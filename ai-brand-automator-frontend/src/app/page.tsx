@@ -13,8 +13,10 @@ export default function Home() {
     const token = localStorage.getItem('access_token');
     if (token) {
       router.push('/dashboard');
+      return; // Don't set loaded if redirecting
     }
-    setIsLoaded(true);
+    // Use requestAnimationFrame to avoid synchronous setState in effect
+    requestAnimationFrame(() => setIsLoaded(true));
   }, [router]);
 
   return (
@@ -279,7 +281,7 @@ export default function Home() {
                       <span className="text-sm text-white">AI just wrote your next viral post</span>
                     </div>
                     <div className="p-3 bg-white/5 rounded-lg text-sm text-brand-silver/80">
-                      "🚀 Exciting news! We just launched our new feature that will change the way you work. Ready to 10x your productivity? Link in bio! #productivity #startup"
+                      &quot;🚀 Exciting news! We just launched our new feature that will change the way you work. Ready to 10x your productivity? Link in bio! #productivity #startup&quot;
                     </div>
                   </div>
                 </div>
@@ -382,7 +384,7 @@ export default function Home() {
                       </svg>
                     ))}
                   </div>
-                  <p className="text-brand-silver/80 mb-6 leading-relaxed">"{testimonial.quote}"</p>
+                  <p className="text-brand-silver/80 mb-6 leading-relaxed">&quot;{testimonial.quote}&quot;</p>
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-electric to-brand-ghost flex items-center justify-center text-sm font-bold text-brand-midnight">
                       {testimonial.avatar}

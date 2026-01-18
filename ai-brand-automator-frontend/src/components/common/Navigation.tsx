@@ -31,7 +31,8 @@ export function Navigation() {
 
   // Close mobile menu when route changes
   useEffect(() => {
-    setMobileMenuOpen(false);
+    // Use requestAnimationFrame to avoid synchronous setState in effect
+    requestAnimationFrame(() => setMobileMenuOpen(false));
   }, [pathname]);
 
   const handleLogout = () => {

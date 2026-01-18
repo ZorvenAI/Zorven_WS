@@ -393,7 +393,6 @@ function AutomationPageContent() {
   // LinkedIn Carousel mode (multi-image, max 9)
   const [linkedinCarouselMode, setLinkedinCarouselMode] = useState(false);
   const [linkedinCarouselImages, setLinkedinCarouselImages] = useState<{ url: string; file?: File; mediaUrn?: string }[]>([]);
-  const [uploadingLinkedinCarouselImage, setUploadingLinkedinCarouselImage] = useState(false);
 
   // Facebook compose state
   const [showFacebookComposeModal, setShowFacebookComposeModal] = useState(false);
@@ -406,7 +405,6 @@ function AutomationPageContent() {
   // Carousel mode state
   const [fbCarouselMode, setFbCarouselMode] = useState(false);
   const [fbCarouselImages, setFbCarouselImages] = useState<{ url: string; file?: File }[]>([]);
-  const [uploadingCarouselImage, setUploadingCarouselImage] = useState(false);
   // Stories state
   const [showFacebookStoriesModal, setShowFacebookStoriesModal] = useState(false);
   const [fbStories, setFbStories] = useState<Array<{ id: string; media_type: string; created_at: string; expires_at?: string }>>([]);
@@ -440,7 +438,7 @@ function AutomationPageContent() {
   const [resumableUploadStatus, setResumableUploadStatus] = useState<'idle' | 'uploading' | 'paused' | 'completed' | 'failed'>('idle');
   const [resumableUploadTitle, setResumableUploadTitle] = useState('');
   const [resumableUploadDescription, setResumableUploadDescription] = useState('');
-  const [currentUploadSessionId, setCurrentUploadSessionId] = useState<string | null>(null);
+  const [, setCurrentUploadSessionId] = useState<string | null>(null);
   
   // Link Preview state
   interface LinkPreview {
@@ -457,7 +455,7 @@ function AutomationPageContent() {
   const [lastFetchedUrl, setLastFetchedUrl] = useState<string | null>(null);
   
   // Deleting Facebook post
-  const [deletingFbPostId, setDeletingFbPostId] = useState<string | null>(null);
+  const [, setDeletingFbPostId] = useState<string | null>(null);
   // Deleting multi-platform post
   const [deletingPostId, setDeletingPostId] = useState<number | null>(null);
 
@@ -1739,7 +1737,6 @@ function AutomationPageContent() {
     loadLinkedInDraft();
     loadTwitterDraft();
     loadIgDraft();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Check for OAuth callback results
