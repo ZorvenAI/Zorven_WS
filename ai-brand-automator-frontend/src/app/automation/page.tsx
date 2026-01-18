@@ -4005,7 +4005,7 @@ function AutomationPageContent() {
                       </span>
                       <button
                         onClick={() => setShowFbPageSwitcher(!showFbPageSwitcher)}
-                        className="text-xs text-brand-electric hover:underline"
+                        className="text-xs text-[#1877F2] hover:underline"
                       >
                         {showFbPageSwitcher ? 'Hide' : 'Show'}
                       </button>
@@ -4384,7 +4384,7 @@ function AutomationPageContent() {
                       </span>
                       <button
                         onClick={() => setShowLinkedInOrgSwitcher(!showLinkedInOrgSwitcher)}
-                        className="text-xs text-brand-electric hover:underline"
+                        className="text-xs text-[#0A66C2] hover:underline"
                       >
                         {showLinkedInOrgSwitcher ? 'Hide' : 'Show'}
                       </button>
@@ -4489,7 +4489,7 @@ function AutomationPageContent() {
                             fetchLinkedInAnalytics();
                           }
                         }}
-                        className="text-xs text-brand-electric hover:underline"
+                        className="text-xs text-[#0A66C2] hover:underline"
                       >
                         {showLinkedInAnalytics ? 'Hide' : 'Show'}
                       </button>
@@ -4580,7 +4580,7 @@ function AutomationPageContent() {
                             fetchLinkedInWebhookEvents();
                           }
                         }}
-                        className="text-xs text-brand-electric hover:underline"
+                        className="text-xs text-[#0A66C2] hover:underline"
                       >
                         {showLinkedInWebhookEvents ? 'Hide' : 'Show'}
                       </button>
@@ -4664,7 +4664,7 @@ function AutomationPageContent() {
                       <span className="text-xs text-brand-silver/70 font-medium">⚙️ Webhook Settings</span>
                       <button
                         onClick={() => setShowLinkedInWebhookSettings(!showLinkedInWebhookSettings)}
-                        className="text-xs text-brand-electric hover:underline"
+                        className="text-xs text-[#0A66C2] hover:underline"
                       >
                         {showLinkedInWebhookSettings ? 'Hide' : 'Show'}
                       </button>
@@ -4717,7 +4717,7 @@ function AutomationPageContent() {
                       </span>
                       <button
                         onClick={() => setShowTwitterAccountPanel(!showTwitterAccountPanel)}
-                        className="text-xs text-brand-electric hover:underline"
+                        className="text-xs text-[#1DA1F2] hover:underline"
                       >
                         {showTwitterAccountPanel ? 'Hide' : 'Show'}
                       </button>
@@ -4764,7 +4764,7 @@ function AutomationPageContent() {
                             fetchTwitterAnalytics();
                           }
                         }}
-                        className="text-xs text-brand-electric hover:underline"
+                        className="text-xs text-[#1DA1F2] hover:underline"
                       >
                         {showTwitterAnalytics ? 'Hide' : 'Show'}
                       </button>
@@ -4855,7 +4855,7 @@ function AutomationPageContent() {
                             fetchTwitterWebhookEvents();
                           }
                         }}
-                        className="text-xs text-brand-electric hover:underline"
+                        className="text-xs text-[#1DA1F2] hover:underline"
                       >
                         {showTwitterWebhookEvents ? 'Hide' : 'Show'}
                       </button>
@@ -4942,7 +4942,7 @@ function AutomationPageContent() {
                       <span className="text-xs text-brand-silver/70 font-medium">⚙️ Webhook Settings</span>
                       <button
                         onClick={() => setShowTwitterWebhookSettings(!showTwitterWebhookSettings)}
-                        className="text-xs text-brand-electric hover:underline"
+                        className="text-xs text-[#1DA1F2] hover:underline"
                       >
                         {showTwitterWebhookSettings ? 'Hide' : 'Show'}
                       </button>
