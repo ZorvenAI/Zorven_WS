@@ -3945,7 +3945,13 @@ function AutomationPageContent() {
                       href={platformStatus.profile_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm text-brand-electric hover:underline"
+                      className={`text-sm hover:underline ${
+                        platform === 'linkedin' ? 'text-[#0A66C2]' :
+                        platform === 'twitter' ? 'text-[#1DA1F2]' :
+                        platform === 'facebook' ? 'text-[#1877F2]' :
+                        platform === 'instagram' ? 'text-pink-400' :
+                        'text-brand-electric'
+                      }`}
                     >
                       View Profile →
                     </a>
