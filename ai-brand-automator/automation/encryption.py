@@ -123,13 +123,15 @@ def decrypt_token(ciphertext: str) -> str:
     except InvalidToken:
         # Do not log the token itself to avoid leaking sensitive data
         logger.error(
-            "Invalid token or wrong encryption key during token decryption; " "returning original ciphertext to caller."
+            "Invalid token or wrong encryption key during token decryption; "
+            "returning original ciphertext to caller."
         )
         return ciphertext
     except Exception as e:
         # Do not log the token itself to avoid leaking sensitive data
         logger.error(
-            "Failed to decrypt token due to unexpected error %s; " "returning original ciphertext to caller.",
+            "Failed to decrypt token due to unexpected error %s; "
+            "returning original ciphertext to caller.",
             e,
         )
         return ciphertext

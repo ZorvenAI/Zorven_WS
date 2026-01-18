@@ -203,7 +203,9 @@ class LinkedInService:
         base_url = "https://api.linkedin.com/v2/organizationAcls"
         query = "q=roleAssignee&role=ADMINISTRATOR"
         projection = (
-            "projection=(elements*" "(organization~(id,localizedName,vanityName," "logoV2(original~:playableStreams))))"
+            "projection=(elements*"
+            "(organization~(id,localizedName,vanityName,"
+            "logoV2(original~:playableStreams))))"
         )
         url = f"{base_url}?{query}&{projection}"
 
@@ -236,7 +238,11 @@ class LinkedInService:
                         original = logo_v2.get("original~", {})
                         elements = original.get("elements", [])
                         if elements:
-                            logo_url = elements[0].get("identifiers", [{}])[0].get("identifier")
+                            logo_url = (
+                                elements[0]
+                                .get("identifiers", [{}])[0]
+                                .get("identifier")
+                            )
 
                     organizations.append(
                         {
@@ -408,7 +414,9 @@ class LinkedInService:
             # Extract upload URL and asset URN
             value = data.get("value", {})
             upload_mechanism = value.get("uploadMechanism", {})
-            media_artifact = upload_mechanism.get("com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest", {})
+            media_artifact = upload_mechanism.get(
+                "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest", {}
+            )
 
             return {
                 "upload_url": media_artifact.get("uploadUrl"),
@@ -419,7 +427,9 @@ class LinkedInService:
             logger.error(f"LinkedIn image registration failed: {e}")
             raise Exception(f"Failed to register image upload: {str(e)}")
 
-    def upload_image(self, upload_url: str, image_data: bytes, content_type: str = "image/jpeg") -> bool:
+    def upload_image(
+        self, upload_url: str, image_data: bytes, content_type: str = "image/jpeg"
+    ) -> bool:
         """
         Upload image binary data to LinkedIn's upload URL.
 
@@ -447,7 +457,9 @@ class LinkedInService:
             logger.error(f"LinkedIn image upload failed: {e}")
             raise Exception(f"Failed to upload image: {str(e)}")
 
-    def upload_image_from_url(self, access_token: str, user_urn: str, image_url: str) -> str:
+    def upload_image_from_url(
+        self, access_token: str, user_urn: str, image_url: str
+    ) -> str:
         """
         Upload an image from a URL to LinkedIn.
 
@@ -484,7 +496,9 @@ class LinkedInService:
 
     # ==================== VIDEO UPLOAD METHODS ====================
 
-    def register_video_upload(self, access_token: str, user_urn: str, file_size: int) -> dict:
+    def register_video_upload(
+        self, access_token: str, user_urn: str, file_size: int
+    ) -> dict:
         """
         Register a video upload with LinkedIn to get upload instructions.
 
@@ -535,7 +549,9 @@ class LinkedInService:
             # Extract upload URL and asset URN
             value = data.get("value", {})
             upload_mechanism = value.get("uploadMechanism", {})
-            media_artifact = upload_mechanism.get("com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest", {})
+            media_artifact = upload_mechanism.get(
+                "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest", {}
+            )
 
             return {
                 "upload_url": media_artifact.get("uploadUrl"),
@@ -546,7 +562,9 @@ class LinkedInService:
             logger.error(f"LinkedIn video registration failed: {e}")
             raise Exception(f"Failed to register video upload: {str(e)}")
 
-    def upload_video(self, upload_url: str, video_data: bytes, content_type: str = "video/mp4") -> bool:
+    def upload_video(
+        self, upload_url: str, video_data: bytes, content_type: str = "video/mp4"
+    ) -> bool:
         """
         Upload video binary data to LinkedIn's upload URL.
 
@@ -717,7 +735,9 @@ class LinkedInService:
             logger.error(f"LinkedIn document registration failed: {e}")
             raise Exception(f"Failed to register document upload: {str(e)}")
 
-    def upload_document(self, upload_url: str, document_data: bytes, content_type: str) -> bool:
+    def upload_document(
+        self, upload_url: str, document_data: bytes, content_type: str
+    ) -> bool:
         """
         Upload document binary data to LinkedIn's upload URL.
 
@@ -846,7 +866,8 @@ class LinkedInService:
         try:
             # Get network size (connections)
             network_url = (
-                "https://api.linkedin.com/v2/networkSizes/" "urn:li:person:me?edgeType=CompanyFollowedByMember"
+                "https://api.linkedin.com/v2/networkSizes/"
+                "urn:li:person:me?edgeType=CompanyFollowedByMember"
             )
 
             response = requests.get(
@@ -891,8 +912,13 @@ class LinkedInService:
             encoded_urn = share_urn.replace(":", "%3A")
 
             # Get likes count
-            likes_url = f"https://api.linkedin.com/v2/socialActions/{encoded_urn}/likes?count=0"
-            comments_url = f"https://api.linkedin.com/v2/socialActions/{encoded_urn}" f"/comments?count=0"
+            likes_url = (
+                f"https://api.linkedin.com/v2/socialActions/{encoded_urn}/likes?count=0"
+            )
+            comments_url = (
+                f"https://api.linkedin.com/v2/socialActions/{encoded_urn}"
+                f"/comments?count=0"
+            )
 
             likes_count = 0
             comments_count = 0
@@ -966,7 +992,10 @@ class LinkedInService:
         try:
             # Fetch UGC posts by the author
             base_url = "https://api.linkedin.com/v2/ugcPosts"
-            url = f"{base_url}?q=authors&authors=List({encoded_author})" f"&count={min(count, 100)}"
+            url = (
+                f"{base_url}?q=authors&authors=List({encoded_author})"
+                f"&count={min(count, 100)}"
+            )
 
             response = requests.get(
                 url,
@@ -984,7 +1013,9 @@ class LinkedInService:
                 for element in data.get("elements", []):
                     post_urn = element.get("id", "")
                     specific_content = element.get("specificContent", {})
-                    share_content = specific_content.get("com.linkedin.ugc.ShareContent", {})
+                    share_content = specific_content.get(
+                        "com.linkedin.ugc.ShareContent", {}
+                    )
                     commentary = share_content.get("shareCommentary", {})
 
                     posts.append(
@@ -1054,7 +1085,8 @@ class LinkedInService:
                 "total_likes": total_likes,
                 "total_comments": total_comments,
                 "engagement_rate": round(
-                    ((total_likes + total_comments) / max(len(posts_with_metrics), 1)) * 100,
+                    ((total_likes + total_comments) / max(len(posts_with_metrics), 1))
+                    * 100,
                     2,
                 )
                 if posts_with_metrics
@@ -1099,7 +1131,10 @@ class LinkedInService:
                 logger.info(f"LinkedIn share deleted: {share_urn}")
                 return True
             else:
-                logger.error(f"LinkedIn share deletion failed: " f"{response.status_code} - {response.text}")
+                logger.error(
+                    f"LinkedIn share deletion failed: "
+                    f"{response.status_code} - {response.text}"
+                )
                 return False
 
         except requests.exceptions.RequestException as e:
@@ -1167,7 +1202,11 @@ class TwitterService:
         code_verifier = secrets.token_urlsafe(64)[:128]
 
         # Generate code challenge (SHA256 hash of verifier, base64url encoded)
-        code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip("=")
+        code_challenge = (
+            base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
+            .decode()
+            .rstrip("=")
+        )
 
         return code_verifier, code_challenge
 
@@ -1221,7 +1260,9 @@ class TwitterService:
         # Twitter requires Basic Auth with client_id:client_secret
         import base64
 
-        credentials = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
+        credentials = base64.b64encode(
+            f"{self.client_id}:{self.client_secret}".encode()
+        ).decode()
 
         try:
             response = requests.post(
@@ -1268,7 +1309,9 @@ class TwitterService:
 
         import base64
 
-        credentials = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
+        credentials = base64.b64encode(
+            f"{self.client_id}:{self.client_secret}".encode()
+        ).decode()
 
         try:
             response = requests.post(
@@ -1314,7 +1357,9 @@ class TwitterService:
 
         import base64
 
-        credentials = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
+        credentials = base64.b64encode(
+            f"{self.client_id}:{self.client_secret}".encode()
+        ).decode()
 
         try:
             response = requests.post(
@@ -1570,7 +1615,9 @@ class TwitterService:
                     "Authorization": f"Bearer {access_token}",
                 },
                 params={
-                    "user.fields": ("public_metrics,created_at,description,profile_image_url"),
+                    "user.fields": (
+                        "public_metrics,created_at,description,profile_image_url"
+                    ),
                 },
                 timeout=30,
             )
@@ -1693,7 +1740,9 @@ class TwitterService:
                 raise Exception(f"Failed to upload media: {str(e)}")
 
         # For larger files or videos, use chunked upload
-        return self._chunked_media_upload(access_token, media_data, media_type, media_category)
+        return self._chunked_media_upload(
+            access_token, media_data, media_type, media_category
+        )
 
     def _chunked_media_upload(
         self,
@@ -1769,7 +1818,9 @@ class TwitterService:
                 segment_index += 1
 
             except requests.exceptions.RequestException as e:
-                logger.error(f"Twitter media APPEND failed at segment {segment_index}: {e}")
+                logger.error(
+                    f"Twitter media APPEND failed at segment {segment_index}: {e}"
+                )
                 raise Exception(f"Failed to upload media chunk: {str(e)}")
 
         # FINALIZE phase
@@ -1791,7 +1842,9 @@ class TwitterService:
             # Check for async processing (videos/GIFs)
             processing_info = finalize_data.get("processing_info")
             if processing_info:
-                logger.info(f"Twitter media {media_id} is processing: {processing_info}")
+                logger.info(
+                    f"Twitter media {media_id} is processing: {processing_info}"
+                )
                 return {
                     "media_id": finalize_data.get("media_id"),
                     "media_id_string": media_id,
@@ -2071,7 +2124,10 @@ class FacebookService:
                 f"{self.GRAPH_API_URL}/{page_id}",
                 params={
                     "access_token": page_access_token,
-                    "fields": ("id,name,about,category,fan_count,followers_count," "picture.type(large),link,username"),
+                    "fields": (
+                        "id,name,about,category,fan_count,followers_count,"
+                        "picture.type(large),link,username"
+                    ),
                 },
                 timeout=30,
             )
@@ -2617,7 +2673,8 @@ class FacebookService:
                 params={
                     "access_token": access_token,
                     "fields": (
-                        "id,message,created_time,permalink_url," "shares,likes.summary(true),comments.summary(true)"
+                        "id,message,created_time,permalink_url,"
+                        "shares,likes.summary(true),comments.summary(true)"
                     ),
                 },
                 timeout=30,
@@ -2817,7 +2874,9 @@ class FacebookService:
         import hashlib
 
         if not self.app_secret:
-            logger.warning("Facebook app secret not configured, skipping signature check")
+            logger.warning(
+                "Facebook app secret not configured, skipping signature check"
+            )
             return True  # Allow in development
 
         if not signature or not signature.startswith("sha256="):
@@ -3422,7 +3481,8 @@ class InstagramService:
                 params={
                     "access_token": access_token,
                     "fields": (
-                        "id,username,name,profile_picture_url," "followers_count,follows_count,media_count,biography"
+                        "id,username,name,profile_picture_url,"
+                        "followers_count,follows_count,media_count,biography"
                     ),
                 },
                 timeout=30,
@@ -3851,7 +3911,8 @@ class InstagramService:
                 params={
                     "access_token": access_token,
                     "fields": (
-                        "id,caption,media_type,media_url,permalink," "thumbnail_url,timestamp,like_count,comments_count"
+                        "id,caption,media_type,media_url,permalink,"
+                        "thumbnail_url,timestamp,like_count,comments_count"
                     ),
                     "limit": limit,
                 },
@@ -4186,7 +4247,9 @@ class InstagramService:
         import hashlib
 
         if not self.app_secret:
-            logger.warning("Instagram app secret not configured, skipping signature check")
+            logger.warning(
+                "Instagram app secret not configured, skipping signature check"
+            )
             return True  # Allow in development
 
         if not signature or not signature.startswith("sha256="):

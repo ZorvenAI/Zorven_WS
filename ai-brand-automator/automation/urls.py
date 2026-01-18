@@ -77,12 +77,16 @@ from .views import (
 router = DefaultRouter()
 router.register(r"social-profiles", SocialProfileViewSet, basename="social-profile")
 router.register(r"tasks", AutomationTaskViewSet, basename="automation-task")
-router.register(r"content-calendar", ContentCalendarViewSet, basename="content-calendar")
+router.register(
+    r"content-calendar", ContentCalendarViewSet, basename="content-calendar"
+)
 
 urlpatterns = [
     # LinkedIn OAuth
     path("linkedin/connect/", LinkedInConnectView.as_view(), name="linkedin-connect"),
-    path("linkedin/callback/", LinkedInCallbackView.as_view(), name="linkedin-callback"),
+    path(
+        "linkedin/callback/", LinkedInCallbackView.as_view(), name="linkedin-callback"
+    ),
     path(
         "linkedin/disconnect/",
         LinkedInDisconnectView.as_view(),
@@ -215,7 +219,9 @@ urlpatterns = [
     ),
     # Facebook OAuth
     path("facebook/connect/", FacebookConnectView.as_view(), name="facebook-connect"),
-    path("facebook/callback/", FacebookCallbackView.as_view(), name="facebook-callback"),
+    path(
+        "facebook/callback/", FacebookCallbackView.as_view(), name="facebook-callback"
+    ),
     path(
         "facebook/disconnect/",
         FacebookDisconnectView.as_view(),

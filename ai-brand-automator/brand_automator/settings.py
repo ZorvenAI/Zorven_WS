@@ -103,7 +103,9 @@ TENANT_APPS = [
     "django.contrib.messages",
 ]
 
-INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
+INSTALLED_APPS = list(SHARED_APPS) + [
+    app for app in TENANT_APPS if app not in SHARED_APPS
+]
 
 MIDDLEWARE = [
     # CORS middleware - MUST BE FIRST for preflight OPTIONS requests
@@ -176,7 +178,10 @@ TENANT_DOMAIN_MODEL = "tenants.Domain"
 # CORS settings
 CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",
-    default=("http://localhost:3000,http://127.0.0.1:3000," "http://localhost:3001,http://localhost:3002"),
+    default=(
+        "http://localhost:3000,http://127.0.0.1:3000,"
+        "http://localhost:3001,http://localhost:3002"
+    ),
     cast=lambda v: [s.strip() for s in v.split(",")],
 )
 # Note: Add development IPs to CORS_ALLOWED_ORIGINS env var instead of using
@@ -197,7 +202,9 @@ CORS_ALLOW_HEADERS = [
 
 # REST Framework settings
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework_simplejwt.authentication.JWTAuthentication",),
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
     "DEFAULT_PAGINATION_CLASS": ("rest_framework.pagination.PageNumberPagination"),
@@ -229,7 +236,10 @@ SIMPLE_JWT = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        "NAME": ("django.contrib.auth.password_validation." "UserAttributeSimilarityValidator"),
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "UserAttributeSimilarityValidator"
+        ),
     },
     {
         "NAME": ("django.contrib.auth.password_validation." "MinimumLengthValidator"),
@@ -273,7 +283,9 @@ GS_CREDENTIALS_PATH = config("GS_CREDENTIALS_PATH", default="")
 GOOGLE_API_KEY = config("GOOGLE_API_KEY", default="")
 
 # Email Configuration
-EMAIL_BACKEND = config("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+EMAIL_BACKEND = config(
+    "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
+)
 EMAIL_HOST = config("EMAIL_HOST", default="")
 EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
@@ -459,7 +471,9 @@ FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
 
 # Celery Configuration
 CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND", default="redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = config(
+    "CELERY_RESULT_BACKEND", default="redis://localhost:6379/0"
+)
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

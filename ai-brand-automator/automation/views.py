@@ -20,7 +20,12 @@ from .serializers import (
     AutomationTaskSerializer,
     ContentCalendarSerializer,
 )
-from .services import linkedin_service, twitter_service, facebook_service, instagram_service
+from .services import (
+    linkedin_service,
+    twitter_service,
+    facebook_service,
+    instagram_service,
+)
 from .constants import (
     TEST_ACCESS_TOKEN,
     TEST_REFRESH_TOKEN,
@@ -66,7 +71,9 @@ class SocialProfileViewSet(viewsets.ModelViewSet):
         """Disconnect a social profile."""
         profile = self.get_object()
         profile.disconnect()
-        return Response({"message": f"{profile.get_platform_display()} disconnected successfully"})
+        return Response(
+            {"message": f"{profile.get_platform_display()} disconnected successfully"}
+        )
 
     @action(detail=False, methods=["get"])
     def status(self, request):
@@ -148,7 +155,10 @@ class LinkedInCallbackView(APIView):
         error_description = request.query_params.get("error_description")
 
         # Debug logging
-        logger.info(f"LinkedIn callback received - code: {bool(code)}, " f"state: {state}, error: {error}")
+        logger.info(
+            f"LinkedIn callback received - code: {bool(code)}, "
+            f"state: {state}, error: {error}"
+        )
 
         # Get frontend URL for redirects
         frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
@@ -156,21 +166,29 @@ class LinkedInCallbackView(APIView):
         # Handle errors from LinkedIn
         if error:
             logger.error(f"LinkedIn OAuth error: {error} - {error_description}")
-            return HttpResponseRedirect(f"{frontend_url}/automation?error={error}&message={error_description}")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error={error}&message={error_description}"
+            )
 
         # Validate state token from database (more reliable than sessions for JWT apps)
         try:
             oauth_state = OAuthState.objects.get(state=state, platform="linkedin")
         except OAuthState.DoesNotExist:
             logger.error(f"LinkedIn OAuth state not found: {state}")
-            redirect_url = f"{frontend_url}/automation?error=invalid_state" "&message=State+token+not+found+or+expired"
+            redirect_url = (
+                f"{frontend_url}/automation?error=invalid_state"
+                "&message=State+token+not+found+or+expired"
+            )
             return HttpResponseRedirect(redirect_url)
 
         # Check if state is expired (10 min limit)
         if oauth_state.is_expired():
             oauth_state.delete()
             logger.error("LinkedIn OAuth state expired")
-            redirect_url = f"{frontend_url}/automation?error=state_expired" "&message=Authorization+timed+out"
+            redirect_url = (
+                f"{frontend_url}/automation?error=state_expired"
+                "&message=Authorization+timed+out"
+            )
             return HttpResponseRedirect(redirect_url)
 
         user = oauth_state.user
@@ -216,14 +234,18 @@ class LinkedInCallbackView(APIView):
             logger.info(f"LinkedIn profile {action} for user {user.email}")
 
             profile_name = profile_data.get("name", "")
-            redirect_url = f"{frontend_url}/automation?success=linkedin&name={profile_name}"
+            redirect_url = (
+                f"{frontend_url}/automation?success=linkedin&name={profile_name}"
+            )
             return HttpResponseRedirect(redirect_url)
 
         except Exception as e:
             logger.error(f"LinkedIn OAuth callback error: {e}")
             # Clean up the OAuth state even on error
             oauth_state.delete()
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=connection_failed&message={str(e)}")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=connection_failed&message={str(e)}"
+            )
 
 
 class LinkedInTestConnectView(APIView):
@@ -255,7 +277,8 @@ class LinkedInTestConnectView(APIView):
                 "refresh_token": TEST_REFRESH_TOKEN,
                 "token_expires_at": timezone.now() + timedelta(days=60),
                 "profile_id": f"test_user_{request.user.id}",
-                "profile_name": request.user.get_full_name() or request.user.email.split("@")[0],
+                "profile_name": request.user.get_full_name()
+                or request.user.email.split("@")[0],
                 "profile_url": "https://www.linkedin.com/in/test-profile",
                 "profile_image_url": None,
                 "status": "connected",
@@ -304,7 +327,9 @@ class LinkedInOrganizationsView(APIView):
     def get(self, request):
         """Get list of organizations the user administers."""
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="linkedin", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="linkedin", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "LinkedIn account not connected"},
@@ -361,7 +386,9 @@ class LinkedInSelectOrganizationView(APIView):
         organization_id = request.data.get("organization_id")  # None = personal profile
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="linkedin", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="linkedin", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "LinkedIn account not connected"},
@@ -404,10 +431,14 @@ class LinkedInPostView(APIView):
         """Create a LinkedIn post."""
         title = request.data.get("title", "").strip()
         text = request.data.get("text", "").strip()
-        media_urns = request.data.get("media_urns", [])  # List of asset URNs from media upload
+        media_urns = request.data.get(
+            "media_urns", []
+        )  # List of asset URNs from media upload
 
         if not text:
-            return Response({"error": "Post text is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Post text is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         if len(text) > 3000:
             return Response(
@@ -427,7 +458,9 @@ class LinkedInPostView(APIView):
             media_urns = [media_urns]
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="linkedin", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="linkedin", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "LinkedIn account not connected"},
@@ -440,7 +473,11 @@ class LinkedInPostView(APIView):
             logger.info(f"Test LinkedIn post by {request.user.email}: {text[:50]}...")
 
             # Create a ContentCalendar entry for the published post
-            post_title = title if title else f"LinkedIn Post - {timezone.now().strftime('%Y-%m-%d %H:%M')}"
+            post_title = (
+                title
+                if title
+                else f"LinkedIn Post - {timezone.now().strftime('%Y-%m-%d %H:%M')}"
+            )
             content = ContentCalendar.objects.create(
                 user=request.user,
                 title=post_title,
@@ -493,7 +530,11 @@ class LinkedInPostView(APIView):
             )
 
             # Create a ContentCalendar entry for the published post
-            post_title = title if title else f"LinkedIn Post - {timezone.now().strftime('%Y-%m-%d %H:%M')}"
+            post_title = (
+                title
+                if title
+                else f"LinkedIn Post - {timezone.now().strftime('%Y-%m-%d %H:%M')}"
+            )
             content = ContentCalendar.objects.create(
                 user=request.user,
                 title=post_title,
@@ -520,7 +561,10 @@ class LinkedInPostView(APIView):
                 result=result,
             )
 
-            logger.info(f"LinkedIn post created by {request.user.email} " f"(media: {len(media_urns)})")
+            logger.info(
+                f"LinkedIn post created by {request.user.email} "
+                f"(media: {len(media_urns)})"
+            )
 
             return Response(
                 {
@@ -625,7 +669,9 @@ class LinkedInCarouselPostView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="linkedin", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="linkedin", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "LinkedIn account not connected"},
@@ -639,10 +685,18 @@ class LinkedInCarouselPostView(APIView):
 
         if is_test_mode:
             test_post_id = f"test_carousel_{uuid.uuid4().hex[:8]}"
-            logger.info(f"Test LinkedIn carousel by {request.user.email}: {text[:50]}...")
+            logger.info(
+                f"Test LinkedIn carousel by {request.user.email}: {text[:50]}..."
+            )
 
             # Create a ContentCalendar entry
-            post_title = title if title else f"[Carousel] {text[:40]}..." if len(text) > 40 else f"[Carousel] {text}"
+            post_title = (
+                title
+                if title
+                else f"[Carousel] {text[:40]}..."
+                if len(text) > 40
+                else f"[Carousel] {text}"
+            )
             ContentCalendar.objects.create(
                 user=request.user,
                 title=post_title,
@@ -685,7 +739,13 @@ class LinkedInCarouselPostView(APIView):
             )
 
             # Store in ContentCalendar
-            post_title = title if title else f"[Carousel] {text[:40]}..." if len(text) > 40 else f"[Carousel] {text}"
+            post_title = (
+                title
+                if title
+                else f"[Carousel] {text[:40]}..."
+                if len(text) > 40
+                else f"[Carousel] {text}"
+            )
             content = ContentCalendar.objects.create(
                 user=request.user,
                 title=post_title,
@@ -703,7 +763,10 @@ class LinkedInCarouselPostView(APIView):
             )
             content.social_profiles.add(profile)
 
-            logger.info(f"LinkedIn carousel created by {request.user.email} " f"(images: {len(media_urns)})")
+            logger.info(
+                f"LinkedIn carousel created by {request.user.email} "
+                f"(images: {len(media_urns)})"
+            )
 
             return Response(
                 {
@@ -741,7 +804,9 @@ class LinkedInMediaUploadView(APIView):
         Returns the asset URN to use when creating a post with media.
         """
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="linkedin", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="linkedin", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "LinkedIn account not connected"},
@@ -792,13 +857,17 @@ class LinkedInMediaUploadView(APIView):
                     media_type = "image"
                 asset_id = f"test-{media_type}-{uuid.uuid4().hex[:12]}"
                 test_asset_urn = f"urn:li:digitalmediaAsset:{asset_id}"
-                logger.info(f"Test LinkedIn {media_type} upload by {request.user.email}")
+                logger.info(
+                    f"Test LinkedIn {media_type} upload by {request.user.email}"
+                )
                 return Response(
                     {
                         "asset_urn": test_asset_urn,
                         "media_type": media_type,
                         "test_mode": True,
-                        "status": "PROCESSING" if (is_video or is_document) else "READY",
+                        "status": "PROCESSING"
+                        if (is_video or is_document)
+                        else "READY",
                         "message": f"{media_type.capitalize()} upload simulated",
                     }
                 )
@@ -812,7 +881,10 @@ class LinkedInMediaUploadView(APIView):
                     result = linkedin_service.upload_video_file(
                         access_token, profile.profile_id, file_data, content_type
                     )
-                    logger.info(f"LinkedIn video uploaded by {request.user.email}: " f"{result['asset_urn']}")
+                    logger.info(
+                        f"LinkedIn video uploaded by {request.user.email}: "
+                        f"{result['asset_urn']}"
+                    )
                     return Response(
                         {
                             "asset_urn": result["asset_urn"],
@@ -830,7 +902,10 @@ class LinkedInMediaUploadView(APIView):
                         content_type,
                         filename=media_file.name,
                     )
-                    logger.info(f"LinkedIn document uploaded by {request.user.email}: " f"{result['document_urn']}")
+                    logger.info(
+                        f"LinkedIn document uploaded by {request.user.email}: "
+                        f"{result['document_urn']}"
+                    )
                     return Response(
                         {
                             "asset_urn": result["document_urn"],
@@ -841,7 +916,9 @@ class LinkedInMediaUploadView(APIView):
                     )
                 else:
                     # Image upload
-                    upload_info = linkedin_service.register_image_upload(access_token, profile.profile_id)
+                    upload_info = linkedin_service.register_image_upload(
+                        access_token, profile.profile_id
+                    )
                     upload_url = upload_info.get("upload_url")
                     asset_urn = upload_info.get("asset_urn")
 
@@ -852,7 +929,9 @@ class LinkedInMediaUploadView(APIView):
                         )
 
                     linkedin_service.upload_image(upload_url, file_data, content_type)
-                    logger.info(f"LinkedIn image uploaded by {request.user.email}: {asset_urn}")
+                    logger.info(
+                        f"LinkedIn image uploaded by {request.user.email}: {asset_urn}"
+                    )
 
                     return Response(
                         {
@@ -890,9 +969,14 @@ class LinkedInMediaUploadView(APIView):
 
             try:
                 access_token = profile.get_valid_access_token()
-                asset_urn = linkedin_service.upload_image_from_url(access_token, profile.profile_id, image_url)
+                asset_urn = linkedin_service.upload_image_from_url(
+                    access_token, profile.profile_id, image_url
+                )
 
-                logger.info(f"LinkedIn image uploaded from URL by {request.user.email}: " f"{asset_urn}")
+                logger.info(
+                    f"LinkedIn image uploaded from URL by {request.user.email}: "
+                    f"{asset_urn}"
+                )
 
                 return Response(
                     {
@@ -934,7 +1018,9 @@ class LinkedInVideoStatusView(APIView):
             Status: PROCESSING, READY, or FAILED
         """
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="linkedin", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="linkedin", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "LinkedIn account not connected"},
@@ -990,7 +1076,9 @@ class LinkedInDocumentStatusView(APIView):
             Status: PROCESSING, AVAILABLE, or FAILED
         """
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="linkedin", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="linkedin", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "LinkedIn account not connected"},
@@ -1041,7 +1129,9 @@ class LinkedInAnalyticsView(APIView):
 
     def get(self, request, post_urn=None):
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="linkedin", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="linkedin", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "LinkedIn account not connected"},
@@ -1129,7 +1219,9 @@ class LinkedInAnalyticsView(APIView):
                 )
             else:
                 # Get full analytics summary
-                analytics = linkedin_service.get_analytics_summary(access_token, user_urn)
+                analytics = linkedin_service.get_analytics_summary(
+                    access_token, user_urn
+                )
                 return Response(analytics)
 
         except Exception as e:
@@ -1151,7 +1243,9 @@ class LinkedInDeletePostView(APIView):
 
     def delete(self, request, post_urn):
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="linkedin", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="linkedin", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "LinkedIn account not connected"},
@@ -1170,14 +1264,20 @@ class LinkedInDeletePostView(APIView):
             ):
                 # Check if this is a LinkedIn post with matching URN
                 if calendar_entry.post_results:
-                    post_id = calendar_entry.post_results.get("id") or calendar_entry.post_results.get("post_urn")
+                    post_id = calendar_entry.post_results.get(
+                        "id"
+                    ) or calendar_entry.post_results.get("post_urn")
                     if post_id == post_urn:
                         # Verify it's a LinkedIn post
-                        if hasattr(calendar_entry, "platforms") and "linkedin" in (calendar_entry.platforms or []):
+                        if hasattr(calendar_entry, "platforms") and "linkedin" in (
+                            calendar_entry.platforms or []
+                        ):
                             calendar_entry.delete()
                             deleted_count = 1
                             break
-                        elif calendar_entry.social_profiles.filter(platform="linkedin").exists():
+                        elif calendar_entry.social_profiles.filter(
+                            platform="linkedin"
+                        ).exists():
                             calendar_entry.delete()
                             deleted_count = 1
                             break
@@ -1203,18 +1303,26 @@ class LinkedInDeletePostView(APIView):
                     status="published",
                 ):
                     if calendar_entry.post_results:
-                        post_id = calendar_entry.post_results.get("id") or calendar_entry.post_results.get("post_urn")
+                        post_id = calendar_entry.post_results.get(
+                            "id"
+                        ) or calendar_entry.post_results.get("post_urn")
                         if post_id == post_urn:
-                            if hasattr(calendar_entry, "platforms") and "linkedin" in (calendar_entry.platforms or []):
+                            if hasattr(calendar_entry, "platforms") and "linkedin" in (
+                                calendar_entry.platforms or []
+                            ):
                                 calendar_entry.delete()
                                 deleted_count += 1
                                 break
-                            elif calendar_entry.social_profiles.filter(platform="linkedin").exists():
+                            elif calendar_entry.social_profiles.filter(
+                                platform="linkedin"
+                            ).exists():
                                 calendar_entry.delete()
                                 deleted_count += 1
                                 break
 
-                logger.info(f"LinkedIn post deleted by {request.user.email}: {post_urn}")
+                logger.info(
+                    f"LinkedIn post deleted by {request.user.email}: {post_urn}"
+                )
                 return Response(
                     {
                         "message": "Post deleted successfully",
@@ -1355,7 +1463,9 @@ class LinkedInWebhookEventsView(APIView):
         from .models import LinkedInWebhookEvent
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="linkedin", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="linkedin", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "LinkedIn account not connected"},
@@ -1436,7 +1546,9 @@ class LinkedInWebhookEventsView(APIView):
         event_type = request.query_params.get("event_type")
         limit = int(request.query_params.get("limit", 50))
 
-        events_qs = LinkedInWebhookEvent.objects.filter(for_user_id=linkedin_user_id).order_by("-created_at")
+        events_qs = LinkedInWebhookEvent.objects.filter(
+            for_user_id=linkedin_user_id
+        ).order_by("-created_at")
 
         if event_type:
             events_qs = events_qs.filter(event_type=event_type)
@@ -1478,7 +1590,9 @@ class LinkedInWebhookEventsView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="linkedin", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="linkedin", status="connected"
+            )
             linkedin_user_id = profile.profile_id
 
             updated = LinkedInWebhookEvent.objects.filter(
@@ -1516,7 +1630,9 @@ class TwitterMediaUploadView(APIView):
         Returns the media_id to use when creating a tweet with media.
         """
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="twitter", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="twitter", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Twitter account not connected"},
@@ -1592,9 +1708,16 @@ class TwitterMediaUploadView(APIView):
             )
 
             media_type = "video" if is_video else ("gif" if is_gif else "image")
-            processing_msg = "Processing may take a few minutes." if result.get("status") == "PROCESSING" else ""
+            processing_msg = (
+                "Processing may take a few minutes."
+                if result.get("status") == "PROCESSING"
+                else ""
+            )
 
-            logger.info(f"Twitter {media_type} uploaded by {request.user.email}: " f"{result.get('media_id_string')}")
+            logger.info(
+                f"Twitter {media_type} uploaded by {request.user.email}: "
+                f"{result.get('media_id_string')}"
+            )
 
             return Response(
                 {
@@ -1632,7 +1755,9 @@ class TwitterMediaStatusView(APIView):
             Status: pending, in_progress, succeeded, failed
         """
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="twitter", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="twitter", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Twitter account not connected"},
@@ -1739,7 +1864,9 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
         Adds or removes social profiles based on the platforms list.
         """
         # Handle LinkedIn platform
-        linkedin_profiles_on_instance = instance.social_profiles.filter(platform="linkedin")
+        linkedin_profiles_on_instance = instance.social_profiles.filter(
+            platform="linkedin"
+        )
 
         if "linkedin" in instance.platforms:
             # Ensure the user's connected LinkedIn profile is attached
@@ -1749,7 +1876,9 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
 
             if linkedin_profile:
                 # Add if not already linked
-                if not linkedin_profiles_on_instance.filter(id=linkedin_profile.id).exists():
+                if not linkedin_profiles_on_instance.filter(
+                    id=linkedin_profile.id
+                ).exists():
                     instance.social_profiles.add(linkedin_profile)
         else:
             # LinkedIn removed from platforms - remove any LinkedIn profiles
@@ -1757,7 +1886,9 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
                 instance.social_profiles.remove(*linkedin_profiles_on_instance)
 
         # Handle Twitter platform
-        twitter_profiles_on_instance = instance.social_profiles.filter(platform="twitter")
+        twitter_profiles_on_instance = instance.social_profiles.filter(
+            platform="twitter"
+        )
 
         if "twitter" in instance.platforms:
             # Ensure the user's connected Twitter profile is attached
@@ -1767,7 +1898,9 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
 
             if twitter_profile:
                 # Add if not already linked
-                if not twitter_profiles_on_instance.filter(id=twitter_profile.id).exists():
+                if not twitter_profiles_on_instance.filter(
+                    id=twitter_profile.id
+                ).exists():
                     instance.social_profiles.add(twitter_profile)
         else:
             # Twitter removed from platforms - remove any Twitter profiles
@@ -1775,7 +1908,9 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
                 instance.social_profiles.remove(*twitter_profiles_on_instance)
 
         # Handle Facebook platform
-        facebook_profiles_on_instance = instance.social_profiles.filter(platform="facebook")
+        facebook_profiles_on_instance = instance.social_profiles.filter(
+            platform="facebook"
+        )
 
         if "facebook" in instance.platforms:
             # Ensure the user's connected Facebook profile is attached
@@ -1785,7 +1920,9 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
 
             if facebook_profile:
                 # Add if not already linked
-                if not facebook_profiles_on_instance.filter(id=facebook_profile.id).exists():
+                if not facebook_profiles_on_instance.filter(
+                    id=facebook_profile.id
+                ).exists():
                     instance.social_profiles.add(facebook_profile)
         else:
             # Facebook removed from platforms - remove any Facebook profiles
@@ -1793,7 +1930,9 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
                 instance.social_profiles.remove(*facebook_profiles_on_instance)
 
         # Handle Instagram platform
-        instagram_profiles_on_instance = instance.social_profiles.filter(platform="instagram")
+        instagram_profiles_on_instance = instance.social_profiles.filter(
+            platform="instagram"
+        )
 
         if "instagram" in instance.platforms:
             # Ensure the user's connected Instagram profile is attached
@@ -1803,7 +1942,9 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
 
             if instagram_profile:
                 # Add if not already linked
-                if not instagram_profiles_on_instance.filter(id=instagram_profile.id).exists():
+                if not instagram_profiles_on_instance.filter(
+                    id=instagram_profile.id
+                ).exists():
                     instance.social_profiles.add(instagram_profile)
         else:
             # Instagram removed from platforms - remove any Instagram profiles
@@ -1864,7 +2005,9 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
 
         return Response(
             {
-                "message": "Publishing completed" if not errors else "Publishing completed with some errors",
+                "message": "Publishing completed"
+                if not errors
+                else "Publishing completed with some errors",
                 "status": content.status,
                 "results": results,
                 "errors": errors,
@@ -1885,7 +2028,9 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
         content.status = "cancelled"
         content.save()
 
-        return Response({"message": "Post cancelled successfully", "status": content.status})
+        return Response(
+            {"message": "Post cancelled successfully", "status": content.status}
+        )
 
 
 # =============================================================================
@@ -1953,10 +2098,14 @@ class TwitterCallbackView(APIView):
 
         if error:
             logger.error(f"Twitter OAuth error: {error}")
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=twitter_auth_failed")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=twitter_auth_failed"
+            )
 
         if not code or not state:
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=missing_params")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=missing_params"
+            )
 
         # Validate state and get code_verifier
         try:
@@ -1966,7 +2115,9 @@ class TwitterCallbackView(APIView):
                 used=False,
             )
         except OAuthState.DoesNotExist:
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=invalid_state")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=invalid_state"
+            )
 
         # Mark state as used
         oauth_state.used = True
@@ -1974,11 +2125,15 @@ class TwitterCallbackView(APIView):
 
         # Check if state is expired (5 minutes)
         if (timezone.now() - oauth_state.created_at).total_seconds() > 300:
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=state_expired")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=state_expired"
+            )
 
         try:
             # Exchange code for tokens with PKCE verifier
-            token_data = twitter_service.exchange_code_for_token(code, oauth_state.code_verifier)
+            token_data = twitter_service.exchange_code_for_token(
+                code, oauth_state.code_verifier
+            )
 
             # Get user info
             user_info = twitter_service.get_user_info(token_data["access_token"])
@@ -2000,13 +2155,20 @@ class TwitterCallbackView(APIView):
             )
 
             action = "created" if created else "updated"
-            logger.info(f"Twitter profile {action} for user {oauth_state.user.email}: " f"@{user_info.get('username')}")
+            logger.info(
+                f"Twitter profile {action} for user {oauth_state.user.email}: "
+                f"@{user_info.get('username')}"
+            )
 
-            return HttpResponseRedirect(f"{frontend_url}/automation?success=true&platform=twitter")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?success=true&platform=twitter"
+            )
 
         except Exception as e:
             logger.error(f"Twitter OAuth callback failed: {e}")
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=twitter_token_exchange_failed")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=twitter_token_exchange_failed"
+            )
 
 
 class TwitterDisconnectView(APIView):
@@ -2122,7 +2284,9 @@ class TwitterPostView(APIView):
             media_ids = [media_ids]
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="twitter", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="twitter", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Twitter account not connected"},
@@ -2134,7 +2298,11 @@ class TwitterPostView(APIView):
             logger.info(f"Test mode tweet by {request.user.email}: {text[:50]}...")
 
             # Create a ContentCalendar entry for the published tweet
-            post_title = title if title else f"Twitter Post - {timezone.now().strftime('%Y-%m-%d %H:%M')}"
+            post_title = (
+                title
+                if title
+                else f"Twitter Post - {timezone.now().strftime('%Y-%m-%d %H:%M')}"
+            )
             content = ContentCalendar.objects.create(
                 user=request.user,
                 title=post_title,
@@ -2192,7 +2360,11 @@ class TwitterPostView(APIView):
             )
 
             # Create a ContentCalendar entry for the published tweet
-            post_title = title if title else f"Twitter Post - {timezone.now().strftime('%Y-%m-%d %H:%M')}"
+            post_title = (
+                title
+                if title
+                else f"Twitter Post - {timezone.now().strftime('%Y-%m-%d %H:%M')}"
+            )
             content = ContentCalendar.objects.create(
                 user=request.user,
                 title=post_title,
@@ -2219,7 +2391,10 @@ class TwitterPostView(APIView):
                 result=result,
             )
 
-            logger.info(f"Twitter tweet created by {request.user.email} " f"(media: {len(media_ids)})")
+            logger.info(
+                f"Twitter tweet created by {request.user.email} "
+                f"(media: {len(media_ids)})"
+            )
 
             return Response(
                 {
@@ -2303,7 +2478,9 @@ class TwitterCarouselPostView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="twitter", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="twitter", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Twitter account not connected"},
@@ -2322,7 +2499,9 @@ class TwitterCarouselPostView(APIView):
             # Create a ContentCalendar entry
             ContentCalendar.objects.create(
                 user=request.user,
-                title=f"[Carousel] {text[:40]}..." if len(text) > 40 else f"[Carousel] {text}",
+                title=f"[Carousel] {text[:40]}..."
+                if len(text) > 40
+                else f"[Carousel] {text}",
                 content=text,
                 media_urls=media_ids,
                 platforms=["twitter"],
@@ -2363,7 +2542,9 @@ class TwitterCarouselPostView(APIView):
             # Store in ContentCalendar
             ContentCalendar.objects.create(
                 user=request.user,
-                title=f"[Carousel] {text[:40]}..." if len(text) > 40 else f"[Carousel] {text}",
+                title=f"[Carousel] {text[:40]}..."
+                if len(text) > 40
+                else f"[Carousel] {text}",
                 content=text,
                 media_urls=media_ids,
                 platforms=["twitter"],
@@ -2429,7 +2610,9 @@ class TwitterDeleteTweetView(APIView):
         from .constants import TWITTER_TEST_ACCESS_TOKEN
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="twitter", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="twitter", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Twitter account not connected"},
@@ -2457,11 +2640,15 @@ class TwitterDeleteTweetView(APIView):
 
                     if post_id == tweet_id:
                         # Verify it's a Twitter post
-                        if hasattr(calendar_entry, "platforms") and "twitter" in (calendar_entry.platforms or []):
+                        if hasattr(calendar_entry, "platforms") and "twitter" in (
+                            calendar_entry.platforms or []
+                        ):
                             calendar_entry.delete()
                             deleted_count = 1
                             break
-                        elif calendar_entry.social_profiles.filter(platform="twitter").exists():
+                        elif calendar_entry.social_profiles.filter(
+                            platform="twitter"
+                        ).exists():
                             calendar_entry.delete()
                             deleted_count = 1
                             break
@@ -2489,16 +2676,22 @@ class TwitterDeleteTweetView(APIView):
                     if calendar_entry.post_results:
                         post_id = None
                         if "tweet" in calendar_entry.post_results:
-                            post_id = calendar_entry.post_results.get("tweet", {}).get("id")
+                            post_id = calendar_entry.post_results.get("tweet", {}).get(
+                                "id"
+                            )
                         else:
                             post_id = calendar_entry.post_results.get("id")
 
                         if post_id == tweet_id:
-                            if hasattr(calendar_entry, "platforms") and "twitter" in (calendar_entry.platforms or []):
+                            if hasattr(calendar_entry, "platforms") and "twitter" in (
+                                calendar_entry.platforms or []
+                            ):
                                 calendar_entry.delete()
                                 deleted_count += 1
                                 break
-                            elif calendar_entry.social_profiles.filter(platform="twitter").exists():
+                            elif calendar_entry.social_profiles.filter(
+                                platform="twitter"
+                            ).exists():
                                 calendar_entry.delete()
                                 deleted_count += 1
                                 break
@@ -2540,7 +2733,9 @@ class TwitterAnalyticsView(APIView):
         from .constants import TWITTER_TEST_ACCESS_TOKEN
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="twitter", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="twitter", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Twitter account not connected"},
@@ -2642,7 +2837,11 @@ class TwitterAnalyticsView(APIView):
                     user_metrics = twitter_service.get_user_metrics(access_token)
                 except Exception as e:
                     error_str = str(e).lower()
-                    if "429" in str(e) or "too many requests" in error_str or "rate" in error_str:
+                    if (
+                        "429" in str(e)
+                        or "too many requests" in error_str
+                        or "rate" in error_str
+                    ):
                         rate_limited = True
                         logger.warning(f"Twitter rate limit hit for user metrics: {e}")
                     else:
@@ -2670,12 +2869,20 @@ class TwitterAnalyticsView(APIView):
                 tweets_metrics = []
                 if tweet_ids and not rate_limited:
                     try:
-                        tweets_metrics = twitter_service.get_multiple_tweet_metrics(access_token, tweet_ids)
+                        tweets_metrics = twitter_service.get_multiple_tweet_metrics(
+                            access_token, tweet_ids
+                        )
                     except Exception as e:
                         error_str = str(e).lower()
-                        if "429" in str(e) or "too many requests" in error_str or "rate" in error_str:
+                        if (
+                            "429" in str(e)
+                            or "too many requests" in error_str
+                            or "rate" in error_str
+                        ):
                             rate_limited = True
-                            logger.warning(f"Twitter rate limit hit for tweet metrics: {e}")
+                            logger.warning(
+                                f"Twitter rate limit hit for tweet metrics: {e}"
+                            )
                         else:
                             raise
 
@@ -2705,7 +2912,9 @@ class TwitterAnalyticsView(APIView):
                         + totals["total_replies"]
                         + totals["total_quotes"]
                     )
-                    totals["engagement_rate"] = round((engagements / totals["total_impressions"]) * 100, 2)
+                    totals["engagement_rate"] = round(
+                        (engagements / totals["total_impressions"]) * 100, 2
+                    )
                 else:
                     totals["engagement_rate"] = 0
 
@@ -2730,11 +2939,18 @@ class TwitterAnalyticsView(APIView):
             error_str = str(e).lower()
 
             # Check if it's a rate limit error
-            if "429" in str(e) or "too many requests" in error_str or "rate" in error_str:
+            if (
+                "429" in str(e)
+                or "too many requests" in error_str
+                or "rate" in error_str
+            ):
                 return Response(
                     {
                         "rate_limited": True,
-                        "rate_limit_message": ("Twitter API rate limit reached. " "Please try again in 15 minutes."),
+                        "rate_limit_message": (
+                            "Twitter API rate limit reached. "
+                            "Please try again in 15 minutes."
+                        ),
                         "user": None,
                         "tweets": [],
                         "totals": {
@@ -2924,7 +3140,9 @@ class TwitterWebhookEventsView(APIView):
         from .constants import TWITTER_TEST_ACCESS_TOKEN
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="twitter", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="twitter", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Twitter account not connected"},
@@ -2977,7 +3195,9 @@ class TwitterWebhookEventsView(APIView):
         event_type = request.query_params.get("event_type")
         limit = int(request.query_params.get("limit", 50))
 
-        events_qs = TwitterWebhookEvent.objects.filter(for_user_id=twitter_user_id).order_by("-created_at")
+        events_qs = TwitterWebhookEvent.objects.filter(
+            for_user_id=twitter_user_id
+        ).order_by("-created_at")
 
         if event_type:
             events_qs = events_qs.filter(event_type=event_type)
@@ -3018,7 +3238,9 @@ class TwitterWebhookEventsView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="twitter", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="twitter", status="connected"
+            )
             twitter_user_id = profile.profile_id
 
             updated = TwitterWebhookEvent.objects.filter(
@@ -3099,10 +3321,14 @@ class FacebookCallbackView(APIView):
         if error:
             error_description = request.GET.get("error_description", error)
             logger.error(f"Facebook OAuth error: {error} - {error_description}")
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=facebook_auth_failed")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=facebook_auth_failed"
+            )
 
         if not code or not state:
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=missing_params")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=missing_params"
+            )
 
         # Validate state
         try:
@@ -3112,7 +3338,9 @@ class FacebookCallbackView(APIView):
                 used=False,
             )
         except OAuthState.DoesNotExist:
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=invalid_state")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=invalid_state"
+            )
 
         # Mark state as used
         oauth_state.used = True
@@ -3120,7 +3348,9 @@ class FacebookCallbackView(APIView):
 
         # Check if state is expired (5 minutes)
         if (timezone.now() - oauth_state.created_at).total_seconds() > 300:
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=state_expired")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=state_expired"
+            )
 
         try:
             # Exchange code for tokens
@@ -3141,7 +3371,10 @@ class FacebookCallbackView(APIView):
             if not pages:
                 error_msg = "No%20Facebook%20Pages%20found."
                 error_msg += "%20Please%20create%20a%20Page%20first."
-                return HttpResponseRedirect(f"{frontend_url}/automation?error=no_pages_found" f"&message={error_msg}")
+                return HttpResponseRedirect(
+                    f"{frontend_url}/automation?error=no_pages_found"
+                    f"&message={error_msg}"
+                )
 
             # Select page - use provided page_id or first available page
             selected_page = None
@@ -3165,10 +3398,16 @@ class FacebookCallbackView(APIView):
             page_link = f"https://facebook.com/{selected_page['id']}"
 
             try:
-                page_info = facebook_service.get_page_info(selected_page["id"], page_access_token)
+                page_info = facebook_service.get_page_info(
+                    selected_page["id"], page_access_token
+                )
                 page_name = page_info.get("name", page_name)
-                page_link = page_info.get("link", f"https://facebook.com/{selected_page['id']}")
-                page_picture_url = page_info.get("picture", {}).get("data", {}).get("url")
+                page_link = page_info.get(
+                    "link", f"https://facebook.com/{selected_page['id']}"
+                )
+                page_picture_url = (
+                    page_info.get("picture", {}).get("data", {}).get("url")
+                )
             except Exception as page_info_error:
                 # Log but continue - we have basic info from pages list
                 logger.warning(f"Could not fetch detailed page info: {page_info_error}")
@@ -3191,13 +3430,20 @@ class FacebookCallbackView(APIView):
             )
 
             action = "created" if created else "updated"
-            logger.info(f"Facebook profile {action} for user {oauth_state.user.email}: " f"Page '{page_name}'")
+            logger.info(
+                f"Facebook profile {action} for user {oauth_state.user.email}: "
+                f"Page '{page_name}'"
+            )
 
-            return HttpResponseRedirect(f"{frontend_url}/automation?success=facebook&name={page_name}")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?success=facebook&name={page_name}"
+            )
 
         except Exception as e:
             logger.error(f"Facebook OAuth callback failed: {e}")
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=facebook_token_exchange_failed")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=facebook_token_exchange_failed"
+            )
 
 
 class FacebookPagesView(APIView):
@@ -3209,7 +3455,9 @@ class FacebookPagesView(APIView):
 
     def get(self, request):
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -3296,7 +3544,9 @@ class FacebookSelectPageView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -3318,13 +3568,19 @@ class FacebookSelectPageView(APIView):
                 )
 
             # Update profile with new page
-            page_info = facebook_service.get_page_info(page_id, selected_page.get("access_token"))
+            page_info = facebook_service.get_page_info(
+                page_id, selected_page.get("access_token")
+            )
 
             profile.page_id = page_id
             profile.page_access_token = selected_page.get("access_token")
             profile.profile_name = page_info.get("name")
-            profile.profile_url = page_info.get("link", f"https://facebook.com/{page_id}")
-            profile.profile_image_url = page_info.get("picture", {}).get("data", {}).get("url")
+            profile.profile_url = page_info.get(
+                "link", f"https://facebook.com/{page_id}"
+            )
+            profile.profile_image_url = (
+                page_info.get("picture", {}).get("data", {}).get("url")
+            )
             profile.save()
 
             return Response(
@@ -3431,7 +3687,9 @@ class FacebookPostView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -3537,7 +3795,9 @@ class FacebookMediaUploadView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -3621,7 +3881,9 @@ class FacebookResumableUploadView(APIView):
     def get_profile(self, request):
         """Get the connected Facebook profile."""
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
             if not profile.page_access_token or not profile.page_id:
                 return None, Response(
                     {"error": "No Facebook Page selected"},
@@ -3661,7 +3923,9 @@ class FacebookResumableUploadView(APIView):
         if upload_session_id:
             # Get specific upload status
             try:
-                upload = FacebookResumableUpload.objects.get(user=request.user, upload_session_id=upload_session_id)
+                upload = FacebookResumableUpload.objects.get(
+                    user=request.user, upload_session_id=upload_session_id
+                )
                 return Response(
                     {
                         "upload_session_id": upload.upload_session_id,
@@ -3684,9 +3948,9 @@ class FacebookResumableUploadView(APIView):
                 )
         else:
             # List in-progress uploads
-            uploads = FacebookResumableUpload.objects.filter(user=request.user, page_id=profile.page_id).filter(
-                status__in=["pending", "uploading", "processing"]
-            )
+            uploads = FacebookResumableUpload.objects.filter(
+                user=request.user, page_id=profile.page_id
+            ).filter(status__in=["pending", "uploading", "processing"])
 
             return Response(
                 {
@@ -3837,7 +4101,9 @@ class FacebookResumableUploadView(APIView):
         from .models import FacebookResumableUpload
 
         try:
-            upload = FacebookResumableUpload.objects.get(user=request.user, upload_session_id=upload_session_id)
+            upload = FacebookResumableUpload.objects.get(
+                user=request.user, upload_session_id=upload_session_id
+            )
         except FacebookResumableUpload.DoesNotExist:
             return Response(
                 {"error": "Upload session not found"},
@@ -3916,7 +4182,9 @@ class FacebookResumableUploadView(APIView):
         from .models import FacebookResumableUpload
 
         try:
-            upload = FacebookResumableUpload.objects.get(user=request.user, upload_session_id=upload_session_id)
+            upload = FacebookResumableUpload.objects.get(
+                user=request.user, upload_session_id=upload_session_id
+            )
         except FacebookResumableUpload.DoesNotExist:
             return Response(
                 {"error": "Upload session not found"},
@@ -3979,7 +4247,9 @@ class FacebookResumableUploadView(APIView):
         from .models import FacebookResumableUpload
 
         try:
-            upload = FacebookResumableUpload.objects.get(user=request.user, upload_session_id=upload_session_id)
+            upload = FacebookResumableUpload.objects.get(
+                user=request.user, upload_session_id=upload_session_id
+            )
         except FacebookResumableUpload.DoesNotExist:
             return Response(
                 {"error": "Upload session not found"},
@@ -4006,7 +4276,9 @@ class FacebookDeletePostView(APIView):
 
     def delete(self, request, post_id):
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -4020,7 +4292,10 @@ class FacebookDeletePostView(APIView):
             )
 
         # Check for test mode - handle both test page token and test_mode post IDs
-        is_test_mode = profile.page_access_token == FACEBOOK_TEST_PAGE_TOKEN or post_id.startswith("test_")
+        is_test_mode = (
+            profile.page_access_token == FACEBOOK_TEST_PAGE_TOKEN
+            or post_id.startswith("test_")
+        )
 
         if is_test_mode:
             # In test mode, delete the ContentCalendar record
@@ -4038,7 +4313,9 @@ class FacebookDeletePostView(APIView):
                 direct_id = calendar_entry.post_results.get("id")
                 # Nested: { "facebook": { "id": "..." } }
                 facebook_data = calendar_entry.post_results.get("facebook", {})
-                nested_id = facebook_data.get("id") if isinstance(facebook_data, dict) else None
+                nested_id = (
+                    facebook_data.get("id") if isinstance(facebook_data, dict) else None
+                )
                 # Check for test_mode flag in nested structure
                 # (for posts without ID)
                 has_test_mode = (
@@ -4057,12 +4334,16 @@ class FacebookDeletePostView(APIView):
 
                 if id_matches:
                     # Verify it's a Facebook post by checking platforms
-                    if hasattr(calendar_entry, "platforms") and "facebook" in (calendar_entry.platforms or []):
+                    if hasattr(calendar_entry, "platforms") and "facebook" in (
+                        calendar_entry.platforms or []
+                    ):
                         calendar_entry.delete()
                         deleted_count = 1
                         break
                     # Or check social_profiles
-                    elif calendar_entry.social_profiles.filter(platform="facebook").exists():
+                    elif calendar_entry.social_profiles.filter(
+                        platform="facebook"
+                    ).exists():
                         calendar_entry.delete()
                         deleted_count = 1
                         break
@@ -4084,13 +4365,20 @@ class FacebookDeletePostView(APIView):
                     user=request.user,
                     status="published",
                 ):
-                    if calendar_entry.post_results and calendar_entry.post_results.get("id") == post_id:
+                    if (
+                        calendar_entry.post_results
+                        and calendar_entry.post_results.get("id") == post_id
+                    ):
                         # Verify it's a Facebook post
-                        if hasattr(calendar_entry, "platforms") and "facebook" in (calendar_entry.platforms or []):
+                        if hasattr(calendar_entry, "platforms") and "facebook" in (
+                            calendar_entry.platforms or []
+                        ):
                             calendar_entry.delete()
                             deleted_count += 1
                             break
-                        elif calendar_entry.social_profiles.filter(platform="facebook").exists():
+                        elif calendar_entry.social_profiles.filter(
+                            platform="facebook"
+                        ).exists():
                             calendar_entry.delete()
                             deleted_count += 1
                             break
@@ -4123,7 +4411,9 @@ class FacebookAnalyticsView(APIView):
 
     def get(self, request, post_id=None):
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -4156,7 +4446,9 @@ class FacebookAnalyticsView(APIView):
         try:
             if post_id:
                 # Get specific post insights
-                insights = facebook_service.get_post_insights(post_id, profile.page_access_token)
+                insights = facebook_service.get_post_insights(
+                    post_id, profile.page_access_token
+                )
                 post = facebook_service.get_post(post_id, profile.page_access_token)
                 return Response(
                     {
@@ -4166,9 +4458,13 @@ class FacebookAnalyticsView(APIView):
                 )
             else:
                 # Get page insights
-                insights = facebook_service.get_page_insights(profile.page_id, profile.page_access_token)
+                insights = facebook_service.get_page_insights(
+                    profile.page_id, profile.page_access_token
+                )
                 # Get recent posts
-                posts = facebook_service.get_page_posts(profile.page_id, profile.page_access_token, limit=10)
+                posts = facebook_service.get_page_posts(
+                    profile.page_id, profile.page_access_token, limit=10
+                )
 
                 return Response(
                     {
@@ -4182,8 +4478,12 @@ class FacebookAnalyticsView(APIView):
                                 "created_time": post.get("created_time"),
                                 "permalink_url": post.get("permalink_url"),
                                 "full_picture": post.get("full_picture"),
-                                "likes": post.get("likes", {}).get("summary", {}).get("total_count", 0),
-                                "comments": post.get("comments", {}).get("summary", {}).get("total_count", 0),
+                                "likes": post.get("likes", {})
+                                .get("summary", {})
+                                .get("total_count", 0),
+                                "comments": post.get("comments", {})
+                                .get("summary", {})
+                                .get("total_count", 0),
                                 "shares": post.get("shares", {}).get("count", 0),
                             }
                             for post in posts
@@ -4229,7 +4529,9 @@ class FacebookLinkPreviewView(APIView):
             url = "https://" + url
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -4250,7 +4552,10 @@ class FacebookLinkPreviewView(APIView):
                     "test_mode": True,
                     "url": url,
                     "title": "Example Link Title",
-                    "description": ("This is a sample description for the " "link preview in test mode."),
+                    "description": (
+                        "This is a sample description for the "
+                        "link preview in test mode."
+                    ),
                     "image": None,
                     "site_name": "Example Site",
                     "type": "website",
@@ -4317,7 +4622,9 @@ class FacebookCarouselPostView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -4341,7 +4648,9 @@ class FacebookCarouselPostView(APIView):
             # Save to ContentCalendar for history (even in test mode)
             ContentCalendar.objects.create(
                 user=request.user,
-                title=f"[Carousel] {message[:40]}..." if len(message) > 40 else f"[Carousel] {message}",
+                title=f"[Carousel] {message[:40]}..."
+                if len(message) > 40
+                else f"[Carousel] {message}",
                 content=message,
                 platforms=["facebook"],
                 scheduled_date=timezone.now(),
@@ -4459,7 +4768,9 @@ class FacebookCarouselUploadView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -4593,7 +4904,9 @@ class FacebookWebhookView(APIView):
         # Validate Facebook webhook signature
         signature_header = request.headers.get("X-Hub-Signature-256", "")
 
-        if not facebook_service.verify_webhook_signature(request.body, signature_header):
+        if not facebook_service.verify_webhook_signature(
+            request.body, signature_header
+        ):
             logger.warning("Facebook webhook signature validation failed")
             return Response(
                 {"error": "Invalid signature"},
@@ -4646,7 +4959,9 @@ class FacebookWebhookView(APIView):
                     item = value.get("item", "")
                     # verb = value.get("verb", "") - available if needed
                     post_id = value.get("post_id", "")
-                    sender_id = value.get("sender_id") or value.get("from", {}).get("id")
+                    sender_id = value.get("sender_id") or value.get("from", {}).get(
+                        "id"
+                    )
 
                     if item == "reaction":
                         event_type = "feed_reaction"
@@ -4664,10 +4979,15 @@ class FacebookWebhookView(APIView):
                         post_id=post_id,
                         payload=value,
                     )
-                    logger.info(f"Facebook {event_type} event stored for page {page_id}, " f"post {post_id}")
+                    logger.info(
+                        f"Facebook {event_type} event stored for page {page_id}, "
+                        f"post {post_id}"
+                    )
 
                 elif field == "mention":
-                    sender_id = value.get("sender_id") or value.get("from", {}).get("id")
+                    sender_id = value.get("sender_id") or value.get("from", {}).get(
+                        "id"
+                    )
                     post_id = value.get("post_id", "")
 
                     FacebookWebhookEvent.objects.create(
@@ -4738,7 +5058,9 @@ class FacebookWebhookEventsView(APIView):
         - limit: Number of events to return (default 50)
         """
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -4798,7 +5120,9 @@ class FacebookWebhookEventsView(APIView):
         - mark_all: If true, mark all events as read
         """
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -4811,9 +5135,13 @@ class FacebookWebhookEventsView(APIView):
         mark_all = request.data.get("mark_all", False)
 
         if mark_all:
-            updated = FacebookWebhookEvent.objects.filter(page_id=profile.page_id, read=False).update(read=True)
+            updated = FacebookWebhookEvent.objects.filter(
+                page_id=profile.page_id, read=False
+            ).update(read=True)
         elif event_ids:
-            updated = FacebookWebhookEvent.objects.filter(page_id=profile.page_id, id__in=event_ids).update(read=True)
+            updated = FacebookWebhookEvent.objects.filter(
+                page_id=profile.page_id, id__in=event_ids
+            ).update(read=True)
         else:
             return Response(
                 {"error": "Provide event_ids or mark_all=true"},
@@ -4840,7 +5168,9 @@ class FacebookWebhookSubscribeView(APIView):
         Subscribe the connected page to webhook events.
         """
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -4864,7 +5194,9 @@ class FacebookWebhookSubscribeView(APIView):
             )
 
         try:
-            result = facebook_service.subscribe_to_page_webhooks(profile.page_id, profile.page_access_token)
+            result = facebook_service.subscribe_to_page_webhooks(
+                profile.page_id, profile.page_access_token
+            )
             return Response(
                 {
                     "success": result.get("success", False),
@@ -4883,7 +5215,9 @@ class FacebookWebhookSubscribeView(APIView):
         Unsubscribe the connected page from webhook events.
         """
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -4907,7 +5241,9 @@ class FacebookWebhookSubscribeView(APIView):
             )
 
         try:
-            result = facebook_service.unsubscribe_from_page_webhooks(profile.page_id, profile.page_access_token)
+            result = facebook_service.unsubscribe_from_page_webhooks(
+                profile.page_id, profile.page_access_token
+            )
             return Response(
                 {
                     "success": result.get("success", False),
@@ -4926,7 +5262,9 @@ class FacebookWebhookSubscribeView(APIView):
         Get current webhook subscriptions for the page.
         """
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -4951,7 +5289,9 @@ class FacebookWebhookSubscribeView(APIView):
             )
 
         try:
-            subscriptions = facebook_service.get_page_webhook_subscriptions(profile.page_id, profile.page_access_token)
+            subscriptions = facebook_service.get_page_webhook_subscriptions(
+                profile.page_id, profile.page_access_token
+            )
             return Response(
                 {
                     "page_id": profile.page_id,
@@ -5064,7 +5404,9 @@ class FacebookStoryView(APIView):
                     )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -5104,7 +5446,12 @@ class FacebookStoryView(APIView):
             _test_stories_cache[user_id] = [
                 s
                 for s in _test_stories_cache[user_id]
-                if (now - timezone.datetime.fromisoformat(s["created_at"].replace("Z", "+00:00"))).total_seconds()
+                if (
+                    now
+                    - timezone.datetime.fromisoformat(
+                        s["created_at"].replace("Z", "+00:00")
+                    )
+                ).total_seconds()
                 < 86400
             ]
 
@@ -5212,7 +5559,9 @@ class FacebookStoryView(APIView):
         Returns list of current stories with their status.
         """
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -5237,7 +5586,9 @@ class FacebookStoryView(APIView):
             active_stories = []
             for story in cached_stories:
                 try:
-                    created = timezone.datetime.fromisoformat(story["created_at"].replace("Z", "+00:00"))
+                    created = timezone.datetime.fromisoformat(
+                        story["created_at"].replace("Z", "+00:00")
+                    )
                     if (now - created).total_seconds() < 86400:
                         active_stories.append(story)
                 except (ValueError, KeyError):
@@ -5294,7 +5645,9 @@ class FacebookStoryDeleteView(APIView):
         - Deletion status
         """
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="facebook", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="facebook", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Facebook account not connected"},
@@ -5312,7 +5665,9 @@ class FacebookStoryDeleteView(APIView):
             # Remove from test cache
             user_id = request.user.id
             if user_id in _test_stories_cache:
-                _test_stories_cache[user_id] = [s for s in _test_stories_cache[user_id] if s["id"] != story_id]
+                _test_stories_cache[user_id] = [
+                    s for s in _test_stories_cache[user_id] if s["id"] != story_id
+                ]
 
             return Response(
                 {
@@ -5360,8 +5715,9 @@ class InstagramConnectView(APIView):
     Returns the authorization URL that the frontend should redirect to.
     Instagram uses Facebook OAuth since it's accessed via Graph API.
 
-    NOTE: Instagram API scopes require Meta App Review approval before production use.
-    For development/testing, use the "Test Connect" button which creates a mock connection.
+    NOTE: Instagram API scopes require Meta App Review approval before
+    production use. For development/testing, use the "Test Connect" button
+    which creates a mock connection.
     """
 
     permission_classes = [IsAuthenticated]
@@ -5370,7 +5726,10 @@ class InstagramConnectView(APIView):
         if not instagram_service.is_configured:
             return Response(
                 {
-                    "error": "Instagram OAuth not configured. Use 'Test Connect' for development testing.",
+                    "error": (
+                        "Instagram OAuth not configured. "
+                        "Use 'Test Connect' for development testing."
+                    ),
                     "hint": (
                         "Instagram API requires Meta App Review for production. "
                         "Click 'Test Connect (No Real Data)' to test the integration."
@@ -5424,10 +5783,14 @@ class InstagramCallbackView(APIView):
         if error:
             error_description = request.GET.get("error_description", error)
             logger.error(f"Instagram OAuth error: {error} - {error_description}")
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=instagram_auth_failed")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=instagram_auth_failed"
+            )
 
         if not code or not state:
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=missing_params")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=missing_params"
+            )
 
         # Validate state
         try:
@@ -5437,7 +5800,9 @@ class InstagramCallbackView(APIView):
                 used=False,
             )
         except OAuthState.DoesNotExist:
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=invalid_state")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=invalid_state"
+            )
 
         # Mark state as used
         oauth_state.used = True
@@ -5445,7 +5810,9 @@ class InstagramCallbackView(APIView):
 
         # Check if state is expired (5 minutes)
         if (timezone.now() - oauth_state.created_at).total_seconds() > 300:
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=state_expired")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=state_expired"
+            )
 
         try:
             # Exchange code for tokens
@@ -5461,13 +5828,18 @@ class InstagramCallbackView(APIView):
             pages = instagram_service.get_user_pages(user_token)
 
             # Find pages with linked Instagram accounts
-            pages_with_instagram = [p for p in pages if p.get("instagram_business_account")]
+            pages_with_instagram = [
+                p for p in pages if p.get("instagram_business_account")
+            ]
 
             if not pages_with_instagram:
                 error_msg = "No%20Instagram%20Business%20Account%20found."
-                error_msg += "%20Please%20link%20your%20Instagram%20to%20a%20Facebook%20Page."
+                error_msg += (
+                    "%20Please%20link%20your%20Instagram%20to%20a%20Facebook%20Page."
+                )
                 return HttpResponseRedirect(
-                    f"{frontend_url}/automation?error=no_instagram_found" f"&message={error_msg}"
+                    f"{frontend_url}/automation?error=no_instagram_found"
+                    f"&message={error_msg}"
                 )
 
             # Use first page with Instagram (user can switch later)
@@ -5483,7 +5855,9 @@ class InstagramCallbackView(APIView):
                     "token_expires_at": token_expires,
                     "profile_id": ig_account.get("id"),
                     "profile_name": ig_account.get("username"),
-                    "profile_url": f"https://instagram.com/{ig_account.get('username')}",
+                    "profile_url": (
+                        f"https://instagram.com/{ig_account.get('username')}"
+                    ),
                     "profile_image_url": ig_account.get("profile_picture_url"),
                     "status": "connected",
                     "page_id": selected_page.get("id"),
@@ -5495,12 +5869,19 @@ class InstagramCallbackView(APIView):
                 },
             )
 
-            logger.info(f"Instagram connected for user {oauth_state.user.email}: " f"@{ig_account.get('username')}")
-            return HttpResponseRedirect(f"{frontend_url}/automation?success=instagram_connected")
+            logger.info(
+                f"Instagram connected for user {oauth_state.user.email}: "
+                f"@{ig_account.get('username')}"
+            )
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?success=instagram_connected"
+            )
 
         except Exception as e:
             logger.error(f"Instagram OAuth callback failed: {e}")
-            return HttpResponseRedirect(f"{frontend_url}/automation?error=instagram_callback_failed")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=instagram_callback_failed"
+            )
 
 
 class InstagramDisconnectView(APIView):
@@ -5569,7 +5950,9 @@ class InstagramAccountsView(APIView):
 
     def get(self, request):
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="instagram", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Instagram account not connected"},
@@ -5620,7 +6003,9 @@ class InstagramAccountsView(APIView):
                         {
                             "id": ig_account.get("id"),
                             "username": ig_account.get("username"),
-                            "profile_picture_url": ig_account.get("profile_picture_url"),
+                            "profile_picture_url": ig_account.get(
+                                "profile_picture_url"
+                            ),
                             "followers_count": ig_account.get("followers_count"),
                             "page_id": page.get("id"),
                             "page_name": page.get("name"),
@@ -5676,7 +6061,9 @@ class InstagramSelectAccountView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="instagram", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Instagram account not connected"},
@@ -5751,7 +6138,9 @@ class InstagramPostView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="instagram", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Instagram account not connected"},
@@ -5792,7 +6181,13 @@ class InstagramPostView(APIView):
             # Store in ContentCalendar for history (same as Facebook test mode)
             # Use provided title, or fallback to caption excerpt, or default
             display_title = (
-                title if title else (caption[:50] + "..." if len(caption) > 50 else (caption or "Instagram Post"))
+                title
+                if title
+                else (
+                    caption[:50] + "..."
+                    if len(caption) > 50
+                    else (caption or "Instagram Post")
+                )
             )
             ContentCalendar.objects.create(
                 user=request.user,
@@ -5888,7 +6283,9 @@ class InstagramPostView(APIView):
                 import time
 
                 for _ in range(30):  # Wait up to 30 seconds
-                    status_resp = instagram_service.check_container_status(container_id, access_token)
+                    status_resp = instagram_service.check_container_status(
+                        container_id, access_token
+                    )
                     status_code = status_resp.get("status_code")
 
                     if status_code == "FINISHED":
@@ -5945,7 +6342,9 @@ class InstagramCarouselPostView(APIView):
         caption = request.data.get("caption", "")
         title = request.data.get("title", "")  # Optional title for organization
         # Accept both image_urls (frontend) and media_urls (API docs) for flexibility
-        media_urls = request.data.get("media_urls") or request.data.get("image_urls", [])
+        media_urls = request.data.get("media_urls") or request.data.get(
+            "image_urls", []
+        )
 
         if len(media_urls) < 2:
             return Response(
@@ -5960,7 +6359,9 @@ class InstagramCarouselPostView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="instagram", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Instagram account not connected"},
@@ -5999,7 +6400,13 @@ class InstagramCarouselPostView(APIView):
 
             # Store in ContentCalendar for history (same as Facebook test mode)
             display_title = (
-                title if title else (caption[:50] + "..." if len(caption) > 50 else (caption or "Instagram Carousel"))
+                title
+                if title
+                else (
+                    caption[:50] + "..."
+                    if len(caption) > 50
+                    else (caption or "Instagram Carousel")
+                )
             )
             ContentCalendar.objects.create(
                 user=request.user,
@@ -6009,7 +6416,10 @@ class InstagramCarouselPostView(APIView):
                 scheduled_date=timezone.now(),
                 status="published",
                 published_at=timezone.now(),
-                post_results={"instagram": {"id": post_id, "media_type": "CAROUSEL_ALBUM"}, "id": post_id},
+                post_results={
+                    "instagram": {"id": post_id, "media_type": "CAROUSEL_ALBUM"},
+                    "id": post_id,
+                },
             )
 
             return Response(
@@ -6081,7 +6491,9 @@ class InstagramStoryView(APIView):
     def get(self, request):
         """Get active stories."""
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="instagram", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Instagram account not connected"},
@@ -6127,7 +6539,9 @@ class InstagramStoryView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="instagram", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Instagram account not connected"},
@@ -6197,7 +6611,9 @@ class InstagramStoryView(APIView):
                 import time
 
                 for _ in range(30):
-                    status_resp = instagram_service.check_container_status(container_id, access_token)
+                    status_resp = instagram_service.check_container_status(
+                        container_id, access_token
+                    )
                     if status_resp.get("status_code") == "FINISHED":
                         break
                     elif status_resp.get("status_code") == "ERROR":
@@ -6263,7 +6679,9 @@ class InstagramAnalyticsView(APIView):
         Otherwise, returns account-level insights.
         """
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="instagram", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Instagram account not connected"},
@@ -6305,7 +6723,9 @@ class InstagramAnalyticsView(APIView):
                             "profile_views": 1200,
                             "website_clicks": 150,
                         },
-                        "recent_posts": _test_instagram_posts_cache.get(request.user.id, [])[:6],
+                        "recent_posts": _test_instagram_posts_cache.get(
+                            request.user.id, []
+                        )[:6],
                     }
                 )
 
@@ -6376,7 +6796,9 @@ class InstagramMediaView(APIView):
         limit = request.query_params.get("limit", 25)
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="instagram", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Instagram account not connected"},
@@ -6421,7 +6843,9 @@ class InstagramCommentsView(APIView):
     def get(self, request, media_id):
         """Get comments on a media item."""
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="instagram", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Instagram account not connected"},
@@ -6479,7 +6903,9 @@ class InstagramCommentsView(APIView):
             )
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="instagram", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Instagram account not connected"},
@@ -6576,7 +7002,9 @@ class InstagramWebhookView(APIView):
                         payload=change,
                     )
 
-                    logger.info(f"Instagram webhook event: {field} for user {ig_user_id}")
+                    logger.info(
+                        f"Instagram webhook event: {field} for user {ig_user_id}"
+                    )
 
         return Response({"received": True})
 
@@ -6593,7 +7021,9 @@ class InstagramWebhookEventsView(APIView):
         from datetime import datetime, timedelta
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="instagram", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Instagram account not connected"},
@@ -6640,7 +7070,10 @@ class InstagramWebhookEventsView(APIView):
                     "event_type_display": "Story Mention",
                     "sender_id": "test_user_789",
                     "media_id": None,
-                    "payload": {"story_id": "story_123", "from": {"id": "test_user_789", "username": "fan_account"}},
+                    "payload": {
+                        "story_id": "story_123",
+                        "from": {"id": "test_user_789", "username": "fan_account"},
+                    },
                     "read": True,
                     "created_at": (now - timedelta(hours=5)).isoformat(),
                 },
@@ -6652,7 +7085,10 @@ class InstagramWebhookEventsView(APIView):
                     "media_id": "17895695668004557",
                     "payload": {
                         "text": "Love this! Where can I get one?",
-                        "from": {"id": "test_user_101", "username": "potential_customer"},
+                        "from": {
+                            "id": "test_user_101",
+                            "username": "potential_customer",
+                        },
                     },
                     "read": True,
                     "created_at": (now - timedelta(days=1)).isoformat(),
@@ -6671,7 +7107,9 @@ class InstagramWebhookEventsView(APIView):
                 }
             )
 
-        events = InstagramWebhookEvent.objects.filter(instagram_user_id=profile.instagram_user_id)
+        events = InstagramWebhookEvent.objects.filter(
+            instagram_user_id=profile.instagram_user_id
+        )
 
         if unread_only:
             events = events.filter(read=False)
@@ -6710,7 +7148,9 @@ class InstagramWebhookEventsView(APIView):
         mark_all = request.data.get("mark_all", False)
 
         try:
-            profile = SocialProfile.objects.get(user=request.user, platform="instagram", status="connected")
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
         except SocialProfile.DoesNotExist:
             return Response(
                 {"error": "Instagram account not connected"},
