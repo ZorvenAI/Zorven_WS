@@ -5376,7 +5376,7 @@ function AutomationPageContent() {
                               setShowResumableUploadModal(true);
                               fetchResumableUploads();
                             }}
-                            className="w-full py-2 px-4 rounded-lg border border-purple-500/30 text-purple-400 hover:bg-purple-500/10 transition-colors"
+                            className="w-full py-2 px-4 rounded-lg border border-[#1877F2]/30 text-[#1877F2] hover:bg-[#1877F2]/10 transition-colors"
                           >
                             📹 Upload Large Video (&gt;1GB)
                           </button>
