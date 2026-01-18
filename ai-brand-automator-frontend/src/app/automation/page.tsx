@@ -142,7 +142,6 @@ const FACEBOOK_MAX_POST_LENGTH = 63206;  // Facebook page post limit
 const INSTAGRAM_MAX_IMAGE_SIZE = 8 * 1024 * 1024;  // 8MB
 const INSTAGRAM_MAX_VIDEO_SIZE = 1024 * 1024 * 1024;  // 1GB (Reels)
 const INSTAGRAM_MAX_POST_LENGTH = 2200;  // Instagram caption limit
-const INSTAGRAM_MAX_CAROUSEL_ITEMS = 10;  // Max carousel items
 
 // Twitter constants
 const TWITTER_MAX_LENGTH = 280;
@@ -868,12 +867,12 @@ function AutomationPageContent() {
   const [igCaption, setIgCaption] = useState('');
   const [igMediaUrls, setIgMediaUrls] = useState<string[]>([]);
   const [igMediaPreview, setIgMediaPreview] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
-  const [uploadingIgMedia, setUploadingIgMedia] = useState(false);
+  const [uploadingIgMedia] = useState(false);
   const [igPosting, setIgPosting] = useState(false);
   // Instagram Carousel mode (multi-image, max 10)
   const [igCarouselMode, setIgCarouselMode] = useState(false);
   const [igCarouselImages, setIgCarouselImages] = useState<{ url: string; file?: File }[]>([]);
-  const [uploadingIgCarouselImage, setUploadingIgCarouselImage] = useState(false);
+  const [uploadingIgCarouselImage] = useState(false);
   // Instagram Stories state
   const [showInstagramStoriesModal, setShowInstagramStoriesModal] = useState(false);
   const [igStories, setIgStories] = useState<Array<{ id: string; media_type: string; timestamp: string }>>([]);
@@ -974,9 +973,6 @@ function AutomationPageContent() {
   const [loadingIgWebhookEvents, setLoadingIgWebhookEvents] = useState(false);
   const [showIgWebhookEvents, setShowIgWebhookEvents] = useState(false);
   const [showIgWebhookSettings, setShowIgWebhookSettings] = useState(false);
-
-  // Instagram media deletion state
-  const [deletingIgMediaId, setDeletingIgMediaId] = useState<string | null>(null);
 
   // Fetch LinkedIn organizations
   const fetchLinkedInOrganizations = useCallback(async () => {
@@ -3270,10 +3266,6 @@ function AutomationPageContent() {
   // Chunk size: 4MB (Facebook recommends 4MB-1GB chunks)
   const CHUNK_SIZE = 4 * 1024 * 1024;
   const ONE_GB = 1 * 1024 * 1024 * 1024;
-
-  // Check if a file should use resumable upload (> 1GB)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const shouldUseResumableUpload = (file: File) => file.size > ONE_GB;
 
   // Fetch active resumable uploads
   const fetchResumableUploads = async () => {

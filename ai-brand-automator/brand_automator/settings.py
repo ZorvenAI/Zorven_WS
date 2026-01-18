@@ -460,7 +460,7 @@ INSTAGRAM_WEBHOOK_VERIFY_TOKEN = config("INSTAGRAM_WEBHOOK_VERIFY_TOKEN", defaul
 
 # Instagram Threads OAuth 2.0 Configuration (separate app)
 INSTAGRAM_THREADS_APP_ID = config("INSTAGRAM_THREADS_APP_ID", default="")
-INSTAGRAM_THREADS_SECRET_KEY = config("INSTAGRAM_THREADS_SECRET_KEY", default="")
+INSTAGRAM_THREADS_APP_SECRET = config("INSTAGRAM_THREADS_APP_SECRET", default="")
 INSTAGRAM_THREADS_REDIRECT_URI = config(
     "INSTAGRAM_THREADS_REDIRECT_URI",
     default="http://localhost:8000/api/v1/automation/threads/callback/",

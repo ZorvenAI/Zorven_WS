@@ -5832,7 +5832,7 @@ class InstagramCallbackView(APIView):
             ig_account = selected_page.get("instagram_business_account", {})
 
             # Create or update the Instagram social profile
-            profile, created = SocialProfile.objects.update_or_create(
+            SocialProfile.objects.update_or_create(
                 user=oauth_state.user,
                 platform="instagram",
                 defaults={
@@ -6016,13 +6016,6 @@ class InstagramAccountsView(APIView):
                 "accounts": accounts,
                 "current_account": current_account,
             })
-
-        except Exception as e:
-            logger.error(f"Failed to fetch Instagram accounts: {e}")
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
 
         except Exception as e:
             logger.error(f"Failed to fetch Instagram accounts: {e}")
