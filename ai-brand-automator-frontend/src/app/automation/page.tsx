@@ -4071,7 +4071,7 @@ function AutomationPageContent() {
                             fetchFbAnalytics();
                           }
                         }}
-                        className="text-xs text-brand-electric hover:underline"
+                        className="text-xs text-[#1877F2] hover:underline"
                       >
                         {showFbAnalytics ? 'Hide' : 'Show'}
                       </button>
@@ -4198,7 +4198,7 @@ function AutomationPageContent() {
                             fetchFbWebhookEvents();
                           }
                         }}
-                        className="text-xs text-brand-electric hover:underline"
+                        className="text-xs text-[#1877F2] hover:underline"
                       >
                         {showFbWebhookEvents ? 'Hide' : 'Show'}
                       </button>
@@ -4295,7 +4295,7 @@ function AutomationPageContent() {
                             fetchFbWebhookSubscriptions();
                           }
                         }}
-                        className="text-xs text-brand-electric hover:underline"
+                        className="text-xs text-[#1877F2] hover:underline"
                       >
                         {showFbWebhookSettings ? 'Hide' : 'Show'}
                       </button>
