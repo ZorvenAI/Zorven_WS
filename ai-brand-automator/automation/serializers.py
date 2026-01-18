@@ -8,9 +8,7 @@ from .models import SocialProfile, AutomationTask, ContentCalendar
 class SocialProfileSerializer(serializers.ModelSerializer):
     """Serializer for social profiles."""
 
-    platform_display = serializers.CharField(
-        source="get_platform_display", read_only=True
-    )
+    platform_display = serializers.CharField(source="get_platform_display", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     is_token_valid = serializers.BooleanField(read_only=True)
 
@@ -47,9 +45,7 @@ class SocialProfileSerializer(serializers.ModelSerializer):
 class AutomationTaskSerializer(serializers.ModelSerializer):
     """Serializer for automation tasks."""
 
-    task_type_display = serializers.CharField(
-        source="get_task_type_display", read_only=True
-    )
+    task_type_display = serializers.CharField(source="get_task_type_display", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
 
     class Meta:

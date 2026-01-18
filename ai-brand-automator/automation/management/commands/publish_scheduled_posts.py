@@ -19,9 +19,7 @@ class Command(BaseCommand):
         now = timezone.now()
 
         # Get all scheduled posts that are due (scheduled_date <= now)
-        due_posts = ContentCalendar.objects.filter(
-            status="scheduled", scheduled_date__lte=now
-        )
+        due_posts = ContentCalendar.objects.filter(status="scheduled", scheduled_date__lte=now)
 
         published_count = 0
         failed_count = 0
@@ -42,9 +40,7 @@ class Command(BaseCommand):
                                 "test_mode": True,
                                 "message": "Post simulated in test mode",
                             }
-                            logger.info(
-                                f"Test auto-publish to LinkedIn: {content.title}"
-                            )
+                            logger.info(f"Test auto-publish to LinkedIn: {content.title}")
                         else:
                             access_token = profile.get_valid_access_token()
                             result = linkedin_service.create_share(
@@ -72,8 +68,4 @@ class Command(BaseCommand):
 
             content.save()
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"\nCompleted: {published_count} published, {failed_count} failed"
-            )
-        )
+        self.stdout.write(self.style.SUCCESS(f"\nCompleted: {published_count} published, {failed_count} failed"))

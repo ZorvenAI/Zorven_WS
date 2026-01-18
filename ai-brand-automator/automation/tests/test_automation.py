@@ -212,9 +212,7 @@ class TestContentCalendar:
 # =============================================================================
 
 
-@pytest.mark.skip(
-    reason="URL routing issue in test environment - reverse() returns 404"
-)
+@pytest.mark.skip(reason="URL routing issue in test environment - reverse() returns 404")
 @pytest.mark.django_db
 class TestSocialProfileStatusView:
     """Tests for social profile status endpoint."""
@@ -233,9 +231,7 @@ class TestSocialProfileStatusView:
         assert "linkedin" in response.data
         assert "twitter" in response.data
 
-    def test_status_shows_connected_profile(
-        self, authenticated_client, linkedin_profile
-    ):
+    def test_status_shows_connected_profile(self, authenticated_client, linkedin_profile):
         """Test status shows connected profile correctly."""
         url = reverse("social-profile-status")
         response = authenticated_client.get(url)
@@ -305,9 +301,7 @@ class TestLinkedInPostView:
     def test_post_in_test_mode(self, authenticated_client, linkedin_profile):
         """Test posting in test mode creates records."""
         url = reverse("linkedin-post")
-        response = authenticated_client.post(
-            url, {"text": "This is a test post", "title": "Test Title"}
-        )
+        response = authenticated_client.post(url, {"text": "This is a test post", "title": "Test Title"})
         assert response.status_code == status.HTTP_200_OK
         assert response.data["test_mode"] is True
 

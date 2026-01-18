@@ -21,9 +21,7 @@ def publish_scheduled_posts():
     now = timezone.now()
 
     # Get all scheduled posts that are due (scheduled_date <= now)
-    due_posts = ContentCalendar.objects.filter(
-        status="scheduled", scheduled_date__lte=now
-    )
+    due_posts = ContentCalendar.objects.filter(status="scheduled", scheduled_date__lte=now)
 
     published_count = 0
     failed_count = 0
@@ -39,9 +37,7 @@ def publish_scheduled_posts():
         else:
             published_count += 1
 
-    logger.info(
-        f"Auto-publish completed: {published_count} published, {failed_count} failed"
-    )
+    logger.info(f"Auto-publish completed: {published_count} published, {failed_count} failed")
     return {
         "published": published_count,
         "failed": failed_count,
@@ -64,9 +60,7 @@ def publish_single_post(content_id):
         return {"error": "Content not found"}
 
     if content.status != "scheduled":
-        logger.warning(
-            f"Content {content_id} is not in scheduled status: {content.status}"
-        )
+        logger.warning(f"Content {content_id} is not in scheduled status: {content.status}")
         return {"error": f"Content is {content.status}, not scheduled"}
 
     logger.info(f"Publishing scheduled post: {content.title}")

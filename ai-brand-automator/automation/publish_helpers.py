@@ -60,9 +60,7 @@ def publish_to_platform(
                     text=content_text,
                     image_urns=media_urls if media_urls else None,
                 )
-                logger.info(
-                    f"{log_prefix}Successfully published to LinkedIn: {content_title}"
-                )
+                logger.info(f"{log_prefix}Successfully published to LinkedIn: {content_title}")
                 return result, None
         except Exception as e:
             error = f"LinkedIn: {str(e)}"
@@ -86,9 +84,7 @@ def publish_to_platform(
                     text=content_text,
                     media_ids=media_urls if media_urls else None,
                 )
-                logger.info(
-                    f"{log_prefix}Successfully published to Twitter: {content_title}"
-                )
+                logger.info(f"{log_prefix}Successfully published to Twitter: {content_title}")
                 return result, None
         except Exception as e:
             error = f"Twitter: {str(e)}"
@@ -131,9 +127,7 @@ def publish_to_platform(
                         page_access_token=profile.page_access_token,
                         message=content_text,
                     )
-                logger.info(
-                    f"{log_prefix}Successfully published to Facebook: {content_title}"
-                )
+                logger.info(f"{log_prefix}Successfully published to Facebook: {content_title}")
                 return result, None
         except Exception as e:
             error = f"Facebook: {str(e)}"
@@ -181,9 +175,7 @@ def publish_to_platform(
                     access_token=access_token,
                     container_id=container_id,
                 )
-                logger.info(
-                    f"{log_prefix}Successfully published to Instagram: {content_title}"
-                )
+                logger.info(f"{log_prefix}Successfully published to Instagram: {content_title}")
                 return result, None
         except Exception as e:
             error = f"Instagram: {str(e)}"

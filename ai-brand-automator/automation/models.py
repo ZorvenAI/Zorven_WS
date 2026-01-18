@@ -31,9 +31,7 @@ class SocialProfile(models.Model):
         ("error", "Error"),
     ]
 
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="social_profiles"
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="social_profiles")
     platform = models.CharField(max_length=20, choices=PLATFORM_CHOICES)
 
     # OAuth tokens (encrypted at rest)
@@ -44,24 +42,19 @@ class SocialProfile(models.Model):
     # Facebook-specific: Page access token (for posting to pages)
     # This is stored separately because Facebook uses user tokens for auth
     # but requires page tokens for posting to pages
-    _page_access_token = models.TextField(
-        blank=True, null=True, db_column="page_access_token"
-    )
+    _page_access_token = models.TextField(blank=True, null=True, db_column="page_access_token")
     page_id = models.CharField(max_length=255, blank=True, null=True)
 
     # Instagram-specific: Business account linked to Facebook Page
     # Instagram requires a Facebook Page connection for the Graph API
     instagram_user_id = models.CharField(
-        max_length=255, blank=True, null=True,
-        help_text="Instagram Business Account ID"
+        max_length=255, blank=True, null=True, help_text="Instagram Business Account ID"
     )
     instagram_username = models.CharField(
-        max_length=255, blank=True, null=True,
-        help_text="Instagram username (handle)"
+        max_length=255, blank=True, null=True, help_text="Instagram username (handle)"
     )
     _instagram_access_token = models.TextField(
-        blank=True, null=True, db_column="instagram_access_token",
-        help_text="Instagram Graph API access token"
+        blank=True, null=True, db_column="instagram_access_token", help_text="Instagram Graph API access token"
     )
 
     # Profile information from the platform
@@ -71,9 +64,7 @@ class SocialProfile(models.Model):
     profile_image_url = models.URLField(blank=True, null=True)
 
     # Connection status
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default="disconnected"
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="disconnected")
 
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
@@ -111,9 +102,7 @@ class SocialProfile(models.Model):
     @property
     def page_access_token(self):
         """Get the decrypted page access token (Facebook only)."""
-        return (
-            decrypt_token(self._page_access_token) if self._page_access_token else None
-        )
+        return decrypt_token(self._page_access_token) if self._page_access_token else None
 
     @page_access_token.setter
     def page_access_token(self, value):
@@ -123,11 +112,7 @@ class SocialProfile(models.Model):
     @property
     def instagram_access_token(self):
         """Get the decrypted Instagram access token."""
-        return (
-            decrypt_token(self._instagram_access_token)
-            if self._instagram_access_token
-            else None
-        )
+        return decrypt_token(self._instagram_access_token) if self._instagram_access_token else None
 
     @instagram_access_token.setter
     def instagram_access_token(self, value):
@@ -263,9 +248,7 @@ class AutomationTask(models.Model):
         ("cancelled", "Cancelled"),
     ]
 
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="automation_tasks"
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="automation_tasks")
     social_profile = models.ForeignKey(
         SocialProfile,
         on_delete=models.CASCADE,
@@ -311,9 +294,7 @@ class ContentCalendar(models.Model):
         ("cancelled", "Cancelled"),
     ]
 
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="scheduled_content"
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="scheduled_content")
 
     title = models.CharField(max_length=255)
     content = models.TextField()
@@ -321,9 +302,7 @@ class ContentCalendar(models.Model):
 
     # Target platforms and profiles
     platforms = models.JSONField(default=list)  # ['linkedin', 'twitter']
-    social_profiles = models.ManyToManyField(
-        SocialProfile, related_name="scheduled_posts", blank=True
-    )
+    social_profiles = models.ManyToManyField(SocialProfile, related_name="scheduled_posts", blank=True)
 
     # Scheduling
     scheduled_date = models.DateTimeField()
@@ -354,13 +333,9 @@ class OAuthState(models.Model):
     """
 
     state = models.CharField(max_length=64, unique=True, db_index=True)
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="oauth_states"
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="oauth_states")
     platform = models.CharField(max_length=20)  # 'linkedin', 'twitter', etc.
-    code_verifier = models.CharField(
-        max_length=256, blank=True, null=True
-    )  # PKCE code verifier for Twitter
+    code_verifier = models.CharField(max_length=256, blank=True, null=True)  # PKCE code verifier for Twitter
     used = models.BooleanField(default=False)  # Mark as used after callback
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -398,15 +373,9 @@ class TwitterWebhookEvent(models.Model):
     ]
 
     event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES)
-    for_user_id = models.CharField(
-        max_length=50, db_index=True, help_text="Twitter user ID this event is for"
-    )
-    payload = models.JSONField(
-        default=dict, help_text="Full event payload from Twitter"
-    )
-    read = models.BooleanField(
-        default=False, help_text="Whether user has seen this event"
-    )
+    for_user_id = models.CharField(max_length=50, db_index=True, help_text="Twitter user ID this event is for")
+    payload = models.JSONField(default=dict, help_text="Full event payload from Twitter")
+    read = models.BooleanField(default=False, help_text="Whether user has seen this event")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -448,21 +417,15 @@ class LinkedInWebhookEvent(models.Model):
     ]
 
     event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES)
-    for_user_id = models.CharField(
-        max_length=100, db_index=True, help_text="LinkedIn member URN this event is for"
-    )
+    for_user_id = models.CharField(max_length=100, db_index=True, help_text="LinkedIn member URN this event is for")
     resource_urn = models.CharField(
         max_length=200,
         blank=True,
         null=True,
         help_text="URN of the resource (share, comment, etc.)",
     )
-    payload = models.JSONField(
-        default=dict, help_text="Full event payload from LinkedIn"
-    )
-    read = models.BooleanField(
-        default=False, help_text="Whether user has seen this event"
-    )
+    payload = models.JSONField(default=dict, help_text="Full event payload from LinkedIn")
+    read = models.BooleanField(default=False, help_text="Whether user has seen this event")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -507,9 +470,7 @@ class FacebookWebhookEvent(models.Model):
     ]
 
     event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES)
-    page_id = models.CharField(
-        max_length=100, db_index=True, help_text="Facebook Page ID this event is for"
-    )
+    page_id = models.CharField(max_length=100, db_index=True, help_text="Facebook Page ID this event is for")
     sender_id = models.CharField(
         max_length=100,
         blank=True,
@@ -522,12 +483,8 @@ class FacebookWebhookEvent(models.Model):
         null=True,
         help_text="ID of the post related to this event",
     )
-    payload = models.JSONField(
-        default=dict, help_text="Full event payload from Facebook"
-    )
-    read = models.BooleanField(
-        default=False, help_text="Whether user has seen this event"
-    )
+    payload = models.JSONField(default=dict, help_text="Full event payload from Facebook")
+    read = models.BooleanField(default=False, help_text="Whether user has seen this event")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -563,18 +520,12 @@ class FacebookResumableUpload(models.Model):
         ("cancelled", "Cancelled"),
     ]
 
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="facebook_uploads"
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="facebook_uploads")
     page_id = models.CharField(max_length=100, help_text="Facebook Page ID")
 
     # Facebook upload session details
-    upload_session_id = models.CharField(
-        max_length=200, unique=True, help_text="Facebook upload session ID"
-    )
-    video_id = models.CharField(
-        max_length=100, blank=True, null=True, help_text="Video ID once upload starts"
-    )
+    upload_session_id = models.CharField(max_length=200, unique=True, help_text="Facebook upload session ID")
+    video_id = models.CharField(max_length=100, blank=True, null=True, help_text="Video ID once upload starts")
 
     # File details
     file_name = models.CharField(max_length=255)
@@ -582,15 +533,9 @@ class FacebookResumableUpload(models.Model):
     content_type = models.CharField(max_length=100, default="video/mp4")
 
     # Upload progress
-    bytes_uploaded = models.BigIntegerField(
-        default=0, help_text="Bytes uploaded so far"
-    )
-    start_offset = models.BigIntegerField(
-        default=0, help_text="Next byte offset to upload from"
-    )
-    end_offset = models.BigIntegerField(
-        default=0, help_text="End offset of last successful chunk"
-    )
+    bytes_uploaded = models.BigIntegerField(default=0, help_text="Bytes uploaded so far")
+    start_offset = models.BigIntegerField(default=0, help_text="Next byte offset to upload from")
+    end_offset = models.BigIntegerField(default=0, help_text="End offset of last successful chunk")
 
     # Status and metadata
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
@@ -682,23 +627,16 @@ class InstagramWebhookEvent(models.Model):
 
     event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES)
     instagram_user_id = models.CharField(
-        max_length=100, db_index=True,
-        help_text="Instagram Business Account ID this event is for"
+        max_length=100, db_index=True, help_text="Instagram Business Account ID this event is for"
     )
     sender_id = models.CharField(
-        max_length=100, blank=True, null=True,
-        help_text="ID of the user who triggered the event"
+        max_length=100, blank=True, null=True, help_text="ID of the user who triggered the event"
     )
     media_id = models.CharField(
-        max_length=200, blank=True, null=True,
-        help_text="ID of the media (post/story) related to this event"
+        max_length=200, blank=True, null=True, help_text="ID of the media (post/story) related to this event"
     )
-    payload = models.JSONField(
-        default=dict, help_text="Full event payload from Instagram"
-    )
-    read = models.BooleanField(
-        default=False, help_text="Whether user has seen this event"
-    )
+    payload = models.JSONField(default=dict, help_text="Full event payload from Instagram")
+    read = models.BooleanField(default=False, help_text="Whether user has seen this event")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -712,10 +650,7 @@ class InstagramWebhookEvent(models.Model):
         ]
 
     def __str__(self):
-        return (
-            f"{self.event_type} for IG user {self.instagram_user_id} "
-            f"at {self.created_at}"
-        )
+        return f"{self.event_type} for IG user {self.instagram_user_id} " f"at {self.created_at}"
 
 
 class InstagramResumableUpload(models.Model):
@@ -745,35 +680,23 @@ class InstagramResumableUpload(models.Model):
         ("STORIES", "Story"),
     ]
 
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="instagram_uploads"
-    )
-    instagram_user_id = models.CharField(
-        max_length=100, help_text="Instagram Business Account ID"
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="instagram_uploads")
+    instagram_user_id = models.CharField(max_length=100, help_text="Instagram Business Account ID")
 
     # Instagram container/media IDs
-    container_id = models.CharField(
-        max_length=200, blank=True, null=True,
-        help_text="Instagram media container ID"
-    )
+    container_id = models.CharField(max_length=200, blank=True, null=True, help_text="Instagram media container ID")
     media_id = models.CharField(
-        max_length=100, blank=True, null=True,
-        help_text="Published media ID once upload completes"
+        max_length=100, blank=True, null=True, help_text="Published media ID once upload completes"
     )
 
     # File details
     file_name = models.CharField(max_length=255)
     file_size = models.BigIntegerField(help_text="Total file size in bytes")
     content_type = models.CharField(max_length=100, default="video/mp4")
-    media_type = models.CharField(
-        max_length=20, choices=MEDIA_TYPE_CHOICES, default="VIDEO"
-    )
+    media_type = models.CharField(max_length=20, choices=MEDIA_TYPE_CHOICES, default="VIDEO")
 
     # Upload progress
-    bytes_uploaded = models.BigIntegerField(
-        default=0, help_text="Bytes uploaded so far"
-    )
+    bytes_uploaded = models.BigIntegerField(default=0, help_text="Bytes uploaded so far")
 
     # Status and metadata
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
