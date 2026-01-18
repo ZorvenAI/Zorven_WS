@@ -12,6 +12,7 @@ from .constants import (
     TWITTER_TEST_ACCESS_TOKEN,
     FACEBOOK_TEST_ACCESS_TOKEN,
     FACEBOOK_TEST_PAGE_TOKEN,
+    INSTAGRAM_TEST_USER_TOKEN,
 )
 
 logger = logging.getLogger(__name__)
@@ -137,6 +138,56 @@ def publish_to_platform(
         except Exception as e:
             error = f"Facebook: {str(e)}"
             logger.error(f"{log_prefix}Failed to publish to Facebook: {e}")
+            return None, error
+
+    elif profile.platform == "instagram" and profile.status == "connected":
+        from .services import instagram_service
+
+        try:
+            access_token = profile.instagram_access_token or profile.page_access_token
+            if access_token == INSTAGRAM_TEST_USER_TOKEN:
+                import uuid
+
+                test_post_id = f"test_ig_post_{uuid.uuid4().hex[:8]}"
+                result = {
+                    "test_mode": True,
+                    "id": test_post_id,
+                    "message": "Instagram post simulated in test mode",
+                    "has_media": len(media_urls) > 0,
+                }
+                logger.info(f"{log_prefix}Test publish to Instagram: {content_title}")
+                return result, None
+            else:
+                if not profile.instagram_user_id:
+                    return None, "Instagram: No Instagram Business Account connected"
+
+                # Instagram requires media
+                if not media_urls or len(media_urls) == 0:
+                    return None, "Instagram: Media is required for Instagram posts"
+
+                # For Instagram, media_urls should be image URLs
+                # Create media container and publish
+                container = instagram_service.create_media_container(
+                    instagram_user_id=profile.instagram_user_id,
+                    access_token=access_token,
+                    image_url=media_urls[0],  # Use first image
+                    caption=content_text,
+                    media_type="IMAGE",
+                )
+
+                container_id = container.get("id")
+                result = instagram_service.publish_media(
+                    instagram_user_id=profile.instagram_user_id,
+                    access_token=access_token,
+                    container_id=container_id,
+                )
+                logger.info(
+                    f"{log_prefix}Successfully published to Instagram: {content_title}"
+                )
+                return result, None
+        except Exception as e:
+            error = f"Instagram: {str(e)}"
+            logger.error(f"{log_prefix}Failed to publish to Instagram: {e}")
             return None, error
 
     return None, None

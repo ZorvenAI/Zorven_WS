@@ -20,7 +20,12 @@ from .serializers import (
     AutomationTaskSerializer,
     ContentCalendarSerializer,
 )
-from .services import linkedin_service, twitter_service, facebook_service
+from .services import (
+    linkedin_service,
+    twitter_service,
+    facebook_service,
+    instagram_service,
+)
 from .constants import (
     TEST_ACCESS_TOKEN,
     TEST_REFRESH_TOKEN,
@@ -41,6 +46,8 @@ from .constants import (
     TWITTER_MEDIA_MAX_GIF_SIZE,
     FACEBOOK_TEST_ACCESS_TOKEN,
     FACEBOOK_TEST_PAGE_TOKEN,
+    INSTAGRAM_TEST_ACCESS_TOKEN,
+    INSTAGRAM_TEST_USER_TOKEN,
 )
 
 logger = logging.getLogger(__name__)
@@ -1921,6 +1928,28 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
             # Facebook removed from platforms - remove any Facebook profiles
             if facebook_profiles_on_instance.exists():
                 instance.social_profiles.remove(*facebook_profiles_on_instance)
+
+        # Handle Instagram platform
+        instagram_profiles_on_instance = instance.social_profiles.filter(
+            platform="instagram"
+        )
+
+        if "instagram" in instance.platforms:
+            # Ensure the user's connected Instagram profile is attached
+            instagram_profile = SocialProfile.objects.filter(
+                user=self.request.user, platform="instagram", status="connected"
+            ).first()
+
+            if instagram_profile:
+                # Add if not already linked
+                if not instagram_profiles_on_instance.filter(
+                    id=instagram_profile.id
+                ).exists():
+                    instance.social_profiles.add(instagram_profile)
+        else:
+            # Instagram removed from platforms - remove any Instagram profiles
+            if instagram_profiles_on_instance.exists():
+                instance.social_profiles.remove(*instagram_profiles_on_instance)
 
     def perform_create(self, serializer):
         """Auto-link social profiles based on selected platforms."""
@@ -5426,6 +5455,26 @@ class FacebookStoryView(APIView):
                 < 86400
             ]
 
+            # Save to ContentCalendar for Recent Activity
+            ContentCalendar.objects.create(
+                user=request.user,
+                title=f"Facebook Story ({story_type.title()})",
+                content="Story posted via Facebook Page",
+                platforms=["facebook"],
+                scheduled_date=timezone.now(),
+                status="published",
+                post_results={
+                    "facebook": {
+                        "id": story_id,
+                        "type": "story",
+                        "media_type": story_type,
+                        "created_at": created_at,
+                        "expires_at": expires_at,
+                        "test_mode": True,
+                    }
+                },
+            )
+
             return Response(
                 {
                     "test_mode": True,
@@ -5467,6 +5516,24 @@ class FacebookStoryView(APIView):
                         video_url=url,
                         title=title,
                     )
+
+            # Save to ContentCalendar for Recent Activity
+            ContentCalendar.objects.create(
+                user=request.user,
+                title=f"Facebook Story ({story_type.title()})",
+                content="Story posted via Facebook Page",
+                platforms=["facebook"],
+                scheduled_date=timezone.now(),
+                status="published",
+                post_results={
+                    "facebook": {
+                        "id": result.get("id"),
+                        "type": "story",
+                        "media_type": story_type,
+                        "created_at": timezone.now().isoformat(),
+                    }
+                },
+            )
 
             return Response(
                 {
@@ -5630,3 +5697,1479 @@ class FacebookStoryDeleteView(APIView):
                 {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+# =============================================================================
+# Instagram Views
+# =============================================================================
+
+# Test mode cache for Instagram posts and stories
+_test_instagram_posts_cache = {}
+_test_instagram_stories_cache = {}
+
+
+class InstagramConnectView(APIView):
+    """
+    Initiate Instagram OAuth 2.0 flow.
+
+    Returns the authorization URL that the frontend should redirect to.
+    Instagram uses Facebook OAuth since it's accessed via Graph API.
+
+    NOTE: Instagram API scopes require Meta App Review approval before
+    production use. For development/testing, use the "Test Connect" button
+    which creates a mock connection.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not instagram_service.is_configured:
+            return Response(
+                {
+                    "error": (
+                        "Instagram OAuth not configured. "
+                        "Use 'Test Connect' for development testing."
+                    ),
+                    "hint": (
+                        "Instagram API requires Meta App Review for production. "
+                        "Click 'Test Connect (No Real Data)' to test the integration."
+                    ),
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        # Generate unique state for CSRF protection
+        state = str(uuid.uuid4())
+
+        # Store state in database
+        OAuthState.objects.create(
+            user=request.user,
+            platform="instagram",
+            state=state,
+        )
+
+        try:
+            auth_url = instagram_service.get_authorization_url(state)
+            return Response(
+                {
+                    "authorization_url": auth_url,
+                    "note": (
+                        "Instagram API scopes may require Meta App Review. "
+                        "If you see a permissions error, use 'Test Connect' instead."
+                    ),
+                }
+            )
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class InstagramCallbackView(APIView):
+    """
+    Handle Instagram OAuth 2.0 callback.
+
+    Exchanges authorization code for tokens, finds Instagram Business Account.
+    """
+
+    # No authentication required - this is a callback from Facebook
+    permission_classes = []
+
+    def get(self, request):
+        code = request.GET.get("code")
+        state = request.GET.get("state")
+        error = request.GET.get("error")
+
+        frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
+
+        if error:
+            error_description = request.GET.get("error_description", error)
+            logger.error(f"Instagram OAuth error: {error} - {error_description}")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=instagram_auth_failed"
+            )
+
+        if not code or not state:
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=missing_params"
+            )
+
+        # Validate state
+        try:
+            oauth_state = OAuthState.objects.get(
+                state=state,
+                platform="instagram",
+                used=False,
+            )
+        except OAuthState.DoesNotExist:
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=invalid_state"
+            )
+
+        # Mark state as used
+        oauth_state.used = True
+        oauth_state.save()
+
+        # Check if state is expired (5 minutes)
+        if (timezone.now() - oauth_state.created_at).total_seconds() > 300:
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=state_expired"
+            )
+
+        try:
+            # Exchange code for tokens
+            token_data = instagram_service.exchange_code_for_token(code)
+            short_lived_token = token_data["access_token"]
+
+            # Get long-lived token
+            long_lived_data = instagram_service.get_long_lived_token(short_lived_token)
+            user_token = long_lived_data["access_token"]
+            token_expires = long_lived_data.get("expires_at")
+
+            # Get user's pages with Instagram Business accounts
+            pages = instagram_service.get_user_pages(user_token)
+
+            # Find pages with linked Instagram accounts
+            pages_with_instagram = [
+                p for p in pages if p.get("instagram_business_account")
+            ]
+
+            if not pages_with_instagram:
+                error_msg = "No%20Instagram%20Business%20Account%20found."
+                error_msg += (
+                    "%20Please%20link%20your%20Instagram%20to%20a%20Facebook%20Page."
+                )
+                return HttpResponseRedirect(
+                    f"{frontend_url}/automation?error=no_instagram_found"
+                    f"&message={error_msg}"
+                )
+
+            # Use first page with Instagram (user can switch later)
+            selected_page = pages_with_instagram[0]
+            ig_account = selected_page.get("instagram_business_account", {})
+
+            # Create or update the Instagram social profile
+            SocialProfile.objects.update_or_create(
+                user=oauth_state.user,
+                platform="instagram",
+                defaults={
+                    "access_token": user_token,
+                    "token_expires_at": token_expires,
+                    "profile_id": ig_account.get("id"),
+                    "profile_name": ig_account.get("username"),
+                    "profile_url": (
+                        f"https://instagram.com/{ig_account.get('username')}"
+                    ),
+                    "profile_image_url": ig_account.get("profile_picture_url"),
+                    "status": "connected",
+                    "page_id": selected_page.get("id"),
+                    "page_access_token": selected_page.get("access_token"),
+                    "instagram_user_id": ig_account.get("id"),
+                    "instagram_username": ig_account.get("username"),
+                    "instagram_access_token": selected_page.get("access_token"),
+                    "last_synced_at": timezone.now(),
+                },
+            )
+
+            logger.info(
+                f"Instagram connected for user {oauth_state.user.email}: "
+                f"@{ig_account.get('username')}"
+            )
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?success=instagram_connected"
+            )
+
+        except Exception as e:
+            logger.error(f"Instagram OAuth callback failed: {e}")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=instagram_callback_failed"
+            )
+
+
+class InstagramDisconnectView(APIView):
+    """Disconnect Instagram account."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            profile = SocialProfile.objects.get(user=request.user, platform="instagram")
+            profile.disconnect()
+            return Response({"message": "Instagram disconnected successfully"})
+        except SocialProfile.DoesNotExist:
+            return Response(
+                {"error": "Instagram account not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+
+class InstagramTestConnectView(APIView):
+    """
+    Create a test Instagram connection for development.
+
+    This allows testing the UI without real Instagram credentials.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        profile, created = SocialProfile.objects.update_or_create(
+            user=request.user,
+            platform="instagram",
+            defaults={
+                "access_token": INSTAGRAM_TEST_ACCESS_TOKEN,
+                "token_expires_at": timezone.now() + timedelta(days=60),
+                "profile_id": "test_ig_user_id",
+                "profile_name": "Test Instagram User",
+                "profile_url": "https://instagram.com/test_ig_user",
+                "profile_image_url": "https://via.placeholder.com/150",
+                "status": "connected",
+                "instagram_user_id": "test_ig_business_id",
+                "instagram_username": "test_ig_user",
+                "instagram_access_token": INSTAGRAM_TEST_USER_TOKEN,
+                "page_id": "test_fb_page_id",
+                "page_access_token": INSTAGRAM_TEST_USER_TOKEN,
+                "last_synced_at": timezone.now(),
+            },
+        )
+
+        return Response(
+            {
+                "message": "Instagram test account connected",
+                "test_mode": True,
+                "profile": SocialProfileSerializer(profile).data,
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
+class InstagramAccountsView(APIView):
+    """
+    List Instagram Business Accounts available via connected Facebook Pages.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
+        except SocialProfile.DoesNotExist:
+            return Response(
+                {"error": "Instagram account not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Check for test mode
+        if profile.instagram_access_token == INSTAGRAM_TEST_USER_TOKEN:
+            # Return the current account if one is selected
+            current_account = None
+            if profile.instagram_user_id:
+                current_account = {
+                    "id": profile.instagram_user_id,
+                    "username": profile.instagram_username or "test_ig_user",
+                }
+            else:
+                # Set a default current account in test mode
+                current_account = {
+                    "id": "test_ig_business_id",
+                    "username": "test_ig_user",
+                }
+
+            return Response(
+                {
+                    "test_mode": True,
+                    "accounts": [
+                        {
+                            "id": "test_ig_business_id",
+                            "username": "test_ig_user",
+                            "name": "Test Instagram Business",
+                            "profile_picture_url": "https://via.placeholder.com/150",
+                            "followers_count": 10000,
+                            "media_count": 50,
+                        }
+                    ],
+                    "current_account": current_account,
+                }
+            )
+
+        try:
+            pages = instagram_service.get_user_pages(profile.access_token)
+            accounts = []
+
+            for page in pages:
+                ig_account = page.get("instagram_business_account")
+                if ig_account:
+                    accounts.append(
+                        {
+                            "id": ig_account.get("id"),
+                            "username": ig_account.get("username"),
+                            "profile_picture_url": ig_account.get(
+                                "profile_picture_url"
+                            ),
+                            "followers_count": ig_account.get("followers_count"),
+                            "page_id": page.get("id"),
+                            "page_name": page.get("name"),
+                            "page_access_token": page.get("access_token"),
+                        }
+                    )
+
+            # Include current account info if one is selected
+            current_account = None
+            if profile.instagram_user_id and profile.instagram_username:
+                current_account = {
+                    "id": profile.instagram_user_id,
+                    "username": profile.instagram_username,
+                }
+            elif accounts:
+                # If no account selected but accounts are available, use the first one
+                current_account = {
+                    "id": accounts[0]["id"],
+                    "username": accounts[0]["username"],
+                }
+
+            return Response(
+                {
+                    "accounts": accounts,
+                    "current_account": current_account,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to fetch Instagram accounts: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class InstagramSelectAccountView(APIView):
+    """
+    Select which Instagram Business Account to use.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        instagram_user_id = request.data.get("instagram_user_id")
+        page_id = request.data.get("page_id")
+        page_access_token = request.data.get("page_access_token")
+
+        if not instagram_user_id:
+            return Response(
+                {"error": "instagram_user_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
+        except SocialProfile.DoesNotExist:
+            return Response(
+                {"error": "Instagram account not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            # Get Instagram account info
+            ig_info = instagram_service.get_user_profile(
+                instagram_user_id,
+                page_access_token or profile.access_token,
+            )
+
+            # Update profile with selected account
+            profile.instagram_user_id = instagram_user_id
+            profile.instagram_username = ig_info.get("username")
+            profile.profile_id = instagram_user_id
+            profile.profile_name = ig_info.get("username")
+            profile.profile_url = f"https://instagram.com/{ig_info.get('username')}"
+            profile.profile_image_url = ig_info.get("profile_picture_url")
+
+            if page_id:
+                profile.page_id = page_id
+            if page_access_token:
+                profile.page_access_token = page_access_token
+                profile.instagram_access_token = page_access_token
+
+            profile.last_synced_at = timezone.now()
+            profile.save()
+
+            return Response(
+                {
+                    "message": f"Instagram @{ig_info.get('username')} selected",
+                    "profile": SocialProfileSerializer(profile).data,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to select Instagram account: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class InstagramPostView(APIView):
+    """
+    Create posts on Instagram.
+
+    Instagram publishing is a 2-step process:
+    1. Create a media container with the image/video URL
+    2. Publish the container
+
+    For scheduled posts, saves to ContentCalendar for Celery processing.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        caption = request.data.get("caption", "")
+        title = request.data.get("title", "")  # Optional title for organization
+        image_url = request.data.get("image_url")
+        video_url = request.data.get("video_url")
+        media_type = request.data.get("media_type", "IMAGE")  # IMAGE, VIDEO, REELS
+        scheduled_time = request.data.get("scheduled_time")
+        share_to_feed = request.data.get("share_to_feed", True)
+
+        if not image_url and not video_url:
+            return Response(
+                {"error": "image_url or video_url is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
+        except SocialProfile.DoesNotExist:
+            return Response(
+                {"error": "Instagram account not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not profile.instagram_user_id:
+            return Response(
+                {"error": "No Instagram Business Account selected"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Get access token
+        access_token = profile.instagram_access_token or profile.page_access_token
+
+        # Check for test mode
+        if access_token == INSTAGRAM_TEST_USER_TOKEN:
+            post_id = f"test_ig_post_{uuid.uuid4().hex[:8]}"
+
+            # Store in test cache
+            user_id = request.user.id
+            if user_id not in _test_instagram_posts_cache:
+                _test_instagram_posts_cache[user_id] = []
+
+            _test_instagram_posts_cache[user_id].append(
+                {
+                    "id": post_id,
+                    "caption": caption,
+                    "media_type": media_type,
+                    "media_url": image_url or video_url,
+                    "permalink": f"https://instagram.com/p/{post_id}",
+                    "timestamp": timezone.now().isoformat(),
+                    "like_count": 0,
+                    "comments_count": 0,
+                }
+            )
+
+            # Store in ContentCalendar for history (same as Facebook test mode)
+            # Use provided title, or fallback to caption excerpt, or default
+            display_title = (
+                title
+                if title
+                else (
+                    caption[:50] + "..."
+                    if len(caption) > 50
+                    else (caption or "Instagram Post")
+                )
+            )
+            ContentCalendar.objects.create(
+                user=request.user,
+                title=display_title,
+                content=caption,
+                platforms=["instagram"],
+                scheduled_date=timezone.now(),
+                status="published",
+                published_at=timezone.now(),
+                post_results={"instagram": {"id": post_id}, "id": post_id},
+            )
+
+            return Response(
+                {
+                    "test_mode": True,
+                    "id": post_id,
+                    "media_type": media_type,
+                    "permalink": f"https://instagram.com/p/{post_id}",
+                    "message": "Post created in test mode",
+                }
+            )
+
+        # Handle scheduled posts
+        if scheduled_time:
+            try:
+                from django.utils.dateparse import parse_datetime
+
+                scheduled_dt = parse_datetime(scheduled_time)
+                if not scheduled_dt:
+                    return Response(
+                        {"error": "Invalid scheduled_time format"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                # Create content calendar entry
+                calendar_entry = ContentCalendar.objects.create(
+                    user=request.user,
+                    title=caption[:100] if caption else "Instagram Post",
+                    content=caption,
+                    media_urls=[image_url or video_url],
+                    platforms=["instagram"],
+                    scheduled_date=scheduled_dt,
+                    status="scheduled",
+                    post_results={
+                        "media_type": media_type,
+                        "share_to_feed": share_to_feed,
+                    },
+                )
+                calendar_entry.social_profiles.add(profile)
+
+                return Response(
+                    {
+                        "scheduled": True,
+                        "calendar_id": calendar_entry.id,
+                        "scheduled_date": scheduled_dt.isoformat(),
+                        "message": "Post scheduled for Instagram",
+                    },
+                    status=status.HTTP_201_CREATED,
+                )
+            except Exception as e:
+                logger.error(f"Failed to schedule Instagram post: {e}")
+                return Response(
+                    {"error": f"Failed to schedule post: {str(e)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        # Immediate post
+        try:
+            # Step 1: Create container
+            if media_type == "REELS":
+                container = instagram_service.create_reel_container(
+                    instagram_user_id=profile.instagram_user_id,
+                    access_token=access_token,
+                    video_url=video_url,
+                    caption=caption,
+                    share_to_feed=share_to_feed,
+                )
+            else:
+                container = instagram_service.create_media_container(
+                    instagram_user_id=profile.instagram_user_id,
+                    access_token=access_token,
+                    image_url=image_url,
+                    video_url=video_url,
+                    caption=caption,
+                    media_type=media_type,
+                )
+
+            container_id = container.get("id")
+
+            # For videos, we need to wait for processing
+            if media_type in ("VIDEO", "REELS"):
+                # Poll for status (in production, use Celery task)
+                import time
+
+                for _ in range(30):  # Wait up to 30 seconds
+                    status_resp = instagram_service.check_container_status(
+                        container_id, access_token
+                    )
+                    status_code = status_resp.get("status_code")
+
+                    if status_code == "FINISHED":
+                        break
+                    elif status_code == "ERROR":
+                        return Response(
+                            {
+                                "error": "Video processing failed",
+                                "details": status_resp.get("status"),
+                            },
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        )
+                    time.sleep(1)
+
+            # Step 2: Publish
+            result = instagram_service.publish_media(
+                instagram_user_id=profile.instagram_user_id,
+                access_token=access_token,
+                container_id=container_id,
+            )
+
+            media_id = result.get("id")
+
+            # Get published media details
+            media = instagram_service.get_media(media_id, access_token)
+
+            return Response(
+                {
+                    "id": media_id,
+                    "media_type": media.get("media_type"),
+                    "permalink": media.get("permalink"),
+                    "media_url": media.get("media_url"),
+                    "timestamp": media.get("timestamp"),
+                    "message": "Post published to Instagram",
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Instagram post creation failed: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class InstagramCarouselPostView(APIView):
+    """
+    Create carousel (multi-image) posts on Instagram.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        caption = request.data.get("caption", "")
+        title = request.data.get("title", "")  # Optional title for organization
+        # Accept both image_urls (frontend) and media_urls (API docs) for flexibility
+        media_urls = request.data.get("media_urls") or request.data.get(
+            "image_urls", []
+        )
+
+        if len(media_urls) < 2:
+            return Response(
+                {"error": "Carousel requires at least 2 images"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if len(media_urls) > 10:
+            return Response(
+                {"error": "Carousel supports maximum 10 images"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
+        except SocialProfile.DoesNotExist:
+            return Response(
+                {"error": "Instagram account not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not profile.instagram_user_id:
+            return Response(
+                {"error": "No Instagram Business Account selected"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        access_token = profile.instagram_access_token or profile.page_access_token
+
+        # Check for test mode
+        if access_token == INSTAGRAM_TEST_USER_TOKEN:
+            post_id = f"test_ig_carousel_{uuid.uuid4().hex[:8]}"
+
+            user_id = request.user.id
+            if user_id not in _test_instagram_posts_cache:
+                _test_instagram_posts_cache[user_id] = []
+
+            _test_instagram_posts_cache[user_id].append(
+                {
+                    "id": post_id,
+                    "caption": caption,
+                    "media_type": "CAROUSEL_ALBUM",
+                    "media_url": media_urls[0],
+                    "children": [{"media_url": url} for url in media_urls],
+                    "permalink": f"https://instagram.com/p/{post_id}",
+                    "timestamp": timezone.now().isoformat(),
+                    "like_count": 0,
+                    "comments_count": 0,
+                }
+            )
+
+            # Store in ContentCalendar for history (same as Facebook test mode)
+            display_title = (
+                title
+                if title
+                else (
+                    caption[:50] + "..."
+                    if len(caption) > 50
+                    else (caption or "Instagram Carousel")
+                )
+            )
+            ContentCalendar.objects.create(
+                user=request.user,
+                title=display_title,
+                content=caption,
+                platforms=["instagram"],
+                scheduled_date=timezone.now(),
+                status="published",
+                published_at=timezone.now(),
+                post_results={
+                    "instagram": {"id": post_id, "media_type": "CAROUSEL_ALBUM"},
+                    "id": post_id,
+                },
+            )
+
+            return Response(
+                {
+                    "test_mode": True,
+                    "id": post_id,
+                    "media_type": "CAROUSEL_ALBUM",
+                    "permalink": f"https://instagram.com/p/{post_id}",
+                    "message": "Carousel created in test mode",
+                }
+            )
+
+        try:
+            # Step 1: Create carousel item containers
+            item_ids = []
+            for url in media_urls:
+                is_video = any(ext in url.lower() for ext in [".mp4", ".mov", ".avi"])
+                item = instagram_service.create_carousel_item_container(
+                    instagram_user_id=profile.instagram_user_id,
+                    access_token=access_token,
+                    image_url=None if is_video else url,
+                    video_url=url if is_video else None,
+                )
+                item_ids.append(item.get("id"))
+
+            # Step 2: Create carousel container
+            carousel = instagram_service.create_carousel_container(
+                instagram_user_id=profile.instagram_user_id,
+                access_token=access_token,
+                children=item_ids,
+                caption=caption,
+            )
+
+            # Step 3: Publish
+            result = instagram_service.publish_media(
+                instagram_user_id=profile.instagram_user_id,
+                access_token=access_token,
+                container_id=carousel.get("id"),
+            )
+
+            media_id = result.get("id")
+            media = instagram_service.get_media(media_id, access_token)
+
+            return Response(
+                {
+                    "id": media_id,
+                    "media_type": "CAROUSEL_ALBUM",
+                    "permalink": media.get("permalink"),
+                    "timestamp": media.get("timestamp"),
+                    "message": "Carousel published to Instagram",
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Instagram carousel creation failed: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class InstagramStoryView(APIView):
+    """
+    Create and list Instagram Stories.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Get active stories."""
+        try:
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
+        except SocialProfile.DoesNotExist:
+            return Response(
+                {"error": "Instagram account not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        access_token = profile.instagram_access_token or profile.page_access_token
+
+        # Check for test mode
+        if access_token == INSTAGRAM_TEST_USER_TOKEN:
+            user_id = request.user.id
+            stories = _test_instagram_stories_cache.get(user_id, [])
+            return Response(
+                {
+                    "test_mode": True,
+                    "stories": stories,
+                }
+            )
+
+        try:
+            stories = instagram_service.get_stories(
+                instagram_user_id=profile.instagram_user_id,
+                access_token=access_token,
+            )
+            return Response({"stories": stories})
+
+        except Exception as e:
+            logger.error(f"Failed to fetch Instagram stories: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def post(self, request):
+        """Create a new story."""
+        image_url = request.data.get("image_url")
+        video_url = request.data.get("video_url")
+
+        if not image_url and not video_url:
+            return Response(
+                {"error": "image_url or video_url is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
+        except SocialProfile.DoesNotExist:
+            return Response(
+                {"error": "Instagram account not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        access_token = profile.instagram_access_token or profile.page_access_token
+
+        # Check for test mode
+        if access_token == INSTAGRAM_TEST_USER_TOKEN:
+            story_id = f"test_ig_story_{uuid.uuid4().hex[:8]}"
+
+            user_id = request.user.id
+            if user_id not in _test_instagram_stories_cache:
+                _test_instagram_stories_cache[user_id] = []
+
+            _test_instagram_stories_cache[user_id].append(
+                {
+                    "id": story_id,
+                    "media_type": "VIDEO" if video_url else "IMAGE",
+                    "media_url": video_url or image_url,
+                    "timestamp": timezone.now().isoformat(),
+                }
+            )
+
+            # Save to ContentCalendar for Recent Activity
+            ContentCalendar.objects.create(
+                user=request.user,
+                title=f"Instagram Story ({'Video' if video_url else 'Image'})",
+                content="Story posted via Instagram",
+                platforms=["instagram"],
+                media_urls=[video_url or image_url],
+                scheduled_date=timezone.now(),
+                status="published",
+                post_results={
+                    "instagram": {
+                        "id": story_id,
+                        "type": "story",
+                        "media_type": "VIDEO" if video_url else "IMAGE",
+                        "media_url": video_url or image_url,
+                        "test_mode": True,
+                    }
+                },
+            )
+
+            return Response(
+                {
+                    "test_mode": True,
+                    "id": story_id,
+                    "message": "Story created in test mode",
+                }
+            )
+
+        try:
+            # Create story container
+            container = instagram_service.create_story_container(
+                instagram_user_id=profile.instagram_user_id,
+                access_token=access_token,
+                image_url=image_url,
+                video_url=video_url,
+            )
+
+            container_id = container.get("id")
+
+            # For videos, wait for processing
+            if video_url:
+                import time
+
+                for _ in range(30):
+                    status_resp = instagram_service.check_container_status(
+                        container_id, access_token
+                    )
+                    if status_resp.get("status_code") == "FINISHED":
+                        break
+                    elif status_resp.get("status_code") == "ERROR":
+                        return Response(
+                            {"error": "Story video processing failed"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        )
+                    time.sleep(1)
+
+            # Publish story
+            result = instagram_service.publish_media(
+                instagram_user_id=profile.instagram_user_id,
+                access_token=access_token,
+                container_id=container_id,
+            )
+
+            # Save to ContentCalendar for Recent Activity
+            ContentCalendar.objects.create(
+                user=request.user,
+                title=f"Instagram Story ({'Video' if video_url else 'Image'})",
+                content="Story posted via Instagram",
+                platforms=["instagram"],
+                media_urls=[video_url or image_url],
+                scheduled_date=timezone.now(),
+                status="published",
+                post_results={
+                    "instagram": {
+                        "id": result.get("id"),
+                        "type": "story",
+                        "media_type": "VIDEO" if video_url else "IMAGE",
+                        "media_url": video_url or image_url,
+                    }
+                },
+            )
+
+            return Response(
+                {
+                    "id": result.get("id"),
+                    "message": "Story published to Instagram",
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Instagram story creation failed: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class InstagramAnalyticsView(APIView):
+    """
+    Get Instagram account and media insights.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, media_id=None):
+        """
+        Get account insights or specific media insights.
+
+        If media_id is provided, returns insights for that media.
+        Otherwise, returns account-level insights.
+        """
+        try:
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
+        except SocialProfile.DoesNotExist:
+            return Response(
+                {"error": "Instagram account not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        access_token = profile.instagram_access_token or profile.page_access_token
+
+        # Check for test mode
+        if access_token == INSTAGRAM_TEST_USER_TOKEN:
+            if media_id:
+                return Response(
+                    {
+                        "test_mode": True,
+                        "media_id": media_id,
+                        "insights": {
+                            "engagement": 150,
+                            "impressions": 1500,
+                            "reach": 1200,
+                            "saved": 25,
+                        },
+                    }
+                )
+            else:
+                return Response(
+                    {
+                        "test_mode": True,
+                        "account": {
+                            "id": profile.instagram_user_id,
+                            "username": profile.instagram_username,
+                            "followers_count": 10000,
+                            "follows_count": 500,
+                            "media_count": 50,
+                        },
+                        "insights": {
+                            "impressions": 50000,
+                            "reach": 40000,
+                            "follower_count": 10000,
+                            "profile_views": 1200,
+                            "website_clicks": 150,
+                        },
+                        "recent_posts": _test_instagram_posts_cache.get(
+                            request.user.id, []
+                        )[:6],
+                    }
+                )
+
+        try:
+            if media_id:
+                # Get media info first to determine type
+                media = instagram_service.get_media(media_id, access_token)
+                media_type = media.get("media_type", "IMAGE")
+
+                insights = instagram_service.get_media_insights(
+                    media_id=media_id,
+                    access_token=access_token,
+                    media_type=media_type,
+                )
+
+                return Response(
+                    {
+                        "media_id": media_id,
+                        "media_type": media_type,
+                        "insights": insights,
+                        "media": media,
+                    }
+                )
+            else:
+                # Get account info and insights
+                account = instagram_service.get_user_profile(
+                    instagram_user_id=profile.instagram_user_id,
+                    access_token=access_token,
+                )
+
+                insights = instagram_service.get_account_insights(
+                    instagram_user_id=profile.instagram_user_id,
+                    access_token=access_token,
+                    period="day",
+                )
+
+                # Get recent posts
+                recent_posts = instagram_service.get_user_media(
+                    instagram_user_id=profile.instagram_user_id,
+                    access_token=access_token,
+                    limit=6,
+                )
+
+                return Response(
+                    {
+                        "account": account,
+                        "insights": insights,
+                        "recent_posts": recent_posts,
+                    }
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to fetch Instagram analytics: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class InstagramMediaView(APIView):
+    """
+    Get Instagram media (posts) for the connected account.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        limit = request.query_params.get("limit", 25)
+
+        try:
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
+        except SocialProfile.DoesNotExist:
+            return Response(
+                {"error": "Instagram account not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        access_token = profile.instagram_access_token or profile.page_access_token
+
+        # Check for test mode
+        if access_token == INSTAGRAM_TEST_USER_TOKEN:
+            posts = _test_instagram_posts_cache.get(request.user.id, [])
+            return Response(
+                {
+                    "test_mode": True,
+                    "media": posts,
+                }
+            )
+
+        try:
+            media = instagram_service.get_user_media(
+                instagram_user_id=profile.instagram_user_id,
+                access_token=access_token,
+                limit=int(limit),
+            )
+            return Response({"media": media})
+
+        except Exception as e:
+            logger.error(f"Failed to fetch Instagram media: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class InstagramCommentsView(APIView):
+    """
+    Get and reply to comments on Instagram media.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, media_id):
+        """Get comments on a media item."""
+        try:
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
+        except SocialProfile.DoesNotExist:
+            return Response(
+                {"error": "Instagram account not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        access_token = profile.instagram_access_token or profile.page_access_token
+
+        # Check for test mode
+        if access_token == INSTAGRAM_TEST_USER_TOKEN:
+            return Response(
+                {
+                    "test_mode": True,
+                    "media_id": media_id,
+                    "comments": [
+                        {
+                            "id": "test_comment_1",
+                            "text": "Great post!",
+                            "username": "test_follower",
+                            "timestamp": timezone.now().isoformat(),
+                            "like_count": 5,
+                        }
+                    ],
+                }
+            )
+
+        try:
+            comments = instagram_service.get_media_comments(
+                media_id=media_id,
+                access_token=access_token,
+            )
+            return Response(
+                {
+                    "media_id": media_id,
+                    "comments": comments,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to fetch Instagram comments: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def post(self, request, media_id):
+        """Reply to a comment."""
+        comment_id = request.data.get("comment_id")
+        message = request.data.get("message")
+
+        if not comment_id or not message:
+            return Response(
+                {"error": "comment_id and message are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
+        except SocialProfile.DoesNotExist:
+            return Response(
+                {"error": "Instagram account not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        access_token = profile.instagram_access_token or profile.page_access_token
+
+        # Check for test mode
+        if access_token == INSTAGRAM_TEST_USER_TOKEN:
+            return Response(
+                {
+                    "test_mode": True,
+                    "id": f"test_reply_{uuid.uuid4().hex[:8]}",
+                    "message": "Reply created in test mode",
+                }
+            )
+
+        try:
+            result = instagram_service.reply_to_comment(
+                comment_id=comment_id,
+                access_token=access_token,
+                message=message,
+            )
+            return Response(
+                {
+                    "id": result.get("id"),
+                    "message": "Reply posted successfully",
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to reply to Instagram comment: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class InstagramWebhookView(APIView):
+    """
+    Handle Instagram webhook verification and events.
+    """
+
+    permission_classes = []  # Webhooks don't use authentication
+
+    def get(self, request):
+        """Handle webhook verification challenge."""
+        mode = request.query_params.get("hub.mode")
+        token = request.query_params.get("hub.verify_token")
+        challenge = request.query_params.get("hub.challenge")
+
+        if mode == "subscribe" and instagram_service.verify_webhook_token(token):
+            logger.info("Instagram webhook verified")
+            return Response(int(challenge))
+        else:
+            logger.warning("Instagram webhook verification failed")
+            return Response(
+                {"error": "Verification failed"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+    def post(self, request):
+        """Handle incoming webhook events."""
+        from .models import InstagramWebhookEvent
+
+        # Verify signature
+        signature = request.headers.get("X-Hub-Signature-256", "")
+        if not instagram_service.verify_webhook_signature(request.body, signature):
+            logger.warning("Instagram webhook signature verification failed")
+            return Response(
+                {"error": "Invalid signature"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Process webhook payload
+        payload = request.data
+
+        # Instagram webhooks come under 'instagram' object
+        if payload.get("object") == "instagram":
+            for entry in payload.get("entry", []):
+                ig_user_id = entry.get("id")
+
+                for change in entry.get("changes", []):
+                    field = change.get("field")
+                    value = change.get("value")
+
+                    # Create webhook event record
+                    InstagramWebhookEvent.objects.create(
+                        event_type=field,
+                        instagram_user_id=ig_user_id,
+                        sender_id=value.get("from", {}).get("id") if value else None,
+                        media_id=value.get("media_id") if value else None,
+                        payload=change,
+                    )
+
+                    logger.info(
+                        f"Instagram webhook event: {field} for user {ig_user_id}"
+                    )
+
+        return Response({"received": True})
+
+
+class InstagramWebhookEventsView(APIView):
+    """
+    Get webhook events for the authenticated user.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .models import InstagramWebhookEvent
+        from datetime import datetime, timedelta
+
+        try:
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
+        except SocialProfile.DoesNotExist:
+            return Response(
+                {"error": "Instagram account not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        limit = request.query_params.get("limit", 50)
+        unread_only = request.query_params.get("unread_only", "false").lower() == "true"
+
+        # Check for test mode
+        if profile.instagram_access_token == INSTAGRAM_TEST_USER_TOKEN:
+            # Return simulated webhook events for test mode
+            now = datetime.now()
+            test_events = [
+                {
+                    "id": 1,
+                    "event_type": "comments",
+                    "event_type_display": "Comment on Post",
+                    "sender_id": "test_user_123",
+                    "media_id": "17895695668004555",
+                    "payload": {
+                        "text": "Great content! 🔥",
+                        "from": {"id": "test_user_123", "username": "test_follower"},
+                    },
+                    "read": False,
+                    "created_at": (now - timedelta(minutes=15)).isoformat(),
+                },
+                {
+                    "id": 2,
+                    "event_type": "mentions",
+                    "event_type_display": "Mentioned",
+                    "sender_id": "test_user_456",
+                    "media_id": "17895695668004556",
+                    "payload": {
+                        "text": "Check out @your_brand!",
+                        "from": {"id": "test_user_456", "username": "influencer"},
+                    },
+                    "read": False,
+                    "created_at": (now - timedelta(hours=2)).isoformat(),
+                },
+                {
+                    "id": 3,
+                    "event_type": "story_mentions",
+                    "event_type_display": "Story Mention",
+                    "sender_id": "test_user_789",
+                    "media_id": None,
+                    "payload": {
+                        "story_id": "story_123",
+                        "from": {"id": "test_user_789", "username": "fan_account"},
+                    },
+                    "read": True,
+                    "created_at": (now - timedelta(hours=5)).isoformat(),
+                },
+                {
+                    "id": 4,
+                    "event_type": "comments",
+                    "event_type_display": "Comment on Post",
+                    "sender_id": "test_user_101",
+                    "media_id": "17895695668004557",
+                    "payload": {
+                        "text": "Love this! Where can I get one?",
+                        "from": {
+                            "id": "test_user_101",
+                            "username": "potential_customer",
+                        },
+                    },
+                    "read": True,
+                    "created_at": (now - timedelta(days=1)).isoformat(),
+                },
+            ]
+
+            if unread_only:
+                test_events = [e for e in test_events if not e["read"]]
+
+            return Response(
+                {
+                    "test_mode": True,
+                    "events": test_events[: int(limit)],
+                    "total_count": len(test_events),
+                    "unread_count": len([e for e in test_events if not e["read"]]),
+                }
+            )
+
+        events = InstagramWebhookEvent.objects.filter(
+            instagram_user_id=profile.instagram_user_id
+        )
+
+        if unread_only:
+            events = events.filter(read=False)
+
+        events = events.order_by("-created_at")[: int(limit)]
+
+        return Response(
+            {
+                "events": [
+                    {
+                        "id": e.id,
+                        "event_type": e.event_type,
+                        "event_type_display": e.get_event_type_display(),
+                        "sender_id": e.sender_id,
+                        "media_id": e.media_id,
+                        "payload": e.payload,
+                        "read": e.read,
+                        "created_at": e.created_at.isoformat(),
+                    }
+                    for e in events
+                ],
+                "total_count": InstagramWebhookEvent.objects.filter(
+                    instagram_user_id=profile.instagram_user_id
+                ).count(),
+                "unread_count": InstagramWebhookEvent.objects.filter(
+                    instagram_user_id=profile.instagram_user_id, read=False
+                ).count(),
+            }
+        )
+
+    def post(self, request):
+        """Mark events as read."""
+        from .models import InstagramWebhookEvent
+
+        event_ids = request.data.get("event_ids", [])
+        mark_all = request.data.get("mark_all", False)
+
+        try:
+            profile = SocialProfile.objects.get(
+                user=request.user, platform="instagram", status="connected"
+            )
+        except SocialProfile.DoesNotExist:
+            return Response(
+                {"error": "Instagram account not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if mark_all:
+            updated = InstagramWebhookEvent.objects.filter(
+                instagram_user_id=profile.instagram_user_id, read=False
+            ).update(read=True)
+        else:
+            updated = InstagramWebhookEvent.objects.filter(
+                id__in=event_ids,
+                instagram_user_id=profile.instagram_user_id,
+            ).update(read=True)
+
+        return Response(
+            {
+                "marked_read": updated,
+                "message": f"{updated} events marked as read",
+            }
+        )

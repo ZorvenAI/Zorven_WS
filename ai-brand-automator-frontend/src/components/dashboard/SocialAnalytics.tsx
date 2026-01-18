@@ -96,6 +96,32 @@ interface FacebookAnalyticsData {
   test_mode?: boolean;
 }
 
+interface InstagramAnalyticsData {
+  account_id?: string;
+  username?: string;
+  profile_picture_url?: string;
+  insights?: {
+    follower_count?: number;
+    follows_count?: number;
+    media_count?: number;
+    impressions?: number;
+    reach?: number;
+    profile_views?: number;
+    website_clicks?: number;
+  };
+  recent_media?: Array<{
+    id: string;
+    caption?: string;
+    media_type: string;
+    permalink: string;
+    thumbnail_url?: string;
+    timestamp: string;
+    like_count: number;
+    comments_count: number;
+  }>;
+  test_mode?: boolean;
+}
+
 interface WebhookEvent {
   id: number;
   event_type: string;
@@ -109,6 +135,7 @@ interface SocialProfiles {
   twitter?: { connected: boolean };
   linkedin?: { connected: boolean };
   facebook?: { connected: boolean };
+  instagram?: { connected: boolean };
 }
 
 export default function SocialAnalytics() {
@@ -145,6 +172,16 @@ export default function SocialAnalytics() {
   const [facebookWebhookEvents, setFacebookWebhookEvents] = useState<WebhookEvent[]>([]);
   const [facebookUnreadCount, setFacebookUnreadCount] = useState(0);
   const [showFacebookNotifications, setShowFacebookNotifications] = useState(false);
+
+  // Instagram Analytics state
+  const [showInstagramAnalytics, setShowInstagramAnalytics] = useState(true);
+  const [instagramAnalyticsLoading, setInstagramAnalyticsLoading] = useState(false);
+  const [instagramAnalyticsData, setInstagramAnalyticsData] = useState<InstagramAnalyticsData | null>(null);
+
+  // Instagram Webhook notifications state
+  const [instagramWebhookEvents, setInstagramWebhookEvents] = useState<WebhookEvent[]>([]);
+  const [instagramUnreadCount, setInstagramUnreadCount] = useState(0);
+  const [showInstagramNotifications, setShowInstagramNotifications] = useState(false);
 
   // Fetch profile status
   const fetchProfiles = useCallback(async () => {
@@ -314,6 +351,57 @@ export default function SocialAnalytics() {
     }
   };
 
+  // Fetch Instagram analytics
+  const fetchInstagramAnalytics = useCallback(async () => {
+    if (!profiles?.instagram?.connected) return;
+    
+    setInstagramAnalyticsLoading(true);
+    try {
+      const response = await apiClient.get('/automation/instagram/analytics/');
+      if (response.ok) {
+        const data = await response.json();
+        setInstagramAnalyticsData(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch Instagram analytics:', error);
+    } finally {
+      setInstagramAnalyticsLoading(false);
+    }
+  }, [profiles?.instagram?.connected]);
+
+  // Fetch Instagram webhook events
+  const fetchInstagramWebhookEvents = useCallback(async () => {
+    if (!profiles?.instagram?.connected) return;
+    
+    try {
+      const response = await apiClient.get('/automation/instagram/webhooks/events/?limit=20');
+      if (response.ok) {
+        const data = await response.json();
+        setInstagramWebhookEvents(data.events || []);
+        setInstagramUnreadCount(data.unread_count || 0);
+      }
+    } catch (error) {
+      console.error('Failed to fetch Instagram webhook events:', error);
+    }
+  }, [profiles?.instagram?.connected]);
+
+  // Mark Instagram events as read
+  const markInstagramEventsAsRead = async (eventIds: number[]) => {
+    try {
+      const response = await apiClient.post('/automation/instagram/webhooks/events/', {
+        event_ids: eventIds,
+      });
+      if (response.ok) {
+        setInstagramWebhookEvents(prev => 
+          prev.map(e => eventIds.includes(e.id) ? { ...e, read: true } : e)
+        );
+        setInstagramUnreadCount(prev => Math.max(0, prev - eventIds.length));
+      }
+    } catch (error) {
+      console.error('Failed to mark Instagram events as read:', error);
+    }
+  };
+
   // Initial data fetch
   useEffect(() => {
     fetchProfiles();
@@ -330,7 +418,10 @@ export default function SocialAnalytics() {
     if (profiles?.facebook?.connected) {
       fetchFacebookAnalytics();
     }
-  }, [profiles, fetchTwitterAnalytics, fetchLinkedInAnalytics, fetchFacebookAnalytics]);
+    if (profiles?.instagram?.connected) {
+      fetchInstagramAnalytics();
+    }
+  }, [profiles, fetchTwitterAnalytics, fetchLinkedInAnalytics, fetchFacebookAnalytics, fetchInstagramAnalytics]);
 
   if (loadingProfiles) {
     return (
@@ -342,7 +433,7 @@ export default function SocialAnalytics() {
     );
   }
 
-  const hasConnectedPlatforms = profiles?.twitter?.connected || profiles?.linkedin?.connected || profiles?.facebook?.connected;
+  const hasConnectedPlatforms = profiles?.twitter?.connected || profiles?.linkedin?.connected || profiles?.facebook?.connected || profiles?.instagram?.connected;
 
   if (!hasConnectedPlatforms) {
     return (
@@ -930,6 +1021,220 @@ export default function SocialAnalytics() {
                 <div className="text-center py-4 text-brand-silver/70">
                   <p>Failed to load analytics.</p>
                   <button onClick={fetchFacebookAnalytics} className="text-[#1877F2] hover:underline mt-1 text-sm">
+                    Try again
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Instagram Analytics */}
+      {profiles?.instagram?.connected && (
+        <div className="glass-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-heading font-bold text-white flex items-center gap-2">
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+                <defs>
+                  <linearGradient id="instagramGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#FFDC80" />
+                    <stop offset="25%" stopColor="#F77737" />
+                    <stop offset="50%" stopColor="#E1306C" />
+                    <stop offset="75%" stopColor="#C13584" />
+                    <stop offset="100%" stopColor="#833AB4" />
+                  </linearGradient>
+                </defs>
+                <path fill="url(#instagramGradient)" d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+              </svg>
+              Instagram Analytics
+            </h2>
+            <div className="flex items-center gap-2">
+              {/* Notifications Bell */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowInstagramNotifications(!showInstagramNotifications);
+                    if (!showInstagramNotifications) fetchInstagramWebhookEvents();
+                  }}
+                  className="p-2 rounded-lg bg-brand-ghost/20 hover:bg-brand-ghost/30 transition-colors relative"
+                  title="Notifications"
+                >
+                  <svg className="w-5 h-5 text-brand-silver" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  {instagramUnreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                      {instagramUnreadCount > 9 ? '9+' : instagramUnreadCount}
+                    </span>
+                  )}
+                </button>
+                
+                {/* Notifications Dropdown */}
+                {showInstagramNotifications && (
+                  <div className="absolute right-0 top-12 w-80 bg-brand-midnight border border-brand-ghost/30 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
+                    <div className="p-3 border-b border-brand-ghost/30 flex items-center justify-between">
+                      <span className="text-sm font-medium text-white">Instagram Notifications</span>
+                      {instagramUnreadCount > 0 && (
+                        <button
+                          onClick={() => markInstagramEventsAsRead(instagramWebhookEvents.filter(e => !e.read).map(e => e.id))}
+                          className="text-xs text-pink-400 hover:underline"
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+                    <div className="divide-y divide-brand-ghost/20">
+                      {instagramWebhookEvents.length === 0 ? (
+                        <div className="p-4 text-center text-brand-silver/70 text-sm">
+                          No notifications yet
+                        </div>
+                      ) : (
+                        instagramWebhookEvents.map((event) => (
+                          <div
+                            key={event.id}
+                            className={`p-3 ${!event.read ? 'bg-pink-500/10' : ''}`}
+                            onClick={() => !event.read && markInstagramEventsAsRead([event.id])}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-medium text-white capitalize">
+                                {event.event_type.replace(/_/g, ' ')}
+                              </span>
+                              <span className="text-xs text-brand-silver/50">
+                                {new Date(event.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                            {!event.read && (
+                              <span className="inline-block w-2 h-2 bg-pink-400 rounded-full"></span>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <button
+                onClick={() => setShowInstagramAnalytics(!showInstagramAnalytics)}
+                className="text-xs text-pink-400 hover:underline"
+              >
+                {showInstagramAnalytics ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </div>
+          
+          {showInstagramAnalytics && (
+            <>
+              {instagramAnalyticsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500"></div>
+                </div>
+              ) : instagramAnalyticsData ? (
+                <div>
+                  {instagramAnalyticsData.test_mode && (
+                    <div className="mb-4 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-400 text-sm">
+                      🧪 Test Mode - Showing simulated analytics data
+                    </div>
+                  )}
+                  
+                  {/* Account Info */}
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      {instagramAnalyticsData.profile_picture_url ? (
+                        <img
+                          src={instagramAnalyticsData.profile_picture_url}
+                          alt={instagramAnalyticsData.username || 'Profile'}
+                          className="w-8 h-8 rounded-full"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069z"/>
+                          </svg>
+                        </div>
+                      )}
+                      <span className="text-sm text-white">@{instagramAnalyticsData.username || 'Your Instagram Account'}</span>
+                    </div>
+                    
+                    {/* Account Stats Grid */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-brand-ghost/10 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-pink-400">{(instagramAnalyticsData.insights?.follower_count || 0).toLocaleString()}</div>
+                        <div className="text-xs text-brand-silver/70">Followers</div>
+                      </div>
+                      <div className="bg-brand-ghost/10 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-white">{(instagramAnalyticsData.insights?.follows_count || 0).toLocaleString()}</div>
+                        <div className="text-xs text-brand-silver/70">Following</div>
+                      </div>
+                      <div className="bg-brand-ghost/10 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-white">{(instagramAnalyticsData.insights?.media_count || 0).toLocaleString()}</div>
+                        <div className="text-xs text-brand-silver/70">Posts</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Engagement Stats */}
+                  {instagramAnalyticsData.insights && (
+                    <div className="grid grid-cols-4 gap-2 mb-4">
+                      <div className="bg-gradient-to-br from-pink-500/20 to-pink-600/10 rounded-lg p-3 text-center border border-pink-500/20">
+                        <div className="text-lg font-bold text-pink-400">{(instagramAnalyticsData.insights.impressions || 0).toLocaleString()}</div>
+                        <div className="text-xs text-brand-silver/70">Impressions</div>
+                      </div>
+                      <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 rounded-lg p-3 text-center border border-purple-500/20">
+                        <div className="text-lg font-bold text-purple-400">{(instagramAnalyticsData.insights.reach || 0).toLocaleString()}</div>
+                        <div className="text-xs text-brand-silver/70">Reach</div>
+                      </div>
+                      <div className="bg-gradient-to-br from-orange-500/20 to-orange-600/10 rounded-lg p-3 text-center border border-orange-500/20">
+                        <div className="text-lg font-bold text-orange-400">{(instagramAnalyticsData.insights.profile_views || 0).toLocaleString()}</div>
+                        <div className="text-xs text-brand-silver/70">Profile Views</div>
+                      </div>
+                      <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 rounded-lg p-3 text-center border border-blue-500/20">
+                        <div className="text-lg font-bold text-blue-400">{(instagramAnalyticsData.insights.website_clicks || 0).toLocaleString()}</div>
+                        <div className="text-xs text-brand-silver/70">Website Clicks</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recent Media */}
+                  {instagramAnalyticsData.recent_media && instagramAnalyticsData.recent_media.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-white mb-3">Recent Posts</h3>
+                      <div className="space-y-3 max-h-64 overflow-y-auto">
+                        {instagramAnalyticsData.recent_media.slice(0, 5).map((media) => (
+                          <div key={media.id} className="bg-brand-ghost/10 rounded-lg p-3">
+                            <div className="flex items-start gap-3">
+                              {media.thumbnail_url && (
+                                <img
+                                  src={media.thumbnail_url}
+                                  alt=""
+                                  className="w-12 h-12 rounded object-cover"
+                                />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-white line-clamp-2 mb-2">
+                                  {media.caption || '(No caption)'}
+                                </p>
+                                <div className="flex items-center gap-4 text-xs text-brand-silver/70">
+                                  <span>❤️ {media.like_count}</span>
+                                  <span>💬 {media.comments_count}</span>
+                                  <span className="capitalize">{media.media_type.toLowerCase()}</span>
+                                  <span className="ml-auto">
+                                    {new Date(media.timestamp).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-brand-silver/70">
+                  <p>Failed to load analytics.</p>
+                  <button onClick={fetchInstagramAnalytics} className="text-pink-400 hover:underline mt-1 text-sm">
                     Try again
                   </button>
                 </div>

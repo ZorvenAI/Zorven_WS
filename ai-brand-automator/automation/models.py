@@ -49,6 +49,21 @@ class SocialProfile(models.Model):
     )
     page_id = models.CharField(max_length=255, blank=True, null=True)
 
+    # Instagram-specific: Business account linked to Facebook Page
+    # Instagram requires a Facebook Page connection for the Graph API
+    instagram_user_id = models.CharField(
+        max_length=255, blank=True, null=True, help_text="Instagram Business Account ID"
+    )
+    instagram_username = models.CharField(
+        max_length=255, blank=True, null=True, help_text="Instagram username (handle)"
+    )
+    _instagram_access_token = models.TextField(
+        blank=True,
+        null=True,
+        db_column="instagram_access_token",
+        help_text="Instagram Graph API access token",
+    )
+
     # Profile information from the platform
     profile_id = models.CharField(max_length=255, blank=True, null=True)
     profile_name = models.CharField(max_length=255, blank=True, null=True)
@@ -104,6 +119,31 @@ class SocialProfile(models.Model):
     def page_access_token(self, value):
         """Set and encrypt the page access token (Facebook only)."""
         self._page_access_token = encrypt_token(value) if value else None
+
+    @property
+    def instagram_access_token(self):
+        """Get the decrypted Instagram access token."""
+        return (
+            decrypt_token(self._instagram_access_token)
+            if self._instagram_access_token
+            else None
+        )
+
+    @instagram_access_token.setter
+    def instagram_access_token(self, value):
+        """Set and encrypt the Instagram access token."""
+        self._instagram_access_token = encrypt_token(value) if value else None
+
+    def get_instagram_token(self):
+        """
+        Get the Instagram Graph API access token.
+        This is used for posting to Instagram Business accounts.
+        """
+        if self.platform != "instagram":
+            raise ValueError("Instagram token is only available for Instagram")
+        if not self.instagram_access_token:
+            raise ValueError("No Instagram access token available")
+        return self.instagram_access_token
 
     @property
     def is_token_valid(self):
@@ -612,5 +652,193 @@ class FacebookResumableUpload(models.Model):
         self.start_offset = start_offset
         self.end_offset = end_offset
         self.bytes_uploaded = end_offset
+        self.status = "uploading"
+        self.save()
+
+
+class InstagramWebhookEvent(models.Model):
+    """
+    Stores incoming webhook events from Instagram.
+
+    Instagram sends webhooks for:
+    - Comments on posts
+    - Mentions in comments or captions
+    - Story mentions
+    - Story replies
+    - Message reactions
+
+    Docs: https://developers.facebook.com/docs/instagram-api/webhooks
+    """
+
+    EVENT_TYPE_CHOICES = [
+        ("comments", "Comment on Post"),
+        ("mentions", "Mentioned"),
+        ("story_mentions", "Story Mention"),
+        ("story_replies", "Story Reply"),
+        ("message_reactions", "Message Reaction"),
+        ("messages", "Direct Message"),
+        ("live_comments", "Live Video Comment"),
+    ]
+
+    event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES)
+    instagram_user_id = models.CharField(
+        max_length=100,
+        db_index=True,
+        help_text="Instagram Business Account ID this event is for",
+    )
+    sender_id = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="ID of the user who triggered the event",
+    )
+    media_id = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="ID of the media (post/story) related to this event",
+    )
+    payload = models.JSONField(
+        default=dict, help_text="Full event payload from Instagram"
+    )
+    read = models.BooleanField(
+        default=False, help_text="Whether user has seen this event"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Instagram Webhook Event"
+        verbose_name_plural = "Instagram Webhook Events"
+        indexes = [
+            models.Index(fields=["instagram_user_id", "-created_at"]),
+            models.Index(fields=["instagram_user_id", "read"]),
+            models.Index(fields=["event_type", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.event_type} for IG user {self.instagram_user_id} "
+            f"at {self.created_at}"
+        )
+
+
+class InstagramResumableUpload(models.Model):
+    """
+    Tracks resumable media upload sessions for Instagram.
+
+    For large videos (Reels), Instagram uses a similar chunked upload flow.
+    This model stores the state of in-progress uploads.
+
+    Docs: https://developers.facebook.com/docs/instagram-api/guides/content-publishing
+    """
+
+    STATUS_CHOICES = [
+        ("pending", "Pending - Not Started"),
+        ("uploading", "Uploading - In Progress"),
+        ("processing", "Processing - Upload Complete"),
+        ("completed", "Completed - Ready"),
+        ("failed", "Failed"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    MEDIA_TYPE_CHOICES = [
+        ("IMAGE", "Image Post"),
+        ("VIDEO", "Video Post"),
+        ("CAROUSEL", "Carousel Post"),
+        ("REELS", "Reels Video"),
+        ("STORIES", "Story"),
+    ]
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="instagram_uploads"
+    )
+    instagram_user_id = models.CharField(
+        max_length=100, help_text="Instagram Business Account ID"
+    )
+
+    # Instagram container/media IDs
+    container_id = models.CharField(
+        max_length=200, blank=True, null=True, help_text="Instagram media container ID"
+    )
+    media_id = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Published media ID once upload completes",
+    )
+
+    # File details
+    file_name = models.CharField(max_length=255)
+    file_size = models.BigIntegerField(help_text="Total file size in bytes")
+    content_type = models.CharField(max_length=100, default="video/mp4")
+    media_type = models.CharField(
+        max_length=20, choices=MEDIA_TYPE_CHOICES, default="VIDEO"
+    )
+
+    # Upload progress
+    bytes_uploaded = models.BigIntegerField(
+        default=0, help_text="Bytes uploaded so far"
+    )
+
+    # Status and metadata
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    caption = models.TextField(blank=True, null=True, help_text="Post caption")
+    error_message = models.TextField(blank=True, null=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Instagram Resumable Upload"
+        verbose_name_plural = "Instagram Resumable Uploads"
+        indexes = [
+            models.Index(fields=["user", "status"]),
+            models.Index(fields=["instagram_user_id", "-created_at"]),
+        ]
+
+    def __str__(self):
+        status_display = self.get_status_display()
+        progress = f"{self.progress_percent:.1f}%"
+        return f"{self.file_name} ({status_display}) - {progress}"
+
+    @property
+    def progress_percent(self) -> float:
+        """Calculate upload progress as percentage."""
+        if self.file_size == 0:
+            return 0.0
+        return (self.bytes_uploaded / self.file_size) * 100
+
+    @property
+    def is_complete(self) -> bool:
+        """Check if upload is complete."""
+        return self.status == "completed"
+
+    @property
+    def is_in_progress(self) -> bool:
+        """Check if upload is in progress."""
+        return self.status in ("pending", "uploading", "processing")
+
+    def mark_completed(self, media_id: str = None):
+        """Mark upload as completed."""
+        self.status = "completed"
+        self.completed_at = timezone.now()
+        self.bytes_uploaded = self.file_size
+        if media_id:
+            self.media_id = media_id
+        self.save()
+
+    def mark_failed(self, error_message: str = None):
+        """Mark upload as failed."""
+        self.status = "failed"
+        self.error_message = error_message
+        self.save()
+
+    def update_progress(self, bytes_uploaded: int):
+        """Update upload progress after a successful chunk."""
+        self.bytes_uploaded = bytes_uploaded
         self.status = "uploading"
         self.save()

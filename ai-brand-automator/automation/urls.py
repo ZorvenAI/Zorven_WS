@@ -57,6 +57,21 @@ from .views import (
     FacebookWebhookView,
     FacebookWebhookEventsView,
     FacebookWebhookSubscribeView,
+    # Instagram views
+    InstagramConnectView,
+    InstagramCallbackView,
+    InstagramDisconnectView,
+    InstagramTestConnectView,
+    InstagramAccountsView,
+    InstagramSelectAccountView,
+    InstagramPostView,
+    InstagramCarouselPostView,
+    InstagramStoryView,
+    InstagramMediaView,
+    InstagramAnalyticsView,
+    InstagramCommentsView,
+    InstagramWebhookView,
+    InstagramWebhookEventsView,
 )
 
 router = DefaultRouter()
@@ -301,6 +316,89 @@ urlpatterns = [
         "facebook/webhooks/subscribe/",
         FacebookWebhookSubscribeView.as_view(),
         name="facebook-webhook-subscribe",
+    ),
+    # Instagram OAuth
+    path(
+        "instagram/connect/",
+        InstagramConnectView.as_view(),
+        name="instagram-connect",
+    ),
+    path(
+        "instagram/callback/",
+        InstagramCallbackView.as_view(),
+        name="instagram-callback",
+    ),
+    path(
+        "instagram/disconnect/",
+        InstagramDisconnectView.as_view(),
+        name="instagram-disconnect",
+    ),
+    path(
+        "instagram/test-connect/",
+        InstagramTestConnectView.as_view(),
+        name="instagram-test-connect",
+    ),
+    # Instagram Accounts
+    path(
+        "instagram/accounts/",
+        InstagramAccountsView.as_view(),
+        name="instagram-accounts",
+    ),
+    path(
+        "instagram/accounts/select/",
+        InstagramSelectAccountView.as_view(),
+        name="instagram-select-account",
+    ),
+    # Instagram Posting
+    path(
+        "instagram/post/",
+        InstagramPostView.as_view(),
+        name="instagram-post",
+    ),
+    path(
+        "instagram/carousel/post/",
+        InstagramCarouselPostView.as_view(),
+        name="instagram-carousel-post",
+    ),
+    # Instagram Stories
+    path(
+        "instagram/stories/",
+        InstagramStoryView.as_view(),
+        name="instagram-stories",
+    ),
+    # Instagram Media (Posts)
+    path(
+        "instagram/media/",
+        InstagramMediaView.as_view(),
+        name="instagram-media",
+    ),
+    # Instagram Analytics
+    path(
+        "instagram/analytics/",
+        InstagramAnalyticsView.as_view(),
+        name="instagram-analytics",
+    ),
+    path(
+        "instagram/analytics/<str:media_id>/",
+        InstagramAnalyticsView.as_view(),
+        name="instagram-analytics-media",
+    ),
+    # Instagram Comments
+    path(
+        "instagram/media/<str:media_id>/comments/",
+        InstagramCommentsView.as_view(),
+        name="instagram-comments",
+    ),
+    # Instagram Webhooks
+    path(
+        "instagram/webhook/",
+        InstagramWebhookView.as_view(),
+        name="instagram-webhook",
+    ),
+    path(
+        "instagram/webhooks/events/",
+        InstagramWebhookEventsView.as_view(),
+        name="instagram-webhook-events",
     ),
     # Router URLs
     path("", include(router.urls)),

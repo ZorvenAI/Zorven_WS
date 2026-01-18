@@ -5,12 +5,15 @@ import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
 import Link from 'next/link';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
 // Draft storage keys - defined at module level
 const DRAFT_KEYS = {
   facebook: 'fb_post_draft',
   linkedin: 'linkedin_post_draft', 
   twitter: 'twitter_post_draft',
+  instagram: 'instagram_post_draft',
 } as const;
 
 interface SocialPlatformStatus {
@@ -62,7 +65,7 @@ const PLATFORM_CONFIG = {
     ),
     color: 'bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500',
     hoverColor: 'hover:opacity-90',
-    available: false, // Coming soon
+    available: true, // Instagram Business integration enabled
   },
   facebook: {
     name: 'Facebook',
@@ -135,6 +138,11 @@ const FACEBOOK_MAX_IMAGE_SIZE = 4 * 1024 * 1024;  // 4MB
 const FACEBOOK_MAX_VIDEO_SIZE = 1024 * 1024 * 1024;  // 1GB
 const FACEBOOK_MAX_POST_LENGTH = 63206;  // Facebook page post limit
 
+// Instagram media size limits
+const INSTAGRAM_MAX_IMAGE_SIZE = 8 * 1024 * 1024;  // 8MB
+const INSTAGRAM_MAX_VIDEO_SIZE = 1024 * 1024 * 1024;  // 1GB (Reels)
+const INSTAGRAM_MAX_POST_LENGTH = 2200;  // Instagram caption limit
+
 // Twitter constants
 const TWITTER_MAX_LENGTH = 280;
 
@@ -143,9 +151,10 @@ const getMediaLimits = (platforms: string[]) => {
   const hasTwitter = platforms.includes('twitter');
   const hasLinkedIn = platforms.includes('linkedin');
   const hasFacebook = platforms.includes('facebook');
+  const hasInstagram = platforms.includes('instagram');
   
   // If no platforms selected, use LinkedIn defaults (most permissive for documents)
-  if (!hasTwitter && !hasLinkedIn && !hasFacebook) {
+  if (!hasTwitter && !hasLinkedIn && !hasFacebook && !hasInstagram) {
     return {
       maxImageSize: LINKEDIN_MAX_IMAGE_SIZE,
       maxVideoSize: LINKEDIN_MAX_VIDEO_SIZE,
@@ -181,7 +190,13 @@ const getMediaLimits = (platforms: string[]) => {
     supportsDocuments = false; // Facebook doesn't support document uploads
   }
   
-  // If Twitter or Facebook selected, documents not supported
+  if (hasInstagram) {
+    maxImage = Math.min(maxImage, INSTAGRAM_MAX_IMAGE_SIZE);
+    maxVideo = Math.min(maxVideo, INSTAGRAM_MAX_VIDEO_SIZE);
+    supportsDocuments = false; // Instagram doesn't support document uploads
+  }
+  
+  // If Twitter, Facebook, or Instagram selected, documents not supported
   if (!supportsDocuments) {
     maxDocument = 0;
   }
@@ -267,9 +282,11 @@ const getMediaHelperText = (platforms: string[]) => {
   const limits = getMediaLimits(platforms);
   const hasTwitter = platforms.includes('twitter');
   const hasFacebook = platforms.includes('facebook');
+  const hasInstagram = platforms.includes('instagram');
   
-  if ((hasTwitter || hasFacebook) && !limits.supportsDocuments) {
-    return `Images: JPEG, PNG, GIF (max ${limits.imageSizeLabel}) • Video: MP4 (max ${limits.videoSizeLabel}) • Note: Documents not supported on ${hasTwitter && hasFacebook ? 'Twitter/Facebook' : hasTwitter ? 'Twitter' : 'Facebook'}`;
+  if ((hasTwitter || hasFacebook || hasInstagram) && !limits.supportsDocuments) {
+    const noDocPlatforms = [hasTwitter && 'Twitter', hasFacebook && 'Facebook', hasInstagram && 'Instagram'].filter(Boolean).join('/');
+    return `Images: JPEG, PNG, GIF (max ${limits.imageSizeLabel}) • Video: MP4 (max ${limits.videoSizeLabel}) • Note: Documents not supported on ${noDocPlatforms}`;
   }
   
   return `Images: JPEG, PNG, GIF (max ${limits.imageSizeLabel}) • Video: MP4 (max ${limits.videoSizeLabel}) • Documents: PDF, DOC, PPT (max ${limits.documentSizeLabel})`;
@@ -316,7 +333,7 @@ function AutomationPageContent() {
   const [profiles, setProfiles] = useState<SocialProfilesStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
   
   // Compose post state
   const [showComposeModal, setShowComposeModal] = useState(false);
@@ -331,8 +348,7 @@ function AutomationPageContent() {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleTitle, setScheduleTitle] = useState('');
   const [scheduleContent, setScheduleContent] = useState('');
-  const [scheduleDate, setScheduleDate] = useState('');
-  const [scheduleTime, setScheduleTime] = useState('');
+  const [scheduleDateTime, setScheduleDateTime] = useState<Date | null>(null);
   const [scheduling, setScheduling] = useState(false);
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>([]);
   const [publishedPosts, setPublishedPosts] = useState<ScheduledPost[]>([]);
@@ -348,8 +364,7 @@ function AutomationPageContent() {
   const [editPlatforms, setEditPlatforms] = useState<string[]>([]);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
-  const [editDate, setEditDate] = useState('');
-  const [editTime, setEditTime] = useState('');
+  const [editDateTime, setEditDateTime] = useState<Date | null>(null);
   const [editing, setEditing] = useState(false);
   const [editMediaUrns, setEditMediaUrns] = useState<string[]>([]);
   const [uploadingEditMedia, setUploadingEditMedia] = useState(false);
@@ -378,7 +393,6 @@ function AutomationPageContent() {
   // LinkedIn Carousel mode (multi-image, max 9)
   const [linkedinCarouselMode, setLinkedinCarouselMode] = useState(false);
   const [linkedinCarouselImages, setLinkedinCarouselImages] = useState<{ url: string; file?: File; mediaUrn?: string }[]>([]);
-  const [uploadingLinkedinCarouselImage, setUploadingLinkedinCarouselImage] = useState(false);
 
   // Facebook compose state
   const [showFacebookComposeModal, setShowFacebookComposeModal] = useState(false);
@@ -391,7 +405,7 @@ function AutomationPageContent() {
   // Carousel mode state
   const [fbCarouselMode, setFbCarouselMode] = useState(false);
   const [fbCarouselImages, setFbCarouselImages] = useState<{ url: string; file?: File }[]>([]);
-  const [uploadingCarouselImage, setUploadingCarouselImage] = useState(false);
+  const [uploadingCarouselImage] = useState(false); // Used for UI state in carousel add button
   // Stories state
   const [showFacebookStoriesModal, setShowFacebookStoriesModal] = useState(false);
   const [fbStories, setFbStories] = useState<Array<{ id: string; media_type: string; created_at: string; expires_at?: string }>>([]);
@@ -425,7 +439,7 @@ function AutomationPageContent() {
   const [resumableUploadStatus, setResumableUploadStatus] = useState<'idle' | 'uploading' | 'paused' | 'completed' | 'failed'>('idle');
   const [resumableUploadTitle, setResumableUploadTitle] = useState('');
   const [resumableUploadDescription, setResumableUploadDescription] = useState('');
-  const [currentUploadSessionId, setCurrentUploadSessionId] = useState<string | null>(null);
+  const [, setCurrentUploadSessionId] = useState<string | null>(null);
   
   // Link Preview state
   interface LinkPreview {
@@ -442,7 +456,7 @@ function AutomationPageContent() {
   const [lastFetchedUrl, setLastFetchedUrl] = useState<string | null>(null);
   
   // Deleting Facebook post
-  const [deletingFbPostId, setDeletingFbPostId] = useState<string | null>(null);
+  const [, setDeletingFbPostId] = useState<string | null>(null);
   // Deleting multi-platform post
   const [deletingPostId, setDeletingPostId] = useState<number | null>(null);
 
@@ -780,6 +794,7 @@ function AutomationPageContent() {
   const [linkedInWebhookEvents, setLinkedInWebhookEvents] = useState<LinkedInWebhookEventsData | null>(null);
   const [loadingLinkedInWebhookEvents, setLoadingLinkedInWebhookEvents] = useState(false);
   const [showLinkedInWebhookEvents, setShowLinkedInWebhookEvents] = useState(false);
+  const [showLinkedInWebhookSettings, setShowLinkedInWebhookSettings] = useState(false);
 
   // Twitter account panel state
   const [showTwitterAccountPanel, setShowTwitterAccountPanel] = useState(false);
@@ -843,6 +858,120 @@ function AutomationPageContent() {
   const [twitterWebhookEvents, setTwitterWebhookEvents] = useState<TwitterWebhookEventsData | null>(null);
   const [loadingTwitterWebhookEvents, setLoadingTwitterWebhookEvents] = useState(false);
   const [showTwitterWebhookEvents, setShowTwitterWebhookEvents] = useState(false);
+  const [showTwitterWebhookSettings, setShowTwitterWebhookSettings] = useState(false);
+
+  // Instagram compose state
+  const [showInstagramComposeModal, setShowInstagramComposeModal] = useState(false);
+  const [igTitle, setIgTitle] = useState('');
+  const [igCaption, setIgCaption] = useState('');
+  const [igMediaUrls, setIgMediaUrls] = useState<string[]>([]);
+  const [igMediaPreview, setIgMediaPreview] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
+  const [uploadingIgMedia] = useState(false);
+  const [igPosting, setIgPosting] = useState(false);
+  // Instagram Carousel mode (multi-image, max 10)
+  const [igCarouselMode, setIgCarouselMode] = useState(false);
+  const [igCarouselImages, setIgCarouselImages] = useState<{ url: string; file?: File }[]>([]);
+  const [uploadingIgCarouselImage] = useState(false);
+  // Instagram Stories state
+  const [showInstagramStoriesModal, setShowInstagramStoriesModal] = useState(false);
+  const [igStories, setIgStories] = useState<Array<{ id: string; media_type: string; timestamp: string }>>([]);
+  const [loadingIgStories, setLoadingIgStories] = useState(false);
+  // Instagram story upload queue
+  interface IgStoryQueueItem {
+    id: string;
+    file: File;
+    type: 'photo' | 'video';
+    preview: string;
+    status: 'pending' | 'uploading' | 'success' | 'failed';
+  }
+  const [igStoryQueue, setIgStoryQueue] = useState<IgStoryQueueItem[]>([]);
+  const [postingIgStory, setPostingIgStory] = useState(false);
+  const [igStoryUploadProgress, setIgStoryUploadProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+
+  // Instagram compose tab state
+  const [igComposeTab, setIgComposeTab] = useState<'compose' | 'preview'>('compose');
+
+  // Instagram draft state
+  const [igDraft, setIgDraft] = useState<{ 
+    title?: string;
+    caption: string; 
+    savedAt: string;
+    mediaUrls?: string[];
+    mediaPreview?: { url: string; type: 'image' | 'video' } | null;
+    mediaSkipped?: boolean;
+  } | null>(null);
+
+  // Instagram account selection state
+  interface InstagramAccount {
+    id: string;
+    name: string;
+    username: string;
+    profile_picture_url?: string;
+  }
+  const [igAccounts, setIgAccounts] = useState<InstagramAccount[]>([]);
+  const [loadingIgAccounts, setLoadingIgAccounts] = useState(false);
+  const [showIgAccountSwitcher, setShowIgAccountSwitcher] = useState(false);
+  const [switchingIgAccount, setSwitchingIgAccount] = useState(false);
+  const [currentIgAccount, setCurrentIgAccount] = useState<{ id: string; username: string } | null>(null);
+
+  // Instagram Analytics state
+  interface IgAnalytics {
+    test_mode?: boolean;
+    account_id?: string;
+    username?: string;
+    insights: {
+      impressions?: number;
+      reach?: number;
+      profile_views?: number;
+      follower_count?: number;
+      email_contacts?: number;
+      phone_call_clicks?: number;
+      text_message_clicks?: number;
+      get_directions_clicks?: number;
+      website_clicks?: number;
+    };
+    recent_media: Array<{
+      id: string;
+      caption?: string;
+      media_type: string;
+      media_url?: string;
+      thumbnail_url?: string;
+      permalink?: string;
+      timestamp: string;
+      like_count: number;
+      comments_count: number;
+    }>;
+  }
+  const [igAnalytics, setIgAnalytics] = useState<IgAnalytics | null>(null);
+  const [loadingIgAnalytics, setLoadingIgAnalytics] = useState(false);
+  const [showIgAnalytics, setShowIgAnalytics] = useState(false);
+  
+  // Instagram Resumable Upload (Large Video) state
+  const [showIgResumableUpload, setShowIgResumableUpload] = useState(false);
+
+  // Instagram Webhook Events state
+  interface IgWebhookEvent {
+    id: number;
+    event_type: string;
+    event_type_display: string;
+    sender_id?: string;
+    media_id?: string;
+    payload: Record<string, unknown>;
+    read: boolean;
+    created_at: string;
+  }
+  interface IgWebhookEventsData {
+    test_mode?: boolean;
+    account_id?: string;
+    username?: string;
+    events: IgWebhookEvent[];
+    total_count: number;
+    unread_count: number;
+  }
+  const [igWebhookEvents, setIgWebhookEvents] = useState<IgWebhookEventsData | null>(null);
+  const [loadingIgWebhookEvents, setLoadingIgWebhookEvents] = useState(false);
+  const [showIgWebhookEvents, setShowIgWebhookEvents] = useState(false);
+  const [showIgWebhookSettings, setShowIgWebhookSettings] = useState(false);
 
   // Fetch LinkedIn organizations
   const fetchLinkedInOrganizations = useCallback(async () => {
@@ -1068,8 +1197,16 @@ function AutomationPageContent() {
         setFbDraft(draft);
         if (mediaSkipped) {
           console.log('Draft saved (media skipped - you will need to re-upload)');
+          setMessage({
+            type: 'warning',
+            text: 'Draft saved! Note: Media was too large to save and will need to be re-uploaded.',
+          });
         } else {
           console.log('Draft saved successfully with media');
+          setMessage({
+            type: 'success',
+            text: 'Draft saved successfully!',
+          });
         }
       } catch (e) {
         // If quota exceeded, try saving without media preview
@@ -1084,9 +1221,16 @@ function AutomationPageContent() {
           localStorage.setItem(DRAFT_KEYS.facebook, JSON.stringify(draftWithoutMedia));
           setFbDraft(draftWithoutMedia);
           console.log('Draft saved (without media due to size)');
+          setMessage({
+            type: 'warning',
+            text: 'Draft saved! Note: Media was too large to save and will need to be re-uploaded.',
+          });
         } catch {
           console.error('Failed to save draft:', e);
-          alert('Draft too large to save. Try removing media or shortening text.');
+          setMessage({
+            type: 'error',
+            text: 'Draft too large to save. Try removing media or shortening text.',
+          });
         }
       }
     }
@@ -1126,14 +1270,21 @@ function AutomationPageContent() {
 
   // Open Facebook compose modal with auto-restore draft
   const openFacebookComposeModal = () => {
-    // Load draft from localStorage
+    // Reset form state first to ensure clean slate
+    setFbPostTitle('');
+    setFbPostText('');
+    setFbMediaUrns([]);
+    setFbMediaPreview(null);
+    setFbDraft(null);
+    
+    // Load draft from localStorage if exists
     const saved = localStorage.getItem(DRAFT_KEYS.facebook);
     console.log('=== OPENING FACEBOOK MODAL ===');
     
     if (saved) {
       try {
         const draft = JSON.parse(saved);
-        console.log('Restoring draft with media:', draft);
+        console.log('Restoring Facebook draft with media:', draft);
         setFbDraft(draft);
         setFbPostTitle(draft.title || '');
         setFbPostText(draft.text || '');
@@ -1145,10 +1296,10 @@ function AutomationPageContent() {
           setFbMediaPreview(draft.mediaPreview);
         }
       } catch (e) {
-        console.error('Failed to parse draft:', e);
+        console.error('Failed to parse Facebook draft:', e);
       }
     } else {
-      console.log('No saved draft found');
+      console.log('No saved Facebook draft found');
     }
     // Then open the modal
     setShowFacebookComposeModal(true);
@@ -1189,6 +1340,17 @@ function AutomationPageContent() {
       try {
         localStorage.setItem(DRAFT_KEYS.linkedin, JSON.stringify(draft));
         setLinkedInDraft(draft);
+        if (mediaSkipped) {
+          setMessage({
+            type: 'warning',
+            text: 'Draft saved! Note: Media was too large to save and will need to be re-uploaded.',
+          });
+        } else {
+          setMessage({
+            type: 'success',
+            text: 'Draft saved successfully!',
+          });
+        }
       } catch {
         // If quota exceeded, save without media
         const draftWithoutMedia = {
@@ -1200,8 +1362,15 @@ function AutomationPageContent() {
         try {
           localStorage.setItem(DRAFT_KEYS.linkedin, JSON.stringify(draftWithoutMedia));
           setLinkedInDraft(draftWithoutMedia);
+          setMessage({
+            type: 'warning',
+            text: 'Draft saved! Note: Media was too large to save and will need to be re-uploaded.',
+          });
         } catch {
-          alert('Draft too large to save.');
+          setMessage({
+            type: 'error',
+            text: 'Draft too large to save. Try removing media or shortening text.',
+          });
         }
       }
     }
@@ -1241,11 +1410,21 @@ function AutomationPageContent() {
 
   // Open LinkedIn compose modal with auto-restore draft
   const openLinkedInComposeModal = () => {
-    // Load draft from localStorage
+    // Reset form state first to ensure clean slate
+    setPostTitle('');
+    setPostText('');
+    setPostMediaUrns([]);
+    setPostMediaPreview(null);
+    setLinkedInDraft(null);
+    
+    // Load draft from localStorage if exists
     const saved = localStorage.getItem(DRAFT_KEYS.linkedin);
+    console.log('=== OPENING LINKEDIN MODAL ===');
+    
     if (saved) {
       try {
         const draft = JSON.parse(saved);
+        console.log('Restoring LinkedIn draft:', draft);
         setLinkedInDraft(draft);
         setPostTitle(draft.title || '');
         setPostText(draft.text || '');
@@ -1255,9 +1434,11 @@ function AutomationPageContent() {
         if (draft.mediaPreview) {
           setPostMediaPreview(draft.mediaPreview);
         }
-      } catch {
-        // Ignore parse errors
+      } catch (e) {
+        console.error('Failed to parse LinkedIn draft:', e);
       }
+    } else {
+      console.log('No saved LinkedIn draft found');
     }
     // Then open the modal
     setShowComposeModal(true);
@@ -1298,6 +1479,17 @@ function AutomationPageContent() {
       try {
         localStorage.setItem(DRAFT_KEYS.twitter, JSON.stringify(draft));
         setTwitterDraft(draft);
+        if (mediaSkipped) {
+          setMessage({
+            type: 'warning',
+            text: 'Draft saved! Note: Media was too large to save and will need to be re-uploaded.',
+          });
+        } else {
+          setMessage({
+            type: 'success',
+            text: 'Draft saved successfully!',
+          });
+        }
       } catch {
         // If quota exceeded, save without media
         const draftWithoutMedia = {
@@ -1309,8 +1501,15 @@ function AutomationPageContent() {
         try {
           localStorage.setItem(DRAFT_KEYS.twitter, JSON.stringify(draftWithoutMedia));
           setTwitterDraft(draftWithoutMedia);
+          setMessage({
+            type: 'warning',
+            text: 'Draft saved! Note: Media was too large to save and will need to be re-uploaded.',
+          });
         } catch {
-          alert('Draft too large to save.');
+          setMessage({
+            type: 'error',
+            text: 'Draft too large to save. Try removing media or shortening text.',
+          });
         }
       }
     }
@@ -1349,11 +1548,21 @@ function AutomationPageContent() {
 
   // Open Twitter compose modal with auto-restore draft
   const openTwitterComposeModal = () => {
-    // Load draft from localStorage
+    // Reset form state first to ensure clean slate
+    setTweetTitle('');
+    setTweetText('');
+    setTweetMediaUrns([]);
+    setTweetMediaPreview(null);
+    setTwitterDraft(null);
+    
+    // Load draft from localStorage if exists
     const saved = localStorage.getItem(DRAFT_KEYS.twitter);
+    console.log('=== OPENING TWITTER MODAL ===');
+    
     if (saved) {
       try {
         const draft = JSON.parse(saved);
+        console.log('Restoring Twitter draft:', draft);
         setTwitterDraft(draft);
         setTweetTitle(draft.title || '');
         setTweetText(draft.text || '');
@@ -1363,12 +1572,164 @@ function AutomationPageContent() {
         if (draft.mediaPreview) {
           setTweetMediaPreview(draft.mediaPreview);
         }
-      } catch {
-        // Ignore parse errors
+      } catch (e) {
+        console.error('Failed to parse Twitter draft:', e);
       }
+    } else {
+      console.log('No saved Twitter draft found');
     }
     // Then open the modal
     setShowTwitterComposeModal(true);
+  };
+
+  // Instagram Draft Functions
+  const saveIgDraft = async () => {
+    if (igTitle || igCaption || igMediaUrls.length > 0 || igMediaPreview) {
+      let mediaPreviewData: { url: string; type: 'image' | 'video' } | null = null;
+      let mediaSkipped = false;
+      let savedMediaUrls: string[] | undefined = undefined;
+      
+      if (igMediaPreview && igMediaPreview.type === 'image') {
+        try {
+          const base64 = await blobUrlToBase64(igMediaPreview.url);
+          if (base64 && base64.length < 500000) {
+            mediaPreviewData = { url: base64, type: igMediaPreview.type };
+            savedMediaUrls = igMediaUrls.length > 0 ? igMediaUrls : undefined;
+          } else {
+            mediaSkipped = true;
+          }
+        } catch {
+          mediaSkipped = true;
+        }
+      } else if (igMediaPreview && igMediaPreview.type === 'video') {
+        mediaSkipped = true;
+      }
+
+      const draft = {
+        title: igTitle || undefined,
+        caption: igCaption,
+        savedAt: new Date().toISOString(),
+        mediaUrls: savedMediaUrls,
+        mediaPreview: mediaPreviewData,
+        mediaSkipped,
+      };
+
+      try {
+        localStorage.setItem(DRAFT_KEYS.instagram, JSON.stringify(draft));
+        setIgDraft(draft);
+        if (mediaSkipped) {
+          setMessage({
+            type: 'warning',
+            text: 'Draft saved! Note: Media was too large to save and will need to be re-uploaded.',
+          });
+        } else {
+          setMessage({
+            type: 'success',
+            text: 'Draft saved successfully!',
+          });
+        }
+      } catch {
+        const draftWithoutMedia = {
+          title: igTitle || undefined,
+          caption: igCaption,
+          savedAt: new Date().toISOString(),
+          mediaSkipped: true,
+        };
+        try {
+          localStorage.setItem(DRAFT_KEYS.instagram, JSON.stringify(draftWithoutMedia));
+          setIgDraft(draftWithoutMedia);
+          setMessage({
+            type: 'warning',
+            text: 'Draft saved! Note: Media was too large to save and will need to be re-uploaded.',
+          });
+        } catch {
+          setMessage({
+            type: 'error',
+            text: 'Draft too large to save. Try removing media or shortening text.',
+          });
+        }
+      }
+    }
+  };
+
+  const loadIgDraft = () => {
+    const saved = localStorage.getItem(DRAFT_KEYS.instagram);
+    if (saved) {
+      try {
+        const draft = JSON.parse(saved);
+        setIgDraft(draft);
+        return draft;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const clearIgDraft = () => {
+    localStorage.removeItem(DRAFT_KEYS.instagram);
+    setIgDraft(null);
+  };
+
+  const restoreIgDraft = () => {
+    if (igDraft) {
+      setIgTitle(igDraft.title || '');
+      setIgCaption(igDraft.caption);
+      if (igDraft.mediaUrls) {
+        setIgMediaUrls(igDraft.mediaUrls);
+      }
+      if (igDraft.mediaPreview) {
+        setIgMediaPreview(igDraft.mediaPreview);
+      }
+    }
+  };
+
+  // Open Instagram compose modal with auto-restore draft
+  const openInstagramComposeModal = () => {
+    // Reset form state first to ensure clean slate
+    setIgTitle('');
+    setIgCaption('');
+    setIgMediaUrls([]);
+    setIgMediaPreview(null);
+    setIgDraft(null);
+    setIgCarouselMode(false);
+    setIgCarouselImages([]);
+    
+    // Load draft from localStorage if exists
+    const saved = localStorage.getItem(DRAFT_KEYS.instagram);
+    console.log('=== OPENING INSTAGRAM MODAL ===');
+    
+    if (saved) {
+      try {
+        const draft = JSON.parse(saved);
+        console.log('Restoring Instagram draft:', draft);
+        setIgDraft(draft);
+        setIgTitle(draft.title || '');
+        setIgCaption(draft.caption || '');
+        if (draft.mediaUrls && draft.mediaUrls.length > 0) {
+          setIgMediaUrls(draft.mediaUrls);
+        }
+        if (draft.mediaPreview) {
+          setIgMediaPreview(draft.mediaPreview);
+        }
+      } catch (e) {
+        console.error('Failed to parse Instagram draft:', e);
+      }
+    } else {
+      console.log('No saved Instagram draft found');
+    }
+    setShowInstagramComposeModal(true);
+  };
+
+  // Reset Instagram compose form
+  const resetInstagramComposeForm = () => {
+    setIgTitle('');
+    setIgCaption('');
+    setIgMediaUrls([]);
+    setIgMediaPreview(null);
+    setIgCarouselMode(false);
+    setIgCarouselImages([]);
+    setIgComposeTab('compose');
   };
 
   // Load drafts on mount
@@ -1376,7 +1737,7 @@ function AutomationPageContent() {
     loadFbDraft();
     loadLinkedInDraft();
     loadTwitterDraft();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadIgDraft();
   }, []);
 
   // Check for OAuth callback results
@@ -1532,7 +1893,7 @@ function AutomationPageContent() {
   }, [profiles?.linkedin?.connected, fetchLinkedInOrganizations]);
 
   const handleConnect = async (platform: string) => {
-    if (platform !== 'linkedin' && platform !== 'twitter' && platform !== 'facebook') {
+    if (platform !== 'linkedin' && platform !== 'twitter' && platform !== 'facebook' && platform !== 'instagram') {
       setMessage({
         type: 'error',
         text: `${PLATFORM_CONFIG[platform as keyof typeof PLATFORM_CONFIG].name} integration coming soon!`,
@@ -1567,7 +1928,7 @@ function AutomationPageContent() {
 
   // Test connection (dev mode only - no real platform data)
   const handleTestConnect = async (platform: string) => {
-    if (platform !== 'linkedin' && platform !== 'twitter' && platform !== 'facebook') return;
+    if (platform !== 'linkedin' && platform !== 'twitter' && platform !== 'facebook' && platform !== 'instagram') return;
 
     setConnecting(platform);
     try {
@@ -1603,7 +1964,7 @@ function AutomationPageContent() {
   };
 
   const handleDisconnect = async (platform: string) => {
-    if (platform !== 'linkedin' && platform !== 'twitter' && platform !== 'facebook') return;
+    if (platform !== 'linkedin' && platform !== 'twitter' && platform !== 'facebook' && platform !== 'instagram') return;
 
     setConnecting(platform);
     try {
@@ -2445,6 +2806,7 @@ function AutomationPageContent() {
       }
       
       fetchFacebookStories();
+      fetchPublishedPosts();  // Refresh Recent Activity to show the story
       
     } finally {
       setPostingFbStory(false);
@@ -2500,14 +2862,408 @@ function AutomationPageContent() {
     setStoryUploadProgress({ current: 0, total: 0 });
   };
 
+  // ========== INSTAGRAM FUNCTIONS ==========
+  
+  // Fetch Instagram accounts (via Facebook Pages with linked Instagram Business accounts)
+  const fetchInstagramAccounts = useCallback(async () => {
+    if (!profiles?.instagram?.connected) return;
+    
+    setLoadingIgAccounts(true);
+    try {
+      const response = await apiClient.get('/automation/instagram/accounts/');
+      if (response.ok) {
+        const data = await response.json();
+        setIgAccounts(data.accounts || []);
+        if (data.current_account) {
+          setCurrentIgAccount({
+            id: data.current_account.id,
+            username: data.current_account.username,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch Instagram accounts:', error);
+    } finally {
+      setLoadingIgAccounts(false);
+    }
+  }, [profiles?.instagram?.connected]);
+
+  // Fetch Instagram accounts when connected
+  useEffect(() => {
+    if (profiles?.instagram?.connected) {
+      fetchInstagramAccounts();
+    }
+  }, [profiles?.instagram?.connected, fetchInstagramAccounts]);
+
+  // Switch Instagram account
+  const handleSwitchInstagramAccount = async (accountId: string) => {
+    setSwitchingIgAccount(true);
+    try {
+      const response = await apiClient.post('/automation/instagram/accounts/select/', {
+        account_id: accountId,
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentIgAccount({ id: data.account_id, username: data.username });
+        setShowIgAccountSwitcher(false);
+        setMessage({
+          type: 'success',
+          text: `Switched to Instagram account: @${data.username}`,
+        });
+        fetchProfiles();
+        setIgAnalytics(null);
+      } else {
+        const errorData = await response.json();
+        setMessage({
+          type: 'error',
+          text: errorData.error || 'Failed to switch Instagram account',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to switch Instagram account:', error);
+      setMessage({
+        type: 'error',
+        text: 'Failed to switch Instagram account. Please try again.',
+      });
+    } finally {
+      setSwitchingIgAccount(false);
+    }
+  };
+
+  // Fetch Instagram Analytics
+  const fetchIgAnalytics = useCallback(async () => {
+    if (!profiles?.instagram?.connected) return;
+    
+    setLoadingIgAnalytics(true);
+    try {
+      const response = await apiClient.get('/automation/instagram/analytics/');
+      if (response.ok) {
+        const data = await response.json();
+        setIgAnalytics(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch Instagram analytics:', error);
+    } finally {
+      setLoadingIgAnalytics(false);
+    }
+  }, [profiles?.instagram?.connected]);
+
+  // Fetch Instagram Webhook Events
+  const fetchIgWebhookEvents = useCallback(async () => {
+    if (!profiles?.instagram?.connected) return;
+    
+    setLoadingIgWebhookEvents(true);
+    try {
+      const response = await apiClient.get('/automation/instagram/webhooks/events/?limit=20');
+      if (response.ok) {
+        const data = await response.json();
+        setIgWebhookEvents(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch Instagram webhook events:', error);
+    } finally {
+      setLoadingIgWebhookEvents(false);
+    }
+  }, [profiles?.instagram?.connected]);
+
+  // Mark Instagram webhook events as read
+  const markIgWebhookEventsAsRead = async (eventIds: number[], markAll = false) => {
+    try {
+      const response = await apiClient.post('/automation/instagram/webhooks/events/', {
+        event_ids: eventIds,
+        mark_all: markAll,
+      });
+      if (response.ok) {
+        // Refresh events
+        fetchIgWebhookEvents();
+      }
+    } catch (error) {
+      console.error('Failed to mark Instagram events as read:', error);
+    }
+  };
+
+  // Handle Instagram Post
+  const handleInstagramPost = async () => {
+    if (!igCaption.trim() && !igMediaPreview) {
+      setMessage({
+        type: 'error',
+        text: 'Please add a caption or media for your Instagram post',
+      });
+      return;
+    }
+
+    if (igCaption.length > INSTAGRAM_MAX_POST_LENGTH) {
+      setMessage({
+        type: 'error',
+        text: `Caption exceeds ${INSTAGRAM_MAX_POST_LENGTH} characters`,
+      });
+      return;
+    }
+
+    // Instagram requires media for posts (unlike Facebook/Twitter)
+    if (!igMediaPreview && !igCarouselMode) {
+      setMessage({
+        type: 'error',
+        text: 'Instagram posts require an image or video',
+      });
+      return;
+    }
+
+    setIgPosting(true);
+    try {
+      const payload: Record<string, unknown> = {
+        caption: igCaption.trim(),
+        title: igTitle.trim() || undefined,
+      };
+
+      // For test mode, we'll send a placeholder media URL
+      if (igMediaPreview) {
+        payload.image_url = igMediaPreview.type === 'image' ? 'test_image_url' : undefined;
+        payload.video_url = igMediaPreview.type === 'video' ? 'test_video_url' : undefined;
+        payload.media_type = igMediaPreview.type === 'video' ? 'REELS' : 'IMAGE';
+      }
+
+      const response = await apiClient.post('/automation/instagram/post/', payload);
+
+      if (response.ok) {
+        const data = await response.json();
+        setMessage({
+          type: 'success',
+          text: data.test_mode 
+            ? '🧪 Instagram post simulated (Test Mode)' 
+            : '✅ Posted to Instagram successfully!',
+        });
+        clearIgDraft();
+        resetInstagramComposeForm();
+        setShowInstagramComposeModal(false);
+        fetchPublishedPosts();
+      } else {
+        const error = await response.json();
+        setMessage({
+          type: 'error',
+          text: error.error || 'Failed to post to Instagram',
+        });
+      }
+    } catch (error) {
+      console.error('Instagram post error:', error);
+      setMessage({
+        type: 'error',
+        text: 'Failed to post to Instagram',
+      });
+    } finally {
+      setIgPosting(false);
+    }
+  };
+
+  // Handle Instagram Carousel Post
+  const handleInstagramCarouselPost = async () => {
+    if (igCarouselImages.length < 2) {
+      setMessage({ type: 'error', text: 'Carousel posts require at least 2 images' });
+      return;
+    }
+    if (igCarouselImages.length > 10) {
+      setMessage({ type: 'error', text: 'Instagram carousel supports maximum 10 images' });
+      return;
+    }
+
+    setIgPosting(true);
+    try {
+      // For test mode, send placeholder URLs
+      const imageUrls = igCarouselImages.map((_, index) => `carousel_image_${index + 1}`);
+      
+      const response = await apiClient.post('/automation/instagram/carousel/post/', {
+        caption: igCaption || '',
+        title: igTitle.trim() || undefined,
+        media_urls: imageUrls,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setMessage({
+          type: 'success',
+          text: data.test_mode 
+            ? '🧪 Carousel post simulated (Test Mode)' 
+            : '✅ Instagram carousel posted successfully!',
+        });
+        clearIgDraft();
+        resetInstagramComposeForm();
+        setShowInstagramComposeModal(false);
+        fetchPublishedPosts();
+      } else {
+        const error = await response.json();
+        setMessage({
+          type: 'error',
+          text: error.error || 'Failed to create Instagram carousel post',
+        });
+      }
+    } catch (error) {
+      console.error('Instagram carousel post error:', error);
+      setMessage({
+        type: 'error',
+        text: 'Failed to create Instagram carousel post',
+      });
+    } finally {
+      setIgPosting(false);
+    }
+  };
+
+  // Fetch Instagram Stories
+  const fetchInstagramStories = async () => {
+    setLoadingIgStories(true);
+    try {
+      const response = await apiClient.get('/automation/instagram/stories/');
+      if (response.ok) {
+        const data = await response.json();
+        setIgStories(data.stories || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch Instagram stories:', error);
+    } finally {
+      setLoadingIgStories(false);
+    }
+  };
+
+  // Add to Instagram story queue
+  const addToIgStoryQueue = (files: FileList | null) => {
+    if (!files) return;
+    
+    const newItems: IgStoryQueueItem[] = [];
+    
+    Array.from(files).forEach((file) => {
+      const isVideo = file.type.startsWith('video/');
+      const isImage = file.type.startsWith('image/');
+      
+      if (!isVideo && !isImage) {
+        setMessage({ type: 'error', text: `${file.name} is not a valid image or video file` });
+        return;
+      }
+      
+      // Validate file sizes
+      if (isImage && file.size > INSTAGRAM_MAX_IMAGE_SIZE) {
+        setMessage({ type: 'error', text: `${file.name} is too large. Max 8MB for photos.` });
+        return;
+      }
+      if (isVideo && file.size > INSTAGRAM_MAX_VIDEO_SIZE) {
+        setMessage({ type: 'error', text: `${file.name} is too large. Max 1GB for videos.` });
+        return;
+      }
+      
+      newItems.push({
+        id: `ig_story_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        file,
+        type: isVideo ? 'video' : 'photo',
+        preview: URL.createObjectURL(file),
+        status: 'pending',
+      });
+    });
+    
+    setIgStoryQueue(prev => [...prev, ...newItems]);
+  };
+
+  // Remove from Instagram story queue
+  const removeFromIgStoryQueue = (id: string) => {
+    setIgStoryQueue(prev => {
+      const item = prev.find(i => i.id === id);
+      if (item) {
+        URL.revokeObjectURL(item.preview);
+      }
+      return prev.filter(i => i.id !== id);
+    });
+  };
+
+  // Handle Instagram Story Post
+  const handleInstagramStoryPost = async () => {
+    if (igStoryQueue.length === 0) {
+      setMessage({ type: 'error', text: 'Please add at least one photo or video to your story' });
+      return;
+    }
+
+    setPostingIgStory(true);
+    setIgStoryUploadProgress({ current: 0, total: igStoryQueue.length });
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    setIgStoryQueue(prev => prev.map(item => ({ ...item, status: 'pending' as const })));
+
+    try {
+      for (let i = 0; i < igStoryQueue.length; i++) {
+        const item = igStoryQueue[i];
+        setIgStoryUploadProgress({ current: i + 1, total: igStoryQueue.length });
+        
+        setIgStoryQueue(prev => prev.map(q => 
+          q.id === item.id ? { ...q, status: 'uploading' as const } : q
+        ));
+        
+        try {
+          const formData = new FormData();
+          formData.append('type', item.type);
+          formData.append('file', item.file);
+
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/automation/instagram/stories/`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+              },
+              body: formData,
+            }
+          );
+
+          if (response.ok) {
+            successCount++;
+            setIgStoryQueue(prev => prev.map(q => 
+              q.id === item.id ? { ...q, status: 'success' as const } : q
+            ));
+          } else {
+            failCount++;
+            setIgStoryQueue(prev => prev.map(q => 
+              q.id === item.id ? { ...q, status: 'failed' as const } : q
+            ));
+          }
+        } catch {
+          failCount++;
+          setIgStoryQueue(prev => prev.map(q => 
+            q.id === item.id ? { ...q, status: 'failed' as const } : q
+          ));
+        }
+      }
+
+      if (successCount > 0) {
+        setMessage({
+          type: failCount > 0 ? 'error' : 'success',
+          text: failCount > 0 
+            ? `Posted ${successCount} stories, ${failCount} failed` 
+            : `${successCount} ${successCount === 1 ? 'story' : 'stories'} posted successfully!`,
+        });
+        resetInstagramStoryForm();
+        setShowInstagramStoriesModal(false);
+        fetchInstagramStories();
+        fetchPublishedPosts();  // Refresh Recent Activity to show the story
+      } else {
+        setMessage({ type: 'error', text: 'All stories failed to post' });
+      }
+    } catch (error) {
+      console.error('Instagram story post error:', error);
+      setMessage({ type: 'error', text: 'Failed to post Instagram stories' });
+    } finally {
+      setPostingIgStory(false);
+    }
+  };
+
+  // Reset Instagram story form
+  const resetInstagramStoryForm = () => {
+    igStoryQueue.forEach(item => URL.revokeObjectURL(item.preview));
+    setIgStoryQueue([]);
+    setIgStoryUploadProgress({ current: 0, total: 0 });
+  };
+
   // ========== RESUMABLE UPLOAD FUNCTIONS ==========
   // Chunk size: 4MB (Facebook recommends 4MB-1GB chunks)
   const CHUNK_SIZE = 4 * 1024 * 1024;
   const ONE_GB = 1 * 1024 * 1024 * 1024;
-
-  // Check if a file should use resumable upload (> 1GB)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const shouldUseResumableUpload = (file: File) => file.size > ONE_GB;
 
   // Fetch active resumable uploads
   const fetchResumableUploads = async () => {
@@ -2865,7 +3621,7 @@ function AutomationPageContent() {
 
   // Handle scheduling a post
   const handleSchedulePost = async () => {
-    if (!scheduleTitle.trim() || !scheduleContent.trim() || !scheduleDate || !scheduleTime) {
+    if (!scheduleTitle.trim() || !scheduleContent.trim() || !scheduleDateTime) {
       setMessage({
         type: 'error',
         text: 'Please fill in all fields',
@@ -2890,10 +3646,26 @@ function AutomationPageContent() {
       return;
     }
 
-    // Create a proper Date object from local date/time and convert to ISO string
-    // This preserves the local timezone information
-    const localDateTime = new Date(`${scheduleDate}T${scheduleTime}:00`);
-    const scheduledDateTime = localDateTime.toISOString();
+    // Check content length for Instagram
+    if (schedulePlatforms.includes('instagram') && scheduleContent.length > INSTAGRAM_MAX_POST_LENGTH) {
+      setMessage({
+        type: 'error',
+        text: `Content exceeds Instagram's ${INSTAGRAM_MAX_POST_LENGTH} character limit`,
+      });
+      return;
+    }
+
+    // Instagram requires media
+    if (schedulePlatforms.includes('instagram') && scheduleMediaUrns.length === 0) {
+      setMessage({
+        type: 'error',
+        text: 'Instagram posts require an image or video. Please add media.',
+      });
+      return;
+    }
+
+    // Convert schedule datetime to ISO string
+    const scheduledDateTime = scheduleDateTime.toISOString();
     
     setScheduling(true);
     try {
@@ -2907,15 +3679,20 @@ function AutomationPageContent() {
       });
       
       if (response.ok) {
-        const platformNames = schedulePlatforms.map(p => p === 'linkedin' ? 'LinkedIn' : 'Twitter/X').join(' & ');
+        const platformNameMap: Record<string, string> = {
+          linkedin: 'LinkedIn',
+          twitter: 'Twitter/X',
+          facebook: 'Facebook',
+          instagram: 'Instagram',
+        };
+        const platformNames = schedulePlatforms.map(p => platformNameMap[p] || p).join(' & ');
         setMessage({
           type: 'success',
           text: `Post scheduled for ${platformNames}!${scheduleMediaUrns.length > 0 ? ' (with media)' : ''}`,
         });
         setScheduleTitle('');
         setScheduleContent('');
-        setScheduleDate('');
-        setScheduleTime('');
+        setScheduleDateTime(null);
         setScheduleMediaUrns([]);
         if (scheduleMediaPreview) {
           URL.revokeObjectURL(scheduleMediaPreview.url);
@@ -2996,19 +3773,8 @@ function AutomationPageContent() {
     setEditingPost(post);
     setEditTitle(post.title);
     setEditContent(post.content);
-    // Parse the scheduled date/time using consistent local timezone handling
-    const date = new Date(post.scheduled_date);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    setEditDate(`${year}-${month}-${day}`);
-    setEditTime(
-      date.toLocaleTimeString('en-US', {
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    );
+    // Parse the scheduled date/time
+    setEditDateTime(new Date(post.scheduled_date));
     // Load existing media if any
     setEditMediaUrns(post.media_urls || []);
     // Load platforms
@@ -3037,16 +3803,22 @@ function AutomationPageContent() {
       return;
     }
     
+    if (!editDateTime) {
+      setMessage({
+        type: 'error',
+        text: 'Please select a date and time',
+      });
+      return;
+    }
+
     setEditing(true);
     try {
-      const scheduledDate = new Date(`${editDate}T${editTime}`);
-      
       const response = await apiClient.put(`/automation/content-calendar/${editingPost.id}/`, {
         title: editTitle,
         content: editContent,
         media_urls: editMediaUrns,
         platforms: editPlatforms,
-        scheduled_date: scheduledDate.toISOString(),
+        scheduled_date: editDateTime.toISOString(),
         status: editingPost.status,  // Preserve original status
       });
 
@@ -3104,6 +3876,8 @@ function AutomationPageContent() {
           <div className={`mb-6 p-4 rounded-lg border ${
             message.type === 'success' 
               ? 'bg-brand-mint/10 border-brand-mint/30 text-brand-mint' 
+              : message.type === 'warning'
+              ? 'bg-yellow-900/30 border-yellow-500/30 text-yellow-300'
               : 'bg-red-900/30 border-red-500/30 text-red-300'
           }`}>
             <div className="flex items-center justify-between">
@@ -3169,14 +3943,20 @@ function AutomationPageContent() {
                       href={platformStatus.profile_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm text-brand-electric hover:underline"
+                      className={`text-sm hover:underline ${
+                        platform === 'linkedin' ? 'text-[#0A66C2]' :
+                        platform === 'twitter' ? 'text-[#1DA1F2]' :
+                        platform === 'facebook' ? 'text-[#1877F2]' :
+                        platform === 'instagram' ? 'text-pink-400' :
+                        'text-brand-electric'
+                      }`}
                     >
                       View Profile →
                     </a>
                     {platform === 'linkedin' && (
                       <button
                         onClick={openLinkedInComposeModal}
-                        className="text-sm text-brand-mint hover:text-brand-mint/80 flex items-center gap-1"
+                        className="text-sm text-[#0A66C2] hover:text-[#0A66C2]/80 flex items-center gap-1"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -3187,7 +3967,7 @@ function AutomationPageContent() {
                     {platform === 'twitter' && (
                       <button
                         onClick={openTwitterComposeModal}
-                        className="text-sm text-brand-mint hover:text-brand-mint/80 flex items-center gap-1"
+                        className="text-sm text-[#1DA1F2] hover:text-[#1DA1F2]/80 flex items-center gap-1"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -3198,7 +3978,18 @@ function AutomationPageContent() {
                     {platform === 'facebook' && (
                       <button
                         onClick={openFacebookComposeModal}
-                        className="text-sm text-brand-mint hover:text-brand-mint/80 flex items-center gap-1"
+                        className="text-sm text-[#1877F2] hover:text-[#1877F2]/80 flex items-center gap-1"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Create Post
+                      </button>
+                    )}
+                    {platform === 'instagram' && (
+                      <button
+                        onClick={openInstagramComposeModal}
+                        className="text-sm text-pink-400 hover:text-pink-300 flex items-center gap-1"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -3218,12 +4009,9 @@ function AutomationPageContent() {
                       </span>
                       <button
                         onClick={() => setShowFbPageSwitcher(!showFbPageSwitcher)}
-                        className="text-xs text-brand-electric hover:underline flex items-center gap-1"
+                        className="text-xs text-[#1877F2] hover:underline"
                       >
-                        <svg className={`w-3 h-3 transition-transform ${showFbPageSwitcher ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                        {fbPages.length > 1 ? 'Switch Page' : 'View Pages'}
+                        {showFbPageSwitcher ? 'Hide' : 'Show'}
                       </button>
                     </div>
                     
@@ -3277,27 +4065,24 @@ function AutomationPageContent() {
 
                 {/* Facebook Analytics Section */}
                 {platform === 'facebook' && isConnected && (
-                  <div className="mt-4 border-t border-brand-ghost/20 pt-4">
+                  <div className="mt-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-brand-silver/70 font-medium">📊 Page Analytics</span>
                       <button
                         onClick={() => {
                           setShowFbAnalytics(!showFbAnalytics);
-                          if (!fbAnalytics && !loadingFbAnalytics) {
+                          if (!showFbAnalytics && !fbAnalytics) {
                             fetchFbAnalytics();
                           }
                         }}
-                        className="text-xs text-brand-electric hover:underline flex items-center gap-1"
+                        className="text-xs text-[#1877F2] hover:underline"
                       >
-                        <svg className={`w-3 h-3 transition-transform ${showFbAnalytics ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
                         {showFbAnalytics ? 'Hide' : 'Show'}
                       </button>
                     </div>
                     
                     {showFbAnalytics && (
-                      <div className="bg-white/5 rounded-lg p-3">
+                      <div className="mt-2 bg-white/5 rounded-lg p-3">
                         {loadingFbAnalytics ? (
                           <div className="flex items-center justify-center py-4">
                             <svg className="animate-spin w-5 h-5 text-brand-electric" fill="none" viewBox="0 0 24 24">
@@ -3400,12 +4185,12 @@ function AutomationPageContent() {
 
                 {/* Facebook Webhook Events Section */}
                 {platform === 'facebook' && isConnected && (
-                  <div className="mt-4 border-t border-brand-ghost/20 pt-4">
+                  <div className="mt-4">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-brand-silver/70 font-medium">🔔 Webhook Events</span>
                         {fbWebhookEvents && fbWebhookEvents.unread_count > 0 && (
-                          <span className="px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">
+                          <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
                             {fbWebhookEvents.unread_count}
                           </span>
                         )}
@@ -3413,21 +4198,18 @@ function AutomationPageContent() {
                       <button
                         onClick={() => {
                           setShowFbWebhookEvents(!showFbWebhookEvents);
-                          if (!fbWebhookEvents && !loadingFbWebhookEvents) {
+                          if (!showFbWebhookEvents && !fbWebhookEvents) {
                             fetchFbWebhookEvents();
                           }
                         }}
-                        className="text-xs text-brand-electric hover:underline flex items-center gap-1"
+                        className="text-xs text-[#1877F2] hover:underline"
                       >
-                        <svg className={`w-3 h-3 transition-transform ${showFbWebhookEvents ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
                         {showFbWebhookEvents ? 'Hide' : 'Show'}
                       </button>
                     </div>
                     
                     {showFbWebhookEvents && (
-                      <div className="bg-white/5 rounded-lg p-3">
+                      <div className="mt-2 bg-white/5 rounded-lg p-3">
                         {loadingFbWebhookEvents ? (
                           <div className="flex items-center justify-center py-4">
                             <svg className="animate-spin w-5 h-5 text-brand-electric" fill="none" viewBox="0 0 24 24">
@@ -3508,26 +4290,19 @@ function AutomationPageContent() {
                 {/* Facebook Webhook Subscription Settings */}
                 {platform === 'facebook' && isConnected && (
                   <div className="mt-4">
-                    <div
-                      className="flex items-center justify-between cursor-pointer p-2 rounded-lg hover:bg-white/5"
-                      onClick={() => {
-                        setShowFbWebhookSettings(!showFbWebhookSettings);
-                        if (!showFbWebhookSettings && !fbWebhookSubscriptions) {
-                          fetchFbWebhookSubscriptions();
-                        }
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-brand-silver/70 font-medium">⚙️ Webhook Settings</span>
-                      </div>
-                      <svg
-                        className={`w-4 h-4 text-brand-silver/50 transition-transform ${showFbWebhookSettings ? 'rotate-180' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-brand-silver/70 font-medium">⚙️ Webhook Settings</span>
+                      <button
+                        onClick={() => {
+                          setShowFbWebhookSettings(!showFbWebhookSettings);
+                          if (!showFbWebhookSettings && !fbWebhookSubscriptions) {
+                            fetchFbWebhookSubscriptions();
+                          }
+                        }}
+                        className="text-xs text-[#1877F2] hover:underline"
                       >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                        {showFbWebhookSettings ? 'Hide' : 'Show'}
+                      </button>
                     </div>
                     {showFbWebhookSettings && (
                       <div className="mt-2 bg-white/5 rounded-lg p-3 space-y-3">
@@ -3613,12 +4388,9 @@ function AutomationPageContent() {
                       </span>
                       <button
                         onClick={() => setShowLinkedInOrgSwitcher(!showLinkedInOrgSwitcher)}
-                        className="text-xs text-brand-electric hover:underline flex items-center gap-1"
+                        className="text-xs text-[#0A66C2] hover:underline"
                       >
-                        <svg className={`w-3 h-3 transition-transform ${showLinkedInOrgSwitcher ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                        {linkedInOrgs.length > 0 ? 'Switch Account' : 'View Account'}
+                        {showLinkedInOrgSwitcher ? 'Hide' : 'Show'}
                       </button>
                     </div>
                     
@@ -3712,26 +4484,19 @@ function AutomationPageContent() {
                 {/* LinkedIn Analytics Section */}
                 {platform === 'linkedin' && isConnected && (
                   <div className="mt-4">
-                    <div
-                      className="flex items-center justify-between cursor-pointer p-2 rounded-lg hover:bg-white/5"
-                      onClick={() => {
-                        setShowLinkedInAnalytics(!showLinkedInAnalytics);
-                        if (!showLinkedInAnalytics && !linkedInAnalytics) {
-                          fetchLinkedInAnalytics();
-                        }
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-brand-silver/70 font-medium">📊 Analytics</span>
-                      </div>
-                      <svg
-                        className={`w-4 h-4 text-brand-silver/50 transition-transform ${showLinkedInAnalytics ? 'rotate-180' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-brand-silver/70 font-medium">📊 Analytics</span>
+                      <button
+                        onClick={() => {
+                          setShowLinkedInAnalytics(!showLinkedInAnalytics);
+                          if (!showLinkedInAnalytics && !linkedInAnalytics) {
+                            fetchLinkedInAnalytics();
+                          }
+                        }}
+                        className="text-xs text-[#0A66C2] hover:underline"
                       >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                        {showLinkedInAnalytics ? 'Hide' : 'Show'}
+                      </button>
                     </div>
                     {showLinkedInAnalytics && (
                       <div className="mt-2 bg-white/5 rounded-lg p-3 space-y-3">
@@ -3803,15 +4568,7 @@ function AutomationPageContent() {
                 {/* LinkedIn Webhook Events Section */}
                 {platform === 'linkedin' && isConnected && (
                   <div className="mt-4">
-                    <div
-                      className="flex items-center justify-between cursor-pointer p-2 rounded-lg hover:bg-white/5"
-                      onClick={() => {
-                        setShowLinkedInWebhookEvents(!showLinkedInWebhookEvents);
-                        if (!showLinkedInWebhookEvents && !linkedInWebhookEvents) {
-                          fetchLinkedInWebhookEvents();
-                        }
-                      }}
-                    >
+                    <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-brand-silver/70 font-medium">🔔 Webhook Events</span>
                         {linkedInWebhookEvents && linkedInWebhookEvents.unread_count > 0 && (
@@ -3820,14 +4577,17 @@ function AutomationPageContent() {
                           </span>
                         )}
                       </div>
-                      <svg
-                        className={`w-4 h-4 text-brand-silver/50 transition-transform ${showLinkedInWebhookEvents ? 'rotate-180' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                      <button
+                        onClick={() => {
+                          setShowLinkedInWebhookEvents(!showLinkedInWebhookEvents);
+                          if (!showLinkedInWebhookEvents && !linkedInWebhookEvents) {
+                            fetchLinkedInWebhookEvents();
+                          }
+                        }}
+                        className="text-xs text-[#0A66C2] hover:underline"
                       >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                        {showLinkedInWebhookEvents ? 'Hide' : 'Show'}
+                      </button>
                     </div>
                     {showLinkedInWebhookEvents && (
                       <div className="mt-2 bg-white/5 rounded-lg p-3 space-y-2 max-h-64 overflow-y-auto">
@@ -3901,6 +4661,57 @@ function AutomationPageContent() {
                   </div>
                 )}
 
+                {/* LinkedIn Webhook Settings */}
+                {platform === 'linkedin' && isConnected && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-brand-silver/70 font-medium">⚙️ Webhook Settings</span>
+                      <button
+                        onClick={() => setShowLinkedInWebhookSettings(!showLinkedInWebhookSettings)}
+                        className="text-xs text-[#0A66C2] hover:underline"
+                      >
+                        {showLinkedInWebhookSettings ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    {showLinkedInWebhookSettings && (
+                      <div className="mt-2 bg-white/5 rounded-lg p-3 space-y-3">
+                        <div className="flex items-center gap-2 text-xs text-green-400">
+                          <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                          <span>Webhooks Active</span>
+                        </div>
+                        
+                        <div className="text-xs text-brand-silver/70">
+                          <strong>Monitored Events:</strong>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {['share', 'comment', 'reaction', 'mention', 'connection'].map((field) => (
+                            <span
+                              key={field}
+                              className="text-xs bg-[#0A66C2]/20 text-[#0A66C2] px-2 py-0.5 rounded"
+                            >
+                              {field}
+                            </span>
+                          ))}
+                        </div>
+                        
+                        <div className="text-xs text-brand-silver/50 mt-2 p-2 bg-brand-midnight/50 rounded">
+                          <p className="flex items-center gap-1">
+                            <span>ℹ️</span>
+                            <span>LinkedIn webhooks are configured at the app level. When events occur on your connected account, they will appear in the Webhook Events section above.</span>
+                          </p>
+                        </div>
+                        
+                        <button
+                          onClick={fetchLinkedInWebhookEvents}
+                          className="text-xs text-brand-silver/50 hover:text-brand-silver transition-colors"
+                        >
+                          ↻ Refresh Events
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Twitter Account Switcher */}
                 {platform === 'twitter' && isConnected && (
                   <div className="mt-4">
@@ -3910,12 +4721,9 @@ function AutomationPageContent() {
                       </span>
                       <button
                         onClick={() => setShowTwitterAccountPanel(!showTwitterAccountPanel)}
-                        className="text-xs text-brand-electric hover:underline flex items-center gap-1"
+                        className="text-xs text-[#1DA1F2] hover:underline"
                       >
-                        <svg className={`w-3 h-3 transition-transform ${showTwitterAccountPanel ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                        View Account
+                        {showTwitterAccountPanel ? 'Hide' : 'Show'}
                       </button>
                     </div>
                     {showTwitterAccountPanel && (
@@ -3951,26 +4759,19 @@ function AutomationPageContent() {
                 {/* Twitter Analytics Section */}
                 {platform === 'twitter' && isConnected && (
                   <div className="mt-4">
-                    <div
-                      className="flex items-center justify-between cursor-pointer p-2 rounded-lg hover:bg-white/5"
-                      onClick={() => {
-                        setShowTwitterAnalytics(!showTwitterAnalytics);
-                        if (!showTwitterAnalytics && !twitterAnalytics) {
-                          fetchTwitterAnalytics();
-                        }
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-brand-silver/70 font-medium">📊 Analytics</span>
-                      </div>
-                      <svg
-                        className={`w-4 h-4 text-brand-silver/50 transition-transform ${showTwitterAnalytics ? 'rotate-180' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-brand-silver/70 font-medium">📊 Analytics</span>
+                      <button
+                        onClick={() => {
+                          setShowTwitterAnalytics(!showTwitterAnalytics);
+                          if (!showTwitterAnalytics && !twitterAnalytics) {
+                            fetchTwitterAnalytics();
+                          }
+                        }}
+                        className="text-xs text-[#1DA1F2] hover:underline"
                       >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                        {showTwitterAnalytics ? 'Hide' : 'Show'}
+                      </button>
                     </div>
                     {showTwitterAnalytics && (
                       <div className="mt-2 bg-white/5 rounded-lg p-3 space-y-3">
@@ -4042,15 +4843,7 @@ function AutomationPageContent() {
                 {/* Twitter Webhook Events Section */}
                 {platform === 'twitter' && isConnected && (
                   <div className="mt-4">
-                    <div
-                      className="flex items-center justify-between cursor-pointer p-2 rounded-lg hover:bg-white/5"
-                      onClick={() => {
-                        setShowTwitterWebhookEvents(!showTwitterWebhookEvents);
-                        if (!showTwitterWebhookEvents && !twitterWebhookEvents) {
-                          fetchTwitterWebhookEvents();
-                        }
-                      }}
-                    >
+                    <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-brand-silver/70 font-medium">🔔 Webhook Events</span>
                         {twitterWebhookEvents && twitterWebhookEvents.unread_count > 0 && (
@@ -4059,14 +4852,17 @@ function AutomationPageContent() {
                           </span>
                         )}
                       </div>
-                      <svg
-                        className={`w-4 h-4 text-brand-silver/50 transition-transform ${showTwitterWebhookEvents ? 'rotate-180' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                      <button
+                        onClick={() => {
+                          setShowTwitterWebhookEvents(!showTwitterWebhookEvents);
+                          if (!showTwitterWebhookEvents && !twitterWebhookEvents) {
+                            fetchTwitterWebhookEvents();
+                          }
+                        }}
+                        className="text-xs text-[#1DA1F2] hover:underline"
                       >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                        {showTwitterWebhookEvents ? 'Hide' : 'Show'}
+                      </button>
                     </div>
                     {showTwitterWebhookEvents && (
                       <div className="mt-2 bg-white/5 rounded-lg p-3 space-y-2 max-h-64 overflow-y-auto">
@@ -4143,6 +4939,399 @@ function AutomationPageContent() {
                   </div>
                 )}
 
+                {/* Twitter Webhook Settings */}
+                {platform === 'twitter' && isConnected && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-brand-silver/70 font-medium">⚙️ Webhook Settings</span>
+                      <button
+                        onClick={() => setShowTwitterWebhookSettings(!showTwitterWebhookSettings)}
+                        className="text-xs text-[#1DA1F2] hover:underline"
+                      >
+                        {showTwitterWebhookSettings ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    {showTwitterWebhookSettings && (
+                      <div className="mt-2 bg-white/5 rounded-lg p-3 space-y-3">
+                        <div className="flex items-center gap-2 text-xs text-green-400">
+                          <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                          <span>Webhooks Active</span>
+                        </div>
+                        
+                        <div className="text-xs text-brand-silver/70">
+                          <strong>Monitored Events:</strong>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {['tweet_create', 'favorite', 'follow', 'direct_message', 'mention', 'retweet'].map((field) => (
+                            <span
+                              key={field}
+                              className="text-xs bg-black/40 text-gray-300 border border-gray-600 px-2 py-0.5 rounded"
+                            >
+                              {field.replace(/_/g, ' ')}
+                            </span>
+                          ))}
+                        </div>
+                        
+                        <div className="text-xs text-brand-silver/50 mt-2 p-2 bg-brand-midnight/50 rounded">
+                          <p className="flex items-center gap-1">
+                            <span>ℹ️</span>
+                            <span>Twitter/X webhooks are configured via the Account Activity API. When events occur on your connected account, they will appear in the Webhook Events section above.</span>
+                          </p>
+                        </div>
+                        
+                        <button
+                          onClick={fetchTwitterWebhookEvents}
+                          className="text-xs text-brand-silver/50 hover:text-brand-silver transition-colors"
+                        >
+                          ↻ Refresh Events
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Instagram Account Switcher */}
+                {platform === 'instagram' && isConnected && (igAccounts.length > 0 || currentIgAccount) && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-brand-silver/70">
+                        {currentIgAccount ? `Account: @${currentIgAccount.username}` : 'Select an account'}
+                      </span>
+                      <button
+                        onClick={() => setShowIgAccountSwitcher(!showIgAccountSwitcher)}
+                        className="text-xs text-pink-400 hover:underline"
+                      >
+                        {showIgAccountSwitcher ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    
+                    {showIgAccountSwitcher && (
+                      <div className="bg-white/5 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
+                        {loadingIgAccounts ? (
+                          <div className="text-center py-2">
+                            <span className="text-brand-silver/50 text-sm">Loading accounts...</span>
+                          </div>
+                        ) : (
+                          igAccounts.map((account) => (
+                            <button
+                              key={account.id}
+                              onClick={() => handleSwitchInstagramAccount(account.id)}
+                              disabled={switchingIgAccount || currentIgAccount?.id === account.id}
+                              className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                                currentIgAccount?.id === account.id
+                                  ? 'bg-pink-500/20 border border-pink-500/30'
+                                  : 'hover:bg-white/10'
+                              } disabled:opacity-50`}
+                            >
+                              {account.profile_picture_url ? (
+                                <img
+                                  src={account.profile_picture_url}
+                                  alt={account.username}
+                                  className="w-8 h-8 rounded-full"
+                                />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center">
+                                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073z"/>
+                                  </svg>
+                                </div>
+                              )}
+                              <div className="flex-1 text-left">
+                                <p className="text-sm text-white font-medium">@{account.username}</p>
+                                {account.name && (
+                                  <p className="text-xs text-brand-silver/50">{account.name}</p>
+                                )}
+                              </div>
+                              {currentIgAccount?.id === account.id && (
+                                <span className="text-pink-400 text-xs">Active</span>
+                              )}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Instagram Analytics Section (Inline) */}
+                {platform === 'instagram' && isConnected && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-brand-silver/70 font-medium">📊 Account Analytics</span>
+                      <button
+                        onClick={() => {
+                          setShowIgAnalytics(!showIgAnalytics);
+                          if (!showIgAnalytics && !igAnalytics) {
+                            fetchIgAnalytics();
+                          }
+                        }}
+                        className="text-xs text-pink-400 hover:underline"
+                      >
+                        {showIgAnalytics ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    
+                    {showIgAnalytics && (
+                      <div className="mt-2 bg-white/5 rounded-lg p-3">
+                        {loadingIgAnalytics ? (
+                          <div className="flex items-center justify-center py-4">
+                            <svg className="animate-spin w-5 h-5 text-pink-500" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          </div>
+                        ) : igAnalytics ? (
+                          <>
+                            {igAnalytics.test_mode && (
+                              <div className="mb-3 px-2 py-1.5 bg-pink-500/10 rounded text-xs text-pink-400">
+                                🧪 Test mode - showing sample data
+                              </div>
+                            )}
+                            
+                            {/* Insights Grid */}
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                              <div className="text-center p-2 bg-white/5 rounded">
+                                <p className="text-lg font-bold text-white">
+                                  {(igAnalytics.insights.follower_count || 0).toLocaleString()}
+                                </p>
+                                <p className="text-xs text-brand-silver/70">Followers</p>
+                              </div>
+                              <div className="text-center p-2 bg-white/5 rounded">
+                                <p className="text-lg font-bold text-white">
+                                  {(igAnalytics.insights.impressions || 0).toLocaleString()}
+                                </p>
+                                <p className="text-xs text-brand-silver/70">Impressions</p>
+                              </div>
+                              <div className="text-center p-2 bg-white/5 rounded">
+                                <p className="text-lg font-bold text-white">
+                                  {(igAnalytics.insights.reach || 0).toLocaleString()}
+                                </p>
+                                <p className="text-xs text-brand-silver/70">Reach</p>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                              <div className="text-center p-2 bg-white/5 rounded">
+                                <p className="text-lg font-bold text-white">
+                                  {(igAnalytics.insights.profile_views || 0).toLocaleString()}
+                                </p>
+                                <p className="text-xs text-brand-silver/70">Profile Views</p>
+                              </div>
+                              <div className="text-center p-2 bg-white/5 rounded">
+                                <p className="text-lg font-bold text-white">
+                                  {(igAnalytics.insights.website_clicks || 0).toLocaleString()}
+                                </p>
+                                <p className="text-xs text-brand-silver/70">Website Clicks</p>
+                              </div>
+                              <div className="text-center p-2 bg-white/5 rounded">
+                                <p className="text-lg font-bold text-white">
+                                  {(igAnalytics.insights.email_contacts || 0).toLocaleString()}
+                                </p>
+                                <p className="text-xs text-brand-silver/70">Email Clicks</p>
+                              </div>
+                            </div>
+                            
+                            {/* Recent Media */}
+                            {igAnalytics.recent_media && igAnalytics.recent_media.length > 0 && (
+                              <div className="mt-3 border-t border-brand-ghost/20 pt-3">
+                                <p className="text-xs font-medium text-brand-silver mb-2">Recent Posts</p>
+                                <div className="space-y-2 max-h-32 overflow-y-auto">
+                                  {igAnalytics.recent_media.slice(0, 3).map((media) => (
+                                    <div key={media.id} className="flex items-start gap-2 p-2 bg-white/5 rounded text-xs">
+                                      {(media.media_url || media.thumbnail_url) && (
+                                        <img src={media.thumbnail_url || media.media_url} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                                      )}
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-white truncate">{media.caption || '(No caption)'}</p>
+                                        <div className="flex gap-2 text-brand-silver/50 mt-0.5">
+                                          <span>❤️ {media.like_count}</span>
+                                          <span>💬 {media.comments_count}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Refresh Button */}
+                            <button
+                              onClick={fetchIgAnalytics}
+                              className="mt-3 w-full text-xs text-pink-400 hover:underline"
+                            >
+                              ↻ Refresh Analytics
+                            </button>
+                          </>
+                        ) : (
+                          <div className="text-center py-4 text-brand-silver/50 text-sm">
+                            No analytics data available
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Instagram Webhook Events Section */}
+                {platform === 'instagram' && isConnected && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-brand-silver/70 font-medium">🔔 Webhook Events</span>
+                        {igWebhookEvents && igWebhookEvents.unread_count > 0 && (
+                          <span className="bg-pink-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                            {igWebhookEvents.unread_count}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowIgWebhookEvents(!showIgWebhookEvents);
+                          if (!showIgWebhookEvents && !igWebhookEvents) {
+                            fetchIgWebhookEvents();
+                          }
+                        }}
+                        className="text-xs text-pink-400 hover:underline"
+                      >
+                        {showIgWebhookEvents ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    
+                    {showIgWebhookEvents && (
+                      <div className="mt-2 bg-white/5 rounded-lg p-3">
+                        {loadingIgWebhookEvents ? (
+                          <div className="flex items-center justify-center py-4">
+                            <svg className="animate-spin w-5 h-5 text-pink-500" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          </div>
+                        ) : igWebhookEvents && igWebhookEvents.events.length > 0 ? (
+                          <>
+                            {igWebhookEvents.test_mode && (
+                              <div className="mb-2 text-xs text-yellow-400/80 bg-yellow-400/10 rounded px-2 py-1 inline-block">
+                                🧪 Test Mode - Showing simulated events
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between mb-2 text-xs text-brand-silver/70">
+                              <span>{igWebhookEvents.total_count} events total</span>
+                              {igWebhookEvents.unread_count > 0 && (
+                                <button
+                                  onClick={() => markIgWebhookEventsAsRead([], true)}
+                                  className="text-pink-400 hover:underline"
+                                >
+                                  Mark all as read
+                                </button>
+                              )}
+                            </div>
+                            
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {igWebhookEvents.events.map((event) => (
+                                <div 
+                                  key={event.id} 
+                                  className={`p-2 rounded text-xs ${event.read ? 'bg-white/5' : 'bg-pink-500/10 border border-pink-500/20'}`}
+                                >
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className={`font-medium ${event.read ? 'text-brand-silver' : 'text-white'}`}>
+                                          {event.event_type_display || event.event_type}
+                                        </span>
+                                        {!event.read && (
+                                          <span className="w-2 h-2 bg-pink-400 rounded-full"></span>
+                                        )}
+                                      </div>
+                                      {event.media_id && (
+                                        <p className="text-brand-silver/50 mt-0.5">Media: {event.media_id}</p>
+                                      )}
+                                      <p className="text-brand-silver/50 mt-0.5">
+                                        {new Date(event.created_at).toLocaleString()}
+                                      </p>
+                                    </div>
+                                    {!event.read && (
+                                      <button
+                                        onClick={() => markIgWebhookEventsAsRead([event.id])}
+                                        className="text-brand-silver/50 hover:text-pink-400"
+                                        title="Mark as read"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            
+                            <button
+                              onClick={fetchIgWebhookEvents}
+                              className="mt-3 w-full text-xs text-pink-400 hover:underline"
+                            >
+                              ↻ Refresh Events
+                            </button>
+                          </>
+                        ) : (
+                          <div className="text-center py-4 text-brand-silver/50 text-sm">
+                            No webhook events yet. Events will appear here when Instagram sends notifications about your account activity.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Instagram Webhook Settings */}
+                {platform === 'instagram' && isConnected && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-brand-silver/70 font-medium">⚙️ Webhook Settings</span>
+                      <button
+                        onClick={() => setShowIgWebhookSettings(!showIgWebhookSettings)}
+                        className="text-xs text-pink-400 hover:underline"
+                      >
+                        {showIgWebhookSettings ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    {showIgWebhookSettings && (
+                      <div className="mt-2 bg-white/5 rounded-lg p-3 space-y-3">
+                        <div className="flex items-center gap-2 text-xs text-green-400">
+                          <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                          <span>Webhooks Active</span>
+                        </div>
+                        
+                        <div className="text-xs text-brand-silver/70">
+                          <strong>Monitored Events:</strong>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {['comments', 'mentions', 'story_insights', 'live_comments'].map((field) => (
+                            <span
+                              key={field}
+                              className="text-xs bg-pink-500/20 text-pink-400 px-2 py-0.5 rounded"
+                            >
+                              {field}
+                            </span>
+                          ))}
+                        </div>
+                        
+                        <div className="text-xs text-brand-silver/50 mt-2 p-2 bg-brand-midnight/50 rounded">
+                          <p className="flex items-center gap-1">
+                            <span>ℹ️</span>
+                            <span>Instagram webhooks are configured at the app level. When events occur on your connected account, they will appear in the Webhook Events section above.</span>
+                          </p>
+                        </div>
+                        
+                        <button
+                          onClick={fetchIgWebhookEvents}
+                          className="text-xs text-brand-silver/50 hover:text-brand-silver transition-colors"
+                        >
+                          ↻ Refresh Events
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Action Buttons */}
                 <div className="mt-6 space-y-2">
                   {isConnected ? (
@@ -4150,7 +5339,7 @@ function AutomationPageContent() {
                       {platform === 'linkedin' && (
                         <button
                           onClick={openLinkedInComposeModal}
-                          className="w-full py-2.5 px-4 rounded-lg bg-brand-electric hover:bg-brand-electric/80 text-brand-midnight font-bold transition-colors"
+                          className="w-full py-2.5 px-4 rounded-lg bg-[#0A66C2] hover:bg-[#004182] text-white font-bold transition-colors"
                         >
                           📝 Compose Post
                         </button>
@@ -4158,7 +5347,7 @@ function AutomationPageContent() {
                       {platform === 'twitter' && (
                         <button
                           onClick={openTwitterComposeModal}
-                          className="w-full py-2.5 px-4 rounded-lg bg-brand-electric hover:bg-brand-electric/80 text-brand-midnight font-bold transition-colors"
+                          className="w-full py-2.5 px-4 rounded-lg bg-black hover:bg-gray-800 text-white font-bold transition-colors border border-gray-700"
                         >
                           🐦 Compose Tweet
                         </button>
@@ -4167,7 +5356,7 @@ function AutomationPageContent() {
                         <>
                           <button
                             onClick={openFacebookComposeModal}
-                            className="w-full py-2.5 px-4 rounded-lg bg-brand-electric hover:bg-brand-electric/80 text-brand-midnight font-bold transition-colors"
+                            className="w-full py-2.5 px-4 rounded-lg bg-[#1877F2] hover:bg-[#0d5fc7] text-white font-bold transition-colors"
                           >
                             📘 Compose Post
                           </button>
@@ -4185,7 +5374,32 @@ function AutomationPageContent() {
                               setShowResumableUploadModal(true);
                               fetchResumableUploads();
                             }}
-                            className="w-full py-2 px-4 rounded-lg border border-purple-500/30 text-purple-400 hover:bg-purple-500/10 transition-colors"
+                            className="w-full py-2 px-4 rounded-lg border border-[#1877F2]/30 text-[#1877F2] hover:bg-[#1877F2]/10 transition-colors"
+                          >
+                            📹 Upload Large Video (&gt;1GB)
+                          </button>
+                        </>
+                      )}
+                      {platform === 'instagram' && (
+                        <>
+                          <button
+                            onClick={openInstagramComposeModal}
+                            className="w-full py-2.5 px-4 rounded-lg bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 hover:opacity-90 text-white font-bold transition-colors"
+                          >
+                            📸 Compose Post
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowInstagramStoriesModal(true);
+                              fetchInstagramStories();
+                            }}
+                            className="w-full py-2 px-4 rounded-lg border border-pink-500/30 text-pink-400 hover:bg-pink-500/10 transition-colors"
+                          >
+                            📱 Create Story
+                          </button>
+                          <button
+                            onClick={() => setShowIgResumableUpload(true)}
+                            className="w-full py-2 px-4 rounded-lg border border-pink-500/30 text-pink-400 hover:bg-pink-500/10 transition-colors"
                           >
                             📹 Upload Large Video (&gt;1GB)
                           </button>
@@ -4209,7 +5423,7 @@ function AutomationPageContent() {
                         {isLoading ? 'Connecting...' : `Connect ${config.name}`}
                       </button>
                       {/* Test Connect Button - Dev Mode Only */}
-                      {(platform === 'linkedin' || platform === 'twitter' || platform === 'facebook') && (
+                      {(platform === 'linkedin' || platform === 'twitter' || platform === 'facebook' || platform === 'instagram') && (
                         <button
                           onClick={() => handleTestConnect(platform)}
                           disabled={isLoading || loading}
@@ -4428,6 +5642,13 @@ function AutomationPageContent() {
                         <div className="p-1.5 rounded bg-[#1877F2]" title="Facebook">
                           <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                          </svg>
+                        </div>
+                      )}
+                      {post.platforms.includes('instagram') && (
+                        <div className="p-1.5 rounded bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400" title="Instagram">
+                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
                           </svg>
                         </div>
                       )}
@@ -5567,7 +6788,7 @@ function AutomationPageContent() {
 
             {/* Modal Header */}
             <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 rounded-lg bg-blue-600 text-white">
+              <div className="p-2 rounded-lg bg-[#1877F2] text-white">
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                 </svg>
@@ -5579,8 +6800,8 @@ function AutomationPageContent() {
             </div>
 
             {/* Info about test mode */}
-            <div className="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
-              <p className="text-blue-400 text-sm">
+            <div className="mb-4 p-3 rounded-lg bg-[#1877F2]/10 border border-[#1877F2]/30">
+              <p className="text-[#1877F2] text-sm">
                 ℹ️ Test mode is automatically enabled when using test credentials. Connect real Facebook Page access to post live content.
               </p>
             </div>
@@ -6083,6 +7304,465 @@ function AutomationPageContent() {
         </div>
       )}
 
+      {/* Instagram Compose Modal */}
+      {showInstagramComposeModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="glass-card w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 relative">
+            {/* Close button */}
+            <button
+              onClick={() => {
+                setShowInstagramComposeModal(false);
+                resetInstagramComposeForm();
+              }}
+              className="absolute top-4 right-4 text-brand-silver hover:text-white"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Modal Header */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 text-white">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-heading font-bold text-white">Create Instagram Post</h2>
+                <p className="text-sm text-brand-silver/70">Share content to your Instagram Business account</p>
+              </div>
+            </div>
+
+            {/* Info about test mode */}
+            <div className="mb-4 p-3 rounded-lg bg-pink-500/10 border border-pink-500/30">
+              <p className="text-pink-400 text-sm">
+                ℹ️ Test mode is automatically enabled when using test credentials. Connect a real Instagram Business account to post live content.
+              </p>
+            </div>
+
+            {/* Draft Indicator & Save */}
+            {(igDraft || igCaption || igTitle) && (
+              <div className="mb-4 flex items-center justify-between p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <div className="flex items-center gap-2 text-amber-400 text-sm">
+                  <span>📝</span>
+                  {igDraft && !igCaption && !igTitle ? (
+                    <>
+                      <span>Draft saved {new Date(igDraft.savedAt).toLocaleString()}</span>
+                      {igDraft.mediaSkipped && <span className="text-amber-300 text-xs">(media not saved)</span>}
+                      <button
+                        onClick={restoreIgDraft}
+                        className="text-amber-300 hover:underline"
+                      >
+                        Restore
+                      </button>
+                    </>
+                  ) : igDraft && igDraft.caption === igCaption && igDraft.title === igTitle ? (
+                    <span className="text-green-400">
+                      ✓ Draft saved {new Date(igDraft.savedAt).toLocaleString()}
+                      {igDraft.mediaSkipped && <span className="text-amber-300 text-xs ml-1">(media not saved)</span>}
+                    </span>
+                  ) : (
+                    <span>Unsaved changes</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveIgDraft}
+                    className="text-xs text-amber-300 hover:text-amber-200"
+                  >
+                    💾 Save Draft
+                  </button>
+                  {igDraft && (
+                    <button
+                      onClick={clearIgDraft}
+                      className="text-xs text-red-400 hover:text-red-300"
+                    >
+                      ✕ Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Compose / Preview Tab Toggle */}
+            <div className="mb-4 flex gap-2">
+              <button
+                onClick={() => setIgComposeTab('compose')}
+                className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                  igComposeTab === 'compose'
+                    ? 'border-pink-500 bg-pink-500/20 text-pink-400'
+                    : 'border-brand-ghost/30 text-brand-silver hover:bg-white/5'
+                }`}
+              >
+                ✏️ Compose
+              </button>
+              <button
+                onClick={() => setIgComposeTab('preview')}
+                className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                  igComposeTab === 'preview'
+                    ? 'border-pink-500 bg-pink-500/20 text-pink-400'
+                    : 'border-brand-ghost/30 text-brand-silver hover:bg-white/5'
+                }`}
+              >
+                👁️ Preview
+              </button>
+            </div>
+
+            {/* Preview Tab */}
+            {igComposeTab === 'preview' && (
+              <div className="mb-6">
+                <div className="bg-white rounded-lg overflow-hidden shadow-lg">
+                  {/* Instagram Post Header */}
+                  <div className="p-3 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center text-white font-bold text-sm">
+                      {(currentIgAccount?.username || profiles?.instagram?.profile_name || 'I')[0].toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900 text-sm">
+                        {currentIgAccount?.username || profiles?.instagram?.profile_name || 'your_account'}
+                      </p>
+                    </div>
+                  </div>
+                  {/* Image/Carousel Preview */}
+                  {igCarouselMode && igCarouselImages.length > 0 && (
+                    <div className="aspect-square bg-gray-100 relative">
+                      <img src={igCarouselImages[0].url} alt="Preview" className="w-full h-full object-cover" />
+                      {igCarouselImages.length > 1 && (
+                        <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 rounded-full text-white text-xs">
+                          1/{igCarouselImages.length}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {!igCarouselMode && igMediaPreview && (
+                    <div className="aspect-square bg-gray-100">
+                      {igMediaPreview.type === 'image' ? (
+                        <img src={igMediaPreview.url} alt="Preview" className="w-full h-full object-cover" />
+                      ) : (
+                        <video src={igMediaPreview.url} className="w-full h-full object-cover" />
+                      )}
+                    </div>
+                  )}
+                  {!igCarouselMode && !igMediaPreview && (
+                    <div className="aspect-square bg-gray-100 flex items-center justify-center">
+                      <span className="text-gray-400">No media selected</span>
+                    </div>
+                  )}
+                  {/* Engagement Bar */}
+                  <div className="px-3 py-2 flex gap-4">
+                    <span className="text-2xl">♡</span>
+                    <span className="text-2xl">💬</span>
+                    <span className="text-2xl">➤</span>
+                  </div>
+                  {/* Caption */}
+                  <div className="px-3 pb-3">
+                    <p className="text-gray-900 text-sm">
+                      <span className="font-semibold">{currentIgAccount?.username || 'your_account'}</span>{' '}
+                      {igCaption || 'Your caption will appear here...'}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-brand-silver/50 mt-2 text-center">
+                  This is a preview. Actual appearance may vary.
+                </p>
+              </div>
+            )}
+
+            {/* Compose Tab Content */}
+            {igComposeTab === 'compose' && (
+              <>
+                {/* Post Type Toggle */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-brand-silver mb-2">Post Type</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setIgCarouselMode(false)}
+                      className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                        !igCarouselMode
+                          ? 'border-pink-500 bg-pink-500/20 text-pink-400'
+                          : 'border-brand-ghost/30 text-brand-silver hover:bg-white/5'
+                      }`}
+                    >
+                      📷 Single Post
+                    </button>
+                    <button
+                      onClick={() => setIgCarouselMode(true)}
+                      className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                        igCarouselMode
+                          ? 'border-pink-500 bg-pink-500/20 text-pink-400'
+                          : 'border-brand-ghost/30 text-brand-silver hover:bg-white/5'
+                      }`}
+                    >
+                      🎠 Carousel (2-10 images)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Form Fields */}
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-brand-silver mb-1">Title (optional)</label>
+                    <input
+                      type="text"
+                      value={igTitle}
+                      onChange={(e) => setIgTitle(e.target.value)}
+                      placeholder="Give your post a title for organization..."
+                      maxLength={100}
+                      className="w-full bg-brand-midnight border border-brand-ghost/30 rounded-lg p-3 text-white placeholder-brand-silver/50 focus:outline-none focus:ring-2 focus:ring-pink-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-brand-silver mb-1">Caption</label>
+                    <textarea
+                      value={igCaption}
+                      onChange={(e) => setIgCaption(e.target.value)}
+                      placeholder="Write a caption... Add hashtags for more reach!"
+                      rows={5}
+                      maxLength={INSTAGRAM_MAX_POST_LENGTH}
+                      className="w-full bg-brand-midnight border border-brand-ghost/30 rounded-lg p-3 text-white placeholder-brand-silver/50 focus:outline-none focus:ring-2 focus:ring-pink-500/50 resize-none"
+                    />
+                    <div className="flex justify-between items-center mt-1 text-xs">
+                      <span className={`${
+                        igCaption.length > INSTAGRAM_MAX_POST_LENGTH - 200 
+                          ? igCaption.length > INSTAGRAM_MAX_POST_LENGTH 
+                            ? 'text-red-400' 
+                            : 'text-amber-400' 
+                          : 'text-brand-silver/50'
+                      }`}>
+                        {igCaption.length} / {INSTAGRAM_MAX_POST_LENGTH} characters
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Media Upload for Instagram - Single Post Mode */}
+                  {!igCarouselMode && (
+                    <div>
+                      <label className="block text-sm font-medium text-brand-silver mb-1">Media (required)</label>
+                      <div className="flex items-center gap-3">
+                        <label className={`flex items-center gap-2 px-4 py-2 rounded-lg border border-brand-ghost/30 text-brand-silver hover:bg-white/5 transition-colors cursor-pointer ${uploadingIgMedia ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          {uploadingIgMedia ? 'Uploading...' : 'Add Media'}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,video/mp4"
+                            className="hidden"
+                            disabled={uploadingIgMedia}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const previewUrl = URL.createObjectURL(file);
+                                const isVideo = file.type.startsWith('video/');
+                                setIgMediaPreview({ url: previewUrl, type: isVideo ? 'video' : 'image' });
+                                // In real implementation, upload to get URL
+                                setIgMediaUrls([previewUrl]);
+                              }
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                        {igMediaUrls.length > 0 && (
+                          <div className="flex items-center gap-2 text-green-400 text-sm">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Media attached
+                            <button
+                              onClick={() => {
+                                setIgMediaUrls([]);
+                                if (igMediaPreview) {
+                                  URL.revokeObjectURL(igMediaPreview.url);
+                                  setIgMediaPreview(null);
+                                }
+                              }}
+                              className="text-red-400 hover:text-red-300 ml-2"
+                              title="Remove media"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {/* Media Preview */}
+                      {igMediaPreview && (
+                        <div className="mt-3 relative inline-block">
+                          {igMediaPreview.type === 'video' ? (
+                            <video 
+                              src={igMediaPreview.url} 
+                              className="max-w-full max-h-48 rounded-lg border border-brand-ghost/30"
+                              controls
+                            />
+                          ) : (
+                            <img 
+                              src={igMediaPreview.url} 
+                              alt="Media preview" 
+                              className="max-w-full max-h-48 rounded-lg border border-brand-ghost/30 object-cover"
+                            />
+                          )}
+                          {uploadingIgMedia && (
+                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg">
+                              <div className="flex items-center gap-2 text-white">
+                                <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Uploading...
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <p className="text-xs text-brand-silver/50 mt-1">
+                        Supported: JPEG, PNG (max 8MB), MP4 video (max 1GB)
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Carousel Images - Carousel Mode */}
+                  {igCarouselMode && (
+                    <div>
+                      <label className="block text-sm font-medium text-brand-silver mb-1">
+                        Carousel Images ({igCarouselImages.length}/10)
+                      </label>
+                      <p className="text-xs text-brand-silver/50 mb-3">
+                        Add 2-10 images for your carousel post. Images will be displayed in the order shown.
+                      </p>
+                      
+                      {/* Image Grid */}
+                      <div className="grid grid-cols-5 gap-2 mb-3">
+                        {igCarouselImages.map((img, index) => (
+                          <div key={index} className="relative aspect-square group">
+                            <img
+                              src={img.url}
+                              alt={`Carousel image ${index + 1}`}
+                              className="w-full h-full object-cover rounded-lg border border-brand-ghost/30"
+                            />
+                            <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 text-white text-xs flex items-center justify-center font-bold">
+                              {index + 1}
+                            </div>
+                            <button
+                              onClick={() => {
+                                const newImages = [...igCarouselImages];
+                                if (newImages[index].url.startsWith('blob:')) {
+                                  URL.revokeObjectURL(newImages[index].url);
+                                }
+                                newImages.splice(index, 1);
+                                setIgCarouselImages(newImages);
+                              }}
+                              className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        
+                        {/* Add Image Button */}
+                        {igCarouselImages.length < 10 && (
+                          <label className={`aspect-square flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-brand-ghost/30 hover:border-pink-500 hover:bg-pink-500/10 transition-colors cursor-pointer ${uploadingIgCarouselImage ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                            {uploadingIgCarouselImage ? (
+                              <svg className="animate-spin w-6 h-6 text-brand-silver" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            ) : (
+                              <>
+                                <svg className="w-6 h-6 text-brand-silver" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                <span className="text-xs text-brand-silver mt-1">Add</span>
+                              </>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              className="hidden"
+                              disabled={uploadingIgCarouselImage}
+                              onChange={(e) => {
+                                const files = e.target.files;
+                                if (files) {
+                                  const newImages: { url: string; file: File }[] = [];
+                                  const maxToAdd = 10 - igCarouselImages.length;
+                                  
+                                  Array.from(files).slice(0, maxToAdd).forEach(file => {
+                                    if (file.type.startsWith('image/')) {
+                                      const previewUrl = URL.createObjectURL(file);
+                                      newImages.push({ url: previewUrl, file });
+                                    }
+                                  });
+                                  
+                                  if (newImages.length > 0) {
+                                    setIgCarouselImages(prev => [...prev, ...newImages]);
+                                  }
+                                  
+                                  if (files.length > maxToAdd) {
+                                    setMessage({ type: 'error', text: `Only added ${maxToAdd} images. Maximum is 10.` });
+                                  }
+                                }
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                      
+                      {/* Validation Message */}
+                      {igCarouselImages.length > 0 && igCarouselImages.length < 2 && (
+                        <p className="text-xs text-amber-400">⚠️ Add at least 2 images for a carousel post</p>
+                      )}
+                      {igCarouselImages.length >= 2 && (
+                        <p className="text-xs text-green-400">✓ Ready to post carousel with {igCarouselImages.length} images</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowInstagramComposeModal(false);
+                  resetInstagramComposeForm();
+                }}
+                className="px-6 py-2.5 rounded-lg border border-brand-ghost/30 text-brand-silver hover:bg-white/5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={igCarouselMode ? handleInstagramCarouselPost : handleInstagramPost}
+                disabled={
+                  igPosting || 
+                  uploadingIgMedia || 
+                  uploadingIgCarouselImage ||
+                  (!igCarouselMode && !igMediaPreview) ||
+                  (igCarouselMode && igCarouselImages.length < 2) ||
+                  igCaption.length > INSTAGRAM_MAX_POST_LENGTH
+                }
+                className="px-6 py-2.5 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 hover:opacity-90"
+              >
+                {igPosting ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Posting...
+                  </>
+                ) : (
+                  igCarouselMode ? `Post Carousel (${igCarouselImages.length} images)` : 'Post to Instagram'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Facebook Stories Modal */}
       {showFacebookStoriesModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -6102,9 +7782,9 @@ function AutomationPageContent() {
 
             {/* Modal Header */}
             <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 text-white">
+              <div className="p-2 rounded-lg bg-[#1877F2] text-white">
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                 </svg>
               </div>
               <div>
@@ -6131,7 +7811,7 @@ function AutomationPageContent() {
                 <div className="flex gap-3 overflow-x-auto pb-2">
                   {fbStories.map((story) => (
                     <div key={story.id} className="flex-shrink-0 relative group">
-                      <div className="w-20 h-32 rounded-lg bg-gradient-to-br from-purple-500/20 via-pink-500/20 to-orange-500/20 border border-brand-ghost/30 flex items-center justify-center">
+                      <div className="w-20 h-32 rounded-lg bg-[#1877F2]/20 border border-[#1877F2]/30 flex items-center justify-center">
                         <span className="text-2xl">{story.media_type === 'VIDEO' ? '🎬' : '📷'}</span>
                       </div>
                       <button
@@ -6155,18 +7835,18 @@ function AutomationPageContent() {
               <h3 className="text-sm font-medium text-brand-silver mb-3">Create New Stories</h3>
               
               {/* Info Banner */}
-              <div className="mb-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
-                <p className="text-purple-400 text-xs">
+              <div className="mb-4 p-3 rounded-lg bg-[#1877F2]/10 border border-[#1877F2]/30">
+                <p className="text-blue-400 text-xs">
                   📸 Add multiple photos and videos to post as a sequence of stories. Each file becomes a separate story.
                 </p>
-                <p className="text-purple-400/70 text-xs mt-1">
+                <p className="text-blue-400/70 text-xs mt-1">
                   Photos: JPEG/PNG, max 4MB • Videos: MP4/MOV, max 4GB, 1-60 seconds
                 </p>
               </div>
 
               {/* File Upload Area */}
               <div className="mb-4">
-                <label className={`flex flex-col items-center justify-center w-full h-32 rounded-lg border-2 border-dashed border-brand-ghost/30 hover:border-purple-500 hover:bg-purple-500/10 transition-colors cursor-pointer ${postingFbStory ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                <label className={`flex flex-col items-center justify-center w-full h-32 rounded-lg border-2 border-dashed border-brand-ghost/30 hover:border-[#1877F2] hover:bg-[#1877F2]/10 transition-colors cursor-pointer ${postingFbStory ? 'opacity-50 cursor-not-allowed' : ''}`}>
                   <svg className="w-8 h-8 text-brand-silver mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
@@ -6263,14 +7943,14 @@ function AutomationPageContent() {
 
               {/* Upload Progress */}
               {postingFbStory && storyUploadProgress.total > 0 && (
-                <div className="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                <div className="mb-4 p-3 rounded-lg bg-[#1877F2]/10 border border-[#1877F2]/30">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-blue-400 text-sm">Uploading stories...</span>
                     <span className="text-blue-400 text-sm">{storyUploadProgress.current} / {storyUploadProgress.total}</span>
                   </div>
                   <div className="h-2 bg-brand-ghost/30 rounded-full overflow-hidden">
                     <div 
-                      className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 transition-all duration-300"
+                      className="h-full bg-[#1877F2] transition-all duration-300"
                       style={{ width: `${(storyUploadProgress.current / storyUploadProgress.total) * 100}%` }}
                     />
                   </div>
@@ -6281,7 +7961,7 @@ function AutomationPageContent() {
               <button
                 onClick={handleFacebookStoryPost}
                 disabled={postingFbStory || fbStoryQueue.length === 0}
-                className="w-full py-2.5 px-4 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 hover:from-purple-600 hover:via-pink-600 hover:to-orange-600"
+                className="w-full py-2.5 px-4 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 bg-[#1877F2] hover:bg-[#0d5fc7]"
               >
                 {postingFbStory ? (
                   <>
@@ -6297,6 +7977,220 @@ function AutomationPageContent() {
                   '✨ Share to Story'
                 ) : (
                   `✨ Share ${fbStoryQueue.length} Stories`
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Instagram Stories Modal */}
+      {showInstagramStoriesModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="glass-card w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 relative">
+            {/* Close button */}
+            <button
+              onClick={() => {
+                setShowInstagramStoriesModal(false);
+                resetInstagramStoryForm();
+              }}
+              className="absolute top-4 right-4 text-brand-silver hover:text-white"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Modal Header */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 text-white">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073z"/>
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-heading font-bold text-white">Instagram Stories</h2>
+                <p className="text-sm text-brand-silver/70">Create 24-hour ephemeral content</p>
+              </div>
+            </div>
+
+            {/* Active Stories */}
+            <div className="mb-6">
+              <h3 className="text-sm font-medium text-brand-silver mb-3">Active Stories</h3>
+              {loadingIgStories ? (
+                <div className="flex justify-center py-4">
+                  <svg className="animate-spin w-6 h-6 text-pink-500" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                </div>
+              ) : igStories.length === 0 ? (
+                <div className="text-center py-4 text-brand-silver/50 text-sm">
+                  No active stories. Stories disappear after 24 hours.
+                </div>
+              ) : (
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {igStories.map((story) => (
+                    <div key={story.id} className="flex-shrink-0 relative group">
+                      <div className="w-20 h-32 rounded-lg bg-gradient-to-br from-purple-500/20 via-pink-500/20 to-orange-500/20 border border-brand-ghost/30 flex items-center justify-center">
+                        <span className="text-2xl">{story.media_type === 'VIDEO' ? '🎬' : '📷'}</span>
+                      </div>
+                      <p className="text-xs text-brand-silver/50 text-center mt-1">
+                        {new Date(story.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Create Story Section */}
+            <div className="border-t border-brand-ghost/30 pt-6">
+              <h3 className="text-sm font-medium text-brand-silver mb-3">Create New Stories</h3>
+              
+              {/* Info Banner */}
+              <div className="mb-4 p-3 rounded-lg bg-pink-500/10 border border-pink-500/30">
+                <p className="text-pink-400 text-xs">
+                  📸 Add photos and videos to post as Instagram stories. Each file becomes a separate story.
+                </p>
+                <p className="text-pink-400/70 text-xs mt-1">
+                  Photos: JPEG/PNG, max 8MB • Videos: MP4, max 1GB, 1-60 seconds
+                </p>
+              </div>
+
+              {/* File Upload Area */}
+              <div className="mb-4">
+                <label className={`flex flex-col items-center justify-center w-full h-32 rounded-lg border-2 border-dashed border-brand-ghost/30 hover:border-pink-500 hover:bg-pink-500/10 transition-colors cursor-pointer ${postingIgStory ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                  <svg className="w-8 h-8 text-brand-silver mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <span className="text-brand-silver text-sm">
+                    Click to add photos or videos
+                  </span>
+                  <span className="text-brand-silver/50 text-xs mt-1">
+                    Select multiple files at once
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,video/mp4"
+                    multiple
+                    className="hidden"
+                    disabled={postingIgStory}
+                    onChange={(e) => {
+                      addToIgStoryQueue(e.target.files);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
+
+              {/* Story Queue */}
+              {igStoryQueue.length > 0 && (
+                <div className="mb-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="text-sm text-brand-silver">Story Queue ({igStoryQueue.length} items)</h4>
+                    <button
+                      onClick={resetInstagramStoryForm}
+                      disabled={postingIgStory}
+                      className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {igStoryQueue.map((item, index) => (
+                      <div key={item.id} className="flex-shrink-0 relative group">
+                        <div className={`w-16 h-24 rounded-lg overflow-hidden border-2 ${
+                          item.status === 'uploading' ? 'border-pink-500' :
+                          item.status === 'success' ? 'border-green-500' :
+                          item.status === 'failed' ? 'border-red-500' :
+                          'border-brand-ghost/30'
+                        }`}>
+                          {item.type === 'video' ? (
+                            <video 
+                              src={item.preview} 
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <img 
+                              src={item.preview} 
+                              alt={`Story ${index + 1}`} 
+                              className="w-full h-full object-cover"
+                            />
+                          )}
+                          {/* Status overlay */}
+                          {item.status !== 'pending' && (
+                            <div className={`absolute inset-0 flex items-center justify-center ${
+                              item.status === 'uploading' ? 'bg-pink-500/50' :
+                              item.status === 'success' ? 'bg-green-500/50' :
+                              item.status === 'failed' ? 'bg-red-500/50' : ''
+                            }`}>
+                              {item.status === 'uploading' && (
+                                <svg className="animate-spin w-6 h-6 text-white" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                              )}
+                              {item.status === 'success' && <span className="text-white text-lg">✓</span>}
+                              {item.status === 'failed' && <span className="text-white text-lg">✗</span>}
+                            </div>
+                          )}
+                        </div>
+                        {/* Type indicator */}
+                        <div className="absolute bottom-1 left-1 text-xs">
+                          {item.type === 'video' ? '🎬' : '📷'}
+                        </div>
+                        {/* Remove button */}
+                        {!postingIgStory && item.status === 'pending' && (
+                          <button
+                            onClick={() => removeFromIgStoryQueue(item.id)}
+                            className="absolute top-0 right-0 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-1 -translate-y-1"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Upload Progress */}
+              {postingIgStory && igStoryUploadProgress.total > 0 && (
+                <div className="mb-4 p-3 rounded-lg bg-pink-500/10 border border-pink-500/30">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-pink-400 text-sm">Uploading stories...</span>
+                    <span className="text-pink-400 text-sm">{igStoryUploadProgress.current} / {igStoryUploadProgress.total}</span>
+                  </div>
+                  <div className="h-2 bg-brand-ghost/30 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 transition-all duration-300"
+                      style={{ width: `${(igStoryUploadProgress.current / igStoryUploadProgress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Post Story Button */}
+              <button
+                onClick={handleInstagramStoryPost}
+                disabled={postingIgStory || igStoryQueue.length === 0}
+                className="w-full py-2.5 px-4 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 hover:from-purple-600 hover:via-pink-600 hover:to-orange-600"
+              >
+                {postingIgStory ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Posting {igStoryUploadProgress.current} of {igStoryUploadProgress.total}...
+                  </>
+                ) : igStoryQueue.length === 0 ? (
+                  '✨ Add media to share'
+                ) : igStoryQueue.length === 1 ? (
+                  '✨ Share to Story'
+                ) : (
+                  `✨ Share ${igStoryQueue.length} Stories`
                 )}
               </button>
             </div>
@@ -6534,6 +8428,85 @@ function AutomationPageContent() {
         </div>
       )}
 
+      {/* Instagram Large Video Upload Modal */}
+      {showIgResumableUpload && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="glass-card w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 relative">
+            {/* Close button */}
+            <button
+              onClick={() => setShowIgResumableUpload(false)}
+              className="absolute top-4 right-4 text-brand-silver hover:text-white"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Modal Header */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 text-white">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-heading font-bold text-white">Instagram Large Video Upload</h2>
+                <p className="text-sm text-brand-silver/70">Upload videos larger than 1GB</p>
+              </div>
+            </div>
+
+            {/* Info Banner */}
+            <div className="mb-6 p-4 rounded-lg bg-pink-500/10 border border-pink-500/30">
+              <p className="text-pink-400 text-sm">
+                📹 Instagram Large Video Upload supports:
+              </p>
+              <ul className="text-pink-400/80 text-sm mt-2 ml-4 list-disc space-y-1">
+                <li>Videos up to 60 minutes for Reels/Feed</li>
+                <li>Chunked upload for reliability</li>
+                <li>Automatic format optimization</li>
+              </ul>
+            </div>
+
+            {/* Coming Soon Notice */}
+            <div className="mb-6 p-4 rounded-lg bg-gradient-to-br from-purple-600/20 via-pink-500/20 to-orange-400/20 border border-pink-500/30">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-2xl">🚀</span>
+                <h3 className="text-lg font-semibold text-white">Coming Soon</h3>
+              </div>
+              <p className="text-brand-silver text-sm">
+                Instagram large video upload with resumable chunked uploads is being developed. 
+                This feature will allow you to upload videos larger than 1GB with progress tracking and resume capability.
+              </p>
+            </div>
+
+            {/* Current Option */}
+            <div className="border-t border-brand-ghost/30 pt-6">
+              <h3 className="text-sm font-medium text-brand-silver mb-3">Current Option</h3>
+              <p className="text-brand-silver/70 text-sm mb-4">
+                For now, you can upload videos up to 100MB directly through the Compose Post feature.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowIgResumableUpload(false);
+                    openInstagramComposeModal();
+                  }}
+                  className="flex-1 py-2.5 px-4 rounded-lg bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 text-white hover:opacity-90 transition-colors"
+                >
+                  📸 Open Compose Post
+                </button>
+                <button
+                  onClick={() => setShowIgResumableUpload(false)}
+                  className="py-2.5 px-4 rounded-lg border border-brand-ghost/30 text-brand-silver hover:bg-white/5 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Schedule Post Modal */}
       {showScheduleModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -6544,8 +8517,7 @@ function AutomationPageContent() {
                 setShowScheduleModal(false);
                 setScheduleTitle('');
                 setScheduleContent('');
-                setScheduleDate('');
-                setScheduleTime('');
+                setScheduleDateTime(null);
                 setScheduleMediaUrns([]);
                 setSchedulePlatforms(['linkedin']);
               }}
@@ -6602,21 +8574,29 @@ function AutomationPageContent() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-brand-silver mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={scheduleDate}
-                    onChange={(e) => setScheduleDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                    className="w-full bg-brand-midnight border border-brand-ghost/30 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-electric/50"
+                  <DatePicker
+                    selected={scheduleDateTime}
+                    onChange={(date: Date | null) => setScheduleDateTime(date)}
+                    minDate={new Date()}
+                    dateFormat="MMM d, yyyy"
+                    placeholderText="Select date"
+                    className="datepicker-input"
+                    wrapperClassName="w-full"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-brand-silver mb-1">Time</label>
-                  <input
-                    type="time"
-                    value={scheduleTime}
-                    onChange={(e) => setScheduleTime(e.target.value)}
-                    className="w-full bg-brand-midnight border border-brand-ghost/30 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-electric/50"
+                  <DatePicker
+                    selected={scheduleDateTime}
+                    onChange={(date: Date | null) => setScheduleDateTime(date)}
+                    showTimeSelect
+                    showTimeSelectOnly
+                    timeIntervals={15}
+                    timeCaption="Time"
+                    dateFormat="h:mm aa"
+                    placeholderText="Select time"
+                    className="datepicker-input"
+                    wrapperClassName="w-full"
                   />
                 </div>
               </div>
@@ -6692,12 +8672,47 @@ function AutomationPageContent() {
                     <span className="text-sm text-white">Facebook</span>
                     <span className="text-xs text-brand-silver/50 ml-auto">Max 63,206 chars</span>
                   </label>
+                  
+                  {/* Instagram Option */}
+                  <label className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-white/5 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={schedulePlatforms.includes('instagram')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSchedulePlatforms([...schedulePlatforms, 'instagram']);
+                        } else {
+                          setSchedulePlatforms(schedulePlatforms.filter(p => p !== 'instagram'));
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-brand-ghost/30 text-brand-electric focus:ring-brand-electric/50"
+                    />
+                    <div className="p-1.5 rounded bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400">
+                      <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                      </svg>
+                    </div>
+                    <span className="text-sm text-white">Instagram</span>
+                    <span className="text-xs text-brand-silver/50 ml-auto">Max {INSTAGRAM_MAX_POST_LENGTH} chars</span>
+                  </label>
                 </div>
                 
                 {/* Character limit warning */}
                 {schedulePlatforms.includes('twitter') && scheduleContent.length > TWITTER_MAX_LENGTH && (
                   <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
                     ⚠️ Content exceeds Twitter&apos;s {TWITTER_MAX_LENGTH} character limit ({scheduleContent.length} chars)
+                  </div>
+                )}
+                
+                {schedulePlatforms.includes('instagram') && scheduleContent.length > INSTAGRAM_MAX_POST_LENGTH && (
+                  <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
+                    ⚠️ Content exceeds Instagram&apos;s {INSTAGRAM_MAX_POST_LENGTH} character limit ({scheduleContent.length} chars)
+                  </div>
+                )}
+                
+                {schedulePlatforms.includes('instagram') && !scheduleMediaPreview && (
+                  <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded text-xs text-yellow-400">
+                    ⚠️ Instagram posts require an image or video. Please add media.
                   </div>
                 )}
                 
@@ -6799,8 +8814,7 @@ function AutomationPageContent() {
                   setShowScheduleModal(false);
                   setScheduleTitle('');
                   setScheduleContent('');
-                  setScheduleDate('');
-                  setScheduleTime('');
+                  setScheduleDateTime(null);
                   setScheduleMediaUrns([]);
                   if (scheduleMediaPreview) {
                     URL.revokeObjectURL(scheduleMediaPreview.url);
@@ -6814,7 +8828,7 @@ function AutomationPageContent() {
               </button>
               <button
                 onClick={handleSchedulePost}
-                disabled={scheduling || uploadingScheduleMedia || !scheduleTitle.trim() || !scheduleContent.trim() || !scheduleDate || !scheduleTime || schedulePlatforms.length === 0 || (schedulePlatforms.includes('twitter') && scheduleContent.length > TWITTER_MAX_LENGTH)}
+                disabled={scheduling || uploadingScheduleMedia || !scheduleTitle.trim() || !scheduleContent.trim() || !scheduleDateTime || schedulePlatforms.length === 0 || (schedulePlatforms.includes('twitter') && scheduleContent.length > TWITTER_MAX_LENGTH) || (schedulePlatforms.includes('instagram') && scheduleContent.length > INSTAGRAM_MAX_POST_LENGTH) || (schedulePlatforms.includes('instagram') && scheduleMediaUrns.length === 0)}
                 className="px-6 py-2.5 rounded-lg bg-brand-electric hover:bg-brand-electric/80 text-brand-midnight font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {scheduling ? (
@@ -6845,8 +8859,7 @@ function AutomationPageContent() {
                 setEditingPost(null);
                 setEditTitle('');
                 setEditContent('');
-                setEditDate('');
-                setEditTime('');
+                setEditDateTime(null);
                 setEditMediaUrns([]);
                 setEditPlatforms([]);
               }}
@@ -6903,20 +8916,29 @@ function AutomationPageContent() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-brand-silver mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={editDate}
-                    onChange={(e) => setEditDate(e.target.value)}
-                    className="w-full bg-brand-midnight border border-brand-ghost/30 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-electric/50"
+                  <DatePicker
+                    selected={editDateTime}
+                    onChange={(date: Date | null) => setEditDateTime(date)}
+                    minDate={new Date()}
+                    dateFormat="MMM d, yyyy"
+                    placeholderText="Select date"
+                    className="datepicker-input"
+                    wrapperClassName="w-full"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-brand-silver mb-1">Time</label>
-                  <input
-                    type="time"
-                    value={editTime}
-                    onChange={(e) => setEditTime(e.target.value)}
-                    className="w-full bg-brand-midnight border border-brand-ghost/30 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-electric/50"
+                  <DatePicker
+                    selected={editDateTime}
+                    onChange={(date: Date | null) => setEditDateTime(date)}
+                    showTimeSelect
+                    showTimeSelectOnly
+                    timeIntervals={15}
+                    timeCaption="Time"
+                    dateFormat="h:mm aa"
+                    placeholderText="Select time"
+                    className="datepicker-input"
+                    wrapperClassName="w-full"
                   />
                 </div>
               </div>
@@ -7038,8 +9060,7 @@ function AutomationPageContent() {
                   setEditingPost(null);
                   setEditTitle('');
                   setEditContent('');
-                  setEditDate('');
-                  setEditTime('');
+                  setEditDateTime(null);
                   setEditMediaUrns([]);
                   setEditPlatforms([]);
                 }}
@@ -7049,7 +9070,7 @@ function AutomationPageContent() {
               </button>
               <button
                 onClick={handleEditPost}
-                disabled={editing || uploadingEditMedia || !editTitle.trim() || !editContent.trim() || !editDate || !editTime || editPlatforms.length === 0 || (editPlatforms.includes('twitter') && editContent.length > TWITTER_MAX_LENGTH)}
+                disabled={editing || uploadingEditMedia || !editTitle.trim() || !editContent.trim() || !editDateTime || editPlatforms.length === 0 || (editPlatforms.includes('twitter') && editContent.length > TWITTER_MAX_LENGTH)}
                 className="px-6 py-2.5 rounded-lg bg-brand-electric hover:bg-brand-electric/80 text-brand-midnight font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {editing ? (

@@ -15,6 +15,10 @@ TWITTER_TEST_REFRESH_TOKEN = "test_twitter_refresh_token_not_real"
 FACEBOOK_TEST_ACCESS_TOKEN = "test_facebook_access_token_not_real"
 FACEBOOK_TEST_PAGE_TOKEN = "test_facebook_page_token_not_real"
 
+# Instagram test mode constants
+INSTAGRAM_TEST_ACCESS_TOKEN = "test_instagram_access_token_not_real"
+INSTAGRAM_TEST_USER_TOKEN = "test_instagram_user_token_not_real"
+
 # LinkedIn API limits
 LINKEDIN_POST_MAX_LENGTH = 3000
 LINKEDIN_TITLE_MAX_LENGTH = 200
@@ -40,6 +44,19 @@ TWITTER_VIDEO_TYPES: List[str] = ["video/mp4", "video/quicktime"]
 # Facebook supported media types
 FACEBOOK_IMAGE_TYPES: List[str] = ["image/jpeg", "image/png", "image/gif", "image/bmp"]
 FACEBOOK_VIDEO_TYPES: List[str] = ["video/mp4", "video/mov", "video/avi"]
+
+# Instagram API limits
+INSTAGRAM_POST_MAX_LENGTH = 2200  # Instagram caption limit
+INSTAGRAM_MEDIA_MAX_IMAGES = 10  # Max images per carousel post
+INSTAGRAM_MEDIA_MAX_VIDEO_SIZE = 1024 * 1024 * 1024  # 1GB for video (Reels)
+INSTAGRAM_MEDIA_MAX_IMAGE_SIZE = 8 * 1024 * 1024  # 8MB for images
+INSTAGRAM_STORY_MAX_VIDEO_DURATION = 60  # 60 seconds for stories
+INSTAGRAM_REEL_MAX_VIDEO_DURATION = 90  # 90 seconds for reels
+INSTAGRAM_HASHTAG_MAX = 30  # Max hashtags per post
+
+# Instagram supported media types
+INSTAGRAM_IMAGE_TYPES: List[str] = ["image/jpeg", "image/png"]
+INSTAGRAM_VIDEO_TYPES: List[str] = ["video/mp4", "video/mov"]
 
 # Editable post statuses - posts with these statuses can be edited
 EDITABLE_STATUSES: List[str] = ["draft", "scheduled"]

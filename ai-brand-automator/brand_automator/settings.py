@@ -447,6 +447,25 @@ FACEBOOK_REDIRECT_URI = config(
 # Set this to a random string and use the same value in Facebook Developer Portal
 FACEBOOK_WEBHOOK_VERIFY_TOKEN = config("FACEBOOK_WEBHOOK_VERIFY_TOKEN", default="")
 
+# Instagram OAuth 2.0 Configuration (via Facebook Graph API)
+# Instagram Business accounts require a linked Facebook Page
+INSTAGRAM_APP_ID = config("INSTAGRAM_APP_ID", default="")
+INSTAGRAM_APP_SECRET = config("INSTAGRAM_APP_SECRET", default="")
+INSTAGRAM_REDIRECT_URI = config(
+    "INSTAGRAM_REDIRECT_URI",
+    default="http://localhost:8000/api/v1/automation/instagram/callback/",
+)
+# Instagram Webhook Configuration
+INSTAGRAM_WEBHOOK_VERIFY_TOKEN = config("INSTAGRAM_WEBHOOK_VERIFY_TOKEN", default="")
+
+# Instagram Threads OAuth 2.0 Configuration (separate app)
+INSTAGRAM_THREADS_APP_ID = config("INSTAGRAM_THREADS_APP_ID", default="")
+INSTAGRAM_THREADS_APP_SECRET = config("INSTAGRAM_THREADS_APP_SECRET", default="")
+INSTAGRAM_THREADS_REDIRECT_URI = config(
+    "INSTAGRAM_THREADS_REDIRECT_URI",
+    default="http://localhost:8000/api/v1/automation/threads/callback/",
+)
+
 # Frontend URL for OAuth redirects
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
 

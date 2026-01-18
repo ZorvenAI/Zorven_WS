@@ -3229,3 +3229,1060 @@ class FacebookService:
 
 # Singleton instance
 facebook_service = FacebookService()
+
+
+class InstagramService:
+    """
+    Service for Instagram Business Account integration via Facebook Graph API.
+
+    Instagram API requires:
+    1. A Facebook App with Instagram Graph API enabled
+    2. A Facebook Page linked to an Instagram Business Account
+    3. User authentication via Facebook OAuth
+
+    Documentation:
+    https://developers.facebook.com/docs/instagram-api
+    https://developers.facebook.com/docs/instagram-api/guides/content-publishing
+    """
+
+    GRAPH_API_URL = "https://graph.facebook.com/v18.0"
+    AUTHORIZATION_URL = "https://www.facebook.com/v18.0/dialog/oauth"
+    TOKEN_URL = "https://graph.facebook.com/v18.0/oauth/access_token"
+
+    # Scopes needed for Instagram Business Account access
+    # NOTE: Instagram-specific scopes (instagram_basic, instagram_content_publish, etc.)
+    # require Meta App Review approval. For development/testing, use the "Test Connect"
+    # button in the UI which creates a mock connection without real OAuth.
+    #
+    # For production with approved app, uncomment the full SCOPES list below.
+    # Full scopes (requires App Review):
+    # - instagram_basic - Read profile info and media
+    # - instagram_content_publish - Publish posts, stories, reels
+    # - instagram_manage_comments - Read and reply to comments
+    # - instagram_manage_insights - Read insights/analytics
+    # - pages_show_list - List Facebook Pages (needed to get IG account)
+    # - pages_read_engagement - Read page engagement
+
+    # Development scopes (available without App Review for app admins/testers)
+    SCOPES = [
+        "public_profile",
+        "pages_show_list",
+        "pages_read_engagement",
+    ]
+
+    # Production scopes (uncomment after Meta App Review approval)
+    # SCOPES = [
+    #     "public_profile",
+    #     "pages_show_list",
+    #     "instagram_basic",
+    #     "instagram_content_publish",
+    #     "instagram_manage_comments",
+    #     "instagram_manage_insights",
+    #     "pages_read_engagement",
+    # ]
+
+    def __init__(self):
+        self.app_id = getattr(settings, "INSTAGRAM_APP_ID", None)
+        self.app_secret = getattr(settings, "INSTAGRAM_APP_SECRET", None)
+        self.redirect_uri = getattr(
+            settings,
+            "INSTAGRAM_REDIRECT_URI",
+            "http://localhost:8000/api/v1/automation/instagram/callback/",
+        )
+
+    @property
+    def is_configured(self) -> bool:
+        """Check if Instagram credentials are configured."""
+        return bool(self.app_id and self.app_secret)
+
+    def get_authorization_url(self, state: str) -> str:
+        """
+        Generate the Instagram OAuth authorization URL.
+
+        Uses Facebook OAuth since Instagram API is accessed via Graph API.
+
+        Args:
+            state: A unique state token to prevent CSRF attacks
+
+        Returns:
+            The full authorization URL to redirect the user to
+        """
+        if not self.is_configured:
+            raise ValueError("Instagram credentials not configured")
+
+        params = {
+            "client_id": self.app_id,
+            "redirect_uri": self.redirect_uri,
+            "state": state,
+            "scope": ",".join(self.SCOPES),
+            "response_type": "code",
+        }
+
+        return f"{self.AUTHORIZATION_URL}?{urlencode(params)}"
+
+    def exchange_code_for_token(self, code: str) -> dict:
+        """
+        Exchange the authorization code for access token.
+
+        Args:
+            code: The authorization code from callback
+
+        Returns:
+            Dictionary with access_token, expires_in, etc.
+        """
+        if not self.is_configured:
+            raise ValueError("Instagram credentials not configured")
+
+        params = {
+            "client_id": self.app_id,
+            "redirect_uri": self.redirect_uri,
+            "client_secret": self.app_secret,
+            "code": code,
+        }
+
+        try:
+            response = requests.get(
+                self.TOKEN_URL,
+                params=params,
+                timeout=30,
+            )
+            response.raise_for_status()
+            token_data = response.json()
+
+            # Calculate token expiration time
+            expires_in = token_data.get("expires_in", 5184000)  # Default 60 days
+            token_data["expires_at"] = timezone.now() + timedelta(seconds=expires_in)
+
+            return token_data
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram token exchange failed: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                logger.error(f"Response: {e.response.text}")
+            raise Exception(f"Failed to exchange code for token: {str(e)}")
+
+    def get_long_lived_token(self, short_lived_token: str) -> dict:
+        """
+        Exchange a short-lived token for a long-lived token (60 days).
+
+        Args:
+            short_lived_token: The short-lived access token
+
+        Returns:
+            Dictionary with long-lived access_token
+        """
+        if not self.is_configured:
+            raise ValueError("Instagram credentials not configured")
+
+        params = {
+            "grant_type": "fb_exchange_token",
+            "client_id": self.app_id,
+            "client_secret": self.app_secret,
+            "fb_exchange_token": short_lived_token,
+        }
+
+        try:
+            response = requests.get(
+                self.TOKEN_URL,
+                params=params,
+                timeout=30,
+            )
+            response.raise_for_status()
+            token_data = response.json()
+
+            # Long-lived tokens last ~60 days
+            expires_in = token_data.get("expires_in", 5184000)
+            token_data["expires_at"] = timezone.now() + timedelta(seconds=expires_in)
+
+            return token_data
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram long-lived token exchange failed: {e}")
+            raise Exception(f"Failed to get long-lived token: {str(e)}")
+
+    def get_user_pages(self, access_token: str) -> list:
+        """
+        Get the list of Facebook Pages the user manages.
+
+        Instagram Business accounts are linked to Facebook Pages.
+
+        Args:
+            access_token: Valid Facebook user access token
+
+        Returns:
+            List of pages with their Instagram Business accounts
+        """
+        try:
+            response = requests.get(
+                f"{self.GRAPH_API_URL}/me/accounts",
+                params={
+                    "access_token": access_token,
+                    "fields": (
+                        "id,name,access_token,instagram_business_account"
+                        "{id,username,profile_picture_url,followers_count}"
+                    ),
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("data", [])
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram pages fetch failed: {e}")
+            raise Exception(f"Failed to fetch user pages: {str(e)}")
+
+    def get_instagram_account(self, page_id: str, access_token: str) -> dict:
+        """
+        Get the Instagram Business Account linked to a Facebook Page.
+
+        Args:
+            page_id: The Facebook Page ID
+            access_token: Page access token
+
+        Returns:
+            Dictionary with Instagram account info
+        """
+        try:
+            response = requests.get(
+                f"{self.GRAPH_API_URL}/{page_id}",
+                params={
+                    "access_token": access_token,
+                    "fields": (
+                        "instagram_business_account"
+                        "{id,username,name,profile_picture_url,"
+                        "followers_count,follows_count,media_count,biography}"
+                    ),
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("instagram_business_account", {})
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram account fetch failed: {e}")
+            raise Exception(f"Failed to fetch Instagram account: {str(e)}")
+
+    def get_user_profile(self, instagram_user_id: str, access_token: str) -> dict:
+        """
+        Get Instagram Business Account profile information.
+
+        Args:
+            instagram_user_id: Instagram Business Account ID
+            access_token: Valid access token
+
+        Returns:
+            Dictionary with profile data
+        """
+        try:
+            response = requests.get(
+                f"{self.GRAPH_API_URL}/{instagram_user_id}",
+                params={
+                    "access_token": access_token,
+                    "fields": (
+                        "id,username,name,profile_picture_url,"
+                        "followers_count,follows_count,media_count,biography"
+                    ),
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram profile fetch failed: {e}")
+            raise Exception(f"Failed to fetch profile: {str(e)}")
+
+    # =========================================================================
+    # Content Publishing - Single Image/Video Posts
+    # =========================================================================
+
+    def create_media_container(
+        self,
+        instagram_user_id: str,
+        access_token: str,
+        image_url: Optional[str] = None,
+        video_url: Optional[str] = None,
+        caption: Optional[str] = None,
+        media_type: str = "IMAGE",
+    ) -> dict:
+        """
+        Create a media container for publishing.
+
+        Instagram publishing is a 2-step process:
+        1. Create a container with the media URL
+        2. Publish the container
+
+        Args:
+            instagram_user_id: Instagram Business Account ID
+            access_token: Valid access token
+            image_url: URL of the image (for IMAGE type)
+            video_url: URL of the video (for VIDEO/REELS type)
+            caption: Post caption (max 2200 characters)
+            media_type: IMAGE, VIDEO, or REELS
+
+        Returns:
+            Dictionary with container id
+        """
+        payload = {
+            "access_token": access_token,
+        }
+
+        if caption:
+            payload["caption"] = caption[:2200]  # Instagram caption limit
+
+        if media_type == "IMAGE" and image_url:
+            payload["image_url"] = image_url
+        elif media_type in ("VIDEO", "REELS") and video_url:
+            payload["video_url"] = video_url
+            payload["media_type"] = media_type
+        else:
+            raise ValueError(f"Invalid media type or missing URL: {media_type}")
+
+        try:
+            response = requests.post(
+                f"{self.GRAPH_API_URL}/{instagram_user_id}/media",
+                data=payload,
+                timeout=60,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            logger.info(f"Instagram container created: {data.get('id')}")
+            return data
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram container creation failed: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                logger.error(f"Response: {e.response.text}")
+            raise Exception(f"Failed to create media container: {str(e)}")
+
+    def check_container_status(
+        self,
+        container_id: str,
+        access_token: str,
+    ) -> dict:
+        """
+        Check the status of a media container.
+
+        Video containers take time to process. Poll this endpoint until
+        status is FINISHED or ERROR.
+
+        Args:
+            container_id: The media container ID
+            access_token: Valid access token
+
+        Returns:
+            Dictionary with status_code and status
+        """
+        try:
+            response = requests.get(
+                f"{self.GRAPH_API_URL}/{container_id}",
+                params={
+                    "access_token": access_token,
+                    "fields": "status_code,status",
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram container status check failed: {e}")
+            raise Exception(f"Failed to check container status: {str(e)}")
+
+    def publish_media(
+        self,
+        instagram_user_id: str,
+        access_token: str,
+        container_id: str,
+    ) -> dict:
+        """
+        Publish a media container to Instagram.
+
+        Args:
+            instagram_user_id: Instagram Business Account ID
+            access_token: Valid access token
+            container_id: The media container ID to publish
+
+        Returns:
+            Dictionary with published media id
+        """
+        try:
+            response = requests.post(
+                f"{self.GRAPH_API_URL}/{instagram_user_id}/media_publish",
+                data={
+                    "creation_id": container_id,
+                    "access_token": access_token,
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            logger.info(f"Instagram media published: {data.get('id')}")
+            return data
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram media publish failed: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                logger.error(f"Response: {e.response.text}")
+            raise Exception(f"Failed to publish media: {str(e)}")
+
+    # =========================================================================
+    # Carousel Posts (Multi-Image)
+    # =========================================================================
+
+    def create_carousel_item_container(
+        self,
+        instagram_user_id: str,
+        access_token: str,
+        image_url: Optional[str] = None,
+        video_url: Optional[str] = None,
+        is_carousel_item: bool = True,
+    ) -> dict:
+        """
+        Create a carousel item container (unpublished).
+
+        Args:
+            instagram_user_id: Instagram Business Account ID
+            access_token: Valid access token
+            image_url: URL of the image
+            video_url: URL of the video
+            is_carousel_item: Must be True for carousel items
+
+        Returns:
+            Dictionary with container id
+        """
+        payload = {
+            "access_token": access_token,
+            "is_carousel_item": "true",
+        }
+
+        if image_url:
+            payload["image_url"] = image_url
+        elif video_url:
+            payload["video_url"] = video_url
+            payload["media_type"] = "VIDEO"
+        else:
+            raise ValueError("Either image_url or video_url must be provided")
+
+        try:
+            response = requests.post(
+                f"{self.GRAPH_API_URL}/{instagram_user_id}/media",
+                data=payload,
+                timeout=60,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            logger.info(f"Instagram carousel item created: {data.get('id')}")
+            return data
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram carousel item creation failed: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                logger.error(f"Response: {e.response.text}")
+            raise Exception(f"Failed to create carousel item: {str(e)}")
+
+    def create_carousel_container(
+        self,
+        instagram_user_id: str,
+        access_token: str,
+        children: List[str],
+        caption: Optional[str] = None,
+    ) -> dict:
+        """
+        Create a carousel container with multiple items.
+
+        Args:
+            instagram_user_id: Instagram Business Account ID
+            access_token: Valid access token
+            children: List of carousel item container IDs (2-10 items)
+            caption: Post caption
+
+        Returns:
+            Dictionary with carousel container id
+        """
+        if len(children) < 2:
+            raise ValueError("Carousel requires at least 2 items")
+        if len(children) > 10:
+            raise ValueError("Carousel supports maximum 10 items")
+
+        payload = {
+            "access_token": access_token,
+            "media_type": "CAROUSEL",
+            "children": ",".join(children),
+        }
+
+        if caption:
+            payload["caption"] = caption[:2200]
+
+        try:
+            response = requests.post(
+                f"{self.GRAPH_API_URL}/{instagram_user_id}/media",
+                data=payload,
+                timeout=60,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            logger.info(f"Instagram carousel container created: {data.get('id')}")
+            return data
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram carousel creation failed: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                logger.error(f"Response: {e.response.text}")
+            raise Exception(f"Failed to create carousel: {str(e)}")
+
+    # =========================================================================
+    # Stories
+    # =========================================================================
+
+    def create_story_container(
+        self,
+        instagram_user_id: str,
+        access_token: str,
+        image_url: Optional[str] = None,
+        video_url: Optional[str] = None,
+    ) -> dict:
+        """
+        Create a story media container.
+
+        Stories are vertical (9:16 aspect ratio) and expire after 24 hours.
+
+        Args:
+            instagram_user_id: Instagram Business Account ID
+            access_token: Valid access token
+            image_url: URL of the image
+            video_url: URL of the video (max 60 seconds)
+
+        Returns:
+            Dictionary with container id
+        """
+        payload = {
+            "access_token": access_token,
+            "media_type": "STORIES",
+        }
+
+        if image_url:
+            payload["image_url"] = image_url
+        elif video_url:
+            payload["video_url"] = video_url
+        else:
+            raise ValueError("Either image_url or video_url must be provided")
+
+        try:
+            response = requests.post(
+                f"{self.GRAPH_API_URL}/{instagram_user_id}/media",
+                data=payload,
+                timeout=60,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            logger.info(f"Instagram story container created: {data.get('id')}")
+            return data
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram story container creation failed: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                logger.error(f"Response: {e.response.text}")
+            raise Exception(f"Failed to create story container: {str(e)}")
+
+    def get_stories(
+        self,
+        instagram_user_id: str,
+        access_token: str,
+    ) -> list:
+        """
+        Get active stories for the Instagram account.
+
+        Args:
+            instagram_user_id: Instagram Business Account ID
+            access_token: Valid access token
+
+        Returns:
+            List of active stories
+        """
+        try:
+            response = requests.get(
+                f"{self.GRAPH_API_URL}/{instagram_user_id}/stories",
+                params={
+                    "access_token": access_token,
+                    "fields": "id,media_type,media_url,timestamp,permalink",
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("data", [])
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram stories fetch failed: {e}")
+            raise Exception(f"Failed to fetch stories: {str(e)}")
+
+    # =========================================================================
+    # Reels
+    # =========================================================================
+
+    def create_reel_container(
+        self,
+        instagram_user_id: str,
+        access_token: str,
+        video_url: str,
+        caption: Optional[str] = None,
+        cover_url: Optional[str] = None,
+        share_to_feed: bool = True,
+    ) -> dict:
+        """
+        Create a Reel media container.
+
+        Reels are short-form videos (max 90 seconds).
+
+        Args:
+            instagram_user_id: Instagram Business Account ID
+            access_token: Valid access token
+            video_url: URL of the video
+            caption: Reel caption
+            cover_url: URL of the cover image (optional)
+            share_to_feed: Whether to also share to feed
+
+        Returns:
+            Dictionary with container id
+        """
+        payload = {
+            "access_token": access_token,
+            "media_type": "REELS",
+            "video_url": video_url,
+            "share_to_feed": str(share_to_feed).lower(),
+        }
+
+        if caption:
+            payload["caption"] = caption[:2200]
+
+        if cover_url:
+            payload["cover_url"] = cover_url
+
+        try:
+            response = requests.post(
+                f"{self.GRAPH_API_URL}/{instagram_user_id}/media",
+                data=payload,
+                timeout=60,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            logger.info(f"Instagram reel container created: {data.get('id')}")
+            return data
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram reel container creation failed: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                logger.error(f"Response: {e.response.text}")
+            raise Exception(f"Failed to create reel container: {str(e)}")
+
+    # =========================================================================
+    # Media Management
+    # =========================================================================
+
+    def get_user_media(
+        self,
+        instagram_user_id: str,
+        access_token: str,
+        limit: int = 25,
+    ) -> list:
+        """
+        Get recent media (posts) from the Instagram account.
+
+        Args:
+            instagram_user_id: Instagram Business Account ID
+            access_token: Valid access token
+            limit: Number of posts to retrieve
+
+        Returns:
+            List of media objects
+        """
+        try:
+            response = requests.get(
+                f"{self.GRAPH_API_URL}/{instagram_user_id}/media",
+                params={
+                    "access_token": access_token,
+                    "fields": (
+                        "id,caption,media_type,media_url,permalink,"
+                        "thumbnail_url,timestamp,like_count,comments_count"
+                    ),
+                    "limit": limit,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("data", [])
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram media fetch failed: {e}")
+            raise Exception(f"Failed to fetch media: {str(e)}")
+
+    def get_media(
+        self,
+        media_id: str,
+        access_token: str,
+    ) -> dict:
+        """
+        Get details of a specific media item.
+
+        Args:
+            media_id: The media ID
+            access_token: Valid access token
+
+        Returns:
+            Dictionary with media details
+        """
+        try:
+            response = requests.get(
+                f"{self.GRAPH_API_URL}/{media_id}",
+                params={
+                    "access_token": access_token,
+                    "fields": (
+                        "id,caption,media_type,media_url,permalink,"
+                        "thumbnail_url,timestamp,like_count,comments_count,"
+                        "children{id,media_type,media_url}"
+                    ),
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram media fetch failed: {e}")
+            raise Exception(f"Failed to fetch media: {str(e)}")
+
+    def delete_media(
+        self,
+        media_id: str,
+        access_token: str,
+    ) -> bool:
+        """
+        Delete a media item.
+
+        Note: Instagram API doesn't support deleting via Graph API.
+        This will return False with a warning.
+
+        Args:
+            media_id: The media ID to delete
+            access_token: Valid access token
+
+        Returns:
+            False (deletion not supported via API)
+        """
+        # Instagram Graph API doesn't support media deletion
+        logger.warning(
+            f"Instagram media deletion not supported via API. "
+            f"Media {media_id} must be deleted from the Instagram app."
+        )
+        return False
+
+    # =========================================================================
+    # Comments
+    # =========================================================================
+
+    def get_media_comments(
+        self,
+        media_id: str,
+        access_token: str,
+        limit: int = 50,
+    ) -> list:
+        """
+        Get comments on a media item.
+
+        Args:
+            media_id: The media ID
+            access_token: Valid access token
+            limit: Number of comments to retrieve
+
+        Returns:
+            List of comments
+        """
+        try:
+            response = requests.get(
+                f"{self.GRAPH_API_URL}/{media_id}/comments",
+                params={
+                    "access_token": access_token,
+                    "fields": "id,text,timestamp,username,like_count,replies{id,text}",
+                    "limit": limit,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("data", [])
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram comments fetch failed: {e}")
+            raise Exception(f"Failed to fetch comments: {str(e)}")
+
+    def reply_to_comment(
+        self,
+        comment_id: str,
+        access_token: str,
+        message: str,
+    ) -> dict:
+        """
+        Reply to a comment.
+
+        Args:
+            comment_id: The comment ID to reply to
+            access_token: Valid access token
+            message: The reply message
+
+        Returns:
+            Dictionary with created reply id
+        """
+        try:
+            response = requests.post(
+                f"{self.GRAPH_API_URL}/{comment_id}/replies",
+                data={
+                    "access_token": access_token,
+                    "message": message,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            logger.info(f"Instagram reply created: {data.get('id')}")
+            return data
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram reply creation failed: {e}")
+            raise Exception(f"Failed to reply to comment: {str(e)}")
+
+    def delete_comment(
+        self,
+        comment_id: str,
+        access_token: str,
+    ) -> bool:
+        """
+        Delete a comment or reply.
+
+        Args:
+            comment_id: The comment ID to delete
+            access_token: Valid access token
+
+        Returns:
+            True if deletion was successful
+        """
+        try:
+            response = requests.delete(
+                f"{self.GRAPH_API_URL}/{comment_id}",
+                params={"access_token": access_token},
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            logger.info(f"Instagram comment deleted: {comment_id}")
+            return data.get("success", False)
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram comment deletion failed: {e}")
+            raise Exception(f"Failed to delete comment: {str(e)}")
+
+    # =========================================================================
+    # Analytics / Insights
+    # =========================================================================
+
+    def get_account_insights(
+        self,
+        instagram_user_id: str,
+        access_token: str,
+        period: str = "day",
+        metrics: Optional[List[str]] = None,
+    ) -> dict:
+        """
+        Get account-level insights.
+
+        Args:
+            instagram_user_id: Instagram Business Account ID
+            access_token: Valid access token
+            period: Time period (day, week, days_28, lifetime)
+            metrics: List of metrics to retrieve
+
+        Returns:
+            Dictionary with account insights
+        """
+        if metrics is None:
+            metrics = [
+                "impressions",
+                "reach",
+                "follower_count",
+                "profile_views",
+                "website_clicks",
+            ]
+
+        try:
+            response = requests.get(
+                f"{self.GRAPH_API_URL}/{instagram_user_id}/insights",
+                params={
+                    "access_token": access_token,
+                    "metric": ",".join(metrics),
+                    "period": period,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            # Parse insights into a more usable format
+            insights = {}
+            for item in data.get("data", []):
+                metric_name = item.get("name")
+                values = item.get("values", [])
+                if values:
+                    insights[metric_name] = values[-1].get("value", 0)
+
+            return insights
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram account insights fetch failed: {e}")
+            raise Exception(f"Failed to fetch account insights: {str(e)}")
+
+    def get_media_insights(
+        self,
+        media_id: str,
+        access_token: str,
+        media_type: str = "IMAGE",
+    ) -> dict:
+        """
+        Get insights for a specific media item.
+
+        Args:
+            media_id: The media ID
+            access_token: Valid access token
+            media_type: Type of media (IMAGE, VIDEO, CAROUSEL_ALBUM, REELS)
+
+        Returns:
+            Dictionary with media insights
+        """
+        # Different metrics available based on media type
+        if media_type == "VIDEO":
+            metrics = [
+                "engagement",
+                "impressions",
+                "reach",
+                "saved",
+                "video_views",
+            ]
+        elif media_type == "REELS":
+            metrics = [
+                "comments",
+                "likes",
+                "reach",
+                "saved",
+                "shares",
+                "plays",
+                "total_interactions",
+            ]
+        elif media_type == "CAROUSEL_ALBUM":
+            metrics = [
+                "carousel_album_engagement",
+                "carousel_album_impressions",
+                "carousel_album_reach",
+                "carousel_album_saved",
+            ]
+        else:  # IMAGE
+            metrics = [
+                "engagement",
+                "impressions",
+                "reach",
+                "saved",
+            ]
+
+        try:
+            response = requests.get(
+                f"{self.GRAPH_API_URL}/{media_id}/insights",
+                params={
+                    "access_token": access_token,
+                    "metric": ",".join(metrics),
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            # Parse insights
+            insights = {}
+            for item in data.get("data", []):
+                metric_name = item.get("name")
+                values = item.get("values", [])
+                if values:
+                    insights[metric_name] = values[0].get("value", 0)
+
+            return insights
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Instagram media insights fetch failed: {e}")
+            raise Exception(f"Failed to fetch media insights: {str(e)}")
+
+    # =========================================================================
+    # Webhooks
+    # =========================================================================
+
+    def verify_webhook_signature(self, payload: bytes, signature: str) -> bool:
+        """
+        Verify the webhook signature from Instagram/Facebook.
+
+        Args:
+            payload: Raw request body
+            signature: The X-Hub-Signature-256 header value
+
+        Returns:
+            True if signature is valid
+        """
+        import hmac
+        import hashlib
+
+        if not self.app_secret:
+            logger.warning(
+                "Instagram app secret not configured, skipping signature check"
+            )
+            return True  # Allow in development
+
+        if not signature or not signature.startswith("sha256="):
+            logger.warning("Invalid Instagram webhook signature format")
+            return False
+
+        expected_signature = (
+            "sha256="
+            + hmac.new(
+                self.app_secret.encode("utf-8"),
+                payload,
+                hashlib.sha256,
+            ).hexdigest()
+        )
+
+        return hmac.compare_digest(signature, expected_signature)
+
+    def verify_webhook_token(self, verify_token: str) -> bool:
+        """
+        Verify the webhook subscription verify token.
+
+        Args:
+            verify_token: The hub.verify_token from the request
+
+        Returns:
+            True if token matches configured value
+        """
+        configured_token = getattr(settings, "INSTAGRAM_WEBHOOK_VERIFY_TOKEN", None)
+        if not configured_token:
+            logger.warning("INSTAGRAM_WEBHOOK_VERIFY_TOKEN not configured")
+            return False
+        return verify_token == configured_token
+
+
+# Singleton instance
+instagram_service = InstagramService()

@@ -328,3 +328,174 @@
   animation: slide-in 0.3s ease-out;
 }
 
+/* ===== React DatePicker Dark Theme ===== */
+.react-datepicker-wrapper {
+  width: 100%;
+}
+
+.react-datepicker-popper {
+  z-index: 50 !important;
+}
+
+.react-datepicker {
+  background-color: #0A0B10 !important;
+  border: 1px solid rgba(138, 43, 226, 0.3) !important;
+  border-radius: 0.75rem !important;
+  font-family: inherit !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important;
+}
+
+.react-datepicker__triangle {
+  display: none !important;
+}
+
+.react-datepicker__header {
+  background-color: rgba(138, 43, 226, 0.1) !important;
+  border-bottom: 1px solid rgba(138, 43, 226, 0.2) !important;
+  border-radius: 0.75rem 0.75rem 0 0 !important;
+  padding-top: 0.75rem !important;
+}
+
+.react-datepicker__current-month,
+.react-datepicker-time__header {
+  color: white !important;
+  font-weight: 600 !important;
+  font-size: 0.95rem !important;
+}
+
+.react-datepicker__day-names {
+  margin-top: 0.5rem !important;
+}
+
+.react-datepicker__day-name {
+  color: var(--brand-electric) !important;
+  font-weight: 500 !important;
+  width: 2.2rem !important;
+  line-height: 2.2rem !important;
+}
+
+.react-datepicker__month {
+  margin: 0.5rem !important;
+}
+
+.react-datepicker__day {
+  color: #E1E1E6 !important;
+  width: 2.2rem !important;
+  line-height: 2.2rem !important;
+  border-radius: 0.5rem !important;
+  transition: all 0.15s ease !important;
+}
+
+.react-datepicker__day:hover {
+  background-color: rgba(0, 245, 255, 0.2) !important;
+  color: white !important;
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected {
+  background-color: var(--brand-electric) !important;
+  color: #0A0B10 !important;
+  font-weight: 600 !important;
+}
+
+.react-datepicker__day--selected:hover {
+  background-color: var(--brand-electric) !important;
+}
+
+.react-datepicker__day--today {
+  border: 1px solid var(--brand-ghost) !important;
+  font-weight: 600 !important;
+}
+
+.react-datepicker__day--disabled {
+  color: rgba(225, 225, 230, 0.3) !important;
+  cursor: not-allowed !important;
+}
+
+.react-datepicker__day--disabled:hover {
+  background-color: transparent !important;
+}
+
+.react-datepicker__day--outside-month {
+  color: rgba(225, 225, 230, 0.25) !important;
+}
+
+.react-datepicker__navigation {
+  top: 0.75rem !important;
+}
+
+.react-datepicker__navigation-icon::before {
+  border-color: var(--brand-electric) !important;
+}
+
+.react-datepicker__navigation:hover *::before {
+  border-color: white !important;
+}
+
+/* Time picker styles */
+.react-datepicker__time-container {
+  border-left: 1px solid rgba(138, 43, 226, 0.2) !important;
+  width: 100px !important;
+}
+
+.react-datepicker__time {
+  background-color: #0A0B10 !important;
+  border-radius: 0 0 0.75rem 0 !important;
+}
+
+.react-datepicker__time-box {
+  width: 100px !important;
+}
+
+.react-datepicker__time-list {
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--brand-ghost) transparent !important;
+}
+
+.react-datepicker__time-list::-webkit-scrollbar {
+  width: 6px !important;
+}
+
+.react-datepicker__time-list::-webkit-scrollbar-thumb {
+  background-color: var(--brand-ghost) !important;
+  border-radius: 3px !important;
+}
+
+.react-datepicker__time-list-item {
+  color: #E1E1E6 !important;
+  transition: all 0.15s ease !important;
+}
+
+.react-datepicker__time-list-item:hover {
+  background-color: rgba(0, 245, 255, 0.2) !important;
+  color: white !important;
+}
+
+.react-datepicker__time-list-item--selected {
+  background-color: var(--brand-electric) !important;
+  color: #0A0B10 !important;
+  font-weight: 600 !important;
+}
+
+/* Input field styling for datepicker */
+.datepicker-input {
+  width: 100%;
+  background-color: #0A0B10;
+  border: 1px solid rgba(138, 43, 226, 0.3);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  color: white;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.datepicker-input:focus {
+  outline: none;
+  border-color: var(--brand-electric);
+  box-shadow: 0 0 0 2px rgba(0, 245, 255, 0.2);
+}
+
+.datepicker-input::placeholder {
+  color: rgba(225, 225, 230, 0.5);
+}

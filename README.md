@@ -15,10 +15,14 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 - 📁 **File Upload** - Multi-file drag-and-drop with GCS integration
 - 💳 **Stripe Integration** - Subscription plans with checkout and billing portal
 - 📱 **Mobile Ready** - Responsive design with network testing support
-- 🔗 **LinkedIn Integration** - OAuth 2.0 with posting and scheduling
-- 📅 **Content Calendar** - Schedule and manage social media posts
+- 🔗 **LinkedIn Integration** - OAuth 2.0 with posting, scheduling, analytics & webhooks
+- 🐦 **Twitter/X Integration** - OAuth 2.0 with PKCE, threads, media uploads, analytics
+- 📘 **Facebook Integration** - Page posting, stories, carousels, resumable video uploads
+- 📅 **Content Calendar** - Schedule and manage social media posts across platforms
 - ⚡ **Celery Automation** - Background task processing for scheduled posts
-- 🖼️ **Media Attachments** - Images (8MB), videos (500MB), documents (100MB)
+- 🖼️ **Media Attachments** - Images, videos, documents with platform-specific limits
+- 💾 **Draft Save/Restore** - Auto-save drafts with media support in compose modals
+- 📊 **Social Analytics** - Engagement metrics and insights for all platforms
 
 ## Tech Stack
 
