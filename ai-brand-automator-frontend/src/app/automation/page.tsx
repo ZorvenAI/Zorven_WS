@@ -405,6 +405,7 @@ function AutomationPageContent() {
   // Carousel mode state
   const [fbCarouselMode, setFbCarouselMode] = useState(false);
   const [fbCarouselImages, setFbCarouselImages] = useState<{ url: string; file?: File }[]>([]);
+  const [uploadingCarouselImage] = useState(false); // Used for UI state in carousel add button
   // Stories state
   const [showFacebookStoriesModal, setShowFacebookStoriesModal] = useState(false);
   const [fbStories, setFbStories] = useState<Array<{ id: string; media_type: string; created_at: string; expires_at?: string }>>([]);
