@@ -33,17 +33,18 @@ RUN mkdir -p logs staticfiles
 EXPOSE 8000
 
 # Create entrypoint script - v2 with production domains
-RUN echo '#!/bin/bash\n\
-set -e\n\
-echo "=== Running migrations ==="\n\
-python manage.py migrate --noinput\n\
-echo "=== Setting up production domains ==="\n\
-python add_production_domains.py\n\
-echo "=== Collecting static files ==="\n\
-python manage.py collectstatic --noinput --clear || true\n\
-echo "=== Starting Gunicorn on port $PORT ==="\n\
-exec gunicorn brand_automator.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 2 --timeout 120 --access-logfile - --error-logfile -\n\
-' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+RUN cat <<'EOF' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+#!/bin/bash
+set -e
+echo "=== Running migrations ==="
+python manage.py migrate --noinput
+echo "=== Setting up production domains ==="
+python add_production_domains.py
+echo "=== Collecting static files ==="
+python manage.py collectstatic --noinput || true
+echo "=== Starting Gunicorn on port $PORT ==="
+exec gunicorn brand_automator.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 2 --timeout 120 --access-logfile - --error-logfile -
+EOF
 
 # Run entrypoint
 CMD ["/app/entrypoint.sh"]

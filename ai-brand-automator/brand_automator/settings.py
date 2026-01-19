@@ -164,10 +164,9 @@ if DATABASE_URL:
             default=DATABASE_URL,
             conn_max_age=600,
             conn_health_checks=True,
-            engine="django_tenants.postgresql_backend",
         )
     }
-    # Override engine for django-tenants
+    # Set engine for django-tenants (dj_database_url uses default postgres engine)
     DATABASES["default"]["ENGINE"] = "django_tenants.postgresql_backend"
 else:
     # Use individual DB_* variables (local development)
