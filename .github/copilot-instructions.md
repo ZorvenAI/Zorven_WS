@@ -385,4 +385,151 @@ self.model_name = "gemini-2.0-flash"  # Updated from deprecated gemini-1.5-flash
 
 ---
 
+## Phase 5: Railway Production Deployment
+
+### 5.1 Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              RAILWAY PLATFORM                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐    │
+│  │   NGINX     │   │   NEXT.JS   │   │   DJANGO    │   │   CELERY    │    │
+│  │   PROXY     │──▶│  FRONTEND   │   │   BACKEND   │   │   WORKER    │    │
+│  │  (Service)  │   │  (Service)  │   │  (Service)  │   │  (Service)  │    │
+│  └─────────────┘   └─────────────┘   └──────┬──────┘   └──────┬──────┘    │
+│                                              │                  │          │
+│  ┌─────────────┐                      ┌──────▼──────────────────▼──────┐   │
+│  │   CELERY    │                      │           REDIS               │   │
+│  │    BEAT     │─────────────────────▶│         (Service)             │   │
+│  │  (Service)  │                      │    Broker + Result Backend    │   │
+│  └─────────────┘                      └───────────────────────────────┘   │
+│                                                                             │
+│                           ┌─────────────────┐                              │
+│                           │   POSTGRES      │                              │
+│                           │   (Neon DB)     │                              │
+│                           │   External      │                              │
+│                           └─────────────────┘                              │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 5.2 Directory Structure
+
+```
+/deployment/
+├── docker/
+│   ├── backend/
+│   │   └── Dockerfile           # Django API
+│   ├── frontend/
+│   │   └── Dockerfile           # Next.js
+│   ├── celery-worker/
+│   │   └── Dockerfile           # Celery Worker
+│   ├── celery-beat/
+│   │   └── Dockerfile           # Celery Beat Scheduler
+│   └── nginx/
+│       ├── Dockerfile           # Nginx Reverse Proxy
+│       └── nginx.conf
+│
+├── railway/
+│   └── railway.toml             # Railway configuration
+│
+├── scripts/
+│   ├── start-backend.sh
+│   ├── start-celery-worker.sh
+│   ├── start-celery-beat.sh
+│   └── health-check.sh
+│
+└── docker-compose.yml           # Local development orchestration
+```
+
+### 5.3 Implementation Phases
+
+**Phase 5.1: Docker Configuration** (Est. 2-3 hours)
+| Step | Task | Description |
+|------|------|-------------|
+| 5.1.1 | Backend Dockerfile | Multi-stage build for Django with Gunicorn |
+| 5.1.2 | Frontend Dockerfile | Multi-stage build for Next.js standalone |
+| 5.1.3 | Celery Worker Dockerfile | Based on backend with worker entrypoint |
+| 5.1.4 | Celery Beat Dockerfile | Based on backend with beat entrypoint |
+| 5.1.5 | Nginx Dockerfile | Reverse proxy configuration |
+| 5.1.6 | Docker Compose | Local orchestration for testing |
+| 5.1.7 | Startup Scripts | Entrypoint scripts for each service |
+
+**Phase 5.2: Redis & Celery Configuration** (Est. 1-2 hours)
+| Step | Task | Description |
+|------|------|-------------|
+| 5.2.1 | Celery Settings | Update Django settings for Celery |
+| 5.2.2 | Redis Configuration | Configure Redis as broker/backend |
+| 5.2.3 | Task Definitions | Define async tasks |
+| 5.2.4 | Beat Schedule | Configure periodic tasks |
+
+**Phase 5.3: Railway Configuration** (Est. 1-2 hours)
+| Step | Task | Description |
+|------|------|-------------|
+| 5.3.1 | railway.toml | Railway service configuration |
+| 5.3.2 | Environment Variables | Production secrets template |
+| 5.3.3 | Health Checks | Configure Railway health monitoring |
+| 5.3.4 | Domain Setup | Custom domain configuration |
+
+**Phase 5.4: GitHub CI/CD Pipeline** (Est. 2-3 hours)
+| Step | Task | Description |
+|------|------|-------------|
+| 5.4.1 | Update CI Workflow | Enhanced testing pipeline |
+| 5.4.2 | Railway Deploy Action | Auto-deploy on merge to main |
+| 5.4.3 | Environment Secrets | Configure GitHub secrets for Railway |
+| 5.4.4 | Rollback Strategy | Manual rollback workflow |
+
+### 5.4 Railway Services
+
+| Service | Dockerfile | Port | Est. Cost |
+|---------|------------|------|-----------|
+| Backend (Django) | docker/backend/Dockerfile | 8000 | $5-20/mo |
+| Frontend (Next.js) | docker/frontend/Dockerfile | 3000 | $5-15/mo |
+| Celery Worker | docker/celery-worker/Dockerfile | - | $5-15/mo |
+| Celery Beat | docker/celery-beat/Dockerfile | - | $5/mo |
+| Redis | Railway Redis plugin | 6379 | $5-10/mo |
+| **Total** | | | **~$25-65/mo** |
+
+### 5.5 Environment Variables (Railway)
+
+**Backend Service:**
+```bash
+SECRET_KEY=<django-secret>
+DEBUG=False
+ALLOWED_HOSTS=*.railway.app,<custom-domain>
+DATABASE_URL=<neon-connection-string>
+REDIS_URL=<railway-redis-url>
+GOOGLE_API_KEY=<gemini-api-key>
+STRIPE_SECRET_KEY=<stripe-secret>
+STRIPE_WEBHOOK_SECRET=<webhook-secret>
+CORS_ALLOWED_ORIGINS=https://<frontend-domain>
+```
+
+**Frontend Service:**
+```bash
+NEXT_PUBLIC_API_URL=https://<backend-domain>
+```
+
+### 5.6 GitHub Actions Deployment
+
+```yaml
+# .github/workflows/deploy-railway.yml
+name: Deploy to Railway
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: railwayapp/railway-github-link@v1
+        with:
+          token: ${{ secrets.RAILWAY_TOKEN }}
+```
+
+---
+
 **When fixing issues**: Always reference [CODEBASE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md](docs/CODEBASE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md) for detailed implementation guidance and use defensive programming patterns for tenant access.

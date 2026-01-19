@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -110,9 +111,11 @@ INSTALLED_APPS = list(SHARED_APPS) + [
 MIDDLEWARE = [
     # CORS middleware - MUST BE FIRST for preflight OPTIONS requests
     "corsheaders.middleware.CorsMiddleware",
-    # Multi-tenancy middleware
-    "django_tenants.middleware.main.TenantMainMiddleware",
+    # Multi-tenancy middleware - DefaultTenantMiddleware falls back to public schema
+    "django_tenants.middleware.default.DefaultTenantMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    # WhiteNoise for static files - must be after SecurityMiddleware
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -151,26 +154,43 @@ WSGI_APPLICATION = "brand_automator.wsgi.application"
 # Determine if we're in test mode
 TESTING = "pytest" in sys.modules or "test" in sys.argv
 
-# Use PostgreSQL for all environments (local test DB for pytest, Neon for production)
-DATABASES = {
-    "default": {
-        "ENGINE": "django_tenants.postgresql_backend",
-        "NAME": config("DB_NAME", default="neondb"),
-        "USER": config("DB_USER", default="neondb_owner"),
-        "PASSWORD": config("DB_PASSWORD", default=""),
-        "HOST": config("DB_HOST", default="localhost"),
-        "PORT": config("DB_PORT", default="5432"),
-        "OPTIONS": {
-            "sslmode": config("DB_SSLMODE", default="require"),
-            "channel_binding": config("DB_CHANNEL_BINDING", default="require"),
-        },
+# Database configuration - supports both DATABASE_URL and individual DB_* vars
+DATABASE_URL = config("DATABASE_URL", default="")
+
+if DATABASE_URL:
+    # Use DATABASE_URL if available (Railway, Heroku, etc.)
+    DATABASES = {
+        "default": dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
-}
+    # Set engine for django-tenants (dj_database_url uses default postgres engine)
+    DATABASES["default"]["ENGINE"] = "django_tenants.postgresql_backend"
+else:
+    # Use individual DB_* variables (local development)
+    DATABASES = {
+        "default": {
+            "ENGINE": "django_tenants.postgresql_backend",
+            "NAME": config("DB_NAME", default="neondb"),
+            "USER": config("DB_USER", default="neondb_owner"),
+            "PASSWORD": config("DB_PASSWORD", default=""),
+            "HOST": config("DB_HOST", default="localhost"),
+            "PORT": config("DB_PORT", default="5432"),
+            "OPTIONS": {
+                "sslmode": config("DB_SSLMODE", default="require"),
+                "channel_binding": config("DB_CHANNEL_BINDING", default="require"),
+            },
+        }
+    }
 
 # Multi-tenancy settings
 DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
 TENANT_MODEL = "tenants.Tenant"
 TENANT_DOMAIN_MODEL = "tenants.Domain"
+# Show public schema if no tenant found (allows health checks on unknown domains)
+SHOW_PUBLIC_IF_NO_TENANT_FOUND = True
 
 # Custom User Model - temporarily disabled for migration
 # AUTH_USER_MODEL = 'tenants.User'
@@ -269,6 +289,12 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# WhiteNoise for static file serving in production
+# Use simple storage to avoid manifest issues during collectstatic
+if not DEBUG:
+    STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 
 # Media files (user uploads)
 MEDIA_URL = "/media/"
@@ -314,7 +340,9 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
-    SECURE_SSL_REDIRECT = True
+    # SECURE_SSL_REDIRECT disabled - Railway handles HTTPS at load balancer level
+    # This also allows Railway's internal healthcheck (which uses HTTP) to work
+    SECURE_SSL_REDIRECT = False
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Logging Configuration
