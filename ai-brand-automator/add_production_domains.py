@@ -60,9 +60,7 @@ def add_production_domains():
             localhost.save()
             print("✅ Set localhost as primary domain")
     except Domain.DoesNotExist:
-        Domain.objects.create(
-            domain="localhost", tenant=public_tenant, is_primary=True
-        )
+        Domain.objects.create(domain="localhost", tenant=public_tenant, is_primary=True)
         print("✅ Created localhost as primary domain")
 
     print("\n🎉 Production domains added successfully!")
