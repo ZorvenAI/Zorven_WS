@@ -363,6 +363,199 @@ ai-brand-automator-frontend/src/
 
 ---
 
+## Model Context Protocol (MCP) Integration
+
+### Overview
+
+The automation service supports **dual-mode operation**:
+1. **REST API Mode**: Traditional Django REST Framework endpoints at `/api/v1/automation/`
+2. **MCP Mode**: Model Context Protocol server for AI agent integration
+
+### MCP Server Architecture
+
+The MCP server exposes automation capabilities as tools that AI models (Claude, GPT, etc.) can invoke:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     MCP SERVER                                  │
+├─────────────────────────────────────────────────────────────────┤
+│  Transport Layer (stdio or SSE)                                │
+├─────────────────────────────────────────────────────────────────┤
+│  Available Tools:                                               │
+│  - list_social_profiles      - get_social_profile_status        │
+│  - disconnect_social_profile - list_scheduled_content           │
+│  - create_scheduled_content  - update_scheduled_content         │
+│  - cancel_scheduled_content  - publish_content_now              │
+│  - post_to_linkedin          - post_to_twitter                  │
+│  - post_to_facebook          - list_automation_tasks            │
+│  - get_platform_oauth_url                                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Starting the MCP Server
+
+**Stdio Transport** (for Claude Desktop, VS Code):
+```bash
+cd ai-brand-automator
+source ../.venv/bin/activate
+python run_mcp_server.py --transport stdio
+```
+
+**SSE Transport** (for web clients):
+```bash
+cd ai-brand-automator
+source ../.venv/bin/activate
+python run_mcp_server.py --transport sse --host 0.0.0.0 --port 8001
+```
+
+**Debug Mode**:
+```bash
+python run_mcp_server.py --transport stdio --debug
+```
+
+### Claude Desktop Integration
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+```json
+{
+  "mcpServers": {
+    "automation": {
+      "command": "python",
+      "args": ["run_mcp_server.py"],
+      "cwd": "/path/to/ai-brand-automator",
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "brand_automator.settings"
+      }
+    }
+  }
+}
+```
+
+### VS Code Integration
+
+Use the [mcp.json](ai-brand-automator/mcp.json) configuration file for VS Code Copilot integration.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| [automation/mcp_server.py](ai-brand-automator/automation/mcp_server.py) | MCP server with 13 tools |
+| [run_mcp_server.py](ai-brand-automator/run_mcp_server.py) | Standalone runner script |
+| [mcp.json](ai-brand-automator/mcp.json) | VS Code MCP configuration |
+
+### MCP Tool Reference
+
+| Tool | Description | Required Args |
+|------|-------------|---------------|
+| `list_social_profiles` | List all connected social accounts | `company_id` |
+| `get_social_profile_status` | Check connection status | `profile_id` |
+| `disconnect_social_profile` | Remove social connection | `profile_id` |
+| `list_scheduled_content` | Get scheduled posts | `company_id` |
+| `create_scheduled_content` | Schedule new post | `company_id`, `platform`, `content`, `scheduled_time` |
+| `update_scheduled_content` | Modify scheduled post | `content_id`, (optional fields) |
+| `cancel_scheduled_content` | Cancel scheduled post | `content_id` |
+| `publish_content_now` | Publish immediately | `content_id` |
+| `post_to_linkedin` | Direct LinkedIn post | `profile_id`, `content` |
+| `post_to_twitter` | Direct Twitter post | `profile_id`, `content` |
+| `post_to_facebook` | Direct Facebook post | `profile_id`, `content` |
+| `list_automation_tasks` | Get automation jobs | `company_id` |
+| `get_platform_oauth_url` | Get OAuth connect URL | `platform`, `company_id`, `redirect_uri` |
+
+### Environment Variables for MCP
+
+Add to `.env`:
+```bash
+# Social Platform OAuth (required for actual posting)
+LINKEDIN_CLIENT_ID=<linkedin-client-id>
+LINKEDIN_CLIENT_SECRET=<linkedin-client-secret>
+TWITTER_CLIENT_ID=<twitter-client-id>
+TWITTER_CLIENT_SECRET=<twitter-client-secret>
+FACEBOOK_APP_ID=<facebook-app-id>
+FACEBOOK_APP_SECRET=<facebook-app-secret>
+```
+
+### Testing the MCP Server
+
+Multiple testing approaches are available:
+
+#### 1. Python Test Script (Recommended)
+```bash
+cd ai-brand-automator
+source ../.venv/bin/activate
+
+python test_mcp_server.py           # Run all tests
+python test_mcp_server.py --verbose # Verbose output
+python test_mcp_server.py --live user@example.com  # Test with real user data
+```
+
+The test script verifies:
+- Server metadata (name, version, description)
+- Server creation
+- All 13 tools are registered and callable
+- Tool input validation
+- Resources and prompts are registered
+- Error handling for invalid inputs
+
+#### 2. MCP Inspector (Interactive Web UI)
+```bash
+# Install MCP Inspector
+pip install mcp-inspector
+
+# Run inspector with your server
+npx @anthropic-ai/mcp-inspector python run_mcp_server.py
+```
+Opens a web UI where you can browse tools, call them with custom arguments, and view responses.
+
+#### 3. Claude Desktop Integration (Real-World Test)
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+```json
+{
+  "mcpServers": {
+    "automation": {
+      "command": "python",
+      "args": ["run_mcp_server.py"],
+      "cwd": "/path/to/ai-brand-automator",
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "brand_automator.settings"
+      }
+    }
+  }
+}
+```
+Restart Claude Desktop, then ask Claude to use the automation tools.
+
+#### 4. Direct JSON-RPC via stdin (Low-Level)
+```bash
+# List available tools
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python run_mcp_server.py
+
+# List resources
+echo '{"jsonrpc":"2.0","id":1,"method":"resources/list"}' | python run_mcp_server.py
+
+# List prompts
+echo '{"jsonrpc":"2.0","id":1,"method":"prompts/list"}' | python run_mcp_server.py
+```
+
+#### 5. SSE Transport Test (For Web Clients)
+```bash
+# Terminal 1: Start server with SSE
+python run_mcp_server.py --transport sse --port 8001
+
+# Terminal 2: Test with curl
+curl -X POST http://localhost:8001/sse \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+#### Test Files
+
+| File | Purpose |
+|------|---------|
+| [test_mcp_server.py](ai-brand-automator/test_mcp_server.py) | Comprehensive test suite for MCP server |
+| [run_mcp_server.py](ai-brand-automator/run_mcp_server.py) | Standalone runner for manual testing |
+
+---
+
 ## Key Technical Decisions
 
 ### Middleware Order (Critical)

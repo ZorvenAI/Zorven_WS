@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "automation": {
+      "command": "python",
+      "args": [
+        "-m",
+        "automation.mcp_server"
+      ],
+      "cwd": "${workspaceFolder}/ai-brand-automator",
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "brand_automator.settings",
+        "PYTHONPATH": "${workspaceFolder}/ai-brand-automator"
+      },
+      "description": "AI Brand Automator - Social Media Automation MCP Server",
+      "capabilities": {
+        "tools": [
+          "list_social_profiles",
+          "get_social_profile_status",
+          "disconnect_social_profile",
+          "list_scheduled_content",
+          "create_scheduled_content",
+          "update_scheduled_content",
+          "cancel_scheduled_content",
+          "publish_content_now",
+          "post_to_linkedin",
+          "post_to_twitter",
+          "post_to_facebook",
+          "list_automation_tasks",
+          "get_platform_oauth_url"
+        ]
+      }
+    }
+  }
+}
