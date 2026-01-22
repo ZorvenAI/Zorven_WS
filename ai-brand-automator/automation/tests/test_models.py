@@ -1,6 +1,8 @@
 """
 Unit tests for automation models.
-Covers SocialProfile, ContentCalendar, AutomationTask, OAuthState, and webhook event models.
+
+Covers SocialProfile, ContentCalendar, AutomationTask, OAuthState,
+and webhook event models.
 """
 
 import pytest
