@@ -8,6 +8,7 @@ Tests platform-specific services focusing on:
 
 Note: These tests use mocking for HTTP calls where needed.
 """
+
 import pytest
 from datetime import timedelta
 from unittest.mock import patch, MagicMock
@@ -30,7 +31,6 @@ from automation.constants import (
     FACEBOOK_TEST_PAGE_TOKEN,
     INSTAGRAM_TEST_ACCESS_TOKEN,
 )
-
 
 User = get_user_model()
 
@@ -126,7 +126,10 @@ class TestLinkedInService:
     def test_service_initialization(self):
         """Test LinkedInService initializes correctly."""
         service = LinkedInService()
-        assert service.AUTHORIZATION_URL == "https://www.linkedin.com/oauth/v2/authorization"
+        assert (
+            service.AUTHORIZATION_URL
+            == "https://www.linkedin.com/oauth/v2/authorization"
+        )
         assert service.TOKEN_URL == "https://www.linkedin.com/oauth/v2/accessToken"
         assert service.PROFILE_URL == "https://api.linkedin.com/v2/userinfo"
 
@@ -150,9 +153,9 @@ class TestLinkedInService:
         """Test authorization URL has correct structure when configured."""
         service = LinkedInService()
         service.client_id = "test_client_id"
-        
+
         auth_url = service.get_authorization_url(state="test_state_123")
-        
+
         assert "linkedin.com/oauth/v2/authorization" in auth_url
         assert "response_type=code" in auth_url
         assert "state=test_state_123" in auth_url
@@ -163,7 +166,7 @@ class TestLinkedInService:
         service = LinkedInService()
         service.client_id = None
         service.client_secret = None
-        
+
         with pytest.raises(ValueError, match="not configured"):
             service.get_authorization_url(state="test_state")
 
@@ -283,18 +286,22 @@ class TestTwitterService:
         import secrets
         import base64
         import hashlib
-        
+
         # Test the PKCE pattern used by Twitter OAuth
         code_verifier = secrets.token_urlsafe(32)
-        
+
         # Verify it has appropriate length (43-128 chars)
         assert len(code_verifier) >= 43
-        
+
         # Test code challenge generation
-        code_challenge = base64.urlsafe_b64encode(
-            hashlib.sha256(code_verifier.encode("utf-8")).digest()
-        ).decode("utf-8").rstrip("=")
-        
+        code_challenge = (
+            base64.urlsafe_b64encode(
+                hashlib.sha256(code_verifier.encode("utf-8")).digest()
+            )
+            .decode("utf-8")
+            .rstrip("=")
+        )
+
         assert len(code_challenge) > 0
 
     def test_get_authorization_url_raises_when_not_configured(self):
@@ -302,10 +309,12 @@ class TestTwitterService:
         service = TwitterService()
         service.client_id = None
         service.client_secret = None
-        
+
         # Twitter OAuth requires code_challenge for PKCE
         with pytest.raises((ValueError, TypeError)):
-            service.get_authorization_url(state="test_state", code_challenge="test_challenge")
+            service.get_authorization_url(
+                state="test_state", code_challenge="test_challenge"
+            )
 
 
 # =============================================================================
@@ -359,7 +368,9 @@ class TestInstagramService:
         """Test InstagramService initializes correctly."""
         service = InstagramService()
         # Instagram uses Facebook OAuth
-        assert "facebook.com" in service.AUTHORIZATION_URL or hasattr(service, "is_configured")
+        assert "facebook.com" in service.AUTHORIZATION_URL or hasattr(
+            service, "is_configured"
+        )
 
     def test_is_configured_property(self):
         """Test is_configured returns boolean."""
@@ -419,7 +430,7 @@ class TestServiceProfileIntegration:
         """Test expired token check."""
         linkedin_profile.token_expires_at = timezone.now() - timedelta(hours=1)
         linkedin_profile.save()
-        
+
         result = linkedin_profile.is_token_valid
         if callable(result):
             result = result()
@@ -430,7 +441,7 @@ class TestServiceProfileIntegration:
         # Token expires in 5 minutes
         linkedin_profile.token_expires_at = timezone.now() + timedelta(minutes=5)
         linkedin_profile.save()
-        
+
         # Should be expiring soon (default threshold is typically 10-15 minutes)
         result = linkedin_profile.is_token_expiring_soon
         if callable(result):
@@ -440,9 +451,11 @@ class TestServiceProfileIntegration:
     def test_disconnect_profile_clears_tokens(self, linkedin_profile):
         """Test disconnecting profile clears all tokens."""
         linkedin_profile.disconnect()
-        
+
         assert linkedin_profile.status == "disconnected"
-        assert linkedin_profile.access_token is None or linkedin_profile.access_token == ""
+        assert (
+            linkedin_profile.access_token is None or linkedin_profile.access_token == ""
+        )
 
 
 # =============================================================================
@@ -484,7 +497,9 @@ class TestServiceErrorHandling:
     @patch("requests.post")
     def test_linkedin_handles_connection_error(self, mock_post):
         """Test LinkedIn handles connection errors."""
-        mock_post.side_effect = requests.exceptions.ConnectionError("Connection refused")
+        mock_post.side_effect = requests.exceptions.ConnectionError(
+            "Connection refused"
+        )
 
         service = LinkedInService()
         service.client_id = "test_client_id"

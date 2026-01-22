@@ -7,6 +7,7 @@ Tests end-to-end flows including:
 - API endpoint interactions
 - Cross-model workflows
 """
+
 import pytest
 from datetime import timedelta
 from unittest.mock import patch, MagicMock
@@ -30,7 +31,6 @@ from automation.constants import (
     FACEBOOK_TEST_PAGE_TOKEN,
     INSTAGRAM_TEST_ACCESS_TOKEN,
 )
-
 
 User = get_user_model()
 
@@ -133,7 +133,9 @@ def instagram_profile(user):
 
 
 @pytest.fixture
-def all_profiles(linkedin_profile, twitter_profile, facebook_profile, instagram_profile):
+def all_profiles(
+    linkedin_profile, twitter_profile, facebook_profile, instagram_profile
+):
     """Create all social profiles for a user."""
     return {
         "linkedin": linkedin_profile,
@@ -430,7 +432,9 @@ class TestPublishHelpersIntegration:
         content.refresh_from_db()
         assert content.status == "failed"
 
-    def test_update_content_status_partial_success(self, user, linkedin_profile, twitter_profile):
+    def test_update_content_status_partial_success(
+        self, user, linkedin_profile, twitter_profile
+    ):
         """Test update_content_status handles partial success."""
         from automation.publish_helpers import update_content_status
 

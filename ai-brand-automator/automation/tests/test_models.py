@@ -2,6 +2,7 @@
 Unit tests for automation models.
 Covers SocialProfile, ContentCalendar, AutomationTask, OAuthState, and webhook event models.
 """
+
 import pytest
 from datetime import timedelta
 from django.contrib.auth import get_user_model
@@ -19,7 +20,6 @@ from automation.models import (
     FacebookWebhookEvent,
 )
 from automation.constants import TEST_ACCESS_TOKEN, TEST_REFRESH_TOKEN
-
 
 User = get_user_model()
 
@@ -493,7 +493,12 @@ class TestAutomationTaskModel:
 
     def test_task_type_choices(self, user):
         """Test all valid task type choices."""
-        task_types = ["social_post", "profile_sync", "content_schedule", "analytics_fetch"]
+        task_types = [
+            "social_post",
+            "profile_sync",
+            "content_schedule",
+            "analytics_fetch",
+        ]
         for task_type in task_types:
             task = AutomationTask.objects.create(
                 user=user,
@@ -707,8 +712,15 @@ class TestTwitterWebhookEventModel:
     def test_all_event_types(self, db):
         """Test all valid event types."""
         event_types = [
-            "tweet_create", "favorite", "follow", "unfollow",
-            "direct_message", "tweet_delete", "mention", "retweet", "quote",
+            "tweet_create",
+            "favorite",
+            "follow",
+            "unfollow",
+            "direct_message",
+            "tweet_delete",
+            "mention",
+            "retweet",
+            "quote",
         ]
         for event_type in event_types:
             event = TwitterWebhookEvent.objects.create(

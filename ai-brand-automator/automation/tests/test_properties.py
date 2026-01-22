@@ -4,6 +4,7 @@ Property-based tests for the automation app using Hypothesis.
 These tests generate random inputs to verify invariants and edge cases
 that might be missed by example-based tests.
 """
+
 import pytest
 from datetime import timedelta
 from string import printable
@@ -23,7 +24,6 @@ from automation.serializers import (
     AutomationTaskSerializer,
     ContentCalendarSerializer,
 )
-
 
 User = get_user_model()
 
@@ -58,7 +58,9 @@ token_strategy = st.text(
     alphabet=printable,
     min_size=1,
     max_size=200,
-).filter(lambda x: x.strip())  # Ensure non-empty after stripping
+).filter(
+    lambda x: x.strip()
+)  # Ensure non-empty after stripping
 
 # Strategy for profile names
 profile_name_strategy = st.text(
@@ -88,7 +90,9 @@ class TestEncryptionProperties:
     """Property-based tests for token encryption/decryption."""
 
     @given(token=token_strategy)
-    @settings(max_examples=100, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=100, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_encryption_roundtrip(self, token):
         """Property: encrypt then decrypt returns original token."""
         encrypted = encrypt_token(token)
@@ -96,16 +100,22 @@ class TestEncryptionProperties:
         assert decrypted == token
 
     @given(token=token_strategy)
-    @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_encrypted_differs_from_plaintext(self, token):
         """Property: encrypted value differs from plaintext (unless very short)."""
         encrypted = encrypt_token(token)
         # Encrypted values should be prefixed with 'enc:' or be the original
         # if encryption is not available
-        assert encrypted != token or encrypted == token  # Always true, but tests encryption
+        assert (
+            encrypted != token or encrypted == token
+        )  # Always true, but tests encryption
 
     @given(st.lists(token_strategy, min_size=2, max_size=5, unique=True))
-    @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_different_tokens_produce_different_encrypted_values(self, tokens):
         """Property: different tokens produce different encrypted values."""
         encrypted = [encrypt_token(t) for t in tokens]
@@ -113,7 +123,9 @@ class TestEncryptionProperties:
         assert len(set(encrypted)) == len(encrypted)
 
     @given(token=token_strategy)
-    @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_decrypt_handles_none_and_empty(self, token):
         """Property: decrypt handles None and empty gracefully."""
         # These should return the input unchanged
@@ -121,7 +133,9 @@ class TestEncryptionProperties:
         assert decrypt_token("") == ""
 
     @given(token=token_strategy)
-    @settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_multiple_encryptions_are_idempotent_for_decryption(self, token):
         """Property: even if encrypted multiple times, decryption works."""
         encrypted1 = encrypt_token(token)
@@ -150,8 +164,12 @@ class TestSocialProfileProperties:
         )
 
     @given(platform=platform_strategy, status=social_profile_status_strategy)
-    @settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow])
-    def test_profile_creation_with_any_valid_platform_and_status(self, platform, status):
+    @settings(
+        max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
+    def test_profile_creation_with_any_valid_platform_and_status(
+        self, platform, status
+    ):
         """Property: profiles can be created with any valid platform/status combo."""
         # Clean up any existing profiles for this platform
         SocialProfile.objects.filter(user=self.user, platform=platform).delete()
@@ -168,7 +186,9 @@ class TestSocialProfileProperties:
     @given(
         hours_until_expiry=st.integers(min_value=-100, max_value=100),
     )
-    @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_is_token_valid_invariant(self, hours_until_expiry):
         """Property: is_token_valid correctly reflects expiry time."""
         SocialProfile.objects.filter(user=self.user, platform="linkedin").delete()
@@ -190,7 +210,9 @@ class TestSocialProfileProperties:
     @given(
         minutes_until_expiry=st.integers(min_value=-10, max_value=15),
     )
-    @settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_is_token_expiring_soon_invariant(self, minutes_until_expiry):
         """Property: is_token_expiring_soon is True when <= 5 minutes remaining."""
         SocialProfile.objects.filter(user=self.user, platform="linkedin").delete()
@@ -210,7 +232,9 @@ class TestSocialProfileProperties:
         profile.delete()
 
     @given(token=token_strategy)
-    @settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_token_encryption_on_model(self, token):
         """Property: tokens are encrypted when saved and decrypted when read."""
         SocialProfile.objects.filter(user=self.user, platform="linkedin").delete()
@@ -250,7 +274,9 @@ class TestContentCalendarProperties:
         status=content_status_strategy,
         platforms=st.lists(platform_strategy, min_size=1, max_size=4, unique=True),
     )
-    @settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_content_creation_with_valid_inputs(self, status, platforms):
         """Property: content can be created with any valid status and platforms."""
         content = ContentCalendar.objects.create(
@@ -268,7 +294,9 @@ class TestContentCalendarProperties:
     @given(
         num_media=st.integers(min_value=0, max_value=10),
     )
-    @settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_media_urls_stores_any_number(self, num_media):
         """Property: media_urls can store any number of URLs."""
         media_urls = [f"https://example.com/media{i}.jpg" for i in range(num_media)]
@@ -286,7 +314,9 @@ class TestContentCalendarProperties:
     @given(
         hours_offset=st.integers(min_value=-48, max_value=168),
     )
-    @settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_scheduled_date_ordering(self, hours_offset):
         """Property: content is ordered by scheduled_date."""
         ContentCalendar.objects.filter(user=self.user).delete()
@@ -335,7 +365,9 @@ class TestAutomationTaskProperties:
         task_type=task_type_strategy,
         status=task_status_strategy,
     )
-    @settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_task_creation_with_valid_inputs(self, task_type, status):
         """Property: tasks can be created with any valid type/status combo."""
         task = AutomationTask.objects.create(
@@ -355,7 +387,9 @@ class TestAutomationTaskProperties:
             max_size=10,
         ),
     )
-    @settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_payload_stores_any_json(self, payload):
         """Property: payload can store any JSON-serializable data."""
         task = AutomationTask.objects.create(
@@ -389,7 +423,9 @@ class TestOAuthStateProperties:
     @given(
         minutes_age=st.integers(min_value=0, max_value=30),
     )
-    @settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_is_expired_invariant(self, minutes_age):
         """Property: is_expired() returns True only after 10 minutes."""
         import uuid
@@ -430,7 +466,9 @@ class TestSerializerProperties:
         )
 
     @given(platform=platform_strategy, status=social_profile_status_strategy)
-    @settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_social_profile_serializer_output(self, platform, status):
         """Property: serializer always produces valid output for any profile."""
         SocialProfile.objects.filter(user=self.user, platform=platform).delete()
@@ -452,7 +490,9 @@ class TestSerializerProperties:
         profile.delete()
 
     @given(task_type=task_type_strategy, status=task_status_strategy)
-    @settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_automation_task_serializer_output(self, task_type, status):
         """Property: serializer always produces valid output for any task."""
         task = AutomationTask.objects.create(
@@ -471,7 +511,9 @@ class TestSerializerProperties:
         task.delete()
 
     @given(status=content_status_strategy)
-    @settings(max_examples=15, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=15, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_content_calendar_serializer_output(self, status):
         """Property: serializer always produces valid output for any content."""
         content = ContentCalendar.objects.create(
