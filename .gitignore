@@ -12,6 +12,15 @@ build/
 venv/
 env/
 
+# Testing
+.hypothesis/
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+.tox/
+
 # Django
 *.log
 db.sqlite3

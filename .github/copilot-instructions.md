@@ -68,10 +68,18 @@ pytest -v                      # All tests
 pytest -m unit                 # Unit tests only
 pytest -m property             # Property-based tests
 pytest --hypothesis-show-statistics  # Hypothesis stats
+
+# Automation service tests (149 tests)
+pytest automation/tests/ -v    # All automation tests
+pytest automation/tests/test_models.py -v       # 51 unit tests
+pytest automation/tests/test_properties.py -v   # 18 property tests
+pytest automation/tests/test_integration.py -v  # 26 integration tests
+pytest automation/tests/test_services.py -v     # 36 service tests
 ```
 
 - **Test fixtures**: [conftest.py](ai-brand-automator/conftest.py) - Public tenant auto-created, schema reset after each test
 - **Property tests**: [onboarding/tests/test_properties.py](ai-brand-automator/onboarding/tests/test_properties.py) - Hypothesis generates random data to test invariants
+- **Automation tests**: [automation/tests/](ai-brand-automator/automation/tests/) - Comprehensive test suite (models, properties, integration, services)
 - **Key pattern**: `@pytest.fixture` with `SERVER_NAME='localhost'` for django-tenants compatibility
 
 **Frontend** (Jest + React Testing Library):

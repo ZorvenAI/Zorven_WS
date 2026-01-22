@@ -3,6 +3,7 @@ Tests for the automation app.
 Covers OAuth flow, LinkedIn/Twitter API services, token encryption,
 content calendar CRUD, Celery tasks, and views.
 """
+
 import pytest
 from datetime import timedelta
 from unittest.mock import patch, MagicMock
@@ -18,7 +19,6 @@ from automation.models import (
     OAuthState,
 )
 from automation.constants import TEST_ACCESS_TOKEN, TEST_REFRESH_TOKEN
-
 
 User = get_user_model()
 
