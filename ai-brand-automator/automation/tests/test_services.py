@@ -14,10 +14,9 @@ from datetime import timedelta
 from unittest.mock import patch, MagicMock
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from django.conf import settings
 import requests
 
-from automation.models import SocialProfile, ContentCalendar
+from automation.models import SocialProfile
 from automation.services import (
     LinkedInService,
     TwitterService,

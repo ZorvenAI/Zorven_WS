@@ -10,11 +10,9 @@ Tests end-to-end flows including:
 
 import pytest
 from datetime import timedelta
-from unittest.mock import patch, MagicMock
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework.test import APIClient
-from rest_framework import status
 
 from automation.models import (
     SocialProfile,
@@ -159,7 +157,7 @@ class TestOAuthFlowIntegration:
         import uuid
 
         state_token = str(uuid.uuid4())
-        oauth_state = OAuthState.objects.create(
+        OAuthState.objects.create(
             user=user,
             state=state_token,
             platform="linkedin",
@@ -179,7 +177,7 @@ class TestOAuthFlowIntegration:
         state_token = str(uuid.uuid4())
         code_verifier = secrets.token_urlsafe(32)
 
-        oauth_state = OAuthState.objects.create(
+        OAuthState.objects.create(
             user=user,
             state=state_token,
             platform="twitter",
@@ -503,7 +501,7 @@ class TestCeleryTasksIntegration:
         )
         content.social_profiles.add(linkedin_profile)
 
-        result = publish_scheduled_posts()
+        publish_scheduled_posts()
 
         content.refresh_from_db()
         assert content.status == "scheduled"  # Still scheduled, not published

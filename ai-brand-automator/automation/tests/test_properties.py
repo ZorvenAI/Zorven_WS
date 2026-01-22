@@ -10,7 +10,7 @@ from datetime import timedelta
 from string import printable
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from hypothesis import given, strategies as st, settings, assume, HealthCheck
+from hypothesis import given, strategies as st, settings, HealthCheck
 
 from automation.models import (
     SocialProfile,

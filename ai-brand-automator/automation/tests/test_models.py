@@ -7,7 +7,6 @@ import pytest
 from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 
 from automation.models import (
@@ -19,7 +18,6 @@ from automation.models import (
     LinkedInWebhookEvent,
     FacebookWebhookEvent,
 )
-from automation.constants import TEST_ACCESS_TOKEN, TEST_REFRESH_TOKEN
 
 User = get_user_model()
 
