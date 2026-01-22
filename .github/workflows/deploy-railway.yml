@@ -70,7 +70,7 @@ jobs:
       
       - name: Deploy Backend
         run: |
-          railway up --service backend --detach
+          railway up --service ${{ secrets.RAILWAY_BACKEND_SERVICE }} --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
       
@@ -104,7 +104,7 @@ jobs:
       
       - name: Deploy Frontend
         run: |
-          railway up --service frontend --detach
+          railway up --service ${{ secrets.RAILWAY_FRONTEND_SERVICE }} --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
       
@@ -123,12 +123,13 @@ jobs:
           fi
 
   # ==========================================================================
-  # Deploy Celery Worker to Railway
+  # Deploy Celery Worker to Railway (Optional - skipped if service doesn't exist)
   # ==========================================================================
   deploy-celery-worker:
     runs-on: ubuntu-latest
     needs: [pre-deploy-checks, deploy-backend]
     if: always() && (needs.pre-deploy-checks.outputs.backend-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
     
     steps:
       - uses: actions/checkout@v4
@@ -138,17 +139,22 @@ jobs:
       
       - name: Deploy Celery Worker
         run: |
-          railway up --service celery-worker --detach
+          if [ -n "${{ secrets.RAILWAY_CELERY_WORKER_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_CELERY_WORKER_SERVICE }} --detach
+          else
+            echo "RAILWAY_CELERY_WORKER_SERVICE not set, skipping celery-worker deployment"
+          fi
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
   # ==========================================================================
-  # Deploy Celery Beat to Railway
+  # Deploy Celery Beat to Railway (Optional - skipped if service doesn't exist)
   # ==========================================================================
   deploy-celery-beat:
     runs-on: ubuntu-latest
     needs: [pre-deploy-checks, deploy-backend]
     if: always() && (needs.pre-deploy-checks.outputs.backend-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
     
     steps:
       - uses: actions/checkout@v4
@@ -158,7 +164,11 @@ jobs:
       
       - name: Deploy Celery Beat
         run: |
-          railway up --service celery-beat --detach
+          if [ -n "${{ secrets.RAILWAY_CELERY_BEAT_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_CELERY_BEAT_SERVICE }} --detach
+          else
+            echo "RAILWAY_CELERY_BEAT_SERVICE not set, skipping celery-beat deployment"
+          fi
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
