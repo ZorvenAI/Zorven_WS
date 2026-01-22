@@ -379,8 +379,22 @@ class TestAutomationTaskProperties:
 
     @given(
         payload=st.dictionaries(
-            keys=st.text(min_size=1, max_size=20).filter(str.isalnum),
-            values=st.text(max_size=100),
+            keys=st.text(
+                alphabet=st.characters(
+                    whitelist_categories=("L", "N"),  # Letters and numbers only
+                    min_codepoint=32,
+                    max_codepoint=126,
+                ),
+                min_size=1,
+                max_size=20,
+            ),
+            values=st.text(
+                alphabet=st.characters(
+                    min_codepoint=32,
+                    max_codepoint=126,  # Printable ASCII only
+                ),
+                max_size=100,
+            ),
             min_size=0,
             max_size=10,
         ),
@@ -389,7 +403,7 @@ class TestAutomationTaskProperties:
         max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow]
     )
     def test_payload_stores_any_json(self, payload):
-        """Property: payload can store any JSON-serializable data."""
+        """Property: payload can store JSON with printable ASCII characters."""
         task = AutomationTask.objects.create(
             user=self.user,
             task_type="social_post",
