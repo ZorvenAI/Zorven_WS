@@ -104,13 +104,11 @@ class TestEncryptionProperties:
         max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow]
     )
     def test_encrypted_differs_from_plaintext(self, token):
-        """Property: encrypted value differs from plaintext (unless very short)."""
+        """Property: encrypted value is prefixed or unchanged."""
         encrypted = encrypt_token(token)
-        # Encrypted values should be prefixed with 'enc:' or be the original
-        # if encryption is not available
-        assert (
-            encrypted != token or encrypted == token
-        )  # Always true, but tests encryption
+        # Encrypted values should be prefixed with 'enc:' when encryption is active,
+        # or be returned unchanged if encryption is not available/configured.
+        assert encrypted == token or encrypted.startswith("enc:")
 
     @given(st.lists(token_strategy, min_size=2, max_size=5, unique=True))
     @settings(

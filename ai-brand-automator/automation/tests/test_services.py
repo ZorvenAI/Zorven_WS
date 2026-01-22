@@ -441,7 +441,7 @@ class TestServiceProfileIntegration:
         linkedin_profile.token_expires_at = timezone.now() + timedelta(minutes=5)
         linkedin_profile.save()
 
-        # Should be expiring soon (default threshold is typically 10-15 minutes)
+        # Should be expiring soon (threshold is 5 minutes per is_token_expiring_soon)
         result = linkedin_profile.is_token_expiring_soon
         if callable(result):
             result = result()
