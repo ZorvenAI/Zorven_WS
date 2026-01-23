@@ -1,4 +1,5 @@
 """Tests for Google Business Profile integration."""
+
 import pytest
 from datetime import timedelta
 from django.utils import timezone
@@ -6,7 +7,12 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
-from hypothesis import given, strategies as st, settings as hypothesis_settings, HealthCheck
+from hypothesis import (
+    given,
+    strategies as st,
+    settings as hypothesis_settings,
+    HealthCheck,
+)
 
 from automation.models import GoogleBusinessProfile, GoogleBusinessLocation, OAuthState
 from automation.services import google_business_service
@@ -25,9 +31,7 @@ User = get_user_model()
 def user(db):
     """Create a test user."""
     return User.objects.create_user(
-        username="gbp_test_user",
-        email="gbp@test.com",
-        password="testpass123"
+        username="gbp_test_user", email="gbp@test.com", password="testpass123"
     )
 
 
@@ -130,7 +134,7 @@ class TestGoogleBusinessProfileModel:
         """Test that disconnect clears all tokens."""
         gbp_profile.disconnect()
         gbp_profile.refresh_from_db()
-        
+
         assert gbp_profile.status == "disconnected"
         assert gbp_profile._access_token is None
         assert gbp_profile._refresh_token is None
@@ -185,7 +189,7 @@ class TestGoogleBusinessLocationModel:
         """Test that locations are deleted when profile is deleted."""
         location_id = gbp_location.id
         gbp_profile.delete()
-        
+
         assert not GoogleBusinessLocation.objects.filter(id=location_id).exists()
 
 
@@ -204,7 +208,7 @@ class TestGoogleBusinessService:
     def test_mock_mode_exchange_code(self):
         """Test exchanging code in mock mode."""
         result = google_business_service.exchange_code_for_token("test_code")
-        
+
         assert "access_token" in result
         assert "refresh_token" in result
         assert "expires_in" in result
@@ -213,7 +217,7 @@ class TestGoogleBusinessService:
     def test_mock_mode_list_accounts(self):
         """Test listing accounts in mock mode."""
         accounts = google_business_service.list_accounts("mock_token")
-        
+
         assert isinstance(accounts, list)
         assert len(accounts) > 0
         assert "name" in accounts[0]
@@ -222,10 +226,9 @@ class TestGoogleBusinessService:
     def test_mock_mode_list_locations(self):
         """Test listing locations in mock mode."""
         locations = google_business_service.list_locations(
-            "mock_token",
-            "accounts/mock123"
+            "mock_token", "accounts/mock123"
         )
-        
+
         assert isinstance(locations, list)
         assert len(locations) > 0
         assert "name" in locations[0]
@@ -245,21 +248,19 @@ class TestGoogleBusinessService:
                 "postal_code": "27000",
                 "country": "US",
                 "phone_number": "+1-555-123-4567",
-                "primary_category": "Restaurant"
-            }
+                "primary_category": "Restaurant",
+            },
         )
-        
+
         assert "name" in result
         assert result["title"] == "New Business"
 
     def test_mock_mode_update_location(self):
         """Test updating location in mock mode."""
         result = google_business_service.update_location(
-            "mock_token",
-            "locations/mock456",
-            {"business_name": "Updated Business"}
+            "mock_token", "locations/mock456", {"business_name": "Updated Business"}
         )
-        
+
         assert "name" in result
         # Mock returns the updated title
         assert "title" in result
@@ -267,27 +268,23 @@ class TestGoogleBusinessService:
     def test_mock_mode_delete_location(self):
         """Test deleting location in mock mode."""
         # Should not raise an exception
-        google_business_service.delete_location(
-            "mock_token",
-            "locations/mock789"
-        )
+        google_business_service.delete_location("mock_token", "locations/mock789")
 
     def test_mock_mode_get_user_info(self):
         """Test getting user info in mock mode."""
         result = google_business_service.get_user_info(
             google_business_service.MOCK_ACCESS_TOKEN
         )
-        
+
         assert "email" in result
         assert "sub" in result
 
     def test_mock_mode_get_location(self):
         """Test getting a specific location in mock mode."""
         result = google_business_service.get_location(
-            "mock_token",
-            "locations/loc_123456789_001"
+            "mock_token", "locations/loc_123456789_001"
         )
-        
+
         assert isinstance(result, dict)
         assert "name" in result or "title" in result
 
@@ -298,7 +295,7 @@ class TestGoogleBusinessServiceOAuth:
     def test_get_authorization_url(self):
         """Test getting OAuth authorization URL."""
         url = google_business_service.get_authorization_url(state="test_state_123")
-        
+
         # In mock mode, returns a mock URL
         assert "state=test_state_123" in url
         # Mock mode returns frontend URL with mock_gbp_auth=true
@@ -308,7 +305,7 @@ class TestGoogleBusinessServiceOAuth:
     def test_authorization_url_contains_state(self):
         """Test that OAuth URL includes state parameter."""
         url = google_business_service.get_authorization_url(state="unique_state")
-        
+
         assert "unique_state" in url
 
 
@@ -324,7 +321,7 @@ class TestGoogleBusinessProfileSerializer:
         """Test serializing a profile."""
         serializer = GoogleBusinessProfileSerializer(gbp_profile)
         data = serializer.data
-        
+
         assert data["id"] == gbp_profile.id
         assert data["google_email"] == "test@example.com"
         assert data["status"] == "connected"
@@ -340,9 +337,7 @@ class TestGoogleBusinessProfileSerializer:
     def test_read_only_fields(self, gbp_profile):
         """Test that read-only fields cannot be modified."""
         serializer = GoogleBusinessProfileSerializer(
-            gbp_profile,
-            data={"google_email": "hacker@evil.com"},
-            partial=True
+            gbp_profile, data={"google_email": "hacker@evil.com"}, partial=True
         )
         # Serializer is valid because read-only fields are ignored
         assert serializer.is_valid()
@@ -359,7 +354,7 @@ class TestGoogleBusinessLocationSerializer:
         """Test serializing a location."""
         serializer = GoogleBusinessLocationSerializer(gbp_location)
         data = serializer.data
-        
+
         assert data["id"] == gbp_location.id
         assert data["business_name"] == "Test Business"
         assert data["full_address"] == "123 Test Street, Test City, TS 12345, US"
@@ -369,9 +364,7 @@ class TestGoogleBusinessLocationSerializer:
     def test_read_only_fields(self, gbp_location):
         """Test read-only fields in location serializer."""
         serializer = GoogleBusinessLocationSerializer(
-            gbp_location,
-            data={"location_id": "hacked"},
-            partial=True
+            gbp_location, data={"location_id": "hacked"}, partial=True
         )
         assert serializer.is_valid()
         serializer.save()
@@ -466,7 +459,7 @@ class TestGoogleBusinessAccountSerializer:
         }
         serializer = GoogleBusinessAccountSerializer(account_data)
         output = serializer.data
-        
+
         assert output["name"] == "accounts/123456789"
         assert output["account_name"] == "My Business Account"
         assert output["account_type"] == "LOCATION_GROUP"
@@ -485,7 +478,7 @@ class TestGoogleBusinessCategorySerializer:
         }
         serializer = GoogleBusinessCategorySerializer(category_data)
         output = serializer.data
-        
+
         assert output["name"] == "categories/gcid:restaurant"
         assert output["display_name"] == "Restaurant"
 
@@ -500,8 +493,10 @@ class TestGoogleBusinessConnectAPI:
 
     def test_connect_returns_auth_url(self, authenticated_client, user):
         """Test connect endpoint returns authorization URL."""
-        response = authenticated_client.get("/api/v1/automation/google-business/connect/")
-        
+        response = authenticated_client.get(
+            "/api/v1/automation/google-business/connect/"
+        )
+
         assert response.status_code == status.HTTP_200_OK
         assert "authorization_url" in response.data
         assert "is_mock_mode" in response.data
@@ -509,8 +504,10 @@ class TestGoogleBusinessConnectAPI:
 
     def test_connect_returns_mock_mode_info(self, authenticated_client, user):
         """Test connect endpoint returns mock mode info when API not configured."""
-        response = authenticated_client.get("/api/v1/automation/google-business/connect/")
-        
+        response = authenticated_client.get(
+            "/api/v1/automation/google-business/connect/"
+        )
+
         assert response.status_code == status.HTTP_200_OK
         assert response.data["is_mock_mode"] is True
         assert response.data["requires_approval"] is True
@@ -530,18 +527,22 @@ class TestGoogleBusinessDisconnectAPI:
 
     def test_disconnect_success(self, authenticated_client, user, gbp_profile):
         """Test disconnecting a profile."""
-        response = authenticated_client.delete("/api/v1/automation/google-business/disconnect/")
-        
+        response = authenticated_client.delete(
+            "/api/v1/automation/google-business/disconnect/"
+        )
+
         assert response.status_code == status.HTTP_200_OK
         assert "message" in response.data
-        
+
         gbp_profile.refresh_from_db()
         assert gbp_profile.status == "disconnected"
 
     def test_disconnect_not_connected(self, authenticated_client, user):
         """Test disconnect when no profile exists."""
-        response = authenticated_client.delete("/api/v1/automation/google-business/disconnect/")
-        
+        response = authenticated_client.delete(
+            "/api/v1/automation/google-business/disconnect/"
+        )
+
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_disconnect_requires_authentication(self, api_client):
@@ -555,12 +556,14 @@ class TestGoogleBusinessTestConnectAPI:
 
     def test_test_connect_creates_mock_profile(self, authenticated_client, user):
         """Test test-connect creates a mock profile."""
-        response = authenticated_client.post("/api/v1/automation/google-business/test-connect/")
-        
+        response = authenticated_client.post(
+            "/api/v1/automation/google-business/test-connect/"
+        )
+
         assert response.status_code == status.HTTP_200_OK
         assert "profile" in response.data
         assert response.data["profile"]["is_mock"] is True
-        
+
         profile = GoogleBusinessProfile.objects.get(user=user)
         assert profile.status == "connected"
         assert profile.is_mock is True
@@ -576,16 +579,20 @@ class TestGoogleBusinessStatusAPI:
 
     def test_status_connected(self, authenticated_client, user, gbp_profile):
         """Test status when connected."""
-        response = authenticated_client.get("/api/v1/automation/google-business/status/")
-        
+        response = authenticated_client.get(
+            "/api/v1/automation/google-business/status/"
+        )
+
         assert response.status_code == status.HTTP_200_OK
         assert response.data["connected"] is True
         assert response.data["profile"]["google_email"] == "test@example.com"
 
     def test_status_not_connected(self, authenticated_client, user):
         """Test status when not connected."""
-        response = authenticated_client.get("/api/v1/automation/google-business/status/")
-        
+        response = authenticated_client.get(
+            "/api/v1/automation/google-business/status/"
+        )
+
         assert response.status_code == status.HTTP_200_OK
         assert response.data["connected"] is False
         assert response.data["profile"] is None
@@ -601,15 +608,19 @@ class TestGoogleBusinessAccountsAPI:
 
     def test_list_accounts(self, authenticated_client, user, gbp_profile):
         """Test listing accounts."""
-        response = authenticated_client.get("/api/v1/automation/google-business/accounts/")
-        
+        response = authenticated_client.get(
+            "/api/v1/automation/google-business/accounts/"
+        )
+
         assert response.status_code == status.HTTP_200_OK
         assert "accounts" in response.data
         assert isinstance(response.data["accounts"], list)
 
     def test_list_accounts_not_connected(self, authenticated_client, user):
         """Test listing accounts when not connected."""
-        response = authenticated_client.get("/api/v1/automation/google-business/accounts/")
+        response = authenticated_client.get(
+            "/api/v1/automation/google-business/accounts/"
+        )
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_list_accounts_requires_authentication(self, api_client):
@@ -628,7 +639,7 @@ class TestGoogleBusinessSelectAccountAPI:
         response = authenticated_client.post(
             "/api/v1/automation/google-business/accounts/123456789/select/"
         )
-        
+
         assert response.status_code == status.HTTP_200_OK
         assert "profile" in response.data
 
@@ -637,7 +648,7 @@ class TestGoogleBusinessSelectAccountAPI:
         response = authenticated_client.post(
             "/api/v1/automation/google-business/accounts/nonexistent999/select/"
         )
-        
+
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_select_account_requires_authentication(self, api_client):
@@ -651,10 +662,14 @@ class TestGoogleBusinessSelectAccountAPI:
 class TestGoogleBusinessLocationsAPI:
     """Integration tests for Google Business Locations endpoint."""
 
-    def test_list_locations(self, authenticated_client, user, gbp_profile, gbp_location):
+    def test_list_locations(
+        self, authenticated_client, user, gbp_profile, gbp_location
+    ):
         """Test listing locations."""
-        response = authenticated_client.get("/api/v1/automation/google-business/locations/")
-        
+        response = authenticated_client.get(
+            "/api/v1/automation/google-business/locations/"
+        )
+
         assert response.status_code == status.HTTP_200_OK
         assert "locations" in response.data
         assert response.data["count"] == 1
@@ -662,7 +677,9 @@ class TestGoogleBusinessLocationsAPI:
 
     def test_list_locations_not_connected(self, authenticated_client, user):
         """Test listing locations when not connected."""
-        response = authenticated_client.get("/api/v1/automation/google-business/locations/")
+        response = authenticated_client.get(
+            "/api/v1/automation/google-business/locations/"
+        )
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_list_locations_no_account_selected(self, authenticated_client, user, db):
@@ -673,7 +690,9 @@ class TestGoogleBusinessLocationsAPI:
             google_email="test@example.com",
             gbp_account_id=None,  # No account selected
         )
-        response = authenticated_client.get("/api/v1/automation/google-business/locations/")
+        response = authenticated_client.get(
+            "/api/v1/automation/google-business/locations/"
+        )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_create_location(self, authenticated_client, user, gbp_profile):
@@ -688,29 +707,26 @@ class TestGoogleBusinessLocationsAPI:
             "country": "US",
         }
         response = authenticated_client.post(
-            "/api/v1/automation/google-business/locations/",
-            data,
-            format="json"
+            "/api/v1/automation/google-business/locations/", data, format="json"
         )
-        
+
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["location"]["business_name"] == "New Location"
-        
+
         # Verify in database
         assert GoogleBusinessLocation.objects.filter(
-            profile=gbp_profile,
-            business_name="New Location"
+            profile=gbp_profile, business_name="New Location"
         ).exists()
 
-    def test_create_location_validation_error(self, authenticated_client, user, gbp_profile):
+    def test_create_location_validation_error(
+        self, authenticated_client, user, gbp_profile
+    ):
         """Test creating location with invalid data."""
         data = {"business_name": "Incomplete"}  # Missing required fields
         response = authenticated_client.post(
-            "/api/v1/automation/google-business/locations/",
-            data,
-            format="json"
+            "/api/v1/automation/google-business/locations/", data, format="json"
         )
-        
+
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "primary_category" in response.data
 
@@ -723,12 +739,14 @@ class TestGoogleBusinessLocationsAPI:
 class TestGoogleBusinessLocationDetailAPI:
     """Integration tests for Google Business Location Detail endpoint."""
 
-    def test_get_location_detail(self, authenticated_client, user, gbp_profile, gbp_location):
+    def test_get_location_detail(
+        self, authenticated_client, user, gbp_profile, gbp_location
+    ):
         """Test getting location details."""
         response = authenticated_client.get(
             f"/api/v1/automation/google-business/locations/{gbp_location.id}/"
         )
-        
+
         assert response.status_code == status.HTTP_200_OK
         assert response.data["business_name"] == "Test Business"
 
@@ -739,27 +757,31 @@ class TestGoogleBusinessLocationDetailAPI:
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_update_location(self, authenticated_client, user, gbp_profile, gbp_location):
+    def test_update_location(
+        self, authenticated_client, user, gbp_profile, gbp_location
+    ):
         """Test updating a location."""
         data = {"business_name": "Updated Business"}
         response = authenticated_client.patch(
             f"/api/v1/automation/google-business/locations/{gbp_location.id}/",
             data,
-            format="json"
+            format="json",
         )
-        
+
         assert response.status_code == status.HTTP_200_OK
-        
+
         gbp_location.refresh_from_db()
         assert gbp_location.business_name == "Updated Business"
 
-    def test_delete_location(self, authenticated_client, user, gbp_profile, gbp_location):
+    def test_delete_location(
+        self, authenticated_client, user, gbp_profile, gbp_location
+    ):
         """Test deleting a location."""
         location_id = gbp_location.id
         response = authenticated_client.delete(
             f"/api/v1/automation/google-business/locations/{location_id}/"
         )
-        
+
         assert response.status_code == status.HTTP_200_OK
         assert not GoogleBusinessLocation.objects.filter(id=location_id).exists()
 
@@ -776,8 +798,10 @@ class TestGoogleBusinessCategoriesAPI:
 
     def test_list_categories(self, authenticated_client, user):
         """Test listing categories."""
-        response = authenticated_client.get("/api/v1/automation/google-business/categories/")
-        
+        response = authenticated_client.get(
+            "/api/v1/automation/google-business/categories/"
+        )
+
         assert response.status_code == status.HTTP_200_OK
         assert "categories" in response.data
         assert isinstance(response.data["categories"], list)
@@ -787,7 +811,7 @@ class TestGoogleBusinessCategoriesAPI:
         response = authenticated_client.get(
             "/api/v1/automation/google-business/categories/?q=restaurant"
         )
-        
+
         assert response.status_code == status.HTTP_200_OK
         assert "categories" in response.data
 
@@ -813,8 +837,7 @@ class TestGoogleBusinessPropertyTests:
         country=st.text(min_size=2, max_size=2).filter(lambda x: x.strip()),
     )
     @hypothesis_settings(
-        max_examples=20,
-        suppress_health_check=[HealthCheck.function_scoped_fixture]
+        max_examples=20, suppress_health_check=[HealthCheck.function_scoped_fixture]
     )
     def test_full_address_never_empty(
         self, db, gbp_profile, address_line1, city, state, postal_code, country
@@ -830,37 +853,34 @@ class TestGoogleBusinessPropertyTests:
             postal_code=postal_code,
             country=country,
         )
-        
+
         assert location.full_address
         assert isinstance(location.full_address, str)
         assert len(location.full_address) > 0
-        
+
         # Cleanup
         location.delete()
 
-    @given(
-        hours_offset=st.integers(min_value=-100, max_value=100)
-    )
+    @given(hours_offset=st.integers(min_value=-100, max_value=100))
     @hypothesis_settings(
-        max_examples=20,
-        suppress_health_check=[HealthCheck.function_scoped_fixture]
+        max_examples=20, suppress_health_check=[HealthCheck.function_scoped_fixture]
     )
     def test_token_expiry_logic_consistent(self, db, user, hours_offset):
         """Test token validity is consistent with expiry time."""
         expiry_time = timezone.now() + timedelta(hours=hours_offset)
-        
+
         profile = GoogleBusinessProfile.objects.create(
             user=user,
             google_account_id=f"accounts/{hash(hours_offset)}",
             google_email=f"test{hours_offset}@example.com",
             token_expires_at=expiry_time,
         )
-        
+
         if hours_offset > 0:
             assert profile.is_token_valid is True
         else:
             assert profile.is_token_valid is False
-        
+
         # Cleanup
         profile.delete()
 
@@ -876,7 +896,7 @@ class TestGoogleBusinessPropertyTests:
             "primary_category": category,
         }
         serializer = GoogleBusinessLocationCreateSerializer(data=data)
-        
+
         assert not serializer.is_valid()
         # Must have address_line1, city, state, postal_code errors
         assert "address_line1" in serializer.errors
@@ -886,7 +906,7 @@ class TestGoogleBusinessPropertyTests:
     @hypothesis_settings(
         max_examples=5,
         deadline=2000,
-        suppress_health_check=[HealthCheck.function_scoped_fixture]
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
     )
     def test_disconnect_idempotent(self, db, user, times):
         """Test that calling disconnect multiple times is safe."""
@@ -898,16 +918,16 @@ class TestGoogleBusinessPropertyTests:
             _access_token="token",
             _refresh_token="refresh",
         )
-        
+
         # Call disconnect multiple times
         for _ in range(times):
             profile.disconnect()
             profile.refresh_from_db()
-        
+
         # Should always end up disconnected
         assert profile.status == "disconnected"
         assert profile._access_token is None
-        
+
         # Cleanup
         profile.delete()
 
@@ -927,7 +947,7 @@ class TestGoogleBusinessEdgeCases:
             google_account_id="accounts/empty",
             google_email="empty@example.com",
         )
-        
+
         assert profile.access_token is None
         assert profile.refresh_token is None
         assert profile.is_token_valid is False
@@ -944,7 +964,7 @@ class TestGoogleBusinessEdgeCases:
             postal_code="1",
             country="US",
         )
-        
+
         assert location.full_address == "1 St, A, B 1, US"
 
     def test_location_with_special_characters(self, db, gbp_profile):
@@ -960,7 +980,7 @@ class TestGoogleBusinessEdgeCases:
             postal_code="95101",
             country="US",
         )
-        
+
         assert "O'Brien" in location.full_address
         assert "San José" in location.full_address
 
@@ -977,7 +997,7 @@ class TestGoogleBusinessEdgeCases:
                 postal_code="12345",
                 country="US",
             )
-        
+
         assert gbp_profile.locations.count() == 5
 
     def test_cascade_delete_multiple_locations(self, db, user):
@@ -987,7 +1007,7 @@ class TestGoogleBusinessEdgeCases:
             google_account_id="accounts/cascade",
             google_email="cascade@example.com",
         )
-        
+
         for i in range(3):
             GoogleBusinessLocation.objects.create(
                 profile=profile,
@@ -999,13 +1019,11 @@ class TestGoogleBusinessEdgeCases:
                 postal_code="00000",
                 country="US",
             )
-        
+
         profile_id = profile.id
         profile.delete()
-        
-        assert not GoogleBusinessLocation.objects.filter(
-            profile_id=profile_id
-        ).exists()
+
+        assert not GoogleBusinessLocation.objects.filter(profile_id=profile_id).exists()
 
     def test_user_cannot_access_other_users_profile(
         self, authenticated_client, user, db
@@ -1013,9 +1031,7 @@ class TestGoogleBusinessEdgeCases:
         """Test user cannot access another user's profile locations."""
         # Create another user with a profile
         other_user = User.objects.create_user(
-            username="other_user",
-            email="other@example.com",
-            password="pass123"
+            username="other_user", email="other@example.com", password="pass123"
         )
         other_profile = GoogleBusinessProfile.objects.create(
             user=other_user,
@@ -1034,12 +1050,12 @@ class TestGoogleBusinessEdgeCases:
             postal_code="00000",
             country="US",
         )
-        
+
         # Authenticated as 'user', try to access other_user's location
         response = authenticated_client.get(
             f"/api/v1/automation/google-business/locations/{other_location.id}/"
         )
-        
+
         # Should not find it (404) because it belongs to different user
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -1056,14 +1072,14 @@ class TestGoogleBusinessEdgeCases:
             created_at=timezone.now() - timedelta(hours=2)
         )
         expired_state.refresh_from_db()
-        
+
         assert expired_state.is_expired() is True
-        
+
         # Create a fresh state
         fresh_state = OAuthState.objects.create(
             state="fresh123",
             user=user,
             platform="google_business",
         )
-        
+
         assert fresh_state.is_expired() is False

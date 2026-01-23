@@ -7569,7 +7569,10 @@ class GoogleBusinessLocationsView(APIView):
         try:
             # In mock mode, just return all locations from database
             # In real mode, sync from API first then return all
-            if not google_business_service.is_mock_mode and profile.access_token != google_business_service.MOCK_ACCESS_TOKEN:
+            if (
+                not google_business_service.is_mock_mode
+                and profile.access_token != google_business_service.MOCK_ACCESS_TOKEN
+            ):
                 access_token = profile.access_token
                 api_locations = google_business_service.list_locations(
                     access_token, profile.gbp_account_id
