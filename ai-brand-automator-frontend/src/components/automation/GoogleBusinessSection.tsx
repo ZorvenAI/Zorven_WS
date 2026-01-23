@@ -30,7 +30,7 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
-  const [categorySearch, setCategorySearch] = useState('');
+  const [showCustomCategory, setShowCustomCategory] = useState(false);
 
   // Form state for creating location
   const [newLocation, setNewLocation] = useState<CreateLocationData>({
@@ -80,11 +80,16 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
 
   // Fetch locations when account is selected
   const fetchLocations = useCallback(async () => {
-    if (!profile?.gbp_account_id) return;
+    if (!profile?.gbp_account_id) {
+      console.log('fetchLocations: No gbp_account_id, skipping');
+      return;
+    }
 
+    console.log('fetchLocations: Fetching locations...');
     setLoadingLocations(true);
     try {
       const data = await googleBusinessApi.getLocations();
+      console.log('fetchLocations: Received locations:', data);
       setLocations(data);
     } catch (error) {
       console.error('Failed to fetch GBP locations:', error);
@@ -119,15 +124,12 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
     }
   }, [profile?.gbp_account_id, fetchLocations]);
 
-  // Debounced category search
+  // Fetch all categories when form opens
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (showCreateLocation) {
-        fetchCategories(categorySearch || undefined);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [categorySearch, showCreateLocation, fetchCategories]);
+    if (showCreateLocation && categories.length === 0) {
+      fetchCategories();
+    }
+  }, [showCreateLocation, categories.length, fetchCategories]);
 
   // Handle connect
   const handleConnect = async () => {
@@ -189,15 +191,30 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
 
   // Handle create location
   const handleCreateLocation = async () => {
-    if (!newLocation.business_name || !newLocation.address_line1 || !newLocation.city) {
-      onMessage({ type: 'error', text: 'Please fill in required fields (Business Name, Address, City)' });
+    console.log('handleCreateLocation called with:', newLocation);
+    
+    // Validate all required fields
+    const missingFields = [];
+    if (!newLocation.business_name) missingFields.push('Business Name');
+    if (!newLocation.primary_category) missingFields.push('Category');
+    if (!newLocation.address_line1) missingFields.push('Address');
+    if (!newLocation.city) missingFields.push('City');
+    if (!newLocation.state) missingFields.push('State');
+    if (!newLocation.postal_code) missingFields.push('Postal Code');
+    
+    if (missingFields.length > 0) {
+      console.log('Missing fields:', missingFields);
+      onMessage({ type: 'error', text: `Please fill in required fields: ${missingFields.join(', ')}` });
       return;
     }
+    
+    console.log('Validation passed, calling API...');
 
     try {
       await googleBusinessApi.createLocation(newLocation);
       await fetchLocations();
       setShowCreateLocation(false);
+      setShowLocations(true); // Show locations list after creating
       setNewLocation({
         business_name: '',
         primary_category: '',
@@ -210,6 +227,7 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
         phone_number: '',
         website_url: '',
       });
+      setShowCustomCategory(false);
       onMessage({ type: 'success', text: 'Business location created successfully!' });
     } catch (error) {
       console.error('Failed to create location:', error);
@@ -218,11 +236,11 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
   };
 
   // Handle delete location
-  const handleDeleteLocation = async (locationId: string) => {
+  const handleDeleteLocation = async (id: number) => {
     if (!confirm('Are you sure you want to delete this location?')) return;
 
     try {
-      await googleBusinessApi.deleteLocation(locationId);
+      await googleBusinessApi.deleteLocation(String(id));
       await fetchLocations();
       onMessage({ type: 'success', text: 'Location deleted successfully' });
     } catch (error) {
@@ -248,14 +266,23 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
   }
 
   return (
-    <div className="glass-card p-6 hover:border-brand-electric/30 transition-all">
+    <div className="glass-card p-6 hover:border-[#4285F4]/30 transition-all">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500 via-green-500 to-yellow-500 text-white">
-            {/* Google Business Profile Icon */}
-            <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12s4.48 10 10 10 10-4.48 10-10zm-10-2c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0-6c3.31 0 6 2.69 6 6 0 1.66-.67 3.16-1.76 4.24l-1.42-1.42A3.93 3.93 0 0016 10c0-2.21-1.79-4-4-4S8 7.79 8 10c0 .9.3 1.73.82 2.4L7.4 13.82A5.96 5.96 0 016 10c0-3.31 2.69-6 6-6z"/>
+          <div className="p-2 rounded-xl bg-white">
+            {/* Google Business Profile Icon - Official storefront in location pin */}
+            <svg className="w-10 h-10" viewBox="0 0 48 48" fill="none">
+              {/* Location Pin - Google Blue */}
+              <path d="M24 4C16.27 4 10 10.27 10 18c0 10.5 14 26 14 26s14-15.5 14-26c0-7.73-6.27-14-14-14z" fill="#4285F4"/>
+              {/* Storefront Building - White */}
+              <rect x="16" y="16" width="16" height="12" rx="1" fill="white"/>
+              {/* Storefront Awning */}
+              <path d="M15 16h18v3c0 1-1 2-2.25 2s-2.25-1-2.25-2c0 1-1 2-2.25 2s-2.25-1-2.25-2c0 1-1 2-2.25 2s-2.25-1-2.25-2c0 1-1 2-2.25 2S15 20 15 19v-3z" fill="white"/>
+              {/* Door */}
+              <rect x="21" y="22" width="6" height="6" rx="0.5" fill="#4285F4"/>
+              {/* Door handle */}
+              <circle cx="25.5" cy="25" r="0.75" fill="white"/>
             </svg>
           </div>
           <div>
@@ -279,8 +306,8 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
         {/* Status Indicator */}
         {isConnected && (
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-brand-mint rounded-full animate-pulse" />
-            <span className="text-xs text-brand-mint">Connected</span>
+            <span className="w-2 h-2 bg-[#34A853] rounded-full animate-pulse" />
+            <span className="text-xs text-[#34A853]">Connected</span>
           </div>
         )}
       </div>
@@ -291,8 +318,8 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
           <button
             onClick={handleConnect}
             disabled={connecting}
-            className="px-4 py-2 bg-gradient-to-r from-blue-500 to-green-500 text-white rounded-lg 
-                     hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
+            className="px-4 py-2 bg-[#4285F4] text-white font-semibold rounded-lg 
+                     hover:bg-[#3367D6] transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md"
           >
             {connecting ? (
               <>
@@ -304,8 +331,9 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
               </>
             ) : (
               <>
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
+                {/* Google "G" Icon */}
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                  <path fill="#fff" d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
                 </svg>
                 Connect with Google
               </>
@@ -314,7 +342,7 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
           <button
             onClick={handleTestConnect}
             disabled={connecting}
-            className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 
+            className="px-4 py-2 bg-white/10 text-white border border-white/20 rounded-lg hover:bg-white/20 
                      transition-colors disabled:opacity-50 text-sm"
           >
             Test Mode
@@ -390,7 +418,7 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => setShowLocations(!showLocations)}
-                  className="px-3 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 
+                  className="px-3 py-2 bg-[#4285F4]/20 text-[#4285F4] border border-[#4285F4]/30 rounded-lg hover:bg-[#4285F4]/30 
                            transition-colors text-sm flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -403,8 +431,8 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
                 </button>
                 <button
                   onClick={() => setShowCreateLocation(!showCreateLocation)}
-                  className="px-3 py-2 bg-brand-electric text-white rounded-lg hover:bg-brand-electric/80 
-                           transition-colors text-sm flex items-center gap-2"
+                  className="px-3 py-2 bg-[#34A853] text-white font-semibold rounded-lg hover:bg-[#2E9549] 
+                           transition-colors text-sm flex items-center gap-2 shadow-sm"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -414,7 +442,7 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
                 <button
                   onClick={handleDisconnect}
                   disabled={connecting}
-                  className="px-3 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 
+                  className="px-3 py-2 bg-[#EA4335]/20 text-[#EA4335] border border-[#EA4335]/30 rounded-lg hover:bg-[#EA4335]/30 
                            transition-colors text-sm disabled:opacity-50"
                 >
                   Disconnect
@@ -426,7 +454,7 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
                 <div className="bg-white/5 rounded-lg p-4 space-y-3 max-h-64 overflow-y-auto">
                   {loadingLocations ? (
                     <div className="text-center py-4">
-                      <svg className="w-6 h-6 animate-spin mx-auto text-brand-electric" viewBox="0 0 24 24" fill="none">
+                      <svg className="w-6 h-6 animate-spin mx-auto text-[#4285F4]" viewBox="0 0 24 24" fill="none">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
@@ -441,17 +469,17 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
                           <p className="text-white font-medium">{location.business_name}</p>
                           <p className="text-sm text-brand-silver/70">{location.full_address}</p>
                           {location.primary_category && (
-                            <span className="inline-block mt-1 px-2 py-0.5 bg-brand-electric/20 
-                                           text-brand-electric text-xs rounded">
+                            <span className="inline-block mt-1 px-2 py-0.5 bg-[#4285F4]/20 
+                                           text-[#4285F4] text-xs rounded">
                               {location.primary_category}
                             </span>
                           )}
                           <div className="flex items-center gap-2 mt-2">
                             <span className={`text-xs px-2 py-0.5 rounded ${
                               location.verification_status === 'verified'
-                                ? 'bg-green-500/20 text-green-400'
+                                ? 'bg-[#34A853]/20 text-[#34A853]'
                                 : location.verification_status === 'pending'
-                                  ? 'bg-yellow-500/20 text-yellow-400'
+                                  ? 'bg-[#FBBC05]/20 text-[#FBBC05]'
                                   : 'bg-gray-500/20 text-gray-400'
                             }`}>
                               {location.verification_status}
@@ -459,8 +487,8 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
                           </div>
                         </div>
                         <button
-                          onClick={() => handleDeleteLocation(location.location_id)}
-                          className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                          onClick={() => handleDeleteLocation(location.id)}
+                          className="p-2 text-[#EA4335] hover:bg-[#EA4335]/20 rounded-lg transition-colors"
                           title="Delete location"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -501,36 +529,57 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
                     {/* Category */}
                     <div className="md:col-span-2">
                       <label className="block text-sm text-brand-silver/70 mb-1">
-                        Business Category
+                        Business Category *
                       </label>
-                      <input
-                        type="text"
-                        value={categorySearch}
-                        onChange={(e) => setCategorySearch(e.target.value)}
-                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg 
-                                 text-white focus:border-brand-electric focus:outline-none"
-                        placeholder="Search categories..."
-                      />
-                      {categories.length > 0 && categorySearch && (
-                        <div className="mt-2 bg-white/5 rounded-lg max-h-32 overflow-y-auto">
-                          {loadingCategories ? (
-                            <div className="p-3 text-center text-brand-silver/50">Loading...</div>
-                          ) : (
-                            categories.slice(0, 5).map((cat) => (
-                              <button
-                                key={cat.name}
-                                onClick={() => {
-                                  setNewLocation({ ...newLocation, primary_category: cat.displayName });
-                                  setCategorySearch(cat.displayName);
-                                  setCategories([]);
-                                }}
-                                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-                              >
-                                {cat.displayName}
-                              </button>
-                            ))
-                          )}
+                      {loadingCategories ? (
+                        <div className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-brand-silver/50">
+                          Loading categories...
                         </div>
+                      ) : showCustomCategory ? (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newLocation.primary_category}
+                            onChange={(e) => setNewLocation({ ...newLocation, primary_category: e.target.value })}
+                            className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg 
+                                     text-white focus:border-[#4285F4] focus:outline-none"
+                            placeholder="Enter custom category..."
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowCustomCategory(false);
+                              setNewLocation({ ...newLocation, primary_category: '' });
+                            }}
+                            className="px-3 py-2 bg-white/10 text-white border border-white/20 rounded-lg hover:bg-white/20 text-sm"
+                          >
+                            Back
+                          </button>
+                        </div>
+                      ) : (
+                        <select
+                          value={newLocation.primary_category}
+                          onChange={(e) => {
+                            if (e.target.value === '__OTHER__') {
+                              setShowCustomCategory(true);
+                              setNewLocation({ ...newLocation, primary_category: '' });
+                            } else {
+                              setNewLocation({ ...newLocation, primary_category: e.target.value });
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg 
+                                   text-white focus:border-brand-electric focus:outline-none
+                                   [&>option]:bg-gray-800 [&>option]:text-white"
+                        >
+                          <option value="">-- Select a category --</option>
+                          {categories.map((cat) => (
+                            <option key={cat.name} value={cat.displayName}>
+                              {cat.displayName}
+                            </option>
+                          ))}
+                          <option value="__OTHER__">Other (enter custom category)</option>
+                        </select>
                       )}
                     </div>
 
@@ -643,14 +692,17 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
                   </div>
                   <div className="flex justify-end gap-2 pt-2">
                     <button
-                      onClick={() => setShowCreateLocation(false)}
-                      className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors"
+                      onClick={() => {
+                        setShowCreateLocation(false);
+                        setShowCustomCategory(false);
+                      }}
+                      className="px-4 py-2 bg-white/10 text-white border border-white/20 rounded-lg hover:bg-white/20 transition-colors"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handleCreateLocation}
-                      className="px-4 py-2 bg-brand-electric text-white rounded-lg hover:bg-brand-electric/80 transition-colors"
+                      className="px-4 py-2 bg-[#4285F4] text-white font-semibold rounded-lg hover:bg-[#3367D6] transition-colors shadow-sm"
                     >
                       Create Location
                     </button>

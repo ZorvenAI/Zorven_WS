@@ -369,7 +369,7 @@ export const googleBusinessApi = {
   },
 
   async disconnect(): Promise<{ message: string }> {
-    const response = await apiClient.post('/automation/google-business/disconnect/', {});
+    const response = await apiClient.delete('/automation/google-business/disconnect/');
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Failed to disconnect');
@@ -412,7 +412,14 @@ export const googleBusinessApi = {
     const response = await apiClient.post('/automation/google-business/locations/', data);
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Failed to create location');
+      // Handle DRF validation errors (field: [messages] format)
+      if (typeof error === 'object' && !error.error) {
+        const fieldErrors = Object.entries(error)
+          .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+          .join('; ');
+        throw new Error(fieldErrors || 'Validation failed');
+      }
+      throw new Error(error.error || error.detail || 'Failed to create location');
     }
     return response.json();
   },

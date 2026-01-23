@@ -7550,46 +7550,48 @@ class GoogleBusinessLocationsView(APIView):
             )
 
         try:
-            access_token = profile.access_token
-            api_locations = google_business_service.list_locations(
-                access_token, profile.gbp_account_id
-            )
-
-            # Sync locations to database
-            synced_locations = []
-            for loc_data in api_locations:
-                address = loc_data.get("storefrontAddress", {})
-                address_lines = address.get("addressLines", [])
-                category = loc_data.get("primaryCategory", {})
-
-                location, created = GoogleBusinessLocation.objects.update_or_create(
-                    profile=profile,
-                    location_id=loc_data["name"],
-                    defaults={
-                        "business_name": loc_data.get("title", ""),
-                        "primary_category": category.get("displayName", ""),
-                        "primary_category_id": category.get("name", ""),
-                        "address_line1": address_lines[0] if address_lines else "",
-                        "address_line2": (
-                            address_lines[1] if len(address_lines) > 1 else ""
-                        ),
-                        "city": address.get("locality", ""),
-                        "state": address.get("administrativeArea", ""),
-                        "postal_code": address.get("postalCode", ""),
-                        "country": address.get("regionCode", "US"),
-                        "phone_number": loc_data.get("primaryPhone", ""),
-                        "website_url": loc_data.get("websiteUri", ""),
-                        "is_synced": True,
-                    },
+            # In mock mode, just return all locations from database
+            # In real mode, sync from API first then return all
+            if not google_business_service.is_mock_mode and profile.access_token != google_business_service.MOCK_ACCESS_TOKEN:
+                access_token = profile.access_token
+                api_locations = google_business_service.list_locations(
+                    access_token, profile.gbp_account_id
                 )
-                synced_locations.append(location)
 
-            # Return serialized locations
-            serializer = GoogleBusinessLocationSerializer(synced_locations, many=True)
+                # Sync locations from API to database
+                for loc_data in api_locations:
+                    address = loc_data.get("storefrontAddress", {})
+                    address_lines = address.get("addressLines", [])
+                    category = loc_data.get("primaryCategory", {})
+
+                    GoogleBusinessLocation.objects.update_or_create(
+                        profile=profile,
+                        location_id=loc_data["name"],
+                        defaults={
+                            "business_name": loc_data.get("title", ""),
+                            "primary_category": category.get("displayName", ""),
+                            "primary_category_id": category.get("name", ""),
+                            "address_line1": address_lines[0] if address_lines else "",
+                            "address_line2": (
+                                address_lines[1] if len(address_lines) > 1 else ""
+                            ),
+                            "city": address.get("locality", ""),
+                            "state": address.get("administrativeArea", ""),
+                            "postal_code": address.get("postalCode", ""),
+                            "country": address.get("regionCode", "US"),
+                            "phone_number": loc_data.get("primaryPhone", ""),
+                            "website_url": loc_data.get("websiteUri", ""),
+                            "is_synced": True,
+                        },
+                    )
+
+            # Return ALL locations from database for this profile
+            all_locations = GoogleBusinessLocation.objects.filter(profile=profile)
+            serializer = GoogleBusinessLocationSerializer(all_locations, many=True)
             return Response(
                 {
                     "locations": serializer.data,
-                    "count": len(synced_locations),
+                    "count": all_locations.count(),
                     "is_mock_mode": google_business_service.is_mock_mode,
                 }
             )
@@ -7812,9 +7814,16 @@ class GoogleBusinessLocationDetailView(APIView):
             )
 
         try:
-            location = GoogleBusinessLocation.objects.get(
-                profile=profile, id=location_id
-            )
+            # Try to find by database ID first, then by location_id field
+            try:
+                location = GoogleBusinessLocation.objects.get(
+                    profile=profile, id=int(location_id)
+                )
+            except (ValueError, GoogleBusinessLocation.DoesNotExist):
+                # location_id is not an integer, try looking up by location_id field
+                location = GoogleBusinessLocation.objects.get(
+                    profile=profile, location_id=location_id
+                )
         except GoogleBusinessLocation.DoesNotExist:
             return Response(
                 {"error": "Location not found"},
