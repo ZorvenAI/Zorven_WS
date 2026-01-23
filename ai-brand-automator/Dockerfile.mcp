@@ -1,0 +1,65 @@
+# ==============================================================================
+# MCP Server Dockerfile
+# Model Context Protocol server for AI agent integration
+# Exposes automation capabilities via SSE transport
+# ==============================================================================
+
+# Python base image
+FROM python:3.12-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DJANGO_SETTINGS_MODULE=brand_automator.settings \
+    MCP_PORT=8001 \
+    MCP_HOST=0.0.0.0 \
+    MCP_TRANSPORT=sse
+
+# Set work directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    build-essential \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy project
+COPY . .
+
+# Create logs directory
+RUN mkdir -p logs
+
+# Expose MCP server port
+EXPOSE 8001
+
+# Health check - MCP server exposes /health endpoint on SSE transport
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${MCP_PORT}/health || exit 1
+
+# Create entrypoint script for MCP server
+RUN cat <<'EOF' > /app/entrypoint-mcp.sh && chmod +x /app/entrypoint-mcp.sh
+#!/bin/bash
+set -e
+echo "=== Starting MCP Server ==="
+echo "Transport: ${MCP_TRANSPORT}"
+echo "Host: ${MCP_HOST}"
+echo "Port: ${MCP_PORT}"
+
+# Run MCP server with configured transport
+exec python run_mcp_server.py \
+    --transport "${MCP_TRANSPORT}" \
+    --host "${MCP_HOST}" \
+    --port "${MCP_PORT}"
+EOF
+
+# Run MCP server
+CMD ["/app/entrypoint-mcp.sh"]

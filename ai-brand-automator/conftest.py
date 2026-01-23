@@ -8,6 +8,10 @@ from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from hypothesis import settings
 
+# Exclude standalone test scripts from pytest collection
+# test_mcp_server.py is designed to be run manually, not with pytest
+collect_ignore = ["test_mcp_server.py"]
+
 # Load test environment variables before Django initializes
 test_env_path = Path(__file__).parent / ".env.test"
 if test_env_path.exists():
