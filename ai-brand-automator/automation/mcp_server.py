@@ -108,26 +108,31 @@ Key Capabilities:
 • Publish content immediately or on schedule
 • Track automation task status and history
 • Generate OAuth URLs for new platform connections
+• Manage Google Business Profile listings and locations
 
 Authentication: Users are identified by email. Call tools with 'user_email' parameter.
 Platforms: linkedin, twitter, instagram, facebook
+Google Business: Profile connection, account selection, location CRUD
 
 Common Workflows:
 1. Check connected accounts: list_social_profiles → get_social_profile_status
 2. Schedule a post: create_scheduled_content → (optional) update_scheduled_content
 3. Post immediately: post_to_linkedin / post_to_twitter / post_to_facebook
 4. Connect new platform: get_platform_oauth_url → redirect user → callback
+5. Google Business: gbp_get_status → gbp_connect → gbp_select_account → gbp_list_locations
 """
 
 from django.contrib.auth import get_user_model  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
 from .models import SocialProfile, ContentCalendar, AutomationTask  # noqa: E402
+from .models import GoogleBusinessProfile, GoogleBusinessLocation  # noqa: E402
 from .services import (  # noqa: E402
     linkedin_service,
     twitter_service,
     facebook_service,
     instagram_service,
+    google_business_service,
 )
 from .publish_helpers import publish_content, update_content_status  # noqa: E402
 
@@ -836,6 +841,417 @@ Example:
                         },
                     },
                     "required": ["platform", "user_email"],
+                    "additionalProperties": False,
+                },
+            ),
+            # Google Business Profile Tools
+            Tool(
+                name="gbp_get_status",
+                description="""Get Google Business Profile connection status for a user.
+
+Returns the current GBP connection status including account details,
+connection state, and whether the profile is in mock mode (for testing).
+
+Returns:
+    {
+        "connected": true,
+        "profile": {
+            "id": 123,
+            "google_email": "user@gmail.com",
+            "gbp_account_id": "accounts/123456",
+            "gbp_account_name": "My Business",
+            "status": "connected",
+            "is_mock": false,
+            "is_token_valid": true,
+            "location_count": 3
+        }
+    }
+
+If not connected:
+    {"connected": false, "profile": null}
+
+Example:
+    {"user_email": "user@example.com"}""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_email": {
+                            "type": "string",
+                            "format": "email",
+                            "description": "Email address of the user",
+                        },
+                    },
+                    "required": ["user_email"],
+                    "additionalProperties": False,
+                },
+            ),
+            Tool(
+                name="gbp_connect",
+                description="""Initiate Google Business Profile OAuth connection.
+
+Generates an authorization URL for the user to connect their Google account.
+Supports both real OAuth (when credentials configured) and mock mode (for testing).
+
+Returns:
+    {
+        "authorization_url": "https://accounts.google.com/o/oauth2/...",
+        "is_mock_mode": false,
+        "instructions": "Redirect user to authorization URL..."
+    }
+
+In mock mode, use gbp_test_connect instead for instant connection.
+
+Example:
+    {"user_email": "user@example.com"}""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_email": {
+                            "type": "string",
+                            "format": "email",
+                            "description": "Email address of the user",
+                        },
+                    },
+                    "required": ["user_email"],
+                    "additionalProperties": False,
+                },
+            ),
+            Tool(
+                name="gbp_test_connect",
+                description="""Create a test/mock Google Business Profile connection.
+
+Creates a simulated GBP connection for testing without real Google OAuth.
+Useful for development, demos, and testing the GBP workflow.
+
+Returns:
+    {
+        "success": true,
+        "message": "Test connection created",
+        "profile": {
+            "id": 123,
+            "status": "connected",
+            "is_mock": true,
+            "google_email": "test@example.com"
+        }
+    }
+
+Example:
+    {"user_email": "user@example.com"}""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_email": {
+                            "type": "string",
+                            "format": "email",
+                            "description": "Email address of the user",
+                        },
+                    },
+                    "required": ["user_email"],
+                    "additionalProperties": False,
+                },
+            ),
+            Tool(
+                name="gbp_disconnect",
+                description="""Disconnect Google Business Profile for a user.
+
+Revokes the GBP connection and clears stored tokens. The user will need
+to re-authenticate to use GBP features again.
+
+Returns:
+    {
+        "success": true,
+        "message": "Google Business Profile disconnected"
+    }
+
+Errors:
+- "No Google Business Profile found" - User doesn't have GBP connected
+
+Example:
+    {"user_email": "user@example.com"}""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_email": {
+                            "type": "string",
+                            "format": "email",
+                            "description": "Email address of the user",
+                        },
+                    },
+                    "required": ["user_email"],
+                    "additionalProperties": False,
+                },
+            ),
+            Tool(
+                name="gbp_list_accounts",
+                description="""List available Google Business Profile accounts.
+
+Returns GBP accounts the user has access to. The user must select one
+account to manage locations under.
+
+Returns:
+    {
+        "accounts": [
+            {
+                "name": "accounts/123456789",
+                "accountName": "My Business Account",
+                "type": "PERSONAL",
+                "role": "PRIMARY_OWNER",
+                "state": {"status": "VERIFIED"}
+            }
+        ],
+        "count": 1
+    }
+
+Errors:
+- "No Google Business Profile found" - User doesn't have GBP connected
+- "GBP connection not active" - Token expired or revoked
+
+Example:
+    {"user_email": "user@example.com"}""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_email": {
+                            "type": "string",
+                            "format": "email",
+                            "description": "Email address of the user",
+                        },
+                    },
+                    "required": ["user_email"],
+                    "additionalProperties": False,
+                },
+            ),
+            Tool(
+                name="gbp_select_account",
+                description="""Select a Google Business Profile account to use.
+
+Sets the active GBP account for managing business locations.
+The account_id should be from the gbp_list_accounts response.
+
+Returns:
+    {
+        "success": true,
+        "message": "Account selected",
+        "account_id": "accounts/123456789",
+        "account_name": "My Business Account"
+    }
+
+Example:
+    {"user_email": "user@example.com", "account_id": "accounts/123456789"}""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_email": {
+                            "type": "string",
+                            "format": "email",
+                            "description": "Email address of the user",
+                        },
+                        "account_id": {
+                            "type": "string",
+                            "description": "GBP account ID (e.g., 'accounts/123456789')",
+                        },
+                    },
+                    "required": ["user_email", "account_id"],
+                    "additionalProperties": False,
+                },
+            ),
+            Tool(
+                name="gbp_list_locations",
+                description="""List business locations for the user's GBP account.
+
+Returns all business locations associated with the selected GBP account.
+
+Returns:
+    {
+        "locations": [
+            {
+                "id": 1,
+                "location_id": "locations/abc123",
+                "business_name": "Downtown Coffee Shop",
+                "primary_category": "Coffee shop",
+                "full_address": "123 Main St, San Francisco, CA 94102",
+                "phone_number": "+1-415-555-0100",
+                "website_url": "https://example.com",
+                "verification_status": "verified",
+                "is_synced": true
+            }
+        ],
+        "count": 1
+    }
+
+Errors:
+- "No Google Business Profile found" - User doesn't have GBP connected
+- "No GBP account selected" - User needs to select an account first
+
+Example:
+    {"user_email": "user@example.com"}""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_email": {
+                            "type": "string",
+                            "format": "email",
+                            "description": "Email address of the user",
+                        },
+                    },
+                    "required": ["user_email"],
+                    "additionalProperties": False,
+                },
+            ),
+            Tool(
+                name="gbp_create_location",
+                description="""Create a new business location in Google Business Profile.
+
+Creates a new business listing. Required fields: business_name, address_line1, city.
+
+Returns:
+    {
+        "success": true,
+        "location": {
+            "id": 2,
+            "location_id": "locations/new123",
+            "business_name": "My New Shop",
+            "full_address": "456 Oak Ave, San Francisco, CA 94108",
+            "verification_status": "unverified"
+        }
+    }
+
+Note: New locations typically require verification through Google.
+
+Example:
+    {
+        "user_email": "user@example.com",
+        "business_name": "My Coffee Shop",
+        "primary_category": "Coffee shop",
+        "address_line1": "123 Main Street",
+        "city": "San Francisco",
+        "state": "CA",
+        "postal_code": "94102",
+        "country": "US",
+        "phone_number": "+1-415-555-0100"
+    }""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_email": {
+                            "type": "string",
+                            "format": "email",
+                            "description": "Email address of the user",
+                        },
+                        "business_name": {
+                            "type": "string",
+                            "description": "Name of the business",
+                        },
+                        "primary_category": {
+                            "type": "string",
+                            "description": "Primary business category (e.g., 'Coffee shop')",
+                        },
+                        "address_line1": {
+                            "type": "string",
+                            "description": "Street address line 1",
+                        },
+                        "address_line2": {
+                            "type": "string",
+                            "description": "Street address line 2 (optional)",
+                        },
+                        "city": {
+                            "type": "string",
+                            "description": "City name",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "State/province code (e.g., 'CA')",
+                        },
+                        "postal_code": {
+                            "type": "string",
+                            "description": "Postal/ZIP code",
+                        },
+                        "country": {
+                            "type": "string",
+                            "description": "Country code (e.g., 'US')",
+                            "default": "US",
+                        },
+                        "phone_number": {
+                            "type": "string",
+                            "description": "Business phone number",
+                        },
+                        "website_url": {
+                            "type": "string",
+                            "format": "uri",
+                            "description": "Business website URL",
+                        },
+                    },
+                    "required": [
+                        "user_email",
+                        "business_name",
+                        "address_line1",
+                        "city",
+                    ],
+                    "additionalProperties": False,
+                },
+            ),
+            Tool(
+                name="gbp_delete_location",
+                description="""Delete a business location from Google Business Profile.
+
+Removes a location from the user's GBP account. This action cannot be undone.
+
+Returns:
+    {
+        "success": true,
+        "message": "Location 'My Coffee Shop' deleted"
+    }
+
+Errors:
+- "Location not found" - The specified location doesn't exist
+- "Cannot delete verified location" - Some restrictions may apply
+
+Example:
+    {"user_email": "user@example.com", "location_id": "locations/abc123"}""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_email": {
+                            "type": "string",
+                            "format": "email",
+                            "description": "Email address of the user",
+                        },
+                        "location_id": {
+                            "type": "string",
+                            "description": "Location ID to delete (e.g., 'locations/abc123')",
+                        },
+                    },
+                    "required": ["user_email", "location_id"],
+                    "additionalProperties": False,
+                },
+            ),
+            Tool(
+                name="gbp_search_categories",
+                description="""Search for Google Business Profile categories.
+
+Searches available business categories for creating or updating locations.
+Returns matching categories with their display names.
+
+Returns:
+    {
+        "categories": [
+            {"name": "categories/gcid:coffee_shop", "displayName": "Coffee shop"},
+            {"name": "categories/gcid:cafe", "displayName": "Cafe"}
+        ],
+        "count": 2
+    }
+
+Example:
+    {"query": "coffee"}""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query for categories (optional, returns all if empty)",
+                        },
+                    },
+                    "required": [],
                     "additionalProperties": False,
                 },
             ),
@@ -1596,6 +2012,277 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
             "state": state_token,
             "instructions": f"Redirect the user to the authorization URL to connect their {platform.title()} account.",
         }
+
+    # Google Business Profile Tools
+    elif name == "gbp_get_status":
+        user = get_user(arguments["user_email"])
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(company__users=user)
+            location_count = GoogleBusinessLocation.objects.filter(
+                profile=profile
+            ).count()
+            return {
+                "connected": profile.status == "connected",
+                "profile": {
+                    "id": profile.id,
+                    "google_email": profile.google_email,
+                    "gbp_account_id": profile.gbp_account_id,
+                    "gbp_account_name": profile.gbp_account_name,
+                    "status": profile.status,
+                    "is_mock": profile.is_mock,
+                    "is_token_valid": profile.is_token_valid,
+                    "location_count": location_count,
+                },
+            }
+        except GoogleBusinessProfile.DoesNotExist:
+            return {"connected": False, "profile": None}
+
+    elif name == "gbp_connect":
+        user = get_user(arguments["user_email"])
+        import uuid
+
+        state = str(uuid.uuid4())
+        auth_url = google_business_service.get_authorization_url(state)
+
+        return {
+            "authorization_url": auth_url,
+            "is_mock_mode": google_business_service.is_mock_mode,
+            "state": state,
+            "instructions": (
+                "Redirect the user to the authorization URL to connect their Google account. "
+                "In mock mode, use gbp_test_connect for instant testing."
+            ),
+        }
+
+    elif name == "gbp_test_connect":
+        user = get_user(arguments["user_email"])
+
+        # Get or create company for user
+        from onboarding.models import Company
+
+        company = Company.objects.filter(users=user).first()
+        if not company:
+            raise ValueError("User has no company. Create a company first.")
+
+        # Create or update mock profile
+        profile, created = GoogleBusinessProfile.objects.update_or_create(
+            company=company,
+            defaults={
+                "google_account_id": "mock_google_account_123",
+                "google_account_name": "Test Account",
+                "google_email": f"test_{user.email}",
+                "status": "connected",
+                "is_mock": True,
+            },
+        )
+
+        # Set mock tokens
+        profile.set_access_token(google_business_service.MOCK_ACCESS_TOKEN)
+        profile.set_refresh_token(google_business_service.MOCK_REFRESH_TOKEN)
+        profile.save()
+
+        return {
+            "success": True,
+            "message": "Test connection created (mock mode)",
+            "profile": {
+                "id": profile.id,
+                "status": profile.status,
+                "is_mock": profile.is_mock,
+                "google_email": profile.google_email,
+            },
+        }
+
+    elif name == "gbp_disconnect":
+        user = get_user(arguments["user_email"])
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(company__users=user)
+            profile.disconnect()
+            return {
+                "success": True,
+                "message": "Google Business Profile disconnected",
+            }
+        except GoogleBusinessProfile.DoesNotExist:
+            return {"success": False, "error": "No Google Business Profile found"}
+
+    elif name == "gbp_list_accounts":
+        user = get_user(arguments["user_email"])
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(company__users=user)
+        except GoogleBusinessProfile.DoesNotExist:
+            raise ValueError("No Google Business Profile found. Connect GBP first.")
+
+        if profile.status != "connected":
+            raise ValueError("GBP connection not active. Please reconnect.")
+
+        access_token = profile.get_access_token()
+        accounts = google_business_service.list_accounts(access_token)
+
+        return {"accounts": accounts, "count": len(accounts)}
+
+    elif name == "gbp_select_account":
+        user = get_user(arguments["user_email"])
+        account_id = arguments["account_id"]
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(company__users=user)
+        except GoogleBusinessProfile.DoesNotExist:
+            raise ValueError("No Google Business Profile found. Connect GBP first.")
+
+        # Get account details from the account list
+        access_token = profile.get_access_token()
+        accounts = google_business_service.list_accounts(access_token)
+
+        selected_account = None
+        for account in accounts:
+            if account.get("name") == account_id:
+                selected_account = account
+                break
+
+        if not selected_account:
+            raise ValueError(f"Account {account_id} not found")
+
+        # Update profile with selected account
+        profile.gbp_account_id = account_id
+        profile.gbp_account_name = selected_account.get("accountName", "")
+        profile.save()
+
+        return {
+            "success": True,
+            "message": "Account selected",
+            "account_id": account_id,
+            "account_name": profile.gbp_account_name,
+        }
+
+    elif name == "gbp_list_locations":
+        user = get_user(arguments["user_email"])
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(company__users=user)
+        except GoogleBusinessProfile.DoesNotExist:
+            raise ValueError("No Google Business Profile found. Connect GBP first.")
+
+        if not profile.gbp_account_id:
+            raise ValueError("No GBP account selected. Use gbp_select_account first.")
+
+        locations = GoogleBusinessLocation.objects.filter(profile=profile)
+        location_list = []
+
+        for loc in locations:
+            location_list.append(
+                {
+                    "id": loc.id,
+                    "location_id": loc.location_id,
+                    "business_name": loc.business_name,
+                    "primary_category": loc.primary_category,
+                    "full_address": loc.full_address,
+                    "phone_number": loc.phone_number,
+                    "website_url": loc.website_url,
+                    "verification_status": loc.verification_status,
+                    "is_synced": loc.is_synced,
+                }
+            )
+
+        return {"locations": location_list, "count": len(location_list)}
+
+    elif name == "gbp_create_location":
+        user = get_user(arguments["user_email"])
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(company__users=user)
+        except GoogleBusinessProfile.DoesNotExist:
+            raise ValueError("No Google Business Profile found. Connect GBP first.")
+
+        if not profile.gbp_account_id:
+            raise ValueError("No GBP account selected. Use gbp_select_account first.")
+
+        # Prepare location data
+        location_data = {
+            "business_name": arguments["business_name"],
+            "primary_category": arguments.get("primary_category", ""),
+            "address_line1": arguments["address_line1"],
+            "address_line2": arguments.get("address_line2", ""),
+            "city": arguments["city"],
+            "state": arguments.get("state", ""),
+            "postal_code": arguments.get("postal_code", ""),
+            "country": arguments.get("country", "US"),
+            "phone_number": arguments.get("phone_number", ""),
+            "website_url": arguments.get("website_url", ""),
+        }
+
+        # Create via service (handles mock/real mode)
+        access_token = profile.get_access_token()
+        api_result = google_business_service.create_location(
+            access_token, profile.gbp_account_id, location_data
+        )
+
+        # Save to database
+        location = GoogleBusinessLocation.objects.create(
+            profile=profile,
+            location_id=api_result.get(
+                "name", f"locations/mock_{timezone.now().timestamp()}"
+            ),
+            business_name=location_data["business_name"],
+            primary_category=location_data["primary_category"],
+            address_line1=location_data["address_line1"],
+            address_line2=location_data["address_line2"],
+            city=location_data["city"],
+            state=location_data["state"],
+            postal_code=location_data["postal_code"],
+            country=location_data["country"],
+            phone_number=location_data["phone_number"],
+            website_url=location_data["website_url"],
+            verification_status="unverified",
+            is_synced=not profile.is_mock,
+        )
+
+        return {
+            "success": True,
+            "location": {
+                "id": location.id,
+                "location_id": location.location_id,
+                "business_name": location.business_name,
+                "full_address": location.full_address,
+                "verification_status": location.verification_status,
+            },
+        }
+
+    elif name == "gbp_delete_location":
+        user = get_user(arguments["user_email"])
+        location_id = arguments["location_id"]
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(company__users=user)
+        except GoogleBusinessProfile.DoesNotExist:
+            raise ValueError("No Google Business Profile found")
+
+        try:
+            location = GoogleBusinessLocation.objects.get(
+                profile=profile, location_id=location_id
+            )
+            business_name = location.business_name
+
+            # Delete via service if not mock
+            if not profile.is_mock:
+                access_token = profile.get_access_token()
+                google_business_service.delete_location(access_token, location_id)
+
+            location.delete()
+
+            return {
+                "success": True,
+                "message": f"Location '{business_name}' deleted",
+            }
+        except GoogleBusinessLocation.DoesNotExist:
+            raise ValueError(f"Location {location_id} not found")
+
+    elif name == "gbp_search_categories":
+        query = arguments.get("query", "")
+        categories = google_business_service.list_categories(query=query)
+
+        return {"categories": categories, "count": len(categories)}
 
     else:
         raise ValueError(f"Unknown tool: {name}")
