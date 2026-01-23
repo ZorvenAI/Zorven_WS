@@ -97,10 +97,11 @@ Examples:
         asyncio.run(run_mcp_server())
 
     elif args.transport == "sse":
-        from automation.mcp_server import create_mcp_server
+        from automation.mcp_server import create_mcp_server, SERVER_NAME, SERVER_VERSION
         from mcp.server.sse import SseServerTransport
         from starlette.applications import Starlette
         from starlette.routing import Route
+        from starlette.responses import JSONResponse
         import uvicorn
 
         server = create_mcp_server()
@@ -117,15 +118,28 @@ Examples:
         async def handle_messages(request):
             await sse.handle_post_message(request.scope, request.receive, request._send)
 
+        async def health_check(request):
+            """Health check endpoint for Docker/Kubernetes."""
+            return JSONResponse(
+                {
+                    "status": "healthy",
+                    "service": SERVER_NAME,
+                    "version": SERVER_VERSION,
+                    "transport": "sse",
+                }
+            )
+
         app = Starlette(
             debug=args.debug,
             routes=[
                 Route("/sse", endpoint=handle_sse),
                 Route("/messages", endpoint=handle_messages, methods=["POST"]),
+                Route("/health", endpoint=health_check, methods=["GET"]),
             ],
         )
 
         logger.info(f"SSE server listening on http://{args.host}:{args.port}")
+        logger.info(f"Health check available at http://{args.host}:{args.port}/health")
         uvicorn.run(app, host=args.host, port=args.port)
 
 

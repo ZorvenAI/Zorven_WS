@@ -554,6 +554,45 @@ curl -X POST http://localhost:8001/sse \
 | [test_mcp_server.py](ai-brand-automator/test_mcp_server.py) | Comprehensive test suite for MCP server |
 | [run_mcp_server.py](ai-brand-automator/run_mcp_server.py) | Standalone runner for manual testing |
 
+### Docker Deployment
+
+The MCP server can be deployed via Docker using SSE transport for web clients and AI agents:
+
+```bash
+# Start MCP server alongside other services
+docker-compose up mcp-server
+
+# Or start all services including MCP
+docker-compose up -d
+
+# Check MCP server health
+curl http://localhost:8001/health
+```
+
+**Docker Compose Service Configuration:**
+```yaml
+mcp-server:
+  build:
+    context: .
+    dockerfile: Dockerfile
+  command: python run_mcp_server.py --transport sse --host 0.0.0.0 --port 8001
+  ports:
+    - "8001:8001"
+  environment:
+    - DATABASE_URL=postgresql://postgres:postgres@db:5432/brand_automator
+    - REDIS_URL=redis://redis:6379/0
+    - DJANGO_SETTINGS_MODULE=brand_automator.settings
+```
+
+**Endpoints:**
+| Endpoint | Description |
+|----------|-------------|
+| `http://localhost:8001/sse` | SSE connection endpoint for MCP clients |
+| `http://localhost:8001/messages` | Message POST endpoint |
+| `http://localhost:8001/health` | Health check for Docker/Kubernetes |
+
+**Note:** For Claude Desktop or VS Code, use **stdio transport** (runs locally, not in Docker). Docker deployment is for **SSE transport** only (web clients, remote access).
+
 ---
 
 ## Key Technical Decisions
@@ -729,6 +768,43 @@ jobs:
       - uses: railwayapp/railway-github-link@v1
         with:
           token: ${{ secrets.RAILWAY_TOKEN }}
+```
+
+### 5.7 Required GitHub Secrets
+
+Configure these secrets in your GitHub repository settings for CI/CD:
+
+| Secret | Description | Required |
+|--------|-------------|----------|
+| `RAILWAY_TOKEN` | Railway API token for deployments | Yes |
+| `RAILWAY_BACKEND_SERVICE` | Backend service ID in Railway | Yes |
+| `RAILWAY_BACKEND_URL` | Backend URL for health checks | Yes |
+| `RAILWAY_FRONTEND_SERVICE` | Frontend service ID in Railway | Yes |
+| `RAILWAY_FRONTEND_URL` | Frontend URL for health checks | Yes |
+| `RAILWAY_CELERY_WORKER_SERVICE` | Celery worker service ID | Optional |
+| `RAILWAY_CELERY_BEAT_SERVICE` | Celery beat service ID | Optional |
+| `RAILWAY_MCP_SERVER_SERVICE` | MCP server service ID | Optional |
+| `RAILWAY_MCP_SERVER_URL` | MCP server URL (e.g., `https://mcp.yourdomain.com`) | Optional |
+
+**MCP Server Environment Variables (Railway):**
+```bash
+# Required
+DJANGO_SETTINGS_MODULE=brand_automator.settings
+SECRET_KEY=<django-secret>
+DATABASE_URL=<neon-connection-string>
+
+# MCP Transport Configuration
+MCP_PORT=8001
+MCP_HOST=0.0.0.0
+MCP_TRANSPORT=sse
+
+# Optional - Social Platform OAuth
+LINKEDIN_CLIENT_ID=<linkedin-client-id>
+LINKEDIN_CLIENT_SECRET=<linkedin-client-secret>
+TWITTER_CLIENT_ID=<twitter-client-id>
+TWITTER_CLIENT_SECRET=<twitter-client-secret>
+FACEBOOK_APP_ID=<facebook-app-id>
+FACEBOOK_APP_SECRET=<facebook-app-secret>
 ```
 
 ---

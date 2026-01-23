@@ -69,6 +69,21 @@ jobs:
           python manage.py migrate_schemas --shared --noinput
           pytest --cov=. --cov-report=xml --cov-report=html
       
+      - name: Test MCP Server
+        env:
+          SECRET_KEY: test-secret-key-for-ci
+          DB_NAME: test_db
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_SSLMODE: disable
+          DB_CHANNEL_BINDING: disable
+          DEBUG: True
+        run: |
+          cd ai-brand-automator
+          python test_mcp_server.py --verbose
+      
       - name: Upload coverage
         uses: codecov/codecov-action@v3
         with:
@@ -141,3 +156,8 @@ jobs:
         run: |
           cd ai-brand-automator-frontend
           docker build -t ai-brand-automator-frontend:${{ github.sha }} .
+      
+      - name: Build MCP server image
+        run: |
+          cd ai-brand-automator
+          docker build -f Dockerfile.mcp -t ai-brand-automator-mcp:${{ github.sha }} .
