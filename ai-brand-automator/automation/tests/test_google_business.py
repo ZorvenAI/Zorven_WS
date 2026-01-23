@@ -825,16 +825,21 @@ class TestGoogleBusinessCategoriesAPI:
 # =============================================================================
 
 
+def no_null_chars(s):
+    """Filter to exclude NUL characters which PostgreSQL doesn't allow."""
+    return s.strip() and "\x00" not in s
+
+
 @pytest.mark.django_db(transaction=True)
 class TestGoogleBusinessPropertyTests:
     """Property-based tests using Hypothesis."""
 
     @given(
-        address_line1=st.text(min_size=1, max_size=100).filter(lambda x: x.strip()),
-        city=st.text(min_size=1, max_size=50).filter(lambda x: x.strip()),
-        state=st.text(min_size=1, max_size=20).filter(lambda x: x.strip()),
-        postal_code=st.text(min_size=1, max_size=10).filter(lambda x: x.strip()),
-        country=st.text(min_size=2, max_size=2).filter(lambda x: x.strip()),
+        address_line1=st.text(min_size=1, max_size=100).filter(no_null_chars),
+        city=st.text(min_size=1, max_size=50).filter(no_null_chars),
+        state=st.text(min_size=1, max_size=20).filter(no_null_chars),
+        postal_code=st.text(min_size=1, max_size=10).filter(no_null_chars),
+        country=st.text(min_size=2, max_size=2).filter(no_null_chars),
     )
     @hypothesis_settings(
         max_examples=20, suppress_health_check=[HealthCheck.function_scoped_fixture]
@@ -885,8 +890,8 @@ class TestGoogleBusinessPropertyTests:
         profile.delete()
 
     @given(
-        business_name=st.text(min_size=1, max_size=255).filter(lambda x: x.strip()),
-        category=st.text(min_size=1, max_size=255).filter(lambda x: x.strip()),
+        business_name=st.text(min_size=1, max_size=255).filter(no_null_chars),
+        category=st.text(min_size=1, max_size=255).filter(no_null_chars),
     )
     @hypothesis_settings(max_examples=10)
     def test_location_create_serializer_requires_address(self, business_name, category):
