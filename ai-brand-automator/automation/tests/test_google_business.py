@@ -1,6 +1,7 @@
 """Tests for Google Business Profile integration."""
 
 import pytest
+import uuid
 from datetime import timedelta
 from django.utils import timezone
 from django.contrib.auth import get_user_model
@@ -824,6 +825,7 @@ class TestGoogleBusinessCategoriesAPI:
 # =============================================================================
 
 
+@pytest.mark.django_db(transaction=True)
 class TestGoogleBusinessPropertyTests:
     """Property-based tests using Hypothesis."""
 
@@ -843,7 +845,7 @@ class TestGoogleBusinessPropertyTests:
         """Test that full_address property always returns non-empty string."""
         location = GoogleBusinessLocation.objects.create(
             profile=gbp_profile,
-            location_id=f"locations/{hash(address_line1)}",
+            location_id=f"locations/{uuid.uuid4()}",
             business_name="Test",
             address_line1=address_line1,
             city=city,
@@ -869,8 +871,8 @@ class TestGoogleBusinessPropertyTests:
 
         profile = GoogleBusinessProfile.objects.create(
             user=user,
-            google_account_id=f"accounts/{hash(hours_offset)}",
-            google_email=f"test{hours_offset}@example.com",
+            google_account_id=f"accounts/{uuid.uuid4()}",
+            google_email=f"test-{uuid.uuid4()}@example.com",
             token_expires_at=expiry_time,
         )
 
@@ -910,8 +912,8 @@ class TestGoogleBusinessPropertyTests:
         """Test that calling disconnect multiple times is safe."""
         profile = GoogleBusinessProfile.objects.create(
             user=user,
-            google_account_id=f"accounts/{times}",
-            google_email="test@example.com",
+            google_account_id=f"accounts/{uuid.uuid4()}",
+            google_email=f"test-{uuid.uuid4()}@example.com",
             status="connected",
             _access_token="token",
             _refresh_token="refresh",
