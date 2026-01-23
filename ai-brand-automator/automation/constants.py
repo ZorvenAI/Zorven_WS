@@ -1,6 +1,7 @@
 """
 Constants for the automation app.
 """
+
 from typing import List
 
 # Test mode constants - used for development without real credentials

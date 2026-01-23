@@ -1,6 +1,7 @@
 """
 URL configuration for the automation app.
 """
+
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
@@ -72,6 +73,17 @@ from .views import (
     InstagramCommentsView,
     InstagramWebhookView,
     InstagramWebhookEventsView,
+    # Google Business Profile views
+    GoogleBusinessConnectView,
+    GoogleBusinessCallbackView,
+    GoogleBusinessDisconnectView,
+    GoogleBusinessTestConnectView,
+    GoogleBusinessStatusView,
+    GoogleBusinessAccountsView,
+    GoogleBusinessSelectAccountView,
+    GoogleBusinessLocationsView,
+    GoogleBusinessLocationDetailView,
+    GoogleBusinessCategoriesView,
 )
 
 router = DefaultRouter()
@@ -399,6 +411,63 @@ urlpatterns = [
         "instagram/webhooks/events/",
         InstagramWebhookEventsView.as_view(),
         name="instagram-webhook-events",
+    ),
+    # =========================================================================
+    # Google Business Profile
+    # =========================================================================
+    # OAuth
+    path(
+        "google-business/connect/",
+        GoogleBusinessConnectView.as_view(),
+        name="google-business-connect",
+    ),
+    path(
+        "google-business/callback/",
+        GoogleBusinessCallbackView.as_view(),
+        name="google-business-callback",
+    ),
+    path(
+        "google-business/disconnect/",
+        GoogleBusinessDisconnectView.as_view(),
+        name="google-business-disconnect",
+    ),
+    path(
+        "google-business/test-connect/",
+        GoogleBusinessTestConnectView.as_view(),
+        name="google-business-test-connect",
+    ),
+    path(
+        "google-business/status/",
+        GoogleBusinessStatusView.as_view(),
+        name="google-business-status",
+    ),
+    # Accounts
+    path(
+        "google-business/accounts/",
+        GoogleBusinessAccountsView.as_view(),
+        name="google-business-accounts",
+    ),
+    path(
+        "google-business/accounts/<str:account_id>/select/",
+        GoogleBusinessSelectAccountView.as_view(),
+        name="google-business-select-account",
+    ),
+    # Locations
+    path(
+        "google-business/locations/",
+        GoogleBusinessLocationsView.as_view(),
+        name="google-business-locations",
+    ),
+    path(
+        "google-business/locations/<int:location_id>/",
+        GoogleBusinessLocationDetailView.as_view(),
+        name="google-business-location-detail",
+    ),
+    # Categories
+    path(
+        "google-business/categories/",
+        GoogleBusinessCategoriesView.as_view(),
+        name="google-business-categories",
     ),
     # Router URLs
     path("", include(router.urls)),

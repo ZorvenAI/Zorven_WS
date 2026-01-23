@@ -1,6 +1,7 @@
 """
 LinkedIn OAuth and API service.
 """
+
 import requests
 import logging
 from typing import Optional, List
@@ -1084,13 +1085,18 @@ class LinkedInService:
                 "total_posts": len(posts),
                 "total_likes": total_likes,
                 "total_comments": total_comments,
-                "engagement_rate": round(
-                    ((total_likes + total_comments) / max(len(posts_with_metrics), 1))
-                    * 100,
-                    2,
-                )
-                if posts_with_metrics
-                else 0,
+                "engagement_rate": (
+                    round(
+                        (
+                            (total_likes + total_comments)
+                            / max(len(posts_with_metrics), 1)
+                        )
+                        * 100,
+                        2,
+                    )
+                    if posts_with_metrics
+                    else 0
+                ),
             },
         }
 
@@ -2225,9 +2231,11 @@ class FacebookService:
                 "url": url,
                 "title": data.get("og_object", {}).get("title", ""),
                 "description": data.get("og_object", {}).get("description", ""),
-                "image": data.get("og_object", {}).get("image", [{}])[0].get("url")
-                if isinstance(data.get("og_object", {}).get("image"), list)
-                else data.get("og_object", {}).get("image", {}).get("url"),
+                "image": (
+                    data.get("og_object", {}).get("image", [{}])[0].get("url")
+                    if isinstance(data.get("og_object", {}).get("image"), list)
+                    else data.get("og_object", {}).get("image", {}).get("url")
+                ),
                 "site_name": data.get("og_object", {}).get("site_name", ""),
                 "type": data.get("og_object", {}).get("type", "website"),
                 "id": data.get("id"),
@@ -4286,3 +4294,614 @@ class InstagramService:
 
 # Singleton instance
 instagram_service = InstagramService()
+
+
+class GoogleBusinessService:
+    """
+    Service for Google Business Profile API integration.
+
+    Supports dual-mode operation:
+    - Mock Mode: Works without API credentials (for development/testing)
+    - Real Mode: Uses actual GBP APIs (requires approved credentials)
+
+    APIs Used (Real Mode):
+    - Account Management API: List/manage GBP accounts
+    - Business Information API: Create/update locations
+
+    Docs: https://developers.google.com/my-business/content/overview
+    """
+
+    AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+    TOKEN_URL = "https://oauth2.googleapis.com/token"
+    USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
+
+    # GBP API endpoints
+    ACCOUNT_MANAGEMENT_URL = "https://mybusinessaccountmanagement.googleapis.com/v1"
+    BUSINESS_INFO_URL = "https://mybusinessbusinessinformation.googleapis.com/v1"
+
+    # OAuth scopes for GBP
+    SCOPES = [
+        "openid",
+        "email",
+        "profile",
+        "https://www.googleapis.com/auth/business.manage",  # Full GBP access
+    ]
+
+    # Mock data constants
+    MOCK_ACCESS_TOKEN = "gbp_mock_access_token_12345"
+    MOCK_REFRESH_TOKEN = "gbp_mock_refresh_token_67890"
+
+    def __init__(self):
+        self.client_id = getattr(settings, "GOOGLE_BUSINESS_CLIENT_ID", None)
+        self.client_secret = getattr(settings, "GOOGLE_BUSINESS_CLIENT_SECRET", None)
+        self.redirect_uri = getattr(
+            settings,
+            "GOOGLE_BUSINESS_REDIRECT_URI",
+            "http://localhost:8000/api/v1/automation/google-business/callback/",
+        )
+
+    @property
+    def is_configured(self) -> bool:
+        """Check if real GBP API credentials are configured."""
+        return bool(self.client_id and self.client_secret)
+
+    @property
+    def is_mock_mode(self) -> bool:
+        """Check if running in mock mode."""
+        return not self.is_configured
+
+    # ============= MOCK DATA GENERATORS =============
+
+    def _get_mock_accounts(self) -> List[dict]:
+        """Return mock GBP accounts for testing."""
+        return [
+            {
+                "name": "accounts/123456789",
+                "accountName": "My Business Account",
+                "type": "PERSONAL",
+                "role": "PRIMARY_OWNER",
+                "state": {"status": "VERIFIED"},
+            },
+            {
+                "name": "accounts/987654321",
+                "accountName": "Secondary Business",
+                "type": "LOCATION_GROUP",
+                "role": "OWNER",
+                "state": {"status": "VERIFIED"},
+            },
+        ]
+
+    def _get_mock_locations(self, account_id: str) -> List[dict]:
+        """Return mock locations for testing."""
+        # Extract numeric ID from account_id like "accounts/123456789"
+        numeric_id = account_id.split("/")[-1] if "/" in account_id else account_id
+        return [
+            {
+                "name": f"locations/loc_{numeric_id}_001",
+                "title": "Downtown Coffee Shop",
+                "storefrontAddress": {
+                    "addressLines": ["123 Main Street"],
+                    "locality": "San Francisco",
+                    "administrativeArea": "CA",
+                    "postalCode": "94102",
+                    "regionCode": "US",
+                },
+                "primaryPhone": "+1-415-555-0100",
+                "websiteUri": "https://example.com",
+                "primaryCategory": {
+                    "name": "categories/gcid:coffee_shop",
+                    "displayName": "Coffee shop",
+                },
+                "metadata": {
+                    "hasGoogleUpdated": False,
+                    "canOperateLodgingData": False,
+                },
+            },
+            {
+                "name": f"locations/loc_{numeric_id}_002",
+                "title": "Uptown Bakery",
+                "storefrontAddress": {
+                    "addressLines": ["456 Oak Avenue", "Suite 100"],
+                    "locality": "San Francisco",
+                    "administrativeArea": "CA",
+                    "postalCode": "94108",
+                    "regionCode": "US",
+                },
+                "primaryPhone": "+1-415-555-0200",
+                "websiteUri": "https://bakery.example.com",
+                "primaryCategory": {
+                    "name": "categories/gcid:bakery",
+                    "displayName": "Bakery",
+                },
+                "metadata": {
+                    "hasGoogleUpdated": False,
+                    "canOperateLodgingData": False,
+                },
+            },
+        ]
+
+    def _get_mock_categories(self, query: str = "") -> List[dict]:
+        """Return mock business categories for testing."""
+        categories = [
+            {"name": "categories/gcid:restaurant", "displayName": "Restaurant"},
+            {"name": "categories/gcid:coffee_shop", "displayName": "Coffee shop"},
+            {"name": "categories/gcid:bakery", "displayName": "Bakery"},
+            {"name": "categories/gcid:bar", "displayName": "Bar"},
+            {"name": "categories/gcid:cafe", "displayName": "Cafe"},
+            {
+                "name": "categories/gcid:pizza_restaurant",
+                "displayName": "Pizza restaurant",
+            },
+            {
+                "name": "categories/gcid:fast_food_restaurant",
+                "displayName": "Fast food restaurant",
+            },
+            {"name": "categories/gcid:hair_salon", "displayName": "Hair salon"},
+            {"name": "categories/gcid:spa", "displayName": "Spa"},
+            {"name": "categories/gcid:gym", "displayName": "Gym"},
+            {"name": "categories/gcid:dentist", "displayName": "Dentist"},
+            {"name": "categories/gcid:doctor", "displayName": "Doctor"},
+            {"name": "categories/gcid:lawyer", "displayName": "Lawyer"},
+            {"name": "categories/gcid:accountant", "displayName": "Accountant"},
+            {
+                "name": "categories/gcid:real_estate_agency",
+                "displayName": "Real estate agency",
+            },
+            {
+                "name": "categories/gcid:software_company",
+                "displayName": "Software company",
+            },
+            {
+                "name": "categories/gcid:marketing_agency",
+                "displayName": "Marketing agency",
+            },
+            {
+                "name": "categories/gcid:consulting_firm",
+                "displayName": "Consulting firm",
+            },
+        ]
+        if query:
+            query_lower = query.lower()
+            return [c for c in categories if query_lower in c["displayName"].lower()]
+        return categories
+
+    def _get_mock_user_info(self) -> dict:
+        """Return mock Google user info for testing."""
+        return {
+            "sub": "mock_google_user_id_12345",
+            "name": "Test User",
+            "given_name": "Test",
+            "family_name": "User",
+            "email": "testuser@gmail.com",
+            "email_verified": True,
+            "picture": "https://example.com/photo.jpg",
+        }
+
+    # ============= OAUTH METHODS =============
+
+    def get_authorization_url(self, state: str) -> str:
+        """Generate OAuth authorization URL."""
+        if self.is_mock_mode:
+            # Return a mock URL that frontend can detect
+            frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
+            return f"{frontend_url}/automation?" f"mock_gbp_auth=true&state={state}"
+
+        params = {
+            "response_type": "code",
+            "client_id": self.client_id,
+            "redirect_uri": self.redirect_uri,
+            "state": state,
+            "scope": " ".join(self.SCOPES),
+            "access_type": "offline",  # Get refresh token
+            "prompt": "consent",  # Force consent to get refresh token
+        }
+        return f"{self.AUTHORIZATION_URL}?{urlencode(params)}"
+
+    def exchange_code_for_token(self, code: str) -> dict:
+        """Exchange authorization code for tokens."""
+        if self.is_mock_mode or code == "mock_code":
+            return self._mock_exchange_code_for_token(code)
+        return self._real_exchange_code_for_token(code)
+
+    def _mock_exchange_code_for_token(self, code: str) -> dict:
+        """Mock token exchange for testing."""
+        return {
+            "access_token": self.MOCK_ACCESS_TOKEN,
+            "refresh_token": self.MOCK_REFRESH_TOKEN,
+            "expires_in": 3600,
+            "expires_at": timezone.now() + timedelta(hours=1),
+            "token_type": "Bearer",
+            "scope": " ".join(self.SCOPES),
+        }
+
+    def _real_exchange_code_for_token(self, code: str) -> dict:
+        """Real token exchange with Google OAuth."""
+        if not self.is_configured:
+            raise ValueError("Google Business credentials not configured")
+
+        data = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": self.redirect_uri,
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+        }
+
+        try:
+            response = requests.post(
+                self.TOKEN_URL,
+                data=data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=30,
+            )
+            response.raise_for_status()
+            token_data = response.json()
+
+            # Calculate expiration time
+            expires_in = token_data.get("expires_in", 3600)
+            token_data["expires_at"] = timezone.now() + timedelta(seconds=expires_in)
+
+            return token_data
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Google OAuth token exchange failed: {e}")
+            raise ValueError(f"Failed to exchange code for token: {str(e)}")
+
+    def refresh_access_token(self, refresh_token: str) -> dict:
+        """Refresh expired access token."""
+        if self.is_mock_mode or refresh_token == self.MOCK_REFRESH_TOKEN:
+            return self._mock_exchange_code_for_token("refresh")
+
+        if not self.is_configured:
+            raise ValueError("Google Business credentials not configured")
+
+        data = {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+        }
+
+        try:
+            response = requests.post(
+                self.TOKEN_URL,
+                data=data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=30,
+            )
+            response.raise_for_status()
+            token_data = response.json()
+
+            expires_in = token_data.get("expires_in", 3600)
+            token_data["expires_at"] = timezone.now() + timedelta(seconds=expires_in)
+
+            return token_data
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Google OAuth token refresh failed: {e}")
+            raise ValueError(f"Failed to refresh token: {str(e)}")
+
+    def get_user_info(self, access_token: str) -> dict:
+        """Get Google user profile info."""
+        if self.is_mock_mode or access_token == self.MOCK_ACCESS_TOKEN:
+            return self._get_mock_user_info()
+
+        try:
+            response = requests.get(
+                self.USERINFO_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to get Google user info: {e}")
+            raise ValueError(f"Failed to get user info: {str(e)}")
+
+    # ============= ACCOUNT METHODS =============
+
+    def list_accounts(self, access_token: str) -> List[dict]:
+        """List GBP accounts the user has access to."""
+        if self.is_mock_mode or access_token == self.MOCK_ACCESS_TOKEN:
+            return self._get_mock_accounts()
+        return self._real_list_accounts(access_token)
+
+    def _real_list_accounts(self, access_token: str) -> List[dict]:
+        """Real API call to list accounts."""
+        try:
+            response = requests.get(
+                f"{self.ACCOUNT_MANAGEMENT_URL}/accounts",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("accounts", [])
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to list GBP accounts: {e}")
+            raise ValueError(f"Failed to list accounts: {str(e)}")
+
+    # ============= LOCATION METHODS =============
+
+    def list_locations(self, access_token: str, account_id: str) -> List[dict]:
+        """List locations for a GBP account."""
+        if self.is_mock_mode or access_token == self.MOCK_ACCESS_TOKEN:
+            return self._get_mock_locations(account_id)
+        return self._real_list_locations(access_token, account_id)
+
+    def _real_list_locations(self, access_token: str, account_id: str) -> List[dict]:
+        """Real API call to list locations."""
+        # Ensure account_id is in the correct format
+        if not account_id.startswith("accounts/"):
+            account_id = f"accounts/{account_id}"
+
+        try:
+            response = requests.get(
+                f"{self.BUSINESS_INFO_URL}/{account_id}/locations",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={
+                    "readMask": (
+                        "name,title,storefrontAddress,"
+                        "primaryPhone,websiteUri,primaryCategory"
+                    )
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("locations", [])
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to list GBP locations: {e}")
+            raise ValueError(f"Failed to list locations: {str(e)}")
+
+    def get_location(self, access_token: str, location_id: str) -> dict:
+        """Get a specific location's details."""
+        if self.is_mock_mode or access_token == self.MOCK_ACCESS_TOKEN:
+            # Return first mock location
+            locations = self._get_mock_locations("123456789")
+            for loc in locations:
+                if loc["name"] == location_id:
+                    return loc
+            return locations[0] if locations else {}
+        return self._real_get_location(access_token, location_id)
+
+    def _real_get_location(self, access_token: str, location_id: str) -> dict:
+        """Real API call to get location details."""
+        if not location_id.startswith("locations/"):
+            location_id = f"locations/{location_id}"
+
+        try:
+            response = requests.get(
+                f"{self.BUSINESS_INFO_URL}/{location_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={
+                    "readMask": (
+                        "name,title,storefrontAddress,primaryPhone,"
+                        "websiteUri,primaryCategory,regularHours"
+                    )
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to get GBP location: {e}")
+            raise ValueError(f"Failed to get location: {str(e)}")
+
+    def create_location(
+        self, access_token: str, account_id: str, location_data: dict
+    ) -> dict:
+        """Create a new business location."""
+        if self.is_mock_mode or access_token == self.MOCK_ACCESS_TOKEN:
+            return self._mock_create_location(account_id, location_data)
+        return self._real_create_location(access_token, account_id, location_data)
+
+    def _mock_create_location(self, account_id: str, location_data: dict) -> dict:
+        """Mock location creation for testing."""
+        import uuid
+
+        location_id = f"locations/mock_{uuid.uuid4().hex[:8]}"
+        return {
+            "name": location_id,
+            "title": location_data.get("business_name", "New Business"),
+            "storefrontAddress": {
+                "addressLines": [
+                    location_data.get("address_line1", ""),
+                    location_data.get("address_line2", ""),
+                ],
+                "locality": location_data.get("city", ""),
+                "administrativeArea": location_data.get("state", ""),
+                "postalCode": location_data.get("postal_code", ""),
+                "regionCode": location_data.get("country", "US"),
+            },
+            "primaryPhone": location_data.get("phone_number", ""),
+            "websiteUri": location_data.get("website_url", ""),
+            "primaryCategory": {
+                "name": location_data.get(
+                    "primary_category_id", "categories/gcid:business"
+                ),
+                "displayName": location_data.get("primary_category", "Business"),
+            },
+        }
+
+    def _real_create_location(
+        self, access_token: str, account_id: str, location_data: dict
+    ) -> dict:
+        """Real API call to create a location."""
+        if not account_id.startswith("accounts/"):
+            account_id = f"accounts/{account_id}"
+
+        # Build the location payload per GBP API spec
+        payload = {
+            "title": location_data.get("business_name"),
+            "storefrontAddress": {
+                "addressLines": [
+                    location_data.get("address_line1", ""),
+                ],
+                "locality": location_data.get("city", ""),
+                "administrativeArea": location_data.get("state", ""),
+                "postalCode": location_data.get("postal_code", ""),
+                "regionCode": location_data.get("country", "US"),
+            },
+        }
+
+        if location_data.get("address_line2"):
+            payload["storefrontAddress"]["addressLines"].append(
+                location_data["address_line2"]
+            )
+
+        if location_data.get("phone_number"):
+            payload["primaryPhone"] = location_data["phone_number"]
+
+        if location_data.get("website_url"):
+            payload["websiteUri"] = location_data["website_url"]
+
+        if location_data.get("primary_category_id"):
+            payload["primaryCategory"] = {"name": location_data["primary_category_id"]}
+
+        try:
+            response = requests.post(
+                f"{self.BUSINESS_INFO_URL}/{account_id}/locations",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to create GBP location: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                logger.error(f"Response: {e.response.text}")
+            raise ValueError(f"Failed to create location: {str(e)}")
+
+    def update_location(
+        self, access_token: str, location_id: str, update_data: dict
+    ) -> dict:
+        """Update an existing location."""
+        if self.is_mock_mode or access_token == self.MOCK_ACCESS_TOKEN:
+            return self._mock_create_location("mock_account", update_data)
+        return self._real_update_location(access_token, location_id, update_data)
+
+    def _real_update_location(
+        self, access_token: str, location_id: str, update_data: dict
+    ) -> dict:
+        """Real API call to update a location."""
+        if not location_id.startswith("locations/"):
+            location_id = f"locations/{location_id}"
+
+        # Build update mask based on what's being updated
+        update_mask_fields = []
+        payload = {}
+
+        if "business_name" in update_data:
+            payload["title"] = update_data["business_name"]
+            update_mask_fields.append("title")
+
+        if "phone_number" in update_data:
+            payload["primaryPhone"] = update_data["phone_number"]
+            update_mask_fields.append("primaryPhone")
+
+        if "website_url" in update_data:
+            payload["websiteUri"] = update_data["website_url"]
+            update_mask_fields.append("websiteUri")
+
+        # Handle address updates
+        address_fields = ["address_line1", "city", "state", "postal_code", "country"]
+        if any(f in update_data for f in address_fields):
+            payload["storefrontAddress"] = {
+                "addressLines": [update_data.get("address_line1", "")],
+                "locality": update_data.get("city", ""),
+                "administrativeArea": update_data.get("state", ""),
+                "postalCode": update_data.get("postal_code", ""),
+                "regionCode": update_data.get("country", "US"),
+            }
+            if update_data.get("address_line2"):
+                payload["storefrontAddress"]["addressLines"].append(
+                    update_data["address_line2"]
+                )
+            update_mask_fields.append("storefrontAddress")
+
+        try:
+            response = requests.patch(
+                f"{self.BUSINESS_INFO_URL}/{location_id}",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                params={"updateMask": ",".join(update_mask_fields)},
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to update GBP location: {e}")
+            raise ValueError(f"Failed to update location: {str(e)}")
+
+    def delete_location(self, access_token: str, location_id: str) -> bool:
+        """Delete a location."""
+        if self.is_mock_mode or access_token == self.MOCK_ACCESS_TOKEN:
+            logger.info(f"Mock: Deleted location {location_id}")
+            return True
+        return self._real_delete_location(access_token, location_id)
+
+    def _real_delete_location(self, access_token: str, location_id: str) -> bool:
+        """Real API call to delete a location."""
+        if not location_id.startswith("locations/"):
+            location_id = f"locations/{location_id}"
+
+        try:
+            response = requests.delete(
+                f"{self.BUSINESS_INFO_URL}/{location_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=30,
+            )
+            response.raise_for_status()
+            return True
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to delete GBP location: {e}")
+            raise ValueError(f"Failed to delete location: {str(e)}")
+
+    # ============= CATEGORY METHODS =============
+
+    def list_categories(
+        self,
+        region_code: str = "US",
+        language_code: str = "en",
+        query: str = "",
+    ) -> List[dict]:
+        """List available business categories."""
+        if self.is_mock_mode:
+            return self._get_mock_categories(query)
+        return self._real_list_categories(region_code, language_code, query)
+
+    def _real_list_categories(
+        self, region_code: str, language_code: str, query: str = ""
+    ) -> List[dict]:
+        """Real API call to list categories."""
+        params = {
+            "regionCode": region_code,
+            "languageCode": language_code,
+            "view": "FULL",
+        }
+        if query:
+            params["filter"] = f'displayName:"{query}"'
+
+        try:
+            response = requests.get(
+                f"{self.BUSINESS_INFO_URL}/categories",
+                params=params,
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("categories", [])
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to list GBP categories: {e}")
+            # Return mock categories as fallback
+            return self._get_mock_categories(query)
+
+
+# Singleton instance
+google_business_service = GoogleBusinessService()

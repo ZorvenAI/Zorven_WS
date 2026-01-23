@@ -1,6 +1,7 @@
 """
 Views for the automation app - social media integrations and content scheduling.
 """
+
 import uuid
 import logging
 from datetime import timedelta
@@ -693,9 +694,11 @@ class LinkedInCarouselPostView(APIView):
             post_title = (
                 title
                 if title
-                else f"[Carousel] {text[:40]}..."
-                if len(text) > 40
-                else f"[Carousel] {text}"
+                else (
+                    f"[Carousel] {text[:40]}..."
+                    if len(text) > 40
+                    else f"[Carousel] {text}"
+                )
             )
             ContentCalendar.objects.create(
                 user=request.user,
@@ -742,9 +745,11 @@ class LinkedInCarouselPostView(APIView):
             post_title = (
                 title
                 if title
-                else f"[Carousel] {text[:40]}..."
-                if len(text) > 40
-                else f"[Carousel] {text}"
+                else (
+                    f"[Carousel] {text[:40]}..."
+                    if len(text) > 40
+                    else f"[Carousel] {text}"
+                )
             )
             content = ContentCalendar.objects.create(
                 user=request.user,
@@ -865,9 +870,9 @@ class LinkedInMediaUploadView(APIView):
                         "asset_urn": test_asset_urn,
                         "media_type": media_type,
                         "test_mode": True,
-                        "status": "PROCESSING"
-                        if (is_video or is_document)
-                        else "READY",
+                        "status": (
+                            "PROCESSING" if (is_video or is_document) else "READY"
+                        ),
                         "message": f"{media_type.capitalize()} upload simulated",
                     }
                 )
@@ -2005,9 +2010,11 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
 
         return Response(
             {
-                "message": "Publishing completed"
-                if not errors
-                else "Publishing completed with some errors",
+                "message": (
+                    "Publishing completed"
+                    if not errors
+                    else "Publishing completed with some errors"
+                ),
                 "status": content.status,
                 "results": results,
                 "errors": errors,
@@ -2499,9 +2506,11 @@ class TwitterCarouselPostView(APIView):
             # Create a ContentCalendar entry
             ContentCalendar.objects.create(
                 user=request.user,
-                title=f"[Carousel] {text[:40]}..."
-                if len(text) > 40
-                else f"[Carousel] {text}",
+                title=(
+                    f"[Carousel] {text[:40]}..."
+                    if len(text) > 40
+                    else f"[Carousel] {text}"
+                ),
                 content=text,
                 media_urls=media_ids,
                 platforms=["twitter"],
@@ -2542,9 +2551,11 @@ class TwitterCarouselPostView(APIView):
             # Store in ContentCalendar
             ContentCalendar.objects.create(
                 user=request.user,
-                title=f"[Carousel] {text[:40]}..."
-                if len(text) > 40
-                else f"[Carousel] {text}",
+                title=(
+                    f"[Carousel] {text[:40]}..."
+                    if len(text) > 40
+                    else f"[Carousel] {text}"
+                ),
                 content=text,
                 media_urls=media_ids,
                 platforms=["twitter"],
@@ -3480,12 +3491,14 @@ class FacebookPagesView(APIView):
                 {
                     "pages": test_pages,
                     "selected_page_id": profile.page_id,
-                    "current_page": {
-                        "id": profile.page_id,
-                        "name": profile.profile_name,
-                    }
-                    if profile.page_id
-                    else None,
+                    "current_page": (
+                        {
+                            "id": profile.page_id,
+                            "name": profile.profile_name,
+                        }
+                        if profile.page_id
+                        else None
+                    ),
                     "test_mode": True,
                 }
             )
@@ -4648,9 +4661,11 @@ class FacebookCarouselPostView(APIView):
             # Save to ContentCalendar for history (even in test mode)
             ContentCalendar.objects.create(
                 user=request.user,
-                title=f"[Carousel] {message[:40]}..."
-                if len(message) > 40
-                else f"[Carousel] {message}",
+                title=(
+                    f"[Carousel] {message[:40]}..."
+                    if len(message) > 40
+                    else f"[Carousel] {message}"
+                ),
                 content=message,
                 platforms=["facebook"],
                 scheduled_date=timezone.now(),
@@ -7173,3 +7188,721 @@ class InstagramWebhookEventsView(APIView):
                 "message": f"{updated} events marked as read",
             }
         )
+
+
+# ============================================================================
+# GOOGLE BUSINESS PROFILE VIEWS
+# ============================================================================
+
+
+class GoogleBusinessConnectView(APIView):
+    """
+    Initiates Google Business Profile OAuth flow.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Redirect user to Google authorization page or return mock mode info."""
+        from .services import google_business_service
+
+        # Check if we're in mock mode (no API credentials configured)
+        if google_business_service.is_mock_mode:
+            return Response(
+                {
+                    "authorization_url": None,
+                    "is_mock_mode": True,
+                    "message": (
+                        "Google Business Profile API credentials are not "
+                        "configured. This feature requires Google API "
+                        "approval which can take 1-4 weeks. Please use "
+                        "'Test Mode' to explore the feature with simulated data."
+                    ),
+                    "requires_approval": True,
+                    "approval_url": (
+                        "https://developers.google.com/" "my-business/content/prereqs"
+                    ),
+                }
+            )
+
+        # Real mode - generate OAuth URL
+        state = str(uuid.uuid4())
+
+        # Clean up any old states for this user/platform
+        OAuthState.objects.filter(
+            user=request.user, platform="google_business"
+        ).delete()
+
+        # Create new state
+        OAuthState.objects.create(
+            state=state, user=request.user, platform="google_business"
+        )
+
+        # Get the authorization URL
+        auth_url = google_business_service.get_authorization_url(state)
+
+        return Response(
+            {
+                "authorization_url": auth_url,
+                "is_mock_mode": False,
+                "requires_approval": False,
+            }
+        )
+
+
+class GoogleBusinessCallbackView(APIView):
+    """
+    Handles Google Business Profile OAuth callback.
+    """
+
+    # No authentication required - this is called by Google redirect
+    permission_classes = []
+
+    def get(self, request):
+        """Handle the OAuth callback from Google."""
+        from .services import google_business_service
+        from .models import GoogleBusinessProfile
+
+        code = request.query_params.get("code")
+        state = request.query_params.get("state")
+        error = request.query_params.get("error")
+        error_description = request.query_params.get("error_description", "")
+
+        frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
+
+        # Handle errors from Google
+        if error:
+            logger.error(f"Google OAuth error: {error} - {error_description}")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error={error}&message={error_description}"
+            )
+
+        # Validate state token
+        try:
+            oauth_state = OAuthState.objects.get(
+                state=state, platform="google_business"
+            )
+        except OAuthState.DoesNotExist:
+            logger.error(f"Google OAuth state not found: {state}")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=invalid_state"
+                "&message=State+token+not+found+or+expired"
+            )
+
+        if oauth_state.is_expired():
+            oauth_state.delete()
+            logger.error("Google OAuth state expired")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=state_expired"
+                "&message=Authorization+timed+out"
+            )
+
+        user = oauth_state.user
+
+        try:
+            # Exchange code for tokens
+            token_data = google_business_service.exchange_code_for_token(code)
+            access_token = token_data.get("access_token")
+            refresh_token = token_data.get("refresh_token")
+            expires_at = token_data.get("expires_at")
+
+            # Get user info from Google
+            user_info = google_business_service.get_user_info(access_token)
+
+            # Create or update GoogleBusinessProfile
+            profile, created = GoogleBusinessProfile.objects.update_or_create(
+                user=user,
+                defaults={
+                    "status": "connected",
+                    "google_account_id": user_info.get("sub"),
+                    "google_account_name": user_info.get("name"),
+                    "google_email": user_info.get("email"),
+                    "token_expires_at": expires_at,
+                    "is_mock": google_business_service.is_mock_mode,
+                    "last_synced_at": timezone.now(),
+                },
+            )
+            profile.access_token = access_token
+            profile.refresh_token = refresh_token
+            profile.save()
+
+            # Mark OAuth state as used
+            oauth_state.used = True
+            oauth_state.save()
+
+            logger.info(f"Google Business connected for user {user.email}")
+
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?google_business=connected"
+            )
+
+        except Exception as e:
+            logger.exception(f"Google OAuth callback failed: {e}")
+            return HttpResponseRedirect(
+                f"{frontend_url}/automation?error=oauth_failed&message={str(e)}"
+            )
+
+
+class GoogleBusinessDisconnectView(APIView):
+    """
+    Disconnects Google Business Profile.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        """Disconnect Google Business Profile."""
+        from .models import GoogleBusinessProfile
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(user=request.user)
+            profile.disconnect()
+            return Response({"message": "Google Business Profile disconnected"})
+        except GoogleBusinessProfile.DoesNotExist:
+            return Response(
+                {"error": "No Google Business Profile connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+
+class GoogleBusinessTestConnectView(APIView):
+    """
+    Test connection without real OAuth (for development/testing).
+    Creates a mock GoogleBusinessProfile connection.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """Create a mock GBP connection for testing."""
+        from .models import GoogleBusinessProfile
+        from .services import google_business_service
+
+        # Create or update with mock data
+        profile, created = GoogleBusinessProfile.objects.update_or_create(
+            user=request.user,
+            defaults={
+                "status": "connected",
+                "google_account_id": "mock_google_user_id_12345",
+                "google_account_name": "Test User",
+                "google_email": request.user.email,
+                "gbp_account_id": "accounts/123456789",
+                "gbp_account_name": "My Business Account",
+                "token_expires_at": timezone.now() + timedelta(hours=1),
+                "is_mock": True,
+                "last_synced_at": timezone.now(),
+            },
+        )
+        profile.access_token = google_business_service.MOCK_ACCESS_TOKEN
+        profile.refresh_token = google_business_service.MOCK_REFRESH_TOKEN
+        profile.save()
+
+        from .serializers import GoogleBusinessProfileSerializer
+
+        return Response(
+            {
+                "message": "Test connection established (mock mode)",
+                "profile": GoogleBusinessProfileSerializer(profile).data,
+            }
+        )
+
+
+class GoogleBusinessStatusView(APIView):
+    """
+    Get current Google Business Profile connection status.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Get GBP connection status."""
+        from .models import GoogleBusinessProfile
+        from .serializers import GoogleBusinessProfileSerializer
+        from .services import google_business_service
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(user=request.user)
+            return Response(
+                {
+                    "connected": profile.status == "connected",
+                    "profile": GoogleBusinessProfileSerializer(profile).data,
+                    "is_mock_mode": google_business_service.is_mock_mode,
+                }
+            )
+        except GoogleBusinessProfile.DoesNotExist:
+            return Response(
+                {
+                    "connected": False,
+                    "profile": None,
+                    "is_mock_mode": google_business_service.is_mock_mode,
+                }
+            )
+
+
+class GoogleBusinessAccountsView(APIView):
+    """
+    List available GBP accounts for the connected user.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """List GBP accounts."""
+        from .models import GoogleBusinessProfile
+        from .services import google_business_service
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(
+                user=request.user, status="connected"
+            )
+        except GoogleBusinessProfile.DoesNotExist:
+            return Response(
+                {"error": "Google Business Profile not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            access_token = profile.access_token
+            accounts = google_business_service.list_accounts(access_token)
+            return Response(
+                {
+                    "accounts": accounts,
+                    "selected_account_id": profile.gbp_account_id,
+                }
+            )
+        except Exception as e:
+            logger.exception(f"Failed to list GBP accounts: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GoogleBusinessSelectAccountView(APIView):
+    """
+    Select a GBP account to use for location management.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, account_id):
+        """Select a GBP account."""
+        from .models import GoogleBusinessProfile
+        from .services import google_business_service
+        from .serializers import GoogleBusinessProfileSerializer
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(
+                user=request.user, status="connected"
+            )
+        except GoogleBusinessProfile.DoesNotExist:
+            return Response(
+                {"error": "Google Business Profile not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Verify the account exists
+        try:
+            access_token = profile.access_token
+            accounts = google_business_service.list_accounts(access_token)
+
+            # Find the account
+            account = None
+            for acc in accounts:
+                if acc["name"] == account_id or acc["name"] == f"accounts/{account_id}":
+                    account = acc
+                    break
+
+            if not account:
+                return Response(
+                    {"error": "Account not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Update profile with selected account
+            profile.gbp_account_id = account["name"]
+            profile.gbp_account_name = account.get("accountName", "")
+            profile.last_synced_at = timezone.now()
+            profile.save()
+
+            return Response(
+                {
+                    "message": "Account selected",
+                    "profile": GoogleBusinessProfileSerializer(profile).data,
+                }
+            )
+
+        except Exception as e:
+            logger.exception(f"Failed to select GBP account: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GoogleBusinessLocationsView(APIView):
+    """
+    List and create business locations.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """List locations for the selected GBP account."""
+        from .models import GoogleBusinessProfile, GoogleBusinessLocation
+        from .serializers import GoogleBusinessLocationSerializer
+        from .services import google_business_service
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(
+                user=request.user, status="connected"
+            )
+        except GoogleBusinessProfile.DoesNotExist:
+            return Response(
+                {"error": "Google Business Profile not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not profile.gbp_account_id:
+            return Response(
+                {"error": "No GBP account selected. Please select an account first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            # In mock mode, just return all locations from database
+            # In real mode, sync from API first then return all
+            if (
+                not google_business_service.is_mock_mode
+                and profile.access_token != google_business_service.MOCK_ACCESS_TOKEN
+            ):
+                access_token = profile.access_token
+                api_locations = google_business_service.list_locations(
+                    access_token, profile.gbp_account_id
+                )
+
+                # Sync locations from API to database
+                for loc_data in api_locations:
+                    address = loc_data.get("storefrontAddress", {})
+                    address_lines = address.get("addressLines", [])
+                    category = loc_data.get("primaryCategory", {})
+
+                    GoogleBusinessLocation.objects.update_or_create(
+                        profile=profile,
+                        location_id=loc_data["name"],
+                        defaults={
+                            "business_name": loc_data.get("title", ""),
+                            "primary_category": category.get("displayName", ""),
+                            "primary_category_id": category.get("name", ""),
+                            "address_line1": address_lines[0] if address_lines else "",
+                            "address_line2": (
+                                address_lines[1] if len(address_lines) > 1 else ""
+                            ),
+                            "city": address.get("locality", ""),
+                            "state": address.get("administrativeArea", ""),
+                            "postal_code": address.get("postalCode", ""),
+                            "country": address.get("regionCode", "US"),
+                            "phone_number": loc_data.get("primaryPhone", ""),
+                            "website_url": loc_data.get("websiteUri", ""),
+                            "is_synced": True,
+                        },
+                    )
+
+            # Return ALL locations from database for this profile
+            all_locations = GoogleBusinessLocation.objects.filter(profile=profile)
+            serializer = GoogleBusinessLocationSerializer(all_locations, many=True)
+            return Response(
+                {
+                    "locations": serializer.data,
+                    "count": all_locations.count(),
+                    "is_mock_mode": google_business_service.is_mock_mode,
+                }
+            )
+
+        except Exception as e:
+            logger.exception(f"Failed to list GBP locations: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def post(self, request):
+        """Create a new location."""
+        from .models import GoogleBusinessProfile, GoogleBusinessLocation
+        from .serializers import (
+            GoogleBusinessLocationCreateSerializer,
+            GoogleBusinessLocationSerializer,
+        )
+        from .services import google_business_service
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(
+                user=request.user, status="connected"
+            )
+        except GoogleBusinessProfile.DoesNotExist:
+            return Response(
+                {"error": "Google Business Profile not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not profile.gbp_account_id:
+            return Response(
+                {"error": "No GBP account selected. Please select an account first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate input
+        serializer = GoogleBusinessLocationCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            access_token = profile.access_token
+            location_data = serializer.validated_data
+
+            # Create location via API
+            api_result = google_business_service.create_location(
+                access_token, profile.gbp_account_id, location_data
+            )
+
+            # Parse API response and save to database
+            address = api_result.get("storefrontAddress", {})
+            address_lines = address.get("addressLines", [])
+            category = api_result.get("primaryCategory", {})
+
+            location = GoogleBusinessLocation.objects.create(
+                profile=profile,
+                location_id=api_result["name"],
+                business_name=api_result.get("title", location_data["business_name"]),
+                primary_category=category.get(
+                    "displayName", location_data.get("primary_category", "")
+                ),
+                primary_category_id=category.get(
+                    "name", location_data.get("primary_category_id", "")
+                ),
+                address_line1=(
+                    address_lines[0]
+                    if address_lines
+                    else location_data.get("address_line1", "")
+                ),
+                address_line2=(
+                    address_lines[1]
+                    if len(address_lines) > 1
+                    else location_data.get("address_line2", "")
+                ),
+                city=address.get("locality", location_data.get("city", "")),
+                state=address.get("administrativeArea", location_data.get("state", "")),
+                postal_code=address.get(
+                    "postalCode", location_data.get("postal_code", "")
+                ),
+                country=address.get("regionCode", location_data.get("country", "US")),
+                phone_number=api_result.get(
+                    "primaryPhone", location_data.get("phone_number", "")
+                ),
+                website_url=api_result.get(
+                    "websiteUri", location_data.get("website_url", "")
+                ),
+                is_synced=True,
+            )
+
+            return Response(
+                {
+                    "message": "Location created successfully",
+                    "location": GoogleBusinessLocationSerializer(location).data,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        except Exception as e:
+            logger.exception(f"Failed to create GBP location: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GoogleBusinessLocationDetailView(APIView):
+    """
+    Get, update, or delete a specific location.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, location_id):
+        """Get location details."""
+        from .models import GoogleBusinessProfile, GoogleBusinessLocation
+        from .serializers import GoogleBusinessLocationSerializer
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(
+                user=request.user, status="connected"
+            )
+        except GoogleBusinessProfile.DoesNotExist:
+            return Response(
+                {"error": "Google Business Profile not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            location = GoogleBusinessLocation.objects.get(
+                profile=profile, id=location_id
+            )
+            return Response(GoogleBusinessLocationSerializer(location).data)
+        except GoogleBusinessLocation.DoesNotExist:
+            return Response(
+                {"error": "Location not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    def patch(self, request, location_id):
+        """Update a location."""
+        from .models import GoogleBusinessProfile, GoogleBusinessLocation
+        from .serializers import GoogleBusinessLocationSerializer
+        from .services import google_business_service
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(
+                user=request.user, status="connected"
+            )
+        except GoogleBusinessProfile.DoesNotExist:
+            return Response(
+                {"error": "Google Business Profile not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            location = GoogleBusinessLocation.objects.get(
+                profile=profile, id=location_id
+            )
+        except GoogleBusinessLocation.DoesNotExist:
+            return Response(
+                {"error": "Location not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            access_token = profile.access_token
+            update_data = request.data
+
+            # Update via API (result used for logging/debugging)
+            google_business_service.update_location(
+                access_token, location.location_id, update_data
+            )
+
+            # Update local database
+            for field in [
+                "business_name",
+                "address_line1",
+                "address_line2",
+                "city",
+                "state",
+                "postal_code",
+                "country",
+                "phone_number",
+                "website_url",
+            ]:
+                if field in update_data:
+                    setattr(location, field, update_data[field])
+
+            location.is_synced = True
+            location.save()
+
+            return Response(
+                {
+                    "message": "Location updated successfully",
+                    "location": GoogleBusinessLocationSerializer(location).data,
+                }
+            )
+
+        except Exception as e:
+            logger.exception(f"Failed to update GBP location: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def delete(self, request, location_id):
+        """Delete a location."""
+        from .models import GoogleBusinessProfile, GoogleBusinessLocation
+        from .services import google_business_service
+
+        try:
+            profile = GoogleBusinessProfile.objects.get(
+                user=request.user, status="connected"
+            )
+        except GoogleBusinessProfile.DoesNotExist:
+            return Response(
+                {"error": "Google Business Profile not connected"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            # Try to find by database ID first, then by location_id field
+            try:
+                location = GoogleBusinessLocation.objects.get(
+                    profile=profile, id=int(location_id)
+                )
+            except (ValueError, GoogleBusinessLocation.DoesNotExist):
+                # location_id is not an integer, try looking up by location_id field
+                location = GoogleBusinessLocation.objects.get(
+                    profile=profile, location_id=location_id
+                )
+        except GoogleBusinessLocation.DoesNotExist:
+            return Response(
+                {"error": "Location not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            access_token = profile.access_token
+
+            # Delete via API
+            google_business_service.delete_location(access_token, location.location_id)
+
+            # Delete from database
+            location.delete()
+
+            return Response({"message": "Location deleted successfully"})
+
+        except Exception as e:
+            logger.exception(f"Failed to delete GBP location: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GoogleBusinessCategoriesView(APIView):
+    """
+    Search business categories.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """List/search business categories."""
+        from .services import google_business_service
+
+        query = request.query_params.get("q", "")
+        region_code = request.query_params.get("region", "US")
+        language_code = request.query_params.get("language", "en")
+
+        try:
+            categories = google_business_service.list_categories(
+                region_code=region_code,
+                language_code=language_code,
+                query=query,
+            )
+            return Response(
+                {
+                    "categories": categories,
+                    "count": len(categories),
+                    "is_mock_mode": google_business_service.is_mock_mode,
+                }
+            )
+        except Exception as e:
+            logger.exception(f"Failed to list GBP categories: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

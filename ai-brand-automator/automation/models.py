@@ -1,6 +1,7 @@
 """
 Automation models for social media integration and content scheduling.
 """
+
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -842,3 +843,207 @@ class InstagramResumableUpload(models.Model):
         self.bytes_uploaded = bytes_uploaded
         self.status = "uploading"
         self.save()
+
+
+class GoogleBusinessProfile(models.Model):
+    """
+    Stores Google Business Profile connection and OAuth tokens.
+
+    Supports dual-mode operation:
+    - Mock Mode: Works without API credentials (for development/testing)
+    - Real Mode: Uses actual GBP APIs (requires approved credentials)
+
+    Uses Google Business Profile APIs:
+    - Account Management API (accounts)
+    - Business Information API (locations)
+    """
+
+    STATUS_CHOICES = [
+        ("connected", "Connected"),
+        ("disconnected", "Disconnected"),
+        ("expired", "Token Expired"),
+        ("error", "Error"),
+        ("pending_verification", "Pending Verification"),
+    ]
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="google_business_profiles"
+    )
+
+    # OAuth tokens (encrypted at rest)
+    _access_token = models.TextField(blank=True, null=True, db_column="access_token")
+    _refresh_token = models.TextField(blank=True, null=True, db_column="refresh_token")
+    token_expires_at = models.DateTimeField(blank=True, null=True)
+
+    # Google Account Info
+    google_account_id = models.CharField(max_length=255, blank=True, null=True)
+    google_account_name = models.CharField(max_length=255, blank=True, null=True)
+    google_email = models.EmailField(blank=True, null=True)
+
+    # Selected GBP Account (from Account Management API)
+    gbp_account_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="accounts/{account_id} resource name",
+    )
+    gbp_account_name = models.CharField(max_length=255, blank=True, null=True)
+
+    # Connection status
+    status = models.CharField(
+        max_length=25, choices=STATUS_CHOICES, default="disconnected"
+    )
+
+    # Mock mode indicator
+    is_mock = models.BooleanField(
+        default=False, help_text="True if connected via mock/test mode"
+    )
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_synced_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "Google Business Profile"
+        verbose_name_plural = "Google Business Profiles"
+        # One GBP connection per user
+        constraints = [
+            models.UniqueConstraint(fields=["user"], name="unique_user_gbp_connection")
+        ]
+
+    def __str__(self):
+        email = self.google_email or "no email"
+        return f"{self.user.email} - GBP ({email}, {self.status})"
+
+    # Encrypted token properties (same pattern as SocialProfile)
+    @property
+    def access_token(self):
+        """Get the decrypted access token."""
+        return decrypt_token(self._access_token) if self._access_token else None
+
+    @access_token.setter
+    def access_token(self, value):
+        """Set and encrypt the access token."""
+        self._access_token = encrypt_token(value) if value else None
+
+    @property
+    def refresh_token(self):
+        """Get the decrypted refresh token."""
+        return decrypt_token(self._refresh_token) if self._refresh_token else None
+
+    @refresh_token.setter
+    def refresh_token(self, value):
+        """Set and encrypt the refresh token."""
+        self._refresh_token = encrypt_token(value) if value else None
+
+    @property
+    def is_token_valid(self):
+        """Check if the access token is still valid."""
+        if not self.token_expires_at:
+            return False
+        return timezone.now() < self.token_expires_at
+
+    @property
+    def is_token_expiring_soon(self):
+        """Check if the token will expire within 5 minutes."""
+        if not self.token_expires_at:
+            return True
+        from datetime import timedelta
+
+        return timezone.now() + timedelta(minutes=5) >= self.token_expires_at
+
+    def disconnect(self):
+        """Disconnect the Google Business Profile."""
+        self.access_token = None
+        self.refresh_token = None
+        self.token_expires_at = None
+        self.gbp_account_id = None
+        self.gbp_account_name = None
+        self.status = "disconnected"
+        self.is_mock = False
+        self.save()
+
+
+class GoogleBusinessLocation(models.Model):
+    """
+    Stores individual business locations from Google Business Profile.
+
+    A user can have multiple locations under one GBP account.
+    """
+
+    VERIFICATION_STATUS_CHOICES = [
+        ("unverified", "Unverified"),
+        ("pending", "Verification Pending"),
+        ("verified", "Verified"),
+        ("failed", "Verification Failed"),
+    ]
+
+    profile = models.ForeignKey(
+        GoogleBusinessProfile, on_delete=models.CASCADE, related_name="locations"
+    )
+
+    # Location identifier from GBP API
+    location_id = models.CharField(
+        max_length=255, help_text="locations/{location_id} resource name"
+    )
+
+    # Business Information
+    business_name = models.CharField(max_length=255)
+    primary_category = models.CharField(max_length=255, blank=True)
+    primary_category_id = models.CharField(
+        max_length=255, blank=True, help_text="categories/gcid:xxx format"
+    )
+    additional_categories = models.JSONField(default=list, blank=True)
+
+    # Address
+    address_line1 = models.CharField(max_length=255, blank=True)
+    address_line2 = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=100, blank=True)
+    postal_code = models.CharField(max_length=20, blank=True)
+    country = models.CharField(max_length=2, default="US")  # ISO 3166-1 alpha-2
+
+    # Contact
+    phone_number = models.CharField(max_length=20, blank=True)
+    website_url = models.URLField(blank=True)
+
+    # Business hours (stored as JSON)
+    business_hours = models.JSONField(
+        default=dict, blank=True, help_text="Regular business hours by day"
+    )
+    special_hours = models.JSONField(
+        default=list, blank=True, help_text="Special hours for holidays, etc."
+    )
+
+    # Verification
+    verification_status = models.CharField(
+        max_length=20, choices=VERIFICATION_STATUS_CHOICES, default="unverified"
+    )
+
+    # Sync status
+    is_synced = models.BooleanField(default=True)
+    last_synced_at = models.DateTimeField(auto_now=True)
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Google Business Location"
+        verbose_name_plural = "Google Business Locations"
+        unique_together = ["profile", "location_id"]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.business_name} ({self.city}, {self.state})"
+
+    @property
+    def full_address(self):
+        """Return formatted full address."""
+        parts = [self.address_line1]
+        if self.address_line2:
+            parts.append(self.address_line2)
+        parts.append(f"{self.city}, {self.state} {self.postal_code}")
+        parts.append(self.country)
+        return ", ".join(filter(None, parts))
