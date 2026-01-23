@@ -7203,10 +7203,26 @@ class GoogleBusinessConnectView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """Redirect user to Google authorization page or return mock auth URL."""
+        """Redirect user to Google authorization page or return mock mode info."""
         from .services import google_business_service
 
-        # Generate a unique state token
+        # Check if we're in mock mode (no API credentials configured)
+        if google_business_service.is_mock_mode:
+            return Response(
+                {
+                    "authorization_url": None,
+                    "is_mock_mode": True,
+                    "message": (
+                        "Google Business Profile API credentials are not configured. "
+                        "This feature requires Google API approval which can take 1-4 weeks. "
+                        "Please use 'Test Mode' to explore the feature with simulated data."
+                    ),
+                    "requires_approval": True,
+                    "approval_url": "https://developers.google.com/my-business/content/prereqs",
+                }
+            )
+
+        # Real mode - generate OAuth URL
         state = str(uuid.uuid4())
 
         # Clean up any old states for this user/platform
@@ -7225,7 +7241,8 @@ class GoogleBusinessConnectView(APIView):
         return Response(
             {
                 "authorization_url": auth_url,
-                "is_mock_mode": google_business_service.is_mock_mode,
+                "is_mock_mode": False,
+                "requires_approval": False,
             }
         )
 

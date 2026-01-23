@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   googleBusinessApi,
   GoogleBusinessProfile,
@@ -15,6 +16,9 @@ interface GoogleBusinessSectionProps {
 }
 
 export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSectionProps) {
+  // Hooks for handling mock OAuth callback
+  const searchParams = useSearchParams();
+  
   // State
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
@@ -31,6 +35,8 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [showCustomCategory, setShowCustomCategory] = useState(false);
+  const [showApiNotConfigured, setShowApiNotConfigured] = useState(false);
+  const [apiApprovalUrl, setApiApprovalUrl] = useState<string | null>(null);
 
   // Form state for creating location
   const [newLocation, setNewLocation] = useState<CreateLocationData>({
@@ -57,6 +63,24 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
       setLoading(false);
     }
   }, []);
+
+  // Handle OAuth callback from URL params (for real OAuth flow)
+  useEffect(() => {
+    const googleBusinessConnected = searchParams.get('google_business');
+    const error = searchParams.get('error');
+    
+    if (googleBusinessConnected === 'connected') {
+      // Real OAuth callback success
+      onMessage({ type: 'success', text: 'Connected to Google Business Profile!' });
+      window.history.replaceState({}, '', '/automation');
+      fetchStatus();
+    } else if (error) {
+      // OAuth error
+      const message = searchParams.get('message') || 'Failed to connect to Google Business Profile';
+      onMessage({ type: 'error', text: decodeURIComponent(message) });
+      window.history.replaceState({}, '', '/automation');
+    }
+  }, [searchParams, onMessage, fetchStatus]);
 
   useEffect(() => {
     fetchStatus();
@@ -136,7 +160,21 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
     setConnecting(true);
     try {
       const data = await googleBusinessApi.connect();
-      window.location.href = data.authorization_url;
+      
+      // Check if API is not configured (mock mode)
+      if (data.is_mock_mode || data.requires_approval) {
+        setShowApiNotConfigured(true);
+        if (data.approval_url) {
+          setApiApprovalUrl(data.approval_url);
+        }
+        setConnecting(false);
+        return;
+      }
+      
+      // Real mode - redirect to Google OAuth
+      if (data.authorization_url) {
+        window.location.href = data.authorization_url;
+      }
     } catch (error) {
       console.error('Failed to connect:', error);
       onMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to connect' });
@@ -314,7 +352,66 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
 
       {/* Connection Actions */}
       {!isConnected ? (
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 space-y-4">
+          {/* API Not Configured Message */}
+          {showApiNotConfigured && (
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <svg className="w-6 h-6 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div className="flex-1">
+                  <h4 className="text-yellow-400 font-semibold text-sm">Google Business Profile API Not Configured</h4>
+                  <p className="text-brand-silver/80 text-sm mt-1">
+                    The Google Business Profile API requires a verification and approval process from Google. 
+                    This is a standard requirement for accessing business profile data.
+                  </p>
+                  {apiApprovalUrl && (
+                    <a 
+                      href={apiApprovalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[#4285F4] hover:text-[#5a9bf6] text-sm mt-2"
+                    >
+                      Learn about the approval process
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  )}
+                  <div className="mt-3 pt-3 border-t border-yellow-500/20">
+                    <p className="text-brand-silver/60 text-xs mb-2">
+                      In the meantime, you can use <strong>Test Mode</strong> to explore all features with simulated data.
+                    </p>
+                    <button
+                      onClick={() => {
+                        setShowApiNotConfigured(false);
+                        handleTestConnect();
+                      }}
+                      disabled={connecting}
+                      className="px-3 py-1.5 bg-white/10 text-white border border-white/20 rounded-lg 
+                               hover:bg-white/20 transition-colors disabled:opacity-50 text-sm flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      Use Test Mode Instead
+                    </button>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowApiNotConfigured(false)}
+                  className="text-brand-silver/50 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
           <button
             onClick={handleConnect}
             disabled={connecting}
@@ -347,6 +444,7 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
           >
             Test Mode
           </button>
+          </div>
         </div>
       ) : (
         <>

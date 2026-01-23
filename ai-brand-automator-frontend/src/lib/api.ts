@@ -350,7 +350,13 @@ export const googleBusinessApi = {
     return data.profile || null;
   },
 
-  async connect(): Promise<{ authorization_url: string }> {
+  async connect(): Promise<{
+    authorization_url: string | null;
+    is_mock_mode: boolean;
+    requires_approval?: boolean;
+    message?: string;
+    approval_url?: string;
+  }> {
     const response = await apiClient.get('/automation/google-business/connect/');
     if (!response.ok) {
       const error = await response.json();
