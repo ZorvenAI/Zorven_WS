@@ -4,7 +4,6 @@ import pytest
 from datetime import timedelta
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
 from hypothesis import (
@@ -635,10 +634,9 @@ class TestGoogleBusinessSelectAccountAPI:
     def test_select_account(self, authenticated_client, user, gbp_profile):
         """Test selecting an account."""
         # Mock service returns accounts with name like "accounts/123456789"
-        # Use just the ID part - the view checks for both "account_id" and "accounts/account_id"
-        response = authenticated_client.post(
-            "/api/v1/automation/google-business/accounts/123456789/select/"
-        )
+        # Use just the ID part - view checks both formats
+        url = "/api/v1/automation/google-business/accounts/123456789/select/"
+        response = authenticated_client.post(url)
 
         assert response.status_code == status.HTTP_200_OK
         assert "profile" in response.data
@@ -684,7 +682,7 @@ class TestGoogleBusinessLocationsAPI:
 
     def test_list_locations_no_account_selected(self, authenticated_client, user, db):
         """Test listing locations when no account selected."""
-        profile = GoogleBusinessProfile.objects.create(
+        GoogleBusinessProfile.objects.create(
             user=user,
             status="connected",
             google_email="test@example.com",

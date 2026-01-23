@@ -4638,7 +4638,10 @@ class GoogleBusinessService:
                 f"{self.BUSINESS_INFO_URL}/{account_id}/locations",
                 headers={"Authorization": f"Bearer {access_token}"},
                 params={
-                    "readMask": "name,title,storefrontAddress,primaryPhone,websiteUri,primaryCategory"
+                    "readMask": (
+                        "name,title,storefrontAddress,"
+                        "primaryPhone,websiteUri,primaryCategory"
+                    )
                 },
                 timeout=30,
             )
@@ -4670,7 +4673,10 @@ class GoogleBusinessService:
                 f"{self.BUSINESS_INFO_URL}/{location_id}",
                 headers={"Authorization": f"Bearer {access_token}"},
                 params={
-                    "readMask": "name,title,storefrontAddress,primaryPhone,websiteUri,primaryCategory,regularHours"
+                    "readMask": (
+                        "name,title,storefrontAddress,primaryPhone,"
+                        "websiteUri,primaryCategory,regularHours"
+                    )
                 },
                 timeout=30,
             )

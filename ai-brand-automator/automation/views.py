@@ -7213,12 +7213,15 @@ class GoogleBusinessConnectView(APIView):
                     "authorization_url": None,
                     "is_mock_mode": True,
                     "message": (
-                        "Google Business Profile API credentials are not configured. "
-                        "This feature requires Google API approval which can take 1-4 weeks. "
-                        "Please use 'Test Mode' to explore the feature with simulated data."
+                        "Google Business Profile API credentials are not "
+                        "configured. This feature requires Google API "
+                        "approval which can take 1-4 weeks. Please use "
+                        "'Test Mode' to explore the feature with simulated data."
                     ),
                     "requires_approval": True,
-                    "approval_url": "https://developers.google.com/my-business/content/prereqs",
+                    "approval_url": (
+                        "https://developers.google.com/" "my-business/content/prereqs"
+                    ),
                 }
             )
 
