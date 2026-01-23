@@ -7,6 +7,7 @@ import { apiClient } from '@/lib/api';
 import Link from 'next/link';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import GoogleBusinessSection from '@/components/automation/GoogleBusinessSection';
 
 // Draft storage keys - defined at module level
 const DRAFT_KEYS = {
@@ -5445,6 +5446,14 @@ function AutomationPageContent() {
               </div>
             );
           })}
+        </div>
+
+        {/* Google Business Profile Section */}
+        <div className="mt-8">
+          <h2 className="text-2xl font-heading font-bold text-white mb-4">Google Business Profile</h2>
+          <GoogleBusinessSection 
+            onMessage={(msg) => setMessage(msg)}
+          />
         </div>
 
         {/* Content Calendar Section */}

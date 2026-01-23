@@ -267,3 +267,189 @@ export const subscriptionApi = {
     return (data as PaginatedResponse<PaymentHistory>).results || [];
   },
 };
+
+// Google Business Profile types
+export interface GoogleBusinessProfile {
+  id: number;
+  google_account_id: string | null;
+  google_account_name: string | null;
+  google_email: string | null;
+  gbp_account_id: string | null;
+  gbp_account_name: string | null;
+  status: 'connected' | 'disconnected' | 'expired' | 'error' | 'pending_verification';
+  is_mock: boolean;
+  is_token_valid: boolean;
+  created_at: string;
+  updated_at: string;
+  last_synced_at: string | null;
+}
+
+export interface GoogleBusinessLocation {
+  id: number;
+  location_id: string;
+  business_name: string;
+  primary_category: string;
+  primary_category_id: string;
+  additional_categories: string[];
+  address_line1: string;
+  address_line2: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  phone_number: string;
+  website_url: string;
+  business_hours: Record<string, unknown>;
+  special_hours: unknown[];
+  verification_status: 'unverified' | 'pending' | 'verified' | 'failed';
+  is_synced: boolean;
+  full_address: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GoogleBusinessAccount {
+  name: string;
+  accountName: string;
+  type: string;
+  role: string;
+  state: {
+    status: string;
+  };
+}
+
+export interface GoogleBusinessCategory {
+  name: string;
+  displayName: string;
+}
+
+export interface CreateLocationData {
+  business_name: string;
+  primary_category: string;
+  address_line1: string;
+  address_line2?: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country?: string;
+  phone_number?: string;
+  website_url?: string;
+}
+
+// Google Business Profile API functions
+export const googleBusinessApi = {
+  async getStatus(): Promise<GoogleBusinessProfile | null> {
+    const response = await apiClient.get('/automation/google-business/connect/');
+    if (response.status === 404) {
+      return null;
+    }
+    if (!response.ok) {
+      return null;
+    }
+    return response.json();
+  },
+
+  async connect(): Promise<{ authorization_url: string }> {
+    const response = await apiClient.post('/automation/google-business/connect/', {});
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to initiate connection');
+    }
+    return response.json();
+  },
+
+  async testConnect(): Promise<{ message: string; profile: GoogleBusinessProfile }> {
+    const response = await apiClient.post('/automation/google-business/test-connect/', {});
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create test connection');
+    }
+    return response.json();
+  },
+
+  async disconnect(): Promise<{ message: string }> {
+    const response = await apiClient.post('/automation/google-business/disconnect/', {});
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to disconnect');
+    }
+    return response.json();
+  },
+
+  async getAccounts(): Promise<GoogleBusinessAccount[]> {
+    const response = await apiClient.get('/automation/google-business/accounts/');
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch accounts');
+    }
+    const data = await response.json();
+    return data.accounts || [];
+  },
+
+  async selectAccount(accountId: string): Promise<{ message: string }> {
+    const response = await apiClient.post('/automation/google-business/accounts/', {
+      account_id: accountId,
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to select account');
+    }
+    return response.json();
+  },
+
+  async getLocations(): Promise<GoogleBusinessLocation[]> {
+    const response = await apiClient.get('/automation/google-business/locations/');
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch locations');
+    }
+    const data = await response.json();
+    return data.locations || [];
+  },
+
+  async createLocation(data: CreateLocationData): Promise<GoogleBusinessLocation> {
+    const response = await apiClient.post('/automation/google-business/locations/', data);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create location');
+    }
+    return response.json();
+  },
+
+  async updateLocation(
+    locationId: string,
+    data: Partial<CreateLocationData>
+  ): Promise<GoogleBusinessLocation> {
+    const response = await apiClient.put(
+      `/automation/google-business/locations/${locationId}/`,
+      data
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update location');
+    }
+    return response.json();
+  },
+
+  async deleteLocation(locationId: string): Promise<{ message: string }> {
+    const response = await apiClient.delete(
+      `/automation/google-business/locations/${locationId}/`
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete location');
+    }
+    return response.json();
+  },
+
+  async searchCategories(query?: string): Promise<GoogleBusinessCategory[]> {
+    const params = query ? `?q=${encodeURIComponent(query)}` : '';
+    const response = await apiClient.get(`/automation/google-business/categories/${params}`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch categories');
+    }
+    const data = await response.json();
+    return data.categories || [];
+  },
+};
