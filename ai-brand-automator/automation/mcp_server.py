@@ -2018,7 +2018,7 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
         user = get_user(arguments["user_email"])
 
         try:
-            profile = GoogleBusinessProfile.objects.get(company__users=user)
+            profile = GoogleBusinessProfile.objects.get(user=user)
             location_count = GoogleBusinessLocation.objects.filter(
                 profile=profile
             ).count()
@@ -2039,7 +2039,6 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
             return {"connected": False, "profile": None}
 
     elif name == "gbp_connect":
-        user = get_user(arguments["user_email"])
         import uuid
 
         state = str(uuid.uuid4())
@@ -2058,16 +2057,9 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
     elif name == "gbp_test_connect":
         user = get_user(arguments["user_email"])
 
-        # Get or create company for user
-        from onboarding.models import Company
-
-        company = Company.objects.filter(users=user).first()
-        if not company:
-            raise ValueError("User has no company. Create a company first.")
-
         # Create or update mock profile
         profile, created = GoogleBusinessProfile.objects.update_or_create(
-            company=company,
+            user=user,
             defaults={
                 "google_account_id": "mock_google_account_123",
                 "google_account_name": "Test Account",
@@ -2077,9 +2069,9 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
             },
         )
 
-        # Set mock tokens
-        profile.set_access_token(google_business_service.MOCK_ACCESS_TOKEN)
-        profile.set_refresh_token(google_business_service.MOCK_REFRESH_TOKEN)
+        # Set mock tokens using property setters
+        profile.access_token = google_business_service.MOCK_ACCESS_TOKEN
+        profile.refresh_token = google_business_service.MOCK_REFRESH_TOKEN
         profile.save()
 
         return {
@@ -2097,7 +2089,7 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
         user = get_user(arguments["user_email"])
 
         try:
-            profile = GoogleBusinessProfile.objects.get(company__users=user)
+            profile = GoogleBusinessProfile.objects.get(user=user)
             profile.disconnect()
             return {
                 "success": True,
@@ -2110,14 +2102,14 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
         user = get_user(arguments["user_email"])
 
         try:
-            profile = GoogleBusinessProfile.objects.get(company__users=user)
+            profile = GoogleBusinessProfile.objects.get(user=user)
         except GoogleBusinessProfile.DoesNotExist:
             raise ValueError("No Google Business Profile found. Connect GBP first.")
 
         if profile.status != "connected":
             raise ValueError("GBP connection not active. Please reconnect.")
 
-        access_token = profile.get_access_token()
+        access_token = profile.access_token
         accounts = google_business_service.list_accounts(access_token)
 
         return {"accounts": accounts, "count": len(accounts)}
@@ -2127,12 +2119,12 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
         account_id = arguments["account_id"]
 
         try:
-            profile = GoogleBusinessProfile.objects.get(company__users=user)
+            profile = GoogleBusinessProfile.objects.get(user=user)
         except GoogleBusinessProfile.DoesNotExist:
             raise ValueError("No Google Business Profile found. Connect GBP first.")
 
         # Get account details from the account list
-        access_token = profile.get_access_token()
+        access_token = profile.access_token
         accounts = google_business_service.list_accounts(access_token)
 
         selected_account = None
@@ -2160,7 +2152,7 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
         user = get_user(arguments["user_email"])
 
         try:
-            profile = GoogleBusinessProfile.objects.get(company__users=user)
+            profile = GoogleBusinessProfile.objects.get(user=user)
         except GoogleBusinessProfile.DoesNotExist:
             raise ValueError("No Google Business Profile found. Connect GBP first.")
 
@@ -2191,7 +2183,7 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
         user = get_user(arguments["user_email"])
 
         try:
-            profile = GoogleBusinessProfile.objects.get(company__users=user)
+            profile = GoogleBusinessProfile.objects.get(user=user)
         except GoogleBusinessProfile.DoesNotExist:
             raise ValueError("No Google Business Profile found. Connect GBP first.")
 
@@ -2213,7 +2205,7 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
         }
 
         # Create via service (handles mock/real mode)
-        access_token = profile.get_access_token()
+        access_token = profile.access_token
         api_result = google_business_service.create_location(
             access_token, profile.gbp_account_id, location_data
         )
@@ -2254,7 +2246,7 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
         location_id = arguments["location_id"]
 
         try:
-            profile = GoogleBusinessProfile.objects.get(company__users=user)
+            profile = GoogleBusinessProfile.objects.get(user=user)
         except GoogleBusinessProfile.DoesNotExist:
             raise ValueError("No Google Business Profile found")
 
@@ -2266,7 +2258,7 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
 
             # Delete via service if not mock
             if not profile.is_mock:
-                access_token = profile.get_access_token()
+                access_token = profile.access_token
                 google_business_service.delete_location(access_token, location_id)
 
             location.delete()
