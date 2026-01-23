@@ -107,16 +107,17 @@ Examples:
         server = create_mcp_server()
         sse = SseServerTransport("/messages")
 
-        async def handle_sse(request):
-            async with sse.connect_sse(
-                request.scope, request.receive, request._send
-            ) as streams:
+        # Use raw ASGI callables to properly access scope, receive, send
+        async def handle_sse(scope, receive, send):
+            """SSE endpoint using raw ASGI interface."""
+            async with sse.connect_sse(scope, receive, send) as streams:
                 await server.run(
                     streams[0], streams[1], server.create_initialization_options()
                 )
 
-        async def handle_messages(request):
-            await sse.handle_post_message(request.scope, request.receive, request._send)
+        async def handle_messages(scope, receive, send):
+            """Messages endpoint using raw ASGI interface."""
+            await sse.handle_post_message(scope, receive, send)
 
         async def health_check(request):
             """Health check endpoint for Docker/Kubernetes."""

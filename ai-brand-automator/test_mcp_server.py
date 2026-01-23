@@ -176,12 +176,16 @@ async def test_list_tools():
             elif tool_name == "get_platform_oauth_url":
                 args["platform"] = "linkedin"
             elif tool_name == "create_scheduled_content":
+                # Use future date to avoid validation issues
+                from datetime import timedelta
+
+                future_date = (datetime.now() + timedelta(days=7)).isoformat() + "Z"
                 args.update(
                     {
                         "title": "Test",
                         "content": "Test content",
                         "platforms": ["linkedin"],
-                        "scheduled_date": "2025-01-01T10:00:00Z",
+                        "scheduled_date": future_date,
                     }
                 )
 

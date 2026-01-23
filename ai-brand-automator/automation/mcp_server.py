@@ -774,7 +774,7 @@ Example: Get failed tasks for debugging
                             "description": "Filter by task status (optional)",
                             "enum": [
                                 "pending",
-                                "running",
+                                "in_progress",
                                 "completed",
                                 "failed",
                                 "cancelled",
@@ -1162,8 +1162,13 @@ Please:
     return server
 
 
-async def _execute_tool(name: str, arguments: dict) -> dict[str, Any]:
-    """Execute a tool and return the result."""
+def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
+    """
+    Execute a tool synchronously and return the result.
+
+    This is the sync implementation that performs Django ORM operations.
+    It is wrapped by _execute_tool with sync_to_async for async contexts.
+    """
 
     # Helper to get user by email
     def get_user(email: str):
@@ -1226,7 +1231,11 @@ async def _execute_tool(name: str, arguments: dict) -> dict[str, Any]:
             profile.disconnect()
             return {
                 "success": True,
-                "message": f"{profile.get_platform_display()} disconnected successfully",
+                "message": (
+                    f"{profile.get_platform_display()} disconnected from this app "
+                    "and local tokens cleared. If needed, also revoke access in "
+                    f"your {profile.get_platform_display()} account settings."
+                ),
             }
         except SocialProfile.DoesNotExist:
             return {"success": False, "error": f"No {platform} profile found"}
@@ -1241,9 +1250,12 @@ async def _execute_tool(name: str, arguments: dict) -> dict[str, Any]:
         if "status" in arguments:
             queryset = queryset.filter(status=arguments["status"])
         else:
-            # Default: show future scheduled content
+            # Default: show future scheduled content (from now to days_ahead)
+            now = timezone.now()
             queryset = queryset.filter(
-                scheduled_date__lte=timezone.now() + timedelta(days=days_ahead)
+                scheduled_date__gte=now,
+                scheduled_date__lte=now + timedelta(days=days_ahead),
+                status="scheduled",
             )
 
         content_list = []
@@ -1334,7 +1346,27 @@ async def _execute_tool(name: str, arguments: dict) -> dict[str, Any]:
                 arguments["scheduled_date"].replace("Z", "+00:00")
             )
         if "platforms" in arguments:
-            content.platforms = arguments["platforms"]
+            platforms = arguments["platforms"]
+            if not isinstance(platforms, list):
+                raise ValueError("platforms must be provided as a list")
+
+            # Update platforms and keep social_profiles M2M in sync
+            connected_profiles = SocialProfile.objects.filter(
+                user=content.user, platform__in=platforms, status="connected"
+            )
+            connected_platforms = set(
+                connected_profiles.values_list("platform", flat=True)
+            )
+
+            missing_platforms = set(platforms) - connected_platforms
+            if missing_platforms:
+                missing_str = ", ".join(sorted(str(p) for p in missing_platforms))
+                raise ValueError(
+                    f"No connected social profiles found for: {missing_str}"
+                )
+
+            content.platforms = platforms
+            content.social_profiles.set(connected_profiles)
 
         content.save()
 
@@ -1451,7 +1483,7 @@ async def _execute_tool(name: str, arguments: dict) -> dict[str, Any]:
         return {
             "success": True,
             "platform": "twitter",
-            "tweet_id": result.get("data", {}).get("id"),
+            "tweet_id": result.get("id"),
             "result": result,
         }
 
@@ -1524,13 +1556,6 @@ async def _execute_tool(name: str, arguments: dict) -> dict[str, Any]:
 
         state_token = str(uuid.uuid4())
 
-        # Store OAuth state
-        OAuthState.objects.create(
-            user=user,
-            state=state_token,
-            platform=platform,
-        )
-
         # Get authorization URL based on platform
         service_map = {
             "linkedin": linkedin_service,
@@ -1549,7 +1574,21 @@ async def _execute_tool(name: str, arguments: dict) -> dict[str, Any]:
                 "Please set the required environment variables."
             )
 
-        auth_url = service.get_authorization_url(state_token)
+        # Handle PKCE for Twitter OAuth 2.0
+        code_verifier = None
+        if platform == "twitter":
+            code_verifier, code_challenge = twitter_service.generate_pkce_pair()
+            auth_url = service.get_authorization_url(state_token, code_challenge)
+        else:
+            auth_url = service.get_authorization_url(state_token)
+
+        # Store OAuth state (with code_verifier for Twitter PKCE)
+        OAuthState.objects.create(
+            user=user,
+            state=state_token,
+            platform=platform,
+            code_verifier=code_verifier,
+        )
 
         return {
             "platform": platform,
@@ -1560,6 +1599,21 @@ async def _execute_tool(name: str, arguments: dict) -> dict[str, Any]:
 
     else:
         raise ValueError(f"Unknown tool: {name}")
+
+
+async def _execute_tool(name: str, arguments: dict) -> dict[str, Any]:
+    """
+    Execute a tool asynchronously.
+
+    Wraps the synchronous _execute_tool_sync with sync_to_async to properly
+    handle Django ORM operations in async contexts without raising
+    SynchronousOnlyOperation errors.
+    """
+    from asgiref.sync import sync_to_async
+
+    return await sync_to_async(_execute_tool_sync, thread_sensitive=True)(
+        name, arguments
+    )
 
 
 async def run_mcp_server():
