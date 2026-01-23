@@ -4,6 +4,7 @@ Encryption utilities for securing OAuth tokens at rest.
 Uses Fernet symmetric encryption from the cryptography library.
 The encryption key is derived from Django's SECRET_KEY.
 """
+
 import base64
 import hashlib
 import logging

@@ -2,6 +2,7 @@
 Management command to automatically publish scheduled posts that are due.
 Run this via cron: */5 * * * * python manage.py publish_scheduled_posts
 """
+
 import logging
 from django.core.management.base import BaseCommand
 from django.utils import timezone
