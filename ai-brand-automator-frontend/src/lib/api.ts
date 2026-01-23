@@ -339,18 +339,19 @@ export interface CreateLocationData {
 // Google Business Profile API functions
 export const googleBusinessApi = {
   async getStatus(): Promise<GoogleBusinessProfile | null> {
-    const response = await apiClient.get('/automation/google-business/connect/');
+    const response = await apiClient.get('/automation/google-business/status/');
     if (response.status === 404) {
       return null;
     }
     if (!response.ok) {
       return null;
     }
-    return response.json();
+    const data = await response.json();
+    return data.profile || null;
   },
 
   async connect(): Promise<{ authorization_url: string }> {
-    const response = await apiClient.post('/automation/google-business/connect/', {});
+    const response = await apiClient.get('/automation/google-business/connect/');
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Failed to initiate connection');
