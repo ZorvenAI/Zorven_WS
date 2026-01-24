@@ -12,7 +12,7 @@ import pytest
 from django.test import TestCase, RequestFactory, override_settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 import jwt
 from datetime import datetime, timedelta
 
@@ -21,7 +21,6 @@ from brand_automator.middleware import (
     RateLimitMiddleware,
     SecurityMiddleware,
 )
-
 
 User = get_user_model()
 
@@ -40,7 +39,9 @@ class TestKongAuthenticationMiddleware(TestCase):
         self.get_response = MagicMock(return_value=MagicMock(status_code=200))
         self.middleware = KongAuthenticationMiddleware(self.get_response)
 
-    def create_jwt_token(self, user_id=None, expired=False, issuer="ai-brand-automator"):
+    def create_jwt_token(
+        self, user_id=None, expired=False, issuer="ai-brand-automator"
+    ):
         """Helper to create JWT tokens for testing"""
         payload = {
             "iss": issuer,
@@ -69,7 +70,7 @@ class TestKongAuthenticationMiddleware(TestCase):
             request.META["HTTP_X_KONG_PROXY"] = "true"
 
             # Middleware should pass through without error
-            response = self.middleware(request)
+            _response = self.middleware(request)
             self.get_response.assert_called()
 
     @override_settings(KONG_ENABLED=True)
@@ -81,7 +82,7 @@ class TestKongAuthenticationMiddleware(TestCase):
         request.META["HTTP_AUTHORIZATION"] = f"Bearer {token}"
         request.META["HTTP_X_KONG_PROXY"] = "true"
 
-        response = self.middleware(request)
+        _response = self.middleware(request)
 
         # User should be loaded
         self.assertEqual(request.user.id, self.user.id)
@@ -94,7 +95,7 @@ class TestKongAuthenticationMiddleware(TestCase):
         request.user = AnonymousUser()
         # No Authorization header
 
-        response = self.middleware(request)
+        _response = self.middleware(request)
 
         # User should remain anonymous
         self.assertTrue(isinstance(request.user, AnonymousUser))
@@ -108,7 +109,7 @@ class TestKongAuthenticationMiddleware(TestCase):
         request.META["HTTP_X_KONG_PROXY"] = "true"
 
         # Should not raise exception
-        response = self.middleware(request)
+        _response = self.middleware(request)
         self.assertTrue(isinstance(request.user, AnonymousUser))
 
     @override_settings(KONG_ENABLED=False)
@@ -117,7 +118,7 @@ class TestKongAuthenticationMiddleware(TestCase):
         request = self.factory.get("/api/v1/companies/")
         request.user = AnonymousUser()
 
-        response = self.middleware(request)
+        _response = self.middleware(request)
 
         # Should pass through without modification
         self.get_response.assert_called()
@@ -131,7 +132,7 @@ class TestKongAuthenticationMiddleware(TestCase):
         request.META["HTTP_AUTHORIZATION"] = f"Bearer {token}"
         request.META["HTTP_X_KONG_PROXY"] = "true"
 
-        response = self.middleware(request)
+        _response = self.middleware(request)
 
         self.assertTrue(isinstance(request.user, AnonymousUser))
 
@@ -154,7 +155,7 @@ class TestRateLimitMiddleware(TestCase):
 
         # Make many requests
         for _ in range(150):
-            response = middleware(request)
+            _response = middleware(request)
 
         # Should not return 429 since Kong handles rate limiting
         self.get_response.assert_called()
@@ -210,7 +211,7 @@ class TestSecurityMiddleware(TestCase):
 
         request = self.factory.get("/api/v1/companies/")
 
-        response = middleware(request)
+        _response = middleware(request)
 
         # Check that security headers were set
         call_args = [call[0][0] for call in response_mock.__setitem__.call_args_list]
@@ -242,7 +243,7 @@ class TestKongHeaderProcessing(TestCase):
         request.META["HTTP_X_KONG_PROXY"] = "true"
 
         # Process request
-        response = middleware(request)
+        _response = middleware(request)
 
         # Verify the header is present
         self.assertEqual(request.META.get("HTTP_X_FORWARDED_PROTO"), "https")
@@ -256,7 +257,7 @@ class TestKongHeaderProcessing(TestCase):
         request.user = AnonymousUser()
         request.META["HTTP_X_KONG_PROXY"] = "true"
 
-        response = middleware(request)
+        _response = middleware(request)
 
         # Middleware should recognize Kong proxy
         self.assertEqual(request.META.get("HTTP_X_KONG_PROXY"), "true")
@@ -269,6 +270,7 @@ class TestAssetConfirmationEndpoint:
     @pytest.fixture
     def api_client(self):
         from rest_framework.test import APIClient
+
         return APIClient()
 
     @pytest.fixture
@@ -286,8 +288,7 @@ class TestAssetConfirmationEndpoint:
         from onboarding.models import Company
 
         tenant, _ = Tenant.objects.get_or_create(
-            schema_name="public",
-            defaults={"name": "Public Tenant"}
+            schema_name="public", defaults={"name": "Public Tenant"}
         )
         company = Company.objects.create(
             tenant=tenant,
@@ -301,13 +302,17 @@ class TestAssetConfirmationEndpoint:
         response = api_client.post("/api/v1/assets/confirm_gcs_upload/", {})
         assert response.status_code == 401
 
-    def test_confirm_gcs_upload_requires_fields(self, api_client, authenticated_user, company):
+    def test_confirm_gcs_upload_requires_fields(
+        self, api_client, authenticated_user, company
+    ):
         """Confirm GCS upload requires file_name, file_type, file_size, gcs_path"""
         api_client.force_authenticate(user=authenticated_user)
 
         response = api_client.post("/api/v1/assets/confirm_gcs_upload/", {})
         assert response.status_code == 400
-        assert "file_name" in str(response.content) or "Missing required" in str(response.content)
+        assert "file_name" in str(response.content) or "Missing required" in str(
+            response.content
+        )
 
     def test_confirm_gcs_upload_success(self, api_client, authenticated_user, company):
         """Confirm GCS upload creates BrandAsset record"""
@@ -321,8 +326,10 @@ class TestAssetConfirmationEndpoint:
             "gcs_bucket": "brand-automator-assets",
         }
 
-        response = api_client.post("/api/v1/assets/confirm_gcs_upload/", data, format="json")
-        
+        response = api_client.post(
+            "/api/v1/assets/confirm_gcs_upload/", data, format="json"
+        )
+
         # Should create asset successfully
         if response.status_code == 201:
             assert "id" in response.json()

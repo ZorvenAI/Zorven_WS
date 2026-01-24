@@ -1841,7 +1841,7 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
     # Direct Posting Tools
     elif name == "post_to_linkedin":
         from .constants import TEST_ACCESS_TOKEN
-        
+
         user = get_user(arguments["user_email"])
 
         try:
@@ -1896,7 +1896,7 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
 
     elif name == "post_to_twitter":
         from .constants import TWITTER_TEST_ACCESS_TOKEN
-        
+
         user = get_user(arguments["user_email"])
 
         try:
@@ -1942,7 +1942,7 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
 
     elif name == "post_to_facebook":
         from .constants import FACEBOOK_TEST_ACCESS_TOKEN, FACEBOOK_TEST_PAGE_TOKEN
-        
+
         user = get_user(arguments["user_email"])
 
         try:
@@ -1953,7 +1953,10 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
             raise ValueError("Facebook profile not connected")
 
         # Check for test mode
-        if profile.access_token == FACEBOOK_TEST_ACCESS_TOKEN or profile.page_access_token == FACEBOOK_TEST_PAGE_TOKEN:
+        if (
+            profile.access_token == FACEBOOK_TEST_ACCESS_TOKEN
+            or profile.page_access_token == FACEBOOK_TEST_PAGE_TOKEN
+        ):
             return {
                 "success": True,
                 "platform": "facebook",

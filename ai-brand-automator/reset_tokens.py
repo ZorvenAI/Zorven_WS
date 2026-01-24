@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 """Reset encrypted tokens to test tokens."""
+
 import os
 import django
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'brand_automator.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "brand_automator.settings")
 django.setup()
 
-from automation.models import GoogleBusinessProfile, SocialProfile
+from automation.models import GoogleBusinessProfile, SocialProfile  # noqa: E402
 
 # Reset GBP ID 2 to mock token
 gbp2 = GoogleBusinessProfile.objects.filter(id=2).first()
@@ -19,9 +20,11 @@ if gbp2:
 # Reset all profiles with encrypted tokens
 for sp in SocialProfile.objects.all():
     needs_reset = False
-    if sp.access_token and (sp.access_token.startswith("enc:") or sp.access_token.startswith("TThYZ")):
+    if sp.access_token and (
+        sp.access_token.startswith("enc:") or sp.access_token.startswith("TThYZ")
+    ):
         needs_reset = True
-    
+
     if needs_reset:
         if sp.platform == "linkedin":
             sp.access_token = "test_access_token_not_real"

@@ -535,7 +535,9 @@ FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
 # Kafka Configuration
 # =============================================================================
 KAFKA_BOOTSTRAP_SERVERS = config("KAFKA_BOOTSTRAP_SERVERS", default="localhost:9092")
-KAFKA_CONSUMER_GROUP_ID = config("KAFKA_CONSUMER_GROUP_ID", default="brand-automator-consumers")
+KAFKA_CONSUMER_GROUP_ID = config(
+    "KAFKA_CONSUMER_GROUP_ID", default="brand-automator-consumers"
+)
 KAFKA_AUTO_OFFSET_RESET = config("KAFKA_AUTO_OFFSET_RESET", default="earliest")
 KAFKA_ENABLE_AUTO_COMMIT = config("KAFKA_ENABLE_AUTO_COMMIT", default=True, cast=bool)
 KAFKA_SESSION_TIMEOUT_MS = config("KAFKA_SESSION_TIMEOUT_MS", default=30000, cast=int)

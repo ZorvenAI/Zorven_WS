@@ -19,7 +19,7 @@ class SecurityMiddleware:
     - CSRF token validation for state-changing operations
     - Request size limits
     - Security headers
-    
+
     When Kong Gateway is enabled, security headers are handled by Kong's
     response-transformer plugin. This middleware skips header addition in that case.
     """
@@ -29,7 +29,7 @@ class SecurityMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
         # Check if Kong handles security headers
-        self.kong_enabled = getattr(settings, 'KONG_ENABLED', False)
+        self.kong_enabled = getattr(settings, "KONG_ENABLED", False)
 
     def __call__(self, request):
         # Check request size
@@ -50,9 +50,9 @@ class SecurityMiddleware:
         response["X-XSS-Protection"] = "1; mode=block"
 
         if not settings.DEBUG:
-            response[
-                "Strict-Transport-Security"
-            ] = "max-age=31536000; includeSubDomains"
+            response["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
 
         return response
 
@@ -111,7 +111,7 @@ class RateLimitMiddleware:
     """
     Simple in-memory rate limiting middleware
     For production, use Redis-based solution
-    
+
     When Kong Gateway is enabled (KONG_ENABLED=True), rate limiting
     should be handled by Kong's rate-limiting plugin. This middleware
     becomes a no-op in that case.
@@ -123,7 +123,7 @@ class RateLimitMiddleware:
         self.rate_limit = 100  # requests per minute
         self.window = 60  # seconds
         # Check if Kong handles rate limiting
-        self.kong_enabled = getattr(settings, 'KONG_ENABLED', False)
+        self.kong_enabled = getattr(settings, "KONG_ENABLED", False)
 
     def __call__(self, request):
         import time
@@ -178,21 +178,21 @@ class RateLimitMiddleware:
 class KongAuthenticationMiddleware:
     """
     Middleware for Kong Gateway integration.
-    
+
     When Kong Gateway is enabled (KONG_ENABLED=true), this middleware:
     1. Trusts that Kong has already validated the JWT signature
     2. Decodes the JWT WITHOUT verification to extract user claims
     3. Loads the User from database and sets request.user
     4. Injects tenant context for multi-tenancy
-    
+
     This reduces authentication overhead since Kong has already validated
     the token signature, expiration, and other claims.
-    
+
     Headers expected from Kong:
     - Authorization: Bearer <jwt>
     - X-Kong-Proxy: true (indicates request came through Kong)
     - X-Forwarded-Proto: https
-    
+
     Anonymous routes (no JWT required):
     - /api/v1/auth/login
     - /api/v1/auth/register
@@ -200,50 +200,50 @@ class KongAuthenticationMiddleware:
     - /health, /ready, /alive
     - /api/v1/subscriptions/webhook (Stripe webhook)
     """
-    
+
     # Routes that don't require authentication
     ANONYMOUS_ROUTES = [
-        '/api/v1/auth/login',
-        '/api/v1/auth/register',
-        '/api/v1/auth/refresh',
-        '/health',
-        '/ready',
-        '/alive',
-        '/api/v1/subscriptions/webhook',
-        '/admin',  # Django admin handles its own auth
-        '/static',
-        '/media',
+        "/api/v1/auth/login",
+        "/api/v1/auth/register",
+        "/api/v1/auth/refresh",
+        "/health",
+        "/ready",
+        "/alive",
+        "/api/v1/subscriptions/webhook",
+        "/admin",  # Django admin handles its own auth
+        "/static",
+        "/media",
     ]
-    
+
     def __init__(self, get_response):
         self.get_response = get_response
-        self.kong_enabled = getattr(settings, 'KONG_ENABLED', False)
+        self.kong_enabled = getattr(settings, "KONG_ENABLED", False)
         self.User = get_user_model()
-    
+
     def __call__(self, request):
         # Skip if Kong is not enabled
         if not self.kong_enabled:
             return self.get_response(request)
-        
+
         # Check if this is an anonymous route
         if self._is_anonymous_route(request.path):
             request.user = AnonymousUser()
             return self.get_response(request)
-        
+
         # Check for Kong proxy header (optional, for debugging)
-        is_kong_request = request.META.get('HTTP_X_KONG_PROXY') == 'true'
-        
+        is_kong_request = request.META.get("HTTP_X_KONG_PROXY") == "true"
+
         # Get JWT from Authorization header
-        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-        
-        if not auth_header.startswith('Bearer '):
+        auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+
+        if not auth_header.startswith("Bearer "):
             # No token provided - could be anonymous or error
             # Let DRF handle authentication for protected endpoints
             request.user = AnonymousUser()
             return self.get_response(request)
-        
+
         token = auth_header[7:]  # Remove 'Bearer ' prefix
-        
+
         try:
             # Decode WITHOUT verification - Kong already validated
             # We just need to extract the claims
@@ -255,46 +255,44 @@ class KongAuthenticationMiddleware:
                     "verify_aud": False,
                 },
             )
-            
+
             # Extract user ID from token
-            user_id = payload.get('user_id')
-            
+            user_id = payload.get("user_id")
+
             if user_id:
                 try:
                     user = self.User.objects.get(id=user_id)
                     request.user = user
-                    
+
                     # Set tenant context if available
-                    tenant_id = payload.get('tenant_id')
+                    tenant_id = payload.get("tenant_id")
                     if tenant_id:
                         request.tenant_id = tenant_id
-                    
+
                     # Log successful Kong auth
                     if is_kong_request:
                         logger.debug(
                             f"Kong auth successful for user {user_id} "
                             f"on path {request.path}"
                         )
-                    
+
                 except self.User.DoesNotExist:
-                    logger.warning(
-                        f"User {user_id} from JWT not found in database"
-                    )
+                    logger.warning(f"User {user_id} from JWT not found in database")
                     request.user = AnonymousUser()
             else:
                 # Token doesn't have user_id claim
                 logger.warning("JWT missing user_id claim")
                 request.user = AnonymousUser()
-                
+
         except jwt.exceptions.DecodeError as e:
             logger.warning(f"Failed to decode JWT: {e}")
             request.user = AnonymousUser()
         except Exception as e:
             logger.error(f"Kong auth middleware error: {e}")
             request.user = AnonymousUser()
-        
+
         return self.get_response(request)
-    
+
     def _is_anonymous_route(self, path):
         """Check if the path is an anonymous route that doesn't require auth."""
         for route in self.ANONYMOUS_ROUTES:

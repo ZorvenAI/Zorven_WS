@@ -9,7 +9,7 @@ from .models import AuditLog, KafkaEvent, KafkaConsumerOffset
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
     """Admin for AuditLog model"""
-    
+
     list_display = [
         "timestamp",
         "method",
@@ -47,11 +47,11 @@ class AuditLogAdmin(admin.ModelAdmin):
     ]
     date_hierarchy = "timestamp"
     ordering = ["-timestamp"]
-    
+
     def has_add_permission(self, request):
         """Audit logs are created by Kafka consumer only"""
         return False
-    
+
     def has_change_permission(self, request, obj=None):
         """Audit logs are immutable"""
         return False
@@ -60,7 +60,7 @@ class AuditLogAdmin(admin.ModelAdmin):
 @admin.register(KafkaEvent)
 class KafkaEventAdmin(admin.ModelAdmin):
     """Admin for KafkaEvent model"""
-    
+
     list_display = [
         "topic",
         "status",
@@ -85,19 +85,24 @@ class KafkaEventAdmin(admin.ModelAdmin):
     ]
     date_hierarchy = "created_at"
     ordering = ["-created_at"]
-    
+
     def short_error(self, obj):
         """Truncated error message for list display"""
         if obj.error_message:
-            return obj.error_message[:50] + "..." if len(obj.error_message) > 50 else obj.error_message
+            return (
+                obj.error_message[:50] + "..."
+                if len(obj.error_message) > 50
+                else obj.error_message
+            )
         return "-"
+
     short_error.short_description = "Error"
 
 
 @admin.register(KafkaConsumerOffset)
 class KafkaConsumerOffsetAdmin(admin.ModelAdmin):
     """Admin for KafkaConsumerOffset model"""
-    
+
     list_display = [
         "topic",
         "partition",

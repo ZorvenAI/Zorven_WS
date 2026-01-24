@@ -233,11 +233,11 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
     def confirm_gcs_upload(self, request):
         """
         Confirm a direct GCS upload (when Kong uploads directly to GCS).
-        
+
         This endpoint is called by the frontend after Kong successfully uploads
         a file directly to GCS, bypassing Django. It creates the BrandAsset
         record in the database to track the uploaded file.
-        
+
         Request body:
         {
             "file_name": "original-filename.png",
@@ -252,6 +252,7 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         tenant = getattr(request, "tenant", None)
         if not tenant:
             from tenants.models import Tenant
+
             try:
                 tenant = Tenant.objects.get(schema_name="public")
             except Tenant.DoesNotExist:
