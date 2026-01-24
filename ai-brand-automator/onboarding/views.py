@@ -1,3 +1,4 @@
+import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -16,6 +17,8 @@ from .serializers import (
 from files.services import gcs_service
 from ai_services.services import ai_service
 from brand_automator.validators import validate_file_upload, sanitize_filename
+
+logger = logging.getLogger(__name__)
 
 
 class CompanyViewSet(viewsets.ModelViewSet):
@@ -304,6 +307,31 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
 
         # Sanitize filename
         safe_filename = sanitize_filename(file_name)
+
+        # SECURITY: Validate and derive gcs_path server-side
+        # Enforce tenant-scoped path pattern to prevent cross-tenant access
+        expected_path_prefix = f"assets/{tenant.id}/"
+        if not gcs_path.startswith(expected_path_prefix):
+            logger.warning(
+                f"Invalid gcs_path '{gcs_path}' for tenant {tenant.id}. "
+                f"Expected prefix: {expected_path_prefix}"
+            )
+            return Response(
+                {"error": "Invalid GCS path. Path must be within tenant scope."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verify filename in path matches sanitized filename
+        path_filename = gcs_path.split("/")[-1] if "/" in gcs_path else gcs_path
+        if path_filename != safe_filename:
+            logger.warning(
+                f"GCS path filename '{path_filename}' doesn't match "
+                f"sanitized filename '{safe_filename}'"
+            )
+            return Response(
+                {"error": "GCS path filename mismatch."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Create asset record for the direct GCS upload
         asset = BrandAsset.objects.create(

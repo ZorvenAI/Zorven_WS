@@ -193,10 +193,11 @@ class KafkaConsumerService:
         """
         try:
             # Import here to avoid circular imports
+            from django.utils import timezone
             from kafka_service.models import AuditLog
 
             AuditLog.objects.create(
-                timestamp=log_entry.get("timestamp"),
+                timestamp=timezone.now(),  # Use proper datetime, not ISO string
                 client_ip=log_entry.get("client_ip"),
                 method=log_entry.get("method"),
                 uri=log_entry.get("uri"),

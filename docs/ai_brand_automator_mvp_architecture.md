@@ -159,18 +159,20 @@ This document outlines the architecture for the AI Brand Automator MVP, a multi-
 - `/health/`, `/ready/`, `/alive/` - Health monitoring
 
 ### 3. Authentication (JWT-based)
-**Status**: ✅ Implemented (No Kong Gateway)
+**Status**: ✅ Implemented (with Kong Gateway)
 
 **Implementation**:
-- `djangorestframework-simplejwt` for JWT tokens
+- Kong Gateway handles JWT validation at the edge
+- `djangorestframework-simplejwt` for token generation
+- `KongAuthenticationMiddleware` extracts user from pre-validated tokens
 - Email-based login (not username)
 - Django middleware for CORS (CorsMiddleware first in chain)
-- Django middleware for rate limiting
+- Kong handles rate limiting when enabled
 - Tenant context injection via `TenantMainMiddleware`
 
 **Authentication Flow**:
 ```
-Client → Django (JWT Validation) → Tenant Middleware → Database (Schema)
+Client → Kong (JWT Validation + Rate Limit) → Django → Tenant Middleware → Database
 ```
 
 ### 4. Multi-Tenancy Implementation

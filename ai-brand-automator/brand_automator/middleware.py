@@ -230,8 +230,18 @@ class KongAuthenticationMiddleware:
             request.user = AnonymousUser()
             return self.get_response(request)
 
-        # Check for Kong proxy header (optional, for debugging)
+        # SECURITY: Only trust unverified JWT decode if request came through Kong
+        # This prevents auth bypass if backend is directly accessible
         is_kong_request = request.META.get("HTTP_X_KONG_PROXY") == "true"
+
+        if not is_kong_request:
+            # Request didn't come through Kong - let DRF/SimpleJWT handle auth
+            # This ensures proper JWT verification for direct backend access
+            logger.debug(
+                f"Request to {request.path} not via Kong, "
+                "deferring to DRF authentication"
+            )
+            return self.get_response(request)
 
         # Get JWT from Authorization header
         auth_header = request.META.get("HTTP_AUTHORIZATION", "")
