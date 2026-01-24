@@ -115,6 +115,88 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
     └── CODEBASE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md
 ```
 
+## Kong Gateway Architecture
+
+Kong Gateway runs in **DB-less (declarative) mode** as the API entry point, providing JWT authentication offloading, rate limiting, and CORS handling.
+
+### Architecture Diagram
+
+```
+                    ┌─────────────────────────────────────────┐
+                    │          Kong Gateway (:8000)           │
+                    │  ┌─────────────────────────────────┐    │
+  Frontend (:3000) ─┼─►│  JWT Auth │ Rate Limit │ CORS   │────┼──► Django Backend (:8001)
+                    │  └─────────────────────────────────┘    │           │
+                    └─────────────────────────────────────────┘           ▼
+                                                                   PostgreSQL (Neon)
+                                                                         │
+                                                                         ▼
+                                                                  Gemini 2.0 Flash
+                                                                  Stripe / Celery+Redis
+```
+
+### Service Ports
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Kong Gateway | 8000 | External API entry point |
+| Django Backend | 8001 | Internal only (via Kong) |
+| Kong Admin API | 8002 | Configuration/debugging |
+| MCP Server | 8003 | AI agent tools (SSE/stdio) |
+| Frontend | 3000 | Next.js development server |
+
+### Key Features
+
+- **JWT Offloading**: Kong validates JWT tokens at the edge; Django trusts pre-validated claims
+- **Rate Limiting**: Configurable per-route limits (100 req/min API, 20 req/min auth)
+- **CORS Handling**: Centralized CORS configuration for all origins
+- **Request Transformation**: Header injection for tenant context
+- **Health Checks**: Automatic backend health monitoring
+
+### Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `deployment/docker/kong/kong.yaml` | Declarative Kong configuration |
+| `deployment/docker/kong/docker-entrypoint.sh` | Environment variable substitution |
+| `ai-brand-automator/docker-compose.yml` | Local development with Kong |
+| `ai-brand-automator/brand_automator/middleware.py` | `KongAuthenticationMiddleware` |
+
+### Running with Kong (Local Development)
+
+```bash
+# Start all services (Kong, Django, Redis, PostgreSQL)
+cd ai-brand-automator
+docker-compose up -d
+
+# Frontend points to Kong at localhost:8000
+cd ../ai-brand-automator-frontend
+NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
+```
+
+### Running without Kong (Direct Backend)
+
+```bash
+# Django runs on port 8000 directly
+cd ai-brand-automator
+python manage.py runserver
+
+# Frontend points directly to Django
+cd ../ai-brand-automator-frontend
+NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
+```
+
+### Environment Variables
+
+```bash
+# Backend - Enable Kong mode
+KONG_ENABLED=True              # Trust Kong JWT validation
+
+# Kong - Backend connection (production)
+BACKEND_URL=https://your-backend.railway.app
+BACKEND_HOST=your-backend.railway.app
+```
+
 ## Quick Start
 
 ### Prerequisites
