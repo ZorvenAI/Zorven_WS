@@ -13,12 +13,14 @@ This document outlines the architecture for the AI Brand Automator MVP, a multi-
 |-----------|------------|--------|
 | **Frontend** | Next.js 15 + React 19 + TypeScript + Tailwind CSS | ✅ Implemented |
 | **Backend** | Django 4.2.16 + Django REST Framework | ✅ Implemented |
+| **API Gateway** | Kong Gateway (DB-less mode) | ✅ Implemented |
 | **Database** | PostgreSQL (Neon) with django-tenants | ✅ Implemented |
-| **Authentication** | JWT (djangorestframework-simplejwt) | ✅ Implemented |
-| **Storage** | Google Cloud Storage | ✅ Implemented |
+| **Authentication** | JWT (Kong offloading + SimpleJWT) | ✅ Implemented |
+| **Storage** | Google Cloud Storage (direct via Kong) | ✅ Implemented |
 | **Payments** | Stripe API (subscriptions) | ✅ Implemented |
 | **AI Services** | Google Gemini 2.0 Flash | ✅ Implemented |
 | **Message Queue** | Redis + Celery | ✅ Implemented |
+| **Event Streaming** | Apache Kafka (optional) | ✅ Implemented |
 | **MCP Server** | Model Context Protocol (23 tools) | ✅ Implemented |
 | **Deployment** | Railway (Docker-based) | ✅ Implemented |
 | **CI/CD** | GitHub Actions | ✅ Implemented |
@@ -37,19 +39,27 @@ This document outlines the architecture for the AI Brand Automator MVP, a multi-
 
 ### High-Level Architecture (Actual Implementation)
 ```
-┌─────────────────┐                         ┌─────────────────┐
-│   Next.js 15    │                         │   Django DRF    │
-│   Frontend      │◄───── HTTPS/REST ──────►│   Backend       │
-│   (Port 3000)   │                         │   (Port 8000)   │
-└─────────────────┘                         └────────┬────────┘
-         │                                           │
-         │                                           ▼
-         │                                  ┌─────────────────┐
-         │                                  │   Redis         │
-         │                                  │   (Broker)      │
-         │                                  └────────┬────────┘
-         │                                           │
-         ▼                                           ▼
+┌─────────────────┐                         ┌─────────────────────────────────┐
+│   Next.js 15    │                         │        KONG GATEWAY             │
+│   Frontend      │◄───── HTTPS/REST ──────►│         (Port 8000)             │
+│   (Port 3000)   │                         │  JWT Auth │ CORS │ Rate Limit   │
+└─────────────────┘                         └─────────────┬───────────────────┘
+         │                                                │
+         │                                    ┌───────────┴───────────┐
+         │                                    ▼                       ▼
+         │                            ┌─────────────────┐    ┌─────────────────┐
+         │                            │   Django DRF    │    │  GCS Direct     │
+         │                            │   Backend       │    │  Upload         │
+         │                            │   (Port 8001)   │    │  (Storage)      │
+         │                            └────────┬────────┘    └─────────────────┘
+         │                                     │
+         │                                     ▼
+         │                            ┌─────────────────┐
+         │                            │   Redis         │
+         │                            │   (Broker)      │
+         │                            └────────┬────────┘
+         │                                     │
+         ▼                                     ▼
 ┌─────────────────┐    ┌─────────────────┐  ┌─────────────────┐
 │  Stripe API     │    │  PostgreSQL     │  │   Celery        │
 │  (Payments)     │    │  (Neon)         │  │   Worker + Beat │
@@ -71,6 +81,30 @@ This document outlines the architecture for the AI Brand Automator MVP, a multi-
 │ - Instagram     │                 │                         │
 └─────────────────┴─────────────────┴─────────────────────────┘
 ```
+
+### Kong Gateway Architecture
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      KONG GATEWAY (Port 8000)                           │
+│  ┌─────────────┬─────────────┬─────────────┬─────────────┐             │
+│  │    CORS     │     JWT     │ Rate Limit  │  Logging    │             │
+│  │   Plugin    │   Plugin    │   Plugin    │   Plugin    │             │
+│  └─────────────┴─────────────┴─────────────┴─────────────┘             │
+└─────────────────────────────────────────────────────────────────────────┘
+         │                    │                    │
+         ▼                    ▼                    ▼
+┌─────────────┐      ┌─────────────┐      ┌─────────────┐
+│   Django    │      │    GCS      │      │   Kafka     │
+│   (8001)    │      │  (Storage)  │      │  (Events)   │
+└─────────────┘      └─────────────┘      └─────────────┘
+```
+
+**Key Features:**
+- **JWT Authentication Offloading**: Kong validates tokens, Django trusts headers
+- **CORS Management**: Centralized cross-origin configuration
+- **Rate Limiting**: Global and per-route rate limits (100/min, 1000/hr)
+- **Direct GCS Uploads**: File uploads bypass Django for performance
+- **Kafka Event Streaming**: Audit logging and event ingestion (optional)
 
 ## Component Breakdown
 

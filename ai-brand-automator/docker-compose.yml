@@ -1,7 +1,43 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
+  # Kong Gateway - API Gateway (Entry Point on port 8000)
+  kong:
+    build:
+      context: ../deployment/docker/kong
+      dockerfile: Dockerfile
+    container_name: kong-gateway
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /usr/local/kong/declarative/kong.yaml
+      KONG_PROXY_LISTEN: "0.0.0.0:8000"
+      KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_PLUGINS: bundled,jwt,cors,request-transformer,rate-limiting,response-transformer
+      JWT_SECRET_KEY: ${SECRET_KEY:-django-insecure-changeme}
+      GCP_ACCESS_TOKEN: ${GCP_ACCESS_TOKEN:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8000:8000"   # Proxy - Main entry point
+      - "8002:8001"   # Admin API (mapped to 8002 to avoid conflict with MCP server)
+    volumes:
+      - ../deployment/docker/kong/kong.yaml:/usr/local/kong/declarative/kong.yaml:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - app-network
+
+  # PostgreSQL Database (optional - project uses Neon cloud DB by default)
   db:
     image: postgres:15-alpine
     environment:
@@ -9,7 +45,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"  # Use 5433 to avoid conflict with local PostgreSQL
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -17,6 +53,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - app-network
 
   # Redis Cache
   redis:
@@ -30,30 +68,122 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+    networks:
+      - app-network
 
-  # Django Backend
+  # Django Backend (Internal - accessed via Kong)
   backend:
     build:
       context: .
       dockerfile: Dockerfile
-    command: python manage.py runserver 0.0.0.0:8000
+    command: python manage.py runserver 0.0.0.0:8001
     volumes:
       - .:/app
-    ports:
-      - "8000:8000"
+    # Port NOT exposed to host - only accessible via Kong
+    expose:
+      - "8001"
     environment:
       - DEBUG=True
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/brand_automator
+      # Use .env file for database settings (Neon cloud DB)
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-5432}
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=${SECRET_KEY:-django-insecure-changeme}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GS_BUCKET_NAME=${GS_BUCKET_NAME}
       - GS_PROJECT_ID=${GS_PROJECT_ID}
+      # Kong Integration Settings
+      - KONG_ENABLED=true
+      - ALLOWED_HOSTS=localhost,127.0.0.1,backend,kong
+      - USE_X_FORWARDED_HOST=true
+      - USE_X_FORWARDED_PORT=true
+      # Kafka Settings
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-brand-kafka:9092}
+      - KAFKA_CONSUMER_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID:-brand-automator-consumers}
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app-network
+
+  # Celery Worker - Background task processing
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A brand_automator worker --loglevel=info --concurrency=2
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=True
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-5432}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-changeme}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GS_BUCKET_NAME=${GS_BUCKET_NAME}
+      - GS_PROJECT_ID=${GS_PROJECT_ID}
+      # Social Platform OAuth (for automation publishing)
+      - LINKEDIN_CLIENT_ID=${LINKEDIN_CLIENT_ID:-}
+      - LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET:-}
+      - TWITTER_CLIENT_ID=${TWITTER_CLIENT_ID:-}
+      - TWITTER_CLIENT_SECRET=${TWITTER_CLIENT_SECRET:-}
+      - FACEBOOK_APP_ID=${FACEBOOK_APP_ID:-}
+      - FACEBOOK_APP_SECRET=${FACEBOOK_APP_SECRET:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A brand_automator inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+
+  # Celery Beat - Periodic task scheduler
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A brand_automator beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=True
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-5432}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-changeme}
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
 
   # Next.js Frontend
   frontend:
@@ -67,9 +197,86 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8000
+      # Frontend talks to Kong on port 8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
     depends_on:
-      - backend
+      kong:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # Zookeeper - Kafka Coordination Service
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: brand-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2281:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+    healthcheck:
+      test: ["CMD-SHELL", "echo srvr | nc localhost 2181 | grep Zookeeper"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app-network
+    profiles:
+      - with-kafka
+
+  # Kafka - Event Streaming Platform
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: brand-kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: brand-zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://brand-kafka:9092,PLAINTEXT_HOST://localhost:9192
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+    ports:
+      - "9192:9092"
+      - "29192:29092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+    profiles:
+      - with-kafka
+
+  # Kafka UI - Web interface for monitoring
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: brand-kafka-ui
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: brand-kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: brand-zookeeper:2181
+    ports:
+      - "8080:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - app-network
+    profiles:
+      - with-kafka
 
   # MCP Server (SSE transport for web clients/AI agents)
   mcp-server:
@@ -79,7 +286,7 @@ services:
     volumes:
       - .:/app
     ports:
-      - "8001:8001"
+      - "8003:8001"   # Changed to 8003 to avoid port conflicts
     environment:
       - DEBUG=True
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/brand_automator
@@ -107,7 +314,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   postgres_data:
   redis_data:
+  zookeeper_data:
+  zookeeper_log:
+  kafka_data:

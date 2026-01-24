@@ -45,21 +45,9 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:${MCP_PORT}/health || exit 1
 
-# Create entrypoint script for MCP server
-RUN cat <<'EOF' > /app/entrypoint-mcp.sh && chmod +x /app/entrypoint-mcp.sh
-#!/bin/bash
-set -e
-echo "=== Starting MCP Server ==="
-echo "Transport: ${MCP_TRANSPORT}"
-echo "Host: ${MCP_HOST}"
-echo "Port: ${MCP_PORT}"
-
-# Run MCP server with configured transport
-exec python run_mcp_server.py \
-    --transport "${MCP_TRANSPORT}" \
-    --host "${MCP_HOST}" \
-    --port "${MCP_PORT}"
-EOF
+# Copy entrypoint script
+COPY entrypoint-mcp.sh /app/entrypoint-mcp.sh
+RUN chmod +x /app/entrypoint-mcp.sh
 
 # Run MCP server
 CMD ["/app/entrypoint-mcp.sh"]

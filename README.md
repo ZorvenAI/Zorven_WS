@@ -49,10 +49,12 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 
 ### Backend
 - **Django 4.2.16** + Django REST Framework
+- **Kong Gateway** (DB-less mode) for API gateway, JWT offloading, rate limiting
 - **PostgreSQL** (Neon hosted) with multi-tenancy
 - **Google Gemini 2.0 Flash** for AI content generation
 - **Stripe** for subscription management
 - **Celery 5.6** + Redis for background task processing
+- **Kafka** (optional) for event streaming and audit logging
 - **JWT Authentication** with token refresh
 - **MCP Server** (Model Context Protocol) with 23 tools
 
@@ -66,7 +68,7 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 - **Railway** for production hosting
 - **Docker** for containerization
 - **GitHub Actions** for CI/CD
-- **226+ tests** (pytest + Hypothesis)
+- **241+ tests** (pytest + Hypothesis)
 
 ## Project Structure
 
@@ -99,6 +101,10 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 │
 ├── deployment/                  # Railway deployment configs
 │   ├── docker/                  # Dockerfiles for all services
+│   │   ├── kong/                # Kong Gateway (DB-less mode)
+│   │   │   ├── kong.yaml        # Declarative configuration
+│   │   │   └── Dockerfile       # Kong container
+│   │   └── ...                  # Other service Dockerfiles
 │   └── railway/                 # Railway configuration
 │
 ├── .github/workflows/           # CI/CD pipelines
@@ -182,6 +188,33 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
    # For mobile/network testing:
    python manage.py runserver 0.0.0.0:8000
    ```
+
+### Docker Quick Start (with Kong Gateway)
+
+For full-stack development with Kong Gateway, Kafka, and all services:
+
+```bash
+cd ai-brand-automator
+
+# Start core services (Kong, Django, Redis, PostgreSQL)
+docker-compose up -d
+
+# Or include Kafka for event streaming
+docker-compose --profile with-kafka up -d
+
+# Verify services are running
+curl http://localhost:8000/health/   # Via Kong
+curl http://localhost:8002/status    # Kong Admin API
+```
+
+**Port mapping with Kong:**
+| Service | Port | Description |
+|---------|------|-------------|
+| Kong Gateway | 8000 | Main API entry point |
+| Django Backend | 8001 | Internal (via Kong only) |
+| Kong Admin | 8002 | Gateway config/debug |
+| MCP Server | 8003 | AI agent tools |
+| Frontend | 3000 | Next.js |
 
 7. **Start Celery for background tasks** (optional, for scheduled posting):
    ```bash
