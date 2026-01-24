@@ -50,9 +50,9 @@ class SecurityMiddleware:
         response["X-XSS-Protection"] = "1; mode=block"
 
         if not settings.DEBUG:
-            response["Strict-Transport-Security"] = (
-                "max-age=31536000; includeSubDomains"
-            )
+            response[
+                "Strict-Transport-Security"
+            ] = "max-age=31536000; includeSubDomains"
 
         return response
 
