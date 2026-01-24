@@ -15,7 +15,7 @@ services:
   # 1. Django Backend API Service
   # ---------------------------------------------------------------------------
   - name: core-api-service
-    url: http://backend:8001
+    url: ${BACKEND_URL}
     connect_timeout: 60000
     write_timeout: 60000
     read_timeout: 60000
@@ -45,7 +45,7 @@ services:
   # 2. Authentication Routes (Anonymous - No JWT Required)
   # ---------------------------------------------------------------------------
   - name: auth-service
-    url: http://backend:8001
+    url: ${BACKEND_URL}
     connect_timeout: 60000
     write_timeout: 60000
     read_timeout: 60000
@@ -97,7 +97,7 @@ services:
   # 3. Health Check Routes (Anonymous)
   # ---------------------------------------------------------------------------
   - name: health-service
-    url: http://backend:8001
+    url: ${BACKEND_URL}
     connect_timeout: 10000
     write_timeout: 10000
     read_timeout: 10000
@@ -123,7 +123,7 @@ services:
   # 4. Stripe Webhook Route (Anonymous - Verified by Stripe Signature)
   # ---------------------------------------------------------------------------
   - name: webhook-service
-    url: http://backend:8001
+    url: ${BACKEND_URL}
     connect_timeout: 60000
     write_timeout: 60000
     read_timeout: 60000
@@ -173,7 +173,7 @@ services:
   # ---------------------------------------------------------------------------
   # For MVP, events go through Django which uses kafka_service to publish
   - name: event-ingest-service
-    url: http://backend:8001
+    url: ${BACKEND_URL}
     connect_timeout: 5000
     write_timeout: 5000
     read_timeout: 5000
@@ -368,7 +368,7 @@ plugins:
   # Using http-log instead of kafka-log since kafka plugins require Kong Enterprise
   - name: http-log
     config:
-      http_endpoint: http://backend:8001/api/v1/audit/kong-logs/
+      http_endpoint: ${BACKEND_URL}/api/v1/audit/kong-logs/
       method: POST
       timeout: 10000
       keepalive: 60000
@@ -413,7 +413,7 @@ upstreams:
         unhealthy:
           http_failures: 3
     targets:
-      - target: backend:8001
+      - target: ${BACKEND_HOST}
         weight: 100
     tags:
       - backend
