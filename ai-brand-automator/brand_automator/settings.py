@@ -92,6 +92,7 @@ SHARED_APPS = [
     "onboarding",  # Company data (has FK to Tenant)
     "subscriptions",  # Stripe payment integration
     "automation",  # Social media automation
+    "kafka_service",  # Kafka consumer/producer service
 ]
 
 TENANT_APPS = [
@@ -110,6 +111,7 @@ INSTALLED_APPS = list(SHARED_APPS) + [
 
 MIDDLEWARE = [
     # CORS middleware - MUST BE FIRST for preflight OPTIONS requests
+    # Note: When KONG_HANDLES_CORS=True, this can be removed
     "corsheaders.middleware.CorsMiddleware",
     # Multi-tenancy middleware - DefaultTenantMiddleware falls back to public schema
     "django_tenants.middleware.default.DefaultTenantMiddleware",
@@ -120,11 +122,15 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Kong Authentication Middleware - handles JWT from Kong Gateway
+    # This should be after AuthenticationMiddleware to override when Kong is enabled
+    "brand_automator.middleware.KongAuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # Custom security middleware
     "brand_automator.middleware.SecurityMiddleware",
     "brand_automator.middleware.RequestValidationMiddleware",
+    # Rate limiting disabled when Kong handles it
     "brand_automator.middleware.RateLimitMiddleware",
 ]
 
@@ -220,6 +226,28 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
 ]
 
+# =============================================================================
+# Kong Gateway Integration Settings
+# =============================================================================
+# When KONG_ENABLED=True, Django trusts that Kong Gateway has already
+# validated JWT tokens. The KongAuthenticationMiddleware will decode
+# tokens without verification and extract user claims.
+KONG_ENABLED = config("KONG_ENABLED", default=False, cast=bool)
+
+# Trust proxy headers from Kong
+# These headers are set by Kong when forwarding requests
+USE_X_FORWARDED_HOST = config("USE_X_FORWARDED_HOST", default=KONG_ENABLED, cast=bool)
+USE_X_FORWARDED_PORT = config("USE_X_FORWARDED_PORT", default=KONG_ENABLED, cast=bool)
+
+# Secure proxy SSL header - trust X-Forwarded-Proto from Kong
+# Format: (header_name, expected_value)
+if KONG_ENABLED:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# When Kong handles CORS, we can disable Django CORS middleware
+# Set KONG_HANDLES_CORS=True in production when Kong is the entry point
+KONG_HANDLES_CORS = config("KONG_HANDLES_CORS", default=False, cast=bool)
+
 # REST Framework settings
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -235,6 +263,8 @@ REST_FRAMEWORK = {
 }
 
 # JWT settings
+# These settings are used by both Django SimpleJWT and Kong Gateway
+# The SIGNING_KEY must match the Kong JWT consumer secret
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
@@ -249,6 +279,10 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_id",
     "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
     "TOKEN_TYPE_CLAIM": "token_type",
+    # Issuer claim - must match Kong JWT consumer key
+    "ISSUER": config("JWT_ISSUER", default="ai-brand-automator"),
+    # Audience claim (optional)
+    "AUDIENCE": config("JWT_AUDIENCE", default=None),
 }
 
 # Password validation
@@ -497,7 +531,25 @@ INSTAGRAM_THREADS_REDIRECT_URI = config(
 # Frontend URL for OAuth redirects
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
 
+# =============================================================================
+# Kafka Configuration
+# =============================================================================
+KAFKA_BOOTSTRAP_SERVERS = config("KAFKA_BOOTSTRAP_SERVERS", default="localhost:9092")
+KAFKA_CONSUMER_GROUP_ID = config(
+    "KAFKA_CONSUMER_GROUP_ID", default="brand-automator-consumers"
+)
+KAFKA_AUTO_OFFSET_RESET = config("KAFKA_AUTO_OFFSET_RESET", default="earliest")
+KAFKA_ENABLE_AUTO_COMMIT = config("KAFKA_ENABLE_AUTO_COMMIT", default=True, cast=bool)
+KAFKA_SESSION_TIMEOUT_MS = config("KAFKA_SESSION_TIMEOUT_MS", default=30000, cast=int)
+
+# Kafka Topics
+KAFKA_TOPIC_GATEWAY_LOGS = "gateway-logs"
+KAFKA_TOPIC_RAW_INGESTION = "raw-ingestion-topic"
+KAFKA_TOPIC_DLQ = "dlq-events"
+
+# =============================================================================
 # Celery Configuration
+# =============================================================================
 CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = config(
     "CELERY_RESULT_BACKEND", default="redis://localhost:6379/0"
@@ -517,5 +569,21 @@ CELERY_BEAT_SCHEDULE = {
         # scheduled time. Trade-off: slight DB overhead vs user expectation
         # of timely delivery. For lower frequency, change to 300.0 (5 min).
         "schedule": 60.0,
+    },
+    # Kafka consumer tasks (when Kafka is enabled)
+    "consume-gateway-logs-every-minute": {
+        "task": "kafka_service.tasks.consume_gateway_logs",
+        "schedule": 60.0,  # Every minute
+        "kwargs": {"max_messages": 100},
+    },
+    "consume-raw-events-every-30s": {
+        "task": "kafka_service.tasks.consume_raw_events",
+        "schedule": 30.0,  # Every 30 seconds
+        "kwargs": {"max_messages": 50},
+    },
+    "process-dlq-every-5-minutes": {
+        "task": "kafka_service.tasks.process_dlq_events",
+        "schedule": 300.0,  # Every 5 minutes
+        "kwargs": {"max_messages": 20},
     },
 }

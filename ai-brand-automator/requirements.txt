@@ -19,6 +19,9 @@ django-celery-beat>=2.8.0,<3.0.0
 gunicorn>=21.0.0,<23.0.0
 whitenoise>=6.6.0,<7.0.0
 
+# Kafka integration
+confluent-kafka>=2.3.0,<3.0.0
+
 # MCP (Model Context Protocol) dependencies
 mcp>=1.0.0
 starlette>=0.27.0

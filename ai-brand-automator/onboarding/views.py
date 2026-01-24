@@ -1,3 +1,4 @@
+import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -16,6 +17,8 @@ from .serializers import (
 from files.services import gcs_service
 from ai_services.services import ai_service
 from brand_automator.validators import validate_file_upload, sanitize_filename
+
+logger = logging.getLogger(__name__)
 
 
 class CompanyViewSet(viewsets.ModelViewSet):
@@ -224,6 +227,122 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             file_size=file.size,
             gcs_path=gcs_path if gcs_uploaded else saved_path,
             processed=True,
+        )
+
+        response_serializer = BrandAssetSerializer(asset)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"])
+    def confirm_gcs_upload(self, request):
+        """
+        Confirm a direct GCS upload (when Kong uploads directly to GCS).
+
+        This endpoint is called by the frontend after Kong successfully uploads
+        a file directly to GCS, bypassing Django. It creates the BrandAsset
+        record in the database to track the uploaded file.
+
+        Request body:
+        {
+            "file_name": "original-filename.png",
+            "file_type": "image",  # image, video, document, other
+            "file_size": 1024,  # size in bytes
+            "gcs_path": "assets/tenant-id/filename.png",
+            "gcs_bucket": "brand-automator-assets",
+            "company_id": 1  # optional, defaults to tenant's company
+        }
+        """
+        # Get tenant from request (defensive access for MVP mode)
+        tenant = getattr(request, "tenant", None)
+        if not tenant:
+            from tenants.models import Tenant
+
+            try:
+                tenant = Tenant.objects.get(schema_name="public")
+            except Tenant.DoesNotExist:
+                return Response(
+                    {"error": "Public tenant not found"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        # Validate required fields
+        required_fields = ["file_name", "file_type", "file_size", "gcs_path"]
+        for field in required_fields:
+            if field not in request.data:
+                return Response(
+                    {"error": f"Missing required field: {field}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        file_name = request.data.get("file_name")
+        file_type = request.data.get("file_type")
+        file_size = request.data.get("file_size")
+        gcs_path = request.data.get("gcs_path")
+        gcs_bucket = request.data.get("gcs_bucket", "brand-automator-assets")
+        company_id = request.data.get("company_id")
+
+        # Validate file_type
+        valid_file_types = ["image", "video", "document", "other"]
+        if file_type not in valid_file_types:
+            return Response(
+                {"error": f"Invalid file_type. Must be one of: {valid_file_types}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate file_size is positive integer
+        try:
+            file_size = int(file_size)
+            if file_size <= 0:
+                raise ValueError("File size must be positive")
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "file_size must be a positive integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Get company for the tenant (or by company_id if provided)
+        if company_id:
+            company = get_object_or_404(Company, id=company_id, tenant=tenant)
+        else:
+            company = get_object_or_404(Company, tenant=tenant)
+
+        # Sanitize filename
+        safe_filename = sanitize_filename(file_name)
+
+        # SECURITY: Validate and derive gcs_path server-side
+        # Enforce tenant-scoped path pattern to prevent cross-tenant access
+        expected_path_prefix = f"assets/{tenant.id}/"
+        if not gcs_path.startswith(expected_path_prefix):
+            logger.warning(
+                f"Invalid gcs_path '{gcs_path}' for tenant {tenant.id}. "
+                f"Expected prefix: {expected_path_prefix}"
+            )
+            return Response(
+                {"error": "Invalid GCS path. Path must be within tenant scope."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verify filename in path matches sanitized filename
+        path_filename = gcs_path.split("/")[-1] if "/" in gcs_path else gcs_path
+        if path_filename != safe_filename:
+            logger.warning(
+                f"GCS path filename '{path_filename}' doesn't match "
+                f"sanitized filename '{safe_filename}'"
+            )
+            return Response(
+                {"error": "GCS path filename mismatch."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create asset record for the direct GCS upload
+        asset = BrandAsset.objects.create(
+            tenant=tenant,
+            company=company,
+            file_name=safe_filename,
+            file_type=file_type,
+            file_size=file_size,
+            gcs_path=gcs_path,
+            gcs_bucket=gcs_bucket,
+            processed=True,  # Already uploaded to GCS by Kong
         )
 
         response_serializer = BrandAssetSerializer(asset)

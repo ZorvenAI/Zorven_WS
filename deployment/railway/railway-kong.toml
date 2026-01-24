@@ -1,0 +1,126 @@
+# ==============================================================================
+# Railway Configuration - Kong Gateway Integration
+# ==============================================================================
+# This file defines the Railway deployment configuration for the
+# AI Brand Automator platform with Kong Gateway as the API gateway.
+#
+# Services:
+# - Kong Gateway (port 8000) - API Gateway / Entry Point
+# - Django Backend (port 8001) - Internal API (accessed via Kong)
+# - Next.js Frontend (port 3000) - Web Application
+# - Celery Worker - Background task processor
+# - Celery Beat - Periodic task scheduler
+# - MCP Server (port 8003) - Model Context Protocol (optional)
+#
+# Note: Kafka is not directly supported on Railway. Use Confluent Cloud
+# or Upstash Kafka as external services.
+# ==============================================================================
+
+[build]
+builder = "dockerfile"
+
+# ==============================================================================
+# Kong Gateway Service
+# ==============================================================================
+[[services]]
+name = "kong"
+dockerfilePath = "deployment/docker/kong/Dockerfile"
+port = 8000
+healthcheckPath = "/health/"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[services.env]
+KONG_DATABASE = "off"
+KONG_DECLARATIVE_CONFIG = "/usr/local/kong/declarative/kong.yaml"
+KONG_PROXY_LISTEN = "0.0.0.0:8000"
+KONG_ADMIN_LISTEN = "0.0.0.0:8001"
+KONG_PLUGINS = "bundled,jwt,cors,request-transformer,rate-limiting,response-transformer"
+# JWT_SECRET_KEY is set via Railway dashboard from SECRET_KEY
+
+# ==============================================================================
+# Django Backend Service
+# ==============================================================================
+[[services]]
+name = "backend"
+dockerfilePath = "deployment/docker/backend/Dockerfile"
+port = 8001
+healthcheckPath = "/health/"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+startCommand = "gunicorn brand_automator.wsgi:application --bind 0.0.0.0:8001 --workers 2 --threads 4"
+
+[services.env]
+PORT = "8001"
+DJANGO_SETTINGS_MODULE = "brand_automator.settings"
+PYTHONUNBUFFERED = "1"
+KONG_ENABLED = "true"
+USE_X_FORWARDED_HOST = "true"
+USE_X_FORWARDED_PORT = "true"
+# DATABASE_URL, SECRET_KEY, etc. set via Railway dashboard
+
+# ==============================================================================
+# Next.js Frontend Service
+# ==============================================================================
+[[services]]
+name = "frontend"
+dockerfilePath = "deployment/docker/frontend/Dockerfile"
+port = 3000
+healthcheckPath = "/"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[services.env]
+NODE_ENV = "production"
+# NEXT_PUBLIC_API_URL should point to Kong service URL
+
+# ==============================================================================
+# Celery Worker Service
+# ==============================================================================
+[[services]]
+name = "celery-worker"
+dockerfilePath = "deployment/docker/celery-worker/Dockerfile"
+startCommand = "celery -A brand_automator worker -l info --concurrency 2"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[services.env]
+DJANGO_SETTINGS_MODULE = "brand_automator.settings"
+PYTHONUNBUFFERED = "1"
+CELERY_LOG_LEVEL = "info"
+
+# ==============================================================================
+# Celery Beat Service
+# ==============================================================================
+[[services]]
+name = "celery-beat"
+dockerfilePath = "deployment/docker/celery-beat/Dockerfile"
+startCommand = "celery -A brand_automator beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[services.env]
+DJANGO_SETTINGS_MODULE = "brand_automator.settings"
+PYTHONUNBUFFERED = "1"
+CELERY_LOG_LEVEL = "info"
+
+# ==============================================================================
+# MCP Server Service (Optional)
+# ==============================================================================
+[[services]]
+name = "mcp-server"
+dockerfilePath = "deployment/docker/mcp/Dockerfile"
+port = 8003
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[services.env]
+DJANGO_SETTINGS_MODULE = "brand_automator.settings"
+MCP_PORT = "8003"
+MCP_HOST = "0.0.0.0"
+MCP_TRANSPORT = "sse"

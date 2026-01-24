@@ -1,0 +1,3 @@
+# Kong Configuration Directory
+# This directory contains Kong Gateway configuration files.
+# The kong.yaml declarative config is in deployment/docker/kong/

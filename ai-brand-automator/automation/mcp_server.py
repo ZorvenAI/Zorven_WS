@@ -1840,6 +1840,8 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
 
     # Direct Posting Tools
     elif name == "post_to_linkedin":
+        from .constants import TEST_ACCESS_TOKEN
+
         user = get_user(arguments["user_email"])
 
         try:
@@ -1849,18 +1851,40 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
         except SocialProfile.DoesNotExist:
             raise ValueError("LinkedIn profile not connected")
 
-        if not profile.is_token_valid:
-            raise ValueError("LinkedIn token is expired. Please reconnect.")
+        # Check for test mode
+        if profile.access_token == TEST_ACCESS_TOKEN:
+            return {
+                "success": True,
+                "platform": "linkedin",
+                "post_id": "test_post_id_12345",
+                "test_mode": True,
+                "message": "Post simulated in test mode (no real LinkedIn API call)",
+                "result": {"id": "test_post_id_12345", "test_mode": True},
+            }
+
+        # Get valid access token (refreshes if needed)
+        try:
+            access_token = profile.get_valid_access_token()
+        except ValueError as e:
+            raise ValueError(f"LinkedIn token error: {str(e)}. Please reconnect.")
+
+        if not access_token:
+            raise ValueError("LinkedIn token is missing. Please reconnect.")
 
         text = arguments["text"]
         media_urls = arguments.get("media_urls", [])
 
-        # Create the post
+        # Get the user's LinkedIn URN (profile_id stores the LinkedIn user ID)
+        user_urn = profile.profile_id
+        if not user_urn:
+            raise ValueError("LinkedIn profile ID not found. Please reconnect.")
+
+        # Create the post using correct parameter names
         result = linkedin_service.create_share(
-            access_token=profile.access_token,
-            author_id=profile.platform_user_id,
+            access_token=access_token,
+            user_urn=user_urn,
             text=text,
-            media_ids=media_urls,
+            image_urns=media_urls if media_urls else None,
         )
 
         return {
@@ -1871,6 +1895,8 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
         }
 
     elif name == "post_to_twitter":
+        from .constants import TWITTER_TEST_ACCESS_TOKEN
+
         user = get_user(arguments["user_email"])
 
         try:
@@ -1879,6 +1905,17 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
             )
         except SocialProfile.DoesNotExist:
             raise ValueError("Twitter profile not connected")
+
+        # Check for test mode
+        if profile.access_token == TWITTER_TEST_ACCESS_TOKEN:
+            return {
+                "success": True,
+                "platform": "twitter",
+                "tweet_id": "test_tweet_id_12345",
+                "test_mode": True,
+                "message": "Tweet simulated in test mode (no real Twitter API call)",
+                "result": {"id": "test_tweet_id_12345", "test_mode": True},
+            }
 
         if not profile.is_token_valid:
             raise ValueError("Twitter token is expired. Please reconnect.")
@@ -1904,6 +1941,8 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
         }
 
     elif name == "post_to_facebook":
+        from .constants import FACEBOOK_TEST_ACCESS_TOKEN, FACEBOOK_TEST_PAGE_TOKEN
+
         user = get_user(arguments["user_email"])
 
         try:
@@ -1912,6 +1951,20 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
             )
         except SocialProfile.DoesNotExist:
             raise ValueError("Facebook profile not connected")
+
+        # Check for test mode
+        if (
+            profile.access_token == FACEBOOK_TEST_ACCESS_TOKEN
+            or profile.page_access_token == FACEBOOK_TEST_PAGE_TOKEN
+        ):
+            return {
+                "success": True,
+                "platform": "facebook",
+                "post_id": "test_fb_post_id_12345",
+                "test_mode": True,
+                "message": "Facebook post simulated in test mode (no real Facebook API call)",
+                "result": {"id": "test_fb_post_id_12345", "test_mode": True},
+            }
 
         if not profile.page_id or not profile.page_access_token:
             raise ValueError(
