@@ -342,10 +342,6 @@ GS_CREDENTIALS_PATH = config("GS_CREDENTIALS_PATH", default="")
 # AI Service settings
 GOOGLE_API_KEY = config("GOOGLE_API_KEY", default="")
 
-# Google Business Profile OAuth settings
-GOOGLE_BUSINESS_CLIENT_ID = config("GOOGLE_BUSINESS_CLIENT_ID", default="")
-GOOGLE_BUSINESS_CLIENT_SECRET = config("GOOGLE_BUSINESS_CLIENT_SECRET", default="")
-
 # Email Configuration
 EMAIL_BACKEND = config(
     "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
@@ -530,6 +526,14 @@ INSTAGRAM_THREADS_APP_SECRET = config("INSTAGRAM_THREADS_APP_SECRET", default=""
 INSTAGRAM_THREADS_REDIRECT_URI = config(
     "INSTAGRAM_THREADS_REDIRECT_URI",
     default="http://localhost:8000/api/v1/automation/threads/callback/",
+)
+
+# Google Business Profile OAuth 2.0 Configuration
+GOOGLE_BUSINESS_CLIENT_ID = config("GOOGLE_BUSINESS_CLIENT_ID", default="")
+GOOGLE_BUSINESS_CLIENT_SECRET = config("GOOGLE_BUSINESS_CLIENT_SECRET", default="")
+GOOGLE_BUSINESS_REDIRECT_URI = config(
+    "GOOGLE_BUSINESS_REDIRECT_URI",
+    default="http://localhost:8000/api/v1/automation/google-business/callback/",
 )
 
 # Frontend URL for OAuth redirects
