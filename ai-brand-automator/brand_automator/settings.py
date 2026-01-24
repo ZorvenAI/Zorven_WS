@@ -342,6 +342,10 @@ GS_CREDENTIALS_PATH = config("GS_CREDENTIALS_PATH", default="")
 # AI Service settings
 GOOGLE_API_KEY = config("GOOGLE_API_KEY", default="")
 
+# Google Business Profile OAuth settings
+GOOGLE_BUSINESS_CLIENT_ID = config("GOOGLE_BUSINESS_CLIENT_ID", default="")
+GOOGLE_BUSINESS_CLIENT_SECRET = config("GOOGLE_BUSINESS_CLIENT_SECRET", default="")
+
 # Email Configuration
 EMAIL_BACKEND = config(
     "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
