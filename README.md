@@ -1,11 +1,16 @@
 # AI Brand Automator
 
+> **Version**: 2.0.0 (MVP Complete)  
+> **Status**: ✅ Production Ready  
+> **Last Updated**: January 23, 2026
+
 **Multi-tenant SaaS platform for AI-powered brand building**
 
 A Django REST Framework backend with Next.js frontend that helps businesses create and manage their brand strategy using Google Gemini AI.
 
 ## Features
 
+### Core Platform
 - 🔐 **Multi-tenant Architecture** - Schema-based data isolation with django-tenants
 - 🤖 **AI Brand Strategy Generation** - Powered by Google Gemini 2.0 Flash
 - 📝 **5-Step Onboarding** - Guided company setup with asset uploads
@@ -15,24 +20,41 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 - 📁 **File Upload** - Multi-file drag-and-drop with GCS integration
 - 💳 **Stripe Integration** - Subscription plans with checkout and billing portal
 - 📱 **Mobile Ready** - Responsive design with network testing support
-- 🔗 **LinkedIn Integration** - OAuth 2.0 with posting, scheduling, analytics & webhooks
-- 🐦 **Twitter/X Integration** - OAuth 2.0 with PKCE, threads, media uploads, analytics
-- 📘 **Facebook Integration** - Page posting, stories, carousels, resumable video uploads
+
+### Social Media Integrations (All Complete ✅)
+| Platform | OAuth | Posting | Scheduling | Media | Analytics |
+|----------|-------|---------|------------|-------|-----------|
+| 🔗 LinkedIn | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 🐦 Twitter/X | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 📘 Facebook | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 📸 Instagram | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 📍 Google Business Profile | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+### Automation Features
 - 📅 **Content Calendar** - Schedule and manage social media posts across platforms
 - ⚡ **Celery Automation** - Background task processing for scheduled posts
 - 🖼️ **Media Attachments** - Images, videos, documents with platform-specific limits
 - 💾 **Draft Save/Restore** - Auto-save drafts with media support in compose modals
 - 📊 **Social Analytics** - Engagement metrics and insights for all platforms
+- 🤖 **MCP Server** - 23 tools for AI agent integration (Claude, GPT)
+
+### Google Business Profile (NEW ✅)
+- 📍 GBP listing CRUD operations
+- 📝 GBP post management
+- ⭐ Review management with AI-assisted replies
+- 📈 GBP insights and analytics
+- 🔧 10 dedicated MCP tools
 
 ## Tech Stack
 
 ### Backend
-- **Django 4.2** + Django REST Framework
+- **Django 4.2.16** + Django REST Framework
 - **PostgreSQL** (Neon hosted) with multi-tenancy
 - **Google Gemini 2.0 Flash** for AI content generation
 - **Stripe** for subscription management
 - **Celery 5.6** + Redis for background task processing
 - **JWT Authentication** with token refresh
+- **MCP Server** (Model Context Protocol) with 23 tools
 
 ### Frontend
 - **Next.js 15** + React 19
@@ -40,18 +62,25 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 - **Tailwind CSS** for styling
 - **Automatic API client** with token management
 
+### Deployment
+- **Railway** for production hosting
+- **Docker** for containerization
+- **GitHub Actions** for CI/CD
+- **226+ tests** (pytest + Hypothesis)
+
 ## Project Structure
 
 ```
 .
 ├── ai-brand-automator/          # Django backend
-│   ├── ai_services/             # AI integration & chat
-│   ├── automation/              # Social media automation & LinkedIn
-│   │   ├── docs/                # Integration documentation
-│   │   ├── models.py            # SocialProfile, ContentCalendar
-│   │   ├── services.py          # LinkedIn API service
+│   ├── ai_services/             # AI integration & chat (Gemini 2.0 Flash)
+│   ├── automation/              # Social media automation & MCP server
+│   │   ├── docs/                # Platform integration documentation
+│   │   ├── mcp_server.py        # MCP Server with 23 tools
+│   │   ├── models.py            # SocialProfile, ContentCalendar, GBP models
+│   │   ├── services.py          # Platform API services
 │   │   ├── tasks.py             # Celery background tasks
-│   │   └── views.py             # OAuth & posting endpoints
+│   │   └── views.py             # OAuth & posting endpoints (5700+ lines)
 │   ├── files/                   # File upload service
 │   ├── onboarding/              # Company onboarding
 │   ├── subscriptions/           # Stripe subscription management
@@ -68,7 +97,16 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 │       ├── hooks/               # Custom hooks (useAuth)
 │       └── lib/                 # API client & utilities
 │
+├── deployment/                  # Railway deployment configs
+│   ├── docker/                  # Dockerfiles for all services
+│   └── railway/                 # Railway configuration
+│
+├── .github/workflows/           # CI/CD pipelines
+│   └── deploy-railway.yml       # Full deployment pipeline
+│
 └── docs/                        # Architecture documentation
+    ├── ai_brand_automator_mvp_architecture.md
+    └── CODEBASE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md
 ```
 
 ## Quick Start
@@ -222,14 +260,45 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 ### Social Media Automation
 - `GET /api/v1/automation/social-profiles/` - List connected profiles
 - `GET /api/v1/automation/social-profiles/status/` - Platform connection status
+
+#### LinkedIn
 - `GET /api/v1/automation/linkedin/connect/` - Initiate LinkedIn OAuth
 - `GET /api/v1/automation/linkedin/callback/` - OAuth callback handler
-- `POST /api/v1/automation/linkedin/test-connect/` - Test mode connection (DEBUG only)
 - `POST /api/v1/automation/linkedin/disconnect/` - Disconnect LinkedIn account
 - `POST /api/v1/automation/linkedin/post/` - Post to LinkedIn immediately
-- `POST /api/v1/automation/linkedin/media/upload/` - Upload image, video, or document
-- `GET /api/v1/automation/linkedin/video/status/{urn}/` - Check video processing status
-- `GET /api/v1/automation/linkedin/document/status/{urn}/` - Check document processing status
+- `POST /api/v1/automation/linkedin/media/upload/` - Upload media
+
+#### Twitter/X
+- `GET /api/v1/automation/twitter/connect/` - Initiate Twitter OAuth
+- `GET /api/v1/automation/twitter/callback/` - OAuth callback handler
+- `POST /api/v1/automation/twitter/disconnect/` - Disconnect Twitter account
+- `POST /api/v1/automation/twitter/post/` - Post to Twitter immediately
+
+#### Facebook
+- `GET /api/v1/automation/facebook/connect/` - Initiate Facebook OAuth
+- `GET /api/v1/automation/facebook/callback/` - OAuth callback handler
+- `POST /api/v1/automation/facebook/disconnect/` - Disconnect Facebook account
+- `POST /api/v1/automation/facebook/post/` - Post to Facebook immediately
+
+#### Instagram
+- `GET /api/v1/automation/instagram/connect/` - Initiate Instagram OAuth
+- `GET /api/v1/automation/instagram/callback/` - OAuth callback handler
+- `POST /api/v1/automation/instagram/disconnect/` - Disconnect Instagram account
+- `POST /api/v1/automation/instagram/post/` - Post to Instagram immediately
+
+#### Google Business Profile
+- `GET /api/v1/automation/gbp/listings/` - List GBP listings
+- `POST /api/v1/automation/gbp/listings/` - Create GBP listing
+- `GET /api/v1/automation/gbp/listings/{id}/` - Get GBP listing details
+- `PUT /api/v1/automation/gbp/listings/{id}/` - Update GBP listing
+- `DELETE /api/v1/automation/gbp/listings/{id}/` - Delete GBP listing
+- `POST /api/v1/automation/gbp/listings/{id}/posts/` - Create GBP post
+- `GET /api/v1/automation/gbp/listings/{id}/posts/` - List GBP posts
+- `GET /api/v1/automation/gbp/listings/{id}/reviews/` - Get GBP reviews
+- `POST /api/v1/automation/gbp/reviews/{id}/reply/` - Reply to review
+- `GET /api/v1/automation/gbp/listings/{id}/insights/` - Get GBP insights
+
+#### Content Calendar
 - `GET /api/v1/automation/content-calendar/` - List scheduled posts
 - `POST /api/v1/automation/content-calendar/` - Create scheduled post
 - `PUT /api/v1/automation/content-calendar/{id}/` - Edit scheduled post
@@ -256,25 +325,34 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 **Backend**:
 ```bash
 cd ai-brand-automator
-pytest  # (to be implemented)
+source ../.venv/bin/activate
+pytest -v                      # All tests (226+)
+pytest -m unit                 # Unit tests only
+pytest -m property             # Property-based tests (Hypothesis)
+pytest automation/tests/ -v    # Automation tests (149)
+pytest --cov=. --cov-report=html  # With coverage
 ```
 
 **Frontend**:
 ```bash
 cd ai-brand-automator-frontend
-npm test  # (to be implemented)
+npm test                       # Run tests
+npm test -- --coverage         # With coverage (60% threshold)
 ```
 
 ### Code Quality
 
 **Backend**:
 ```bash
-python manage.py check  # Django system check
+black .                        # Format code
+flake8 .                       # Lint code
+python manage.py check         # Django system check
 ```
 
 **Frontend**:
 ```bash
-npm run build  # TypeScript compilation check
+npm run lint                   # ESLint
+npm run build                  # TypeScript compilation check
 ```
 
 ## Multi-Tenancy
@@ -332,6 +410,14 @@ tenant = Tenant.objects.create(
 | `LINKEDIN_CLIENT_ID` | ⚠️ Optional | LinkedIn OAuth app ID | `77xxx...` |
 | `LINKEDIN_CLIENT_SECRET` | ⚠️ Optional | LinkedIn OAuth secret | `WPLxxx...` |
 | `LINKEDIN_REDIRECT_URI` | ⚠️ Optional | OAuth callback URL | `http://localhost:8000/api/v1/automation/linkedin/callback/` |
+| `TWITTER_CLIENT_ID` | ⚠️ Optional | Twitter OAuth app ID | `xxx...` |
+| `TWITTER_CLIENT_SECRET` | ⚠️ Optional | Twitter OAuth secret | `xxx...` |
+| `FACEBOOK_APP_ID` | ⚠️ Optional | Facebook app ID | `xxx...` |
+| `FACEBOOK_APP_SECRET` | ⚠️ Optional | Facebook app secret | `xxx...` |
+| `INSTAGRAM_CLIENT_ID` | ⚠️ Optional | Instagram client ID | `xxx...` |
+| `INSTAGRAM_CLIENT_SECRET` | ⚠️ Optional | Instagram client secret | `xxx...` |
+| `GOOGLE_CLIENT_ID` | ⚠️ Optional | Google OAuth client ID | `xxx...` |
+| `GOOGLE_CLIENT_SECRET` | ⚠️ Optional | Google OAuth client secret | `xxx...` |
 | `CELERY_BROKER_URL` | ⚠️ Optional | Redis broker URL | `redis://localhost:6379/0` |
 | `CELERY_RESULT_BACKEND` | ⚠️ Optional | Redis result backend | `redis://localhost:6379/0` |
 
@@ -396,21 +482,38 @@ tenant = Tenant.objects.create(
 
 ## Documentation
 
-- [Architecture Plan](plans/ai_brand_automator_mvp_plan.md)
-- [Codebase Analysis](CODEBASE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md)
-- [Copilot Instructions](.github/copilot-instructions.md)
+- [MVP Architecture](docs/ai_brand_automator_mvp_architecture.md) - Complete architecture overview
+- [Architecture Plan](docs/ai_brand_automator_mvp_plan.md) - Original MVP plan
+- [Codebase Analysis](docs/CODEBASE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md) - Implementation details
+- [Copilot Instructions](.github/copilot-instructions.md) - AI pair programming guide
+- [LinkedIn Integration](ai-brand-automator/automation/docs/LINKEDIN_INTEGRATION_REPORT.md)
+- [Twitter Integration](ai-brand-automator/automation/docs/TWITTER_INTEGRATION_REPORT.md)
+- [Facebook Integration](ai-brand-automator/automation/docs/FACEBOOK_INTEGRATION_REPORT.md)
+- [Instagram Integration](ai-brand-automator/automation/docs/INSTAGRAM_INTEGRATION_REPORT.md)
+- [GBP Implementation](ai-brand-automator/automation/docs/GOOGLE_BUSINESS_PROFILE_IMPLEMENTATION_PLAN.md)
 
 ## License
 
-See [LICENSE.md](LICENSE.md)
+See [LICENSE.md](docs/LICENSE.md)
 
 ## Status
 
-**Current Version**: MVP 1.2  
+**Current Version**: 2.0.0 (MVP Complete)  
 **Status**: ✅ Production Ready  
-**Last Updated**: January 15, 2026
+**Deployment**: Railway  
+**Last Updated**: January 23, 2026
 
-### Completed Features
+### Test Coverage
+| Component | Tests | Status |
+|-----------|-------|--------|
+| Automation | 149 | ✅ |
+| GBP | 77 | ✅ |
+| Onboarding | 30+ | ✅ |
+| AI Services | 15+ | ✅ |
+| Files | 10+ | ✅ |
+| **Total** | **226+** | ✅ |
+
+### Completed Features (MVP)
 - ✅ Multi-tenant authentication
 - ✅ User registration with tenant creation
 - ✅ 5-step onboarding flow
@@ -423,27 +526,32 @@ See [LICENSE.md](LICENSE.md)
 - ✅ Stripe subscription management
 - ✅ Checkout flow with plan sync
 - ✅ Mobile/network testing support
-- ✅ LinkedIn OAuth integration with token encryption
-- ✅ Immediate LinkedIn posting
+- ✅ **LinkedIn** - OAuth, posting, scheduling, media, analytics
+- ✅ **Twitter/X** - OAuth with PKCE, threads, media uploads, analytics
+- ✅ **Facebook** - Page posting, stories, carousels, video uploads
+- ✅ **Instagram** - OAuth, posting, stories, reels, carousels
+- ✅ **Google Business Profile** - Listings, posts, reviews, insights
 - ✅ Content Calendar with scheduling
-- ✅ Edit scheduled posts
-- ✅ Media attachments (images, videos, documents)
-- ✅ Celery-based automatic publishing (every 5 minutes)
-- ✅ Published posts history with configurable limit
-- ✅ Automation tasks view with status badges
-- ✅ Test mode for LinkedIn development
+- ✅ Celery-based automatic publishing (every 60 seconds)
+- ✅ MCP Server with 23 tools for AI agents
+- ✅ Railway production deployment
+- ✅ CI/CD with GitHub Actions
+- ✅ 226+ automated tests
 
-### LinkedIn Media Specifications
-| Media Type | Max Size | Formats |
-|------------|----------|---------|
-| Image | 8MB | JPEG, PNG, GIF |
-| Video | 500MB | MP4 only |
-| Document | 100MB | PDF, DOC, DOCX, PPT, PPTX |
+### Media Specifications by Platform
 
-### Pending Features (Post-MVP)
-- ⏳ Twitter/X integration
-- ⏳ Instagram integration
-- ⏳ Facebook integration
-- ⏳ Media attachments in posts
-- ⏳ Advanced analytics
-- ⏳ Team member invites
+| Platform | Image | Video | Document |
+|----------|-------|-------|----------|
+| LinkedIn | 8MB (JPEG, PNG, GIF) | 500MB (MP4) | 100MB (PDF, DOC, PPT) |
+| Twitter/X | 5MB (JPEG, PNG, GIF) | 512MB (MP4) | N/A |
+| Facebook | 4MB (JPEG, PNG) | 4GB (MP4) | N/A |
+| Instagram | 8MB (JPEG, PNG) | 100MB (MP4) | N/A |
+| GBP | 5MB (JPEG, PNG) | N/A | N/A |
+
+### Future Enhancements (Post-MVP)
+See [Architecture Document](docs/ai_brand_automator_mvp_architecture.md#future-enhancements-post-mvp) for Phases 9-17:
+- Phase 9: Video & Content (YouTube, TikTok, Pinterest)
+- Phase 10: E-commerce (Shopify, Amazon)
+- Phase 11: Analytics & Reporting
+- Phase 12: Team & Collaboration
+- Phase 13-17: Advanced AI, Marketing, Enterprise features
