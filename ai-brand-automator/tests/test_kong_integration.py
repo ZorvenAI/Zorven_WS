@@ -55,6 +55,9 @@ class TestKongAuthenticationMiddleware(TestCase):
     @override_settings(KONG_ENABLED=True)
     def test_anonymous_routes_skip_auth(self):
         """Anonymous routes should not require authentication"""
+        self.middleware.kong_enabled = (
+            True  # Set after setUp since decorator runs later
+        )
         anonymous_paths = [
             "/api/v1/auth/login/",
             "/api/v1/auth/register/",
@@ -76,6 +79,9 @@ class TestKongAuthenticationMiddleware(TestCase):
     @override_settings(KONG_ENABLED=True)
     def test_protected_route_with_valid_jwt(self):
         """Protected routes with valid JWT should set request.user"""
+        self.middleware.kong_enabled = (
+            True  # Set after setUp since decorator runs later
+        )
         request = self.factory.get("/api/v1/companies/")
         request.user = AnonymousUser()
         token = self.create_jwt_token()
@@ -91,6 +97,9 @@ class TestKongAuthenticationMiddleware(TestCase):
     @override_settings(KONG_ENABLED=True)
     def test_protected_route_without_jwt(self):
         """Protected routes without JWT should use AnonymousUser"""
+        self.middleware.kong_enabled = (
+            True  # Set after setUp since decorator runs later
+        )
         request = self.factory.get("/api/v1/companies/")
         request.user = AnonymousUser()
         # No Authorization header
@@ -103,6 +112,9 @@ class TestKongAuthenticationMiddleware(TestCase):
     @override_settings(KONG_ENABLED=True)
     def test_malformed_jwt_handled_gracefully(self):
         """Malformed JWT should not crash the middleware"""
+        self.middleware.kong_enabled = (
+            True  # Set after setUp since decorator runs later
+        )
         request = self.factory.get("/api/v1/companies/")
         request.user = AnonymousUser()
         request.META["HTTP_AUTHORIZATION"] = "Bearer invalid-token"
@@ -126,6 +138,9 @@ class TestKongAuthenticationMiddleware(TestCase):
     @override_settings(KONG_ENABLED=True)
     def test_user_not_found_uses_anonymous(self):
         """If user_id in JWT doesn't exist, use AnonymousUser"""
+        self.middleware.kong_enabled = (
+            True  # Set after setUp since decorator runs later
+        )
         request = self.factory.get("/api/v1/companies/")
         request.user = AnonymousUser()
         token = self.create_jwt_token(user_id=99999)  # Non-existent user

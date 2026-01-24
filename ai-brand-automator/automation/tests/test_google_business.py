@@ -1,6 +1,7 @@
 """Tests for Google Business Profile integration."""
 
 import pytest
+from unittest.mock import patch
 import uuid
 from datetime import timedelta
 from django.utils import timezone
@@ -661,10 +662,14 @@ class TestGoogleBusinessSelectAccountAPI:
 class TestGoogleBusinessLocationsAPI:
     """Integration tests for Google Business Locations endpoint."""
 
+    @patch("automation.services.google_business_service.list_locations")
     def test_list_locations(
-        self, authenticated_client, user, gbp_profile, gbp_location
+        self, mock_list_locations, authenticated_client, user, gbp_profile, gbp_location
     ):
         """Test listing locations."""
+        # Mock the API call to return empty list - we only want DB locations
+        mock_list_locations.return_value = []
+
         response = authenticated_client.get(
             "/api/v1/automation/google-business/locations/"
         )
