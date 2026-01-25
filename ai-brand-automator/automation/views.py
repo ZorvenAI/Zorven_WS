@@ -2440,18 +2440,56 @@ class TwitterPostView(APIView):
                 }
             )
 
-        try:
-            # Get valid access token (refresh if needed)
-            access_token = profile.get_valid_access_token()
-
-            # Create tweet
-            result = twitter_service.create_tweet(
+        def attempt_tweet_post(access_token):
+            """Helper to attempt posting a tweet."""
+            return twitter_service.create_tweet(
                 access_token=access_token,
                 text=text,
                 reply_to_id=request.data.get("reply_to_id"),
                 quote_tweet_id=request.data.get("quote_tweet_id"),
                 media_ids=media_ids if media_ids else None,
             )
+
+        try:
+            # Get valid access token (refresh if needed)
+            access_token = profile.get_valid_access_token()
+
+            try:
+                # Create tweet
+                result = attempt_tweet_post(access_token)
+            except Exception as e:
+                error_str = str(e).lower()
+                # Check for 401 Unauthorized or 403 Forbidden (token expired/invalid)
+                if "401" in error_str or "403" in error_str or "unauthorized" in error_str or "forbidden" in error_str:
+                    logger.warning(
+                        f"Twitter API returned auth error, attempting token refresh for user {request.user.email}"
+                    )
+                    try:
+                        # Force token refresh
+                        if profile.refresh_token:
+                            token_data = twitter_service.refresh_access_token(profile.refresh_token)
+                            profile.access_token = token_data.get("access_token")
+                            profile.token_expires_at = token_data.get("expires_at")
+                            if token_data.get("refresh_token"):
+                                profile.refresh_token = token_data.get("refresh_token")
+                            profile.save()
+                            access_token = profile.access_token
+
+                            # Retry the post
+                            result = attempt_tweet_post(access_token)
+                            logger.info(f"Tweet posted successfully after token refresh for {request.user.email}")
+                        else:
+                            # No refresh token, mark as expired
+                            profile.status = "expired"
+                            profile.save()
+                            raise Exception("Token expired and no refresh token available. Please reconnect your Twitter account.")
+                    except Exception as refresh_error:
+                        logger.error(f"Token refresh failed for Twitter: {refresh_error}")
+                        profile.status = "expired"
+                        profile.save()
+                        raise Exception(f"Authentication failed. Please reconnect your Twitter account: {str(refresh_error)}")
+                else:
+                    raise
 
             # Create a ContentCalendar entry for the published tweet
             post_title = (
@@ -3832,21 +3870,40 @@ class FacebookPostView(APIView):
                     }
                 )
 
-            # Create post
-            if photo_url:
-                result = facebook_service.create_page_photo_post(
-                    page_id=profile.page_id,
-                    page_access_token=profile.page_access_token,
-                    photo_url=photo_url,
-                    message=message if message else None,
-                )
-            else:
-                result = facebook_service.create_page_post(
-                    page_id=profile.page_id,
-                    page_access_token=profile.page_access_token,
-                    message=message,
-                    link=link,
-                )
+            def attempt_facebook_post(page_access_token):
+                """Helper to attempt posting to Facebook."""
+                if photo_url:
+                    return facebook_service.create_page_photo_post(
+                        page_id=profile.page_id,
+                        page_access_token=page_access_token,
+                        photo_url=photo_url,
+                        message=message if message else None,
+                    )
+                else:
+                    return facebook_service.create_page_post(
+                        page_id=profile.page_id,
+                        page_access_token=page_access_token,
+                        message=message,
+                        link=link,
+                    )
+
+            try:
+                # Create post
+                result = attempt_facebook_post(profile.page_access_token)
+            except Exception as e:
+                error_str = str(e).lower()
+                # Check for auth errors (Facebook uses various error codes for expired tokens)
+                if "401" in error_str or "403" in error_str or "expired" in error_str or "invalid" in error_str or "error validating access token" in error_str:
+                    logger.warning(
+                        f"Facebook API returned auth error, user {request.user.email} may need to reconnect"
+                    )
+                    # Facebook page tokens don't typically expire, but user tokens do
+                    # If we get here, the user likely needs to reconnect
+                    profile.status = "expired"
+                    profile.save()
+                    raise Exception("Facebook access token expired or invalid. Please reconnect your Facebook account.")
+                else:
+                    raise
 
             # Store in ContentCalendar for history
             ContentCalendar.objects.create(
@@ -6357,7 +6414,8 @@ class InstagramPostView(APIView):
                 )
 
         # Immediate post
-        try:
+        def attempt_instagram_post(access_token):
+            """Helper to attempt posting to Instagram."""
             # Step 1: Create container
             if media_type == "REELS":
                 container = instagram_service.create_reel_container(
@@ -6393,13 +6451,7 @@ class InstagramPostView(APIView):
                     if status_code == "FINISHED":
                         break
                     elif status_code == "ERROR":
-                        return Response(
-                            {
-                                "error": "Video processing failed",
-                                "details": status_resp.get("status"),
-                            },
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        )
+                        raise Exception(f"Video processing failed: {status_resp.get('status')}")
                     time.sleep(1)
 
             # Step 2: Publish
@@ -6408,6 +6460,26 @@ class InstagramPostView(APIView):
                 access_token=access_token,
                 container_id=container_id,
             )
+
+            return result
+
+        try:
+            try:
+                result = attempt_instagram_post(access_token)
+            except Exception as e:
+                error_str = str(e).lower()
+                # Check for auth errors (Instagram/Facebook uses various error messages)
+                if "401" in error_str or "403" in error_str or "expired" in error_str or "invalid" in error_str or "error validating access token" in error_str or "oauth" in error_str:
+                    logger.warning(
+                        f"Instagram API returned auth error, user {request.user.email} may need to reconnect"
+                    )
+                    # Instagram uses Facebook tokens which don't typically auto-refresh
+                    # Mark as expired so user knows to reconnect
+                    profile.status = "expired"
+                    profile.save()
+                    raise Exception("Instagram access token expired or invalid. Please reconnect your Instagram account.")
+                else:
+                    raise
 
             media_id = result.get("id")
 
