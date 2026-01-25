@@ -7656,9 +7656,8 @@ class GoogleBusinessLocationsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            # Call the service which handles both mock and real mode internally
-            access_token = profile.access_token
+        def fetch_and_sync_locations(access_token):
+            """Helper to fetch locations and sync to database."""
             api_locations = google_business_service.list_locations(
                 access_token, profile.gbp_account_id
             )
@@ -7690,6 +7689,18 @@ class GoogleBusinessLocationsView(APIView):
                     },
                 )
 
+            return api_locations
+
+        try:
+            # Get valid access token (auto-refresh if needed)
+            try:
+                access_token = profile.get_valid_access_token()
+            except ValueError:
+                # If token refresh fails, use existing token and let API call fail
+                access_token = profile.access_token
+
+            api_locations = fetch_and_sync_locations(access_token)
+
             # Return ALL locations from database for this profile
             all_locations = GoogleBusinessLocation.objects.filter(profile=profile)
             serializer = GoogleBusinessLocationSerializer(all_locations, many=True)
@@ -7702,7 +7713,54 @@ class GoogleBusinessLocationsView(APIView):
             )
 
         except Exception as e:
+            error_str = str(e)
             logger.exception(f"Failed to list GBP locations: {e}")
+
+            # Check if this is a 401 Unauthorized error - try token refresh and retry
+            if "401" in error_str:
+                try:
+                    if profile.refresh_token:
+                        logger.info(
+                            f"Attempting GBP token refresh for profile {profile.id}"
+                        )
+                        token_data = google_business_service.refresh_access_token(
+                            profile.refresh_token
+                        )
+                        profile.access_token = token_data.get("access_token")
+                        profile.token_expires_at = token_data.get("expires_at")
+                        if token_data.get("refresh_token"):
+                            profile.refresh_token = token_data.get("refresh_token")
+                        profile.save()
+
+                        # Retry with new token
+                        api_locations = fetch_and_sync_locations(profile.access_token)
+
+                        all_locations = GoogleBusinessLocation.objects.filter(
+                            profile=profile
+                        )
+                        serializer = GoogleBusinessLocationSerializer(
+                            all_locations, many=True
+                        )
+                        return Response(
+                            {
+                                "locations": serializer.data,
+                                "count": all_locations.count(),
+                                "is_mock_mode": google_business_service.is_mock_mode,
+                                "token_refreshed": True,
+                            }
+                        )
+                except Exception as refresh_error:
+                    logger.error(f"GBP token refresh failed: {refresh_error}")
+                    profile.status = "expired"
+                    profile.save()
+                    return Response(
+                        {
+                            "error": "Your Google Business Profile connection has expired. Please reconnect.",
+                            "needs_reauth": True,
+                        },
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
+
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,

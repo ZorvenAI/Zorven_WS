@@ -953,6 +953,53 @@ class GoogleBusinessProfile(models.Model):
 
         return timezone.now() + timedelta(minutes=5) >= self.token_expires_at
 
+    def refresh_token_if_needed(self):
+        """
+        Refresh the access token if it's expired or expiring soon.
+        Returns the current (or refreshed) access token.
+        """
+        if self.status != "connected":
+            raise ValueError("Profile is not connected")
+
+        # Mock tokens don't need refresh
+        from .services import GoogleBusinessService
+
+        if (
+            self.is_mock
+            or self.access_token == GoogleBusinessService.MOCK_ACCESS_TOKEN
+        ):
+            return self.access_token
+
+        if not self.is_token_expiring_soon:
+            return self.access_token
+
+        if not self.refresh_token:
+            self.status = "expired"
+            self.save()
+            raise ValueError("No refresh token available")
+
+        from .services import google_business_service
+
+        try:
+            token_data = google_business_service.refresh_access_token(self.refresh_token)
+            self.access_token = token_data.get("access_token")
+            self.token_expires_at = token_data.get("expires_at")
+            if token_data.get("refresh_token"):
+                self.refresh_token = token_data.get("refresh_token")
+            self.save()
+            return self.access_token
+        except Exception as e:
+            self.status = "error"
+            self.save()
+            raise ValueError(f"Failed to refresh token: {str(e)}")
+
+    def get_valid_access_token(self):
+        """
+        Get a valid access token, refreshing if necessary.
+        This is the main method to use before making API calls.
+        """
+        return self.refresh_token_if_needed()
+
     def disconnect(self):
         """Disconnect the Google Business Profile."""
         self.access_token = None
