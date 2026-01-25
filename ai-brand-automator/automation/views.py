@@ -2487,7 +2487,16 @@ class TwitterPostView(APIView):
                         logger.error(f"Token refresh failed for Twitter: {refresh_error}")
                         profile.status = "expired"
                         profile.save()
-                        raise Exception(f"Authentication failed. Please reconnect your Twitter account: {str(refresh_error)}")
+                        # Return a user-friendly error with reconnect flag
+                        return Response(
+                            {
+                                "error": "Your Twitter connection has expired. Please reconnect your Twitter account.",
+                                "needs_reconnect": True,
+                                "platform": "twitter",
+                                "details": str(refresh_error),
+                            },
+                            status=status.HTTP_401_UNAUTHORIZED,
+                        )
                 else:
                     raise
 
@@ -3901,7 +3910,15 @@ class FacebookPostView(APIView):
                     # If we get here, the user likely needs to reconnect
                     profile.status = "expired"
                     profile.save()
-                    raise Exception("Facebook access token expired or invalid. Please reconnect your Facebook account.")
+                    return Response(
+                        {
+                            "error": "Your Facebook connection has expired. Please reconnect your Facebook account.",
+                            "needs_reconnect": True,
+                            "platform": "facebook",
+                            "details": str(e),
+                        },
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
                 else:
                     raise
 
@@ -6477,7 +6494,15 @@ class InstagramPostView(APIView):
                     # Mark as expired so user knows to reconnect
                     profile.status = "expired"
                     profile.save()
-                    raise Exception("Instagram access token expired or invalid. Please reconnect your Instagram account.")
+                    return Response(
+                        {
+                            "error": "Your Instagram connection has expired. Please reconnect your Instagram account.",
+                            "needs_reconnect": True,
+                            "platform": "instagram",
+                            "details": str(e),
+                        },
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
                 else:
                     raise
 
