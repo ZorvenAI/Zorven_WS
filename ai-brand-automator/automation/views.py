@@ -580,7 +580,94 @@ class LinkedInPostView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            error_str = str(e)
             logger.error(f"LinkedIn post failed: {e}")
+
+            # Check if this is a 401 Unauthorized error - token may be invalid
+            if "401" in error_str:
+                # Try to force refresh the token and retry once
+                try:
+                    if profile.refresh_token:
+                        logger.info(
+                            f"Attempting token refresh for profile {profile.id}"
+                        )
+                        # Force refresh by directly calling refresh logic
+                        from .services import linkedin_service as li_service
+
+                        token_data = li_service.refresh_access_token(
+                            profile.refresh_token
+                        )
+                        profile.access_token = token_data.get("access_token")
+                        profile.token_expires_at = token_data.get("expires_at")
+                        if token_data.get("refresh_token"):
+                            profile.refresh_token = token_data.get("refresh_token")
+                        profile.save()
+
+                        # Retry the post with new token
+                        result = linkedin_service.create_share(
+                            access_token=profile.access_token,
+                            user_urn=profile.profile_id,
+                            text=text,
+                            image_urns=media_urns if media_urns else None,
+                        )
+
+                        # Create a ContentCalendar entry for the published post
+                        post_title = (
+                            title
+                            if title
+                            else f"LinkedIn Post - {timezone.now().strftime('%Y-%m-%d %H:%M')}"
+                        )
+                        content = ContentCalendar.objects.create(
+                            user=request.user,
+                            title=post_title,
+                            content=text,
+                            media_urls=media_urns,
+                            platforms=["linkedin"],
+                            scheduled_date=timezone.now(),
+                            published_at=timezone.now(),
+                            status="published",
+                            post_results=result,
+                        )
+                        content.social_profiles.add(profile)
+
+                        AutomationTask.objects.create(
+                            user=request.user,
+                            task_type="social_post",
+                            status="completed",
+                            payload={
+                                "text": text,
+                                "platform": "linkedin",
+                                "media_count": len(media_urns),
+                            },
+                            result=result,
+                        )
+
+                        logger.info(
+                            f"LinkedIn post succeeded after token refresh for "
+                            f"{request.user.email}"
+                        )
+
+                        return Response(
+                            {
+                                "message": "Post created successfully",
+                                "post_id": result.get("id"),
+                                "content_id": content.id,
+                                "has_media": len(media_urns) > 0,
+                                "token_refreshed": True,
+                            }
+                        )
+                except Exception as refresh_error:
+                    logger.error(f"Token refresh and retry failed: {refresh_error}")
+                    # Mark profile as needing re-authentication
+                    profile.status = "expired"
+                    profile.save()
+                    return Response(
+                        {
+                            "error": "Your LinkedIn connection has expired. Please reconnect your account.",
+                            "needs_reauth": True,
+                        },
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
 
             # Create a failed task record
             AutomationTask.objects.create(

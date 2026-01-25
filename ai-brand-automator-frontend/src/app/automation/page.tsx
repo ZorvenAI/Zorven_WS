@@ -5968,6 +5968,24 @@ function AutomationPageContent() {
                       {postText || 'Your post content will appear here...'}
                     </p>
                   </div>
+                  {/* Single Media Preview */}
+                  {!linkedinCarouselMode && postMediaPreview && (
+                    <div className="px-3 pb-3">
+                      {postMediaPreview.type === 'video' ? (
+                        <video
+                          src={postMediaPreview.url}
+                          controls
+                          className="w-full max-h-96 rounded-lg object-contain bg-black"
+                        />
+                      ) : (
+                        <img
+                          src={postMediaPreview.url}
+                          alt="Post media"
+                          className="w-full max-h-96 rounded-lg object-contain"
+                        />
+                      )}
+                    </div>
+                  )}
                   {/* Carousel Images Preview */}
                   {linkedinCarouselMode && linkedinCarouselImages.length > 0 && (
                     <div className="flex overflow-x-auto gap-2 px-3 pb-3">
