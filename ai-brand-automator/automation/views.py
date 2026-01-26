@@ -580,7 +580,119 @@ class LinkedInPostView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            error_str = str(e)
             logger.error(f"LinkedIn post failed: {e}")
+
+            # Check if this is a 401 Unauthorized error - token may be invalid
+            if "401" in error_str:
+                # Try to force refresh the token and retry once
+                try:
+                    if profile.refresh_token:
+                        logger.info(
+                            f"Attempting token refresh for profile {profile.id}"
+                        )
+                        # Force refresh by directly calling refresh logic
+                        from .services import linkedin_service as li_service
+
+                        token_data = li_service.refresh_access_token(
+                            profile.refresh_token
+                        )
+                        profile.access_token = token_data.get("access_token")
+                        profile.token_expires_at = token_data.get("expires_at")
+                        if token_data.get("refresh_token"):
+                            profile.refresh_token = token_data.get("refresh_token")
+                        profile.save()
+
+                        # Retry the post with new token
+                        result = linkedin_service.create_share(
+                            access_token=profile.access_token,
+                            user_urn=profile.profile_id,
+                            text=text,
+                            image_urns=media_urns if media_urns else None,
+                        )
+
+                        # Create a ContentCalendar entry for the published post
+                        post_title = (
+                            title
+                            if title
+                            else (
+                                f"LinkedIn Post - "
+                                f"{timezone.now().strftime('%Y-%m-%d %H:%M')}"
+                            )
+                        )
+                        content = ContentCalendar.objects.create(
+                            user=request.user,
+                            title=post_title,
+                            content=text,
+                            media_urls=media_urns,
+                            platforms=["linkedin"],
+                            scheduled_date=timezone.now(),
+                            published_at=timezone.now(),
+                            status="published",
+                            post_results=result,
+                        )
+                        content.social_profiles.add(profile)
+
+                        task = AutomationTask.objects.create(
+                            user=request.user,
+                            task_type="social_post",
+                            status="completed",
+                            payload={
+                                "text": text,
+                                "platform": "linkedin",
+                                "media_count": len(media_urns),
+                            },
+                            result=result,
+                        )
+
+                        logger.info(
+                            f"LinkedIn post succeeded after token refresh for "
+                            f"{request.user.email}"
+                        )
+
+                        return Response(
+                            {
+                                "message": "Post created successfully",
+                                "post_id": result.get("id"),
+                                "task_id": task.id,
+                                "content_id": content.id,
+                                "has_media": len(media_urns) > 0,
+                                "token_refreshed": True,
+                            }
+                        )
+                except Exception as refresh_error:
+                    logger.error(f"Token refresh and retry failed: {refresh_error}")
+                    # Mark profile as needing re-authentication
+                    profile.status = "expired"
+                    profile.save()
+                    return Response(
+                        {
+                            "error": (
+                                "Your LinkedIn connection has expired. "
+                                "Please reconnect your account."
+                            ),
+                            "needs_reauth": True,
+                        },
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
+            else:
+                # No refresh token available - treat as auth failure
+                logger.warning(
+                    f"LinkedIn 401 error but no refresh token for user "
+                    f"{request.user.email}"
+                )
+                profile.status = "expired"
+                profile.save()
+                return Response(
+                    {
+                        "error": (
+                            "Your LinkedIn connection has expired. "
+                            "Please reconnect your account."
+                        ),
+                        "needs_reauth": True,
+                    },
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
 
             # Create a failed task record
             AutomationTask.objects.create(
@@ -2353,18 +2465,83 @@ class TwitterPostView(APIView):
                 }
             )
 
-        try:
-            # Get valid access token (refresh if needed)
-            access_token = profile.get_valid_access_token()
-
-            # Create tweet
-            result = twitter_service.create_tweet(
+        def attempt_tweet_post(access_token):
+            """Helper to attempt posting a tweet."""
+            return twitter_service.create_tweet(
                 access_token=access_token,
                 text=text,
                 reply_to_id=request.data.get("reply_to_id"),
                 quote_tweet_id=request.data.get("quote_tweet_id"),
                 media_ids=media_ids if media_ids else None,
             )
+
+        try:
+            # Get valid access token (refresh if needed)
+            access_token = profile.get_valid_access_token()
+
+            try:
+                # Create tweet
+                result = attempt_tweet_post(access_token)
+            except Exception as e:
+                error_str = str(e).lower()
+                # Check for 401 Unauthorized or 403 Forbidden (token expired/invalid)
+                if (
+                    "401" in error_str
+                    or "403" in error_str
+                    or "unauthorized" in error_str
+                    or "forbidden" in error_str
+                ):
+                    logger.warning(
+                        f"Twitter API returned auth error, attempting token refresh "
+                        f"for user {request.user.email}"
+                    )
+                    try:
+                        # Force token refresh
+                        if profile.refresh_token:
+                            token_data = twitter_service.refresh_access_token(
+                                profile.refresh_token
+                            )
+                            profile.access_token = token_data.get("access_token")
+                            profile.token_expires_at = token_data.get("expires_at")
+                            if token_data.get("refresh_token"):
+                                profile.refresh_token = token_data.get("refresh_token")
+                            profile.save()
+                            access_token = profile.access_token
+
+                            # Retry the post
+                            result = attempt_tweet_post(access_token)
+                            logger.info(
+                                f"Tweet posted successfully after token refresh "
+                                f"for {request.user.email}"
+                            )
+                        else:
+                            # No refresh token, mark as expired
+                            profile.status = "expired"
+                            profile.save()
+                            raise Exception(
+                                "Token expired and no refresh token available. "
+                                "Please reconnect your Twitter account."
+                            )
+                    except Exception as refresh_error:
+                        logger.error(
+                            f"Token refresh failed for Twitter: {refresh_error}"
+                        )
+                        profile.status = "expired"
+                        profile.save()
+                        # Return a user-friendly error with reconnect flag
+                        return Response(
+                            {
+                                "error": (
+                                    "Your Twitter connection has expired. "
+                                    "Please reconnect your Twitter account."
+                                ),
+                                "needs_reconnect": True,
+                                "platform": "twitter",
+                            },
+                            status=status.HTTP_401_UNAUTHORIZED,
+                        )
+                else:
+                    raise
 
             # Create a ContentCalendar entry for the published tweet
             post_title = (
@@ -3745,21 +3922,59 @@ class FacebookPostView(APIView):
                     }
                 )
 
-            # Create post
-            if photo_url:
-                result = facebook_service.create_page_photo_post(
-                    page_id=profile.page_id,
-                    page_access_token=profile.page_access_token,
-                    photo_url=photo_url,
-                    message=message if message else None,
-                )
-            else:
-                result = facebook_service.create_page_post(
-                    page_id=profile.page_id,
-                    page_access_token=profile.page_access_token,
-                    message=message,
-                    link=link,
-                )
+            def attempt_facebook_post(page_access_token):
+                """Helper to attempt posting to Facebook."""
+                if photo_url:
+                    return facebook_service.create_page_photo_post(
+                        page_id=profile.page_id,
+                        page_access_token=page_access_token,
+                        photo_url=photo_url,
+                        message=message if message else None,
+                    )
+                else:
+                    return facebook_service.create_page_post(
+                        page_id=profile.page_id,
+                        page_access_token=page_access_token,
+                        message=message,
+                        link=link,
+                    )
+
+            try:
+                # Create post
+                result = attempt_facebook_post(profile.page_access_token)
+            except Exception as e:
+                error_str = str(e).lower()
+                # Check for auth errors
+                # (Facebook uses various error codes for expired tokens)
+                if (
+                    "401" in error_str
+                    or "403" in error_str
+                    or "expired" in error_str
+                    or "invalid" in error_str
+                    or "error validating access token" in error_str
+                ):
+                    logger.warning(
+                        f"Facebook API returned auth error, user "
+                        f"{request.user.email} may need to reconnect: "
+                        f"{e}"
+                    )
+                    # Facebook page tokens don't typically expire, but user tokens do
+                    # If we get here, the user likely needs to reconnect
+                    profile.status = "expired"
+                    profile.save()
+                    return Response(
+                        {
+                            "error": (
+                                "Your Facebook connection has expired. "
+                                "Please reconnect your Facebook account."
+                            ),
+                            "needs_reconnect": True,
+                            "platform": "facebook",
+                        },
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
+                else:
+                    raise
 
             # Store in ContentCalendar for history
             ContentCalendar.objects.create(
@@ -6171,8 +6386,17 @@ class InstagramPostView(APIView):
         # Get access token
         access_token = profile.instagram_access_token or profile.page_access_token
 
-        # Check for test mode
-        if access_token == INSTAGRAM_TEST_USER_TOKEN:
+        # Check for test mode - check both token AND profile ID
+        is_test_mode = (
+            access_token == INSTAGRAM_TEST_USER_TOKEN
+            or profile.instagram_user_id == "test_ig_business_id"
+            or (
+                profile.instagram_user_id
+                and profile.instagram_user_id.startswith("test_")
+            )
+        )
+
+        if is_test_mode:
             post_id = f"test_ig_post_{uuid.uuid4().hex[:8]}"
 
             # Store in test cache
@@ -6270,7 +6494,8 @@ class InstagramPostView(APIView):
                 )
 
         # Immediate post
-        try:
+        def attempt_instagram_post(access_token):
+            """Helper to attempt posting to Instagram."""
             # Step 1: Create container
             if media_type == "REELS":
                 container = instagram_service.create_reel_container(
@@ -6306,12 +6531,8 @@ class InstagramPostView(APIView):
                     if status_code == "FINISHED":
                         break
                     elif status_code == "ERROR":
-                        return Response(
-                            {
-                                "error": "Video processing failed",
-                                "details": status_resp.get("status"),
-                            },
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        raise Exception(
+                            f"Video processing failed: {status_resp.get('status')}"
                         )
                     time.sleep(1)
 
@@ -6321,6 +6542,45 @@ class InstagramPostView(APIView):
                 access_token=access_token,
                 container_id=container_id,
             )
+
+            return result
+
+        try:
+            try:
+                result = attempt_instagram_post(access_token)
+            except Exception as e:
+                error_str = str(e).lower()
+                # Check for auth errors (Instagram/Facebook uses various error messages)
+                if (
+                    "401" in error_str
+                    or "403" in error_str
+                    or "expired" in error_str
+                    or "invalid" in error_str
+                    or "error validating access token" in error_str
+                    or "oauth" in error_str
+                ):
+                    logger.warning(
+                        f"Instagram API returned auth error, user "
+                        f"{request.user.email} may need to reconnect"
+                    )
+                    # Instagram uses Facebook tokens which don't typically auto-refresh
+                    # Mark as expired so user knows to reconnect
+                    profile.status = "expired"
+                    profile.save()
+                    return Response(
+                        {
+                            "error": (
+                                "Your Instagram connection has expired. "
+                                "Please reconnect your Instagram account."
+                            ),
+                            "needs_reconnect": True,
+                            "platform": "instagram",
+                            "details": str(e),
+                        },
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
+                else:
+                    raise
 
             media_id = result.get("id")
 
@@ -7569,9 +7829,8 @@ class GoogleBusinessLocationsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            # Call the service which handles both mock and real mode internally
-            access_token = profile.access_token
+        def fetch_and_sync_locations(access_token):
+            """Helper to fetch locations and sync to database."""
             api_locations = google_business_service.list_locations(
                 access_token, profile.gbp_account_id
             )
@@ -7603,6 +7862,18 @@ class GoogleBusinessLocationsView(APIView):
                     },
                 )
 
+            return api_locations
+
+        try:
+            # Get valid access token (auto-refresh if needed)
+            try:
+                access_token = profile.get_valid_access_token()
+            except ValueError:
+                # If token refresh fails, use existing token and let API call fail
+                access_token = profile.access_token
+
+            fetch_and_sync_locations(access_token)
+
             # Return ALL locations from database for this profile
             all_locations = GoogleBusinessLocation.objects.filter(profile=profile)
             serializer = GoogleBusinessLocationSerializer(all_locations, many=True)
@@ -7615,7 +7886,57 @@ class GoogleBusinessLocationsView(APIView):
             )
 
         except Exception as e:
+            error_str = str(e)
             logger.exception(f"Failed to list GBP locations: {e}")
+
+            # Check if this is a 401 Unauthorized error - try token refresh and retry
+            if "401" in error_str:
+                try:
+                    if profile.refresh_token:
+                        logger.info(
+                            f"Attempting GBP token refresh for profile {profile.id}"
+                        )
+                        token_data = google_business_service.refresh_access_token(
+                            profile.refresh_token
+                        )
+                        profile.access_token = token_data.get("access_token")
+                        profile.token_expires_at = token_data.get("expires_at")
+                        if token_data.get("refresh_token"):
+                            profile.refresh_token = token_data.get("refresh_token")
+                        profile.save()
+
+                        # Retry with new token
+                        fetch_and_sync_locations(profile.access_token)
+
+                        all_locations = GoogleBusinessLocation.objects.filter(
+                            profile=profile
+                        )
+                        serializer = GoogleBusinessLocationSerializer(
+                            all_locations, many=True
+                        )
+                        return Response(
+                            {
+                                "locations": serializer.data,
+                                "count": all_locations.count(),
+                                "is_mock_mode": (google_business_service.is_mock_mode),
+                                "token_refreshed": True,
+                            }
+                        )
+                except Exception as refresh_error:
+                    logger.error(f"GBP token refresh failed: {refresh_error}")
+                    profile.status = "expired"
+                    profile.save()
+                    return Response(
+                        {
+                            "error": (
+                                "Your Google Business Profile connection "
+                                "has expired. Please reconnect."
+                            ),
+                            "needs_reauth": True,
+                        },
+                        status=status.HTTP_401_UNAUTHORIZED,
+                    )
+
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
