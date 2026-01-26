@@ -964,10 +964,7 @@ class GoogleBusinessProfile(models.Model):
         # Mock tokens don't need refresh
         from .services import GoogleBusinessService
 
-        if (
-            self.is_mock
-            or self.access_token == GoogleBusinessService.MOCK_ACCESS_TOKEN
-        ):
+        if self.is_mock or self.access_token == GoogleBusinessService.MOCK_ACCESS_TOKEN:
             return self.access_token
 
         if not self.is_token_expiring_soon:
@@ -981,7 +978,9 @@ class GoogleBusinessProfile(models.Model):
         from .services import google_business_service
 
         try:
-            token_data = google_business_service.refresh_access_token(self.refresh_token)
+            token_data = google_business_service.refresh_access_token(
+                self.refresh_token
+            )
             self.access_token = token_data.get("access_token")
             self.token_expires_at = token_data.get("expires_at")
             if token_data.get("refresh_token"):

@@ -2460,14 +2460,21 @@ class TwitterPostView(APIView):
             except Exception as e:
                 error_str = str(e).lower()
                 # Check for 401 Unauthorized or 403 Forbidden (token expired/invalid)
-                if "401" in error_str or "403" in error_str or "unauthorized" in error_str or "forbidden" in error_str:
+                if (
+                    "401" in error_str
+                    or "403" in error_str
+                    or "unauthorized" in error_str
+                    or "forbidden" in error_str
+                ):
                     logger.warning(
                         f"Twitter API returned auth error, attempting token refresh for user {request.user.email}"
                     )
                     try:
                         # Force token refresh
                         if profile.refresh_token:
-                            token_data = twitter_service.refresh_access_token(profile.refresh_token)
+                            token_data = twitter_service.refresh_access_token(
+                                profile.refresh_token
+                            )
                             profile.access_token = token_data.get("access_token")
                             profile.token_expires_at = token_data.get("expires_at")
                             if token_data.get("refresh_token"):
@@ -2477,14 +2484,20 @@ class TwitterPostView(APIView):
 
                             # Retry the post
                             result = attempt_tweet_post(access_token)
-                            logger.info(f"Tweet posted successfully after token refresh for {request.user.email}")
+                            logger.info(
+                                f"Tweet posted successfully after token refresh for {request.user.email}"
+                            )
                         else:
                             # No refresh token, mark as expired
                             profile.status = "expired"
                             profile.save()
-                            raise Exception("Token expired and no refresh token available. Please reconnect your Twitter account.")
+                            raise Exception(
+                                "Token expired and no refresh token available. Please reconnect your Twitter account."
+                            )
                     except Exception as refresh_error:
-                        logger.error(f"Token refresh failed for Twitter: {refresh_error}")
+                        logger.error(
+                            f"Token refresh failed for Twitter: {refresh_error}"
+                        )
                         profile.status = "expired"
                         profile.save()
                         # Return a user-friendly error with reconnect flag
@@ -3902,7 +3915,13 @@ class FacebookPostView(APIView):
             except Exception as e:
                 error_str = str(e).lower()
                 # Check for auth errors (Facebook uses various error codes for expired tokens)
-                if "401" in error_str or "403" in error_str or "expired" in error_str or "invalid" in error_str or "error validating access token" in error_str:
+                if (
+                    "401" in error_str
+                    or "403" in error_str
+                    or "expired" in error_str
+                    or "invalid" in error_str
+                    or "error validating access token" in error_str
+                ):
                     logger.warning(
                         f"Facebook API returned auth error, user {request.user.email} may need to reconnect"
                     )
@@ -6336,9 +6355,12 @@ class InstagramPostView(APIView):
         is_test_mode = (
             access_token == INSTAGRAM_TEST_USER_TOKEN
             or profile.instagram_user_id == "test_ig_business_id"
-            or (profile.instagram_user_id and profile.instagram_user_id.startswith("test_"))
+            or (
+                profile.instagram_user_id
+                and profile.instagram_user_id.startswith("test_")
+            )
         )
-        
+
         if is_test_mode:
             post_id = f"test_ig_post_{uuid.uuid4().hex[:8]}"
 
@@ -6474,7 +6496,9 @@ class InstagramPostView(APIView):
                     if status_code == "FINISHED":
                         break
                     elif status_code == "ERROR":
-                        raise Exception(f"Video processing failed: {status_resp.get('status')}")
+                        raise Exception(
+                            f"Video processing failed: {status_resp.get('status')}"
+                        )
                     time.sleep(1)
 
             # Step 2: Publish
@@ -6492,7 +6516,14 @@ class InstagramPostView(APIView):
             except Exception as e:
                 error_str = str(e).lower()
                 # Check for auth errors (Instagram/Facebook uses various error messages)
-                if "401" in error_str or "403" in error_str or "expired" in error_str or "invalid" in error_str or "error validating access token" in error_str or "oauth" in error_str:
+                if (
+                    "401" in error_str
+                    or "403" in error_str
+                    or "expired" in error_str
+                    or "invalid" in error_str
+                    or "error validating access token" in error_str
+                    or "oauth" in error_str
+                ):
                     logger.warning(
                         f"Instagram API returned auth error, user {request.user.email} may need to reconnect"
                     )
