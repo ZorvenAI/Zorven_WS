@@ -6332,8 +6332,14 @@ class InstagramPostView(APIView):
         # Get access token
         access_token = profile.instagram_access_token or profile.page_access_token
 
-        # Check for test mode
-        if access_token == INSTAGRAM_TEST_USER_TOKEN:
+        # Check for test mode - check both token AND profile ID
+        is_test_mode = (
+            access_token == INSTAGRAM_TEST_USER_TOKEN
+            or profile.instagram_user_id == "test_ig_business_id"
+            or (profile.instagram_user_id and profile.instagram_user_id.startswith("test_"))
+        )
+        
+        if is_test_mode:
             post_id = f"test_ig_post_{uuid.uuid4().hex[:8]}"
 
             # Store in test cache
