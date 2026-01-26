@@ -630,7 +630,7 @@ class LinkedInPostView(APIView):
                         )
                         content.social_profiles.add(profile)
 
-                        AutomationTask.objects.create(
+                        task = AutomationTask.objects.create(
                             user=request.user,
                             task_type="social_post",
                             status="completed",
@@ -651,6 +651,7 @@ class LinkedInPostView(APIView):
                             {
                                 "message": "Post created successfully",
                                 "post_id": result.get("id"),
+                                "task_id": task.id,
                                 "content_id": content.id,
                                 "has_media": len(media_urns) > 0,
                                 "token_refreshed": True,
@@ -668,6 +669,20 @@ class LinkedInPostView(APIView):
                         },
                         status=status.HTTP_401_UNAUTHORIZED,
                     )
+            else:
+                # No refresh token available - treat as auth failure
+                logger.warning(
+                    f"LinkedIn 401 error but no refresh token for user {request.user.email}"
+                )
+                profile.status = "expired"
+                profile.save()
+                return Response(
+                    {
+                        "error": "Your LinkedIn connection has expired. Please reconnect your account.",
+                        "needs_reauth": True,
+                    },
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
 
             # Create a failed task record
             AutomationTask.objects.create(
@@ -2506,7 +2521,6 @@ class TwitterPostView(APIView):
                                 "error": "Your Twitter connection has expired. Please reconnect your Twitter account.",
                                 "needs_reconnect": True,
                                 "platform": "twitter",
-                                "details": str(refresh_error),
                             },
                             status=status.HTTP_401_UNAUTHORIZED,
                         )
@@ -3923,7 +3937,7 @@ class FacebookPostView(APIView):
                     or "error validating access token" in error_str
                 ):
                     logger.warning(
-                        f"Facebook API returned auth error, user {request.user.email} may need to reconnect"
+                        f"Facebook API returned auth error, user {request.user.email} may need to reconnect: {e}"
                     )
                     # Facebook page tokens don't typically expire, but user tokens do
                     # If we get here, the user likely needs to reconnect
@@ -3934,7 +3948,6 @@ class FacebookPostView(APIView):
                             "error": "Your Facebook connection has expired. Please reconnect your Facebook account.",
                             "needs_reconnect": True,
                             "platform": "facebook",
-                            "details": str(e),
                         },
                         status=status.HTTP_401_UNAUTHORIZED,
                     )
@@ -7833,7 +7846,7 @@ class GoogleBusinessLocationsView(APIView):
                 # If token refresh fails, use existing token and let API call fail
                 access_token = profile.access_token
 
-            api_locations = fetch_and_sync_locations(access_token)
+            fetch_and_sync_locations(access_token)
 
             # Return ALL locations from database for this profile
             all_locations = GoogleBusinessLocation.objects.filter(profile=profile)

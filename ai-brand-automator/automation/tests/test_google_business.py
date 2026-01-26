@@ -141,6 +141,121 @@ class TestGoogleBusinessProfileModel:
         assert gbp_profile._refresh_token is None
         assert gbp_profile.token_expires_at is None
 
+    def test_is_token_expiring_soon_when_not_expiring(self, gbp_profile):
+        """Test is_token_expiring_soon returns False when token has time."""
+        gbp_profile.token_expires_at = timezone.now() + timedelta(hours=2)
+        gbp_profile.save()
+        assert gbp_profile.is_token_expiring_soon is False
+
+    def test_is_token_expiring_soon_when_expiring(self, gbp_profile):
+        """Test is_token_expiring_soon returns True when token expires in < 5 mins."""
+        gbp_profile.token_expires_at = timezone.now() + timedelta(minutes=3)
+        gbp_profile.save()
+        assert gbp_profile.is_token_expiring_soon is True
+
+    def test_is_token_expiring_soon_when_expired(self, gbp_profile):
+        """Test is_token_expiring_soon returns True when token is already expired."""
+        gbp_profile.token_expires_at = timezone.now() - timedelta(minutes=5)
+        gbp_profile.save()
+        assert gbp_profile.is_token_expiring_soon is True
+
+    def test_refresh_token_if_needed_returns_current_when_valid(self, gbp_profile):
+        """Test refresh_token_if_needed returns current token when not expiring."""
+        gbp_profile.token_expires_at = timezone.now() + timedelta(hours=2)
+        gbp_profile.save()
+        token = gbp_profile.refresh_token_if_needed()
+        assert token == gbp_profile.access_token
+
+    def test_refresh_token_if_needed_returns_mock_token(self, db, user):
+        """Test refresh_token_if_needed returns mock token without refresh."""
+        from automation.services import GoogleBusinessService
+
+        profile = GoogleBusinessProfile.objects.create(
+            user=user,
+            google_account_id="accounts/mock",
+            google_account_name="Mock Account",
+            google_email="mock@example.com",
+            _access_token=GoogleBusinessService.MOCK_ACCESS_TOKEN,
+            token_expires_at=timezone.now() - timedelta(hours=1),  # Expired
+            status="connected",
+            is_mock=True,
+        )
+        token = profile.refresh_token_if_needed()
+        assert token == GoogleBusinessService.MOCK_ACCESS_TOKEN
+
+    def test_refresh_token_if_needed_raises_when_no_refresh_token(self, db, user):
+        """Test refresh_token_if_needed raises ValueError when no refresh token."""
+        profile = GoogleBusinessProfile.objects.create(
+            user=user,
+            google_account_id="accounts/test",
+            google_account_name="Test Account",
+            google_email="test@example.com",
+            _access_token="test_access_token",
+            _refresh_token=None,  # No refresh token
+            token_expires_at=timezone.now() + timedelta(minutes=2),  # Expiring soon
+            status="connected",
+        )
+        with pytest.raises(ValueError, match="No refresh token available"):
+            profile.refresh_token_if_needed()
+        profile.refresh_from_db()
+        assert profile.status == "expired"
+
+    @patch("automation.services.google_business_service.refresh_access_token")
+    def test_refresh_token_if_needed_refreshes_when_expiring(
+        self, mock_refresh, gbp_profile
+    ):
+        """Test refresh_token_if_needed calls service when token expiring soon."""
+        # Setup expiring token
+        gbp_profile.token_expires_at = timezone.now() + timedelta(minutes=2)
+        gbp_profile.save()
+        original_refresh_token = gbp_profile.refresh_token
+
+        # Mock the refresh response
+        new_expires_at = timezone.now() + timedelta(hours=1)
+        mock_refresh.return_value = {
+            "access_token": "new_access_token",
+            "refresh_token": "new_refresh_token",
+            "expires_at": new_expires_at,
+        }
+
+        token = gbp_profile.refresh_token_if_needed()
+
+        assert token == "new_access_token"
+        mock_refresh.assert_called_once_with(original_refresh_token)
+        gbp_profile.refresh_from_db()
+        assert gbp_profile.access_token == "new_access_token"
+        assert gbp_profile.refresh_token == "new_refresh_token"
+
+    @patch("automation.services.google_business_service.refresh_access_token")
+    def test_refresh_token_if_needed_handles_refresh_failure(
+        self, mock_refresh, gbp_profile
+    ):
+        """Test refresh_token_if_needed marks profile as error on failure."""
+        gbp_profile.token_expires_at = timezone.now() + timedelta(minutes=2)
+        gbp_profile.save()
+
+        mock_refresh.side_effect = Exception("Refresh failed")
+
+        with pytest.raises(ValueError, match="Failed to refresh token"):
+            gbp_profile.refresh_token_if_needed()
+
+        gbp_profile.refresh_from_db()
+        assert gbp_profile.status == "error"
+
+    def test_get_valid_access_token_delegates_to_refresh_method(self, gbp_profile):
+        """Test get_valid_access_token delegates to refresh_token_if_needed."""
+        gbp_profile.token_expires_at = timezone.now() + timedelta(hours=2)
+        gbp_profile.save()
+        token = gbp_profile.get_valid_access_token()
+        assert token == gbp_profile.access_token
+
+    def test_refresh_token_if_needed_raises_when_disconnected(self, gbp_profile):
+        """Test refresh_token_if_needed raises ValueError when profile disconnected."""
+        gbp_profile.status = "disconnected"
+        gbp_profile.save()
+        with pytest.raises(ValueError, match="Profile is not connected"):
+            gbp_profile.refresh_token_if_needed()
+
 
 class TestGoogleBusinessLocationModel:
     """Tests for GoogleBusinessLocation model."""
