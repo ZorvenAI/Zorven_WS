@@ -1,0 +1,188 @@
+"""
+Factory module for creating configured adapter instances.
+
+This module provides factory functions to create properly configured
+adapters from Django settings, enabling dependency injection.
+"""
+
+import logging
+from typing import Optional
+
+from django.conf import settings
+
+from data_ingestion.adapters.gcs_adapter import GCSAdapter
+from data_ingestion.adapters.redis_adapter import RedisAdapter
+from data_ingestion.adapters.kafka_adapter import (
+    KafkaProducerAdapter,
+    KafkaConsumerAdapter,
+)
+from data_ingestion.domain.services import IngestionService
+
+
+logger = logging.getLogger(__name__)
+
+
+def get_data_ingestion_config() -> dict:
+    """Get data ingestion configuration from Django settings."""
+    return getattr(settings, "DATA_INGESTION", {})
+
+
+def create_gcs_adapter(config: Optional[dict] = None) -> GCSAdapter:
+    """
+    Create a GCS adapter from configuration.
+
+    Args:
+        config: Optional config dict (uses Django settings if not provided)
+
+    Returns:
+        Configured GCSAdapter instance
+    """
+    config = config or get_data_ingestion_config()
+    gcs_config = config.get("GCS", {})
+
+    return GCSAdapter(
+        project_id=gcs_config.get("PROJECT_ID", "brandsol"),
+        credentials_path=gcs_config.get("CREDENTIALS_PATH"),
+        default_bucket=gcs_config.get("BUCKET_NAME", "onboarding-bucket1"),
+    )
+
+
+def create_redis_adapter(config: Optional[dict] = None) -> RedisAdapter:
+    """
+    Create a Redis adapter from configuration.
+
+    Args:
+        config: Optional config dict (uses Django settings if not provided)
+
+    Returns:
+        Configured RedisAdapter instance
+    """
+    config = config or get_data_ingestion_config()
+    redis_config = config.get("REDIS", {})
+
+    # Fall back to CELERY_BROKER_URL if REDIS_URL not set
+    redis_url = redis_config.get("URL") or getattr(
+        settings, "CELERY_BROKER_URL", "redis://localhost:6379/0"
+    )
+
+    return RedisAdapter(
+        redis_url=redis_url,
+        dedupe_ttl_seconds=redis_config.get("DEDUPE_TTL_SECONDS", 3600),
+        status_ttl_seconds=redis_config.get("STATUS_TTL_SECONDS", 604800),
+    )
+
+
+def create_kafka_producer(config: Optional[dict] = None) -> KafkaProducerAdapter:
+    """
+    Create a Kafka producer from configuration.
+
+    Args:
+        config: Optional config dict (uses Django settings if not provided)
+
+    Returns:
+        Configured KafkaProducerAdapter instance
+    """
+    config = config or get_data_ingestion_config()
+    kafka_config = config.get("KAFKA", {})
+
+    return KafkaProducerAdapter(
+        bootstrap_servers=kafka_config.get("BOOTSTRAP_SERVERS", "localhost:9092"),
+        client_id=kafka_config.get("PRODUCER_CLIENT_ID", "ingestion-producer"),
+        dlq_topic=kafka_config.get("DLQ_TOPIC", "ingestion-dlq"),
+    )
+
+
+def create_kafka_consumer(config: Optional[dict] = None) -> KafkaConsumerAdapter:
+    """
+    Create a Kafka consumer from configuration.
+
+    Args:
+        config: Optional config dict (uses Django settings if not provided)
+
+    Returns:
+        Configured KafkaConsumerAdapter instance
+    """
+    config = config or get_data_ingestion_config()
+    kafka_config = config.get("KAFKA", {})
+
+    return KafkaConsumerAdapter(
+        bootstrap_servers=kafka_config.get("BOOTSTRAP_SERVERS", "localhost:9092"),
+        group_id=kafka_config.get("CONSUMER_GROUP_ID", "ingestion-consumer-group"),
+        topics=[kafka_config.get("INPUT_TOPIC", "raw-ingestion-topic")],
+        client_id=kafka_config.get("CONSUMER_CLIENT_ID", "ingestion-consumer"),
+        auto_offset_reset=kafka_config.get("AUTO_OFFSET_RESET", "earliest"),
+        enable_auto_commit=kafka_config.get("ENABLE_AUTO_COMMIT", False),
+    )
+
+
+def create_ingestion_service(config: Optional[dict] = None) -> IngestionService:
+    """
+    Create a fully configured IngestionService with all adapters.
+
+    This is the main factory function for creating the service
+    with all dependencies wired up.
+
+    Args:
+        config: Optional config dict (uses Django settings if not provided)
+
+    Returns:
+        Configured IngestionService instance
+    """
+    config = config or get_data_ingestion_config()
+    kafka_config = config.get("KAFKA", {})
+    redis_config = config.get("REDIS", {})
+
+    # Create adapters
+    storage = create_gcs_adapter(config)
+    cache = create_redis_adapter(config)
+    producer = create_kafka_producer(config)
+
+    # Create service
+    service = IngestionService(
+        storage=storage,
+        cache=cache,
+        producer=producer,
+        output_topic=kafka_config.get("OUTPUT_TOPIC", "curation-needed-topic"),
+        dlq_topic=kafka_config.get("DLQ_TOPIC", "ingestion-dlq"),
+        dedupe_ttl_seconds=redis_config.get("DEDUPE_TTL_SECONDS", 3600),
+        status_ttl_seconds=redis_config.get("STATUS_TTL_SECONDS", 604800),
+        max_retries=config.get("MAX_RETRIES", 3),
+        retry_backoff_seconds=config.get("RETRY_BACKOFF_SECONDS", 1.0),
+    )
+
+    logger.info("IngestionService created with all adapters")
+    return service
+
+
+class IngestionServiceContainer:
+    """
+    Singleton container for the IngestionService.
+
+    Ensures only one instance of the service and its adapters
+    are created per process.
+    """
+
+    _instance: Optional[IngestionService] = None
+    _consumer: Optional[KafkaConsumerAdapter] = None
+
+    @classmethod
+    def get_service(cls) -> IngestionService:
+        """Get or create the singleton IngestionService instance."""
+        if cls._instance is None:
+            cls._instance = create_ingestion_service()
+        return cls._instance
+
+    @classmethod
+    def get_consumer(cls) -> KafkaConsumerAdapter:
+        """Get or create the singleton KafkaConsumer instance."""
+        if cls._consumer is None:
+            cls._consumer = create_kafka_consumer()
+        return cls._consumer
+
+    @classmethod
+    def reset(cls) -> None:
+        """Reset the container (useful for testing)."""
+        if cls._consumer:
+            cls._consumer.close()
+        cls._instance = None
+        cls._consumer = None
