@@ -257,7 +257,8 @@ def is_landing_zone_path(object_path: str, landing_prefix: str = "_landing") -> 
     normalized_prefix = landing_prefix.strip("/")
 
     return (
-        normalized_path.startswith(f"{normalized_prefix}/") or normalized_path == normalized_prefix
+        normalized_path.startswith(f"{normalized_prefix}/")
+        or normalized_path == normalized_prefix
     )
 
 

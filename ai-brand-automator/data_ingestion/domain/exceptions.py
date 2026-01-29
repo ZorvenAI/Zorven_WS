@@ -45,7 +45,10 @@ class FileNotFoundInLandingError(DataIngestionError):
     """
 
     def __init__(
-        self, file_path: str, trace_id: Optional[UUID] = None, bucket: Optional[str] = None
+        self,
+        file_path: str,
+        trace_id: Optional[UUID] = None,
+        bucket: Optional[str] = None,
     ):
         self.file_path = file_path
         self.bucket = bucket

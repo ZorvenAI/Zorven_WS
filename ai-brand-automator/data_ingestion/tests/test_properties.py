@@ -153,8 +153,14 @@ class TestGcsUriProperties:
         assert f"gs://{bucket}/{blob}" == gcs_path
 
     @given(
-        bucket=st.text(min_size=3, max_size=30, alphabet="abcdefghijklmnopqrstuvwxyz0123456789-"),
-        blob=st.text(min_size=1, max_size=100, alphabet="abcdefghijklmnopqrstuvwxyz0123456789-_./"),
+        bucket=st.text(
+            min_size=3, max_size=30, alphabet="abcdefghijklmnopqrstuvwxyz0123456789-"
+        ),
+        blob=st.text(
+            min_size=1,
+            max_size=100,
+            alphabet="abcdefghijklmnopqrstuvwxyz0123456789-_./",
+        ),
     )
     def test_parse_roundtrip(self, bucket, blob):
         """Parsing a constructed URI should give back the components."""

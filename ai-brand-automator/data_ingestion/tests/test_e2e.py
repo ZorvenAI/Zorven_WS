@@ -51,16 +51,37 @@ def e2e_storage() -> MockStoragePort:
             "gs://onboarding-bucket1/_landing/frontend/tenant-a/profile_video.mp4",
             b"video_content_a",
         ),
-        ("gs://onboarding-bucket1/_landing/frontend/tenant-a/logo.png", b"image_content_a"),
-        ("gs://onboarding-bucket1/_landing/frontend/tenant-b/promo_video.mp4", b"video_content_b"),
+        (
+            "gs://onboarding-bucket1/_landing/frontend/tenant-a/logo.png",
+            b"image_content_a",
+        ),
+        (
+            "gs://onboarding-bucket1/_landing/frontend/tenant-b/promo_video.mp4",
+            b"video_content_b",
+        ),
         # API uploads
-        ("gs://onboarding-bucket1/_landing/api/tenant-c/bulk_upload_1.mp4", b"video_bulk_1"),
-        ("gs://onboarding-bucket1/_landing/api/tenant-c/bulk_upload_2.mp4", b"video_bulk_2"),
+        (
+            "gs://onboarding-bucket1/_landing/api/tenant-c/bulk_upload_1.mp4",
+            b"video_bulk_1",
+        ),
+        (
+            "gs://onboarding-bucket1/_landing/api/tenant-c/bulk_upload_2.mp4",
+            b"video_bulk_2",
+        ),
         # Batch imports
-        ("gs://onboarding-bucket1/_landing/batch/tenant-d/batch_file.mp4", b"batch_content"),
+        (
+            "gs://onboarding-bucket1/_landing/batch/tenant-d/batch_file.mp4",
+            b"batch_content",
+        ),
         # Edge cases
-        ("gs://onboarding-bucket1/_landing/special/tenant-e/file with spaces.mp4", b"space_file"),
-        ("gs://onboarding-bucket1/_landing/special/tenant-e/файл_unicode.mp4", b"unicode_file"),
+        (
+            "gs://onboarding-bucket1/_landing/special/tenant-e/file with spaces.mp4",
+            b"space_file",
+        ),
+        (
+            "gs://onboarding-bucket1/_landing/special/tenant-e/файл_unicode.mp4",
+            b"unicode_file",
+        ),
     ]
 
     for path, content in test_files:
@@ -131,7 +152,9 @@ def create_ingestion_event(
 class TestE2ECompleteUploadFlow:
     """E2E tests for the complete file upload and processing flow."""
 
-    def test_frontend_upload_complete_flow(self, e2e_service, e2e_storage, e2e_cache, e2e_producer):
+    def test_frontend_upload_complete_flow(
+        self, e2e_service, e2e_storage, e2e_cache, e2e_producer
+    ):
         """
         E2E Test: Frontend upload goes through complete pipeline.
 
@@ -185,7 +208,9 @@ class TestE2ECompleteUploadFlow:
         assert status is not None
         assert status["status"] == ProcessingStatus.RAW_STORED.value
 
-    def test_api_batch_upload_flow(self, e2e_service, e2e_storage, e2e_cache, e2e_producer):
+    def test_api_batch_upload_flow(
+        self, e2e_service, e2e_storage, e2e_cache, e2e_producer
+    ):
         """
         E2E Test: API batch upload processes multiple files.
 
@@ -231,7 +256,9 @@ class TestE2ECompleteUploadFlow:
 class TestE2EKafkaConsumerFlow:
     """E2E tests for Kafka consumer to service integration."""
 
-    def test_consumer_to_service_complete_flow(self, e2e_service, e2e_storage, e2e_consumer):
+    def test_consumer_to_service_complete_flow(
+        self, e2e_service, e2e_storage, e2e_consumer
+    ):
         """
         E2E Test: Events from Kafka consumer flow through service.
 
@@ -309,7 +336,9 @@ class TestE2EKafkaConsumerFlow:
             committed = False
             # In real scenario, send to DLQ
             service.send_to_dlq(
-                consumed_event.model_dump(), NonRetryableError("File not found"), "input-topic"
+                consumed_event.model_dump(),
+                NonRetryableError("File not found"),
+                "input-topic",
             )
 
         # Assert
@@ -607,7 +636,9 @@ class TestE2EErrorHandling:
 class TestE2EStatusTracking:
     """E2E tests for status tracking throughout the pipeline."""
 
-    def test_status_progression_complete_flow(self, e2e_service, e2e_storage, e2e_cache):
+    def test_status_progression_complete_flow(
+        self, e2e_service, e2e_storage, e2e_cache
+    ):
         """
         E2E Test: Status is tracked at each pipeline stage.
 
@@ -663,7 +694,9 @@ class TestE2EStatusTracking:
 class TestE2EEdgeCases:
     """E2E tests for edge cases and special scenarios."""
 
-    def test_file_with_spaces_in_name(self, e2e_service, e2e_storage, e2e_cache, e2e_producer):
+    def test_file_with_spaces_in_name(
+        self, e2e_service, e2e_storage, e2e_cache, e2e_producer
+    ):
         """
         E2E Test: Files with spaces in names are handled correctly.
         """
@@ -677,7 +710,9 @@ class TestE2EEdgeCases:
         assert result.status == ProcessingStatus.RAW_STORED
         assert "file with spaces.mp4" in result.destination_path
 
-    def test_file_with_unicode_name(self, e2e_service, e2e_storage, e2e_cache, e2e_producer):
+    def test_file_with_unicode_name(
+        self, e2e_service, e2e_storage, e2e_cache, e2e_producer
+    ):
         """
         E2E Test: Files with unicode characters are handled correctly.
         """
@@ -853,7 +888,9 @@ class TestE2ECeleryTasks:
 class TestE2EFullPipelineSimulation:
     """E2E tests simulating the complete pipeline from start to finish."""
 
-    def test_simulate_real_world_upload_flow(self, e2e_storage, e2e_cache, e2e_producer):
+    def test_simulate_real_world_upload_flow(
+        self, e2e_storage, e2e_cache, e2e_producer
+    ):
         """
         E2E Test: Simulate a real-world file upload flow.
 
@@ -866,7 +903,9 @@ class TestE2EFullPipelineSimulation:
         6. Output event published for curation
         """
         # Step 1-2: Simulate frontend upload (file already in storage)
-        file_path = "gs://onboarding-bucket1/_landing/frontend/tenant-a/profile_video.mp4"
+        file_path = (
+            "gs://onboarding-bucket1/_landing/frontend/tenant-a/profile_video.mp4"
+        )
         assert file_path in e2e_storage.files
 
         # Step 3: Frontend would publish Kafka event (we create it directly)
@@ -996,6 +1035,8 @@ class TestE2EFullPipelineSimulation:
 
         # Assert - pipeline handled all scenarios
         assert processed > 0
-        assert duplicates > 0 or failed > 0  # Some should have failed or been duplicates
+        assert (
+            duplicates > 0 or failed > 0
+        )  # Some should have failed or been duplicates
         total = processed + failed + duplicates
         assert total == len(events)

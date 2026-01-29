@@ -51,12 +51,18 @@ class IngestionEvent(BaseModel):
     This is the primary input to the ingestion pipeline, received from Kafka.
     """
 
-    event_id: UUID = Field(description="Unique identifier for this event (used for deduplication)")
-    trace_id: UUID = Field(description="Trace ID for distributed tracing across services")
+    event_id: UUID = Field(
+        description="Unique identifier for this event (used for deduplication)"
+    )
+    trace_id: UUID = Field(
+        description="Trace ID for distributed tracing across services"
+    )
     timestamp: datetime = Field(description="When the event was created")
     source: EventSource = Field(description="System that generated this event")
     tenant_id: str = Field(
-        min_length=1, max_length=100, description="Tenant identifier (e.g., 'customer-1')"
+        min_length=1,
+        max_length=100,
+        description="Tenant identifier (e.g., 'customer-1')",
     )
     file_path: str = Field(
         min_length=1,
@@ -79,7 +85,8 @@ class IngestionEvent(BaseModel):
 
         if not re.match(r"^[a-zA-Z0-9_-]+$", v):
             raise ValueError(
-                "tenant_id must contain only alphanumeric characters, " "hyphens, and underscores"
+                "tenant_id must contain only alphanumeric characters, "
+                "hyphens, and underscores"
             )
         return v.lower()  # Normalize to lowercase
 
@@ -126,7 +133,9 @@ class FileMetadata(BaseModel):
     updated_at: Optional[datetime] = Field(
         default=None, description="When the file was last modified"
     )
-    md5_hash: Optional[str] = Field(default=None, description="MD5 hash of file contents")
+    md5_hash: Optional[str] = Field(
+        default=None, description="MD5 hash of file contents"
+    )
     etag: Optional[str] = Field(default=None, description="GCS ETag")
 
     @classmethod

@@ -99,7 +99,9 @@ class TestProcessEvent:
         assert result.processing_duration_ms >= 0  # May be 0 for fast operations
         assert "raw" in result.destination_path
 
-    def test_duplicate_event_raises_error(self, ingestion_service, mock_cache, sample_event):
+    def test_duplicate_event_raises_error(
+        self, ingestion_service, mock_cache, sample_event
+    ):
         """Test that duplicate events raise DuplicateEventError."""
         # Mark event as already processed
         mock_cache.mark_processed(str(sample_event.event_id))
@@ -156,7 +158,9 @@ class TestProcessEvent:
         # Verify deduplication key is set
         assert mock_cache.is_duplicate(str(sample_event.event_id))
 
-    def test_moves_file_to_raw_storage(self, ingestion_service, mock_storage, sample_event):
+    def test_moves_file_to_raw_storage(
+        self, ingestion_service, mock_storage, sample_event
+    ):
         """Test that file is moved from landing to raw storage."""
         mock_storage.add_file(sample_event.file_path)
 
@@ -178,7 +182,9 @@ class TestProcessEvent:
 class TestProcessEventWithRetry:
     """Tests for process_event_with_retry method."""
 
-    def test_successful_first_attempt(self, ingestion_service, mock_storage, sample_event):
+    def test_successful_first_attempt(
+        self, ingestion_service, mock_storage, sample_event
+    ):
         """Test successful processing on first attempt."""
         mock_storage.add_file(sample_event.file_path)
 
@@ -195,7 +201,9 @@ class TestProcessEventWithRetry:
 
         assert result is None
 
-    def test_non_retryable_error_raises_immediately(self, ingestion_service, sample_event):
+    def test_non_retryable_error_raises_immediately(
+        self, ingestion_service, sample_event
+    ):
         """Test that non-retryable errors are raised immediately."""
         # File doesn't exist - non-retryable
 
@@ -259,7 +267,9 @@ class TestErrorHandling:
         with pytest.raises(RetryableError):
             service.process_event(sample_event)
 
-    def test_cache_error_during_status_update(self, mock_storage, mock_producer, sample_event):
+    def test_cache_error_during_status_update(
+        self, mock_storage, mock_producer, sample_event
+    ):
         """Test that cache errors during status update don't fail processing."""
 
         # Create a cache that fails on status update
@@ -286,7 +296,9 @@ class TestErrorHandling:
         result = service.process_event(sample_event)
         assert result.status == ProcessingStatus.RAW_STORED
 
-    def test_cache_error_during_dedupe_check(self, mock_storage, mock_producer, sample_event):
+    def test_cache_error_during_dedupe_check(
+        self, mock_storage, mock_producer, sample_event
+    ):
         """Test that cache errors during dedupe check allow processing to continue."""
 
         # Create a cache that fails on is_duplicate

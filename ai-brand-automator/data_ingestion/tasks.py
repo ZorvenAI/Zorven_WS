@@ -70,7 +70,11 @@ def process_ingestion_event(
     """
     logger.info(
         "Processing ingestion event via Celery",
-        extra={"event_id": event_id, "tenant_id": tenant_id, "task_id": self.request.id},
+        extra={
+            "event_id": event_id,
+            "tenant_id": tenant_id,
+            "task_id": self.request.id,
+        },
     )
 
     try:
@@ -80,7 +84,9 @@ def process_ingestion_event(
             tenant_id=tenant_id,
             file_path=file_path,
             file_type=file_type or "application/octet-stream",
-            timestamp=datetime.fromisoformat(timestamp) if timestamp else datetime.utcnow(),
+            timestamp=datetime.fromisoformat(timestamp)
+            if timestamp
+            else datetime.utcnow(),
             source=EventSource(source) if source else EventSource.FRONTEND_UPLOAD,
             trace_id=UUID(trace_id) if trace_id else uuid4(),
             metadata=metadata,
@@ -133,7 +139,9 @@ def process_ingestion_event(
         raise
 
     except Exception:
-        logger.exception("Unexpected error processing event", extra={"event_id": event_id})
+        logger.exception(
+            "Unexpected error processing event", extra={"event_id": event_id}
+        )
         raise
 
 
@@ -298,4 +306,6 @@ def _send_to_dlq(
         )
         producer.flush()
     except Exception as e:
-        logger.error("Failed to send to DLQ", extra={"event_id": event_id, "error": str(e)})
+        logger.error(
+            "Failed to send to DLQ", extra={"event_id": event_id, "error": str(e)}
+        )

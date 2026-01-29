@@ -88,10 +88,14 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"Consumer started. Listening to: {kafka_config.get('INPUT_TOPIC', 'raw-ingestion-topic')}"
             )
-            self.stdout.write(f"Batch size: {batch_size}, Poll timeout: {poll_timeout}s")
+            self.stdout.write(
+                f"Batch size: {batch_size}, Poll timeout: {poll_timeout}s"
+            )
 
             if dry_run:
-                self.stdout.write(self.style.WARNING("DRY RUN MODE - events will not be processed"))
+                self.stdout.write(
+                    self.style.WARNING("DRY RUN MODE - events will not be processed")
+                )
 
             processed_count = 0
 
@@ -99,7 +103,9 @@ class Command(BaseCommand):
                 # Check max messages limit
                 if max_messages and processed_count >= max_messages:
                     self.stdout.write(
-                        self.style.SUCCESS(f"Reached max messages limit ({max_messages})")
+                        self.style.SUCCESS(
+                            f"Reached max messages limit ({max_messages})"
+                        )
                     )
                     break
 
@@ -132,7 +138,9 @@ class Command(BaseCommand):
                 self._consumer.commit()
 
             self.stdout.write(
-                self.style.SUCCESS(f"Consumer stopped. Processed {processed_count} events.")
+                self.style.SUCCESS(
+                    f"Consumer stopped. Processed {processed_count} events."
+                )
             )
 
         except Exception as e:
@@ -154,10 +162,14 @@ class Command(BaseCommand):
                     )
                 )
             else:
-                self.stdout.write(self.style.WARNING(f"⊘ Skipped duplicate: {event.event_id}"))
+                self.stdout.write(
+                    self.style.WARNING(f"⊘ Skipped duplicate: {event.event_id}")
+                )
 
         except NonRetryableError as e:
-            self.stdout.write(self.style.ERROR(f"✗ Failed (non-retryable): {event.event_id} - {e}"))
+            self.stdout.write(
+                self.style.ERROR(f"✗ Failed (non-retryable): {event.event_id} - {e}")
+            )
             # Send to DLQ
             self._service.send_to_dlq(
                 original_event=event.model_dump(mode="json"),
@@ -168,7 +180,9 @@ class Command(BaseCommand):
             )
 
         except RetryableError as e:
-            self.stdout.write(self.style.ERROR(f"✗ Failed after retries: {event.event_id} - {e}"))
+            self.stdout.write(
+                self.style.ERROR(f"✗ Failed after retries: {event.event_id} - {e}")
+            )
             # Send to DLQ after max retries
             self._service.send_to_dlq(
                 original_event=event.model_dump(mode="json"),

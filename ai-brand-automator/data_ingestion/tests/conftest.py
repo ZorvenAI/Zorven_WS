@@ -69,7 +69,11 @@ class MockStoragePort(StoragePort):
 
     def list_files(self, prefix: str, max_results: int = 100) -> list[str]:
         """List files with the given prefix."""
-        matching = [path for path in self.files.keys() if path.startswith(prefix) or prefix in path]
+        matching = [
+            path
+            for path in self.files.keys()
+            if path.startswith(prefix) or prefix in path
+        ]
         return matching[:max_results]
 
     def add_file(self, path: str, content: bytes = b"test content") -> None:

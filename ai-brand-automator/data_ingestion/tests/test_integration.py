@@ -106,7 +106,11 @@ class TestEndToEndPipeline:
     """Test the complete ingestion pipeline flow."""
 
     def test_complete_ingestion_flow(
-        self, integration_service, integration_storage, integration_cache, integration_producer
+        self,
+        integration_service,
+        integration_storage,
+        integration_cache,
+        integration_producer,
     ):
         """Test the complete flow from event to published result."""
         # Create an event for a file that exists
@@ -145,7 +149,11 @@ class TestEndToEndPipeline:
         assert status["status"] == ProcessingStatus.RAW_STORED.value
 
     def test_multiple_events_different_tenants(
-        self, integration_service, integration_storage, integration_cache, integration_producer
+        self,
+        integration_service,
+        integration_storage,
+        integration_cache,
+        integration_producer,
     ):
         """Test processing multiple events from different tenants."""
         events = [
@@ -175,7 +183,9 @@ class TestEndToEndPipeline:
         # Verify all events were published
         assert len(integration_producer.published) == 2
 
-    def test_date_partitioning_in_destination(self, integration_service, integration_storage):
+    def test_date_partitioning_in_destination(
+        self, integration_service, integration_storage
+    ):
         """Test that destination paths include date partitioning."""
         event = create_test_event(
             tenant_id="tenant-a",
@@ -221,7 +231,9 @@ class TestDeduplicationFlow:
 
         # Create same event ID for second attempt
         # Need to re-add file since it was moved
-        integration_storage.add_file("gs://onboarding-bucket1/_landing/tenant-a/video1.mp4")
+        integration_storage.add_file(
+            "gs://onboarding-bucket1/_landing/tenant-a/video1.mp4"
+        )
 
         duplicate_event = IngestionEvent(
             event_id=event.event_id,  # Same event ID
@@ -277,7 +289,9 @@ class TestErrorHandlingIntegration:
         self, integration_service, integration_cache, integration_producer
     ):
         """Test the flow when a file is missing from landing zone."""
-        event = create_test_event(file_path="gs://onboarding-bucket1/_landing/nonexistent.mp4")
+        event = create_test_event(
+            file_path="gs://onboarding-bucket1/_landing/nonexistent.mp4"
+        )
 
         # Should raise NonRetryableError (wrapping FileNotFoundInLandingError)
         with pytest.raises(NonRetryableError):
@@ -303,7 +317,9 @@ class TestErrorHandlingIntegration:
         assert result1.status == ProcessingStatus.RAW_STORED
 
         # Re-add file and create duplicate
-        integration_storage.add_file("gs://onboarding-bucket1/_landing/tenant-a/video1.mp4")
+        integration_storage.add_file(
+            "gs://onboarding-bucket1/_landing/tenant-a/video1.mp4"
+        )
         duplicate_event = IngestionEvent(
             event_id=event.event_id,
             trace_id=uuid4(),
@@ -353,7 +369,9 @@ class TestErrorHandlingIntegration:
             service.process_event(event)
 
         # Service should send to DLQ
-        service.send_to_dlq(original_event_dict, NonRetryableError("Test"), "input-topic")
+        service.send_to_dlq(
+            original_event_dict, NonRetryableError("Test"), "input-topic"
+        )
         assert len(integration_producer.dlq_messages) == 1
 
 
@@ -385,7 +403,9 @@ class TestStatusTrackingIntegration:
     def test_status_on_failure(self, integration_service, integration_cache):
         """Test that status is set to FAILED on processing errors."""
         # Create event for non-existent file
-        event = create_test_event(file_path="gs://onboarding-bucket1/_landing/missing.mp4")
+        event = create_test_event(
+            file_path="gs://onboarding-bucket1/_landing/missing.mp4"
+        )
 
         # Process should fail with NonRetryableError
         with pytest.raises(NonRetryableError):
@@ -747,7 +767,9 @@ class TestMultiTenantIntegration:
         )
 
         # Add file for tenant with uppercase
-        integration_storage.add_file("gs://onboarding-bucket1/_landing/TENANT-C/file.mp4")
+        integration_storage.add_file(
+            "gs://onboarding-bucket1/_landing/TENANT-C/file.mp4"
+        )
 
         event = create_test_event(
             tenant_id="TENANT-C",  # Uppercase
@@ -769,7 +791,11 @@ class TestIdempotencyIntegration:
     """Test idempotency guarantees in the pipeline."""
 
     def test_processing_is_idempotent_with_deduplication(
-        self, integration_service, integration_storage, integration_cache, integration_producer
+        self,
+        integration_service,
+        integration_storage,
+        integration_cache,
+        integration_producer,
     ):
         """Test that reprocessing the same event doesn't create duplicates."""
         event = create_test_event(
@@ -782,7 +808,9 @@ class TestIdempotencyIntegration:
         published_count_after_first = len(integration_producer.published)
 
         # Try to process again
-        integration_storage.add_file("gs://onboarding-bucket1/_landing/tenant-a/video1.mp4")
+        integration_storage.add_file(
+            "gs://onboarding-bucket1/_landing/tenant-a/video1.mp4"
+        )
 
         with pytest.raises(DuplicateEventError):
             integration_service.process_event(

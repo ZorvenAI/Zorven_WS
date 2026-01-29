@@ -369,7 +369,9 @@ class KafkaConsumerAdapter(EventConsumerPort):
 
             # Parse timestamp
             if isinstance(data.get("timestamp"), str):
-                data["timestamp"] = datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00"))
+                data["timestamp"] = datetime.fromisoformat(
+                    data["timestamp"].replace("Z", "+00:00")
+                )
 
             return IngestionEvent(**data)
         except (json.JSONDecodeError, KeyError, ValueError) as e:
@@ -419,7 +421,9 @@ class KafkaConsumerAdapter(EventConsumerPort):
 
             return {
                 "key": msg.key().decode("utf-8") if msg.key() else None,
-                "value": json.loads(msg.value().decode("utf-8")) if msg.value() else None,
+                "value": json.loads(msg.value().decode("utf-8"))
+                if msg.value()
+                else None,
                 "topic": msg.topic(),
                 "partition": msg.partition(),
                 "offset": msg.offset(),

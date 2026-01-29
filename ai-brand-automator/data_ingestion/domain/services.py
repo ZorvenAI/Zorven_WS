@@ -342,7 +342,11 @@ class IngestionService:
             # Log but don't fail - dedup is best-effort
             logger.warning(
                 "Failed to mark event as processed",
-                extra={"trace_id": str(trace_id), "event_id": event_id, "error": str(e)},
+                extra={
+                    "trace_id": str(trace_id),
+                    "event_id": event_id,
+                    "error": str(e),
+                },
             )
 
     def _update_status(
@@ -363,7 +367,11 @@ class IngestionService:
             # Log but don't fail - status tracking is not critical
             logger.warning(
                 "Failed to update status",
-                extra={"trace_id": str(trace_id), "status": status.value, "error": str(e)},
+                extra={
+                    "trace_id": str(trace_id),
+                    "status": status.value,
+                    "error": str(e),
+                },
             )
 
     def _publish_output_event(
