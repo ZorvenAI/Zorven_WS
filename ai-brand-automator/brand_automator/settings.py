@@ -93,6 +93,7 @@ SHARED_APPS = [
     "subscriptions",  # Stripe payment integration
     "automation",  # Social media automation
     "kafka_service",  # Kafka consumer/producer service
+    "data_ingestion",  # Data ingestion pipeline (Hexagonal Architecture)
 ]
 
 TENANT_APPS = [
@@ -554,6 +555,36 @@ KAFKA_SESSION_TIMEOUT_MS = config("KAFKA_SESSION_TIMEOUT_MS", default=30000, cas
 KAFKA_TOPIC_GATEWAY_LOGS = "gateway-logs"
 KAFKA_TOPIC_RAW_INGESTION = "raw-ingestion-topic"
 KAFKA_TOPIC_DLQ = "dlq-events"
+
+# =============================================================================
+# Data Ingestion Configuration (Hexagonal Architecture Pipeline)
+# =============================================================================
+DATA_INGESTION = {
+    # Kafka Topics for ingestion pipeline
+    "KAFKA_INPUT_TOPIC": config(
+        "INGESTION_KAFKA_INPUT_TOPIC", default="raw-ingestion-topic"
+    ),
+    "KAFKA_OUTPUT_TOPIC": config(
+        "INGESTION_KAFKA_OUTPUT_TOPIC", default="curation-needed-topic"
+    ),
+    "KAFKA_DLQ_TOPIC": config("INGESTION_KAFKA_DLQ_TOPIC", default="ingestion-dlq"),
+    "KAFKA_GROUP_ID": config("INGESTION_KAFKA_GROUP_ID", default="ingestion-svc-group"),
+    # GCS Configuration
+    "GCP_PROJECT_ID": config("GCP_PROJECT_ID", default="brandsol"),
+    "GCP_BUCKET_NAME": config("GCP_BUCKET_NAME", default="onboarding-bucket1"),
+    "GCS_LANDING_PREFIX": config("GCS_LANDING_PREFIX", default="_landing"),
+    "GCS_CREDENTIALS_PATH": config(
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        default=str(BASE_DIR / "credentials" / "gcs-credentials.json"),
+    ),
+    # Processing Configuration
+    "MAX_RETRIES": config("INGESTION_MAX_RETRIES", default=3, cast=int),
+    "RETRY_BACKOFF_SECONDS": config("INGESTION_RETRY_BACKOFF", default=1.0, cast=float),
+    "DEDUPE_TTL_SECONDS": config("INGESTION_DEDUPE_TTL", default=3600, cast=int),
+    "STATUS_TTL_SECONDS": config(
+        "INGESTION_STATUS_TTL", default=604800, cast=int
+    ),  # 7 days
+}
 
 # =============================================================================
 # Celery Configuration
