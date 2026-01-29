@@ -568,9 +568,7 @@ DATA_INGESTION = {
         "INGESTION_KAFKA_OUTPUT_TOPIC", default="curation-needed-topic"
     ),
     "KAFKA_DLQ_TOPIC": config("INGESTION_KAFKA_DLQ_TOPIC", default="ingestion-dlq"),
-    "KAFKA_GROUP_ID": config(
-        "INGESTION_KAFKA_GROUP_ID", default="ingestion-svc-group"
-    ),
+    "KAFKA_GROUP_ID": config("INGESTION_KAFKA_GROUP_ID", default="ingestion-svc-group"),
     # GCS Configuration
     "GCP_PROJECT_ID": config("GCP_PROJECT_ID", default="brandsol"),
     "GCP_BUCKET_NAME": config("GCP_BUCKET_NAME", default="onboarding-bucket1"),
@@ -581,9 +579,7 @@ DATA_INGESTION = {
     ),
     # Processing Configuration
     "MAX_RETRIES": config("INGESTION_MAX_RETRIES", default=3, cast=int),
-    "RETRY_BACKOFF_SECONDS": config(
-        "INGESTION_RETRY_BACKOFF", default=1.0, cast=float
-    ),
+    "RETRY_BACKOFF_SECONDS": config("INGESTION_RETRY_BACKOFF", default=1.0, cast=float),
     "DEDUPE_TTL_SECONDS": config("INGESTION_DEDUPE_TTL", default=3600, cast=int),
     "STATUS_TTL_SECONDS": config(
         "INGESTION_STATUS_TTL", default=604800, cast=int
