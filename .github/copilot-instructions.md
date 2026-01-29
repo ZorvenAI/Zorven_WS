@@ -119,6 +119,15 @@ def test_company_name(authenticated_client, name):
 4. **Social OAuth tokens**: Encrypted in DB via `automation/encryption.py`
 5. **Kong proxy check**: Backend verifies `X-Kong-Proxy: true` header before trusting unverified JWT decode
 
+## Security Warning: Kong Proxy Header
+
+⚠️ **IMPORTANT**: The `X-Kong-Proxy: true` header pattern relies on untrusted input to decide when to skip JWT signature verification. If the Django backend is ever reachable directly (e.g., `runserver 0.0.0.0:8000` or a misconfigured ingress), an attacker can send requests with a forged `X-Kong-Proxy: true` header and a crafted JWT to impersonate any user.
+
+**Best practices:**
+- Only set `KONG_ENABLED=true` in production when the backend is unreachable from untrusted networks
+- Consider using mTLS or a shared secret instead of a spoofable header for proxy verification
+- In development, keep `KONG_ENABLED=false` (default) so Django always verifies JWT signatures
+
 ## Environment Variables
 
 ```bash

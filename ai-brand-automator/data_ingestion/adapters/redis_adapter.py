@@ -377,5 +377,10 @@ class RedisAdapter(CachePort):
         """Close the Redis connection."""
         try:
             self.client.close()
-        except RedisError:
-            pass
+        except RedisError as e:
+            # Best-effort cleanup: log and ignore close errors so shutdown
+            # is not interrupted.
+            logger.debug(
+                "Redis error while closing client; ignoring during cleanup",
+                exc_info=e,
+            )

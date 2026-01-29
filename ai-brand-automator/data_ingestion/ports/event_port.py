@@ -139,12 +139,17 @@ class EventConsumerPort(ABC):
         pass
 
     @abstractmethod
-    def subscribe(self, topics: list[str]) -> None:
+    def subscribe(self, topics: Optional[list[str]] = None) -> None:
         """
-        Subscribe to the specified topics.
+        Subscribe to topics for this consumer.
+
+        Implementations may determine the topics from constructor
+        arguments, settings, or other configuration. If topics is
+        provided, it overrides the configured topics.
 
         Args:
-            topics: List of topic names to subscribe to
+            topics: Optional list of topic names to subscribe to.
+                    If not provided, uses topics configured at construction.
 
         Raises:
             EventConsumerError: If subscription fails

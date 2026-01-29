@@ -9,7 +9,8 @@ from typing import Optional
 from google.cloud import storage
 from google.cloud.exceptions import NotFound, GoogleCloudError
 
-from data_ingestion.ports.storage_port import StoragePort, FileMetadata
+from data_ingestion.ports.storage_port import StoragePort
+from data_ingestion.domain.models import FileMetadata
 from data_ingestion.domain.exceptions import (
     StorageOperationError,
     FileNotFoundInLandingError,
@@ -278,12 +279,15 @@ class GCSAdapter(StoragePort):
             blob.reload()
 
             return FileMetadata(
-                path=file_path,
-                size_bytes=blob.size,
-                content_type=blob.content_type,
+                bucket=bucket.name,
+                path=blob_name,
+                full_uri=file_path,
+                size_bytes=blob.size or 0,
+                content_type=blob.content_type or "application/octet-stream",
                 created_at=blob.time_created,
                 updated_at=blob.updated,
-                checksum=blob.md5_hash,
+                md5_hash=blob.md5_hash,
+                etag=blob.etag,
             )
 
         except NotFound:

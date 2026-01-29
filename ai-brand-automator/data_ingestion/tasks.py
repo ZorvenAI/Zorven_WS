@@ -295,6 +295,11 @@ def _send_to_dlq(
         kafka_config = config.get("KAFKA", {})
 
         producer = create_kafka_producer()
+        # Support both nested KAFKA config and flat keys (KAFKA_INPUT_TOPIC)
+        source_topic = kafka_config.get(
+            "INPUT_TOPIC",
+            config.get("KAFKA_INPUT_TOPIC", "raw-ingestion-topic"),
+        )
         producer.publish_to_dlq(
             original_event={
                 "event_id": event_id,
@@ -302,7 +307,7 @@ def _send_to_dlq(
                 "file_path": file_path,
             },
             error=error,
-            source_topic=kafka_config.get("INPUT_TOPIC", "raw-ingestion-topic"),
+            source_topic=source_topic,
         )
         producer.flush()
     except Exception as e:

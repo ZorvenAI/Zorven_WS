@@ -26,6 +26,16 @@ from data_ingestion.domain.exceptions import (
 logger = logging.getLogger(__name__)
 
 
+def _get_input_topic() -> str:
+    """Get the input topic from config, supporting both nested and flat keys."""
+    config = get_data_ingestion_config()
+    kafka_config = config.get("KAFKA", {})
+    return kafka_config.get(
+        "INPUT_TOPIC",
+        config.get("KAFKA_INPUT_TOPIC", "raw-ingestion-topic"),
+    )
+
+
 class Command(BaseCommand):
     """Django management command to run the ingestion consumer."""
 
@@ -174,9 +184,7 @@ class Command(BaseCommand):
             self._service.send_to_dlq(
                 original_event=event.model_dump(mode="json"),
                 error=e,
-                source_topic=get_data_ingestion_config()
-                .get("KAFKA", {})
-                .get("INPUT_TOPIC", "raw-ingestion-topic"),
+                source_topic=_get_input_topic(),
             )
 
         except RetryableError as e:
@@ -187,9 +195,7 @@ class Command(BaseCommand):
             self._service.send_to_dlq(
                 original_event=event.model_dump(mode="json"),
                 error=e,
-                source_topic=get_data_ingestion_config()
-                .get("KAFKA", {})
-                .get("INPUT_TOPIC", "raw-ingestion-topic"),
+                source_topic=_get_input_topic(),
             )
 
     def _log_event(self, event: IngestionEvent) -> None:

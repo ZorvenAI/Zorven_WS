@@ -38,12 +38,19 @@ def create_gcs_adapter(config: Optional[dict] = None) -> GCSAdapter:
         Configured GCSAdapter instance
     """
     config = config or get_data_ingestion_config()
+    # Support both nested GCS config and flat keys (GCP_PROJECT_ID, etc.)
     gcs_config = config.get("GCS", {})
 
     return GCSAdapter(
-        project_id=gcs_config.get("PROJECT_ID", "brandsol"),
-        credentials_path=gcs_config.get("CREDENTIALS_PATH"),
-        default_bucket=gcs_config.get("BUCKET_NAME", "onboarding-bucket1"),
+        project_id=gcs_config.get(
+            "PROJECT_ID", config.get("GCP_PROJECT_ID", "brandsol")
+        ),
+        credentials_path=gcs_config.get(
+            "CREDENTIALS_PATH", config.get("GCS_CREDENTIALS_PATH")
+        ),
+        default_bucket=gcs_config.get(
+            "BUCKET_NAME", config.get("GCP_BUCKET_NAME", "onboarding-bucket1")
+        ),
     )
 
 
@@ -65,10 +72,20 @@ def create_redis_adapter(config: Optional[dict] = None) -> RedisAdapter:
         settings, "CELERY_BROKER_URL", "redis://localhost:6379/0"
     )
 
+    # TTLs can be configured either under REDIS or as top-level DATA_INGESTION keys
+    dedupe_ttl_seconds = redis_config.get(
+        "DEDUPE_TTL_SECONDS",
+        config.get("DEDUPE_TTL_SECONDS", 3600),
+    )
+    status_ttl_seconds = redis_config.get(
+        "STATUS_TTL_SECONDS",
+        config.get("STATUS_TTL_SECONDS", 604800),
+    )
+
     return RedisAdapter(
         redis_url=redis_url,
-        dedupe_ttl_seconds=redis_config.get("DEDUPE_TTL_SECONDS", 3600),
-        status_ttl_seconds=redis_config.get("STATUS_TTL_SECONDS", 604800),
+        dedupe_ttl_seconds=dedupe_ttl_seconds,
+        status_ttl_seconds=status_ttl_seconds,
     )
 
 
@@ -85,10 +102,26 @@ def create_kafka_producer(config: Optional[dict] = None) -> KafkaProducerAdapter
     config = config or get_data_ingestion_config()
     kafka_config = config.get("KAFKA", {})
 
+    # Support both nested KAFKA config and flat keys (KAFKA_BOOTSTRAP_SERVERS, etc.)
+    # Also fall back to global KAFKA_BOOTSTRAP_SERVERS setting
+    bootstrap_servers = kafka_config.get(
+        "BOOTSTRAP_SERVERS",
+        config.get(
+            "KAFKA_BOOTSTRAP_SERVERS",
+            getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+        ),
+    )
+
     return KafkaProducerAdapter(
-        bootstrap_servers=kafka_config.get("BOOTSTRAP_SERVERS", "localhost:9092"),
-        client_id=kafka_config.get("PRODUCER_CLIENT_ID", "ingestion-producer"),
-        dlq_topic=kafka_config.get("DLQ_TOPIC", "ingestion-dlq"),
+        bootstrap_servers=bootstrap_servers,
+        client_id=kafka_config.get(
+            "PRODUCER_CLIENT_ID",
+            config.get("KAFKA_PRODUCER_CLIENT_ID", "ingestion-producer"),
+        ),
+        dlq_topic=kafka_config.get(
+            "DLQ_TOPIC",
+            config.get("KAFKA_DLQ_TOPIC", "ingestion-dlq"),
+        ),
     )
 
 
@@ -105,13 +138,38 @@ def create_kafka_consumer(config: Optional[dict] = None) -> KafkaConsumerAdapter
     config = config or get_data_ingestion_config()
     kafka_config = config.get("KAFKA", {})
 
+    # Support both nested KAFKA config and flat keys (KAFKA_INPUT_TOPIC, etc.)
+    bootstrap_servers = kafka_config.get(
+        "BOOTSTRAP_SERVERS",
+        config.get(
+            "KAFKA_BOOTSTRAP_SERVERS",
+            getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+        ),
+    )
+    input_topic = kafka_config.get(
+        "INPUT_TOPIC",
+        config.get("KAFKA_INPUT_TOPIC", "raw-ingestion-topic"),
+    )
+
     return KafkaConsumerAdapter(
-        bootstrap_servers=kafka_config.get("BOOTSTRAP_SERVERS", "localhost:9092"),
-        group_id=kafka_config.get("CONSUMER_GROUP_ID", "ingestion-consumer-group"),
-        topics=[kafka_config.get("INPUT_TOPIC", "raw-ingestion-topic")],
-        client_id=kafka_config.get("CONSUMER_CLIENT_ID", "ingestion-consumer"),
-        auto_offset_reset=kafka_config.get("AUTO_OFFSET_RESET", "earliest"),
-        enable_auto_commit=kafka_config.get("ENABLE_AUTO_COMMIT", False),
+        bootstrap_servers=bootstrap_servers,
+        group_id=kafka_config.get(
+            "CONSUMER_GROUP_ID",
+            config.get("KAFKA_CONSUMER_GROUP_ID", "ingestion-consumer-group"),
+        ),
+        topics=[input_topic],
+        client_id=kafka_config.get(
+            "CONSUMER_CLIENT_ID",
+            config.get("KAFKA_CONSUMER_CLIENT_ID", "ingestion-consumer"),
+        ),
+        auto_offset_reset=kafka_config.get(
+            "AUTO_OFFSET_RESET",
+            config.get("KAFKA_AUTO_OFFSET_RESET", "earliest"),
+        ),
+        enable_auto_commit=kafka_config.get(
+            "ENABLE_AUTO_COMMIT",
+            config.get("KAFKA_ENABLE_AUTO_COMMIT", False),
+        ),
     )
 
 
@@ -137,15 +195,35 @@ def create_ingestion_service(config: Optional[dict] = None) -> IngestionService:
     cache = create_redis_adapter(config)
     producer = create_kafka_producer(config)
 
+    # Support both nested config and flat keys for Kafka topics
+    output_topic = kafka_config.get(
+        "OUTPUT_TOPIC",
+        config.get("KAFKA_OUTPUT_TOPIC", "curation-needed-topic"),
+    )
+    dlq_topic = kafka_config.get(
+        "DLQ_TOPIC",
+        config.get("KAFKA_DLQ_TOPIC", "ingestion-dlq"),
+    )
+
+    # Support both nested config and flat keys for TTLs
+    dedupe_ttl = redis_config.get(
+        "DEDUPE_TTL_SECONDS",
+        config.get("DEDUPE_TTL_SECONDS", 3600),
+    )
+    status_ttl = redis_config.get(
+        "STATUS_TTL_SECONDS",
+        config.get("STATUS_TTL_SECONDS", 604800),
+    )
+
     # Create service
     service = IngestionService(
         storage=storage,
         cache=cache,
         producer=producer,
-        output_topic=kafka_config.get("OUTPUT_TOPIC", "curation-needed-topic"),
-        dlq_topic=kafka_config.get("DLQ_TOPIC", "ingestion-dlq"),
-        dedupe_ttl_seconds=redis_config.get("DEDUPE_TTL_SECONDS", 3600),
-        status_ttl_seconds=redis_config.get("STATUS_TTL_SECONDS", 604800),
+        output_topic=output_topic,
+        dlq_topic=dlq_topic,
+        dedupe_ttl_seconds=dedupe_ttl,
+        status_ttl_seconds=status_ttl,
         max_retries=config.get("MAX_RETRIES", 3),
         retry_backoff_seconds=config.get("RETRY_BACKOFF_SECONDS", 1.0),
     )

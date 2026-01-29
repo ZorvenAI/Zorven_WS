@@ -41,8 +41,7 @@ ai-brand-automator/
 │   ├── adapters/                # Concrete Implementations
 │   │   ├── __init__.py
 │   │   ├── gcs_adapter.py
-│   │   ├── kafka_consumer.py
-│   │   ├── kafka_producer.py
+│   │   ├── kafka_adapter.py     # KafkaProducerAdapter + KafkaConsumerAdapter
 │   │   └── redis_adapter.py
 │   ├── management/
 │   │   └── commands/
@@ -53,21 +52,14 @@ ai-brand-automator/
 │   └── tests/
 │       ├── __init__.py
 │       ├── conftest.py          # Shared fixtures
-│       ├── unit/
-│       │   ├── __init__.py
-│       │   ├── test_models.py
-│       │   ├── test_path_generator.py
-│       │   ├── test_exceptions.py
-│       │   └── test_services.py
+│       ├── test_models.py       # Unit tests for domain models
+│       ├── test_path_generator.py
+│       ├── test_exceptions.py
+│       ├── test_services.py
 │       ├── test_properties.py   # Hypothesis property tests
-│       ├── integration/
-│       │   ├── __init__.py
-│       │   ├── test_gcs_adapter.py
-│       │   ├── test_redis_adapter.py
-│       │   └── test_kafka_adapter.py
-│       └── e2e/
-│           ├── __init__.py
-│           └── test_ingestion_pipeline.py
+│       ├── test_adapters.py     # Adapter tests (GCS, Redis, Kafka)
+│       ├── test_integration.py  # Integration tests
+│       └── test_e2e.py          # End-to-end tests
 ```
 
 ---
