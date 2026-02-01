@@ -75,6 +75,8 @@ urlpatterns = [
                 path("subscriptions/", include("subscriptions.urls")),
                 # Automation (LinkedIn, social media, content scheduling)
                 path("automation/", include("automation.urls")),
+                # Data Ingestion (file processing pipeline)
+                path("ingestion/", include("data_ingestion.urls")),
             ]
         ),
     ),
