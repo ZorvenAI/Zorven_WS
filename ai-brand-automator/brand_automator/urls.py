@@ -77,6 +77,8 @@ urlpatterns = [
                 path("automation/", include("automation.urls")),
                 # Data Ingestion (file processing pipeline)
                 path("ingestion/", include("data_ingestion.urls")),
+                # Media Curation (AI content curation pipeline)
+                path("curation/", include("media_curation.urls")),
             ]
         ),
     ),

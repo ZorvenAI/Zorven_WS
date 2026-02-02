@@ -10,7 +10,6 @@ from datetime import datetime
 from unittest.mock import patch, MagicMock
 from uuid import uuid4
 
-from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -19,12 +18,7 @@ from data_ingestion.serializers import (
     BatchIngestionSerializer,
     HealthCheckSerializer,
 )
-from data_ingestion.domain.models import (
-    IngestionEvent,
-    ProcessedEvent,
-    EventSource,
-    ProcessingStatus,
-)
+from data_ingestion.domain.models import ProcessingStatus, ProcessedEvent
 
 
 @pytest.mark.django_db
@@ -242,7 +236,7 @@ class TestIngestionAPIEndpoints:
             mock_adapter.health_check.return_value = True
             mock_redis.return_value = mock_adapter
 
-            with patch("data_ingestion.views.create_gcs_adapter"):
+            with patch("data_ingestion.factory.create_gcs_adapter"):
                 with patch(
                     "data_ingestion.views.get_data_ingestion_config"
                 ) as mock_config:
@@ -437,7 +431,7 @@ class TestIngestionAPIEndpoints:
         with patch("data_ingestion.views.create_redis_adapter") as mock_redis:
             mock_redis.side_effect = Exception("Connection refused")
 
-            with patch("data_ingestion.views.create_gcs_adapter"):
+            with patch("data_ingestion.factory.create_gcs_adapter"):
                 with patch(
                     "data_ingestion.views.get_data_ingestion_config"
                 ) as mock_config:

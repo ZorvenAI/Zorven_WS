@@ -9,11 +9,7 @@ from rest_framework import serializers
 from uuid import uuid4
 from datetime import datetime
 
-from data_ingestion.domain.models import (
-    EventSource,
-    FileType,
-    ProcessingStatus,
-)
+from data_ingestion.domain.models import EventSource, ProcessingStatus
 
 
 class IngestionEventSerializer(serializers.Serializer):
@@ -180,11 +176,15 @@ class IngestionStatusSerializer(serializers.Serializer):
 class IngestionResponseSerializer(serializers.Serializer):
     """Standard response serializer for ingestion endpoints."""
 
-    status = serializers.ChoiceField(choices=["success", "accepted", "failed", "skipped"])
+    status = serializers.ChoiceField(
+        choices=["success", "accepted", "failed", "skipped"]
+    )
     message = serializers.CharField()
     event_id = serializers.UUIDField(required=False)
     trace_id = serializers.UUIDField(required=False)
-    task_id = serializers.CharField(required=False, help_text="Celery task ID for async processing")
+    task_id = serializers.CharField(
+        required=False, help_text="Celery task ID for async processing"
+    )
     destination_path = serializers.CharField(required=False)
     processing_duration_ms = serializers.IntegerField(required=False)
     error = serializers.CharField(required=False)

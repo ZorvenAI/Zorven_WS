@@ -1,0 +1,28 @@
+# ConfigMap for Kafka configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+  labels:
+    app: media-curation
+data:
+  bootstrap_servers: "kafka.default.svc.cluster.local:9092"
+  curation_input_topic: "curation-needed-topic"
+  curation_output_topic: "rag-sync-ready-topic"
+  curation_dlq_topic: "curation-dlq"
+  consumer_group: "media-curation-consumers"
+---
+# ConfigMap for Media Curation settings
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: media-curation-config
+  labels:
+    app: media-curation
+data:
+  VISION_ENABLED: "true"
+  DLP_ENABLED: "true"
+  CURATION_MAX_RETRIES: "3"
+  CURATION_TIMEOUT_SECONDS: "300"
+  VERTEX_MODEL_NAME: "gemini-1.5-pro"
+  VERTEX_LOCATION: "us-central1"

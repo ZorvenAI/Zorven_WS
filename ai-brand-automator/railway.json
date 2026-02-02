@@ -25,6 +25,12 @@
     },
     "ingestion-consumer": {
       "startCommand": "python manage.py run_ingestion --batch-size 10 --poll-timeout 1.0"
+    },
+    "curation-worker": {
+      "startCommand": "celery -A brand_automator worker -Q curation -l info --concurrency=2"
+    },
+    "curation-consumer": {
+      "startCommand": "python manage.py run_curation_consumer --batch-size 10 --poll-timeout 1.0"
     }
   }
 }

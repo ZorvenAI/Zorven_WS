@@ -1,0 +1,221 @@
+# Media Curation Worker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-curation-worker
+  labels:
+    app: media-curation
+    component: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: media-curation
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: media-curation
+        component: worker
+    spec:
+      containers:
+      - name: curation-worker
+        image: gcr.io/${PROJECT_ID}/ai-brand-automator:latest
+        command: ["celery", "-A", "brand_automator", "worker", "-Q", "curation", "-l", "info", "--concurrency=2"]
+        env:
+        - name: DJANGO_SETTINGS_MODULE
+          value: "brand_automator.settings"
+        - name: CELERY_BROKER_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: redis_url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: redis_url
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: database_url
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: secret_key
+        - name: GCP_PROJECT_ID
+          valueFrom:
+            secretKeyRef:
+              name: gcp-credentials
+              key: project_id
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: "/var/secrets/google/key.json"
+        - name: VERTEX_MODEL_NAME
+          value: "gemini-1.5-pro"
+        - name: VERTEX_LOCATION
+          value: "us-central1"
+        - name: VISION_ENABLED
+          value: "true"
+        - name: DLP_ENABLED
+          value: "true"
+        - name: CURATION_MAX_RETRIES
+          value: "3"
+        - name: CURATION_TIMEOUT_SECONDS
+          value: "300"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: kafka-config
+              key: bootstrap_servers
+        - name: KAFKA_CURATION_OUTPUT_TOPIC
+          value: "rag-sync-ready-topic"
+        - name: KAFKA_CURATION_DLQ_TOPIC
+          value: "curation-dlq"
+        volumeMounts:
+        - name: gcp-key
+          mountPath: /var/secrets/google
+          readOnly: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - celery -A brand_automator inspect ping -d celery@$HOSTNAME -Q curation
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          timeoutSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - celery -A brand_automator inspect ping -d celery@$HOSTNAME -Q curation
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 10
+      volumes:
+      - name: gcp-key
+        secret:
+          secretName: gcp-credentials
+---
+# Curation Kafka Consumer Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: curation-kafka-consumer
+  labels:
+    app: media-curation
+    component: consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: media-curation
+      component: consumer
+  template:
+    metadata:
+      labels:
+        app: media-curation
+        component: consumer
+    spec:
+      containers:
+      - name: kafka-consumer
+        image: gcr.io/${PROJECT_ID}/ai-brand-automator:latest
+        command: ["python", "manage.py", "run_curation_consumer", "--batch-size", "10", "--poll-timeout", "1.0"]
+        env:
+        - name: DJANGO_SETTINGS_MODULE
+          value: "brand_automator.settings"
+        - name: CELERY_BROKER_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: redis_url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: redis_url
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: database_url
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: secret_key
+        - name: GCP_PROJECT_ID
+          valueFrom:
+            secretKeyRef:
+              name: gcp-credentials
+              key: project_id
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: "/var/secrets/google/key.json"
+        - name: VERTEX_MODEL_NAME
+          value: "gemini-1.5-pro"
+        - name: VERTEX_LOCATION
+          value: "us-central1"
+        - name: VISION_ENABLED
+          value: "true"
+        - name: DLP_ENABLED
+          value: "true"
+        - name: CURATION_MAX_RETRIES
+          value: "3"
+        - name: CURATION_TIMEOUT_SECONDS
+          value: "300"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: kafka-config
+              key: bootstrap_servers
+        - name: KAFKA_CURATION_INPUT_TOPIC
+          value: "curation-needed-topic"
+        - name: KAFKA_CURATION_OUTPUT_TOPIC
+          value: "rag-sync-ready-topic"
+        - name: KAFKA_CURATION_DLQ_TOPIC
+          value: "curation-dlq"
+        - name: KAFKA_CURATION_CONSUMER_GROUP
+          value: "media-curation-consumers"
+        volumeMounts:
+        - name: gcp-key
+          mountPath: /var/secrets/google
+          readOnly: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - python -c "import redis; r = redis.from_url('$REDIS_URL'); r.ping()"
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          timeoutSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - python -c "import redis; r = redis.from_url('$REDIS_URL'); r.ping()"
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 10
+      volumes:
+      - name: gcp-key
+        secret:
+          secretName: gcp-credentials

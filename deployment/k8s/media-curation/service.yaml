@@ -1,0 +1,34 @@
+# Media Curation Service - Internal service for health checks and metrics
+apiVersion: v1
+kind: Service
+metadata:
+  name: media-curation
+  labels:
+    app: media-curation
+spec:
+  selector:
+    app: media-curation
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  type: ClusterIP
+---
+# Headless service for Kafka consumer discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: media-curation-consumer
+  labels:
+    app: media-curation
+    component: consumer
+spec:
+  selector:
+    app: media-curation
+    component: consumer
+  clusterIP: None
+  ports:
+  - name: health
+    port: 8000
+    targetPort: 8000

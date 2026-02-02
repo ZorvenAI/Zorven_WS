@@ -7,7 +7,6 @@ following Django Rest Framework patterns used in other apps.
 
 import logging
 from datetime import datetime
-from uuid import uuid4, UUID
 
 from rest_framework import status
 from rest_framework.decorators import action
@@ -19,23 +18,15 @@ from rest_framework.viewsets import ViewSet
 from data_ingestion.serializers import (
     IngestionEventSerializer,
     BatchIngestionSerializer,
-    IngestionResponseSerializer,
-    BatchIngestionResponseSerializer,
-    IngestionStatusSerializer,
-    ProcessedEventSerializer,
-    HealthCheckSerializer,
 )
 from data_ingestion.domain.models import IngestionEvent, EventSource
 from data_ingestion.domain.exceptions import (
     DuplicateEventError,
     NonRetryableError,
-    RetryableError,
-    DataIngestionError,
 )
 from data_ingestion.factory import (
     create_ingestion_service,
     create_redis_adapter,
-    create_gcs_adapter,
     get_data_ingestion_config,
 )
 from data_ingestion.tasks import process_ingestion_event, process_batch
@@ -99,7 +90,7 @@ class IngestionViewSet(ViewSet):
         trace_id = validated_data["trace_id"]
 
         # Get tenant from request context (multi-tenancy pattern)
-        tenant = getattr(request, "tenant", None)
+        _tenant = getattr(request, "tenant", None)  # noqa: F841
         tenant_id = validated_data["tenant_id"]
 
         # Log the request
@@ -435,7 +426,7 @@ class IngestionHealthView(APIView):
         try:
             from data_ingestion.factory import create_gcs_adapter
 
-            storage = create_gcs_adapter()
+            _storage = create_gcs_adapter()  # noqa: F841
             # Just check if we can create the adapter (credentials valid)
             components["gcs"] = {"status": "healthy"}
         except Exception as e:

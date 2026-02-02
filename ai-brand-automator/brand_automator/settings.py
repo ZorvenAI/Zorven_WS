@@ -94,6 +94,7 @@ SHARED_APPS = [
     "automation",  # Social media automation
     "kafka_service",  # Kafka consumer/producer service
     "data_ingestion",  # Data ingestion pipeline (Hexagonal Architecture)
+    "media_curation",  # Media curation pipeline (Hexagonal Architecture)
 ]
 
 TENANT_APPS = [
@@ -584,6 +585,74 @@ DATA_INGESTION = {
     "STATUS_TTL_SECONDS": config(
         "INGESTION_STATUS_TTL", default=604800, cast=int
     ),  # 7 days
+}
+
+# =============================================================================
+# Media Curation Configuration (Hexagonal Architecture Pipeline)
+# =============================================================================
+MEDIA_CURATION = {
+    # Kafka Topics for curation pipeline
+    "KAFKA": {
+        "INPUT_TOPIC": config(
+            "CURATION_KAFKA_INPUT_TOPIC", default="curation-needed-topic"
+        ),
+        "OUTPUT_TOPIC": config(
+            "CURATION_KAFKA_OUTPUT_TOPIC", default="rag-sync-ready-topic"
+        ),
+        "DLQ_TOPIC": config("CURATION_KAFKA_DLQ_TOPIC", default="curation-dlq"),
+        "GROUP_ID": config("CURATION_KAFKA_GROUP_ID", default="curation-svc-group"),
+    },
+    # Storage Configuration (GCS)
+    "STORAGE": {
+        "GCP_PROJECT_ID": config("GCP_PROJECT_ID", default="brandsol"),
+        "CURATED_BUCKET": config(
+            "CURATION_GCP_BUCKET_NAME", default="brandsol-curation-bucket"
+        ),
+        "RAW_BUCKET": config("RAW_GCP_BUCKET_NAME", default="onboarding-bucket1"),
+        "CREDENTIALS_PATH": config(
+            "GOOGLE_APPLICATION_CREDENTIALS",
+            default=str(BASE_DIR / "credentials" / "gcs-credentials.json"),
+        ),
+    },
+    # DLP Configuration (Google Cloud DLP)
+    "DLP": {
+        "ENABLED": config("CURATION_DLP_ENABLED", default=True, cast=bool),
+        "GCP_PROJECT_ID": config("DLP_GCP_PROJECT_ID", default="brandsol"),
+        "INFO_TYPES": config(
+            "DLP_INFO_TYPES",
+            default="PHONE_NUMBER,EMAIL_ADDRESS,PERSON_NAME,STREET_ADDRESS,CREDIT_CARD_NUMBER",
+            cast=lambda v: [s.strip() for s in v.split(",")],
+        ),
+        "REDACTION_STRATEGY": config(
+            "DLP_REDACTION_STRATEGY", default="REPLACE"
+        ),  # REPLACE, MASK, HASH
+    },
+    # AI Model Configuration (Gemini)
+    "AI_MODEL": {
+        "PROVIDER": config("CURATION_AI_PROVIDER", default="gemini"),
+        "MODEL_NAME": config("CURATION_AI_MODEL", default="gemini-2.0-flash"),
+        "MAX_TOKENS": config("CURATION_AI_MAX_TOKENS", default=8192, cast=int),
+        "TEMPERATURE": config("CURATION_AI_TEMPERATURE", default=0.1, cast=float),
+    },
+    # Processing Configuration
+    "PROCESSING": {
+        "MAX_RETRIES": config("CURATION_MAX_RETRIES", default=3, cast=int),
+        "RETRY_BACKOFF_SECONDS": config(
+            "CURATION_RETRY_BACKOFF", default=1.0, cast=float
+        ),
+        "BATCH_SIZE": config("CURATION_BATCH_SIZE", default=10, cast=int),
+        "POLL_TIMEOUT_SECONDS": config(
+            "CURATION_POLL_TIMEOUT", default=1.0, cast=float
+        ),
+    },
+    # Cache Configuration (Redis)
+    "CACHE": {
+        "STATUS_TTL_SECONDS": config(
+            "CURATION_STATUS_TTL", default=604800, cast=int
+        ),  # 7 days
+        "DEDUPE_TTL_SECONDS": config("CURATION_DEDUPE_TTL", default=3600, cast=int),
+        "KEY_PREFIX": "curation:",
+    },
 }
 
 # =============================================================================

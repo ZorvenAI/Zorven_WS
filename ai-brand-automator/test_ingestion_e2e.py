@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 # Setup Django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "brand_automator.settings")
 import django
+
 django.setup()
 
 from data_ingestion.factory import create_ingestion_service
@@ -28,7 +29,7 @@ def run_e2e_test():
     print("=" * 60)
     print("DATA INGESTION E2E TEST")
     print("=" * 60)
-    
+
     # Show valid sources
     print("\n📋 Valid EventSource values:")
     for src in EventSource:
@@ -48,7 +49,7 @@ def run_e2e_test():
     event_id = str(uuid.uuid4())
     trace_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc)
-    
+
     event = IngestionEvent(
         event_id=event_id,
         trace_id=trace_id,
@@ -58,7 +59,7 @@ def run_e2e_test():
         file_path="gs://test-bucket/uploads/test-image.jpg",
         file_type="image/jpeg",
         file_size_bytes=1024,
-        metadata={"brand_id": "test-brand-001", "test": True}
+        metadata={"brand_id": "test-brand-001", "test": True},
     )
 
     print(f"   Event ID:   {event.event_id}")
@@ -79,7 +80,7 @@ def run_e2e_test():
             timestamp=timestamp.isoformat(),
             source=EventSource.API_INTEGRATION.value,
             trace_id=trace_id,
-            metadata={"brand_id": "test-brand-001", "test": True}
+            metadata={"brand_id": "test-brand-001", "test": True},
         )
         print(f"   ✅ Task queued: {task_result.id}")
         print(f"   Task status: {task_result.status}")
@@ -99,25 +100,25 @@ def run_e2e_test():
             file_path="gs://test-bucket/uploads/direct-test.jpg",
             file_type="image/jpeg",
             file_size_bytes=2048,
-            metadata={"brand_id": "test-brand-001", "direct": True}
+            metadata={"brand_id": "test-brand-001", "direct": True},
         )
         result = service.process_event(event2)
-        print(f"   ✅ Processing result:")
+        print("   ✅ Processing result:")
         print(f"      - Destination: {result.destination_path}")
         print(f"      - Duration: {result.processing_duration_ms}ms")
     except Exception as e:
         print(f"   ⚠️  Direct processing failed: {e}")
-        print(f"      (This is expected if GCS is not configured)")
+        print("      (This is expected if GCS is not configured)")
 
     print("\n" + "=" * 60)
     print("TEST COMPLETED")
     print("=" * 60)
-    print(f"\n💡 To monitor the event processing:")
-    print(f"   - Kafka UI: http://localhost:8080")
-    print(f"   - Check topic: raw-ingestion-topic")
-    print(f"   - Celery Worker logs: docker compose logs ingestion-worker -f")
+    print("\n💡 To monitor the event processing:")
+    print("   - Kafka UI: http://localhost:8080")
+    print("   - Check topic: raw-ingestion-topic")
+    print("   - Celery Worker logs: docker compose logs ingestion-worker -f")
     print(f"   - Event Trace ID: {trace_id}")
-    
+
     return True
 
 
