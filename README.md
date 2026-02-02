@@ -1,8 +1,8 @@
 # AI Brand Automator
 
-> **Version**: 2.0.0 (MVP Complete)  
+> **Version**: 2.1.0 (Media Curation Service)  
 > **Status**: ✅ Production Ready  
-> **Last Updated**: January 23, 2026
+> **Last Updated**: February 2, 2026
 
 **Multi-tenant SaaS platform for AI-powered brand building**
 
@@ -45,6 +45,16 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 - 📈 GBP insights and analytics
 - 🔧 10 dedicated MCP tools
 
+### Media Curation Service (NEW ✅)
+- 🎬 **Multi-format Processing** - Documents, images, video, and audio
+- 🔍 **AI Enrichment** - Entity extraction, summarization, keyword generation via Gemini
+- 🛡️ **PII Redaction** - Cloud DLP integration with tenant-specific configuration
+- 📊 **Structured Output** - Normalized JSON for downstream RAG indexing
+- 🔄 **Event-Driven** - Kafka-based pipeline with retry and dead letter queue
+- ⚡ **Celery Tasks** - Background processing with status tracking via Redis
+- 🏗️ **Hexagonal Architecture** - Clean separation with Ports & Adapters pattern
+- 📈 **443 tests** with 86% coverage
+
 ## Tech Stack
 
 ### Backend
@@ -68,7 +78,7 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 - **Railway** for production hosting
 - **Docker** for containerization
 - **GitHub Actions** for CI/CD
-- **241+ tests** (pytest + Hypothesis)
+- **680+ tests** (pytest + Hypothesis)
 
 ## Project Structure
 
@@ -83,6 +93,14 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 │   │   ├── services.py          # Platform API services
 │   │   ├── tasks.py             # Celery background tasks
 │   │   └── views.py             # OAuth & posting endpoints (5700+ lines)
+│   ├── media_curation/          # Media processing pipeline (NEW)
+│   │   ├── adapters/            # Redis, GCS, Kafka, DLP adapters
+│   │   ├── domain/              # Core models and business logic
+│   │   ├── ports/               # Abstract interfaces (Hexagonal Architecture)
+│   │   ├── processors/          # Document, Image, Video, Audio processors
+│   │   ├── management/          # Kafka consumer management command
+│   │   ├── tasks.py             # Celery tasks for curation
+│   │   └── views.py             # REST API endpoints
 │   ├── files/                   # File upload service
 │   ├── onboarding/              # Company onboarding
 │   ├── subscriptions/           # Stripe subscription management
@@ -421,6 +439,18 @@ curl http://localhost:8002/status    # Kong Admin API
 - `POST /api/v1/automation/content-calendar/{id}/publish/` - Publish post now
 - `POST /api/v1/automation/content-calendar/{id}/cancel/` - Cancel scheduled post
 
+### Media Curation
+- `POST /api/v1/media-curation/curate/` - Submit single curation request
+- `POST /api/v1/media-curation/curate/batch/` - Submit batch curation request
+- `GET /api/v1/media-curation/status/{event_id}/` - Get curation status
+- `POST /api/v1/media-curation/curate/sync/` - Synchronous curation (blocking)
+- `GET /api/v1/media-curation/health/` - Service health check
+- `GET /api/v1/media-curation/tenant-config/` - List tenant configurations
+- `POST /api/v1/media-curation/tenant-config/` - Create tenant configuration
+- `GET /api/v1/media-curation/tenant-config/{tenant_id}/` - Get tenant config
+- `PUT /api/v1/media-curation/tenant-config/{tenant_id}/` - Update tenant config
+- `DELETE /api/v1/media-curation/tenant-config/{tenant_id}/` - Delete tenant config
+
 ## User Flow
 
 1. **Registration** → Create account + tenant
@@ -441,10 +471,11 @@ curl http://localhost:8002/status    # Kong Admin API
 ```bash
 cd ai-brand-automator
 source ../.venv/bin/activate
-pytest -v                      # All tests (226+)
+pytest -v                      # All tests (680+)
 pytest -m unit                 # Unit tests only
 pytest -m property             # Property-based tests (Hypothesis)
 pytest automation/tests/ -v    # Automation tests (149)
+pytest media_curation/ -v      # Media curation tests (443)
 pytest --cov=. --cov-report=html  # With coverage
 ```
 
@@ -535,6 +566,9 @@ tenant = Tenant.objects.create(
 | `GOOGLE_CLIENT_SECRET` | ⚠️ Optional | Google OAuth client secret | `xxx...` |
 | `CELERY_BROKER_URL` | ⚠️ Optional | Redis broker URL | `redis://localhost:6379/0` |
 | `CELERY_RESULT_BACKEND` | ⚠️ Optional | Redis result backend | `redis://localhost:6379/0` |
+| `KAFKA_BOOTSTRAP_SERVERS` | ⚠️ Optional | Kafka brokers | `localhost:9092` |
+| `MEDIA_CURATION_REDIS_URL` | ⚠️ Optional | Redis for curation cache | `redis://localhost:6379/1` |
+| `GCS_BUCKET_NAME` | ⚠️ Optional | GCS bucket for curated output | `media-curation-output` |
 
 ### Frontend (.env.local)
 
@@ -606,6 +640,7 @@ tenant = Tenant.objects.create(
 - [Facebook Integration](ai-brand-automator/automation/docs/FACEBOOK_INTEGRATION_REPORT.md)
 - [Instagram Integration](ai-brand-automator/automation/docs/INSTAGRAM_INTEGRATION_REPORT.md)
 - [GBP Implementation](ai-brand-automator/automation/docs/GOOGLE_BUSINESS_PROFILE_IMPLEMENTATION_PLAN.md)
+- [Media Curation Service](ai-brand-automator/media_curation/README.md)
 
 ## License
 
@@ -613,20 +648,21 @@ See [LICENSE.md](docs/LICENSE.md)
 
 ## Status
 
-**Current Version**: 2.0.0 (MVP Complete)  
+**Current Version**: 2.1.0 (Media Curation Service)  
 **Status**: ✅ Production Ready  
 **Deployment**: Railway  
-**Last Updated**: January 23, 2026
+**Last Updated**: February 2, 2026
 
 ### Test Coverage
 | Component | Tests | Status |
 |-----------|-------|--------|
+| Media Curation | 443 | ✅ |
 | Automation | 149 | ✅ |
 | GBP | 77 | ✅ |
 | Onboarding | 30+ | ✅ |
 | AI Services | 15+ | ✅ |
 | Files | 10+ | ✅ |
-| **Total** | **226+** | ✅ |
+| **Total** | **680+** | ✅ |
 
 ### Completed Features (MVP)
 - ✅ Multi-tenant authentication
@@ -651,7 +687,17 @@ See [LICENSE.md](docs/LICENSE.md)
 - ✅ MCP Server with 23 tools for AI agents
 - ✅ Railway production deployment
 - ✅ CI/CD with GitHub Actions
-- ✅ 226+ automated tests
+- ✅ 680+ automated tests
+- ✅ **Media Curation Service** - AI-powered content processing pipeline
+
+### Media Curation Supported Formats
+
+| Content Type | Formats | Features |
+|-------------|---------|----------|
+| Documents | PDF, DOC, TXT, HTML, MD, CSV | Text extraction, AI summarization |
+| Images | PNG, JPEG, GIF, WebP, TIFF | OCR, Vision API, entity extraction |
+| Video | MP4, WebM, MPEG, QuickTime | Speech-to-text, scene analysis |
+| Audio | MP3, WAV, OGG, FLAC | Speech-to-text, transcription |
 
 ### Media Specifications by Platform
 
@@ -667,6 +713,6 @@ See [LICENSE.md](docs/LICENSE.md)
 See [Architecture Document](docs/ai_brand_automator_mvp_architecture.md#future-enhancements-post-mvp) for Phases 9-17:
 - Phase 9: Video & Content (YouTube, TikTok, Pinterest)
 - Phase 10: E-commerce (Shopify, Amazon)
-- Phase 11: Analytics & Reporting
+- ~~Phase 11: Analytics & Reporting~~ → Replaced by Media Curation Service
 - Phase 12: Team & Collaboration
 - Phase 13-17: Advanced AI, Marketing, Enterprise features
