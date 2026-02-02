@@ -53,9 +53,6 @@ def _detect_content_type(mime_type: str) -> ContentType:
         return ContentType.DOCUMENT
 
 
-logger = logging.getLogger(__name__)
-
-
 @shared_task(
     bind=True,
     name="media_curation.process_curation_event",

@@ -7,7 +7,7 @@ Run with: pytest media_curation/tests/test_real_integrations.py -v
 Prerequisites:
 - Docker containers running: redis, kafka, zookeeper
 - Redis: localhost:6379
-- Kafka: localhost:9192
+- Kafka: localhost:9092
 """
 
 import asyncio

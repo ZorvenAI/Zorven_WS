@@ -119,16 +119,16 @@ class BaseProcessor(ABC):
             extra={
                 "event_id": str(event.event_id),
                 "trace_id": str(event.trace_id),
-                "file_type": event.file_type,
-                "source_path": event.source_path,
+                "mime_type": event.mime_type,
+                "raw_gcs_uri": event.raw_gcs_uri,
             },
         )
 
-        if not self.supports(event.file_type):
+        if not self.supports(event.mime_type):
             from media_curation.domain.exceptions import ProcessorNotFoundError
 
             raise ProcessorNotFoundError(
-                event.file_type,
+                event.mime_type,
                 event_id=event.event_id,
                 trace_id=event.trace_id,
             )

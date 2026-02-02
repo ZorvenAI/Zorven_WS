@@ -141,8 +141,6 @@ class TenantConfig(BaseModel):
         """Alias for dlp_info_types."""
         return self.dlp_info_types
 
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
 
 class ProcessorResult(BaseModel):
     """

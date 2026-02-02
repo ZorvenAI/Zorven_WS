@@ -278,8 +278,6 @@ class Command(BaseCommand):
                         "retry_count": retry_count,
                     },
                 )
-                import time
-
                 time.sleep(backoff)
                 backoff *= 2
 
