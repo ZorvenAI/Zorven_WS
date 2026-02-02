@@ -185,6 +185,187 @@ services:
     networks:
       - app-network
 
+  # Data Ingestion Celery Worker - Dedicated worker for ingestion queue
+  ingestion-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A brand_automator worker -Q ingestion -l info --concurrency=2
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=True
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-5432}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-changeme}
+      # GCS Configuration
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      - GCP_BUCKET_NAME=${GCP_BUCKET_NAME:-onboarding-bucket1}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
+      # Kafka Topics
+      - INGESTION_KAFKA_INPUT_TOPIC=${INGESTION_KAFKA_INPUT_TOPIC:-raw-ingestion-topic}
+      - INGESTION_KAFKA_OUTPUT_TOPIC=${INGESTION_KAFKA_OUTPUT_TOPIC:-curation-needed-topic}
+      - INGESTION_KAFKA_DLQ_TOPIC=${INGESTION_KAFKA_DLQ_TOPIC:-ingestion-dlq}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-brand-kafka:9092}
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A brand_automator inspect ping -d celery@$$HOSTNAME -Q ingestion || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+
+  # Data Ingestion Kafka Consumer - Consumes raw-ingestion-topic events
+  ingestion-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python manage.py run_ingestion --batch-size 10 --poll-timeout 1.0
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=True
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-5432}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-changeme}
+      # GCS Configuration
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      - GCP_BUCKET_NAME=${GCP_BUCKET_NAME:-onboarding-bucket1}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
+      # Kafka Configuration
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-brand-kafka:9092}
+      - INGESTION_KAFKA_INPUT_TOPIC=${INGESTION_KAFKA_INPUT_TOPIC:-raw-ingestion-topic}
+      - INGESTION_KAFKA_OUTPUT_TOPIC=${INGESTION_KAFKA_OUTPUT_TOPIC:-curation-needed-topic}
+      - INGESTION_KAFKA_DLQ_TOPIC=${INGESTION_KAFKA_DLQ_TOPIC:-ingestion-dlq}
+      - INGESTION_KAFKA_GROUP_ID=${INGESTION_KAFKA_GROUP_ID:-ingestion-svc-group}
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - with-kafka
+
+  # Media Curation Celery Worker - Dedicated worker for curation queue
+  curation-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A brand_automator worker -Q curation -l info --concurrency=2
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=True
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-5432}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-changeme}
+      # GCP Configuration
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      - GCP_BUCKET_NAME=${GCP_BUCKET_NAME:-onboarding-bucket1}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
+      # Vertex AI / Gemini
+      - VERTEX_MODEL_NAME=${VERTEX_MODEL_NAME:-gemini-1.5-pro}
+      - VERTEX_LOCATION=${VERTEX_LOCATION:-us-central1}
+      # Media Curation Settings
+      - VISION_ENABLED=${VISION_ENABLED:-true}
+      - DLP_ENABLED=${DLP_ENABLED:-true}
+      - CURATION_MAX_RETRIES=${CURATION_MAX_RETRIES:-3}
+      - CURATION_TIMEOUT_SECONDS=${CURATION_TIMEOUT_SECONDS:-300}
+      # Kafka Topics (for output)
+      - KAFKA_CURATION_OUTPUT_TOPIC=${KAFKA_CURATION_OUTPUT_TOPIC:-rag-sync-ready-topic}
+      - KAFKA_CURATION_DLQ_TOPIC=${KAFKA_CURATION_DLQ_TOPIC:-curation-dlq}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-brand-kafka:9092}
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A brand_automator inspect ping -d celery@$$HOSTNAME -Q curation || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+
+  # Media Curation Kafka Consumer - Consumes curation-needed-topic events
+  curation-kafka-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.curation-consumer
+    command: python manage.py run_curation_consumer --batch-size 10 --poll-timeout 1.0
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=True
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-5432}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-changeme}
+      # GCP Configuration
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      - GCP_BUCKET_NAME=${GCP_BUCKET_NAME:-onboarding-bucket1}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
+      # Vertex AI / Gemini
+      - VERTEX_MODEL_NAME=${VERTEX_MODEL_NAME:-gemini-1.5-pro}
+      - VERTEX_LOCATION=${VERTEX_LOCATION:-us-central1}
+      # Media Curation Settings
+      - VISION_ENABLED=${VISION_ENABLED:-true}
+      - DLP_ENABLED=${DLP_ENABLED:-true}
+      - CURATION_MAX_RETRIES=${CURATION_MAX_RETRIES:-3}
+      - CURATION_TIMEOUT_SECONDS=${CURATION_TIMEOUT_SECONDS:-300}
+      # Kafka Configuration
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-brand-kafka:9092}
+      - KAFKA_CURATION_INPUT_TOPIC=${KAFKA_CURATION_INPUT_TOPIC:-curation-needed-topic}
+      - KAFKA_CURATION_OUTPUT_TOPIC=${KAFKA_CURATION_OUTPUT_TOPIC:-rag-sync-ready-topic}
+      - KAFKA_CURATION_DLQ_TOPIC=${KAFKA_CURATION_DLQ_TOPIC:-curation-dlq}
+      - KAFKA_CURATION_CONSUMER_GROUP=${KAFKA_CURATION_CONSUMER_GROUP:-media-curation-consumers}
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - with-kafka
+
   # Next.js Frontend
   frontend:
     build:

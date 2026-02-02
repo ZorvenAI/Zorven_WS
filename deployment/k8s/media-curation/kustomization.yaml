@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: media-curation
+
+namespace: default
+
+resources:
+  - configmap.yaml
+  - secrets.template.yaml
+  - deployment.yaml
+  - service.yaml
+  - hpa.yaml
+
+commonLabels:
+  app: media-curation
+  part-of: ai-brand-automator
+
+# Image customization for different environments
+images:
+  - name: gcr.io/${PROJECT_ID}/ai-brand-automator
+    newName: gcr.io/your-project-id/ai-brand-automator
+    newTag: latest
