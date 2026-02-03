@@ -1,0 +1,159 @@
+# RAG Index Service - Docker Compose Configuration
+#
+# Development and testing environment setup
+# Usage: docker-compose -f rag_index/docker-compose.yml up -d
+
+version: "3.8"
+
+services:
+  # ===========================================================================
+  # RAG Index API Service
+  # ===========================================================================
+  rag-index-api:
+    build:
+      context: ..
+      dockerfile: rag_index/Dockerfile
+    container_name: rag-index-api
+    ports:
+      - "8001:8000"
+    environment:
+      - DJANGO_SETTINGS_MODULE=brand_automator.settings
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-key.json
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID}
+      - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-us-central1}
+      - VERTEX_AI_DATASTORE_ID=${VERTEX_AI_DATASTORE_ID}
+    volumes:
+      - ./credentials:/app/credentials:ro
+    depends_on:
+      - redis
+      - kafka
+    networks:
+      - rag-index-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/rag-index/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================================================
+  # Kafka Consumer Worker
+  # ===========================================================================
+  rag-index-consumer:
+    build:
+      context: ..
+      dockerfile: rag_index/Dockerfile
+    container_name: rag-index-consumer
+    command: python manage.py consume_sync_events --topic rag-sync-ready-topic --group rag-index-workers
+    environment:
+      - DJANGO_SETTINGS_MODULE=brand_automator.settings
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-key.json
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID}
+      - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-us-central1}
+      - VERTEX_AI_DATASTORE_ID=${VERTEX_AI_DATASTORE_ID}
+    volumes:
+      - ./credentials:/app/credentials:ro
+    depends_on:
+      - redis
+      - kafka
+      - rag-index-api
+    networks:
+      - rag-index-network
+    restart: unless-stopped
+
+  # ===========================================================================
+  # Celery Worker
+  # ===========================================================================
+  rag-index-worker:
+    build:
+      context: ..
+      dockerfile: rag_index/Dockerfile
+    container_name: rag-index-worker
+    command: celery -A brand_automator worker -l info -Q rag-sync-queue
+    environment:
+      - DJANGO_SETTINGS_MODULE=brand_automator.settings
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-key.json
+      - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID}
+      - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-us-central1}
+      - VERTEX_AI_DATASTORE_ID=${VERTEX_AI_DATASTORE_ID}
+    volumes:
+      - ./credentials:/app/credentials:ro
+    depends_on:
+      - redis
+      - rag-index-api
+    networks:
+      - rag-index-network
+    restart: unless-stopped
+
+  # ===========================================================================
+  # Redis (Status Tracking & Celery Broker)
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: rag-index-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - rag-index-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================================================
+  # Kafka (Local Development)
+  # ===========================================================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: rag-index-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - rag-index-network
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: rag-index-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - rag-index-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+networks:
+  rag-index-network:
+    driver: bridge
+
+volumes:
+  redis-data:

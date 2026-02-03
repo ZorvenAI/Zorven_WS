@@ -95,6 +95,7 @@ SHARED_APPS = [
     "kafka_service",  # Kafka consumer/producer service
     "data_ingestion",  # Data ingestion pipeline (Hexagonal Architecture)
     "media_curation",  # Media curation pipeline (Hexagonal Architecture)
+    "rag_index",  # RAG Index sync service (Hexagonal Architecture)
 ]
 
 TENANT_APPS = [

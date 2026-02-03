@@ -79,6 +79,8 @@ urlpatterns = [
                 path("ingestion/", include("data_ingestion.urls")),
                 # Media Curation (AI content curation pipeline)
                 path("curation/", include("media_curation.urls")),
+                # RAG Index (document sync to Vertex AI)
+                path("rag-index/", include("rag_index.api.urls")),
             ]
         ),
     ),
