@@ -97,9 +97,7 @@ class GCSAdapter(StoragePort):
                 self.client = storage.Client(project=self.project_id)
         except Exception as e:
             # Handle credential errors gracefully - fall back to mock mode
-            logger.warning(
-                f"Failed to initialize GCS client: {e}. Using mock mode."
-            )
+            logger.warning(f"Failed to initialize GCS client: {e}. Using mock mode.")
             self._storage_available = False
             self.client = None
             return
