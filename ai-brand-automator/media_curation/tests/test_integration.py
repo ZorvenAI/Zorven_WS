@@ -561,9 +561,9 @@ class TestRealGCSIntegration:
             pytest.skip("GCS credentials not available")
 
         return GCSAdapter(
-            project_id="brandsol",
+            project_id="brandsol-project",
             credentials_path=credentials_path,
-            default_bucket="brandsol-curation-bucket",
+            default_bucket="onboarding-brandsol-customer-bucket-1",
         )
 
     def test_gcs_read_write_roundtrip(self, gcs_adapter):
@@ -572,7 +572,7 @@ class TestRealGCSIntegration:
 
         test_id = str(uuid.uuid4())[:8]
         test_data = {"test": "data", "id": test_id}
-        destination = f"gs://brandsol-curation-bucket/tests/integration-{test_id}.json"
+        destination = f"gs://onboarding-brandsol-customer-bucket-1/tests/integration-{test_id}.json"
 
         # Write
         result = run_async(
@@ -595,12 +595,12 @@ class TestRealGCSIntegration:
         """Test file existence checking."""
         # Existing file
         exists = run_async(
-            gcs_adapter.exists("gs://onboarding-bucket1/customer-1/test-document.txt")
+            gcs_adapter.exists("gs://onboarding-brandsol-customer-bucket-1/customer-1/customer-1-onboarding-file-example-1.txt")
         )
         assert exists is True
 
         # Non-existing file
         not_exists = run_async(
-            gcs_adapter.exists("gs://brandsol-curation-bucket/does-not-exist-12345.txt")
+            gcs_adapter.exists("gs://onboarding-brandsol-customer-bucket-1/does-not-exist-12345.txt")
         )
         assert not_exists is False
