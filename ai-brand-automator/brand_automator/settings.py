@@ -95,6 +95,7 @@ SHARED_APPS = [
     "kafka_service",  # Kafka consumer/producer service
     "data_ingestion",  # Data ingestion pipeline (Hexagonal Architecture)
     "media_curation",  # Media curation pipeline (Hexagonal Architecture)
+    "rag_index",  # RAG Index sync service (Hexagonal Architecture)
 ]
 
 TENANT_APPS = [
@@ -620,7 +621,10 @@ MEDIA_CURATION = {
         "GCP_PROJECT_ID": config("DLP_GCP_PROJECT_ID", default="brandsol"),
         "INFO_TYPES": config(
             "DLP_INFO_TYPES",
-            default="PHONE_NUMBER,EMAIL_ADDRESS,PERSON_NAME,STREET_ADDRESS,CREDIT_CARD_NUMBER",
+            default=(
+                "PHONE_NUMBER,EMAIL_ADDRESS,PERSON_NAME,"
+                "STREET_ADDRESS,CREDIT_CARD_NUMBER"
+            ),
             cast=lambda v: [s.strip() for s in v.split(",")],
         ),
         "REDACTION_STRATEGY": config(

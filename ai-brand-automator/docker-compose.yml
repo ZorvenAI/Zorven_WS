@@ -366,6 +366,95 @@ services:
     profiles:
       - with-kafka
 
+  # RAG Index Celery Worker - Dedicated worker for RAG sync queue
+  rag-index-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A brand_automator worker -Q rag-sync-queue -l info --concurrency=2
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=True
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-5432}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-changeme}
+      # GCP Configuration
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
+      # Vertex AI Discovery Engine
+      - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol}
+      - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-us-central1}
+      - VERTEX_AI_DATASTORE_ID=${VERTEX_AI_DATASTORE_ID:-}
+      # Kafka Topics
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-brand-kafka:9092}
+      - RAG_SYNC_INPUT_TOPIC=${RAG_SYNC_INPUT_TOPIC:-rag-sync-ready-topic}
+      - RAG_SYNC_OUTPUT_TOPIC=${RAG_SYNC_OUTPUT_TOPIC:-rag-sync-completed-topic}
+      - RAG_SYNC_DLQ_TOPIC=${RAG_SYNC_DLQ_TOPIC:-rag-sync-dlq}
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A brand_automator inspect ping -d celery@$$HOSTNAME -Q rag-sync-queue || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+
+  # RAG Index Kafka Consumer - Consumes rag-sync-ready-topic events
+  rag-index-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python manage.py consume_sync_events --topic rag-sync-ready-topic --group rag-index-consumers
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=True
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-5432}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-changeme}
+      # GCP Configuration
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
+      # Vertex AI Discovery Engine
+      - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol}
+      - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-us-central1}
+      - VERTEX_AI_DATASTORE_ID=${VERTEX_AI_DATASTORE_ID:-}
+      # Kafka Configuration
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-brand-kafka:9092}
+      - RAG_SYNC_INPUT_TOPIC=${RAG_SYNC_INPUT_TOPIC:-rag-sync-ready-topic}
+      - RAG_SYNC_OUTPUT_TOPIC=${RAG_SYNC_OUTPUT_TOPIC:-rag-sync-completed-topic}
+      - RAG_SYNC_DLQ_TOPIC=${RAG_SYNC_DLQ_TOPIC:-rag-sync-dlq}
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - with-kafka
+
   # Next.js Frontend
   frontend:
     build:

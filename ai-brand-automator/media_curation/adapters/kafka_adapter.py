@@ -358,20 +358,34 @@ class KafkaConsumerAdapter(EventConsumerPort):
         else:
             event_data = data
 
-        return CurationEvent(
+        # Parse content_type with case-insensitive handling
+        raw_content_type = event_data.get("content_type", "").lower() or "unknown"
+        try:
+            content_type = ContentType(raw_content_type)
+        except ValueError:
+            # If invalid content_type, we'll infer from mime_type later
+            content_type = ContentType.UNKNOWN
+
+        event = CurationEvent(
             event_id=UUID(event_data.get("event_id", data.get("id", str(UUID(int=0))))),
             trace_id=UUID(event_data.get("trace_id", str(UUID(int=0)))),
             tenant_id=UUID(event_data["tenant_id"]),
             file_id=UUID(event_data["file_id"]),
             raw_gcs_uri=event_data["raw_gcs_uri"],
             mime_type=event_data["mime_type"],
-            content_type=ContentType(event_data.get("content_type", "DOCUMENT")),
+            content_type=content_type,
             source_service=event_data.get("source_service", "data-ingestion"),
             timestamp=datetime.fromisoformat(
                 event_data.get("timestamp", datetime.now(timezone.utc).isoformat())
             ),
             metadata=event_data.get("metadata", {}),
         )
+
+        # If content_type is unknown, infer from mime_type
+        if event.content_type == ContentType.UNKNOWN:
+            event.content_type = event.get_content_type()
+
+        return event
 
     def subscribe(self, topics: Optional[list[str]] = None) -> None:
         """Subscribe to Kafka topics."""

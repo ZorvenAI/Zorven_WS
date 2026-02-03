@@ -1,6 +1,6 @@
 # AI Brand Automator
 
-> **Version**: 2.1.0 (Media Curation Service)  
+> **Version**: 2.2.0 (RAG Index Service)  
 > **Status**: ✅ Production Ready  
 > **Last Updated**: February 2, 2026
 
@@ -45,7 +45,7 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 - 📈 GBP insights and analytics
 - 🔧 10 dedicated MCP tools
 
-### Media Curation Service (NEW ✅)
+### Media Curation Service ✅
 - 🎬 **Multi-format Processing** - Documents, images, video, and audio
 - 🔍 **AI Enrichment** - Entity extraction, summarization, keyword generation via Gemini
 - 🛡️ **PII Redaction** - Cloud DLP integration with tenant-specific configuration
@@ -54,6 +54,16 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 - ⚡ **Celery Tasks** - Background processing with status tracking via Redis
 - 🏗️ **Hexagonal Architecture** - Clean separation with Ports & Adapters pattern
 - 📈 **443 tests** with 86% coverage
+
+### RAG Index Service (NEW ✅)
+- 🔍 **Document Indexing** - Upsert curated JSON documents into Vertex AI Data Store
+- 🗑️ **Document Deletion** - Remove documents from the index on delete events
+- ⏱️ **Rate Limiting** - Sliding window algorithm enforcing 600 req/min quota
+- 📊 **Status Tracking** - Redis-based sync status with TTL
+- 🔄 **Event-Driven** - Kafka consumer with CloudEvents format
+- ⚡ **Celery Tasks** - Background processing with retry logic
+- 🏗️ **Hexagonal Architecture** - Clean separation with Ports & Adapters pattern
+- 📈 **322 tests** covering full pipeline
 
 ## Tech Stack
 
@@ -78,7 +88,7 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 - **Railway** for production hosting
 - **Docker** for containerization
 - **GitHub Actions** for CI/CD
-- **680+ tests** (pytest + Hypothesis)
+- **1000+ tests** (pytest + Hypothesis)
 
 ## Project Structure
 
@@ -101,6 +111,15 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 │   │   ├── management/          # Kafka consumer management command
 │   │   ├── tasks.py             # Celery tasks for curation
 │   │   └── views.py             # REST API endpoints
+│   ├── rag_index/               # RAG Index Service (NEW)
+│   │   ├── adapters/            # GCS, Vertex AI, Redis, Kafka adapters
+│   │   ├── domain/              # Models, schemas, exceptions
+│   │   ├── ports/               # Abstract interfaces
+│   │   ├── services/            # SyncOrchestrator service
+│   │   ├── tasks/               # Celery sync tasks
+│   │   ├── api/                 # REST API views and serializers
+│   │   ├── management/          # Kafka consumer command
+│   │   └── tests/               # 322 tests
 │   ├── files/                   # File upload service
 │   ├── onboarding/              # Company onboarding
 │   ├── subscriptions/           # Stripe subscription management

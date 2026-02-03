@@ -65,16 +65,20 @@ class TestRunCurationConsumerCommand:
         assert cmd._running is False
 
     @patch(
-        "media_curation.management.commands.run_curation_consumer.get_media_curation_config"
+        "media_curation.management.commands.run_curation_consumer"
+        ".get_media_curation_config"
     )
     @patch(
-        "media_curation.management.commands.run_curation_consumer.create_kafka_consumer"
+        "media_curation.management.commands.run_curation_consumer"
+        ".create_kafka_consumer"
     )
     @patch(
-        "media_curation.management.commands.run_curation_consumer.get_curation_service"
+        "media_curation.management.commands.run_curation_consumer"
+        ".get_curation_service"
     )
     @patch(
-        "media_curation.management.commands.run_curation_consumer.create_kafka_producer"
+        "media_curation.management.commands.run_curation_consumer"
+        ".create_kafka_producer"
     )
     def test_command_initializes_components(
         self,

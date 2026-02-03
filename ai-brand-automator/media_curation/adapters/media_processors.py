@@ -57,25 +57,22 @@ class VideoProcessor(ContentProcessorPort):
             location: Vertex AI location
             credentials_path: Path to service account JSON
         """
-        # Lazy import to avoid issues when google-cloud-videointelligence is not installed
+        # Lazy import when google-cloud-videointelligence is not installed
         try:
             from google.cloud import videointelligence_v1
 
             self._video_ai_available = True
         except ImportError:
             self._video_ai_available = False
-            logger.warning(
-                "google-cloud-videointelligence not installed, using mock mode"
-            )
+            logger.warning("google-cloud-videointelligence not installed")
             return
 
         self.project_id = project_id or getattr(settings, "GCP_PROJECT_ID", None)
         self.location = location
 
         if credentials_path:
-            self.client = videointelligence_v1.VideoIntelligenceServiceClient.from_service_account_json(
-                credentials_path
-            )
+            client_cls = videointelligence_v1.VideoIntelligenceServiceClient
+            self.client = client_cls.from_service_account_json(credentials_path)
         else:
             # Use Application Default Credentials
             self.client = videointelligence_v1.VideoIntelligenceServiceClient()
@@ -100,8 +97,9 @@ class VideoProcessor(ContentProcessorPort):
 
         if not self._video_ai_available:
             # Mock mode: return sample extraction
+            mock_text = f"[Mock video transcription] Video from {event.raw_gcs_uri}"
             return ProcessorResult(
-                extracted_text=f"[Mock video transcription] Video from {event.raw_gcs_uri}",
+                extracted_text=mock_text,
                 struct_data={
                     "duration_seconds": 120,
                     "has_audio": True,
@@ -168,8 +166,10 @@ class VideoProcessor(ContentProcessorPort):
                                     "words": [
                                         {
                                             "word": word.word,
-                                            "start_time": word.start_time.total_seconds(),
-                                            "end_time": word.end_time.total_seconds(),
+                                            "start_time": (
+                                                word.start_time.total_seconds()
+                                            ),
+                                            "end_time": (word.end_time.total_seconds()),
                                             "speaker_tag": getattr(
                                                 word, "speaker_tag", 0
                                             ),
@@ -295,8 +295,9 @@ class AudioProcessor(ContentProcessorPort):
 
         if not self._speech_available:
             # Mock mode: return sample transcription
+            mock_text = f"[Mock audio transcription] Audio from {event.raw_gcs_uri}"
             return ProcessorResult(
-                extracted_text=f"[Mock audio transcription] Audio from {event.raw_gcs_uri}",
+                extracted_text=mock_text,
                 struct_data={
                     "duration_seconds": 60,
                     "mime_type": event.mime_type,

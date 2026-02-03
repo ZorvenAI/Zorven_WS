@@ -149,8 +149,9 @@ class TenantConfigSerializer(serializers.Serializer):
         valid_mime_prefixes = ["application/", "image/", "video/", "audio/", "text/"]
         for mime_type in value:
             if not any(mime_type.startswith(prefix) for prefix in valid_mime_prefixes):
+                prefixes = ", ".join(valid_mime_prefixes)
                 raise serializers.ValidationError(
-                    f"Invalid MIME type: {mime_type}. Must start with: {', '.join(valid_mime_prefixes)}"
+                    f"Invalid MIME type: {mime_type}. Must start with: {prefixes}"
                 )
         return value
 

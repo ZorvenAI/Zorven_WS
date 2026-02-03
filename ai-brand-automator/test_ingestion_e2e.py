@@ -15,13 +15,13 @@ from datetime import datetime, timezone
 
 # Setup Django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "brand_automator.settings")
-import django
+import django  # noqa: E402
 
 django.setup()
 
-from data_ingestion.factory import create_ingestion_service
-from data_ingestion.domain.models import IngestionEvent, EventSource
-from data_ingestion.tasks import process_ingestion_event
+from data_ingestion.factory import create_ingestion_service  # noqa: E402
+from data_ingestion.domain.models import IngestionEvent, EventSource  # noqa: E402
+from data_ingestion.tasks import process_ingestion_event  # noqa: E402
 
 
 def run_e2e_test():

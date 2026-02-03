@@ -283,8 +283,6 @@ class CloudDLPAdapter(DLPPort):
         def _check():
             try:
                 # List a single info type as health check
-                from google.cloud import dlp_v2
-
                 self.client.list_info_types(request={"parent": self.parent})
                 return True
             except Exception as e:

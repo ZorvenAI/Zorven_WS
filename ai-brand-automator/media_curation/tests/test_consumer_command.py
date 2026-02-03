@@ -327,10 +327,12 @@ class TestRunCurationConsumerCommand:
         "media_curation.management.commands.run_curation_consumer.create_kafka_producer"
     )
     @patch(
-        "media_curation.management.commands.run_curation_consumer.create_cache_adapter"
+        "media_curation.management.commands.run_curation_consumer"
+        ".create_cache_adapter"
     )
     @patch(
-        "media_curation.management.commands.run_curation_consumer.get_media_curation_config"
+        "media_curation.management.commands.run_curation_consumer"
+        ".get_media_curation_config"
     )
     def test_mock_mode_when_kafka_unavailable(
         self,
