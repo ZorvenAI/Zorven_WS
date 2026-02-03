@@ -30,20 +30,24 @@ RAG_SYNC_COMPLETED_TOPIC = "rag-sync-completed-topic"
 
 def create_producer():
     """Create a Kafka producer."""
-    return Producer({
-        "bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS,
-        "client.id": "pipeline-test-producer",
-    })
+    return Producer(
+        {
+            "bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS,
+            "client.id": "pipeline-test-producer",
+        }
+    )
 
 
 def create_consumer(topics: list[str], group_id: str):
     """Create a Kafka consumer."""
-    consumer = Consumer({
-        "bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS,
-        "group.id": group_id,
-        "auto.offset.reset": "earliest",
-        "enable.auto.commit": True,
-    })
+    consumer = Consumer(
+        {
+            "bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS,
+            "group.id": group_id,
+            "auto.offset.reset": "earliest",
+            "enable.auto.commit": True,
+        }
+    )
     consumer.subscribe(topics)
     return consumer
 
@@ -51,12 +55,12 @@ def create_consumer(topics: list[str], group_id: str):
 def send_raw_ingestion_event():
     """Send a test event to raw-ingestion-topic."""
     producer = create_producer()
-    
+
     event_id = str(uuid.uuid4())
     trace_id = str(uuid.uuid4())
     tenant_id = str(uuid.uuid4())
     file_id = str(uuid.uuid4())
-    
+
     # CloudEvents format for data_ingestion
     event = {
         "specversion": "1.0",
@@ -75,10 +79,10 @@ def send_raw_ingestion_event():
             "metadata": {
                 "source": "test-pipeline",
                 "test_run": True,
-            }
-        }
+            },
+        },
     }
-    
+
     print(f"\n{'='*60}")
     print("Sending test event to raw-ingestion-topic")
     print(f"{'='*60}")
@@ -86,7 +90,7 @@ def send_raw_ingestion_event():
     print(f"Trace ID: {trace_id}")
     print(f"Tenant ID: {tenant_id}")
     print(f"File ID: {file_id}")
-    
+
     producer.produce(
         RAW_INGESTION_TOPIC,
         key=file_id.encode(),
@@ -97,7 +101,7 @@ def send_raw_ingestion_event():
         ],
     )
     producer.flush()
-    
+
     print(f"✓ Event sent to {RAW_INGESTION_TOPIC}")
     return event_id, trace_id
 
@@ -105,12 +109,12 @@ def send_raw_ingestion_event():
 def send_curation_event():
     """Send a test event directly to curation-needed-topic (simulating data_ingestion output)."""
     producer = create_producer()
-    
+
     event_id = str(uuid.uuid4())
     trace_id = str(uuid.uuid4())
     tenant_id = str(uuid.uuid4())
     file_id = str(uuid.uuid4())
-    
+
     # CloudEvents format for media_curation
     event = {
         "specversion": "1.0",
@@ -129,10 +133,10 @@ def send_curation_event():
             "metadata": {
                 "source": "test-pipeline",
                 "test_run": True,
-            }
-        }
+            },
+        },
     }
-    
+
     print(f"\n{'='*60}")
     print("Sending test event to curation-needed-topic")
     print(f"{'='*60}")
@@ -140,7 +144,7 @@ def send_curation_event():
     print(f"Trace ID: {trace_id}")
     print(f"Tenant ID: {tenant_id}")
     print(f"File ID: {file_id}")
-    
+
     producer.produce(
         CURATION_NEEDED_TOPIC,
         key=file_id.encode(),
@@ -151,7 +155,7 @@ def send_curation_event():
         ],
     )
     producer.flush()
-    
+
     print(f"✓ Event sent to {CURATION_NEEDED_TOPIC}")
     return event_id, trace_id
 
@@ -159,12 +163,12 @@ def send_curation_event():
 def send_rag_sync_event():
     """Send a test event directly to rag-sync-ready-topic (simulating media_curation output)."""
     producer = create_producer()
-    
+
     event_id = str(uuid.uuid4())
     trace_id = str(uuid.uuid4())
     tenant_id = str(uuid.uuid4())
     file_id = str(uuid.uuid4())
-    
+
     # CloudEvents format for rag_index
     event = {
         "specversion": "1.0",
@@ -183,10 +187,10 @@ def send_rag_sync_event():
                 "source": "test-pipeline",
                 "test_run": True,
                 "content_type": "application/json",
-            }
-        }
+            },
+        },
     }
-    
+
     print(f"\n{'='*60}")
     print("Sending test event to rag-sync-ready-topic")
     print(f"{'='*60}")
@@ -194,7 +198,7 @@ def send_rag_sync_event():
     print(f"Trace ID: {trace_id}")
     print(f"Tenant ID: {tenant_id}")
     print(f"File ID: {file_id}")
-    
+
     producer.produce(
         RAG_SYNC_READY_TOPIC,
         key=file_id.encode(),
@@ -205,7 +209,7 @@ def send_rag_sync_event():
         ],
     )
     producer.flush()
-    
+
     print(f"✓ Event sent to {RAG_SYNC_READY_TOPIC}")
     return event_id, trace_id
 
@@ -215,18 +219,18 @@ def monitor_topics(duration_seconds: int = 30):
     print(f"\n{'='*60}")
     print(f"Monitoring topics for {duration_seconds} seconds...")
     print(f"{'='*60}")
-    
+
     topics = [
         CURATION_NEEDED_TOPIC,
         RAG_SYNC_READY_TOPIC,
         RAG_SYNC_COMPLETED_TOPIC,
     ]
-    
+
     consumer = create_consumer(topics, f"monitor-{uuid.uuid4().hex[:8]}")
-    
+
     start_time = time.time()
     messages_received = 0
-    
+
     try:
         while time.time() - start_time < duration_seconds:
             msg = consumer.poll(1.0)
@@ -237,21 +241,21 @@ def monitor_topics(duration_seconds: int = 30):
                     continue
                 print(f"Error: {msg.error()}")
                 continue
-            
+
             messages_received += 1
             topic = msg.topic()
             value = json.loads(msg.value().decode())
-            
+
             print(f"\n📨 Message received on {topic}:")
             print(f"   Event ID: {value.get('id', 'N/A')}")
             print(f"   Type: {value.get('type', 'N/A')}")
             print(f"   Source: {value.get('source', 'N/A')}")
-            if 'data' in value:
+            if "data" in value:
                 print(f"   Tenant ID: {value['data'].get('tenant_id', 'N/A')}")
                 print(f"   File ID: {value['data'].get('file_id', 'N/A')}")
     finally:
         consumer.close()
-    
+
     print(f"\n{'='*60}")
     print(f"Monitoring complete. Received {messages_received} messages.")
     print(f"{'='*60}")
@@ -260,19 +264,19 @@ def monitor_topics(duration_seconds: int = 30):
 def main():
     """Main test function."""
     import sys
-    
-    print("\n" + "="*60)
+
+    print("\n" + "=" * 60)
     print("       E2E Pipeline Test")
-    print("="*60)
+    print("=" * 60)
     print("\nTopics flow:")
     print("  1. raw-ingestion-topic → data_ingestion")
     print("  2. curation-needed-topic → media_curation")
     print("  3. rag-sync-ready-topic → rag_index")
     print("  4. rag-sync-completed-topic (output)")
-    
+
     if len(sys.argv) > 1:
         command = sys.argv[1]
-        
+
         if command == "ingestion":
             send_raw_ingestion_event()
         elif command == "curation":
@@ -290,11 +294,21 @@ def main():
         else:
             print(f"Unknown command: {command}")
             print("\nUsage:")
-            print("  python test_pipeline_e2e.py ingestion  - Send to raw-ingestion-topic")
-            print("  python test_pipeline_e2e.py curation   - Send to curation-needed-topic")
-            print("  python test_pipeline_e2e.py rag        - Send to rag-sync-ready-topic")
-            print("  python test_pipeline_e2e.py monitor [duration] - Monitor all topics")
-            print("  python test_pipeline_e2e.py all        - Send to curation + rag topics")
+            print(
+                "  python test_pipeline_e2e.py ingestion  - Send to raw-ingestion-topic"
+            )
+            print(
+                "  python test_pipeline_e2e.py curation   - Send to curation-needed-topic"
+            )
+            print(
+                "  python test_pipeline_e2e.py rag        - Send to rag-sync-ready-topic"
+            )
+            print(
+                "  python test_pipeline_e2e.py monitor [duration] - Monitor all topics"
+            )
+            print(
+                "  python test_pipeline_e2e.py all        - Send to curation + rag topics"
+            )
     else:
         # Default: send a curation event and monitor
         send_curation_event()
