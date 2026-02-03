@@ -642,7 +642,10 @@ class TestVisionAdapterTextDetection:
 
     @pytest.fixture
     def vision_adapter(self):
-        """Create Vision adapter (uses mock mode if google-cloud-vision not available)."""
+        """Create Vision adapter.
+
+        Uses mock mode if google-cloud-vision not available.
+        """
         from media_curation.adapters.vision_adapter import VisionAdapter
 
         return VisionAdapter(project_id="test-project")

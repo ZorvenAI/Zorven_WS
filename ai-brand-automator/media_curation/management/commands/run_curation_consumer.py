@@ -248,10 +248,9 @@ class Command(BaseCommand):
         while retry_count <= max_retries:
             try:
                 result = _run_async(self._service.process_event(event))
+                doc_id = result.document_id if result else "N/A"
                 self.stdout.write(
-                    self.style.SUCCESS(
-                        f"✓ Processed: {event.event_id} -> {result.document_id if result else 'N/A'}"
-                    )
+                    self.style.SUCCESS(f"✓ Processed: {event.event_id} -> {doc_id}")
                 )
                 return True
 

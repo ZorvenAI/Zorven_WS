@@ -221,7 +221,10 @@ class IngestionViewSet(ViewSet):
         return Response(
             {
                 "status": response_status,
-                "message": f"Batch queued: {len(accepted)} accepted, {len(rejected)} rejected",
+                "message": (
+                    f"Batch queued: {len(accepted)} accepted, "
+                    f"{len(rejected)} rejected"
+                ),
                 "total": len(events_data),
                 "accepted": len(accepted),
                 "rejected": len(rejected),

@@ -161,7 +161,10 @@ class DocumentProcessor(ContentProcessorPort):
                 if event.mime_type.startswith("text/"):
                     # Text content can be sent directly
                     text_content = content.decode("utf-8", errors="replace")
-                    prompt = f"{DOCUMENT_EXTRACTION_PROMPT}\n\nDocument content:\n{text_content[:50000]}"
+                    prompt = (
+                        f"{DOCUMENT_EXTRACTION_PROMPT}\n\n"
+                        f"Document content:\n{text_content[:50000]}"
+                    )
                     response = self.model.generate_content(prompt)
                 else:
                     # Binary content (PDF, etc.) needs to be sent as inline data

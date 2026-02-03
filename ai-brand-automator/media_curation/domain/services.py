@@ -484,7 +484,10 @@ class CurationService:
 
         try:
             # Build the output path
-            path = f"gs://{self.output_bucket}/curated/{doc.tenant_id}/{doc.file_id}/{doc.document_id}.json"
+            path = (
+                f"gs://{self.output_bucket}/curated/"
+                f"{doc.tenant_id}/{doc.file_id}/{doc.document_id}.json"
+            )
 
             # Convert to JSON bytes
             doc_data = doc.model_dump(mode="json")

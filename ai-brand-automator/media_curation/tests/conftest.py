@@ -203,7 +203,11 @@ def sample_status_record() -> CurationStatusRecord:
 
 
 class MockContentProcessor:
-    """Mock content processor for testing (implements async interface from ContentProcessorPort)."""
+    """
+    Mock content processor for testing.
+
+    Implements async interface from ContentProcessorPort.
+    """
 
     _SUPPORTED_MIME_TYPES = ["application/pdf", "text/plain"]
 
@@ -253,7 +257,11 @@ class MockContentProcessor:
 
 
 class MockVideoProcessor:
-    """Mock video processor for testing (implements async interface from ContentProcessorPort)."""
+    """
+    Mock video processor for testing.
+
+    Implements async interface from ContentProcessorPort.
+    """
 
     _SUPPORTED_MIME_TYPES = ["video/mp4", "video/webm", "video/*"]
 
@@ -391,7 +399,11 @@ class MockDLPAdapter:
 
 
 class MockStorageAdapter:
-    """Mock storage adapter for testing (implements async interface from StoragePort)."""
+    """
+    Mock storage adapter for testing.
+
+    Implements async interface from StoragePort.
+    """
 
     def __init__(self):
         self.saved_files = {}
@@ -598,7 +610,11 @@ class MockCacheAdapter:
 
 
 class MockEventProducer:
-    """Mock event producer for testing (implements async interface from EventProducerPort)."""
+    """
+    Mock event producer for testing.
+
+    Implements async interface from EventProducerPort.
+    """
 
     def __init__(self):
         self.published_events = []

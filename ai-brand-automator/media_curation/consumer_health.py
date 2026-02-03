@@ -83,7 +83,8 @@ class ConsumerHealthTracker:
     # Redis key prefix for consumer health
     HEALTH_KEY_PREFIX = "media_curation:consumer:health:"
 
-    # TTL for health entries (consumers are considered dead if not updated within this time)
+    # TTL for health entries
+    # (consumers are considered dead if not updated within this time)
     HEALTH_TTL_SECONDS = 60
 
     # Heartbeat interval - how often consumers should update their status
