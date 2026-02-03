@@ -7,7 +7,9 @@ This script:
 2. Creates a data store for document indexing
 3. Verifies the setup
 
-Run with: GOOGLE_APPLICATION_CREDENTIALS=credentials/gcs-credentials.json python scripts/setup_vertex_ai_discovery_engine.py
+Run with:
+    GOOGLE_APPLICATION_CREDENTIALS=credentials/gcs-credentials.json \
+    python scripts/setup_vertex_ai_discovery_engine.py
 """
 
 import os
@@ -51,11 +53,13 @@ def enable_discovery_engine_api():
             return True
         elif "PERMISSION_DENIED" in error_msg:
             print(
-                f"   ⚠️  Permission denied. Service account needs 'Service Usage Admin' role."
+                "   ⚠️  Permission denied. "
+                "Service account needs 'Service Usage Admin' role."
             )
-            print(f"      You can enable manually via GCP Console or run:")
+            print("      You can enable manually via GCP Console or run:")
             print(
-                f"      gcloud services enable discoveryengine.googleapis.com --project={PROJECT_ID}"
+                f"      gcloud services enable discoveryengine.googleapis.com "
+                f"--project={PROJECT_ID}"
             )
             return False
         else:
@@ -164,13 +168,13 @@ def create_data_store():
             return True
         elif "PERMISSION_DENIED" in error_msg:
             print(
-                f"   ❌ Permission denied. Service account needs 'Discovery Engine Admin' role."
+                "   ❌ Permission denied. "
+                "Service account needs 'Discovery Engine Admin' role."
             )
             print(f"      Run: gcloud projects add-iam-policy-binding {PROJECT_ID} \\")
-            print(
-                f"             --member='serviceAccount:brandsol-service-account-87@{PROJECT_ID}.iam.gserviceaccount.com' \\"
-            )
-            print(f"             --role='roles/discoveryengine.admin'")
+            sa = f"brandsol-service-account-87@{PROJECT_ID}.iam.gserviceaccount.com"
+            print(f"             --member='serviceAccount:{sa}' \\")
+            print("             --role='roles/discoveryengine.admin'")
             return False
         else:
             print(f"   ❌ Failed to create data store: {e}")
@@ -183,10 +187,10 @@ def verify_connection():
     try:
         from google.cloud import discoveryengine_v1 as discoveryengine
 
-        # Try to create a client and list operations
-        client = discoveryengine.DocumentServiceClient()
+        # Try to create a client
+        discoveryengine.DocumentServiceClient()
 
-        print(f"   ✅ Discovery Engine client initialized successfully")
+        print("   ✅ Discovery Engine client initialized successfully")
         print(f"   Project: {PROJECT_ID}")
         print(f"   Location: {LOCATION}")
         print(f"   Data Store ID: {DATA_STORE_ID}")

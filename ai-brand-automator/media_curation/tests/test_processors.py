@@ -39,12 +39,14 @@ SAMPLE_FILE_ID = UUID("44444444-4444-4444-4444-444444444444")
 @pytest.fixture
 def sample_document_event():
     """Create a sample document curation event using real GCS file."""
+    bucket = "onboarding-brandsol-customer-bucket-1"
+    raw_uri = f"gs://{bucket}/customer-1/customer-1-onboarding-file-example-1.txt"
     return CurationEvent(
         event_id=SAMPLE_EVENT_ID,
         trace_id=SAMPLE_TRACE_ID,
         tenant_id=SAMPLE_TENANT_ID,
         file_id=SAMPLE_FILE_ID,
-        raw_gcs_uri="gs://onboarding-brandsol-customer-bucket-1/customer-1/customer-1-onboarding-file-example-1.txt",
+        raw_gcs_uri=raw_uri,
         mime_type="text/plain",
         content_type=ContentType.DOCUMENT,
         source_service="test",

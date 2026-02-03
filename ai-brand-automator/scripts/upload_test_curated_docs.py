@@ -3,7 +3,8 @@
 Upload sample curated JSON documents for RAG index testing.
 
 Run with:
-    GOOGLE_APPLICATION_CREDENTIALS=credentials/gcs-credentials.json python scripts/upload_test_curated_docs.py
+    GOOGLE_APPLICATION_CREDENTIALS=credentials/gcs-credentials.json \\
+        python scripts/upload_test_curated_docs.py
 """
 
 import json

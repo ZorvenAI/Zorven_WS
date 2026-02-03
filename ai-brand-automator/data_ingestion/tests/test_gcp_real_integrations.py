@@ -16,11 +16,9 @@ Note: These tests create and delete files in GCS for testing purposes.
 """
 
 import os
-import json
 import pytest
 from pathlib import Path
 from uuid import uuid4
-from datetime import datetime
 
 # Mark all tests as requiring real GCP credentials
 pytestmark = [pytest.mark.integration, pytest.mark.gcp]
@@ -108,7 +106,7 @@ class TestGCSAdapterRealConnection:
 
         assert adapter.project_id == GCP_PROJECT_ID
         assert adapter.client is not None
-        print(f"✅ GCS adapter initialized with explicit credentials")
+        print("✅ GCS adapter initialized with explicit credentials")
 
     def test_check_exists_returns_true(self, gcs_adapter):
         """Test check_exists returns True for existing file."""
@@ -129,7 +127,7 @@ class TestGCSAdapterRealConnection:
         result = gcs_adapter.check_exists(test_uri)
 
         assert result is False
-        print(f"✅ File correctly reported as not existing")
+        print("✅ File correctly reported as not existing")
 
     def test_get_metadata_for_existing_file(self, gcs_adapter):
         """Test get_metadata returns correct metadata for existing file."""
@@ -156,7 +154,7 @@ class TestGCSAdapterRealConnection:
 
         with pytest.raises(FileNotFoundInLandingError):
             gcs_adapter.get_metadata(test_uri)
-        print(f"✅ Correctly raised FileNotFoundInLandingError")
+        print("✅ Correctly raised FileNotFoundInLandingError")
 
     def test_list_files_with_prefix(self, gcs_adapter):
         """Test list_files returns files matching prefix."""
@@ -173,7 +171,7 @@ class TestGCSAdapterRealConnection:
         files = gcs_adapter.list_files(unique_prefix, bucket_name=TEST_BUCKET)
 
         assert files == []
-        print(f"✅ Correctly returned empty list for non-existent prefix")
+        print("✅ Correctly returned empty list for non-existent prefix")
 
 
 class TestGCSAdapterFileOperations:
@@ -250,7 +248,7 @@ class TestGCSAdapterFileOperations:
             # Cleanup
             gcs_adapter.delete_file(source_uri)
             gcs_adapter.delete_file(dest_uri)
-            print(f"✅ Cleaned up test files")
+            print("✅ Cleaned up test files")
 
     def test_move_file(self, gcs_adapter, tmp_path):
         """Test moving a file within GCS (copy + delete source)."""
@@ -279,7 +277,7 @@ class TestGCSAdapterFileOperations:
         finally:
             # Cleanup
             gcs_adapter.delete_file(dest_uri)
-            print(f"✅ Cleaned up test files")
+            print("✅ Cleaned up test files")
 
     def test_download_file(self, gcs_adapter, tmp_path):
         """Test downloading a file from GCS to local filesystem."""
@@ -373,13 +371,13 @@ class TestIngestionPipelineWithRealGCS:
             # Verify metadata preserved
             raw_metadata = gcs_adapter.get_metadata(raw_uri)
             assert raw_metadata.size_bytes == metadata.size_bytes
-            print(f"✅ Metadata preserved after move")
+            print("✅ Metadata preserved after move")
 
         finally:
             # Cleanup
             gcs_adapter.delete_file(landing_uri)
             gcs_adapter.delete_file(raw_uri)
-            print(f"✅ Cleaned up test files")
+            print("✅ Cleaned up test files")
 
     def test_batch_file_listing(self, gcs_adapter, tmp_path):
         """Test listing multiple files in a simulated tenant folder."""

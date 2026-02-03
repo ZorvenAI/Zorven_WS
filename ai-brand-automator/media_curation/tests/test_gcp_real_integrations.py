@@ -95,11 +95,11 @@ class TestGCSAdapterRealConnection:
         )
 
     def test_gcs_health_check(self, gcs_adapter):
-        """Test GCS connection can access bucket (may fail on bucket list permissions)."""
+        """Test GCS connection can access bucket."""
         # Health check may fail if service account lacks storage.buckets.list
         # But file operations work fine - check file access instead
         exists = run_async(gcs_adapter.exists(TEST_TEXT_FILE))
-        assert exists is True, "GCS should be able to access test file"
+        assert exists is True
 
     def test_gcs_download_text_file(self, gcs_adapter):
         """Test downloading text file from GCS."""
@@ -201,9 +201,10 @@ class TestVisionAdapterRealConnection:
             result = run_async(vision_adapter.detect_text(TEST_IMAGE_PNG))
             # Mock mode returns a string, real API returns text
             assert result is not None
-            print(
-                f"OCR extracted text: {result[:200] if isinstance(result, str) else str(result)[:200]}..."
+            text_preview = (
+                result[:200] if isinstance(result, str) else str(result)[:200]
             )
+            print(f"OCR extracted text: {text_preview}...")
         except Exception as e:
             error_str = str(e).lower()
             if "mock" in error_str or "not installed" in error_str:
@@ -217,9 +218,10 @@ class TestVisionAdapterRealConnection:
         try:
             result = run_async(vision_adapter.detect_document_text(TEST_PDF_FILE))
             assert result is not None
-            print(
-                f"Document OCR result: {result[:200] if isinstance(result, str) else str(result)[:200]}..."
+            text_preview = (
+                result[:200] if isinstance(result, str) else str(result)[:200]
             )
+            print(f"Document OCR result: {text_preview}...")
         except Exception as e:
             error_str = str(e).lower()
             if "mock" in error_str or "not installed" in error_str:
@@ -353,9 +355,10 @@ class TestVertexAIAdapterRealConnection:
                 vertex_adapter.generate_from_uri(TEST_IMAGE_JPEG, prompt)
             )
             assert result is not None
-            print(
-                f"Vertex AI result: {result[:200] if isinstance(result, str) else str(result)[:200]}..."
+            text_preview = (
+                result[:200] if isinstance(result, str) else str(result)[:200]
             )
+            print(f"Vertex AI result: {text_preview}...")
         except Exception as e:
             error_str = str(e).lower()
             if "mock" in error_str or "not installed" in error_str:
@@ -367,9 +370,10 @@ class TestVertexAIAdapterRealConnection:
         try:
             result = run_async(vertex_adapter.transcribe_audio(TEST_AUDIO_FILE))
             assert result is not None
-            print(
-                f"Audio transcription: {result[:200] if isinstance(result, str) else str(result)[:200]}..."
+            text_preview = (
+                result[:200] if isinstance(result, str) else str(result)[:200]
             )
+            print(f"Audio transcription: {text_preview}...")
         except Exception as e:
             error_str = str(e).lower()
             if "mock" in error_str or "not installed" in error_str:
@@ -381,9 +385,10 @@ class TestVertexAIAdapterRealConnection:
         try:
             result = run_async(vertex_adapter.analyze_video(TEST_VIDEO_FILE))
             assert result is not None
-            print(
-                f"Video analysis: {result[:200] if isinstance(result, str) else str(result)[:200]}..."
+            text_preview = (
+                result[:200] if isinstance(result, str) else str(result)[:200]
             )
+            print(f"Video analysis: {text_preview}...")
         except Exception as e:
             error_str = str(e).lower()
             if "mock" in error_str or "not installed" in error_str:

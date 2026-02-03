@@ -136,7 +136,8 @@ class TestGCSAdapterRealOperations:
 
         test_id = str(uuid.uuid4())[:8]
         content = b"test content for upload"
-        destination = f"gs://onboarding-brandsol-customer-bucket-1/customer-1/test-uploads/test-upload-{test_id}.txt"
+        bucket = "onboarding-brandsol-customer-bucket-1"
+        destination = f"gs://{bucket}/customer-1/test-uploads/test-upload-{test_id}.txt"
 
         result = run_async(
             gcs_adapter.upload_from_bytes(
@@ -161,29 +162,24 @@ class TestGCSAdapterRealOperations:
     def test_download_as_bytes_returns_bytes(self, gcs_adapter):
         """Test downloading bytes from GCS."""
         # Use the test file in the real bucket
-        result = run_async(
-            gcs_adapter.download_as_bytes(
-                "gs://onboarding-brandsol-customer-bucket-1/customer-1/customer-1-onboarding-file-example-1.txt"
-            )
-        )
+        bucket = "onboarding-brandsol-customer-bucket-1"
+        test_file = f"gs://{bucket}/customer-1/customer-1-onboarding-file-example-1.txt"
+        result = run_async(gcs_adapter.download_as_bytes(test_file))
         assert isinstance(result, bytes)
         assert len(result) > 0
 
     def test_exists_returns_true_for_existing_file(self, gcs_adapter):
         """Test file existence check for existing file."""
-        result = run_async(
-            gcs_adapter.exists(
-                "gs://onboarding-brandsol-customer-bucket-1/customer-1/customer-1-onboarding-file-example-1.txt"
-            )
-        )
+        bucket = "onboarding-brandsol-customer-bucket-1"
+        test_file = f"gs://{bucket}/customer-1/customer-1-onboarding-file-example-1.txt"
+        result = run_async(gcs_adapter.exists(test_file))
         assert result is True
 
     def test_exists_returns_false_for_missing_file(self, gcs_adapter):
         """Test file existence check for non-existent file."""
+        bucket = "onboarding-brandsol-customer-bucket-1"
         result = run_async(
-            gcs_adapter.exists(
-                "gs://onboarding-brandsol-customer-bucket-1/non-existent-file-12345.txt"
-            )
+            gcs_adapter.exists(f"gs://{bucket}/non-existent-file-12345.txt")
         )
         assert result is False
 

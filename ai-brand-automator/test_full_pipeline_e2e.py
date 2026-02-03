@@ -18,13 +18,13 @@ Prerequisites:
 Run:
     cd ai-brand-automator
     source ../.venv/bin/activate
-    GOOGLE_APPLICATION_CREDENTIALS=credentials/gcs-credentials.json python test_full_pipeline_e2e.py
+    GOOGLE_APPLICATION_CREDENTIALS=credentials/gcs-credentials.json \\
+        python test_full_pipeline_e2e.py
 """
 
 import os
 import sys
 import json
-import time
 import uuid
 import requests
 from datetime import datetime, timezone
@@ -354,7 +354,7 @@ def test_rag_index_adapter(results: E2ETestResult):
                 adapter.read_document(curated_uri)
             )
             if doc:
-                results.add_pass("RAG Index Document Read", f"Document loaded")
+                results.add_pass("RAG Index Document Read", "Document loaded")
             else:
                 results.add_skip("RAG Index Document Read", "Document not found")
         except Exception as e:
@@ -397,7 +397,7 @@ def test_full_pipeline_simulation(results: E2ETestResult):
         results.add_pass("Pipeline: Upload to Landing", f"Path: {landing_path}")
 
         # Move to raw (simulating ingestion)
-        raw_blob = bucket.copy_blob(landing_blob, bucket, raw_path)
+        bucket.copy_blob(landing_blob, bucket, raw_path)
         landing_blob.delete()
         results.add_pass("Pipeline: Move to Raw", f"Path: {raw_path}")
 
@@ -518,9 +518,10 @@ def test_kafka_connectivity(results: E2ETestResult):
             if resp.status_code == 200:
                 clusters = resp.json()
                 if clusters and clusters[0].get("status") == "online":
+                    topic_count = clusters[0].get("topicCount")
                     results.add_pass(
                         "Kafka Cluster Status",
-                        f"Status: online, Topics: {clusters[0].get('topicCount', 'N/A')}",
+                        f"Status: online, Topics: {topic_count}",
                     )
 
                     # Get topics via UI API
