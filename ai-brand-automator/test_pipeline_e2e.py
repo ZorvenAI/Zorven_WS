@@ -3,7 +3,7 @@
 End-to-End Pipeline Test Script.
 
 Tests the full flow:
-1. data_ingestion (raw-ingestion-topic) 
+1. data_ingestion (raw-ingestion-topic)
 2. media_curation (curation-needed-topic)
 3. rag_index (rag-sync-ready-topic)
 
@@ -107,7 +107,10 @@ def send_raw_ingestion_event():
 
 
 def send_curation_event():
-    """Send a test event directly to curation-needed-topic (simulating data_ingestion output)."""
+    """Send test event to curation-needed-topic.
+
+    Simulates data_ingestion output.
+    """
     producer = create_producer()
 
     event_id = str(uuid.uuid4())
@@ -161,7 +164,10 @@ def send_curation_event():
 
 
 def send_rag_sync_event():
-    """Send a test event directly to rag-sync-ready-topic (simulating media_curation output)."""
+    """Send test event to rag-sync-ready-topic.
+
+    Simulates media_curation output.
+    """
     producer = create_producer()
 
     event_id = str(uuid.uuid4())
@@ -297,18 +303,10 @@ def main():
             print(
                 "  python test_pipeline_e2e.py ingestion  - Send to raw-ingestion-topic"
             )
-            print(
-                "  python test_pipeline_e2e.py curation   - Send to curation-needed-topic"
-            )
-            print(
-                "  python test_pipeline_e2e.py rag        - Send to rag-sync-ready-topic"
-            )
-            print(
-                "  python test_pipeline_e2e.py monitor [duration] - Monitor all topics"
-            )
-            print(
-                "  python test_pipeline_e2e.py all        - Send to curation + rag topics"
-            )
+            print("  python test_pipeline_e2e.py curation   - curation topic")
+            print("  python test_pipeline_e2e.py rag        - rag-sync topic")
+            print("  python test_pipeline_e2e.py monitor [s] - Monitor topics")
+            print("  python test_pipeline_e2e.py all        - curation + rag")
     else:
         # Default: send a curation event and monitor
         send_curation_event()
