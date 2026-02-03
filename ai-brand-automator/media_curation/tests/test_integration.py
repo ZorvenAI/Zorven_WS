@@ -101,6 +101,10 @@ class TestFactoryIntegration:
         base_dir = settings.BASE_DIR
         credentials_path = os.path.join(base_dir, "credentials", "gcs-credentials.json")
 
+        # Skip if credentials file doesn't exist
+        if not os.path.exists(credentials_path):
+            pytest.skip("GCS credentials file not found - skipping real GCS tests")
+
         adapter = create_storage_adapter(
             {
                 "STORAGE": {

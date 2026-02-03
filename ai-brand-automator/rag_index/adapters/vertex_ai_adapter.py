@@ -158,7 +158,6 @@ class VertexAIAdapter(VertexAIPort):
             )
 
         except Exception as e:
-            processing_time_ms = int((time.time() - start_time) * 1000)
             error_message = str(e)
 
             # Check for rate limiting errors
@@ -236,7 +235,6 @@ class VertexAIAdapter(VertexAIPort):
             )
 
         except Exception as e:
-            processing_time_ms = int((time.time() - start_time) * 1000)
             error_message = str(e)
 
             if "NOT_FOUND" in error_message or "404" in error_message:

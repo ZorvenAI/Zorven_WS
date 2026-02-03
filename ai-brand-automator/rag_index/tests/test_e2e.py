@@ -55,7 +55,7 @@ def mock_services(mock_document):
     """Create all mock services for E2E tests."""
     # GCS mock
     gcs = AsyncMock()
-    gcs.fetch_document = AsyncMock(return_value=mock_document)
+    gcs.read_document = AsyncMock(return_value=mock_document)
     gcs.check_connection = AsyncMock(return_value=True)
 
     # Vertex AI mock
@@ -81,7 +81,7 @@ def mock_services(mock_document):
     redis = AsyncMock()
     redis.set_sync_status = AsyncMock()
     redis.get_sync_status = AsyncMock(return_value=None)
-    redis.ping = AsyncMock(return_value=True)
+    redis.check_connection = AsyncMock(return_value=True)
 
     # Kafka mock
     kafka = AsyncMock()
@@ -132,7 +132,7 @@ class TestE2EPipeline:
         assert result.processing_time_ms >= 0
 
         # Verify all services were called
-        mock_services["gcs"].fetch_document.assert_called_once()
+        mock_services["gcs"].read_document.assert_called_once()
         mock_services["vertex_ai"].upsert_document.assert_called_once()
         mock_services["redis"].set_sync_status.assert_called()
         mock_services["kafka"].publish.assert_called()
@@ -393,7 +393,7 @@ class TestE2EPerformance:
             await asyncio.sleep(0.05)  # 50ms delay
             return {"id": "doc", "content": "test"}
 
-        mock_services["gcs"].fetch_document.side_effect = slow_fetch
+        mock_services["gcs"].read_document.side_effect = slow_fetch
 
         orchestrator = SyncOrchestrator(
             vertex_ai_port=mock_services["vertex_ai"],

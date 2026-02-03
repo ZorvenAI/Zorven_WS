@@ -89,7 +89,7 @@ class HealthViewSet(viewsets.ViewSet):
 
             # Determine overall status
             all_healthy = all(
-                component.get("healthy", False) for component in health_result.values()
+                v is True for v in health_result.values() if v is not None
             )
 
             response_data = {
@@ -132,8 +132,8 @@ class HealthViewSet(viewsets.ViewSet):
             orchestrator = get_orchestrator()
             health_result = run_async(orchestrator.check_health())
 
-            # Check critical components
-            vertex_ai_healthy = health_result.get("vertex_ai", {}).get("healthy", False)
+            # Check critical components (health_result values are booleans)
+            vertex_ai_healthy = health_result.get("vertex_ai", False) is True
 
             if vertex_ai_healthy:
                 return Response({"ready": True}, status=status.HTTP_200_OK)
@@ -270,7 +270,8 @@ class SyncTriggerViewSet(viewsets.ViewSet):
                 "tenant_id": event_data["tenant_id"],
                 "file_id": event_data["file_id"],
                 "action": event_data["action"],
-                "gcs_uri": event_data.get("gcs_uri", ""),
+                "processed_gcs_uri": event_data.get("gcs_uri", ""),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "priority": event_data.get("priority", 0),
                 "metadata": event_data.get("metadata", {}),
             }
@@ -346,7 +347,8 @@ class SyncTriggerViewSet(viewsets.ViewSet):
                         "tenant_id": event_data["tenant_id"],
                         "file_id": event_data["file_id"],
                         "action": event_data["action"],
-                        "gcs_uri": event_data.get("gcs_uri", ""),
+                        "processed_gcs_uri": event_data.get("gcs_uri", ""),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                         "priority": event_data.get("priority", 0),
                         "metadata": event_data.get("metadata", {}),
                     }

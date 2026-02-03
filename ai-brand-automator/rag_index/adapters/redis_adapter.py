@@ -7,7 +7,7 @@ and rate limiting operations.
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from django.conf import settings
@@ -234,7 +234,7 @@ class RedisAdapter(RedisPort):
             ttl = await client.ttl(redis_key)
             reset_at = None
             if ttl > 0:
-                reset_at = datetime.now(timezone.utc)
+                reset_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
 
             return RateLimitStatus(
                 current_count=current_count,

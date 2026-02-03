@@ -69,6 +69,12 @@ class GCSAdapter(StoragePort):
             credentials_path: Path to service account JSON file (optional if using ADC)
             default_bucket: Default bucket name for operations
         """
+        # Set project_id and default_bucket first (used even in mock mode)
+        self.project_id = project_id or getattr(settings, "GCP_PROJECT_ID", None)
+        self.default_bucket = default_bucket or getattr(
+            settings, "MEDIA_CURATION", {}
+        ).get("STORAGE", {}).get("CURATED_BUCKET", "curated-content")
+
         # Lazy import to avoid issues when google-cloud-storage is not installed
         try:
             from google.cloud import storage
@@ -80,19 +86,23 @@ class GCSAdapter(StoragePort):
             self.client = None
             return
 
-        self.project_id = project_id or getattr(settings, "GCP_PROJECT_ID", None)
-        self.default_bucket = default_bucket or getattr(
-            settings, "MEDIA_CURATION", {}
-        ).get("STORAGE", {}).get("CURATED_BUCKET", "curated-content")
-
-        if credentials_path:
-            self.client = storage.Client.from_service_account_json(
-                credentials_path,
-                project=self.project_id,
+        try:
+            if credentials_path:
+                self.client = storage.Client.from_service_account_json(
+                    credentials_path,
+                    project=self.project_id,
+                )
+            else:
+                # Use Application Default Credentials
+                self.client = storage.Client(project=self.project_id)
+        except Exception as e:
+            # Handle credential errors gracefully - fall back to mock mode
+            logger.warning(
+                f"Failed to initialize GCS client: {e}. Using mock mode."
             )
-        else:
-            # Use Application Default Credentials
-            self.client = storage.Client(project=self.project_id)
+            self._storage_available = False
+            self.client = None
+            return
 
         logger.info(
             "GCS adapter initialized",

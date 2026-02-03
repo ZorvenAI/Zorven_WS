@@ -23,13 +23,13 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Install additional RAG index dependencies
+# Install additional RAG index dependencies (versions pinned for security)
 RUN pip install --no-cache-dir \
-    google-cloud-storage \
-    google-cloud-aiplatform \
-    google-cloud-discoveryengine \
-    confluent-kafka \
-    redis[hiredis]
+    google-cloud-storage==2.18.2 \
+    google-cloud-aiplatform==1.79.0 \
+    google-cloud-discoveryengine==0.13.5 \
+    confluent-kafka==2.6.1 \
+    redis[hiredis]==5.2.1
 
 
 # ============================================================================

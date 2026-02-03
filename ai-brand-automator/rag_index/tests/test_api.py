@@ -252,9 +252,9 @@ class TestHealthViewSet:
     ):
         """Test health endpoint returns healthy status."""
         mock_run_async.return_value = {
-            "vertex_ai": {"healthy": True, "latency_ms": 50},
-            "redis": {"healthy": True, "latency_ms": 5},
-            "gcs": {"healthy": True, "latency_ms": 30},
+            "vertex_ai": True,
+            "redis": True,
+            "gcs": True,
         }
 
         response = api_client.get(f"{API_PREFIX}/health/")
@@ -271,8 +271,8 @@ class TestHealthViewSet:
     ):
         """Test health endpoint returns degraded status."""
         mock_run_async.return_value = {
-            "vertex_ai": {"healthy": True, "latency_ms": 50},
-            "redis": {"healthy": False, "error": "Connection failed"},
+            "vertex_ai": True,
+            "redis": False,
         }
 
         response = api_client.get(f"{API_PREFIX}/health/")
@@ -294,7 +294,7 @@ class TestHealthViewSet:
     ):
         """Test readiness probe when healthy."""
         mock_run_async.return_value = {
-            "vertex_ai": {"healthy": True},
+            "vertex_ai": True,
         }
 
         response = api_client.get(f"{API_PREFIX}/health/ready/")
@@ -309,7 +309,7 @@ class TestHealthViewSet:
     ):
         """Test readiness probe when unhealthy."""
         mock_run_async.return_value = {
-            "vertex_ai": {"healthy": False},
+            "vertex_ai": False,
         }
 
         response = api_client.get(f"{API_PREFIX}/health/ready/")

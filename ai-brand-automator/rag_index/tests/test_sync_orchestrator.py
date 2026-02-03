@@ -59,7 +59,7 @@ def mock_vertex_ai():
 def mock_gcs():
     """Create mock GCS port."""
     port = AsyncMock()
-    port.fetch_document = AsyncMock(
+    port.read_document = AsyncMock(
         return_value={
             "id": "doc-123",
             "content": "Test document content",
@@ -76,7 +76,7 @@ def mock_redis():
     port = AsyncMock()
     port.set_sync_status = AsyncMock()
     port.get_sync_status = AsyncMock(return_value=None)
-    port.ping = AsyncMock(return_value=True)
+    port.check_connection = AsyncMock(return_value=True)
     return port
 
 
@@ -242,7 +242,7 @@ class TestUpsertProcessing:
         result = await orchestrator.process_event(upsert_event)
 
         assert result.status == "COMPLETED"
-        mock_gcs.fetch_document.assert_called_once_with(upsert_event.processed_gcs_uri)
+        mock_gcs.read_document.assert_called_once_with(upsert_event.processed_gcs_uri)
         mock_vertex_ai.upsert_document.assert_called_once()
 
     async def test_upsert_updates_status_to_in_progress(
@@ -302,7 +302,7 @@ class TestUpsertProcessing:
         mock_gcs,
     ):
         """Test UPSERT fails when document not found."""
-        mock_gcs.fetch_document.side_effect = DocumentNotFoundError(
+        mock_gcs.read_document.side_effect = DocumentNotFoundError(
             "gs://bucket/path/doc.json"
         )
 
@@ -316,7 +316,7 @@ class TestUpsertProcessing:
         mock_gcs,
     ):
         """Test UPSERT fails on GCS fetch error."""
-        mock_gcs.fetch_document.side_effect = Exception("GCS connection failed")
+        mock_gcs.read_document.side_effect = Exception("GCS connection failed")
 
         with pytest.raises(SyncError):
             await orchestrator.process_event(upsert_event)
@@ -342,7 +342,7 @@ class TestDeleteProcessing:
 
         assert result.status == "COMPLETED"
         mock_vertex_ai.delete_document.assert_called_once()
-        mock_gcs.fetch_document.assert_not_called()
+        mock_gcs.read_document.assert_not_called()
 
     async def test_delete_updates_status(
         self,

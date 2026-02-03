@@ -168,7 +168,10 @@ class TestDocumentProcessorMimeSupport:
 
 
 class TestDocumentProcessorProcessing:
-    """Tests for DocumentProcessor content processing with real GCS."""
+    """Tests for DocumentProcessor content processing with real GCS.
+
+    These tests require real GCS credentials and are skipped in CI.
+    """
 
     @pytest.fixture
     def storage_adapter(self):
@@ -179,6 +182,10 @@ class TestDocumentProcessorProcessing:
 
         base_dir = settings.BASE_DIR
         credentials_path = os.path.join(base_dir, "credentials", "gcs-credentials.json")
+
+        # Skip if credentials file doesn't exist
+        if not os.path.exists(credentials_path):
+            pytest.skip("GCS credentials file not found - skipping real GCS tests")
 
         return GCSAdapter(
             project_id="brandsol",

@@ -261,7 +261,7 @@ class SyncOrchestrator:
 
         # Fetch document from GCS
         try:
-            document = await self._gcs.fetch_document(event.processed_gcs_uri)
+            document = await self._gcs.read_document(event.processed_gcs_uri)
         except DocumentNotFoundError:
             logger.warning(
                 "Document not found in GCS",
@@ -508,7 +508,7 @@ class SyncOrchestrator:
 
         # Check Redis
         try:
-            health["redis"] = await self._redis.ping()
+            health["redis"] = await self._redis.check_connection()
         except Exception as e:
             logger.warning(f"Redis health check failed: {e}")
 

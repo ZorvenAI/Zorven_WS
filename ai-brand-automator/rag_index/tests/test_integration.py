@@ -86,7 +86,7 @@ def mock_document_content():
 def mock_gcs(mock_document_content):
     """Create a mock GCS port."""
     port = AsyncMock()
-    port.fetch_document = AsyncMock(return_value=mock_document_content)
+    port.read_document = AsyncMock(return_value=mock_document_content)
     port.check_connection = AsyncMock(return_value=True)
     return port
 
@@ -120,7 +120,7 @@ def mock_redis():
     port = AsyncMock()
     port.set_sync_status = AsyncMock()
     port.get_sync_status = AsyncMock(return_value=None)
-    port.ping = AsyncMock(return_value=True)
+    port.check_connection = AsyncMock(return_value=True)
     return port
 
 
@@ -170,7 +170,7 @@ class TestUpsertPipeline:
         assert result.event_id is not None
 
         # Verify GCS fetch
-        mock_gcs.fetch_document.assert_called_once_with(sync_event.processed_gcs_uri)
+        mock_gcs.read_document.assert_called_once_with(sync_event.processed_gcs_uri)
 
         # Verify Vertex AI upsert
         mock_vertex_ai.upsert_document.assert_called_once()
@@ -195,7 +195,7 @@ class TestUpsertPipeline:
             "id": "large-doc",
             "content": "x" * 100000,  # 100KB of content
         }
-        mock_gcs.fetch_document.return_value = large_content
+        mock_gcs.read_document.return_value = large_content
 
         result = await orchestrator.process_event(sync_event)
 
@@ -258,7 +258,7 @@ class TestErrorHandling:
         mock_kafka,
     ):
         """Test handling of GCS fetch failure."""
-        mock_gcs.fetch_document.side_effect = DocumentFetchError("Fetch failed")
+        mock_gcs.read_document.side_effect = DocumentFetchError("Fetch failed")
 
         # Orchestrator raises SyncError on failure
         with pytest.raises(SyncError):

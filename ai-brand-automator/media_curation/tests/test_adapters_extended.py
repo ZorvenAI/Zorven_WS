@@ -83,7 +83,10 @@ class TestDLPAdapterMockMode:
 
 
 class TestGCSAdapterExtended:
-    """Extended tests for GCS adapter."""
+    """Extended tests for GCS adapter.
+
+    These tests work in mock mode when credentials are unavailable.
+    """
 
     def test_gcs_adapter_default_bucket(self):
         """Test GCS adapter stores default bucket."""
@@ -93,6 +96,7 @@ class TestGCSAdapterExtended:
             project_id="test-project",
             default_bucket="my-bucket",
         )
+        # Works in mock mode too
         assert adapter.default_bucket == "my-bucket"
 
     def test_gcs_adapter_project_id(self):
@@ -100,6 +104,7 @@ class TestGCSAdapterExtended:
         from media_curation.adapters.gcs_adapter import GCSAdapter
 
         adapter = GCSAdapter(project_id="my-project")
+        # Works in mock mode too
         assert adapter.project_id == "my-project"
 
     def test_gcs_adapter_has_required_methods(self):

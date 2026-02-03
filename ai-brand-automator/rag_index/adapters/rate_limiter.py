@@ -9,6 +9,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Optional
 
 from rag_index.domain.exceptions import RateLimitExceededError
@@ -197,7 +198,8 @@ class SlidingWindowRateLimiter:
             Seconds until more capacity is available
         """
         if status.reset_at:
-            return max(1, int((status.reset_at - time.time())))
+            delta = status.reset_at - datetime.now(timezone.utc)
+            return max(1, int(delta.total_seconds()))
         return self.config.window_seconds
 
 
