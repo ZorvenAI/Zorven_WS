@@ -1,0 +1,104 @@
+================================================================================
+VERTEX AI DISCOVERY ENGINE SETUP STEPS
+================================================================================
+
+Project: brandsol-project (ID: 435031951170)
+Service Account: brandsol-service-account-87@brandsol-project.iam.gserviceaccount.com
+
+STATUS: ✅ COMPLETE
+- Discovery Engine API: ENABLED
+- Data Store: prevision-docs-dev (created in global location)
+- Service Account: Has Discovery Engine Admin role
+
+--------------------------------------------------------------------------------
+STEP 1: Enable Discovery Engine API ✅ DONE
+--------------------------------------------------------------------------------
+
+Option A - Direct Link:
+https://console.developers.google.com/apis/api/discoveryengine.googleapis.com/overview?project=435031951170
+
+Option B - API Library:
+https://console.cloud.google.com/apis/library/discoveryengine.googleapis.com?project=brandsol-project
+
+1. Click the link above
+2. Click "ENABLE" button
+3. Wait for the API to be enabled (takes ~30 seconds)
+
+--------------------------------------------------------------------------------
+STEP 2: Grant Discovery Engine Admin Role to Service Account
+--------------------------------------------------------------------------------
+
+1. Go to: https://console.cloud.google.com/iam-admin/iam?project=brandsol-project
+
+2. Find the service account:
+   brandsol-service-account-87@brandsol-project.iam.gserviceaccount.com
+
+3. Click the pencil icon (Edit) next to the service account
+
+4. Click "ADD ANOTHER ROLE"
+
+5. Search for and select: "Discovery Engine Admin"
+   (Full path: Vertex AI > Discovery Engine Admin)
+
+6. Click "SAVE"
+
+--------------------------------------------------------------------------------
+STEP 3: Create Data Store (After Steps 1 & 2)
+--------------------------------------------------------------------------------
+
+Run the setup script:
+
+cd /Users/naveenhanuman/Development/Prevision_WS/ai-brand-automator
+source ../.venv/bin/activate
+GOOGLE_APPLICATION_CREDENTIALS=credentials/gcs-credentials.json python scripts/setup_vertex_ai_discovery_engine.py
+
+This will create:
+- Data Store ID: prevision-docs-dev
+- Location: global
+- Type: Unstructured documents (for RAG)
+
+--------------------------------------------------------------------------------
+STEP 4: Update .env File
+--------------------------------------------------------------------------------
+
+Add these settings to your .env file:
+
+# Vertex AI Discovery Engine Configuration
+VERTEX_AI_PROJECT_ID=brandsol-project
+VERTEX_AI_LOCATION=global
+VERTEX_AI_DATA_STORE_ID=prevision-docs-dev
+VERTEX_AI_MOCK_MODE=False
+
+--------------------------------------------------------------------------------
+STEP 5: Run Integration Tests
+--------------------------------------------------------------------------------
+
+After setup is complete, run the tests:
+
+cd /Users/naveenhanuman/Development/Prevision_WS/ai-brand-automator
+source ../.venv/bin/activate
+GOOGLE_APPLICATION_CREDENTIALS=credentials/gcs-credentials.json pytest rag_index/tests/test_gcp_real_integrations.py -v
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Error: "Discovery Engine API has not been used in project"
+→ Complete Step 1 (Enable the API)
+
+Error: "Permission denied" or "403"
+→ Complete Step 2 (Grant Discovery Engine Admin role)
+
+Error: "Data store not found"
+→ Complete Step 3 (Create the data store)
+
+================================================================================
+USEFUL LINKS
+================================================================================
+
+- GCP Console: https://console.cloud.google.com/
+- Discovery Engine Console: https://console.cloud.google.com/gen-app-builder/data-stores?project=brandsol-project
+- IAM & Admin: https://console.cloud.google.com/iam-admin/iam?project=brandsol-project
+- API Library: https://console.cloud.google.com/apis/library?project=brandsol-project
+
+================================================================================
