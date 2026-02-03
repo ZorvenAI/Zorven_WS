@@ -42,7 +42,9 @@ def setup_gcp_credentials():
 # Test file URIs in the real GCS bucket
 TEST_BUCKET = "onboarding-brandsol-customer-bucket-1"
 TEST_PREFIX = "customer-1"
-TEST_TEXT_FILE = f"gs://{TEST_BUCKET}/{TEST_PREFIX}/customer-1-onboarding-file-example-1.txt"
+TEST_TEXT_FILE = (
+    f"gs://{TEST_BUCKET}/{TEST_PREFIX}/customer-1-onboarding-file-example-1.txt"
+)
 TEST_IMAGE_PNG = f"gs://{TEST_BUCKET}/{TEST_PREFIX}/AWS-Storage options comparision.png"
 TEST_IMAGE_JPEG = f"gs://{TEST_BUCKET}/{TEST_PREFIX}/Test-image.jpeg"
 TEST_VIDEO_FILE = f"gs://{TEST_BUCKET}/{TEST_PREFIX}/Test-video.mp4"
@@ -199,11 +201,15 @@ class TestVisionAdapterRealConnection:
             result = run_async(vision_adapter.detect_text(TEST_IMAGE_PNG))
             # Mock mode returns a string, real API returns text
             assert result is not None
-            print(f"OCR extracted text: {result[:200] if isinstance(result, str) else str(result)[:200]}...")
+            print(
+                f"OCR extracted text: {result[:200] if isinstance(result, str) else str(result)[:200]}..."
+            )
         except Exception as e:
             error_str = str(e).lower()
             if "mock" in error_str or "not installed" in error_str:
-                pytest.skip("Vision API in mock mode - google-cloud-vision not installed")
+                pytest.skip(
+                    "Vision API in mock mode - google-cloud-vision not installed"
+                )
             raise
 
     def test_vision_detect_document_text(self, vision_adapter):
@@ -211,11 +217,15 @@ class TestVisionAdapterRealConnection:
         try:
             result = run_async(vision_adapter.detect_document_text(TEST_PDF_FILE))
             assert result is not None
-            print(f"Document OCR result: {result[:200] if isinstance(result, str) else str(result)[:200]}...")
+            print(
+                f"Document OCR result: {result[:200] if isinstance(result, str) else str(result)[:200]}..."
+            )
         except Exception as e:
             error_str = str(e).lower()
             if "mock" in error_str or "not installed" in error_str:
-                pytest.skip("Vision API in mock mode - google-cloud-vision not installed")
+                pytest.skip(
+                    "Vision API in mock mode - google-cloud-vision not installed"
+                )
             raise
 
     def test_vision_analyze_image(self, vision_adapter):
@@ -227,7 +237,9 @@ class TestVisionAdapterRealConnection:
         except Exception as e:
             error_str = str(e).lower()
             if "mock" in error_str or "not installed" in error_str:
-                pytest.skip("Vision API in mock mode - google-cloud-vision not installed")
+                pytest.skip(
+                    "Vision API in mock mode - google-cloud-vision not installed"
+                )
             raise
 
 
@@ -341,7 +353,9 @@ class TestVertexAIAdapterRealConnection:
                 vertex_adapter.generate_from_uri(TEST_IMAGE_JPEG, prompt)
             )
             assert result is not None
-            print(f"Vertex AI result: {result[:200] if isinstance(result, str) else str(result)[:200]}...")
+            print(
+                f"Vertex AI result: {result[:200] if isinstance(result, str) else str(result)[:200]}..."
+            )
         except Exception as e:
             error_str = str(e).lower()
             if "mock" in error_str or "not installed" in error_str:
@@ -353,7 +367,9 @@ class TestVertexAIAdapterRealConnection:
         try:
             result = run_async(vertex_adapter.transcribe_audio(TEST_AUDIO_FILE))
             assert result is not None
-            print(f"Audio transcription: {result[:200] if isinstance(result, str) else str(result)[:200]}...")
+            print(
+                f"Audio transcription: {result[:200] if isinstance(result, str) else str(result)[:200]}..."
+            )
         except Exception as e:
             error_str = str(e).lower()
             if "mock" in error_str or "not installed" in error_str:
@@ -365,7 +381,9 @@ class TestVertexAIAdapterRealConnection:
         try:
             result = run_async(vertex_adapter.analyze_video(TEST_VIDEO_FILE))
             assert result is not None
-            print(f"Video analysis: {result[:200] if isinstance(result, str) else str(result)[:200]}...")
+            print(
+                f"Video analysis: {result[:200] if isinstance(result, str) else str(result)[:200]}..."
+            )
         except Exception as e:
             error_str = str(e).lower()
             if "mock" in error_str or "not installed" in error_str:

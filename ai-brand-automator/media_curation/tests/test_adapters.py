@@ -172,14 +172,18 @@ class TestGCSAdapterRealOperations:
     def test_exists_returns_true_for_existing_file(self, gcs_adapter):
         """Test file existence check for existing file."""
         result = run_async(
-            gcs_adapter.exists("gs://onboarding-brandsol-customer-bucket-1/customer-1/customer-1-onboarding-file-example-1.txt")
+            gcs_adapter.exists(
+                "gs://onboarding-brandsol-customer-bucket-1/customer-1/customer-1-onboarding-file-example-1.txt"
+            )
         )
         assert result is True
 
     def test_exists_returns_false_for_missing_file(self, gcs_adapter):
         """Test file existence check for non-existent file."""
         result = run_async(
-            gcs_adapter.exists("gs://onboarding-brandsol-customer-bucket-1/non-existent-file-12345.txt")
+            gcs_adapter.exists(
+                "gs://onboarding-brandsol-customer-bucket-1/non-existent-file-12345.txt"
+            )
         )
         assert result is False
 
@@ -801,7 +805,9 @@ class TestGCSAdapterSaveJson:
             "content": "Test curated document",
             "metadata": {"source": "test"},
         }
-        destination = f"gs://onboarding-brandsol-customer-bucket-1/tests/curated-{test_id}.json"
+        destination = (
+            f"gs://onboarding-brandsol-customer-bucket-1/tests/curated-{test_id}.json"
+        )
 
         result = run_async(
             gcs_adapter.save_json(
@@ -823,7 +829,9 @@ class TestGCSAdapterSaveJson:
             "tenant_id": str(SAMPLE_TENANT_ID),
             "trace_id": str(SAMPLE_TRACE_ID),
         }
-        destination = f"gs://onboarding-brandsol-customer-bucket-1/tests/with-meta-{test_id}.json"
+        destination = (
+            f"gs://onboarding-brandsol-customer-bucket-1/tests/with-meta-{test_id}.json"
+        )
 
         result = run_async(
             gcs_adapter.save_json(

@@ -61,6 +61,7 @@ def setup_django():
     """Set up Django environment."""
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "brand_automator.settings")
     import django
+
     django.setup()
     print("✅ Django configured")
 
@@ -80,6 +81,7 @@ def print_step(step: int, description: str):
 
 class E2ETestResult:
     """Track test results."""
+
     def __init__(self):
         self.passed = []
         self.failed = []
@@ -124,11 +126,17 @@ def test_kong_gateway(results: E2ETestResult):
         # Kong should return a route not found for unknown paths
         response = requests.get(f"{KONG_URL}/api/unknown", timeout=5)
         if response.status_code in [401, 404]:
-            results.add_pass("Kong Gateway Reachable", f"Status: {response.status_code}")
+            results.add_pass(
+                "Kong Gateway Reachable", f"Status: {response.status_code}"
+            )
         else:
-            results.add_pass("Kong Gateway Reachable", f"Unexpected status: {response.status_code}")
+            results.add_pass(
+                "Kong Gateway Reachable", f"Unexpected status: {response.status_code}"
+            )
     except requests.exceptions.ConnectionError:
-        results.add_fail("Kong Gateway Reachable", "Connection refused - is Docker running?")
+        results.add_fail(
+            "Kong Gateway Reachable", "Connection refused - is Docker running?"
+        )
         return False
 
     # Test Kong Admin API
@@ -214,6 +222,7 @@ def test_vertex_ai_discovery_engine(results: E2ETestResult):
 
         # Check connection
         import asyncio
+
         is_connected = asyncio.get_event_loop().run_until_complete(
             adapter.check_connection()
         )
@@ -251,7 +260,9 @@ def test_data_ingestion_adapter(results: E2ETestResult):
         results.add_pass("Data Ingestion Adapter Init", f"Bucket: {GCS_BUCKET}")
 
         # Test file exists
-        test_uri = f"gs://{GCS_BUCKET}/customer-1/customer-1-onboarding-file-example-1.txt"
+        test_uri = (
+            f"gs://{GCS_BUCKET}/customer-1/customer-1-onboarding-file-example-1.txt"
+        )
         if adapter.check_exists(test_uri):
             results.add_pass("Data Ingestion File Check", "Test file exists")
         else:
@@ -260,7 +271,9 @@ def test_data_ingestion_adapter(results: E2ETestResult):
         # Test metadata retrieval
         try:
             metadata = adapter.get_metadata(test_uri)
-            results.add_pass("Data Ingestion Metadata", f"Size: {metadata.size_bytes} bytes")
+            results.add_pass(
+                "Data Ingestion Metadata", f"Size: {metadata.size_bytes} bytes"
+            )
         except Exception as e:
             results.add_skip("Data Ingestion Metadata", str(e))
 
@@ -289,6 +302,7 @@ def test_media_curation_adapter(results: E2ETestResult):
         curated_uri = f"gs://{GCS_BUCKET}/customer-1/curated/curated-doc-001.json"
         try:
             import asyncio
+
             # Check if file exists
             exists = asyncio.get_event_loop().run_until_complete(
                 adapter.exists(curated_uri)
@@ -300,7 +314,9 @@ def test_media_curation_adapter(results: E2ETestResult):
                     adapter.download_as_bytes(curated_uri)
                 )
                 if content:
-                    results.add_pass("Media Curation Download", f"Size: {len(content)} bytes")
+                    results.add_pass(
+                        "Media Curation Download", f"Size: {len(content)} bytes"
+                    )
                 else:
                     results.add_skip("Media Curation Download", "Empty content")
             else:
@@ -333,6 +349,7 @@ def test_rag_index_adapter(results: E2ETestResult):
         curated_uri = f"gs://{GCS_BUCKET}/customer-1/curated/curated-doc-001.json"
         try:
             import asyncio
+
             doc = asyncio.get_event_loop().run_until_complete(
                 adapter.read_document(curated_uri)
             )
@@ -369,7 +386,9 @@ def test_full_pipeline_simulation(results: E2ETestResult):
         bucket = client.bucket(GCS_BUCKET)
 
         landing_path = f"{TEST_FILE_PREFIX}/_landing/{TEST_TENANT_ID}/doc-{test_id}.txt"
-        raw_path = f"{TEST_FILE_PREFIX}/{TEST_TENANT_ID}/raw/2026/02/03/doc-{test_id}.txt"
+        raw_path = (
+            f"{TEST_FILE_PREFIX}/{TEST_TENANT_ID}/raw/2026/02/03/doc-{test_id}.txt"
+        )
 
         # Upload to landing
         landing_blob = bucket.blob(landing_path)
@@ -401,8 +420,7 @@ def test_full_pipeline_simulation(results: E2ETestResult):
 
         curated_blob = bucket.blob(curated_path)
         curated_blob.upload_from_string(
-            json.dumps(curated_doc),
-            content_type="application/json"
+            json.dumps(curated_doc), content_type="application/json"
         )
         results.add_pass("Pipeline: Create Curated Doc", f"Path: {curated_path}")
 
@@ -441,7 +459,7 @@ def test_full_pipeline_simulation(results: E2ETestResult):
             if result.status == "COMPLETED":
                 results.add_pass(
                     "Pipeline: Vertex AI Sync",
-                    f"Document indexed, time: {result.processing_time_ms}ms"
+                    f"Document indexed, time: {result.processing_time_ms}ms",
                 )
             else:
                 results.add_fail("Pipeline: Vertex AI Sync", f"Status: {result.status}")
@@ -450,7 +468,7 @@ def test_full_pipeline_simulation(results: E2ETestResult):
             if "NOT_FOUND" in error_str or "404" in error_str:
                 results.add_skip(
                     "Pipeline: Vertex AI Sync",
-                    "Tenant-specific data store not configured"
+                    "Tenant-specific data store not configured",
                 )
             else:
                 results.add_fail("Pipeline: Vertex AI Sync", error_str[:100])
@@ -487,25 +505,39 @@ def test_kafka_connectivity(results: E2ETestResult):
         if result == 0:
             results.add_pass("Kafka Port Check", "Port 9192 is open")
         else:
-            results.add_fail("Kafka Port Check", f"Cannot connect to port 9192, error: {result}")
+            results.add_fail(
+                "Kafka Port Check", f"Cannot connect to port 9192, error: {result}"
+            )
             return False
 
         # Test via Kafka UI API (it proxies to Kafka)
         import requests
+
         try:
             resp = requests.get("http://localhost:8080/api/clusters", timeout=5)
             if resp.status_code == 200:
                 clusters = resp.json()
                 if clusters and clusters[0].get("status") == "online":
-                    results.add_pass("Kafka Cluster Status", f"Status: online, Topics: {clusters[0].get('topicCount', 'N/A')}")
+                    results.add_pass(
+                        "Kafka Cluster Status",
+                        f"Status: online, Topics: {clusters[0].get('topicCount', 'N/A')}",
+                    )
 
                     # Get topics via UI API
-                    topics_resp = requests.get("http://localhost:8080/api/clusters/local/topics", timeout=5)
+                    topics_resp = requests.get(
+                        "http://localhost:8080/api/clusters/local/topics", timeout=5
+                    )
                     if topics_resp.status_code == 200:
                         data = topics_resp.json()
                         # Handle paginated response: {"pageCount": N, "topics": [...]}
-                        topics = data.get("topics", []) if isinstance(data, dict) else data
-                        topic_names = [t.get("name") for t in topics] if isinstance(topics, list) else []
+                        topics = (
+                            data.get("topics", []) if isinstance(data, dict) else data
+                        )
+                        topic_names = (
+                            [t.get("name") for t in topics]
+                            if isinstance(topics, list)
+                            else []
+                        )
 
                         # Check for required topics
                         required_topics = [
@@ -521,7 +553,9 @@ def test_kafka_connectivity(results: E2ETestResult):
                 else:
                     results.add_skip("Kafka Cluster Status", "Cluster not online")
             else:
-                results.add_skip("Kafka Cluster Status", f"UI API returned {resp.status_code}")
+                results.add_skip(
+                    "Kafka Cluster Status", f"UI API returned {resp.status_code}"
+                )
         except requests.RequestException as e:
             results.add_skip("Kafka Cluster Status", f"Cannot reach Kafka UI: {e}")
 

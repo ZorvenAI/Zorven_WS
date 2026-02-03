@@ -113,7 +113,9 @@ class TestGCSAdapterRealConnection:
     def test_check_exists_returns_true(self, gcs_adapter):
         """Test check_exists returns True for existing file."""
         # Use a known test file
-        test_uri = f"gs://{TEST_BUCKET}/customer-1/customer-1-onboarding-file-example-1.txt"
+        test_uri = (
+            f"gs://{TEST_BUCKET}/customer-1/customer-1-onboarding-file-example-1.txt"
+        )
 
         result = gcs_adapter.check_exists(test_uri)
 
@@ -131,7 +133,9 @@ class TestGCSAdapterRealConnection:
 
     def test_get_metadata_for_existing_file(self, gcs_adapter):
         """Test get_metadata returns correct metadata for existing file."""
-        test_uri = f"gs://{TEST_BUCKET}/customer-1/customer-1-onboarding-file-example-1.txt"
+        test_uri = (
+            f"gs://{TEST_BUCKET}/customer-1/customer-1-onboarding-file-example-1.txt"
+        )
 
         metadata = gcs_adapter.get_metadata(test_uri)
 
@@ -140,7 +144,9 @@ class TestGCSAdapterRealConnection:
         assert metadata.full_uri == test_uri
         assert metadata.size_bytes > 0
         assert metadata.content_type is not None
-        print(f"✅ Got metadata: size={metadata.size_bytes}, type={metadata.content_type}")
+        print(
+            f"✅ Got metadata: size={metadata.size_bytes}, type={metadata.content_type}"
+        )
 
     def test_get_metadata_for_non_existing_file(self, gcs_adapter):
         """Test get_metadata raises error for non-existing file."""
@@ -340,7 +346,9 @@ class TestIngestionPipelineWithRealGCS:
         local_file = tmp_path / f"video-{test_id}.mp4"
         local_file.write_bytes(b"fake video content for testing")
 
-        landing_uri = f"gs://{TEST_BUCKET}/{TEST_PREFIX}/_landing/{tenant_id}/video-{test_id}.mp4"
+        landing_uri = (
+            f"gs://{TEST_BUCKET}/{TEST_PREFIX}/_landing/{tenant_id}/video-{test_id}.mp4"
+        )
         raw_uri = f"gs://{TEST_BUCKET}/{TEST_PREFIX}/{tenant_id}/raw/2026/02/03/video-{test_id}.mp4"
 
         try:

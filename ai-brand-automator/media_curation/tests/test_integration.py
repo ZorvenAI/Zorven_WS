@@ -595,12 +595,16 @@ class TestRealGCSIntegration:
         """Test file existence checking."""
         # Existing file
         exists = run_async(
-            gcs_adapter.exists("gs://onboarding-brandsol-customer-bucket-1/customer-1/customer-1-onboarding-file-example-1.txt")
+            gcs_adapter.exists(
+                "gs://onboarding-brandsol-customer-bucket-1/customer-1/customer-1-onboarding-file-example-1.txt"
+            )
         )
         assert exists is True
 
         # Non-existing file
         not_exists = run_async(
-            gcs_adapter.exists("gs://onboarding-brandsol-customer-bucket-1/does-not-exist-12345.txt")
+            gcs_adapter.exists(
+                "gs://onboarding-brandsol-customer-bucket-1/does-not-exist-12345.txt"
+            )
         )
         assert not_exists is False

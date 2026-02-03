@@ -32,27 +32,31 @@ def enable_discovery_engine_api():
         from google.cloud import service_usage_v1
 
         client = service_usage_v1.ServiceUsageClient()
-        
+
         # Enable the API
         request = service_usage_v1.EnableServiceRequest(
             name=f"projects/{PROJECT_ID}/services/discoveryengine.googleapis.com"
         )
-        
+
         operation = client.enable_service(request=request)
         result = operation.result()  # Wait for completion
-        
+
         print(f"   ✅ Discovery Engine API enabled: {result.service.name}")
         return True
-        
+
     except Exception as e:
         error_msg = str(e)
         if "already enabled" in error_msg.lower() or "ALREADY_EXISTS" in error_msg:
             print("   ✅ Discovery Engine API already enabled")
             return True
         elif "PERMISSION_DENIED" in error_msg:
-            print(f"   ⚠️  Permission denied. Service account needs 'Service Usage Admin' role.")
+            print(
+                f"   ⚠️  Permission denied. Service account needs 'Service Usage Admin' role."
+            )
             print(f"      You can enable manually via GCP Console or run:")
-            print(f"      gcloud services enable discoveryengine.googleapis.com --project={PROJECT_ID}")
+            print(
+                f"      gcloud services enable discoveryengine.googleapis.com --project={PROJECT_ID}"
+            )
             return False
         else:
             print(f"   ❌ Failed to enable API: {e}")
@@ -66,20 +70,20 @@ def check_discovery_engine_api():
         from google.cloud import service_usage_v1
 
         client = service_usage_v1.ServiceUsageClient()
-        
+
         request = service_usage_v1.GetServiceRequest(
             name=f"projects/{PROJECT_ID}/services/discoveryengine.googleapis.com"
         )
-        
+
         service = client.get_service(request=request)
-        
+
         if service.state == service_usage_v1.State.ENABLED:
             print("   ✅ Discovery Engine API is ENABLED")
             return True
         else:
             print(f"   ❌ Discovery Engine API state: {service.state.name}")
             return False
-            
+
     except Exception as e:
         print(f"   ⚠️  Could not check API status: {e}")
         return False
@@ -92,13 +96,15 @@ def list_existing_data_stores():
         from google.cloud import discoveryengine_v1 as discoveryengine
 
         client = discoveryengine.DataStoreServiceClient()
-        
-        parent = f"projects/{PROJECT_ID}/locations/{LOCATION}/collections/default_collection"
-        
+
+        parent = (
+            f"projects/{PROJECT_ID}/locations/{LOCATION}/collections/default_collection"
+        )
+
         request = discoveryengine.ListDataStoresRequest(parent=parent)
-        
+
         data_stores = list(client.list_data_stores(request=request))
-        
+
         if data_stores:
             print(f"   Found {len(data_stores)} existing data store(s):")
             for ds in data_stores:
@@ -107,7 +113,7 @@ def list_existing_data_stores():
         else:
             print("   No existing data stores found")
             return []
-            
+
     except Exception as e:
         error_msg = str(e)
         if "API not enabled" in error_msg or "403" in error_msg:
@@ -124,9 +130,11 @@ def create_data_store():
         from google.cloud import discoveryengine_v1 as discoveryengine
 
         client = discoveryengine.DataStoreServiceClient()
-        
-        parent = f"projects/{PROJECT_ID}/locations/{LOCATION}/collections/default_collection"
-        
+
+        parent = (
+            f"projects/{PROJECT_ID}/locations/{LOCATION}/collections/default_collection"
+        )
+
         # Create unstructured data store for documents
         data_store = discoveryengine.DataStore(
             display_name=DATA_STORE_DISPLAY_NAME,
@@ -134,30 +142,34 @@ def create_data_store():
             solution_types=[discoveryengine.SolutionType.SOLUTION_TYPE_SEARCH],
             content_config=discoveryengine.DataStore.ContentConfig.CONTENT_REQUIRED,
         )
-        
+
         request = discoveryengine.CreateDataStoreRequest(
             parent=parent,
             data_store=data_store,
             data_store_id=DATA_STORE_ID,
         )
-        
+
         operation = client.create_data_store(request=request)
         print("   ⏳ Data store creation in progress (this may take a few minutes)...")
-        
+
         result = operation.result()  # Wait for completion
-        
+
         print(f"   ✅ Data store created: {result.name}")
         return result
-        
+
     except Exception as e:
         error_msg = str(e)
         if "ALREADY_EXISTS" in error_msg:
             print(f"   ✅ Data store already exists: {DATA_STORE_ID}")
             return True
         elif "PERMISSION_DENIED" in error_msg:
-            print(f"   ❌ Permission denied. Service account needs 'Discovery Engine Admin' role.")
+            print(
+                f"   ❌ Permission denied. Service account needs 'Discovery Engine Admin' role."
+            )
             print(f"      Run: gcloud projects add-iam-policy-binding {PROJECT_ID} \\")
-            print(f"             --member='serviceAccount:brandsol-service-account-87@{PROJECT_ID}.iam.gserviceaccount.com' \\")
+            print(
+                f"             --member='serviceAccount:brandsol-service-account-87@{PROJECT_ID}.iam.gserviceaccount.com' \\"
+            )
             print(f"             --role='roles/discoveryengine.admin'")
             return False
         else:
@@ -173,13 +185,13 @@ def verify_connection():
 
         # Try to create a client and list operations
         client = discoveryengine.DocumentServiceClient()
-        
+
         print(f"   ✅ Discovery Engine client initialized successfully")
         print(f"   Project: {PROJECT_ID}")
         print(f"   Location: {LOCATION}")
         print(f"   Data Store ID: {DATA_STORE_ID}")
         return True
-        
+
     except Exception as e:
         print(f"   ❌ Connection verification failed: {e}")
         return False
@@ -190,44 +202,50 @@ def print_env_settings():
     print("\n" + "=" * 60)
     print("Add these settings to your .env file:")
     print("=" * 60)
-    print(f"""
+    print(
+        f"""
 # Vertex AI Discovery Engine Configuration
 VERTEX_AI_PROJECT_ID={PROJECT_ID}
 VERTEX_AI_LOCATION={LOCATION}
 VERTEX_AI_DATA_STORE_ID={DATA_STORE_ID}
 VERTEX_AI_MOCK_MODE=False
-""")
+"""
+    )
 
 
 def main():
     print("=" * 60)
     print("Vertex AI Discovery Engine Setup for brandsol-project")
     print("=" * 60)
-    
+
     # Step 1: Enable API
     api_enabled = enable_discovery_engine_api()
-    
+
     # Step 2: Check API status
     if not api_enabled:
         api_enabled = check_discovery_engine_api()
-    
+
     # Step 3: List existing data stores
     existing_stores = list_existing_data_stores()
-    
+
     # Step 4: Create data store if needed
-    store_exists = any(DATA_STORE_ID in str(ds.name) for ds in existing_stores) if existing_stores else False
-    
+    store_exists = (
+        any(DATA_STORE_ID in str(ds.name) for ds in existing_stores)
+        if existing_stores
+        else False
+    )
+
     if not store_exists:
         create_data_store()
     else:
         print(f"\n4. Data store {DATA_STORE_ID} already exists, skipping creation")
-    
+
     # Step 5: Verify connection
     verify_connection()
-    
+
     # Print env settings
     print_env_settings()
-    
+
     print("\n✅ Setup complete!")
     print("\nNext steps:")
     print("1. Add the .env settings shown above")

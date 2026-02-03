@@ -315,9 +315,7 @@ class TestGCSAdapterWriteOperations:
         client = storage.Client(project=GCP_PROJECT_ID)
         bucket = client.bucket(TEST_BUCKET)
         blob = bucket.blob(test_path)
-        blob.upload_from_string(
-            json.dumps(test_doc), content_type="application/json"
-        )
+        blob.upload_from_string(json.dumps(test_doc), content_type="application/json")
         print(f"Wrote: {test_uri}")
 
         try:
