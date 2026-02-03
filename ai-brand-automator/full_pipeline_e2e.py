@@ -479,6 +479,7 @@ def test_full_pipeline_simulation(results: E2ETestResult):
             try:
                 bucket.blob(blob_path).delete()
             except Exception:
+                # Ignore cleanup errors - file may not exist or already deleted
                 pass
         results.add_pass("Pipeline: Cleanup", "Test files removed")
 

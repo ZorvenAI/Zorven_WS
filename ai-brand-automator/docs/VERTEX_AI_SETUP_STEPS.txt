@@ -54,7 +54,7 @@ GOOGLE_APPLICATION_CREDENTIALS=credentials/gcs-credentials.json python scripts/s
 
 This will create:
 - Data Store ID: prevision-docs-dev
-- Location: us
+- Location: global
 - Type: Unstructured documents (for RAG)
 
 --------------------------------------------------------------------------------
@@ -65,7 +65,7 @@ Add these settings to your .env file:
 
 # Vertex AI Discovery Engine Configuration
 VERTEX_AI_PROJECT_ID=brandsol-project
-VERTEX_AI_LOCATION=us
+VERTEX_AI_LOCATION=global
 VERTEX_AI_DATA_STORE_ID=prevision-docs-dev
 VERTEX_AI_MOCK_MODE=False
 

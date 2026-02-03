@@ -1,8 +1,9 @@
 # Credentials - NEVER commit these
 credentials/
-*.json
-!package.json
-!tsconfig.json
+credentials/*.json
+*-credentials.json
+*-key.json
+service-account*.json
 
 # Environment files
 .env
