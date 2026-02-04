@@ -209,26 +209,26 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         # Get company for the tenant
         company = get_object_or_404(Company, tenant=tenant)
 
-        # Save file locally first (MVP mode - local storage fallback)
-        from django.core.files.storage import default_storage
-
-        local_path = f"assets/{tenant.id}/{safe_filename}"
-        saved_path = default_storage.save(local_path, file)
-
         # Generate unique GCS path in _landing/ zone for pipeline processing
         # Format: _landing/{tenant_id}/{uuid}_{filename}
         unique_id = uuid.uuid4().hex[:8]
         landing_path = f"_landing/{tenant.id}/{unique_id}_{safe_filename}"
 
-        # Try to upload to Google Cloud Storage (optional for MVP)
-        gcs_uploaded = False
+        # Upload to Google Cloud Storage
         try:
             if gcs_service.client and gcs_service.bucket:
                 gcs_service.upload_file(file, landing_path, file.content_type)
-                gcs_uploaded = True
+            else:
+                # GCS not configured - use path as-is for development/testing
+                logger.info(
+                    f"GCS not configured, using path {landing_path} for asset record"
+                )
         except Exception as e:
-            # GCS upload failed, but we have local copy - log and continue
-            logger.warning(f"GCS upload failed (using local storage): {str(e)}")
+            logger.error(f"GCS upload failed: {str(e)}")
+            return Response(
+                {"error": f"Failed to upload file: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         # Create asset record
         asset = BrandAsset.objects.create(
@@ -237,15 +237,14 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             file_name=safe_filename,
             file_type=file_type,
             file_size=file.size,
-            gcs_path=landing_path if gcs_uploaded else saved_path,
+            gcs_path=landing_path,
             processed=False,  # Will be set True after pipeline completes
             pipeline_status="pending",
         )
 
-        # Trigger data pipeline if GCS upload succeeded
-        if gcs_uploaded:
-            pipeline_service = get_pipeline_service()
-            pipeline_service.publish_asset_event(asset)
+        # Trigger data pipeline
+        pipeline_service = get_pipeline_service()
+        pipeline_service.publish_asset_event(asset)
 
         response_serializer = BrandAssetSerializer(asset)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
