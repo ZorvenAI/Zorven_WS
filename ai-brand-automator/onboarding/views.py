@@ -158,6 +158,45 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             )
         return BrandAsset.objects.select_related("tenant", "company").all()
 
+    @action(detail=False, methods=["get"])
+    def status(self, request):
+        """
+        Get assets with their pipeline statuses.
+
+        Query parameters:
+        - pipeline_status: Filter by status (pending, ingested, curated, indexed, failed)
+        - include_processed: Include fully processed assets (default: true)
+
+        Returns list of assets with pipeline status information.
+        """
+        queryset = self.get_queryset()
+
+        # Filter by pipeline_status if provided
+        pipeline_status = request.query_params.get("pipeline_status")
+        if pipeline_status:
+            valid_statuses = ["pending", "ingested", "curated", "indexed", "failed"]
+            if pipeline_status in valid_statuses:
+                queryset = queryset.filter(pipeline_status=pipeline_status)
+
+        # Option to exclude processed assets (useful for monitoring pending items)
+        include_processed = request.query_params.get("include_processed", "true")
+        if include_processed.lower() == "false":
+            queryset = queryset.exclude(pipeline_status="indexed")
+
+        # Order by upload date (most recent first)
+        queryset = queryset.order_by("-uploaded_at")
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(
+            {
+                "count": queryset.count(),
+                "results": serializer.data,
+                "pending_count": queryset.filter(pipeline_status="pending").count(),
+                "failed_count": queryset.filter(pipeline_status="failed").count(),
+                "indexed_count": queryset.filter(pipeline_status="indexed").count(),
+            }
+        )
+
     @action(detail=False, methods=["post"])
     def upload(self, request):
         """Upload a brand asset file"""
