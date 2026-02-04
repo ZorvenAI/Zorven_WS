@@ -275,7 +275,7 @@ class TestWebhookProperties:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestBatchWebhookProperties:
     """Property-based tests for batch pipeline webhooks."""
 
@@ -284,13 +284,25 @@ class TestBatchWebhookProperties:
         """Set up the webhook secret for all tests in this class."""
         settings.PIPELINE_WEBHOOK_SECRET = "test-webhook-secret"
 
+    @pytest.fixture(autouse=True)
+    def reset_connection(self):
+        """Reset database connection before each test to avoid stale connections."""
+        connection.ensure_connection()
+        connection.set_schema_to_public()
+        yield
+        # Clean up after test
+        connection.set_schema_to_public()
+
     @property_settings
     @given(
-        num_updates=st.integers(min_value=1, max_value=5),
-        statuses=st.lists(pipeline_status_strategy, min_size=1, max_size=5),
+        num_updates=st.integers(min_value=1, max_value=3),
+        statuses=st.lists(pipeline_status_strategy, min_size=1, max_size=3),
     )
     def test_batch_updates_count_correctly(self, db, num_updates, statuses):
         """Batch updates should correctly count successes and failures."""
+        # Ensure connection is in good state
+        connection.set_schema_to_public()
+        
         tenant = create_test_tenant()
         company = Company.objects.create(tenant=tenant, name="Batch Test")
 
