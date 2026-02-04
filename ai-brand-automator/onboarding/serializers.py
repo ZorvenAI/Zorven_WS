@@ -60,6 +60,7 @@ class BrandAssetSerializer(serializers.ModelSerializer):
             "id",
             "tenant",
             "uploaded_at",
+            "processed",
             "pipeline_status",
             "pipeline_error",
             "pipeline_trace_id",

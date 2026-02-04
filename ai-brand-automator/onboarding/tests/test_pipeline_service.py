@@ -28,7 +28,7 @@ def pipeline_service():
 def mock_kafka_producer():
     """Create a mock Kafka producer."""
     producer = MagicMock()
-    producer.send = MagicMock(return_value=None)
+    producer.publish_raw = MagicMock(return_value=None)
     return producer
 
 
@@ -111,8 +111,8 @@ class TestPublishAssetEvent:
 
         service.publish_asset_event(sample_brand_asset)
 
-        mock_kafka_producer.send.assert_called_once()
-        call_args = mock_kafka_producer.send.call_args
+        mock_kafka_producer.publish_raw.assert_called_once()
+        call_args = mock_kafka_producer.publish_raw.call_args
         topic = call_args[0][0]
         event = call_args[0][1]
 
@@ -130,7 +130,9 @@ class TestPublishAssetEvent:
         """Should mark asset as failed when Kafka send fails."""
         service = OnboardingPipelineService()
         service._producer = mock_kafka_producer
-        mock_kafka_producer.send.side_effect = Exception("Kafka connection error")
+        mock_kafka_producer.publish_raw.side_effect = Exception(
+            "Kafka connection error"
+        )
 
         result = service.publish_asset_event(sample_brand_asset)
 
@@ -188,7 +190,7 @@ class TestRetryAssetPipeline:
         sample_brand_asset.refresh_from_db()
         assert result is not None
         assert sample_brand_asset.pipeline_error == ""
-        mock_kafka_producer.send.assert_called_once()
+        mock_kafka_producer.publish_raw.assert_called_once()
 
     def test_retry_rejected_for_non_failed_asset(self, sample_brand_asset):
         """Should reject retry for assets not in failed/pending state."""
@@ -235,8 +237,8 @@ class TestPublishCompanyDocument:
 
         result = service.publish_company_document(company_doc)
 
-        mock_kafka_producer.send.assert_called_once()
-        call_args = mock_kafka_producer.send.call_args
+        mock_kafka_producer.publish_raw.assert_called_once()
+        call_args = mock_kafka_producer.publish_raw.call_args
         topic = call_args[0][0]
 
         assert topic == "rag-sync-ready-topic"

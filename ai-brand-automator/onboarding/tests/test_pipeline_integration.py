@@ -69,7 +69,7 @@ class TestAssetUploadPipelineFlow:
 
         # Mock Kafka producer
         mock_producer = MagicMock()
-        mock_producer.send = MagicMock(return_value=MagicMock())
+        mock_producer.publish_raw = MagicMock(return_value=None)
 
         with patch.object(
             OnboardingPipelineService,
@@ -82,10 +82,10 @@ class TestAssetUploadPipelineFlow:
 
         # Verify event was published
         assert trace_id is not None
-        mock_producer.send.assert_called_once()
+        mock_producer.publish_raw.assert_called_once()
 
         # Verify event structure
-        call_args = mock_producer.send.call_args
+        call_args = mock_producer.publish_raw.call_args
         topic = call_args[0][0]
         event = call_args[0][1]
 
@@ -116,7 +116,9 @@ class TestAssetUploadPipelineFlow:
 
         # Mock Kafka producer to raise exception
         mock_producer = MagicMock()
-        mock_producer.send = MagicMock(side_effect=Exception("Kafka connection failed"))
+        mock_producer.publish_raw = MagicMock(
+            side_effect=Exception("Kafka connection failed")
+        )
 
         with patch.object(
             OnboardingPipelineService,
@@ -179,7 +181,7 @@ class TestCompanyRAGExportFlow:
         )
 
         mock_producer = MagicMock()
-        mock_producer.send = MagicMock()
+        mock_producer.publish_raw = MagicMock()
 
         company_doc = {
             "document_type": "company_profile",
@@ -197,8 +199,8 @@ class TestCompanyRAGExportFlow:
             trace_id = service.publish_company_document(company_doc)
 
         # Verify published to RAG topic
-        mock_producer.send.assert_called_once()
-        call_args = mock_producer.send.call_args
+        mock_producer.publish_raw.assert_called_once()
+        call_args = mock_producer.publish_raw.call_args
         topic = call_args[0][0]
 
         assert topic == "rag-sync-ready-topic"
@@ -208,6 +210,11 @@ class TestCompanyRAGExportFlow:
 @pytest.mark.django_db
 class TestWebhookPipelineFlow:
     """Integration tests for webhook → asset update flow."""
+
+    @pytest.fixture(autouse=True)
+    def setup_webhook_secret(self, settings):
+        """Set up the webhook secret for all tests in this class."""
+        settings.PIPELINE_WEBHOOK_SECRET = "test-webhook-secret"
 
     def test_webhook_updates_asset_and_marks_processed(self):
         """Webhook with indexed status should mark asset as processed."""
@@ -228,13 +235,14 @@ class TestWebhookPipelineFlow:
         client = APIClient()
         client.defaults["SERVER_NAME"] = "localhost"
 
-        # Simulate pipeline completion webhook
+        # Simulate pipeline completion webhook with secret
         response = client.post(
             "/api/v1/webhooks/pipeline-status/",
             {
                 "asset_id": asset.id,
                 "status": "indexed",
                 "trace_id": str(uuid.uuid4()),
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -271,6 +279,7 @@ class TestWebhookPipelineFlow:
                 "asset_id": asset.id,
                 "status": "failed",
                 "error": error_msg,
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -317,7 +326,8 @@ class TestWebhookPipelineFlow:
                     {"asset_id": asset1.id, "status": "indexed"},
                     {"asset_id": 99999, "status": "indexed"},  # Non-existent
                     {"asset_id": asset2.id, "status": "curated"},
-                ]
+                ],
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -388,7 +398,7 @@ class TestRetryFlow:
         )
 
         mock_producer = MagicMock()
-        mock_producer.send = MagicMock()
+        mock_producer.publish_raw = MagicMock()
 
         with patch.object(
             OnboardingPipelineService,
@@ -400,7 +410,7 @@ class TestRetryFlow:
             new_trace_id = service.retry_asset_pipeline(asset)
 
         assert new_trace_id is not None
-        mock_producer.send.assert_called_once()
+        mock_producer.publish_raw.assert_called_once()
 
         # Error should be cleared
         asset.refresh_from_db()

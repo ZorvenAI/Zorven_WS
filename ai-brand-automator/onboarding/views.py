@@ -215,13 +215,23 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         landing_path = f"_landing/{tenant.id}/{unique_id}_{safe_filename}"
 
         # Upload to Google Cloud Storage
+        gcs_uploaded = False
         try:
             if gcs_service.client and gcs_service.bucket:
                 gcs_service.upload_file(file, landing_path, file.content_type)
+                gcs_uploaded = True
             else:
-                # GCS not configured - use path as-is for development/testing
-                logger.info(
-                    f"GCS not configured, using path {landing_path} for asset record"
+                # GCS not configured - check if we should fail or allow for dev/testing
+                require_gcs = getattr(settings, "REQUIRE_GCS_UPLOAD", False)
+                if require_gcs:
+                    logger.error("GCS is required but not configured")
+                    return Response(
+                        {"error": "File storage is not configured"},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    )
+                logger.warning(
+                    "GCS not configured, asset record will be created but file "
+                    "is not stored. Set REQUIRE_GCS_UPLOAD=True in production."
                 )
         except Exception as e:
             logger.error(f"GCS upload failed: {str(e)}")
@@ -239,12 +249,16 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             file_size=file.size,
             gcs_path=landing_path,
             processed=False,  # Will be set True after pipeline completes
-            pipeline_status="pending",
+            pipeline_status="pending" if gcs_uploaded else "failed",
+            pipeline_error=""
+            if gcs_uploaded
+            else "GCS not configured - file not stored",
         )
 
-        # Trigger data pipeline
-        pipeline_service = get_pipeline_service()
-        pipeline_service.publish_asset_event(asset)
+        # Trigger data pipeline only if file was uploaded
+        if gcs_uploaded:
+            pipeline_service = get_pipeline_service()
+            pipeline_service.publish_asset_event(asset)
 
         response_serializer = BrandAssetSerializer(asset)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
@@ -549,13 +563,20 @@ def pipeline_status_webhook(request):
         401: Invalid or missing secret
         404: Asset not found
     """
-    # Validate shared secret
+    # Validate shared secret - fail closed if not configured
     expected_secret = getattr(settings, "PIPELINE_WEBHOOK_SECRET", None)
     provided_secret = request.data.get("secret") or request.headers.get(
         "X-Pipeline-Secret"
     )
 
-    if expected_secret and provided_secret != expected_secret:
+    if not expected_secret:
+        logger.error("Pipeline webhook secret is not configured")
+        return Response(
+            {"error": "Webhook authentication is not configured"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    if provided_secret != expected_secret:
         logger.warning("Pipeline webhook called with invalid secret")
         return Response(
             {"error": "Invalid or missing authentication"},
@@ -603,6 +624,9 @@ def pipeline_status_webhook(request):
     asset.pipeline_status = new_status
     if error_message:
         asset.pipeline_error = error_message
+    else:
+        # Clear any previous error when no error message is provided
+        asset.pipeline_error = ""
 
     # Mark as processed when fully indexed
     if new_status == "indexed":
@@ -652,13 +676,20 @@ def pipeline_batch_status_webhook(request):
         200: Updates processed with summary
         401: Invalid or missing secret
     """
-    # Validate shared secret
+    # Validate shared secret - fail closed if not configured
     expected_secret = getattr(settings, "PIPELINE_WEBHOOK_SECRET", None)
     provided_secret = request.data.get("secret") or request.headers.get(
         "X-Pipeline-Secret"
     )
 
-    if expected_secret and provided_secret != expected_secret:
+    if not expected_secret:
+        logger.error("Pipeline batch webhook secret is not configured")
+        return Response(
+            {"error": "Webhook authentication is not configured"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    if provided_secret != expected_secret:
         logger.warning("Pipeline batch webhook called with invalid secret")
         return Response(
             {"error": "Invalid or missing authentication"},
@@ -684,6 +715,9 @@ def pipeline_batch_status_webhook(request):
             asset.pipeline_status = new_status
             if error_message:
                 asset.pipeline_error = error_message
+            else:
+                # Clear any previous error when no error message is provided
+                asset.pipeline_error = ""
             if new_status == "indexed":
                 asset.processed = True
             asset.save(update_fields=["pipeline_status", "pipeline_error", "processed"])

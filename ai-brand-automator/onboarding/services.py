@@ -71,7 +71,17 @@ class OnboardingPipelineService:
 
             # Publish to Kafka
             topic = self._get_input_topic()
-            self.producer.send(topic, event)
+            if self.producer is None:
+                logger.error(
+                    "Kafka producer is not available, cannot publish asset event",
+                    extra={"asset_id": asset.id},
+                )
+                asset.pipeline_status = "failed"
+                asset.pipeline_error = "Kafka producer is not available"
+                asset.save(update_fields=["pipeline_status", "pipeline_error"])
+                return None
+
+            self.producer.publish_raw(topic, event, key=str(trace_id))
 
             logger.info(
                 "Published asset event to Kafka",
@@ -205,7 +215,14 @@ class OnboardingPipelineService:
             return trace_id
 
         try:
-            self.producer.send(topic, event)
+            if self.producer is None:
+                logger.error(
+                    "Kafka producer is not available, cannot publish company document",
+                    extra={"company_id": company_doc.get("company_id")},
+                )
+                raise RuntimeError("Kafka producer is not available")
+
+            self.producer.publish_raw(topic, event, key=str(trace_id))
             logger.info(
                 "Published company document to RAG topic",
                 extra={
