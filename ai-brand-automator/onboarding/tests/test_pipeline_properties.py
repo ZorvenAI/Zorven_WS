@@ -275,7 +275,7 @@ class TestWebhookProperties:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db
 class TestBatchWebhookProperties:
     """Property-based tests for batch pipeline webhooks."""
 
@@ -284,38 +284,31 @@ class TestBatchWebhookProperties:
         """Set up the webhook secret for all tests in this class."""
         settings.PIPELINE_WEBHOOK_SECRET = "test-webhook-secret"
 
-    @pytest.fixture(autouse=True)
-    def reset_connection(self):
-        """Reset database connection before each test to avoid stale connections."""
-        connection.ensure_connection()
-        connection.set_schema_to_public()
-        yield
-        # Clean up after test
-        connection.set_schema_to_public()
-
     @property_settings
     @given(
         num_updates=st.integers(min_value=1, max_value=3),
         statuses=st.lists(pipeline_status_strategy, min_size=1, max_size=3),
     )
-    def test_batch_updates_count_correctly(self, db, num_updates, statuses):
+    def test_batch_updates_count_correctly(
+        self, db, public_tenant, num_updates, statuses
+    ):
         """Batch updates should correctly count successes and failures."""
-        # Ensure connection is in good state
-        connection.set_schema_to_public()
+        # Use public_tenant fixture to avoid transaction isolation issues
+        # Clean up any existing company for this tenant
+        Company.objects.filter(tenant=public_tenant).delete()
 
-        tenant = create_test_tenant()
-        company = Company.objects.create(tenant=tenant, name="Batch Test")
+        company = Company.objects.create(tenant=public_tenant, name="Batch Test")
 
         # Create assets
         assets = []
         for i in range(min(num_updates, len(statuses))):
             asset = BrandAsset.objects.create(
-                tenant=tenant,
+                tenant=public_tenant,
                 company=company,
                 file_name=f"batch_{i}.jpg",
                 file_type="image",
                 file_size=1024,
-                gcs_path=f"_landing/{tenant.id}/batch_{i}.jpg",
+                gcs_path=f"_landing/{public_tenant.id}/batch_{i}.jpg",
                 pipeline_status="pending",
             )
             assets.append(asset)
