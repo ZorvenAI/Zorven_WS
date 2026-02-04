@@ -586,7 +586,21 @@ DATA_INGESTION = {
     "STATUS_TTL_SECONDS": config(
         "INGESTION_STATUS_TTL", default=604800, cast=int
     ),  # 7 days
+    # RAG sync topic (for company documents)
+    "KAFKA_RAG_TOPIC": config(
+        "INGESTION_KAFKA_RAG_TOPIC", default="rag-sync-ready-topic"
+    ),
 }
+
+# =============================================================================
+# Onboarding Pipeline Integration
+# =============================================================================
+# Enable/disable Kafka publishing from onboarding (set False for testing)
+ONBOARDING_KAFKA_ENABLED = config("ONBOARDING_KAFKA_ENABLED", default=True, cast=bool)
+
+# Webhook secret for pipeline status callbacks (optional, but recommended)
+# When set, webhooks must include X-Pipeline-Secret header or secret param
+PIPELINE_WEBHOOK_SECRET = config("PIPELINE_WEBHOOK_SECRET", default="")
 
 # =============================================================================
 # Media Curation Configuration (Hexagonal Architecture Pipeline)

@@ -105,6 +105,14 @@ class BrandAsset(models.Model):
     Uploaded brand assets (images, videos, documents)
     """
 
+    PIPELINE_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("ingested", "Ingested"),
+        ("curated", "Curated"),
+        ("indexed", "Indexed"),
+        ("failed", "Failed"),
+    ]
+
     tenant = models.ForeignKey(
         Tenant,
         on_delete=models.CASCADE,
@@ -138,6 +146,24 @@ class BrandAsset(models.Model):
     uploaded_at = models.DateTimeField(default=timezone.now)
     processed = models.BooleanField(
         default=False, help_text="Whether file has been processed"
+    )
+
+    # Pipeline tracking fields
+    pipeline_status = models.CharField(
+        max_length=20,
+        choices=PIPELINE_STATUS_CHOICES,
+        default="pending",
+        help_text="Current status in the data pipeline",
+    )
+    pipeline_error = models.TextField(
+        blank=True,
+        default="",
+        help_text="Error message if pipeline processing failed",
+    )
+    pipeline_trace_id = models.UUIDField(
+        null=True,
+        blank=True,
+        help_text="Trace ID for tracking through the pipeline",
     )
 
     class Meta:

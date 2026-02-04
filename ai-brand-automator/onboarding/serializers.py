@@ -52,8 +52,18 @@ class BrandAssetSerializer(serializers.ModelSerializer):
             "gcs_bucket",
             "uploaded_at",
             "processed",
+            "pipeline_status",
+            "pipeline_error",
+            "pipeline_trace_id",
         ]
-        read_only_fields = ["id", "tenant", "uploaded_at"]
+        read_only_fields = [
+            "id",
+            "tenant",
+            "uploaded_at",
+            "pipeline_status",
+            "pipeline_error",
+            "pipeline_trace_id",
+        ]
 
 
 class OnboardingProgressSerializer(serializers.ModelSerializer):

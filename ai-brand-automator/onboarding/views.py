@@ -1,10 +1,13 @@
 import logging
+import uuid
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
 from .models import Company, BrandAsset, OnboardingProgress
 from .serializers import (
     CompanySerializer,
@@ -14,6 +17,7 @@ from .serializers import (
     CompanyUpdateSerializer,
     BrandAssetUploadSerializer,
 )
+from .services import get_pipeline_service
 from files.services import gcs_service
 from ai_services.services import ai_service
 from brand_automator.validators import validate_file_upload, sanitize_filename
@@ -79,6 +83,10 @@ class CompanyViewSet(viewsets.ModelViewSet):
             current_step="company_info",
             completed_steps=["company_info"],
         )
+
+        # Set up default pipeline configuration for this tenant
+        pipeline_service = get_pipeline_service()
+        pipeline_service.setup_tenant_pipeline_config(tenant.id)
 
     @action(detail=True, methods=["post"])
     def generate_brand_strategy(self, request, pk=None):
@@ -207,16 +215,20 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         local_path = f"assets/{tenant.id}/{safe_filename}"
         saved_path = default_storage.save(local_path, file)
 
+        # Generate unique GCS path in _landing/ zone for pipeline processing
+        # Format: _landing/{tenant_id}/{uuid}_{filename}
+        unique_id = uuid.uuid4().hex[:8]
+        landing_path = f"_landing/{tenant.id}/{unique_id}_{safe_filename}"
+
         # Try to upload to Google Cloud Storage (optional for MVP)
-        gcs_path = f"assets/{tenant.id}/{safe_filename}"
         gcs_uploaded = False
         try:
             if gcs_service.client and gcs_service.bucket:
-                gcs_service.upload_file(file, gcs_path, file.content_type)
+                gcs_service.upload_file(file, landing_path, file.content_type)
                 gcs_uploaded = True
         except Exception as e:
             # GCS upload failed, but we have local copy - log and continue
-            print(f"GCS upload failed (using local storage): {str(e)}")
+            logger.warning(f"GCS upload failed (using local storage): {str(e)}")
 
         # Create asset record
         asset = BrandAsset.objects.create(
@@ -225,9 +237,15 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             file_name=safe_filename,
             file_type=file_type,
             file_size=file.size,
-            gcs_path=gcs_path if gcs_uploaded else saved_path,
-            processed=True,
+            gcs_path=landing_path if gcs_uploaded else saved_path,
+            processed=False,  # Will be set True after pipeline completes
+            pipeline_status="pending",
         )
+
+        # Trigger data pipeline if GCS upload succeeded
+        if gcs_uploaded:
+            pipeline_service = get_pipeline_service()
+            pipeline_service.publish_asset_event(asset)
 
         response_serializer = BrandAssetSerializer(asset)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
@@ -310,22 +328,28 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
 
         # SECURITY: Validate and derive gcs_path server-side
         # Enforce tenant-scoped path pattern to prevent cross-tenant access
-        expected_path_prefix = f"assets/{tenant.id}/"
-        if not gcs_path.startswith(expected_path_prefix):
+        # Accept both legacy assets/ path and new _landing/ path for pipeline
+        assets_prefix = f"assets/{tenant.id}/"
+        landing_prefix = f"_landing/{tenant.id}/"
+
+        if not (
+            gcs_path.startswith(assets_prefix) or gcs_path.startswith(landing_prefix)
+        ):
             logger.warning(
                 f"Invalid gcs_path '{gcs_path}' for tenant {tenant.id}. "
-                f"Expected prefix: {expected_path_prefix}"
+                f"Expected prefix: {assets_prefix} or {landing_prefix}"
             )
             return Response(
                 {"error": "Invalid GCS path. Path must be within tenant scope."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Verify filename in path matches sanitized filename
+        # Verify filename in path contains sanitized filename
+        # (may have UUID prefix like {uuid}_{filename})
         path_filename = gcs_path.split("/")[-1] if "/" in gcs_path else gcs_path
-        if path_filename != safe_filename:
+        if not path_filename.endswith(safe_filename):
             logger.warning(
-                f"GCS path filename '{path_filename}' doesn't match "
+                f"GCS path filename '{path_filename}' doesn't contain "
                 f"sanitized filename '{safe_filename}'"
             )
             return Response(
@@ -342,11 +366,106 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             file_size=file_size,
             gcs_path=gcs_path,
             gcs_bucket=gcs_bucket,
-            processed=True,  # Already uploaded to GCS by Kong
+            processed=False,  # Will be set True after pipeline completes
+            pipeline_status="pending",
         )
+
+        # Trigger data pipeline
+        pipeline_service = get_pipeline_service()
+        pipeline_service.publish_asset_event(asset)
 
         response_serializer = BrandAssetSerializer(asset)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
+    def retry_pipeline(self, request, pk=None):
+        """
+        Retry pipeline processing for a failed asset.
+
+        This endpoint allows retrying the data pipeline for assets that
+        failed during processing.
+        """
+        asset = self.get_object()
+
+        if asset.pipeline_status not in ("failed", "pending"):
+            return Response(
+                {
+                    "error": (
+                        f"Cannot retry asset with status '{asset.pipeline_status}'. "
+                        "Only 'failed' or 'pending' assets can be retried."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        pipeline_service = get_pipeline_service()
+        trace_id = pipeline_service.retry_asset_pipeline(asset)
+
+        if trace_id:
+            return Response(
+                {
+                    "status": "success",
+                    "message": "Pipeline retry initiated",
+                    "trace_id": trace_id,
+                }
+            )
+        else:
+            return Response(
+                {"status": "error", "message": "Failed to retry pipeline"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(detail=True, methods=["post"])
+    def update_pipeline_status(self, request, pk=None):
+        """
+        Update pipeline status for an asset (webhook for pipeline services).
+
+        This endpoint is called by the data pipeline services to update
+        the processing status of an asset.
+
+        Request body:
+        {
+            "status": "ingested|curated|indexed|failed",
+            "error": "optional error message",
+            "trace_id": "optional trace id for verification"
+        }
+        """
+        asset = self.get_object()
+
+        new_status = request.data.get("status")
+        error = request.data.get("error", "")
+        trace_id = request.data.get("trace_id")
+
+        valid_statuses = ["pending", "ingested", "curated", "indexed", "failed"]
+        if new_status not in valid_statuses:
+            return Response(
+                {"error": f"Invalid status. Must be one of: {valid_statuses}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Optionally verify trace_id matches
+        if trace_id and asset.pipeline_trace_id:
+            if str(asset.pipeline_trace_id) != trace_id:
+                logger.warning(
+                    f"Trace ID mismatch for asset {asset.id}: "
+                    f"expected {asset.pipeline_trace_id}, got {trace_id}"
+                )
+
+        # Update asset status
+        asset.pipeline_status = new_status
+        if error:
+            asset.pipeline_error = error
+        if new_status == "indexed":
+            asset.processed = True
+
+        asset.save(update_fields=["pipeline_status", "pipeline_error", "processed"])
+
+        logger.info(
+            f"Updated pipeline status for asset {asset.id} to {new_status}",
+            extra={"asset_id": asset.id, "status": new_status, "trace_id": trace_id},
+        )
+
+        return Response({"status": "updated", "pipeline_status": new_status})
 
 
 class OnboardingProgressViewSet(viewsets.ModelViewSet):
@@ -399,3 +518,187 @@ class OnboardingProgressViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(progress)
         return Response(serializer.data)
+
+
+# ============================================================================
+# Webhook Endpoints (for internal pipeline services)
+# ============================================================================
+
+
+@csrf_exempt
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def pipeline_status_webhook(request):
+    """
+    Webhook endpoint for data pipeline services to update asset status.
+
+    This endpoint uses a shared secret for authentication instead of
+    user JWT tokens, since it's called by internal services.
+
+    Request body:
+    {
+        "asset_id": 123,
+        "status": "ingested|curated|indexed|failed",
+        "error": "optional error message",
+        "trace_id": "trace UUID for verification",
+        "secret": "shared secret for authentication"
+    }
+
+    Returns:
+        200: Status updated successfully
+        400: Invalid request data
+        401: Invalid or missing secret
+        404: Asset not found
+    """
+    # Validate shared secret
+    expected_secret = getattr(settings, "PIPELINE_WEBHOOK_SECRET", None)
+    provided_secret = request.data.get("secret") or request.headers.get(
+        "X-Pipeline-Secret"
+    )
+
+    if expected_secret and provided_secret != expected_secret:
+        logger.warning("Pipeline webhook called with invalid secret")
+        return Response(
+            {"error": "Invalid or missing authentication"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    # Extract and validate request data
+    asset_id = request.data.get("asset_id")
+    new_status = request.data.get("status")
+    error_message = request.data.get("error", "")
+    trace_id = request.data.get("trace_id")
+
+    if not asset_id:
+        return Response(
+            {"error": "asset_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    valid_statuses = ["pending", "ingested", "curated", "indexed", "failed"]
+    if new_status not in valid_statuses:
+        return Response(
+            {"error": f"Invalid status. Must be one of: {valid_statuses}"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Find and update the asset
+    try:
+        asset = BrandAsset.objects.get(id=asset_id)
+    except BrandAsset.DoesNotExist:
+        return Response(
+            {"error": f"Asset {asset_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Verify trace_id if provided
+    if trace_id and asset.pipeline_trace_id:
+        if str(asset.pipeline_trace_id) != trace_id:
+            logger.warning(
+                f"Trace ID mismatch for asset {asset_id}: "
+                f"expected {asset.pipeline_trace_id}, got {trace_id}"
+            )
+            # Log warning but don't reject - trace_id mismatch might be from retry
+
+    # Update asset status
+    asset.pipeline_status = new_status
+    if error_message:
+        asset.pipeline_error = error_message
+
+    # Mark as processed when fully indexed
+    if new_status == "indexed":
+        asset.processed = True
+
+    asset.save(update_fields=["pipeline_status", "pipeline_error", "processed"])
+
+    logger.info(
+        f"Pipeline webhook updated asset {asset_id} to {new_status}",
+        extra={
+            "asset_id": asset_id,
+            "status": new_status,
+            "trace_id": trace_id,
+            "had_error": bool(error_message),
+        },
+    )
+
+    return Response(
+        {
+            "status": "updated",
+            "asset_id": asset_id,
+            "pipeline_status": new_status,
+        }
+    )
+
+
+@csrf_exempt
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def pipeline_batch_status_webhook(request):
+    """
+    Webhook endpoint for batch status updates from pipeline services.
+
+    This allows updating multiple assets in a single request, which is
+    more efficient for the media_curation service that processes batches.
+
+    Request body:
+    {
+        "updates": [
+            {"asset_id": 123, "status": "curated", "trace_id": "..."},
+            {"asset_id": 124, "status": "failed", "error": "..."}
+        ],
+        "secret": "shared secret for authentication"
+    }
+
+    Returns:
+        200: Updates processed with summary
+        401: Invalid or missing secret
+    """
+    # Validate shared secret
+    expected_secret = getattr(settings, "PIPELINE_WEBHOOK_SECRET", None)
+    provided_secret = request.data.get("secret") or request.headers.get(
+        "X-Pipeline-Secret"
+    )
+
+    if expected_secret and provided_secret != expected_secret:
+        logger.warning("Pipeline batch webhook called with invalid secret")
+        return Response(
+            {"error": "Invalid or missing authentication"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    updates = request.data.get("updates", [])
+    if not updates:
+        return Response(
+            {"error": "updates array is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    results = {"success": 0, "failed": 0, "errors": []}
+
+    for update in updates:
+        asset_id = update.get("asset_id")
+        new_status = update.get("status")
+        error_message = update.get("error", "")
+
+        try:
+            asset = BrandAsset.objects.get(id=asset_id)
+            asset.pipeline_status = new_status
+            if error_message:
+                asset.pipeline_error = error_message
+            if new_status == "indexed":
+                asset.processed = True
+            asset.save(update_fields=["pipeline_status", "pipeline_error", "processed"])
+            results["success"] += 1
+        except BrandAsset.DoesNotExist:
+            results["failed"] += 1
+            results["errors"].append(f"Asset {asset_id} not found")
+        except Exception as e:
+            results["failed"] += 1
+            results["errors"].append(f"Asset {asset_id}: {str(e)}")
+
+    logger.info(
+        f"Pipeline batch webhook processed {len(updates)} updates",
+        extra=results,
+    )
+
+    return Response(results)
