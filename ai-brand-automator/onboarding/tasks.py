@@ -15,7 +15,7 @@ from .services import get_pipeline_service
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, max_retries=3)
+@shared_task(bind=True, max_retries=3, ignore_result=True)
 def export_company_for_rag(self, company_id: int) -> dict[str, Any]:
     """
     Export company data as a structured document for RAG indexing.
@@ -113,7 +113,7 @@ def _build_company_document(company) -> dict[str, Any]:
     }
 
 
-@shared_task(bind=True, max_retries=3)
+@shared_task(bind=True, max_retries=3, ignore_result=True)
 def batch_export_companies_for_rag(
     self, tenant_id: int | None = None
 ) -> dict[str, Any]:

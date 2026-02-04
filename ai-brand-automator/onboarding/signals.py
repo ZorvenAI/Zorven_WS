@@ -38,9 +38,17 @@ def company_saved_handler(sender, instance, created, **kwargs):
         extra={"company_id": instance.id, "is_new": created},
     )
 
-    # Queue the export task
+    # Queue the export task with error handling
     # Using apply_async with countdown to debounce rapid updates
-    export_company_for_rag.apply_async(
-        args=[instance.id],
-        countdown=5 if not created else 0,  # 5s delay for updates to debounce
-    )
+    # Wrap in try/except so company save doesn't fail if Celery/Redis is down
+    try:
+        export_company_for_rag.apply_async(
+            args=[instance.id],
+            countdown=5 if not created else 0,  # 5s delay for updates to debounce
+        )
+    except Exception as e:
+        # Log the error but don't fail the company save
+        logger.warning(
+            f"Failed to queue RAG export task for company {instance.id}: {e}. "
+            "Company was saved but RAG export was not triggered."
+        )
