@@ -19,8 +19,10 @@ from onboarding.models import BrandAsset, Company
 
 
 @pytest.fixture
-def api_client():
+def api_client(settings):
     """Create API client for testing webhooks."""
+    # Set webhook secret for tests
+    settings.PIPELINE_WEBHOOK_SECRET = "test-webhook-secret"
     client = APIClient()
     client.defaults["SERVER_NAME"] = "localhost"
     return client
@@ -64,6 +66,7 @@ class TestPipelineStatusWebhook:
                 "asset_id": sample_asset_for_webhook.id,
                 "status": "ingested",
                 "trace_id": str(sample_asset_for_webhook.pipeline_trace_id),
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -85,6 +88,7 @@ class TestPipelineStatusWebhook:
             {
                 "asset_id": sample_asset_for_webhook.id,
                 "status": "indexed",
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -106,6 +110,7 @@ class TestPipelineStatusWebhook:
                 "asset_id": sample_asset_for_webhook.id,
                 "status": "failed",
                 "error": error_msg,
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -124,6 +129,7 @@ class TestPipelineStatusWebhook:
             {
                 "asset_id": sample_asset_for_webhook.id,
                 "status": "invalid_status",
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -138,6 +144,7 @@ class TestPipelineStatusWebhook:
             "/api/v1/webhooks/pipeline-status/",
             {
                 "status": "ingested",
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -153,6 +160,7 @@ class TestPipelineStatusWebhook:
             {
                 "asset_id": 99999,
                 "status": "ingested",
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -249,6 +257,7 @@ class TestPipelineBatchStatusWebhook:
                     {"asset_id": assets[1].id, "status": "curated"},
                     {"asset_id": assets[2].id, "status": "indexed"},
                 ],
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -276,6 +285,7 @@ class TestPipelineBatchStatusWebhook:
                     {"asset_id": sample_asset_for_webhook.id, "status": "ingested"},
                     {"asset_id": 99999, "status": "ingested"},  # Non-existent
                 ],
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -292,6 +302,7 @@ class TestPipelineBatchStatusWebhook:
             "/api/v1/webhooks/pipeline-batch-status/",
             {
                 "updates": [],
+                "secret": "test-webhook-secret",
             },
             format="json",
         )

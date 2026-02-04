@@ -166,6 +166,11 @@ class TestPipelineServiceProperties:
 class TestWebhookProperties:
     """Property-based tests for pipeline webhooks."""
 
+    @pytest.fixture(autouse=True)
+    def setup_webhook_secret(self, settings):
+        """Set up the webhook secret for all tests in this class."""
+        settings.PIPELINE_WEBHOOK_SECRET = "test-webhook-secret"
+
     @property_settings
     @given(new_status=pipeline_status_strategy)
     def test_status_update_transitions_correctly(self, db, new_status):
@@ -190,6 +195,7 @@ class TestWebhookProperties:
             {
                 "asset_id": asset.id,
                 "status": new_status,
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -223,6 +229,7 @@ class TestWebhookProperties:
                 "asset_id": asset.id,
                 "status": "failed",
                 "error": error_msg,
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -259,6 +266,7 @@ class TestWebhookProperties:
             {
                 "asset_id": asset.id,
                 "status": invalid_status,
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -270,6 +278,11 @@ class TestWebhookProperties:
 @pytest.mark.django_db
 class TestBatchWebhookProperties:
     """Property-based tests for batch pipeline webhooks."""
+
+    @pytest.fixture(autouse=True)
+    def setup_webhook_secret(self, settings):
+        """Set up the webhook secret for all tests in this class."""
+        settings.PIPELINE_WEBHOOK_SECRET = "test-webhook-secret"
 
     @property_settings
     @given(
@@ -306,7 +319,7 @@ class TestBatchWebhookProperties:
 
         response = client.post(
             "/api/v1/webhooks/pipeline-batch-status/",
-            {"updates": updates},
+            {"updates": updates, "secret": "test-webhook-secret"},
             format="json",
         )
 
