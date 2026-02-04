@@ -1,0 +1,334 @@
+"""
+Pipeline Integration Service for Onboarding.
+
+This service integrates the onboarding module with the data pipeline,
+publishing events to Kafka when brand assets are uploaded.
+"""
+
+import logging
+from datetime import datetime, timezone
+from typing import Optional
+from uuid import uuid4
+
+from django.conf import settings
+
+from onboarding.models import BrandAsset
+
+
+logger = logging.getLogger(__name__)
+
+
+class OnboardingPipelineService:
+    """
+    Service to integrate onboarding with the data pipeline.
+
+    Publishes events to Kafka when:
+    - Brand assets are uploaded (triggers ingestion pipeline)
+    - Company data is updated (triggers RAG export)
+    """
+
+    def __init__(self):
+        """Initialize the pipeline service."""
+        self._producer = None
+        self._kafka_enabled = getattr(settings, "ONBOARDING_KAFKA_ENABLED", True)
+
+    @property
+    def producer(self):
+        """Lazy-load Kafka producer."""
+        if self._producer is None and self._kafka_enabled:
+            try:
+                from data_ingestion.factory import create_kafka_producer
+
+                self._producer = create_kafka_producer()
+                logger.info("Kafka producer initialized for onboarding")
+            except Exception as e:
+                logger.warning(f"Failed to create Kafka producer: {e}")
+                self._kafka_enabled = False
+        return self._producer
+
+    def publish_asset_event(self, asset: BrandAsset) -> Optional[str]:
+        """
+        Publish an asset upload event to the raw-ingestion-topic.
+
+        Args:
+            asset: The BrandAsset that was uploaded
+
+        Returns:
+            The trace_id if successful, None if failed
+        """
+        if not self._kafka_enabled:
+            logger.debug("Kafka disabled, skipping asset event publish")
+            return None
+
+        try:
+            trace_id = uuid4()
+            event = self._build_ingestion_event(asset, trace_id)
+
+            # Update asset with trace_id
+            asset.pipeline_trace_id = trace_id
+            asset.pipeline_status = "pending"
+            asset.save(update_fields=["pipeline_trace_id", "pipeline_status"])
+
+            # Publish to Kafka
+            topic = self._get_input_topic()
+            if self.producer is None:
+                logger.error(
+                    "Kafka producer is not available, cannot publish asset event",
+                    extra={"asset_id": asset.id},
+                )
+                asset.pipeline_status = "failed"
+                asset.pipeline_error = "Kafka producer is not available"
+                asset.save(update_fields=["pipeline_status", "pipeline_error"])
+                return None
+
+            self.producer.publish_raw(topic, event, key=str(trace_id))
+
+            logger.info(
+                "Published asset event to Kafka",
+                extra={
+                    "asset_id": asset.id,
+                    "trace_id": str(trace_id),
+                    "topic": topic,
+                },
+            )
+
+            return str(trace_id)
+
+        except Exception as e:
+            logger.error(
+                f"Failed to publish asset event: {e}",
+                extra={"asset_id": asset.id},
+                exc_info=True,
+            )
+            # Mark asset as failed
+            asset.pipeline_status = "failed"
+            asset.pipeline_error = f"Failed to publish to Kafka: {str(e)}"
+            asset.save(update_fields=["pipeline_status", "pipeline_error"])
+            return None
+
+    def _build_ingestion_event(self, asset: BrandAsset, trace_id) -> dict:
+        """
+        Build an ingestion event from a BrandAsset.
+
+        Args:
+            asset: The BrandAsset to create an event for
+            trace_id: UUID for distributed tracing
+
+        Returns:
+            Dict representing the ingestion event
+        """
+        # Map file_type to MIME type
+        mime_type_map = {
+            "image": "image/jpeg",  # Will be refined by ingestion service
+            "video": "video/mp4",
+            "document": "application/pdf",
+            "other": "application/octet-stream",
+        }
+
+        # Build the full GCS URI
+        bucket = asset.gcs_bucket or self._get_default_bucket()
+        gcs_uri = f"gs://{bucket}/{asset.gcs_path}"
+
+        return {
+            "event_id": str(uuid4()),
+            "trace_id": str(trace_id),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "source": "django-backend",
+            "tenant_id": str(asset.tenant.id) if asset.tenant else "public",
+            "file_path": gcs_uri,
+            "file_type": mime_type_map.get(asset.file_type, "application/octet-stream"),
+            "file_size_bytes": asset.file_size,
+            "metadata": {
+                "original_filename": asset.file_name,
+                "asset_id": asset.id,
+                "company_id": asset.company.id if asset.company else None,
+                "uploaded_at": asset.uploaded_at.isoformat(),
+                "source_service": "onboarding",
+            },
+        }
+
+    def _get_input_topic(self) -> str:
+        """Get the Kafka input topic for ingestion events."""
+        config = getattr(settings, "DATA_INGESTION", {})
+        return config.get("KAFKA_INPUT_TOPIC", "raw-ingestion-topic")
+
+    def _get_default_bucket(self) -> str:
+        """Get the default GCS bucket name."""
+        config = getattr(settings, "DATA_INGESTION", {})
+        return config.get("GCP_BUCKET_NAME", "onboarding-brandsol-customer-bucket-1")
+
+    def retry_asset_pipeline(self, asset: BrandAsset) -> Optional[str]:
+        """
+        Retry pipeline processing for a failed asset.
+
+        Args:
+            asset: The BrandAsset to retry
+
+        Returns:
+            The new trace_id if successful, None if failed
+        """
+        if asset.pipeline_status not in ("failed", "pending"):
+            logger.warning(
+                f"Cannot retry asset {asset.id} with status {asset.pipeline_status}"
+            )
+            return None
+
+        # Reset error and re-publish
+        asset.pipeline_error = ""
+        asset.save(update_fields=["pipeline_error"])
+
+        return self.publish_asset_event(asset)
+
+    def publish_company_document(self, company_doc: dict) -> str:
+        """
+        Publish a company document to the RAG sync topic.
+
+        Args:
+            company_doc: The structured company document for RAG indexing.
+
+        Returns:
+            The trace_id for the published document.
+
+        Raises:
+            Exception: If publishing fails.
+        """
+        trace_id = uuid4()
+        topic = self._get_rag_topic()
+
+        # Enrich the document with trace info
+        event = {
+            "event_id": str(uuid4()),
+            "trace_id": str(trace_id),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "source": "onboarding-company-export",
+            **company_doc,
+        }
+
+        if not self._kafka_enabled:
+            logger.info(
+                "Kafka disabled, would publish company document",
+                extra={
+                    "company_id": company_doc.get("company_id"),
+                    "trace_id": str(trace_id),
+                },
+            )
+            return trace_id
+
+        try:
+            if self.producer is None:
+                logger.error(
+                    "Kafka producer is not available, cannot publish company document",
+                    extra={"company_id": company_doc.get("company_id")},
+                )
+                raise RuntimeError("Kafka producer is not available")
+
+            self.producer.publish_raw(topic, event, key=str(trace_id))
+            logger.info(
+                "Published company document to RAG topic",
+                extra={
+                    "company_id": company_doc.get("company_id"),
+                    "trace_id": str(trace_id),
+                    "topic": topic,
+                },
+            )
+            return trace_id
+        except Exception as e:
+            logger.error(
+                f"Failed to publish company document: {e}",
+                extra={"company_id": company_doc.get("company_id")},
+                exc_info=True,
+            )
+            raise
+
+    def _get_rag_topic(self) -> str:
+        """Get the Kafka topic for RAG sync events."""
+        config = getattr(settings, "DATA_INGESTION", {})
+        return config.get("KAFKA_RAG_TOPIC", "rag-sync-ready-topic")
+
+    def setup_tenant_pipeline_config(self, tenant_id: int | str) -> dict:
+        """
+        Set up default pipeline configuration for a new tenant.
+
+        Creates Redis configuration entries that the data pipeline services
+        use to customize behavior per tenant.
+
+        Args:
+            tenant_id: The tenant ID to configure.
+
+        Returns:
+            Dict with the configuration that was set.
+        """
+        from django.core.cache import cache
+
+        tenant_id_str = str(tenant_id)
+
+        # Default pipeline configuration for new tenants
+        default_config = {
+            "enabled": True,
+            "auto_curation": True,
+            "rag_indexing": True,
+            "retention_days": 90,
+            "max_file_size_mb": 50,
+            "allowed_file_types": ["image", "video", "document"],
+        }
+
+        # Store in Redis with tenant-specific key
+        config_key = f"pipeline:tenant:{tenant_id_str}:config"
+
+        try:
+            cache.set(config_key, default_config, timeout=None)  # No expiry
+            logger.info(
+                f"Set up pipeline config for tenant {tenant_id_str}",
+                extra={"config_key": config_key, "config": default_config},
+            )
+        except Exception as e:
+            # Log but don't fail - pipeline will use defaults
+            logger.warning(
+                f"Failed to set pipeline config for tenant {tenant_id_str}: {e}"
+            )
+
+        return default_config
+
+    def get_tenant_pipeline_config(self, tenant_id: int | str) -> dict:
+        """
+        Get pipeline configuration for a tenant.
+
+        Args:
+            tenant_id: The tenant ID to get config for.
+
+        Returns:
+            Dict with the tenant's pipeline configuration, or defaults.
+        """
+        from django.core.cache import cache
+
+        tenant_id_str = str(tenant_id)
+        config_key = f"pipeline:tenant:{tenant_id_str}:config"
+
+        try:
+            config = cache.get(config_key)
+            if config:
+                return config
+        except Exception as e:
+            logger.warning(f"Failed to get pipeline config: {e}")
+
+        # Return defaults if not found
+        return {
+            "enabled": True,
+            "auto_curation": True,
+            "rag_indexing": True,
+            "retention_days": 90,
+            "max_file_size_mb": 50,
+            "allowed_file_types": ["image", "video", "document"],
+        }
+
+
+# Singleton instance for use across the application
+_pipeline_service: Optional[OnboardingPipelineService] = None
+
+
+def get_pipeline_service() -> OnboardingPipelineService:
+    """Get or create the singleton pipeline service instance."""
+    global _pipeline_service
+    if _pipeline_service is None:
+        _pipeline_service = OnboardingPipelineService()
+    return _pipeline_service

@@ -66,6 +66,9 @@ staticfiles/
 # Media files
 media/
 
+# Asset uploads (use GCS in production)
+assets/
+
 # Celery
 celerybeat-schedule
 celerybeat.pid
