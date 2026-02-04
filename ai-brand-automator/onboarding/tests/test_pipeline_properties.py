@@ -302,7 +302,7 @@ class TestBatchWebhookProperties:
         """Batch updates should correctly count successes and failures."""
         # Ensure connection is in good state
         connection.set_schema_to_public()
-        
+
         tenant = create_test_tenant()
         company = Company.objects.create(tenant=tenant, name="Batch Test")
 
