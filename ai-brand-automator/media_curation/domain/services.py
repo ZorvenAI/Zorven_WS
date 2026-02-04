@@ -535,8 +535,12 @@ class CurationService:
                     "file_id": str(event.file_id),
                     "document_id": str(doc.document_id),
                     "curated_gcs_uri": doc.output_gcs_uri,
+                    "processed_gcs_uri": doc.output_gcs_uri,  # Alias for rag-index compatibility
                     "mime_type": doc.mime_type,
                     "pii_redacted": doc.pii_redacted,
+                    "action": "UPSERT",  # Required by rag-index consumer
+                    "metadata": event.metadata
+                    or {},  # Pass through metadata (includes asset_id)
                 },
             )
             import asyncio

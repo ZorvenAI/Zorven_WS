@@ -189,6 +189,9 @@ class ProcessedEvent(BaseModel):
     error_message: Optional[str] = Field(
         default=None, description="Error message if processing failed"
     )
+    metadata: Optional[dict] = Field(
+        default_factory=dict, description="Original event metadata (includes asset_id)"
+    )
 
     model_config = {
         "json_schema_extra": {

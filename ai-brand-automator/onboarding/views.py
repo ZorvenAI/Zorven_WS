@@ -158,6 +158,27 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             )
         return BrandAsset.objects.select_related("tenant", "company").all()
 
+    def destroy(self, request, *args, **kwargs):
+        """Delete asset and clean up associated files from GCS."""
+        instance = self.get_object()
+
+        # Try to delete file from GCS if it exists
+        if instance.gcs_path:
+            try:
+                if gcs_service.bucket:
+                    blob = gcs_service.bucket.blob(instance.gcs_path)
+                    if blob.exists():
+                        blob.delete()
+                        logger.info(f"Deleted GCS file: {instance.gcs_path}")
+            except Exception as e:
+                # Log but don't fail - still delete the DB record
+                logger.warning(
+                    f"Failed to delete GCS file for asset {instance.id}: {e}"
+                )
+
+        # Perform the standard delete
+        return super().destroy(request, *args, **kwargs)
+
     @action(detail=False, methods=["get"])
     def status(self, request):
         """
@@ -279,7 +300,10 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # Create asset record
+        # Create asset record with the actual bucket used for upload
+        actual_bucket = (
+            gcs_service.bucket_name if gcs_service.bucket else "brand-automator-assets"
+        )
         asset = BrandAsset.objects.create(
             tenant=tenant,
             company=company,
@@ -287,6 +311,7 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             file_type=file_type,
             file_size=file.size,
             gcs_path=landing_path,
+            gcs_bucket=actual_bucket,  # Use the actual bucket where file was uploaded
             processed=False,  # Will be set True after pipeline completes
             pipeline_status="pending" if gcs_uploaded else "failed",
             pipeline_error=""

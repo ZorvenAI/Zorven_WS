@@ -18,6 +18,7 @@ from typing import Optional
 from uuid import UUID
 
 from data_ingestion.domain.models import (
+    FileMetadata,
     IngestionEvent,
     ProcessedEvent,
     ProcessingStatus,
@@ -144,6 +145,22 @@ class IngestionService:
 
             # Step 8: Create and publish output event
             processing_duration_ms = int((time.time() - start_time) * 1000)
+
+            # Build file_metadata with MIME type from original event
+            # Parse bucket and path from destination
+            dest_parts = destination_path.replace("gs://", "").split("/", 1)
+            dest_bucket = dest_parts[0] if len(dest_parts) > 0 else ""
+            dest_path = dest_parts[1] if len(dest_parts) > 1 else ""
+
+            file_metadata = FileMetadata(
+                bucket=dest_bucket,
+                path=dest_path,
+                full_uri=destination_path,
+                size_bytes=event.file_size_bytes or 0,
+                content_type=event.file_type,  # Use MIME type from original event
+                created_at=event.timestamp,
+            )
+
             processed_event = ProcessedEvent(
                 event_id=event.event_id,
                 trace_id=trace_id,
@@ -153,6 +170,8 @@ class IngestionService:
                 destination_path=destination_path,
                 status=ProcessingStatus.RAW_STORED,
                 processing_duration_ms=processing_duration_ms,
+                file_metadata=file_metadata,
+                metadata=event.metadata,  # Pass through original metadata (asset_id)
             )
 
             self._publish_output_event(processed_event, trace_id)

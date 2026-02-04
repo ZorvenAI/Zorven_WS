@@ -6,6 +6,7 @@ publishing events to Kafka when brand assets are uploaded.
 """
 
 import logging
+import mimetypes
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
@@ -117,13 +118,18 @@ class OnboardingPipelineService:
         Returns:
             Dict representing the ingestion event
         """
-        # Map file_type to MIME type
-        mime_type_map = {
-            "image": "image/jpeg",  # Will be refined by ingestion service
-            "video": "video/mp4",
-            "document": "application/pdf",
-            "other": "application/octet-stream",
-        }
+        # Detect MIME type from filename first
+        mime_type, _ = mimetypes.guess_type(asset.file_name)
+
+        # Fallback mapping based on file_type if mime detection fails
+        if not mime_type:
+            mime_type_map = {
+                "image": "image/jpeg",
+                "video": "video/mp4",
+                "document": "application/pdf",
+                "other": "application/octet-stream",
+            }
+            mime_type = mime_type_map.get(asset.file_type, "application/octet-stream")
 
         # Build the full GCS URI
         bucket = asset.gcs_bucket or self._get_default_bucket()
@@ -136,7 +142,7 @@ class OnboardingPipelineService:
             "source": "django-backend",
             "tenant_id": str(asset.tenant.id) if asset.tenant else "public",
             "file_path": gcs_uri,
-            "file_type": mime_type_map.get(asset.file_type, "application/octet-stream"),
+            "file_type": mime_type,  # Use detected MIME type
             "file_size_bytes": asset.file_size,
             "metadata": {
                 "original_filename": asset.file_name,

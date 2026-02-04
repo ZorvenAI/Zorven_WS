@@ -74,8 +74,21 @@ class KafkaProducerAdapter(EventProducerPort):
         )
 
     def _serialize_event(self, event: ProcessedEvent) -> bytes:
-        """Serialize a ProcessedEvent to JSON bytes."""
+        """Serialize a ProcessedEvent to JSON bytes for curation service.
+
+        Maps ProcessedEvent fields to CurationEvent expected format:
+        - file_id: Uses event_id (UUID) for curation tracking
+        - raw_gcs_uri: Uses destination_path as raw_gcs_uri
+        - mime_type: Uses file_metadata.content_type or defaults to application/octet-stream
+        - metadata.asset_id: The original BrandAsset ID for status updates
+        """
+        # Get mime_type from file_metadata if available
+        mime_type = "application/octet-stream"
+        if event.file_metadata and event.file_metadata.content_type:
+            mime_type = event.file_metadata.content_type
+
         event_dict = {
+            # Original fields
             "event_id": str(event.event_id),
             "trace_id": str(event.trace_id),
             "timestamp": event.timestamp.isoformat(),
@@ -84,11 +97,22 @@ class KafkaProducerAdapter(EventProducerPort):
             "destination_path": event.destination_path,
             "status": event.status.value,
             "processing_duration_ms": event.processing_duration_ms,
+            # Curation service expected fields
+            "file_id": str(event.event_id),  # Use event_id as file_id (valid UUID)
+            "raw_gcs_uri": event.destination_path,  # Map destination_path to raw_gcs_uri
+            "mime_type": mime_type,
+            "content_type": "unknown",  # Will be inferred by curation from mime_type
+            "source_service": "data-ingestion",
+            "metadata": event.metadata
+            or {},  # Pass through original metadata (includes asset_id)
         }
         if event.error_message:
             event_dict["error_message"] = event.error_message
         if event.file_metadata:
-            event_dict["file_metadata"] = event.file_metadata.model_dump()
+            # Use mode="json" to ensure datetime objects are serialized as ISO strings
+            event_dict["file_metadata"] = event.file_metadata.model_dump(mode="json")
+            # Include file size in metadata for curation
+            event_dict["metadata"]["file_size_bytes"] = event.file_metadata.size_bytes
 
         return json.dumps(event_dict).encode("utf-8")
 

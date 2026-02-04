@@ -4,9 +4,13 @@ Integration with Google Cloud Storage
 """
 
 import os
+import time
+import logging
 from django.conf import settings
 from google.cloud import storage
 from google.oauth2 import service_account
+
+logger = logging.getLogger(__name__)
 
 
 class GCSService:
@@ -41,14 +45,15 @@ class GCSService:
         else:
             self.bucket = None
 
-    def upload_file(self, file_obj, file_path, content_type=None):
+    def upload_file(self, file_obj, file_path, content_type=None, max_retries=3):
         """
-        Upload a file to Google Cloud Storage
+        Upload a file to Google Cloud Storage with retry logic
 
         Args:
             file_obj: File object to upload
             file_path: Path in GCS where to store the file
             content_type: MIME type of the file
+            max_retries: Maximum number of retry attempts (default: 3)
 
         Returns:
             str: Public URL of the uploaded file
@@ -57,23 +62,40 @@ class GCSService:
             # Mock upload for development
             return f"https://storage.googleapis.com/{self.bucket_name}/{file_path}"
 
-        try:
-            blob = self.bucket.blob(file_path)
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                blob = self.bucket.blob(file_path)
 
-            # Set content type if provided
-            if content_type:
-                blob.content_type = content_type
+                # Set content type if provided
+                if content_type:
+                    blob.content_type = content_type
 
-            # Upload the file
-            blob.upload_from_file(file_obj, content_type=content_type)
+                # Reset file position for retry attempts
+                if hasattr(file_obj, "seek"):
+                    file_obj.seek(0)
 
-            # Make the file publicly accessible
-            blob.make_public()
+                # Upload the file
+                blob.upload_from_file(file_obj, content_type=content_type)
 
-            return blob.public_url
+                # Not calling make_public() - bucket uses uniform bucket-level access
+                # Access is controlled via IAM policies at bucket level
+                logger.info(f"Successfully uploaded file to GCS: {file_path}")
+                return blob.public_url
 
-        except Exception as e:
-            raise Exception(f"Failed to upload file to GCS: {str(e)}")
+            except Exception as e:
+                last_error = e
+                wait_time = (2**attempt) + 1  # Exponential backoff: 2, 3, 5 seconds
+                logger.warning(
+                    f"GCS upload attempt {attempt + 1}/{max_retries} failed: {e}. "
+                    f"Retrying in {wait_time}s..."
+                )
+                if attempt < max_retries - 1:
+                    time.sleep(wait_time)
+
+        raise Exception(
+            f"Failed to upload file to GCS after {max_retries} attempts: {str(last_error)}"
+        )
 
     def delete_file(self, file_path):
         """

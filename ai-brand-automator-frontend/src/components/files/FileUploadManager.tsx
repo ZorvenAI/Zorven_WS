@@ -33,7 +33,7 @@ const ALLOWED_TYPES = [
 const MAX_SIZE_MB = 50;
 
 export function FileUploadManager() {
-  const { assets, loading, error, refresh, retryPipeline, hasPendingAssets } = useAssets({
+  const { assets, loading, error, refresh, retryPipeline, deleteAsset, hasPendingAssets } = useAssets({
     pollingInterval: 5000, // Poll every 5 seconds for status updates
   });
 
@@ -298,10 +298,9 @@ export function FileUploadManager() {
             )}
             <button
               onClick={refresh}
-              disabled={loading}
-              className="text-sm text-brand-electric hover:text-brand-electric/80 disabled:opacity-50"
+              className="text-sm text-brand-electric hover:text-brand-electric/80"
             >
-              {loading ? 'Loading...' : 'Refresh'}
+              Refresh
             </button>
           </div>
         </div>
@@ -319,7 +318,7 @@ export function FileUploadManager() {
         ) : (
           <div className="divide-y divide-white/10 border border-white/10 rounded-lg bg-white/5">
             {assets.map((asset) => (
-              <AssetRow key={asset.id} asset={asset} onRetry={handleRetry} />
+              <AssetRow key={asset.id} asset={asset} onRetry={handleRetry} onDelete={deleteAsset} />
             ))}
           </div>
         )}
@@ -331,16 +330,27 @@ export function FileUploadManager() {
 interface AssetRowProps {
   asset: BrandAsset;
   onRetry: (assetId: number) => Promise<void>;
+  onDelete: (assetId: number) => Promise<boolean>;
 }
 
-function AssetRow({ asset, onRetry }: AssetRowProps) {
+function AssetRow({ asset, onRetry, onDelete }: AssetRowProps) {
   const [retrying, setRetrying] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const statusConfig = getPipelineStatusConfig(asset.pipeline_status);
 
   const handleRetry = async () => {
     setRetrying(true);
     await onRetry(asset.id);
     setRetrying(false);
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Are you sure you want to delete "${asset.file_name}"?`)) {
+      return;
+    }
+    setDeleting(true);
+    await onDelete(asset.id);
+    setDeleting(false);
   };
 
   return (
@@ -370,6 +380,15 @@ function AssetRow({ asset, onRetry }: AssetRowProps) {
             {retrying ? '...' : '⟳ Retry'}
           </button>
         )}
+
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
+          title="Delete file"
+        >
+          {deleting ? '...' : '🗑️'}
+        </button>
       </div>
     </div>
   );
