@@ -32,9 +32,13 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  const fetchAssets = useCallback(async () => {
-    setLoading(true);
+  const fetchAssets = useCallback(async (showLoading = true) => {
+    // Only show loading spinner on initial load, not on polling refreshes
+    if (showLoading && isInitialLoad) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -57,8 +61,9 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
       console.error('Error fetching assets:', err);
     } finally {
       setLoading(false);
+      setIsInitialLoad(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, isInitialLoad]);
 
   const retryPipeline = useCallback(async (assetId: number): Promise<boolean> => {
     try {
@@ -98,11 +103,11 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
   // Auto-fetch on mount
   useEffect(() => {
     if (autoFetch) {
-      fetchAssets();
+      fetchAssets(true);
     }
   }, [autoFetch, fetchAssets]);
 
-  // Polling for status updates
+  // Polling for status updates (silent refresh - no loading indicator)
   useEffect(() => {
     if (pollingInterval <= 0) return;
 
@@ -113,7 +118,7 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
       );
 
       if (hasPending) {
-        fetchAssets();
+        fetchAssets(false); // Silent refresh - no loading indicator
       }
     }, pollingInterval);
 
@@ -124,11 +129,17 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
     (a) => a.pipeline_status === 'pending' || a.pipeline_status === 'ingested' || a.pipeline_status === 'curated'
   );
 
+  // Manual refresh always shows loading
+  const refresh = useCallback(() => {
+    setLoading(true);
+    return fetchAssets(true);
+  }, [fetchAssets]);
+
   return {
     assets,
     loading,
     error,
-    refresh: fetchAssets,
+    refresh,
     retryPipeline,
     deleteAsset,
     hasPendingAssets,
