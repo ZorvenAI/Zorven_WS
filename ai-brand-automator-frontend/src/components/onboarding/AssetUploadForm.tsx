@@ -1,39 +1,70 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api';
+import { getPipelineStatusConfig, PipelineStatus } from '@/types/assets';
+
+const POLLING_INTERVAL = 5000; // Poll every 5 seconds
 
 interface UploadedFile {
   id: string;
   file_name: string;
   file_type: string; // Changed from asset_type to match backend
   file_size: number;
+  pipeline_status: PipelineStatus;
 }
 
 export function AssetUploadForm() {
   const router = useRouter();
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load existing uploaded files on mount
+  // Function to fetch assets
+  const fetchAssets = useCallback(async () => {
+    try {
+      const response = await apiClient.get('/assets/');
+      if (response.ok) {
+        const data = await response.json();
+        const assets = data.results || [];
+        setUploadedFiles(assets);
+      }
+    } catch (error) {
+      console.error('Failed to load files:', error);
+    }
+  }, []);
+
+  // Check if any files are still processing (not indexed or failed)
+  const hasPendingFiles = uploadedFiles.some(
+    (f) => f.pipeline_status !== 'indexed' && f.pipeline_status !== 'failed'
+  );
+
+  // Load existing uploaded files on mount and set up polling
   useEffect(() => {
-    const loadExistingFiles = async () => {
-      try {
-        const response = await apiClient.get('/assets/');
-        if (response.ok) {
-          const data = await response.json();
-          const assets = data.results || [];
-          setUploadedFiles(assets);
-        }
-      } catch (error) {
-        console.error('Failed to load existing files:', error);
+    fetchAssets();
+  }, [fetchAssets]);
+
+  // Set up polling when there are pending files
+  useEffect(() => {
+    if (hasPendingFiles) {
+      pollingRef.current = setInterval(() => {
+        fetchAssets();
+      }, POLLING_INTERVAL);
+    } else if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
       }
     };
-
-    loadExistingFiles();
-  }, []);
+  }, [hasPendingFiles, fetchAssets]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -91,6 +122,30 @@ export function AssetUploadForm() {
     router.push('/onboarding/step-5');
   };
 
+  const handleDelete = async (fileId: string, fileName: string) => {
+    if (!confirm(`Are you sure you want to delete "${fileName}"?`)) {
+      return;
+    }
+
+    setDeletingId(fileId);
+    setError('');
+
+    try {
+      const response = await apiClient.delete(`/assets/${fileId}/`);
+      if (response.ok) {
+        setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId));
+      } else {
+        const errorData = await response.json();
+        setError(`Failed to delete ${fileName}: ${errorData.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      setError(`Failed to delete ${fileName}. Please try again.`);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const handleNext = () => {
     if (uploadedFiles.length === 0) {
       setError('Please upload at least one file or click Skip to continue.');
@@ -138,7 +193,7 @@ export function AssetUploadForm() {
                 className="sr-only"
                 multiple
                 onChange={handleFileUpload}
-                accept="image/*,.pdf,.doc,.docx"
+                accept="image/*,.pdf,.doc,.docx,video/*,.mp4,.mov"
                 disabled={uploading}
               />
             </label>
@@ -147,7 +202,7 @@ export function AssetUploadForm() {
             </p>
           </div>
           <p className="text-xs text-brand-silver/50">
-            PNG, JPG, PDF up to 10MB each
+            PNG, JPG, PDF, MP4 up to 50MB each
           </p>
         </div>
       </div>
@@ -161,7 +216,14 @@ export function AssetUploadForm() {
 
       {uploadedFiles.length > 0 && (
         <div className="space-y-2">
-          <h3 className="font-medium text-white">Uploaded Files</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium text-white">Uploaded Files</h3>
+            {hasPendingFiles && (
+              <span className="text-xs text-brand-silver/70 animate-pulse">
+                🔄 Processing...
+              </span>
+            )}
+          </div>
           <ul className="divide-y divide-white/10 border border-white/10 rounded-lg bg-white/5">
             {uploadedFiles.map((file) => (
               <li key={file.id} className="px-4 py-3 flex items-center justify-between">
@@ -173,9 +235,32 @@ export function AssetUploadForm() {
                     ({(file.file_size / 1024).toFixed(1)} KB)
                   </span>
                 </div>
-                <span className="text-xs bg-brand-electric/20 text-brand-electric px-2 py-1 rounded">
-                  {file.file_type}
-                </span>
+                <div className="flex items-center gap-3">
+                  {(() => {
+                    const statusConfig = getPipelineStatusConfig(file.pipeline_status || 'pending');
+                    return (
+                      <span className={`text-xs px-2 py-1 rounded ${statusConfig.bgColor} ${statusConfig.color}`}>
+                        {statusConfig.icon} {statusConfig.label}
+                      </span>
+                    );
+                  })()}
+                  <span className="text-xs bg-brand-electric/20 text-brand-electric px-2 py-1 rounded">
+                    {file.file_type}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(file.id, file.file_name)}
+                    disabled={deletingId === file.id}
+                    className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Delete file"
+                  >
+                    {deletingId === file.id ? (
+                      <span className="inline-block animate-spin">⏳</span>
+                    ) : (
+                      <span>🗑️</span>
+                    )}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
