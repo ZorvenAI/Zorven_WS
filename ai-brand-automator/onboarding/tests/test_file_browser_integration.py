@@ -264,9 +264,9 @@ class TestFileBrowserIntegration:
         page = 1
 
         while True:
-            response = client.get(
-                f"/api/v1/assets/?page={page}&page_size=3&sort_by=file_size&sort_order=desc"
-            )
+            url = f"/api/v1/assets/?page={page}&page_size=3"
+            url += "&sort_by=file_size&sort_order=desc"
+            response = client.get(url)
             assert response.status_code == status.HTTP_200_OK
 
             data = response.json()

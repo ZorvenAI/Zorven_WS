@@ -386,9 +386,9 @@ class KafkaConsumerAdapter(EventConsumerPort):
         event_id = UUID(event_data.get("event_id", data.get("id", str(UUID(int=0)))))
 
         # Handle backward compatibility with old message format:
-        # - file_id: Use file_id if present, otherwise fallback to event_id
-        # - raw_gcs_uri: Use raw_gcs_uri if present, otherwise fallback to destination_path
-        # - mime_type: Use mime_type if present, otherwise try file_metadata.content_type or default
+        # - file_id: Use file_id if present, else fallback to event_id
+        # - raw_gcs_uri: Use raw_gcs_uri if present, else destination_path
+        # - mime_type: Use if present, else file_metadata.content_type
         file_id = UUID(event_data.get("file_id", str(event_id)))
 
         raw_gcs_uri = event_data.get("raw_gcs_uri") or event_data.get(

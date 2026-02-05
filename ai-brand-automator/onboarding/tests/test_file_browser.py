@@ -248,10 +248,11 @@ class TestAssetsListFiltering:
         # Create test assets
         assets = []
         for i in range(15):
+            ext = "pdf" if i % 3 == 0 else "jpg" if i % 3 == 1 else "mp4"
             asset = BrandAsset.objects.create(
                 company=company,
                 tenant=tenant,
-                file_name=f"test-file-{i:02d}.{'pdf' if i % 3 == 0 else 'jpg' if i % 3 == 1 else 'mp4'}",
+                file_name=f"test-file-{i:02d}.{ext}",
                 file_type="document"
                 if i % 3 == 0
                 else "image"

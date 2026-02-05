@@ -95,7 +95,7 @@ class GCSService:
                     time.sleep(wait_time)
 
         raise Exception(
-            f"Failed to upload file to GCS after {max_retries} attempts: {str(last_error)}"
+            f"Failed to upload to GCS after {max_retries} attempts: {last_error}"
         )
 
     def delete_file(self, file_path):
@@ -167,9 +167,9 @@ class GCSService:
 
             blob = self.bucket.blob(file_path)
 
-            # Note: We don't check if file exists here - signed URL generation works
-            # even for non-existent files. GCS will return 404 when accessed.
-            # This allows viewing files that may be in different paths or being processed.
+            # Note: We don't check if file exists - signed URL generation works
+            # even for non-existent files. GCS returns 404 when accessed.
+            # This allows viewing files in different paths or being processed.
 
             # Build response disposition header if downloading
             response_disposition = None

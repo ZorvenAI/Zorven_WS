@@ -79,8 +79,8 @@ class KafkaProducerAdapter(EventProducerPort):
         Maps ProcessedEvent fields to CurationEvent expected format:
         - file_id: Uses event_id (UUID) for curation tracking
         - raw_gcs_uri: Uses destination_path as raw_gcs_uri
-        - mime_type: Uses file_metadata.content_type or defaults to application/octet-stream
-        - metadata.asset_id: The original BrandAsset ID for status updates
+        - mime_type: Uses file_metadata.content_type or defaults
+        - metadata.asset_id: The original BrandAsset ID for updates
         """
         # Get mime_type from file_metadata if available
         mime_type = "application/octet-stream"
@@ -98,8 +98,8 @@ class KafkaProducerAdapter(EventProducerPort):
             "status": event.status.value,
             "processing_duration_ms": event.processing_duration_ms,
             # Curation service expected fields
-            "file_id": str(event.event_id),  # Use event_id as file_id (valid UUID)
-            "raw_gcs_uri": event.destination_path,  # Map destination_path to raw_gcs_uri
+            "file_id": str(event.event_id),  # Use event_id as file_id
+            "raw_gcs_uri": event.destination_path,  # Map to raw_gcs_uri
             "mime_type": mime_type,
             "content_type": "unknown",  # Will be inferred by curation from mime_type
             "source_service": "data-ingestion",

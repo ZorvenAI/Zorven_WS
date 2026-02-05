@@ -354,8 +354,10 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             "expires_at": "2026-02-05T12:30:00Z"
         }
         """
+        tenant = getattr(request, "tenant", None)
         logger.info(
-            f"signed_url action called: pk={pk}, user={request.user}, tenant={getattr(request, 'tenant', None)}"
+            f"signed_url action called: pk={pk}, user={request.user}, "
+            f"tenant={tenant}"
         )
         try:
             asset = self.get_object()
@@ -423,7 +425,8 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         Get assets with their pipeline statuses.
 
         Query parameters:
-        - pipeline_status: Filter by status (pending, ingested, curated, indexed, failed)
+        - pipeline_status: Filter by status (pending, ingested, curated,
+          indexed, failed)
         - include_processed: Include fully processed assets (default: true)
 
         Returns list of assets with pipeline status information.
