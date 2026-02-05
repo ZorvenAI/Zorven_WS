@@ -41,9 +41,7 @@ class TestFileBrowserIntegration:
         )
 
         # Create company
-        company = Company.objects.create(
-            name="Integration Test Company", tenant=tenant
-        )
+        company = Company.objects.create(name="Integration Test Company", tenant=tenant)
 
         client = APIClient()
         client.force_authenticate(user=user)
@@ -306,9 +304,7 @@ class TestTenantIsolation:
             username="user1", email="user1@example.com", password="pass123"
         )
 
-        company1 = Company.objects.create(
-            name="Company One", tenant=tenant1
-        )
+        company1 = Company.objects.create(name="Company One", tenant=tenant1)
 
         asset1 = BrandAsset.objects.create(
             company=company1,
@@ -322,7 +318,9 @@ class TestTenantIsolation:
 
         # Create tenant 2
         tenant2 = Tenant.objects.create(schema_name="tenant_two", name="Tenant Two")
-        Domain.objects.create(domain="tenant2.localhost", tenant=tenant2, is_primary=True)
+        Domain.objects.create(
+            domain="tenant2.localhost", tenant=tenant2, is_primary=True
+        )
 
         user2 = django_user_model.objects.create_user(
             username="user2", email="user2@example.com", password="pass123"
@@ -352,9 +350,7 @@ class TestTenantIsolation:
             username="listuser1", email="listuser1@example.com", password="pass123"
         )
 
-        company1 = Company.objects.create(
-            name="Company One", tenant=tenant1
-        )
+        company1 = Company.objects.create(name="Company One", tenant=tenant1)
 
         for i in range(3):
             BrandAsset.objects.create(
@@ -377,9 +373,7 @@ class TestTenantIsolation:
             username="listuser2", email="listuser2@example.com", password="pass123"
         )
 
-        company2 = Company.objects.create(
-            name="Company Two", tenant=tenant2
-        )
+        company2 = Company.objects.create(name="Company Two", tenant=tenant2)
 
         for i in range(5):
             BrandAsset.objects.create(
