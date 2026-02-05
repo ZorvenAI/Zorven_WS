@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
+from django.db.models import Count, Q
 from .models import Company, BrandAsset, OnboardingProgress
 from .serializers import (
     CompanySerializer,
@@ -177,8 +178,22 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         # Try to delete file from GCS if it exists
         if instance.gcs_path:
             try:
-                if gcs_service.bucket:
-                    blob = gcs_service.bucket.blob(instance.gcs_path)
+                bucket = None
+
+                # Prefer the asset-specific bucket if available
+                gcs_client = getattr(gcs_service, "client", None)
+                bucket_name = getattr(gcs_service, "bucket_name", None)
+
+                if gcs_client and getattr(instance, "gcs_bucket", None):
+                    bucket = gcs_client.bucket(instance.gcs_bucket)
+                elif gcs_client and bucket_name:
+                    bucket = gcs_client.bucket(bucket_name)
+                else:
+                    # Fallback to existing bucket attribute for backward compatibility
+                    bucket = getattr(gcs_service, "bucket", None)
+
+                if bucket:
+                    blob = bucket.blob(instance.gcs_path)
                     if blob.exists():
                         blob.delete()
                         logger.info(f"Deleted GCS file: {instance.gcs_path}")
@@ -430,14 +445,22 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         # Order by upload date (most recent first)
         queryset = queryset.order_by("-uploaded_at")
 
+        # Single query to get all counts (more efficient than 4 separate COUNT queries)
+        counts = queryset.aggregate(
+            total=Count("id"),
+            pending=Count("id", filter=Q(pipeline_status="pending")),
+            failed=Count("id", filter=Q(pipeline_status="failed")),
+            indexed=Count("id", filter=Q(pipeline_status="indexed")),
+        )
+
         serializer = self.get_serializer(queryset, many=True)
         return Response(
             {
-                "count": queryset.count(),
+                "count": counts["total"],
                 "results": serializer.data,
-                "pending_count": queryset.filter(pipeline_status="pending").count(),
-                "failed_count": queryset.filter(pipeline_status="failed").count(),
-                "indexed_count": queryset.filter(pipeline_status="indexed").count(),
+                "pending_count": counts["pending"],
+                "failed_count": counts["failed"],
+                "indexed_count": counts["indexed"],
             }
         )
 

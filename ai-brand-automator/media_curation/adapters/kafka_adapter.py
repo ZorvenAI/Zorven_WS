@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import traceback
-import uuid as uuid_module
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Optional, Any
@@ -39,7 +39,7 @@ def _parse_tenant_id(raw_tenant_id: str) -> UUID:
     except (ValueError, AttributeError):
         # Generate a deterministic UUID from the string using namespace
         namespace = UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # DNS namespace
-        return uuid_module.uuid5(namespace, str(raw_tenant_id))
+        return uuid.uuid5(namespace, str(raw_tenant_id))
 
 
 class KafkaProducerAdapter(EventProducerPort):

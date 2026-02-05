@@ -48,7 +48,7 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
   // Core fetch function - silent parameter controls loading indicator
   const doFetch = useCallback(async (silent: boolean) => {
     // Only set loading for initial load (when we have no assets yet)
-    if (!silent && assets.length === 0) {
+    if (!silent && assetsRef.current.length === 0) {
       setLoading(true);
     }
     setError(null);
@@ -72,7 +72,17 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
       setTotalCount(data.count || newAssets.length);
       
       // Only update state if data has actually changed (prevents unnecessary re-renders)
-      const hasChanged = JSON.stringify(newAssets) !== JSON.stringify(assetsRef.current);
+      // Compare by key fields that are likely to change instead of full JSON.stringify
+      const hasChanged = (() => {
+        const current = assetsRef.current;
+        if (newAssets.length !== current.length) return true;
+        return newAssets.some((asset, i) => 
+          asset.id !== current[i]?.id ||
+          asset.pipeline_status !== current[i]?.pipeline_status ||
+          asset.pipeline_error !== current[i]?.pipeline_error
+        );
+      })();
+      
       if (hasChanged) {
         setAssets(newAssets);
       }
@@ -84,7 +94,7 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
       // Always set loading to false after any fetch
       setLoading(false);
     }
-  }, [statusFilter, assets.length]);
+  }, [statusFilter]);
 
   const retryPipeline = useCallback(async (assetId: number): Promise<boolean> => {
     try {

@@ -328,6 +328,171 @@ class TestBrandAssetViewSet:
         # Verify asset was deleted
         assert not BrandAsset.objects.filter(id=asset_id).exists()
 
+    def test_delete_asset_with_gcs_file(self, authenticated_client, public_tenant):
+        """Test that GCS file is deleted when asset is deleted"""
+        from unittest.mock import patch, MagicMock
+
+        company = CompanyFactory(tenant=public_tenant)
+        asset = BrandAssetFactory(
+            tenant=public_tenant,
+            company=company,
+            gcs_path="test-tenant/assets/test-file.pdf",
+            gcs_bucket="test-bucket",
+        )
+        asset_id = asset.id
+
+        # Mock the GCS service
+        mock_blob = MagicMock()
+        mock_blob.exists.return_value = True
+        mock_bucket = MagicMock()
+        mock_bucket.blob.return_value = mock_blob
+        mock_client = MagicMock()
+        mock_client.bucket.return_value = mock_bucket
+
+        with patch("onboarding.views.gcs_service") as mock_gcs_service:
+            mock_gcs_service.client = mock_client
+            mock_gcs_service.bucket_name = "default-bucket"
+
+            response = authenticated_client.delete(self.url_detail(asset_id))
+            assert response.status_code == status.HTTP_204_NO_CONTENT
+
+            # Verify GCS blob.delete() was called
+            mock_blob.delete.assert_called_once()
+
+        # Verify asset was deleted from DB
+        assert not BrandAsset.objects.filter(id=asset_id).exists()
+
+    def test_delete_asset_continues_on_gcs_error(
+        self, authenticated_client, public_tenant
+    ):
+        """Test that asset deletion continues even if GCS deletion fails"""
+        from unittest.mock import patch, MagicMock
+
+        company = CompanyFactory(tenant=public_tenant)
+        asset = BrandAssetFactory(
+            tenant=public_tenant,
+            company=company,
+            gcs_path="test-tenant/assets/test-file.pdf",
+        )
+        asset_id = asset.id
+
+        with patch("onboarding.views.gcs_service") as mock_gcs_service:
+            # Simulate GCS error
+            mock_gcs_service.client = MagicMock()
+            mock_gcs_service.client.bucket.side_effect = Exception("GCS error")
+
+            response = authenticated_client.delete(self.url_detail(asset_id))
+            # Should still succeed despite GCS error
+            assert response.status_code == status.HTTP_204_NO_CONTENT
+
+        # Verify asset was still deleted from DB
+        assert not BrandAsset.objects.filter(id=asset_id).exists()
+
+    def test_status_endpoint(self, authenticated_client, public_tenant):
+        """Test the /assets/status/ endpoint returns correct counts"""
+        company = CompanyFactory(tenant=public_tenant)
+
+        # Create assets with different statuses
+        BrandAssetFactory(
+            tenant=public_tenant, company=company, pipeline_status="pending"
+        )
+        BrandAssetFactory(
+            tenant=public_tenant, company=company, pipeline_status="pending"
+        )
+        BrandAssetFactory(
+            tenant=public_tenant, company=company, pipeline_status="indexed"
+        )
+        BrandAssetFactory(
+            tenant=public_tenant, company=company, pipeline_status="failed"
+        )
+
+        response = authenticated_client.get(reverse("brandasset-status"))
+        assert response.status_code == status.HTTP_200_OK
+
+        data = response.data
+        assert "count" in data
+        assert "results" in data
+        assert "pending_count" in data
+        assert "failed_count" in data
+        assert "indexed_count" in data
+
+        # Verify counts
+        assert data["pending_count"] >= 2
+        assert data["indexed_count"] >= 1
+        assert data["failed_count"] >= 1
+
+    def test_status_endpoint_filter_by_pipeline_status(
+        self, authenticated_client, public_tenant
+    ):
+        """Test /assets/status/ filters by pipeline_status parameter"""
+        company = CompanyFactory(tenant=public_tenant)
+
+        BrandAssetFactory(
+            tenant=public_tenant, company=company, pipeline_status="pending"
+        )
+        BrandAssetFactory(
+            tenant=public_tenant, company=company, pipeline_status="indexed"
+        )
+
+        response = authenticated_client.get(
+            reverse("brandasset-status") + "?pipeline_status=pending"
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        # All results should be pending
+        for result in response.data["results"]:
+            assert result["pipeline_status"] == "pending"
+
+    def test_status_endpoint_exclude_processed(
+        self, authenticated_client, public_tenant
+    ):
+        """Test /assets/status/ with include_processed=false"""
+        company = CompanyFactory(tenant=public_tenant)
+
+        BrandAssetFactory(
+            tenant=public_tenant, company=company, pipeline_status="pending"
+        )
+        BrandAssetFactory(
+            tenant=public_tenant, company=company, pipeline_status="indexed"
+        )
+
+        response = authenticated_client.get(
+            reverse("brandasset-status") + "?include_processed=false"
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        # No indexed assets should be in results
+        for result in response.data["results"]:
+            assert result["pipeline_status"] != "indexed"
+
+    def test_status_endpoint_ordering(self, authenticated_client, public_tenant):
+        """Test that /assets/status/ returns assets ordered by -uploaded_at"""
+        company = CompanyFactory(tenant=public_tenant)
+
+        # Create assets - order should be most recent first
+        BrandAssetFactory(
+            tenant=public_tenant,
+            company=company,
+            file_name="first.pdf",
+            pipeline_status="pending",
+        )
+        BrandAssetFactory(
+            tenant=public_tenant,
+            company=company,
+            file_name="second.pdf",
+            pipeline_status="pending",
+        )
+
+        response = authenticated_client.get(reverse("brandasset-status"))
+        assert response.status_code == status.HTTP_200_OK
+
+        results = response.data["results"]
+        # Most recently uploaded should be first
+        if len(results) >= 2:
+            file_names = [r["file_name"] for r in results[:2]]
+            # second.pdf was created last, should appear first
+            assert "second.pdf" in file_names
+
 
 @pytest.mark.django_db
 @pytest.mark.unit
