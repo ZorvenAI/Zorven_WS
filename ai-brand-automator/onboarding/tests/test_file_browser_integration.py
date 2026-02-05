@@ -23,28 +23,31 @@ class TestFileBrowserIntegration:
     def authenticated_client_with_company(self, db, django_user_model):
         from tenants.models import Tenant, Domain
         from onboarding.models import Company
+        import uuid
 
-        # Create tenant
+        # Create tenant with unique domain to avoid conflicts
+        unique_id = uuid.uuid4().hex[:8]
         tenant = Tenant.objects.create(
-            schema_name="test_integration", name="Test Tenant"
+            schema_name=f"test_integration_{unique_id}", name="Test Tenant"
         )
-        Domain.objects.create(domain="localhost", tenant=tenant, is_primary=True)
+        domain_name = f"integration-{unique_id}.localhost"
+        Domain.objects.create(domain=domain_name, tenant=tenant, is_primary=True)
 
         # Create user
         user = django_user_model.objects.create_user(
-            username="integrationuser",
-            email="integration@example.com",
+            username=f"integrationuser_{unique_id}",
+            email=f"integration_{unique_id}@example.com",
             password="testpass123",
         )
 
         # Create company
         company = Company.objects.create(
-            name="Integration Test Company", tenant=tenant, user=user
+            name="Integration Test Company", tenant=tenant
         )
 
         client = APIClient()
         client.force_authenticate(user=user)
-        client.defaults["SERVER_NAME"] = "localhost"
+        client.defaults["SERVER_NAME"] = domain_name
         client._force_tenant = tenant
 
         return client, user, tenant, company
@@ -304,7 +307,7 @@ class TestTenantIsolation:
         )
 
         company1 = Company.objects.create(
-            name="Company One", tenant=tenant1, user=user1
+            name="Company One", tenant=tenant1
         )
 
         asset1 = BrandAsset.objects.create(
@@ -319,7 +322,7 @@ class TestTenantIsolation:
 
         # Create tenant 2
         tenant2 = Tenant.objects.create(schema_name="tenant_two", name="Tenant Two")
-        Domain.objects.create(domain="localhost", tenant=tenant2, is_primary=True)
+        Domain.objects.create(domain="tenant2.localhost", tenant=tenant2, is_primary=True)
 
         user2 = django_user_model.objects.create_user(
             username="user2", email="user2@example.com", password="pass123"
@@ -328,7 +331,7 @@ class TestTenantIsolation:
         # User 2 tries to access User 1's asset
         client = APIClient()
         client.force_authenticate(user=user2)
-        client.defaults["SERVER_NAME"] = "localhost"
+        client.defaults["SERVER_NAME"] = "tenant2.localhost"
         client._force_tenant = tenant2
 
         response = client.get(f"/api/v1/assets/{asset1.id}/signed-url/")
@@ -350,7 +353,7 @@ class TestTenantIsolation:
         )
 
         company1 = Company.objects.create(
-            name="Company One", tenant=tenant1, user=user1
+            name="Company One", tenant=tenant1
         )
 
         for i in range(3):
@@ -375,7 +378,7 @@ class TestTenantIsolation:
         )
 
         company2 = Company.objects.create(
-            name="Company Two", tenant=tenant2, user=user2
+            name="Company Two", tenant=tenant2
         )
 
         for i in range(5):

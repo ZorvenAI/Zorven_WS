@@ -457,8 +457,7 @@ class TestProcessEvent:
         assert result is True
         assert "Processed" in cmd.stdout.getvalue()
 
-    @patch("media_curation.management.commands.run_curation_consumer._run_async")
-    def test_process_event_non_retryable_error(self, mock_run_async):
+    def test_process_event_non_retryable_error(self):
         """Test non-retryable error handling."""
         from media_curation.domain.models import CurationEvent
         from media_curation.domain.exceptions import NonRetryableError
@@ -468,9 +467,8 @@ class TestProcessEvent:
         cmd.stdout = StringIO()
         cmd.stderr = StringIO()
         cmd._producer = MagicMock()
-        cmd._service = MagicMock()  # Must set service
-
-        mock_run_async.side_effect = NonRetryableError("Invalid format")
+        cmd._service = MagicMock()
+        cmd._service.process_event.side_effect = NonRetryableError("Invalid format")
 
         event = CurationEvent(
             event_id=uuid4(),
@@ -486,11 +484,8 @@ class TestProcessEvent:
         assert result is False
         assert "Non-retryable" in cmd.stdout.getvalue()
 
-    @patch("media_curation.management.commands.run_curation_consumer._run_async")
     @patch("media_curation.management.commands.run_curation_consumer.time.sleep")
-    def test_process_event_retryable_error_max_retries(
-        self, mock_sleep, mock_run_async
-    ):
+    def test_process_event_retryable_error_max_retries(self, mock_sleep):
         """Test retryable error exceeds max retries."""
         from media_curation.domain.models import CurationEvent
         from media_curation.domain.exceptions import RetryableError
@@ -500,9 +495,8 @@ class TestProcessEvent:
         cmd.stdout = StringIO()
         cmd.stderr = StringIO()
         cmd._producer = MagicMock()
-        cmd._service = MagicMock()  # Must set service
-
-        mock_run_async.side_effect = RetryableError("Temporary failure")
+        cmd._service = MagicMock()
+        cmd._service.process_event.side_effect = RetryableError("Temporary failure")
 
         event = CurationEvent(
             event_id=uuid4(),

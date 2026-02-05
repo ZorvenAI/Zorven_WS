@@ -126,21 +126,26 @@ class TestSignedUrlEndpoint:
     @pytest.fixture
     def authenticated_client(self, db, django_user_model):
         from tenants.models import Tenant, Domain
+        import uuid
 
-        # Create tenant
+        # Create tenant with unique domain to avoid conflicts
+        unique_id = uuid.uuid4().hex[:8]
         tenant = Tenant.objects.create(
-            schema_name="test_signed_url", name="Test Tenant"
+            schema_name=f"test_signed_url_{unique_id}", name="Test Tenant"
         )
-        Domain.objects.create(domain="localhost", tenant=tenant, is_primary=True)
+        domain_name = f"signedurl-{unique_id}.localhost"
+        Domain.objects.create(domain=domain_name, tenant=tenant, is_primary=True)
 
         # Create user
         user = django_user_model.objects.create_user(
-            username="testuser", email="test@example.com", password="testpass123"
+            username=f"testuser_{unique_id}",
+            email=f"test_{unique_id}@example.com",
+            password="testpass123",
         )
 
         client = APIClient()
         client.force_authenticate(user=user)
-        client.defaults["SERVER_NAME"] = "localhost"
+        client.defaults["SERVER_NAME"] = domain_name
         client._force_tenant = tenant
 
         return client, user, tenant
@@ -150,7 +155,7 @@ class TestSignedUrlEndpoint:
         client, user, tenant = authenticated_client
         from onboarding.models import Company, BrandAsset
 
-        company = Company.objects.create(name="Test Company", tenant=tenant, user=user)
+        company = Company.objects.create(name="Test Company", tenant=tenant)
 
         asset = BrandAsset.objects.create(
             company=company,
@@ -232,18 +237,25 @@ class TestAssetsListFiltering:
     def authenticated_client_with_assets(self, db, django_user_model):
         from tenants.models import Tenant, Domain
         from onboarding.models import Company, BrandAsset
+        import uuid
 
-        # Create tenant
-        tenant = Tenant.objects.create(schema_name="test_filters", name="Test Tenant")
-        Domain.objects.create(domain="localhost", tenant=tenant, is_primary=True)
+        # Create tenant with unique domain to avoid conflicts
+        unique_id = uuid.uuid4().hex[:8]
+        tenant = Tenant.objects.create(
+            schema_name=f"test_filters_{unique_id}", name="Test Tenant"
+        )
+        domain_name = f"filters-{unique_id}.localhost"
+        Domain.objects.create(domain=domain_name, tenant=tenant, is_primary=True)
 
         # Create user
         user = django_user_model.objects.create_user(
-            username="testuser2", email="test2@example.com", password="testpass123"
+            username=f"testuser2_{unique_id}",
+            email=f"test2_{unique_id}@example.com",
+            password="testpass123",
         )
 
         # Create company
-        company = Company.objects.create(name="Test Company", tenant=tenant, user=user)
+        company = Company.objects.create(name="Test Company", tenant=tenant)
 
         # Create test assets
         assets = []
@@ -270,7 +282,7 @@ class TestAssetsListFiltering:
 
         client = APIClient()
         client.force_authenticate(user=user)
-        client.defaults["SERVER_NAME"] = "localhost"
+        client.defaults["SERVER_NAME"] = domain_name
         client._force_tenant = tenant
 
         return client, assets
@@ -402,20 +414,25 @@ class TestAssetsListPagination:
     def authenticated_client_with_many_assets(self, db, django_user_model):
         from tenants.models import Tenant, Domain
         from onboarding.models import Company, BrandAsset
+        import uuid
 
-        # Create tenant
+        # Create tenant with unique domain to avoid conflicts
+        unique_id = uuid.uuid4().hex[:8]
         tenant = Tenant.objects.create(
-            schema_name="test_pagination", name="Test Tenant"
+            schema_name=f"test_pagination_{unique_id}", name="Test Tenant"
         )
-        Domain.objects.create(domain="localhost", tenant=tenant, is_primary=True)
+        domain_name = f"pagination-{unique_id}.localhost"
+        Domain.objects.create(domain=domain_name, tenant=tenant, is_primary=True)
 
         # Create user
         user = django_user_model.objects.create_user(
-            username="testuser3", email="test3@example.com", password="testpass123"
+            username=f"testuser3_{unique_id}",
+            email=f"test3_{unique_id}@example.com",
+            password="testpass123",
         )
 
         # Create company
-        company = Company.objects.create(name="Test Company", tenant=tenant, user=user)
+        company = Company.objects.create(name="Test Company", tenant=tenant)
 
         # Create 45 test assets
         assets = []
@@ -433,7 +450,7 @@ class TestAssetsListPagination:
 
         client = APIClient()
         client.force_authenticate(user=user)
-        client.defaults["SERVER_NAME"] = "localhost"
+        client.defaults["SERVER_NAME"] = domain_name
         client._force_tenant = tenant
 
         return client, assets

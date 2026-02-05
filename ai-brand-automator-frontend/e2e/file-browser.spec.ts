@@ -15,7 +15,6 @@ import { test, expect, type Page } from '@playwright/test';
 
 // Test configuration
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
-const API_URL = process.env.PLAYWRIGHT_API_URL || 'http://localhost:8000';
 
 // Test user credentials (should be set via environment)
 const TEST_USER = {
@@ -340,8 +339,10 @@ test.describe('File Browser E2E', () => {
     test('uploads a file via dropzone', async ({ page }) => {
       await navigateToAssets(page);
       
-      // Find dropzone
-      const dropzone = page.locator('[data-testid="dropzone"], .dropzone, text=/drag.*drop/i');
+      // Verify dropzone is present (file input should be available)
+      await expect(page.locator('[data-testid="dropzone"], .dropzone, text=/drag.*drop/i').or(
+        page.locator('input[type="file"]')
+      ).first()).toBeVisible();
       
       // Create test file
       const buffer = Buffer.from('test image content');

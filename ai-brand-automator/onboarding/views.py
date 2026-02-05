@@ -1,6 +1,7 @@
 import logging
 import uuid
 import math
+from urllib.parse import urlencode
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -281,6 +282,7 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
                         }
                     )
             except ValueError:
+                # Invalid limit value - fall through to pagination mode
                 pass
 
         # Handle pagination mode (for full file browser)
@@ -298,23 +300,19 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         paginated_queryset = queryset[start_index:end_index]
         serializer = self.get_serializer(paginated_queryset, many=True)
 
-        # Build pagination URLs
+        # Build pagination URLs using proper URL encoding
         base_url = request.build_absolute_uri(request.path)
         query_params = request.query_params.copy()
 
         next_url = None
         if page_int < total_pages:
             query_params["page"] = str(page_int + 1)
-            next_url = (
-                f"{base_url}?{'&'.join(f'{k}={v}' for k, v in query_params.items())}"
-            )
+            next_url = f"{base_url}?{urlencode(query_params)}"
 
         prev_url = None
         if page_int > 1:
             query_params["page"] = str(page_int - 1)
-            prev_url = (
-                f"{base_url}?{'&'.join(f'{k}={v}' for k, v in query_params.items())}"
-            )
+            prev_url = f"{base_url}?{urlencode(query_params)}"
 
         return Response(
             {
