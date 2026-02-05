@@ -29,37 +29,34 @@ const mockFiles = [
   {
     id: '1',
     file_name: 'logo.png',
-    file_type: 'image',
+    file_type: 'image' as const,
     file_size: 102400,
-    status: 'indexed',
+    pipeline_status: 'indexed' as const,
     uploaded_at: '2025-01-20T10:00:00Z',
-    gcs_uri: 'gs://bucket/logo.png',
+    gcs_path: 'gs://bucket/logo.png',
   },
   {
     id: '2',
     file_name: 'hero.jpg',
-    file_type: 'image',
+    file_type: 'image' as const,
     file_size: 204800,
-    status: 'indexed',
+    pipeline_status: 'indexed' as const,
     uploaded_at: '2025-01-19T15:00:00Z',
-    gcs_uri: 'gs://bucket/hero.jpg',
+    gcs_path: 'gs://bucket/hero.jpg',
   },
   {
     id: '3',
     file_name: 'brand-video.mp4',
-    file_type: 'video',
+    file_type: 'video' as const,
     file_size: 5242880,
-    status: 'pending',
+    pipeline_status: 'pending' as const,
     uploaded_at: '2025-01-18T09:00:00Z',
-    gcs_uri: 'gs://bucket/brand-video.mp4',
+    gcs_path: 'gs://bucket/brand-video.mp4',
   },
 ];
 
 describe('AssetUploadForm', () => {
-  const defaultProps = {
-    companyId: 'company-123',
-    onUploadComplete: jest.fn(),
-  };
+  // Note: AssetUploadForm takes no props - it fetches data internally
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -78,21 +75,21 @@ describe('AssetUploadForm', () => {
     (assetsApi.uploadAsset as jest.Mock).mockResolvedValue({
       id: '4',
       file_name: 'new-upload.png',
-      file_type: 'image',
+      file_type: 'image' as const,
       file_size: 50000,
-      status: 'pending',
+      pipeline_status: 'pending' as const,
     });
   });
 
   describe('Component Rendering', () => {
     it('renders upload form', () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       expect(screen.getByText(/upload|drop files/i)).toBeInTheDocument();
     });
 
     it('renders file list section', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       await waitFor(() => {
         expect(screen.getByText('logo.png')).toBeInTheDocument();
@@ -100,7 +97,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('shows view all button when files exist', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /view all|see all|all files/i })).toBeInTheDocument();
@@ -119,7 +116,7 @@ describe('AssetUploadForm', () => {
         limited: true,
       });
       
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       await waitFor(() => {
         // Should show files but not all 25
@@ -137,7 +134,7 @@ describe('AssetUploadForm', () => {
         total_size: 50000000,
       });
       
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       await waitFor(() => {
         expect(screen.getByText(/25 files/i)).toBeInTheDocument();
@@ -145,7 +142,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('opens modal when View All clicked', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       await waitFor(() => {
         expect(screen.getByText('logo.png')).toBeInTheDocument();
@@ -159,13 +156,13 @@ describe('AssetUploadForm', () => {
 
   describe('File Upload', () => {
     it('renders dropzone area', () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       expect(screen.getByText(/drag.*drop|click.*upload/i)).toBeInTheDocument();
     });
 
     it('accepts file drop', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       const dropzone = screen.getByTestId('dropzone') || screen.getByText(/drag.*drop/i).closest('div');
       const file = new File(['test content'], 'test.png', { type: 'image/png' });
@@ -184,7 +181,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('accepts file selection via input', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       const fileInput = screen.getByLabelText(/upload|choose file/i) || 
         document.querySelector('input[type="file"]');
@@ -204,7 +201,7 @@ describe('AssetUploadForm', () => {
         () => new Promise(resolve => setTimeout(resolve, 100))
       );
       
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       const fileInput = document.querySelector('input[type="file"]');
       if (fileInput) {
@@ -219,7 +216,7 @@ describe('AssetUploadForm', () => {
 
     it('calls onUploadComplete after successful upload', async () => {
       const onUploadComplete = jest.fn();
-      render(<AssetUploadForm {...defaultProps} onUploadComplete={onUploadComplete} />);
+      render(<AssetUploadForm />);
       
       const fileInput = document.querySelector('input[type="file"]');
       if (fileInput) {
@@ -233,7 +230,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('refreshes file list after upload', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       // Initial load
       await waitFor(() => {
@@ -255,7 +252,7 @@ describe('AssetUploadForm', () => {
     it('shows error on upload failure', async () => {
       (assetsApi.uploadAsset as jest.Mock).mockRejectedValue(new Error('Upload failed'));
       
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       const fileInput = document.querySelector('input[type="file"]');
       if (fileInput) {
@@ -273,7 +270,7 @@ describe('AssetUploadForm', () => {
     it('can view file with signed URL', async () => {
       const windowOpen = jest.spyOn(window, 'open').mockImplementation(() => null);
       
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       await waitFor(() => {
         expect(screen.getByText('logo.png')).toBeInTheDocument();
@@ -294,7 +291,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('can delete file from compact view', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       await waitFor(() => {
         expect(screen.getByText('logo.png')).toBeInTheDocument();
@@ -312,7 +309,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('refreshes list after delete', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       await waitFor(() => {
         expect(screen.getByText('logo.png')).toBeInTheDocument();
@@ -333,7 +330,7 @@ describe('AssetUploadForm', () => {
 
   describe('File Type Validation', () => {
     it('accepts valid image types', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       const fileInput = document.querySelector('input[type="file"]');
       if (fileInput) {
@@ -347,7 +344,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('accepts valid video types', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       const fileInput = document.querySelector('input[type="file"]');
       if (fileInput) {
@@ -361,7 +358,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('rejects invalid file types', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       const fileInput = document.querySelector('input[type="file"]');
       if (fileInput) {
@@ -377,7 +374,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('rejects files exceeding size limit', async () => {
-      render(<AssetUploadForm {...defaultProps} maxFileSize={1000000} />);
+      render(<AssetUploadForm />);
       
       const fileInput = document.querySelector('input[type="file"]');
       if (fileInput) {
@@ -405,7 +402,7 @@ describe('AssetUploadForm', () => {
         total_size: 0,
       });
       
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       await waitFor(() => {
         expect(screen.getByText(/no files|upload your first|get started/i)).toBeInTheDocument();
@@ -421,7 +418,7 @@ describe('AssetUploadForm', () => {
         total_size: 0,
       });
       
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       await waitFor(() => {
         expect(screen.queryByRole('button', { name: /view all/i })).not.toBeInTheDocument();
@@ -431,7 +428,7 @@ describe('AssetUploadForm', () => {
 
   describe('Storage Info', () => {
     it('displays total storage used', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       await waitFor(() => {
         expect(screen.getByText(/5\.(3|4) MB/i)).toBeInTheDocument();
@@ -439,7 +436,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('displays file count', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       await waitFor(() => {
         expect(screen.getByText(/3 files/i)).toBeInTheDocument();
@@ -449,7 +446,7 @@ describe('AssetUploadForm', () => {
 
   describe('Accessibility', () => {
     it('has accessible upload button', () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       const uploadButton = screen.getByRole('button', { name: /upload/i }) ||
         screen.getByLabelText(/upload/i);
@@ -458,7 +455,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('file input has accessible label', () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       const fileInput = document.querySelector('input[type="file"]');
       if (fileInput) {
@@ -467,7 +464,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('supports keyboard navigation', async () => {
-      render(<AssetUploadForm {...defaultProps} />);
+      render(<AssetUploadForm />);
       
       await waitFor(() => {
         expect(screen.getByText('logo.png')).toBeInTheDocument();

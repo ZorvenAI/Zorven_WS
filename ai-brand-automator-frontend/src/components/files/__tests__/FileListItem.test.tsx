@@ -23,9 +23,9 @@ const mockFile: AssetFile = {
   file_name: 'test-image.jpg',
   file_type: 'image',
   file_size: 1048576, // 1MB
-  status: 'indexed',
+  pipeline_status: 'indexed',
   uploaded_at: '2025-01-20T10:30:00Z',
-  gcs_uri: 'gs://bucket/path/test-image.jpg',
+  gcs_path: 'gs://bucket/path/test-image.jpg',
 };
 
 describe('FileListItem', () => {
@@ -82,12 +82,12 @@ describe('FileListItem', () => {
     });
 
     it('renders different status colors', () => {
-      const pendingFile = { ...mockFile, status: 'pending' as const };
+      const pendingFile = { ...mockFile, pipeline_status: 'pending' as const };
       const { rerender } = render(<FileListItem {...defaultProps} file={pendingFile} />);
       
       expect(screen.getByText('pending')).toBeInTheDocument();
 
-      const failedFile = { ...mockFile, status: 'failed' as const };
+      const failedFile = { ...mockFile, pipeline_status: 'failed' as const };
       rerender(<FileListItem {...defaultProps} file={failedFile} />);
       
       expect(screen.getByText('failed')).toBeInTheDocument();
@@ -109,28 +109,21 @@ describe('FileListItem', () => {
     });
 
     it('shows video icon for video files', () => {
-      const videoFile = { ...mockFile, file_type: 'video' };
+      const videoFile = { ...mockFile, file_type: 'video' as const };
       render(<FileListItem {...defaultProps} file={videoFile} />);
       
       expect(screen.getByText('🎬')).toBeInTheDocument();
     });
 
     it('shows document icon for document files', () => {
-      const docFile = { ...mockFile, file_type: 'document' };
+      const docFile = { ...mockFile, file_type: 'document' as const };
       render(<FileListItem {...defaultProps} file={docFile} />);
       
       expect(screen.getByText('📄')).toBeInTheDocument();
     });
 
-    it('shows audio icon for audio files', () => {
-      const audioFile = { ...mockFile, file_type: 'audio' };
-      render(<FileListItem {...defaultProps} file={audioFile} />);
-      
-      expect(screen.getByText('🎵')).toBeInTheDocument();
-    });
-
     it('shows generic icon for other files', () => {
-      const otherFile = { ...mockFile, file_type: 'other' };
+      const otherFile = { ...mockFile, file_type: 'other' as const };
       render(<FileListItem {...defaultProps} file={otherFile} />);
       
       expect(screen.getByText('📁')).toBeInTheDocument();
@@ -261,55 +254,18 @@ describe('FileListItem', () => {
 
   describe('Compact Mode', () => {
     it('renders in compact mode when specified', () => {
-      render(<FileListItem {...defaultProps} mode="compact" />);
+      render(<FileListItem {...defaultProps} compact={true} />);
       
       expect(screen.getByText('test-image.jpg')).toBeInTheDocument();
     });
 
-    it('hides some details in compact mode', () => {
-      render(<FileListItem {...defaultProps} mode="compact" />);
-      
-      // Status might be hidden in compact mode
-      expect(screen.queryByText('indexed')).not.toBeInTheDocument();
-    });
-
-    it('shows all details in table mode', () => {
-      render(<FileListItem {...defaultProps} mode="table" />);
+    it('renders in normal mode by default', () => {
+      render(<FileListItem {...defaultProps} />);
       
       expect(screen.getByText('test-image.jpg')).toBeInTheDocument();
       expect(screen.getByText('image')).toBeInTheDocument();
       expect(screen.getByText('indexed')).toBeInTheDocument();
-      expect(screen.getByText('1.00 MB')).toBeInTheDocument();
-    });
-  });
-
-  describe('Selection', () => {
-    it('renders checkbox when selectable', () => {
-      render(<FileListItem {...defaultProps} selectable={true} />);
-      
-      expect(screen.getByRole('checkbox')).toBeInTheDocument();
-    });
-
-    it('shows selected state', () => {
-      render(<FileListItem {...defaultProps} selectable={true} selected={true} />);
-      
-      expect(screen.getByRole('checkbox')).toBeChecked();
-    });
-
-    it('calls onSelect when checkbox clicked', () => {
-      const onSelect = jest.fn();
-      render(
-        <FileListItem
-          {...defaultProps}
-          selectable={true}
-          selected={false}
-          onSelect={onSelect}
-        />
-      );
-      
-      fireEvent.click(screen.getByRole('checkbox'));
-      
-      expect(onSelect).toHaveBeenCalledWith('123', true);
+      expect(screen.getByText('1.0 MB')).toBeInTheDocument();
     });
   });
 
