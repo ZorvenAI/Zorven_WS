@@ -146,7 +146,7 @@ class TestSignedUrlEndpoint:
         client = APIClient()
         client.force_authenticate(user=user)
         client.defaults["SERVER_NAME"] = domain_name
-        client._force_tenant = tenant
+        client.handler._force_tenant = tenant
 
         return client, user, tenant
 
@@ -208,7 +208,7 @@ class TestSignedUrlEndpoint:
         client, user, tenant = authenticated_client
         from onboarding.models import Company, BrandAsset
 
-        company = Company.objects.create(name="Test Company", tenant=tenant, user=user)
+        company = Company.objects.create(name="Test Company", tenant=tenant)
 
         asset = BrandAsset.objects.create(
             company=company,
@@ -283,7 +283,7 @@ class TestAssetsListFiltering:
         client = APIClient()
         client.force_authenticate(user=user)
         client.defaults["SERVER_NAME"] = domain_name
-        client._force_tenant = tenant
+        client.handler._force_tenant = tenant
 
         return client, assets
 
@@ -451,7 +451,7 @@ class TestAssetsListPagination:
         client = APIClient()
         client.force_authenticate(user=user)
         client.defaults["SERVER_NAME"] = domain_name
-        client._force_tenant = tenant
+        client.handler._force_tenant = tenant
 
         return client, assets
 

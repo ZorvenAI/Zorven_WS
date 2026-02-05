@@ -46,7 +46,7 @@ class TestFileBrowserIntegration:
         client = APIClient()
         client.force_authenticate(user=user)
         client.defaults["SERVER_NAME"] = domain_name
-        client._force_tenant = tenant
+        client.handler._force_tenant = tenant
 
         return client, user, tenant, company
 
@@ -331,7 +331,7 @@ class TestTenantIsolation:
         client = APIClient()
         client.force_authenticate(user=user2)
         client.defaults["SERVER_NAME"] = "tenant2.localhost"
-        client._force_tenant = tenant2
+        client.handler._force_tenant = tenant2
 
         response = client.get(f"/api/v1/assets/{asset1.id}/signed-url/")
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -391,7 +391,7 @@ class TestTenantIsolation:
         client1 = APIClient()
         client1.force_authenticate(user=user1)
         client1.defaults["SERVER_NAME"] = "list1.localhost"
-        client1._force_tenant = tenant1
+        client1.handler._force_tenant = tenant1
 
         response = client1.get("/api/v1/assets/")
         assert response.status_code == status.HTTP_200_OK
@@ -404,7 +404,7 @@ class TestTenantIsolation:
         client2 = APIClient()
         client2.force_authenticate(user=user2)
         client2.defaults["SERVER_NAME"] = "list2.localhost"
-        client2._force_tenant = tenant2
+        client2.handler._force_tenant = tenant2
 
         response = client2.get("/api/v1/assets/")
         assert response.status_code == status.HTTP_200_OK
