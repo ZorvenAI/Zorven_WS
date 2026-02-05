@@ -21,6 +21,7 @@ interface UseAssetsReturn {
   retryPipeline: (assetId: number) => Promise<boolean>;
   deleteAsset: (assetId: number) => Promise<boolean>;
   hasPendingAssets: boolean;
+  totalCount: number;
 }
 
 /**
@@ -30,6 +31,7 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
   const { autoFetch = true, pollingInterval = 0, statusFilter } = options;
 
   const [assets, setAssets] = useState<BrandAsset[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true); // Start with loading true for initial load
   const [error, setError] = useState<string | null>(null);
 
@@ -65,6 +67,9 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
 
       const data: AssetsListResponse = await response.json();
       const newAssets = data.results || [];
+      
+      // Update total count
+      setTotalCount(data.count || newAssets.length);
       
       // Only update state if data has actually changed (prevents unnecessary re-renders)
       const hasChanged = JSON.stringify(newAssets) !== JSON.stringify(assetsRef.current);
@@ -163,6 +168,7 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
     retryPipeline,
     deleteAsset,
     hasPendingAssets,
+    totalCount,
   };
 }
 

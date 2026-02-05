@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiClient } from '@/lib/api';
+import { apiClient, assetsApi } from '@/lib/api';
 import { getPipelineStatusConfig, PipelineStatus } from '@/types/assets';
+import { AllFilesModal } from '@/components/ui/AllFilesModal';
 
 const POLLING_INTERVAL = 5000; // Poll every 5 seconds
+const LIMIT_OPTIONS = [3, 6, 9] as const;
 
 interface UploadedFile {
   id: string;
@@ -15,27 +17,40 @@ interface UploadedFile {
   pipeline_status: PipelineStatus;
 }
 
+interface AssetsResponse {
+  count: number;
+  showing: number;
+  has_more: boolean;
+  results: UploadedFile[];
+}
+
 export function AssetUploadForm() {
   const router = useRouter();
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [displayLimit, setDisplayLimit] = useState<typeof LIMIT_OPTIONS[number]>(6);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [loadingUrlId, setLoadingUrlId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [showAllFiles, setShowAllFiles] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Function to fetch assets
+  // Function to fetch assets with limit
   const fetchAssets = useCallback(async () => {
     try {
-      const response = await apiClient.get('/assets/');
+      const response = await apiClient.get(`/assets/?limit=${displayLimit}`);
       if (response.ok) {
-        const data = await response.json();
-        const assets = data.results || [];
-        setUploadedFiles(assets);
+        const data: AssetsResponse = await response.json();
+        setUploadedFiles(data.results || []);
+        setTotalCount(data.count || 0);
+        setHasMore(data.has_more || false);
       }
     } catch (error) {
       console.error('Failed to load files:', error);
     }
-  }, []);
+  }, [displayLimit]);
 
   // Check if any files are still processing (not indexed or failed)
   const hasPendingFiles = uploadedFiles.some(
@@ -146,6 +161,39 @@ export function AssetUploadForm() {
     }
   };
 
+  const handleView = async (fileId: string) => {
+    setLoadingUrlId(fileId);
+    setError('');
+    try {
+      const signedUrls = await assetsApi.getSignedUrl(fileId);
+      window.open(signedUrls.view_url, '_blank');
+    } catch (err) {
+      setError('Failed to get file URL');
+      console.error('Error getting signed URL:', err);
+    } finally {
+      setLoadingUrlId(null);
+    }
+  };
+
+  const handleDownload = async (fileId: string, fileName: string) => {
+    setLoadingUrlId(fileId);
+    setError('');
+    try {
+      const signedUrls = await assetsApi.getSignedUrl(fileId);
+      const link = document.createElement('a');
+      link.href = signedUrls.download_url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      setError('Failed to download file');
+      console.error('Error downloading file:', err);
+    } finally {
+      setLoadingUrlId(null);
+    }
+  };
+
   const handleNext = () => {
     if (uploadedFiles.length === 0) {
       setError('Please upload at least one file or click Skip to continue.');
@@ -216,13 +264,46 @@ export function AssetUploadForm() {
 
       {uploadedFiles.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="font-medium text-white">Uploaded Files</h3>
-            {hasPendingFiles && (
-              <span className="text-xs text-brand-silver/70 animate-pulse">
-                🔄 Processing...
-              </span>
-            )}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <h3 className="font-medium text-white">
+                Uploaded Files
+                <span className="ml-2 text-sm text-brand-silver/70">
+                  ({uploadedFiles.length}{hasMore ? `/${totalCount}` : ''})
+                </span>
+              </h3>
+              {hasPendingFiles && (
+                <span className="text-xs text-brand-silver/70 animate-pulse">
+                  🔄 Processing...
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Limit selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-brand-silver/70">Show:</span>
+                <select
+                  value={displayLimit}
+                  onChange={(e) => setDisplayLimit(Number(e.target.value) as typeof LIMIT_OPTIONS[number])}
+                  className="px-2 py-1 text-xs rounded border border-white/20 bg-brand-dark text-white focus:outline-none focus:border-brand-electric"
+                >
+                  {LIMIT_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* View All button */}
+              {totalCount > displayLimit && (
+                <button
+                  onClick={() => setShowAllFiles(true)}
+                  className="px-3 py-1 text-xs rounded border border-brand-electric/50 bg-brand-electric/20 text-brand-electric hover:bg-brand-electric/30 transition-colors"
+                >
+                  View All ({totalCount})
+                </button>
+              )}
+            </div>
           </div>
           <ul className="divide-y divide-white/10 border border-white/10 rounded-lg bg-white/5">
             {uploadedFiles.map((file) => (
@@ -247,6 +328,30 @@ export function AssetUploadForm() {
                   <span className="text-xs bg-brand-electric/20 text-brand-electric px-2 py-1 rounded">
                     {file.file_type}
                   </span>
+                  {/* View button - show for indexed/curated files */}
+                  {(file.pipeline_status === 'indexed' || file.pipeline_status === 'curated') && (
+                    <button
+                      type="button"
+                      onClick={() => handleView(file.id)}
+                      disabled={loadingUrlId === file.id}
+                      className="text-brand-electric hover:text-brand-electric/80 disabled:opacity-50 transition-colors"
+                      title="View file"
+                    >
+                      {loadingUrlId === file.id ? '⏳' : '👁️'}
+                    </button>
+                  )}
+                  {/* Download button - show for indexed/curated files */}
+                  {(file.pipeline_status === 'indexed' || file.pipeline_status === 'curated') && (
+                    <button
+                      type="button"
+                      onClick={() => handleDownload(file.id, file.file_name)}
+                      disabled={loadingUrlId === file.id}
+                      className="text-brand-electric hover:text-brand-electric/80 disabled:opacity-50 transition-colors"
+                      title="Download file"
+                    >
+                      ⬇️
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleDelete(file.id, file.file_name)}
@@ -293,6 +398,18 @@ export function AssetUploadForm() {
           </button>
         </div>
       </div>
+
+      {/* All Files Modal */}
+      <AllFilesModal
+        isOpen={showAllFiles}
+        onClose={() => {
+          setShowAllFiles(false);
+          fetchAssets(); // Refresh the list when modal closes
+        }}
+        onDelete={async (fileId, fileName) => {
+          await handleDelete(fileId, fileName);
+        }}
+      />
     </div>
   );
 }

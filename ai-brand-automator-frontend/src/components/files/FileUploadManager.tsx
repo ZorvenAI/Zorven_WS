@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import { useAssets, uploadAsset } from '@/hooks/useAssets';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { uploadAsset } from '@/hooks/useAssets';
+import { apiClient, assetsApi } from '@/lib/api';
 import {
   BrandAsset,
   getPipelineStatusConfig,
@@ -9,6 +10,7 @@ import {
   formatFileSize,
   getFileTypeFromMime,
 } from '@/types/assets';
+import { AllFilesModal } from '@/components/ui/AllFilesModal';
 
 interface UploadingFile {
   id: string;
@@ -16,6 +18,13 @@ interface UploadingFile {
   progress: number;
   status: 'uploading' | 'success' | 'error';
   error?: string;
+}
+
+interface AssetsResponse {
+  count: number;
+  showing: number;
+  has_more: boolean;
+  results: BrandAsset[];
 }
 
 const ALLOWED_TYPES = [
@@ -31,15 +40,95 @@ const ALLOWED_TYPES = [
 ];
 
 const MAX_SIZE_MB = 50;
+const LIMIT_OPTIONS = [3, 6, 9] as const;
+const POLLING_INTERVAL = 5000;
 
 export function FileUploadManager() {
-  const { assets, loading, error, refresh, retryPipeline, deleteAsset, hasPendingAssets } = useAssets({
-    pollingInterval: 5000, // Poll every 5 seconds for status updates
-  });
-
+  const [assets, setAssets] = useState<BrandAsset[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [displayLimit, setDisplayLimit] = useState<typeof LIMIT_OPTIONS[number]>(6);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
+  const [showAllFiles, setShowAllFiles] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Function to fetch assets with limit
+  const fetchAssets = useCallback(async () => {
+    try {
+      const response = await apiClient.get(`/assets/?limit=${displayLimit}`);
+      if (response.ok) {
+        const data: AssetsResponse = await response.json();
+        setAssets(data.results || []);
+        setTotalCount(data.count || 0);
+        setHasMore(data.has_more || false);
+      }
+    } catch (err) {
+      console.error('Failed to load files:', err);
+      setError('Failed to load files');
+    } finally {
+      setLoading(false);
+    }
+  }, [displayLimit]);
+
+  // Check if any files are still processing (not indexed or failed)
+  const hasPendingAssets = assets.some(
+    (f) => f.pipeline_status !== 'indexed' && f.pipeline_status !== 'failed'
+  );
+
+  // Load existing uploaded files on mount and set up polling
+  useEffect(() => {
+    fetchAssets();
+  }, [fetchAssets]);
+
+  // Set up polling when there are pending files
+  useEffect(() => {
+    if (hasPendingAssets) {
+      pollingRef.current = setInterval(() => {
+        fetchAssets();
+      }, POLLING_INTERVAL);
+    } else if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [hasPendingAssets, fetchAssets]);
+
+  const refresh = useCallback(() => {
+    fetchAssets();
+  }, [fetchAssets]);
+
+  const retryPipeline = useCallback(async (assetId: number) => {
+    try {
+      await apiClient.post(`/assets/${assetId}/retry_pipeline/`, {});
+      await fetchAssets();
+    } catch (err) {
+      console.error('Failed to retry pipeline:', err);
+    }
+  }, [fetchAssets]);
+
+  const deleteAsset = useCallback(async (assetId: number): Promise<boolean> => {
+    try {
+      const response = await apiClient.delete(`/assets/${assetId}/`);
+      if (response.ok) {
+        await fetchAssets();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Failed to delete asset:', err);
+      return false;
+    }
+  }, [fetchAssets]);
 
   const validateFile = useCallback((file: File): string | null => {
     if (!ALLOWED_TYPES.includes(file.type)) {
@@ -287,42 +376,82 @@ export function FileUploadManager() {
       )}
 
       {/* Assets List */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="font-medium text-white">Your Files</h3>
-          <div className="flex items-center gap-2">
-            {hasPendingAssets && (
-              <span className="text-xs text-brand-silver/70 animate-pulse">
-                🔄 Processing...
-              </span>
-            )}
-            <button
-              onClick={refresh}
-              className="text-sm text-brand-electric hover:text-brand-electric/80"
-            >
-              Refresh
-            </button>
+      {assets.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <h3 className="font-medium text-white">
+                Your Files
+                <span className="ml-2 text-sm text-brand-silver/70">
+                  ({assets.length}{hasMore ? `/${totalCount}` : ''})
+                </span>
+              </h3>
+              {hasPendingAssets && (
+                <span className="text-xs text-brand-silver/70 animate-pulse">
+                  🔄 Processing...
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Limit selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-brand-silver/70">Show:</span>
+                <select
+                  value={displayLimit}
+                  onChange={(e) => setDisplayLimit(Number(e.target.value) as typeof LIMIT_OPTIONS[number])}
+                  className="px-2 py-1 text-xs rounded border border-white/20 bg-brand-dark text-white focus:outline-none focus:border-brand-electric"
+                >
+                  {LIMIT_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* View All button */}
+              {totalCount > displayLimit && (
+                <button
+                  onClick={() => setShowAllFiles(true)}
+                  className="px-3 py-1 text-xs rounded border border-brand-electric/50 bg-brand-electric/20 text-brand-electric hover:bg-brand-electric/30 transition-colors"
+                >
+                  View All ({totalCount})
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-
-        {loading && assets.length === 0 ? (
-          <div className="text-center py-8">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-brand-electric"></div>
-            <p className="mt-2 text-sm text-brand-silver/70">Loading assets...</p>
-          </div>
-        ) : assets.length === 0 ? (
-          <div className="text-center py-8 text-brand-silver/50">
-            <p>No files uploaded yet.</p>
-            <p className="text-sm mt-1">Upload your first brand asset to get started.</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-white/10 border border-white/10 rounded-lg bg-white/5">
+          <ul className="divide-y divide-white/10 border border-white/10 rounded-lg bg-white/5">
             {assets.map((asset) => (
               <AssetRow key={asset.id} asset={asset} onRetry={handleRetry} onDelete={deleteAsset} />
             ))}
-          </div>
-        )}
-      </div>
+          </ul>
+        </div>
+      )}
+
+      {loading && assets.length === 0 && (
+        <div className="text-center py-8">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-brand-electric"></div>
+          <p className="mt-2 text-sm text-brand-silver/70">Loading assets...</p>
+        </div>
+      )}
+
+      {!loading && assets.length === 0 && (
+        <div className="text-center py-8 text-brand-silver/50">
+          <p>No files uploaded yet.</p>
+          <p className="text-sm mt-1">Upload your first brand asset to get started.</p>
+        </div>
+      )}
+
+      {/* All Files Modal */}
+      <AllFilesModal
+        isOpen={showAllFiles}
+        onClose={() => {
+          setShowAllFiles(false);
+          refresh(); // Refresh the list when modal closes
+        }}
+        onDelete={async (fileId) => {
+          await deleteAsset(Number(fileId));
+        }}
+      />
     </div>
   );
 }
@@ -336,6 +465,8 @@ interface AssetRowProps {
 function AssetRow({ asset, onRetry, onDelete }: AssetRowProps) {
   const [retrying, setRetrying] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [loadingUrl, setLoadingUrl] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const statusConfig = getPipelineStatusConfig(asset.pipeline_status);
 
   const handleRetry = async () => {
@@ -353,13 +484,49 @@ function AssetRow({ asset, onRetry, onDelete }: AssetRowProps) {
     setDeleting(false);
   };
 
+  const handleView = async () => {
+    setLoadingUrl(true);
+    setError(null);
+    try {
+      const signedUrls = await assetsApi.getSignedUrl(asset.id.toString());
+      window.open(signedUrls.view_url, '_blank');
+    } catch (err) {
+      setError('Failed to get file URL');
+      console.error('Error getting signed URL:', err);
+    } finally {
+      setLoadingUrl(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    setLoadingUrl(true);
+    setError(null);
+    try {
+      const signedUrls = await assetsApi.getSignedUrl(asset.id.toString());
+      const link = document.createElement('a');
+      link.href = signedUrls.download_url;
+      link.download = asset.file_name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      setError('Failed to download file');
+      console.error('Error downloading file:', err);
+    } finally {
+      setLoadingUrl(false);
+    }
+  };
+
   return (
-    <div className="px-4 py-3 flex items-center justify-between">
+    <li className="px-4 py-3 flex items-center justify-between">
       <div className="flex items-center gap-3 flex-1 min-w-0">
         <span className="text-lg">{getFileTypeIcon(asset.file_type)}</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-white truncate">{asset.file_name}</p>
-          <p className="text-xs text-brand-silver/70">{formatFileSize(asset.file_size)}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-brand-silver/70">{formatFileSize(asset.file_size)}</span>
+            {error && <span className="text-xs text-red-400">{error}</span>}
+          </div>
         </div>
       </div>
 
@@ -369,6 +536,34 @@ function AssetRow({ asset, onRetry, onDelete }: AssetRowProps) {
         >
           {statusConfig.icon} {statusConfig.label}
         </span>
+
+        <span className="text-xs bg-brand-electric/20 text-brand-electric px-2 py-1 rounded">
+          {asset.file_type}
+        </span>
+
+        {/* View button - show for indexed/curated files */}
+        {(asset.pipeline_status === 'indexed' || asset.pipeline_status === 'curated') && (
+          <button
+            onClick={handleView}
+            disabled={loadingUrl}
+            className="text-brand-electric hover:text-brand-electric/80 disabled:opacity-50 transition-colors"
+            title="View file"
+          >
+            {loadingUrl ? '⏳' : '👁️'}
+          </button>
+        )}
+
+        {/* Download button - show for indexed/curated files */}
+        {(asset.pipeline_status === 'indexed' || asset.pipeline_status === 'curated') && (
+          <button
+            onClick={handleDownload}
+            disabled={loadingUrl}
+            className="text-brand-electric hover:text-brand-electric/80 disabled:opacity-50 transition-colors"
+            title="Download file"
+          >
+            ⬇️
+          </button>
+        )}
 
         {asset.pipeline_status === 'failed' && (
           <button
@@ -384,12 +579,16 @@ function AssetRow({ asset, onRetry, onDelete }: AssetRowProps) {
         <button
           onClick={handleDelete}
           disabled={deleting}
-          className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
+          className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           title="Delete file"
         >
-          {deleting ? '...' : '🗑️'}
+          {deleting ? (
+            <span className="inline-block animate-spin">⏳</span>
+          ) : (
+            <span>🗑️</span>
+          )}
         </button>
       </div>
-    </div>
+    </li>
   );
 }

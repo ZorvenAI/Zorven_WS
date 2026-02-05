@@ -6,6 +6,7 @@ Integration with Google Cloud Storage
 import os
 import time
 import logging
+from datetime import timedelta
 from django.conf import settings
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -125,6 +126,84 @@ class GCSService:
             return blob.exists()
         except Exception:
             return False
+
+    def generate_signed_url(
+        self,
+        file_path,
+        expiration_minutes=15,
+        for_download=False,
+        filename=None,
+    ):
+        """
+        Generate a signed URL for temporary access to a file.
+
+        Args:
+            file_path: Path of the file in GCS
+            expiration_minutes: How long the URL should be valid (default: 15)
+            for_download: If True, sets content-disposition to attachment
+            filename: Original filename for download (used with for_download)
+
+        Returns:
+            dict: Contains 'url' and 'expires_at' timestamp
+        """
+        if not self.bucket:
+            # Mock URL for development
+            from datetime import datetime, timezone
+
+            mock_url = (
+                f"https://storage.googleapis.com/{self.bucket_name}/{file_path}"
+                f"?mock_signed=true"
+            )
+            expires_at = datetime.now(timezone.utc) + timedelta(
+                minutes=expiration_minutes
+            )
+            return {
+                "url": mock_url,
+                "expires_at": expires_at.isoformat(),
+            }
+
+        try:
+            from datetime import datetime, timezone
+
+            blob = self.bucket.blob(file_path)
+
+            # Note: We don't check if file exists here - signed URL generation works
+            # even for non-existent files. GCS will return 404 when accessed.
+            # This allows viewing files that may be in different paths or being processed.
+
+            # Build response disposition header if downloading
+            response_disposition = None
+            if for_download and filename:
+                # Sanitize filename for header
+                safe_filename = filename.replace('"', '\\"')
+                response_disposition = f'attachment; filename="{safe_filename}"'
+
+            # Generate signed URL
+            expiration = timedelta(minutes=expiration_minutes)
+            url = blob.generate_signed_url(
+                version="v4",
+                expiration=expiration,
+                method="GET",
+                response_disposition=response_disposition,
+            )
+
+            expires_at = datetime.now(timezone.utc) + expiration
+
+            logger.info(
+                f"Generated signed URL for {file_path}, "
+                f"expires in {expiration_minutes} minutes"
+            )
+
+            return {
+                "url": url,
+                "expires_at": expires_at.isoformat(),
+            }
+
+        except FileNotFoundError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to generate signed URL for {file_path}: {e}")
+            raise Exception(f"Failed to generate signed URL: {str(e)}")
 
 
 # Global service instance

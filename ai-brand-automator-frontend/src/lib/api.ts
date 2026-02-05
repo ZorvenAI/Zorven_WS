@@ -137,6 +137,154 @@ export const apiClient = {
       method: 'DELETE',
     });
   },
+
+  async patch(endpoint: string, data: unknown) {
+    return this.request(endpoint, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+// ==========================================
+// Asset/File Browser API Types & Functions
+// ==========================================
+
+export interface AssetFile {
+  id: string;
+  file_name: string;
+  file_type: 'image' | 'video' | 'document' | 'other';
+  file_size: number;
+  pipeline_status: 'pending' | 'ingested' | 'curated' | 'indexed' | 'failed';
+  uploaded_at: string;
+  gcs_path?: string;
+}
+
+export interface SignedUrlResponse {
+  view_url: string;
+  download_url: string;
+  expires_at: string;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+}
+
+export interface AssetsListParams {
+  page?: number;
+  page_size?: number;
+  limit?: number;
+  search?: string;
+  file_type?: string;
+  status?: string;
+  sort_by?: 'uploaded_at' | 'file_name' | 'file_size';
+  sort_order?: 'asc' | 'desc';
+}
+
+export interface PaginatedAssetsResponse {
+  count: number;
+  total_pages: number;
+  current_page: number;
+  page_size: number;
+  has_next: boolean;
+  has_previous: boolean;
+  next: string | null;
+  previous: string | null;
+  results: AssetFile[];
+  filters_applied: {
+    search: string | null;
+    file_type: string | null;
+    status: string | null;
+    sort_by: string;
+    sort_order: string;
+  };
+}
+
+export interface LimitedAssetsResponse {
+  count: number;
+  showing: number;
+  has_more: boolean;
+  results: AssetFile[];
+  filters_applied: {
+    search: string | null;
+    file_type: string | null;
+    status: string | null;
+    sort_by: string;
+    sort_order: string;
+  };
+}
+
+export const assetsApi = {
+  /**
+   * Get paginated list of assets with optional filters
+   */
+  async getAssets(params: AssetsListParams = {}): Promise<PaginatedAssetsResponse | LimitedAssetsResponse> {
+    const searchParams = new URLSearchParams();
+    
+    if (params.page) searchParams.set('page', params.page.toString());
+    if (params.page_size) searchParams.set('page_size', params.page_size.toString());
+    if (params.limit) searchParams.set('limit', params.limit.toString());
+    if (params.search) searchParams.set('search', params.search);
+    if (params.file_type) searchParams.set('file_type', params.file_type);
+    if (params.status) searchParams.set('status', params.status);
+    if (params.sort_by) searchParams.set('sort_by', params.sort_by);
+    if (params.sort_order) searchParams.set('sort_order', params.sort_order);
+
+    const queryString = searchParams.toString();
+    const endpoint = `/assets/${queryString ? `?${queryString}` : ''}`;
+    
+    const response = await apiClient.get(endpoint);
+    if (!response.ok) {
+      throw new Error('Failed to fetch assets');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get signed URLs for viewing/downloading a file
+   * URLs expire in 15 minutes
+   */
+  async getSignedUrl(assetId: string): Promise<SignedUrlResponse> {
+    const response = await apiClient.get(`/assets/${assetId}/signed-url/`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to get signed URL');
+    }
+    return response.json();
+  },
+
+  /**
+   * Delete an asset
+   */
+  async deleteAsset(assetId: string): Promise<void> {
+    const response = await apiClient.delete(`/assets/${assetId}/`);
+    if (!response.ok) {
+      throw new Error('Failed to delete asset');
+    }
+  },
+
+  /**
+   * Upload a new asset
+   */
+  async uploadAsset(file: File, fileType: string): Promise<AssetFile> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('file_type', fileType);
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/assets/upload/`, {
+      method: 'POST',
+      headers: {
+        ...(token && { 'Authorization': `Bearer ${token}` }),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to upload asset');
+    }
+    return response.json();
+  },
 };
 
 // Subscription API types
