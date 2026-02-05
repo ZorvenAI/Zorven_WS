@@ -300,7 +300,8 @@ class TestTenantIsolation:
             domain="tenant1.localhost", tenant=tenant1, is_primary=True
         )
 
-        user1 = django_user_model.objects.create_user(
+        # Create user for tenant 1 (unused but kept for realistic tenant setup)
+        django_user_model.objects.create_user(
             username="user1", email="user1@example.com", password="pass123"
         )
 
