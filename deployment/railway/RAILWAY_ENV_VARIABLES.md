@@ -59,6 +59,39 @@ KAFKA_SASL_MECHANISM=PLAIN
 # Enable Kafka publishing from onboarding file uploads (default: true)
 ONBOARDING_KAFKA_ENABLED=true
 
+# Enable Celery Beat scheduled Kafka consumer tasks (default: false — set to true only after Kafka is configured)
+KAFKA_CONSUMERS_ENABLED=false
+
+# =============================================================================
+# Google Cloud Credentials (for pipeline workers)
+# =============================================================================
+# Paste the FULL JSON content of your GCS service account key.
+# Used by entrypoint scripts in Docker to write /app/gcs-credentials.json.
+# Required on: web, ingestion-consumer, ingestion-worker,
+#              curation-consumer, curation-worker
+GCS_CREDENTIALS_JSON=<paste-full-service-account-json>
+
+# =============================================================================
+# Pipeline Topic Overrides (optional — defaults shown)
+# =============================================================================
+# INGESTION_KAFKA_INPUT_TOPIC=raw-ingestion-topic
+# INGESTION_KAFKA_OUTPUT_TOPIC=curation-needed-topic
+# INGESTION_KAFKA_DLQ_TOPIC=ingestion-dlq
+# CURATION_KAFKA_INPUT_TOPIC=curation-needed-topic
+# CURATION_KAFKA_OUTPUT_TOPIC=rag-sync-ready-topic
+# CURATION_KAFKA_DLQ_TOPIC=curation-dlq
+
+# =============================================================================
+# Media Curation AI & DLP (optional — defaults shown)
+# =============================================================================
+# CURATION_DLP_ENABLED=true
+# CURATION_AI_PROVIDER=google
+# CURATION_AI_MODEL=gemini-1.5-pro
+# DLP_GCP_PROJECT_ID=<same-as-GS_PROJECT_ID>
+
+# Pipeline status webhook auth (optional)
+# PIPELINE_WEBHOOK_SECRET=<shared-secret-for-pipeline-callbacks>
+
 # =============================================================================
 # External Services
 # =============================================================================

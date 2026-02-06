@@ -627,6 +627,7 @@ PIPELINE_WEBHOOK_SECRET = config("PIPELINE_WEBHOOK_SECRET", default="")
 MEDIA_CURATION = {
     # Kafka Topics for curation pipeline
     "KAFKA": {
+        "BOOTSTRAP_SERVERS": KAFKA_BOOTSTRAP_SERVERS,
         "INPUT_TOPIC": config(
             "CURATION_KAFKA_INPUT_TOPIC", default="curation-needed-topic"
         ),

@@ -195,7 +195,22 @@ class VertexAIAdapter:
             return response.text
 
         except Exception as e:
-            if self._is_quota_error(e):
+            # Check for credential errors — fall back to mock mode
+            try:
+                from google.auth.exceptions import DefaultCredentialsError
+
+                is_credential_error = isinstance(e, DefaultCredentialsError)
+            except ImportError:
+                is_credential_error = False
+
+            if is_credential_error:
+                logger.warning(
+                    "Vertex AI credentials not available, switching to mock mode",
+                    exc_info=True,
+                )
+                self._vertex_available = False
+                return f"[Mock Vertex AI response] Content from {gcs_uri}"
+            elif self._is_quota_error(e):
                 raise AIModelQuotaExceededError(
                     f"Quota exceeded for Vertex AI: {e}",
                 )

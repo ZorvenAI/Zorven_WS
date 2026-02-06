@@ -246,6 +246,7 @@ class KafkaConsumerService:
             producer = Producer(
                 {
                     "bootstrap.servers": KafkaConfig.BOOTSTRAP_SERVERS,
+                    **KafkaConfig.get_sasl_config(),
                 }
             )
 

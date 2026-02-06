@@ -68,20 +68,25 @@ class CloudDLPAdapter(DLPPort):
         self.project_id = project_id or getattr(settings, "GCP_PROJECT_ID", None)
         self.default_info_types = default_info_types or DEFAULT_INFO_TYPES
 
-        if credentials_path:
-            self.client = dlp_v2.DlpServiceClient.from_service_account_json(
-                credentials_path
+        try:
+            if credentials_path:
+                self.client = dlp_v2.DlpServiceClient.from_service_account_json(
+                    credentials_path
+                )
+            else:
+                # Use Application Default Credentials
+                self.client = dlp_v2.DlpServiceClient()
+
+            self.parent = f"projects/{self.project_id}"
+
+            logger.info(
+                "Cloud DLP adapter initialized",
+                extra={"project_id": self.project_id},
             )
-        else:
-            # Use Application Default Credentials
-            self.client = dlp_v2.DlpServiceClient()
-
-        self.parent = f"projects/{self.project_id}"
-
-        logger.info(
-            "Cloud DLP adapter initialized",
-            extra={"project_id": self.project_id},
-        )
+        except Exception as e:
+            self._dlp_available = False
+            self.client = None
+            logger.warning(f"DLP client initialization failed (using mock mode): {e}")
 
     def _get_info_types_config(
         self, tenant_config: Optional[TenantConfig] = None

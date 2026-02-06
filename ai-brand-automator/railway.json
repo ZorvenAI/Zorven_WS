@@ -6,13 +6,15 @@
   },
   "deploy": {
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 5,
-    "healthcheckPath": "/health/",
-    "healthcheckTimeout": 300
+    "restartPolicyMaxRetries": 5
   },
   "services": {
     "web": {
-      "startCommand": "/app/entrypoint.sh"
+      "startCommand": "/app/entrypoint.sh",
+      "deploy": {
+        "healthcheckPath": "/health/",
+        "healthcheckTimeout": 300
+      }
     },
     "celery-worker": {
       "startCommand": "/app/entrypoint-worker.sh celery -A brand_automator worker -l info --concurrency=2"
