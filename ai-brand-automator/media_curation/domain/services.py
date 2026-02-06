@@ -29,7 +29,6 @@ from media_curation.domain.exceptions import (
     ProcessorNotFoundError,
     StorageError,
     AIModelError,
-    DLPError,
 )
 from media_curation.ports.ai_port import ContentProcessorPort
 from media_curation.ports.dlp_port import DLPPort
@@ -156,8 +155,11 @@ class CurationService:
             ProcessorNotFoundError: If no processor supports the MIME type
             ConfigurationError: If tenant config is invalid
             AIModelError: If AI processing fails
-            DLPError: If PII redaction fails
             StorageError: If saving to GCS fails
+
+        Note:
+            DLP (PII redaction) errors are non-fatal and handled internally.
+            Curation continues with original text if DLP fails.
         """
         trace_id = str(event.trace_id)
         logger.info(
@@ -270,7 +272,7 @@ class CurationService:
             self._handle_failure(event, e, retryable=False)
             raise
 
-        except (AIModelError, DLPError) as e:
+        except AIModelError as e:
             # May be retryable depending on the error
             is_retryable = isinstance(e, RetryableError)
             self._handle_failure(event, e, retryable=is_retryable)
@@ -439,10 +441,12 @@ class CurationService:
                 loop.close()
 
             return result.redacted_text, result.has_pii
-        except Exception as e:
-            logger.error(f"DLP redaction failed: {e}")
-            # DLP is non-fatal: return original text so curation can continue
-            logger.warning("Continuing curation without PII redaction due to DLP error")
+        except Exception:
+            # DLP is non-fatal: log with traceback and continue with original text
+            logger.warning(
+                "DLP redaction failed, continuing curation without PII redaction",
+                exc_info=True,
+            )
             return text, False
 
     def _build_curated_document(

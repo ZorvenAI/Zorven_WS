@@ -384,6 +384,68 @@ class TestCurationServicePIIRedaction:
         assert result.pii_redacted is True
         assert "[REDACTED]" in result.extracted_text
 
+    def test_dlp_failure_continues_curation_without_redaction(
+        self,
+        processor_factory,
+        mock_storage_adapter,
+        mock_event_producer,
+    ):
+        """Test that DLP failure is non-fatal: curation succeeds with original text."""
+        import asyncio
+
+        # Create a DLP adapter that raises on redact_pii
+        failing_dlp = MockDLPAdapter(should_fail=True)
+        mock_cache = MockCacheAdapter()
+
+        # Set up tenant config with DLP enabled
+        tenant_config = TenantConfig(
+            tenant_id=SAMPLE_TENANT_ID,
+            dlp_enabled=True,
+            dlp_info_types=["EMAIL_ADDRESS"],
+        )
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(
+            mock_cache.set_tenant_config(
+                str(SAMPLE_TENANT_ID),
+                tenant_config,
+            )
+        )
+        loop.close()
+
+        service = CurationService(
+            processor_factory=processor_factory,
+            dlp=failing_dlp,
+            storage=mock_storage_adapter,
+            cache=mock_cache,
+            producer=mock_event_producer,
+            output_topic="rag-sync-ready-topic",
+            dlq_topic="curation-dlq",
+            output_bucket="curated-content",
+        )
+
+        event = CurationEvent(
+            event_id=uuid4(),
+            trace_id=uuid4(),
+            tenant_id=SAMPLE_TENANT_ID,
+            file_id=uuid4(),
+            raw_gcs_uri="gs://bucket/file.pdf",
+            mime_type="application/pdf",
+            content_type=ContentType.DOCUMENT,
+            source_service="test",
+            timestamp=datetime.now(timezone.utc),
+        )
+
+        # DLP fails, but curation should still succeed
+        result = service.process_event(event)
+
+        # Verify curation completed with original (unredacted) text
+        assert result is not None
+        assert result.pii_redacted is False
+        assert result.extracted_text == "Mock extracted text"
+
+        # Verify DLP was attempted (called but failed)
+        assert len(failing_dlp.redact_calls) == 1
+
 
 class TestCurationServiceRetryLogic:
     """Tests for CurationService.process_with_retry()."""

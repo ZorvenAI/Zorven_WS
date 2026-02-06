@@ -51,8 +51,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--group",
             type=str,
-            default=getattr(settings, "KAFKA_CONSUMER_GROUP", "rag-index-consumer"),
-            help="Kafka consumer group ID (default: rag-index-consumer)",
+            default=getattr(settings, "KAFKA_CONSUMER_GROUP", "rag-index-consumers"),
+            help="Kafka consumer group ID (default: rag-index-consumers)",
         )
         parser.add_argument(
             "--bootstrap-servers",
