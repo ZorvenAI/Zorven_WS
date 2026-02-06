@@ -77,6 +77,11 @@ def create_test_tenant():
 class TestE2EAssetUpload:
     """E2E tests for asset upload pipeline."""
 
+    @pytest.fixture(autouse=True)
+    def setup_webhook_secret(self, settings):
+        """Set up the webhook secret for all tests in this class."""
+        settings.PIPELINE_WEBHOOK_SECRET = "test-webhook-secret"
+
     def test_e2e_asset_upload_gcs_path_format(self):
         """Verify uploaded assets use correct GCS path format for pipeline."""
         tenant = create_test_tenant()
@@ -128,7 +133,11 @@ class TestE2EAssetUpload:
         for stage in stages:
             response = client.post(
                 "/api/v1/webhooks/pipeline-status/",
-                {"asset_id": asset.id, "status": stage},
+                {
+                    "asset_id": asset.id,
+                    "status": stage,
+                    "secret": "test-webhook-secret",
+                },
                 format="json",
             )
             assert response.status_code == status.HTTP_200_OK
@@ -202,6 +211,11 @@ class TestE2ETenantConfig:
 class TestE2EFullPipelineFlow:
     """E2E test for complete pipeline flow."""
 
+    @pytest.fixture(autouse=True)
+    def setup_webhook_secret(self, settings):
+        """Set up the webhook secret for all tests in this class."""
+        settings.PIPELINE_WEBHOOK_SECRET = "test-webhook-secret"
+
     def test_e2e_complete_asset_lifecycle(self):
         """
         Complete E2E test of asset lifecycle:
@@ -247,6 +261,7 @@ class TestE2EFullPipelineFlow:
             {
                 "asset_id": asset.id,
                 "status": "ingested",
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -258,6 +273,7 @@ class TestE2EFullPipelineFlow:
             {
                 "asset_id": asset.id,
                 "status": "curated",
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -269,6 +285,7 @@ class TestE2EFullPipelineFlow:
             {
                 "asset_id": asset.id,
                 "status": "indexed",
+                "secret": "test-webhook-secret",
             },
             format="json",
         )

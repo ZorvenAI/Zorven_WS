@@ -1,39 +1,85 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiClient } from '@/lib/api';
+import { apiClient, assetsApi } from '@/lib/api';
+import { getPipelineStatusConfig, PipelineStatus } from '@/types/assets';
+import { AllFilesModal } from '@/components/ui/AllFilesModal';
+
+const POLLING_INTERVAL = 5000; // Poll every 5 seconds
+const LIMIT_OPTIONS = [3, 6, 9] as const;
 
 interface UploadedFile {
   id: string;
   file_name: string;
   file_type: string; // Changed from asset_type to match backend
   file_size: number;
+  pipeline_status: PipelineStatus;
+}
+
+interface AssetsResponse {
+  count: number;
+  showing: number;
+  has_more: boolean;
+  results: UploadedFile[];
 }
 
 export function AssetUploadForm() {
   const router = useRouter();
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [displayLimit, setDisplayLimit] = useState<typeof LIMIT_OPTIONS[number]>(6);
   const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [loadingUrlId, setLoadingUrlId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [showAllFiles, setShowAllFiles] = useState(false);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load existing uploaded files on mount
+  // Function to fetch assets with limit
+  const fetchAssets = useCallback(async () => {
+    try {
+      const response = await apiClient.get(`/assets/?limit=${displayLimit}`);
+      if (response.ok) {
+        const data: AssetsResponse = await response.json();
+        setUploadedFiles(data.results || []);
+        setTotalCount(data.count || 0);
+        setHasMore(data.has_more || false);
+      }
+    } catch (error) {
+      console.error('Failed to load files:', error);
+    }
+  }, [displayLimit]);
+
+  // Check if any files are still processing (not indexed or failed)
+  const hasPendingFiles = uploadedFiles.some(
+    (f) => f.pipeline_status !== 'indexed' && f.pipeline_status !== 'failed'
+  );
+
+  // Load existing uploaded files on mount and set up polling
   useEffect(() => {
-    const loadExistingFiles = async () => {
-      try {
-        const response = await apiClient.get('/assets/');
-        if (response.ok) {
-          const data = await response.json();
-          const assets = data.results || [];
-          setUploadedFiles(assets);
-        }
-      } catch (error) {
-        console.error('Failed to load existing files:', error);
+    fetchAssets();
+  }, [fetchAssets]);
+
+  // Set up polling when there are pending files
+  useEffect(() => {
+    if (hasPendingFiles) {
+      pollingRef.current = setInterval(() => {
+        fetchAssets();
+      }, POLLING_INTERVAL);
+    } else if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
       }
     };
-
-    loadExistingFiles();
-  }, []);
+  }, [hasPendingFiles, fetchAssets]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -91,6 +137,63 @@ export function AssetUploadForm() {
     router.push('/onboarding/step-5');
   };
 
+  const handleDelete = async (fileId: string, fileName: string) => {
+    if (!confirm(`Are you sure you want to delete "${fileName}"?`)) {
+      return;
+    }
+
+    setDeletingId(fileId);
+    setError('');
+
+    try {
+      const response = await apiClient.delete(`/assets/${fileId}/`);
+      if (response.ok) {
+        setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId));
+      } else {
+        const errorData = await response.json();
+        setError(`Failed to delete ${fileName}: ${errorData.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      setError(`Failed to delete ${fileName}. Please try again.`);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleView = async (fileId: string) => {
+    setLoadingUrlId(fileId);
+    setError('');
+    try {
+      const signedUrls = await assetsApi.getSignedUrl(fileId);
+      window.open(signedUrls.view_url, '_blank');
+    } catch (err) {
+      setError('Failed to get file URL');
+      console.error('Error getting signed URL:', err);
+    } finally {
+      setLoadingUrlId(null);
+    }
+  };
+
+  const handleDownload = async (fileId: string, fileName: string) => {
+    setLoadingUrlId(fileId);
+    setError('');
+    try {
+      const signedUrls = await assetsApi.getSignedUrl(fileId);
+      const link = document.createElement('a');
+      link.href = signedUrls.download_url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      setError('Failed to download file');
+      console.error('Error downloading file:', err);
+    } finally {
+      setLoadingUrlId(null);
+    }
+  };
+
   const handleNext = () => {
     if (uploadedFiles.length === 0) {
       setError('Please upload at least one file or click Skip to continue.');
@@ -138,7 +241,7 @@ export function AssetUploadForm() {
                 className="sr-only"
                 multiple
                 onChange={handleFileUpload}
-                accept="image/*,.pdf,.doc,.docx"
+                accept="image/*,.pdf,.doc,.docx,video/*,.mp4,.mov"
                 disabled={uploading}
               />
             </label>
@@ -147,7 +250,7 @@ export function AssetUploadForm() {
             </p>
           </div>
           <p className="text-xs text-brand-silver/50">
-            PNG, JPG, PDF up to 10MB each
+            PNG, JPG, PDF, MP4 up to 50MB each
           </p>
         </div>
       </div>
@@ -161,7 +264,47 @@ export function AssetUploadForm() {
 
       {uploadedFiles.length > 0 && (
         <div className="space-y-2">
-          <h3 className="font-medium text-white">Uploaded Files</h3>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <h3 className="font-medium text-white">
+                Uploaded Files
+                <span className="ml-2 text-sm text-brand-silver/70">
+                  ({uploadedFiles.length}{hasMore ? `/${totalCount}` : ''})
+                </span>
+              </h3>
+              {hasPendingFiles && (
+                <span className="text-xs text-brand-silver/70 animate-pulse">
+                  🔄 Processing...
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Limit selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-brand-silver/70">Show:</span>
+                <select
+                  value={displayLimit}
+                  onChange={(e) => setDisplayLimit(Number(e.target.value) as typeof LIMIT_OPTIONS[number])}
+                  className="px-2 py-1 text-xs rounded border border-white/20 bg-brand-dark text-white focus:outline-none focus:border-brand-electric"
+                >
+                  {LIMIT_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* View All button */}
+              {totalCount > displayLimit && (
+                <button
+                  onClick={() => setShowAllFiles(true)}
+                  className="px-3 py-1 text-xs rounded border border-brand-electric/50 bg-brand-electric/20 text-brand-electric hover:bg-brand-electric/30 transition-colors"
+                >
+                  View All ({totalCount})
+                </button>
+              )}
+            </div>
+          </div>
           <ul className="divide-y divide-white/10 border border-white/10 rounded-lg bg-white/5">
             {uploadedFiles.map((file) => (
               <li key={file.id} className="px-4 py-3 flex items-center justify-between">
@@ -173,9 +316,56 @@ export function AssetUploadForm() {
                     ({(file.file_size / 1024).toFixed(1)} KB)
                   </span>
                 </div>
-                <span className="text-xs bg-brand-electric/20 text-brand-electric px-2 py-1 rounded">
-                  {file.file_type}
-                </span>
+                <div className="flex items-center gap-3">
+                  {(() => {
+                    const statusConfig = getPipelineStatusConfig(file.pipeline_status || 'pending');
+                    return (
+                      <span className={`text-xs px-2 py-1 rounded ${statusConfig.bgColor} ${statusConfig.color}`}>
+                        {statusConfig.icon} {statusConfig.label}
+                      </span>
+                    );
+                  })()}
+                  <span className="text-xs bg-brand-electric/20 text-brand-electric px-2 py-1 rounded">
+                    {file.file_type}
+                  </span>
+                  {/* View button - show for indexed/curated files */}
+                  {(file.pipeline_status === 'indexed' || file.pipeline_status === 'curated') && (
+                    <button
+                      type="button"
+                      onClick={() => handleView(file.id)}
+                      disabled={loadingUrlId === file.id}
+                      className="text-brand-electric hover:text-brand-electric/80 disabled:opacity-50 transition-colors"
+                      title="View file"
+                    >
+                      {loadingUrlId === file.id ? '⏳' : '👁️'}
+                    </button>
+                  )}
+                  {/* Download button - show for indexed/curated files */}
+                  {(file.pipeline_status === 'indexed' || file.pipeline_status === 'curated') && (
+                    <button
+                      type="button"
+                      onClick={() => handleDownload(file.id, file.file_name)}
+                      disabled={loadingUrlId === file.id}
+                      className="text-brand-electric hover:text-brand-electric/80 disabled:opacity-50 transition-colors"
+                      title="Download file"
+                    >
+                      ⬇️
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(file.id, file.file_name)}
+                    disabled={deletingId === file.id}
+                    className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Delete file"
+                  >
+                    {deletingId === file.id ? (
+                      <span className="inline-block animate-spin">⏳</span>
+                    ) : (
+                      <span>🗑️</span>
+                    )}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -208,6 +398,18 @@ export function AssetUploadForm() {
           </button>
         </div>
       </div>
+
+      {/* All Files Modal */}
+      <AllFilesModal
+        isOpen={showAllFiles}
+        onClose={() => {
+          setShowAllFiles(false);
+          fetchAssets(); // Refresh the list when modal closes
+        }}
+        onDelete={async (fileId, fileName) => {
+          await handleDelete(fileId, fileName);
+        }}
+      />
     </div>
   );
 }

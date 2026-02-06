@@ -22,6 +22,42 @@ from rag_index.domain.models import SyncEvent
 logger = logging.getLogger(__name__)
 
 
+def _update_asset_status(asset_id: str, status: str, error_msg: str = "") -> bool:
+    """Update BrandAsset pipeline_status after indexing.
+
+    Args:
+        asset_id: The asset ID (integer as string)
+        status: The new pipeline status (indexed, failed)
+        error_msg: Error message if status is failed
+
+    Returns:
+        True if update succeeded, False otherwise
+    """
+    try:
+        from onboarding.models import BrandAsset
+
+        try:
+            aid = int(asset_id)
+            asset = BrandAsset.objects.filter(id=aid).first()
+        except (ValueError, TypeError):
+            asset = None
+
+        if asset:
+            asset.pipeline_status = status
+            if error_msg:
+                asset.pipeline_error = error_msg
+            asset.save(update_fields=["pipeline_status", "pipeline_error"])
+            logger.info(f"Updated BrandAsset {asset.id} pipeline_status to {status}")
+            return True
+        else:
+            logger.warning(f"BrandAsset not found for asset_id: {asset_id}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Failed to update BrandAsset status: {e}")
+        return False
+
+
 # ============================================================================
 # Task Configuration
 # ============================================================================
@@ -175,6 +211,8 @@ def sync_document(
             "trace_id": event.trace_id,
             "action": event.action.value,
             "retry_count": self.request.retries,
+            "metadata": event.metadata,
+            "asset_id": event.metadata.get("asset_id") if event.metadata else None,
         },
     )
 
@@ -192,6 +230,13 @@ def sync_document(
                 "processing_time_ms": result.processing_time_ms,
             },
         )
+
+        # Update BrandAsset status to indexed
+        asset_id = event.metadata.get("asset_id") if event.metadata else None
+        if asset_id:
+            _update_asset_status(str(asset_id), "indexed")
+        else:
+            logger.warning(f"No asset_id in metadata for event {event.event_id}")
 
         return result.to_dict()
 

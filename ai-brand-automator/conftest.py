@@ -2,11 +2,42 @@
 Global pytest fixtures and configuration
 """
 import os
+import sys
 import pytest
 from pathlib import Path
+from unittest.mock import MagicMock
 from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from hypothesis import settings
+
+# ============================================
+# Mock Kafka BEFORE any imports to prevent slow connection attempts
+# ============================================
+mock_producer = MagicMock()
+mock_producer.produce = MagicMock()
+mock_producer.flush = MagicMock()
+mock_producer.poll = MagicMock(return_value=0)
+
+mock_consumer = MagicMock()
+mock_consumer.subscribe = MagicMock()
+mock_consumer.poll = MagicMock(return_value=None)
+mock_consumer.close = MagicMock()
+
+# Create mock confluent_kafka module
+mock_confluent_kafka = MagicMock()
+mock_confluent_kafka.Producer = MagicMock(return_value=mock_producer)
+mock_confluent_kafka.Consumer = MagicMock(return_value=mock_consumer)
+mock_confluent_kafka.KafkaError = MagicMock()
+mock_confluent_kafka.KafkaException = Exception
+
+# Create mock admin submodule
+mock_admin = MagicMock()
+mock_admin.AdminClient = MagicMock()
+mock_admin.NewTopic = MagicMock()
+
+# Inject mocks before any real imports
+sys.modules["confluent_kafka"] = mock_confluent_kafka
+sys.modules["confluent_kafka.admin"] = mock_admin
 
 # Exclude standalone test scripts from pytest collection
 # test_mcp_server.py is designed to be run manually, not with pytest

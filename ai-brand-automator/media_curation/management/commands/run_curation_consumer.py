@@ -32,6 +32,48 @@ from media_curation.consumer_health import ConsumerHealthTracker
 logger = logging.getLogger(__name__)
 
 
+def _update_asset_status(file_id: str, status: str, error_msg: str = "") -> bool:
+    """Update BrandAsset pipeline_status after curation.
+
+    Args:
+        file_id: The file/asset ID (can be UUID string or int)
+        status: The new pipeline status (curated, failed)
+        error_msg: Error message if status is failed
+
+    Returns:
+        True if update succeeded, False otherwise
+    """
+    try:
+        from onboarding.models import BrandAsset
+
+        # Try to find asset by ID (could be integer or UUID)
+        try:
+            asset_id = int(file_id)
+            asset = BrandAsset.objects.filter(id=asset_id).first()
+        except (ValueError, TypeError):
+            # file_id might be a UUID - try matching by pipeline_trace_id
+            try:
+                trace_uuid = uuid.UUID(file_id)
+                asset = BrandAsset.objects.filter(pipeline_trace_id=trace_uuid).first()
+            except (ValueError, TypeError):
+                asset = None
+
+        if asset:
+            asset.pipeline_status = status
+            if error_msg:
+                asset.pipeline_error = error_msg
+            asset.save(update_fields=["pipeline_status", "pipeline_error"])
+            logger.info(f"Updated BrandAsset {asset.id} pipeline_status to {status}")
+            return True
+        else:
+            logger.warning(f"BrandAsset not found for file_id: {file_id}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Failed to update BrandAsset status: {e}")
+        return False
+
+
 def _run_async(coro):
     """Helper to run async coroutines in sync context."""
     loop = asyncio.new_event_loop()
@@ -245,10 +287,25 @@ class Command(BaseCommand):
         retry_count = 0
         backoff = 1.0
 
+        # Get asset_id from metadata for status updates
+        asset_id = None
+        if event.metadata and "asset_id" in event.metadata:
+            asset_id = str(event.metadata["asset_id"])
+
         while retry_count <= max_retries:
             try:
-                result = _run_async(self._service.process_event(event))
+                # process_event is synchronous, call it directly
+                result = self._service.process_event(event)
                 doc_id = result.document_id if result else "N/A"
+
+                # Update BrandAsset status to curated (use asset_id from metadata)
+                if asset_id:
+                    _update_asset_status(asset_id, "curated")
+                else:
+                    logger.warning(
+                        f"No asset_id in metadata for event {event.event_id}"
+                    )
+
                 self.stdout.write(
                     self.style.SUCCESS(f"✓ Processed: {event.event_id} -> {doc_id}")
                 )
@@ -264,6 +321,10 @@ class Command(BaseCommand):
                             "trace_id": str(event.trace_id),
                         },
                     )
+                    # Update BrandAsset status to failed
+                    if asset_id:
+                        _update_asset_status(asset_id, "failed", str(e))
+
                     self._send_to_dlq(event, e)
                     self.stdout.write(
                         self.style.ERROR(f"✗ Failed after retries: {event.event_id}")
@@ -288,6 +349,10 @@ class Command(BaseCommand):
                         "error": str(e),
                     },
                 )
+                # Update BrandAsset status to failed
+                if asset_id:
+                    _update_asset_status(asset_id, "failed", str(e))
+
                 self._send_to_dlq(event, e)
                 self.stdout.write(
                     self.style.ERROR(f"✗ Non-retryable: {event.event_id} - {e}")
@@ -296,6 +361,10 @@ class Command(BaseCommand):
 
             except Exception as e:
                 logger.exception("Unexpected error processing event")
+                # Update BrandAsset status to failed
+                if asset_id:
+                    _update_asset_status(asset_id, "failed", str(e))
+
                 self._send_to_dlq(event, e)
                 self.stdout.write(
                     self.style.ERROR(f"✗ Unexpected error: {event.event_id}")

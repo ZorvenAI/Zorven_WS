@@ -338,7 +338,7 @@ def create_curation_service(config: Optional[dict] = None):
 
     # Get Kafka topic and bucket configuration
     kafka_config = config.get("KAFKA", {})
-    storage_config = config.get("GCS", {})
+    storage_config = config.get("STORAGE", {})  # Match settings.MEDIA_CURATION key
 
     service = CurationService(
         processor_factory=create_processor_factory(config),

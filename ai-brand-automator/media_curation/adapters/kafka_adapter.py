@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import traceback
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Optional, Any
@@ -24,6 +25,21 @@ logger = logging.getLogger(__name__)
 
 # Thread pool for async I/O operations
 _executor = ThreadPoolExecutor(max_workers=4)
+
+
+def _parse_tenant_id(raw_tenant_id: str) -> UUID:
+    """
+    Parse tenant_id from string to UUID.
+
+    If the string is already a valid UUID, return it directly.
+    Otherwise, generate a deterministic UUID from the string using UUID5.
+    """
+    try:
+        return UUID(raw_tenant_id)
+    except (ValueError, AttributeError):
+        # Generate a deterministic UUID from the string using namespace
+        namespace = UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # DNS namespace
+        return uuid.uuid5(namespace, str(raw_tenant_id))
 
 
 class KafkaProducerAdapter(EventProducerPort):
@@ -366,13 +382,34 @@ class KafkaConsumerAdapter(EventConsumerPort):
             # If invalid content_type, we'll infer from mime_type later
             content_type = ContentType.UNKNOWN
 
+        # Get event_id - required
+        event_id = UUID(event_data.get("event_id", data.get("id", str(UUID(int=0)))))
+
+        # Handle backward compatibility with old message format:
+        # - file_id: Use file_id if present, else fallback to event_id
+        # - raw_gcs_uri: Use raw_gcs_uri if present, else destination_path
+        # - mime_type: Use if present, else file_metadata.content_type
+        file_id = UUID(event_data.get("file_id", str(event_id)))
+
+        raw_gcs_uri = event_data.get("raw_gcs_uri") or event_data.get(
+            "destination_path"
+        )
+        if not raw_gcs_uri:
+            raise KeyError("raw_gcs_uri or destination_path required")
+
+        mime_type = event_data.get("mime_type")
+        if not mime_type:
+            # Try to get from file_metadata
+            file_metadata = event_data.get("file_metadata", {})
+            mime_type = file_metadata.get("content_type", "application/octet-stream")
+
         event = CurationEvent(
-            event_id=UUID(event_data.get("event_id", data.get("id", str(UUID(int=0))))),
+            event_id=event_id,
             trace_id=UUID(event_data.get("trace_id", str(UUID(int=0)))),
-            tenant_id=UUID(event_data["tenant_id"]),
-            file_id=UUID(event_data["file_id"]),
-            raw_gcs_uri=event_data["raw_gcs_uri"],
-            mime_type=event_data["mime_type"],
+            tenant_id=_parse_tenant_id(event_data["tenant_id"]),
+            file_id=file_id,
+            raw_gcs_uri=raw_gcs_uri,
+            mime_type=mime_type,
             content_type=content_type,
             source_service=event_data.get("source_service", "data-ingestion"),
             timestamp=datetime.fromisoformat(

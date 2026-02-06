@@ -9,7 +9,7 @@ services:
     container_name: kong-gateway
     environment:
       KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /usr/local/kong/declarative/kong.yaml
+      # KONG_DECLARATIVE_CONFIG is set by the entrypoint script after envsubst
       KONG_PROXY_LISTEN: "0.0.0.0:8000"
       KONG_ADMIN_LISTEN: "0.0.0.0:8001"
       KONG_PROXY_ACCESS_LOG: /dev/stdout
@@ -20,11 +20,13 @@ services:
       JWT_SECRET_KEY: ${SECRET_KEY:-django-insecure-changeme}
       GCP_ACCESS_TOKEN: ${GCP_ACCESS_TOKEN:-}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      BACKEND_URL: http://backend:8001
     ports:
       - "8000:8000"   # Proxy - Main entry point
       - "8002:8001"   # Admin API (mapped to 8002 to avoid conflict with MCP server)
     volumes:
-      - ../deployment/docker/kong/kong.yaml:/usr/local/kong/declarative/kong.yaml:ro
+      # Mount to template path - entrypoint will run envsubst and output to /tmp
+      - ../deployment/docker/kong/kong.yaml:/usr/local/kong/declarative/kong.yaml.template:ro
     depends_on:
       backend:
         condition: service_healthy

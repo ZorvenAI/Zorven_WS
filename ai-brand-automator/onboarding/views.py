@@ -1,5 +1,7 @@
 import logging
 import uuid
+import math
+from urllib.parse import urlencode
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -8,6 +10,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
+from django.db.models import Count, Q
 from .models import Company, BrandAsset, OnboardingProgress
 from .serializers import (
     CompanySerializer,
@@ -152,11 +155,315 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Filter by tenant in multi-tenant setup with optimized queries
-        if hasattr(self.request, "tenant") and self.request.tenant:
-            return BrandAsset.objects.filter(tenant=self.request.tenant).select_related(
+        tenant = getattr(self.request, "tenant", None)
+        logger.info(
+            f"BrandAsset get_queryset: request.tenant={tenant}, "
+            f"type={type(tenant)}, has_tenant={hasattr(self.request, 'tenant')}"
+        )
+        if tenant:
+            qs = BrandAsset.objects.filter(tenant=tenant).select_related(
                 "tenant", "company"
             )
-        return BrandAsset.objects.select_related("tenant", "company").all()
+            logger.info(
+                f"BrandAsset get_queryset: filtered queryset count={qs.count()}"
+            )
+            return qs
+        qs = BrandAsset.objects.select_related("tenant", "company").all()
+        logger.info(f"BrandAsset get_queryset: unfiltered queryset count={qs.count()}")
+        return qs
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete asset and clean up associated files from GCS."""
+        instance = self.get_object()
+
+        # Try to delete file from GCS if it exists
+        if instance.gcs_path:
+            try:
+                bucket = None
+
+                # Prefer the asset-specific bucket if available
+                gcs_client = getattr(gcs_service, "client", None)
+                bucket_name = getattr(gcs_service, "bucket_name", None)
+
+                if gcs_client and getattr(instance, "gcs_bucket", None):
+                    bucket = gcs_client.bucket(instance.gcs_bucket)
+                elif gcs_client and bucket_name:
+                    bucket = gcs_client.bucket(bucket_name)
+                else:
+                    # Fallback to existing bucket attribute for backward compatibility
+                    bucket = getattr(gcs_service, "bucket", None)
+
+                if bucket:
+                    blob = bucket.blob(instance.gcs_path)
+                    if blob.exists():
+                        blob.delete()
+                        logger.info(f"Deleted GCS file: {instance.gcs_path}")
+            except Exception as e:
+                # Log but don't fail - still delete the DB record
+                logger.warning(
+                    f"Failed to delete GCS file for asset {instance.id}: {e}"
+                )
+
+        # Perform the standard delete
+        return super().destroy(request, *args, **kwargs)
+
+    def list(self, request, *args, **kwargs):
+        """
+        List assets with enhanced filtering, sorting, and pagination.
+
+        Query parameters:
+        - page: Page number (1-indexed, default: 1)
+        - page_size: Items per page (default: 10, max: 50)
+        - limit: Quick limit for onboarding view (3, 6, 9) - bypasses pagination
+        - search: Search by filename (case-insensitive)
+        - file_type: Filter by type (image, video, document, other)
+        - status: Filter by pipeline status (pending, indexed, failed, etc.)
+        - sort_by: Sort field (uploaded_at, file_name, file_size)
+        - sort_order: Sort direction (asc, desc - default: desc)
+        """
+        queryset = self.get_queryset()
+
+        # Extract query parameters
+        search = request.query_params.get("search", "").strip()
+        file_type = request.query_params.get("file_type", "").strip()
+        status_filter = request.query_params.get("status", "").strip()
+        sort_by = request.query_params.get("sort_by", "uploaded_at").strip()
+        sort_order = request.query_params.get("sort_order", "desc").strip()
+        limit = request.query_params.get("limit")
+        page = request.query_params.get("page", "1")
+        page_size = request.query_params.get("page_size", "10")
+
+        # Apply search filter
+        if search:
+            queryset = queryset.filter(file_name__icontains=search)
+
+        # Apply file type filter
+        valid_file_types = ["image", "video", "document", "other"]
+        if file_type and file_type in valid_file_types:
+            queryset = queryset.filter(file_type=file_type)
+
+        # Apply status filter
+        valid_statuses = ["pending", "ingested", "curated", "indexed", "failed"]
+        if status_filter and status_filter in valid_statuses:
+            queryset = queryset.filter(pipeline_status=status_filter)
+
+        # Apply sorting
+        valid_sort_fields = ["uploaded_at", "file_name", "file_size"]
+        if sort_by not in valid_sort_fields:
+            sort_by = "uploaded_at"
+        if sort_order not in ["asc", "desc"]:
+            sort_order = "desc"
+
+        order_prefix = "" if sort_order == "asc" else "-"
+        queryset = queryset.order_by(f"{order_prefix}{sort_by}")
+
+        total_count = queryset.count()
+
+        # Handle quick limit mode (for onboarding compact view)
+        if limit:
+            try:
+                limit_int = int(limit)
+                if limit_int in [3, 6, 9]:
+                    limited_queryset = queryset[:limit_int]
+                    serializer = self.get_serializer(limited_queryset, many=True)
+                    return Response(
+                        {
+                            "count": total_count,
+                            "showing": min(limit_int, total_count),
+                            "has_more": total_count > limit_int,
+                            "results": serializer.data,
+                            "filters_applied": {
+                                "search": search or None,
+                                "file_type": file_type or None,
+                                "status": status_filter or None,
+                                "sort_by": sort_by,
+                                "sort_order": sort_order,
+                            },
+                        }
+                    )
+            except ValueError:
+                # Invalid limit value - fall through to pagination mode
+                pass
+
+        # Handle pagination mode (for full file browser)
+        try:
+            page_int = max(1, int(page))
+            page_size_int = min(50, max(1, int(page_size)))  # Cap at 50
+        except ValueError:
+            page_int = 1
+            page_size_int = 10
+
+        total_pages = math.ceil(total_count / page_size_int) if total_count > 0 else 1
+        start_index = (page_int - 1) * page_size_int
+        end_index = start_index + page_size_int
+
+        paginated_queryset = queryset[start_index:end_index]
+        serializer = self.get_serializer(paginated_queryset, many=True)
+
+        # Build pagination URLs using proper URL encoding
+        base_url = request.build_absolute_uri(request.path)
+        query_params = request.query_params.copy()
+
+        next_url = None
+        if page_int < total_pages:
+            query_params["page"] = str(page_int + 1)
+            next_url = f"{base_url}?{urlencode(query_params)}"
+
+        prev_url = None
+        if page_int > 1:
+            query_params["page"] = str(page_int - 1)
+            prev_url = f"{base_url}?{urlencode(query_params)}"
+
+        return Response(
+            {
+                "count": total_count,
+                "total_pages": total_pages,
+                "current_page": page_int,
+                "page_size": page_size_int,
+                "has_next": page_int < total_pages,
+                "has_previous": page_int > 1,
+                "next": next_url,
+                "previous": prev_url,
+                "results": serializer.data,
+                "filters_applied": {
+                    "search": search or None,
+                    "file_type": file_type or None,
+                    "status": status_filter or None,
+                    "sort_by": sort_by,
+                    "sort_order": sort_order,
+                },
+            }
+        )
+
+    @action(detail=True, methods=["get"], url_path="signed-url")
+    def signed_url(self, request, pk=None):
+        """
+        Generate signed URLs for viewing/downloading a file.
+
+        Returns temporary URLs that expire in 15 minutes.
+
+        Query parameters:
+        - download: If "true", returns URL with download disposition
+
+        Response:
+        {
+            "view_url": "https://storage.googleapis.com/...",
+            "download_url": "https://storage.googleapis.com/...",
+            "expires_at": "2026-02-05T12:30:00Z"
+        }
+        """
+        tenant = getattr(request, "tenant", None)
+        logger.info(
+            f"signed_url action called: pk={pk}, user={request.user}, "
+            f"tenant={tenant}"
+        )
+        try:
+            asset = self.get_object()
+            logger.info(f"signed_url: got asset id={asset.id}")
+        except Exception as e:
+            logger.error(f"signed_url: get_object failed: {e}")
+            raise
+
+        if not asset.gcs_path:
+            return Response(
+                {"error": "Asset has no associated file"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        expiry_minutes = getattr(settings, "GCS_SIGNED_URL_EXPIRY_MINUTES", 15)
+
+        try:
+            logger.info(f"signed_url: generating URL for gcs_path={asset.gcs_path}")
+            # Generate view URL (inline display)
+            view_result = gcs_service.generate_signed_url(
+                file_path=asset.gcs_path,
+                expiration_minutes=expiry_minutes,
+                for_download=False,
+            )
+            logger.info(f"signed_url: view_result={view_result}")
+
+            # Generate download URL (attachment disposition)
+            download_result = gcs_service.generate_signed_url(
+                file_path=asset.gcs_path,
+                expiration_minutes=expiry_minutes,
+                for_download=True,
+                filename=asset.file_name,
+            )
+            logger.info(f"signed_url: download_result={download_result}")
+
+            return Response(
+                {
+                    "view_url": view_result["url"],
+                    "download_url": download_result["url"],
+                    "expires_at": view_result["expires_at"],
+                    "file_name": asset.file_name,
+                    "file_type": asset.file_type,
+                    "file_size": asset.file_size,
+                }
+            )
+
+        except FileNotFoundError as e:
+            logger.error(f"signed_url: FileNotFoundError: {e}")
+            return Response(
+                {"error": "File not found in storage"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to generate signed URL for asset {pk}: {e}", exc_info=True
+            )
+            return Response(
+                {"error": "Failed to generate signed URL"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(detail=False, methods=["get"])
+    def status(self, request):
+        """
+        Get assets with their pipeline statuses.
+
+        Query parameters:
+        - pipeline_status: Filter by status (pending, ingested, curated,
+          indexed, failed)
+        - include_processed: Include fully processed assets (default: true)
+
+        Returns list of assets with pipeline status information.
+        """
+        queryset = self.get_queryset()
+
+        # Filter by pipeline_status if provided
+        pipeline_status = request.query_params.get("pipeline_status")
+        if pipeline_status:
+            valid_statuses = ["pending", "ingested", "curated", "indexed", "failed"]
+            if pipeline_status in valid_statuses:
+                queryset = queryset.filter(pipeline_status=pipeline_status)
+
+        # Option to exclude processed assets (useful for monitoring pending items)
+        include_processed = request.query_params.get("include_processed", "true")
+        if include_processed.lower() == "false":
+            queryset = queryset.exclude(pipeline_status="indexed")
+
+        # Order by upload date (most recent first)
+        queryset = queryset.order_by("-uploaded_at")
+
+        # Single query to get all counts (more efficient than 4 separate COUNT queries)
+        counts = queryset.aggregate(
+            total=Count("id"),
+            pending=Count("id", filter=Q(pipeline_status="pending")),
+            failed=Count("id", filter=Q(pipeline_status="failed")),
+            indexed=Count("id", filter=Q(pipeline_status="indexed")),
+        )
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(
+            {
+                "count": counts["total"],
+                "results": serializer.data,
+                "pending_count": counts["pending"],
+                "failed_count": counts["failed"],
+                "indexed_count": counts["indexed"],
+            }
+        )
 
     @action(detail=False, methods=["post"])
     def upload(self, request):
@@ -240,7 +547,10 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # Create asset record
+        # Create asset record with the actual bucket used for upload
+        actual_bucket = (
+            gcs_service.bucket_name if gcs_service.bucket else "brand-automator-assets"
+        )
         asset = BrandAsset.objects.create(
             tenant=tenant,
             company=company,
@@ -248,6 +558,7 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             file_type=file_type,
             file_size=file.size,
             gcs_path=landing_path,
+            gcs_bucket=actual_bucket,  # Use the actual bucket where file was uploaded
             processed=False,  # Will be set True after pipeline completes
             pipeline_status="pending" if gcs_uploaded else "failed",
             pipeline_error=""
