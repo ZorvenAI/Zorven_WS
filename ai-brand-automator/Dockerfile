@@ -32,10 +32,20 @@ RUN mkdir -p logs staticfiles
 # Expose port
 EXPOSE 8000
 
-# Create entrypoint script - v2 with production domains
+# Create entrypoint script - v3 with GCS credentials support
 RUN cat <<'EOF' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 #!/bin/bash
 set -e
+
+# Write GCS credentials file from env var if provided (Railway/Heroku)
+if [ -n "$GCS_CREDENTIALS_JSON" ]; then
+  echo "=== Writing GCS credentials file ==="
+  printf '%s' "$GCS_CREDENTIALS_JSON" > /app/gcs-credentials.json
+  chmod 600 /app/gcs-credentials.json
+  export GS_CREDENTIALS_PATH=/app/gcs-credentials.json
+  export GOOGLE_APPLICATION_CREDENTIALS=/app/gcs-credentials.json
+fi
+
 echo "=== Running migrations ==="
 python manage.py migrate --noinput
 echo "=== Setting up production domains ==="

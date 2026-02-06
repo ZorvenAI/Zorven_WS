@@ -3,20 +3,29 @@ File Storage Services for BrandForge AI
 Integration with Google Cloud Storage
 """
 
+import json
 import os
 import time
 import logging
 from datetime import timedelta
+import google.auth
 from django.conf import settings
 from google.cloud import storage
 from google.oauth2 import service_account
 
 logger = logging.getLogger(__name__)
 
+GCS_SCOPES = ["https://www.googleapis.com/auth/devstorage.full_control"]
+
 
 class GCSService:
     """
-    Service for interacting with Google Cloud Storage
+    Service for interacting with Google Cloud Storage.
+
+    Credentials are resolved in order:
+    1. GCS_CREDENTIALS_JSON env var (inline JSON - for Railway/Heroku)
+    2. GS_CREDENTIALS_PATH file on disk (local dev with service account key)
+    3. Application Default Credentials (GCP-hosted environments)
     """
 
     def __init__(self):
@@ -26,26 +35,49 @@ class GCSService:
 
         # Initialize GCS client
         try:
-            if self.credentials_path and os.path.exists(self.credentials_path):
-                credentials = service_account.Credentials.from_service_account_file(
-                    self.credentials_path,
-                    scopes=["https://www.googleapis.com/auth/devstorage.full_control"],
-                )
-                self.client = storage.Client(
-                    credentials=credentials, project=self.project_id
-                )
-            else:
-                # Try to use default credentials (for GCP environments)
-                self.client = storage.Client(project=self.project_id)
+            credentials = self._resolve_credentials()
+            self.client = storage.Client(
+                credentials=credentials, project=self.project_id
+            )
         except Exception as e:
             # Fallback: create a mock client for development
-            print(f"GCS initialization failed: {e}. Using mock service.")
+            logger.warning("GCS initialization failed: %s. Using mock service.", e)
             self.client = None
 
         if self.client:
             self.bucket = self.client.bucket(self.bucket_name)
         else:
             self.bucket = None
+
+    def _resolve_credentials(self):
+        """Resolve GCS credentials from env var, file, or return None for ADC."""
+        # 1. Inline JSON from environment variable (Railway / Heroku / CI)
+        creds_json = os.environ.get("GCS_CREDENTIALS_JSON", "").strip()
+        if creds_json:
+            logger.info("Loading GCS credentials from GCS_CREDENTIALS_JSON env var")
+            try:
+                info = json.loads(creds_json)
+                return service_account.Credentials.from_service_account_info(
+                    info, scopes=GCS_SCOPES
+                )
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(
+                    "Invalid GCS_CREDENTIALS_JSON env var; falling back to "
+                    "file/ADC credentials: %s",
+                    e,
+                )
+
+        # 2. Service account key file on disk (local development)
+        if self.credentials_path and os.path.exists(self.credentials_path):
+            logger.info("Loading GCS credentials from file: %s", self.credentials_path)
+            return service_account.Credentials.from_service_account_file(
+                self.credentials_path, scopes=GCS_SCOPES
+            )
+
+        # 3. Fall back to Application Default Credentials (with explicit scopes)
+        logger.info("No explicit GCS credentials found, using ADC")
+        credentials, project = google.auth.default(scopes=GCS_SCOPES)
+        return credentials
 
     def upload_file(self, file_obj, file_path, content_type=None, max_retries=3):
         """
