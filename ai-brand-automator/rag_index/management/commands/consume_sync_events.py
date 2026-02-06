@@ -158,6 +158,12 @@ class Command(BaseCommand):
             "max.poll.interval.ms": 300000,  # 5 minutes
         }
 
+        # Add SASL/SSL config for managed Kafka (Confluent Cloud, etc.)
+        sasl_config = getattr(settings, "KAFKA_SASL_CONFIG", {})
+        if sasl_config:
+            config.update(sasl_config)
+            logger.info("Kafka SASL/SSL authentication enabled")
+
         try:
             self._consumer = Consumer(config)
             self._consumer.subscribe([self.topic])
