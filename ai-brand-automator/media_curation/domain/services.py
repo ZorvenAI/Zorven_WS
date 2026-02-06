@@ -441,7 +441,9 @@ class CurationService:
             return result.redacted_text, result.has_pii
         except Exception as e:
             logger.error(f"DLP redaction failed: {e}")
-            raise DLPError(f"PII redaction failed: {e}") from e
+            # DLP is non-fatal: return original text so curation can continue
+            logger.warning("Continuing curation without PII redaction due to DLP error")
+            return text, False
 
     def _build_curated_document(
         self,
