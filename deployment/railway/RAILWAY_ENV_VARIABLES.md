@@ -40,15 +40,24 @@ ALLOWED_HOSTS=your-backend.railway.app,your-kong.railway.app,localhost
 # =============================================================================
 # Kafka Settings (Use Confluent Cloud or Upstash)
 # =============================================================================
-# Railway doesn't support Kafka directly - use external service
-# Confluent Cloud: https://confluent.cloud/
+# Railway doesn't support Kafka directly - use an external managed service.
+# Confluent Cloud: https://confluent.cloud/ (recommended - free tier available)
 # Upstash Kafka: https://upstash.com/
+#
+# These env vars MUST be set on ALL Railway services that use Kafka:
+#   web, ingestion-consumer, ingestion-worker, curation-consumer, curation-worker
+#
+# After setting these, deploy the ingestion-consumer and curation-consumer
+# services using the startCommands from railway.json.
 
 KAFKA_BOOTSTRAP_SERVERS=<confluent-cloud-bootstrap-servers>
 KAFKA_SASL_USERNAME=<confluent-cloud-api-key>
 KAFKA_SASL_PASSWORD=<confluent-cloud-api-secret>
 KAFKA_SECURITY_PROTOCOL=SASL_SSL
 KAFKA_SASL_MECHANISM=PLAIN
+
+# Enable Kafka publishing from onboarding file uploads (default: true)
+ONBOARDING_KAFKA_ENABLED=true
 
 # =============================================================================
 # External Services

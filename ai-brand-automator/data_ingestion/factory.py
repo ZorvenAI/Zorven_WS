@@ -112,6 +112,9 @@ def create_kafka_producer(config: Optional[dict] = None) -> KafkaProducerAdapter
         ),
     )
 
+    # Get SASL/SSL config from Django settings
+    sasl_config = getattr(settings, "KAFKA_SASL_CONFIG", {})
+
     return KafkaProducerAdapter(
         bootstrap_servers=bootstrap_servers,
         client_id=kafka_config.get(
@@ -122,6 +125,7 @@ def create_kafka_producer(config: Optional[dict] = None) -> KafkaProducerAdapter
             "DLQ_TOPIC",
             config.get("KAFKA_DLQ_TOPIC", "ingestion-dlq"),
         ),
+        sasl_config=sasl_config,
     )
 
 
@@ -151,6 +155,9 @@ def create_kafka_consumer(config: Optional[dict] = None) -> KafkaConsumerAdapter
         config.get("KAFKA_INPUT_TOPIC", "raw-ingestion-topic"),
     )
 
+    # Get SASL/SSL config from Django settings
+    sasl_config = getattr(settings, "KAFKA_SASL_CONFIG", {})
+
     return KafkaConsumerAdapter(
         bootstrap_servers=bootstrap_servers,
         group_id=kafka_config.get(
@@ -170,6 +177,7 @@ def create_kafka_consumer(config: Optional[dict] = None) -> KafkaConsumerAdapter
             "ENABLE_AUTO_COMMIT",
             config.get("KAFKA_ENABLE_AUTO_COMMIT", False),
         ),
+        sasl_config=sasl_config,
     )
 
 

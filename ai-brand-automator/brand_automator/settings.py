@@ -553,10 +553,29 @@ KAFKA_AUTO_OFFSET_RESET = config("KAFKA_AUTO_OFFSET_RESET", default="earliest")
 KAFKA_ENABLE_AUTO_COMMIT = config("KAFKA_ENABLE_AUTO_COMMIT", default=True, cast=bool)
 KAFKA_SESSION_TIMEOUT_MS = config("KAFKA_SESSION_TIMEOUT_MS", default=30000, cast=int)
 
+# Kafka SASL/SSL Authentication (for managed Kafka: Confluent Cloud, Upstash, etc.)
+KAFKA_SECURITY_PROTOCOL = config("KAFKA_SECURITY_PROTOCOL", default="")
+KAFKA_SASL_MECHANISM = config("KAFKA_SASL_MECHANISM", default="PLAIN")
+KAFKA_SASL_USERNAME = config("KAFKA_SASL_USERNAME", default="")
+KAFKA_SASL_PASSWORD = config("KAFKA_SASL_PASSWORD", default="")
+
 # Kafka Topics
 KAFKA_TOPIC_GATEWAY_LOGS = "gateway-logs"
 KAFKA_TOPIC_RAW_INGESTION = "raw-ingestion-topic"
 KAFKA_TOPIC_DLQ = "dlq-events"
+
+# Build SASL/SSL config dict for confluent-kafka Producer/Consumer.
+# Empty dict when KAFKA_SECURITY_PROTOCOL is not set (local dev).
+KAFKA_SASL_CONFIG = (
+    {
+        "security.protocol": KAFKA_SECURITY_PROTOCOL,
+        "sasl.mechanism": KAFKA_SASL_MECHANISM,
+        "sasl.username": KAFKA_SASL_USERNAME,
+        "sasl.password": KAFKA_SASL_PASSWORD,
+    }
+    if KAFKA_SECURITY_PROTOCOL
+    else {}
+)
 
 # =============================================================================
 # Data Ingestion Configuration (Hexagonal Architecture Pipeline)
@@ -696,20 +715,27 @@ CELERY_BEAT_SCHEDULE = {
         # of timely delivery. For lower frequency, change to 300.0 (5 min).
         "schedule": 60.0,
     },
-    # Kafka consumer tasks (when Kafka is enabled)
-    "consume-gateway-logs-every-minute": {
-        "task": "kafka_service.tasks.consume_gateway_logs",
-        "schedule": 60.0,  # Every minute
-        "kwargs": {"max_messages": 100},
-    },
-    "consume-raw-events-every-30s": {
-        "task": "kafka_service.tasks.consume_raw_events",
-        "schedule": 30.0,  # Every 30 seconds
-        "kwargs": {"max_messages": 50},
-    },
-    "process-dlq-every-5-minutes": {
-        "task": "kafka_service.tasks.process_dlq_events",
-        "schedule": 300.0,  # Every 5 minutes
-        "kwargs": {"max_messages": 20},
-    },
 }
+
+# Kafka consumer tasks — only register when Kafka is configured
+# (prevents error-flooding logs when no Kafka broker is available)
+if KAFKA_BOOTSTRAP_SERVERS and KAFKA_BOOTSTRAP_SERVERS != "localhost:9092":
+    CELERY_BEAT_SCHEDULE.update(
+        {
+            "consume-gateway-logs-every-minute": {
+                "task": "kafka_service.tasks.consume_gateway_logs",
+                "schedule": 60.0,
+                "kwargs": {"max_messages": 100},
+            },
+            "consume-raw-events-every-30s": {
+                "task": "kafka_service.tasks.consume_raw_events",
+                "schedule": 30.0,
+                "kwargs": {"max_messages": 50},
+            },
+            "process-dlq-every-5-minutes": {
+                "task": "kafka_service.tasks.process_dlq_events",
+                "schedule": 300.0,
+                "kwargs": {"max_messages": 20},
+            },
+        }
+    )

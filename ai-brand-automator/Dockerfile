@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     build-essential \
     libpq-dev \
+    librdkafka-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -32,7 +33,7 @@ RUN mkdir -p logs staticfiles
 # Expose port
 EXPOSE 8000
 
-# Create entrypoint script - v3 with GCS credentials support
+# Create entrypoint script - v4 with GCS credentials + Kafka consumer support
 RUN cat <<'EOF' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 #!/bin/bash
 set -e
@@ -54,6 +55,23 @@ echo "=== Collecting static files ==="
 python manage.py collectstatic --noinput || true
 echo "=== Starting Gunicorn on port $PORT ==="
 exec gunicorn brand_automator.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 2 --timeout 120 --access-logfile - --error-logfile -
+EOF
+
+# Create worker entrypoint (for Kafka consumers and Celery workers on Railway)
+RUN cat <<'EOF' > /app/entrypoint-worker.sh && chmod +x /app/entrypoint-worker.sh
+#!/bin/bash
+set -e
+
+# Write GCS credentials file from env var if provided (Railway/Heroku)
+if [ -n "$GCS_CREDENTIALS_JSON" ]; then
+  printf '%s' "$GCS_CREDENTIALS_JSON" > /app/gcs-credentials.json
+  chmod 600 /app/gcs-credentials.json
+  export GS_CREDENTIALS_PATH=/app/gcs-credentials.json
+  export GOOGLE_APPLICATION_CREDENTIALS=/app/gcs-credentials.json
+fi
+
+# Execute the command passed as arguments
+exec "$@"
 EOF
 
 # Run entrypoint

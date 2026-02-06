@@ -41,6 +41,7 @@ class KafkaProducerAdapter(EventProducerPort):
         retries: int = 3,
         retry_backoff_ms: int = 100,
         dlq_topic: Optional[str] = None,
+        sasl_config: Optional[dict] = None,
         **kafka_config,
     ):
         """
@@ -53,6 +54,7 @@ class KafkaProducerAdapter(EventProducerPort):
             retries: Number of retries for failed sends
             retry_backoff_ms: Backoff between retries
             dlq_topic: Dead letter queue topic name
+            sasl_config: SASL/SSL config dict for managed Kafka
             **kafka_config: Additional Kafka producer config
         """
         self.bootstrap_servers = bootstrap_servers
@@ -64,6 +66,7 @@ class KafkaProducerAdapter(EventProducerPort):
             "acks": acks,
             "retries": retries,
             "retry.backoff.ms": retry_backoff_ms,
+            **(sasl_config or {}),
             **kafka_config,
         }
 
@@ -338,6 +341,7 @@ class KafkaConsumerAdapter(EventConsumerPort):
         enable_auto_commit: bool = False,
         max_poll_interval_ms: int = 300000,
         session_timeout_ms: int = 45000,
+        sasl_config: Optional[dict] = None,
         **kafka_config,
     ):
         """
@@ -352,6 +356,7 @@ class KafkaConsumerAdapter(EventConsumerPort):
             enable_auto_commit: Whether to auto-commit offsets
             max_poll_interval_ms: Max time between polls
             session_timeout_ms: Session timeout
+            sasl_config: SASL/SSL config dict for managed Kafka
             **kafka_config: Additional Kafka consumer config
         """
         self.bootstrap_servers = bootstrap_servers
@@ -368,6 +373,7 @@ class KafkaConsumerAdapter(EventConsumerPort):
             "enable.auto.commit": enable_auto_commit,
             "max.poll.interval.ms": max_poll_interval_ms,
             "session.timeout.ms": session_timeout_ms,
+            **(sasl_config or {}),
             **kafka_config,
         }
 

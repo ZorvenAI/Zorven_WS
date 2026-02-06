@@ -55,6 +55,7 @@ class KafkaProducerAdapter(EventProducerPort):
         client_id: str = "curation-producer",
         dlq_topic: Optional[str] = None,
         output_topic: Optional[str] = None,
+        sasl_config: Optional[dict] = None,
         **kafka_config,
     ):
         """
@@ -65,6 +66,7 @@ class KafkaProducerAdapter(EventProducerPort):
             client_id: Client identifier
             dlq_topic: Dead letter queue topic name
             output_topic: Default output topic for curated documents
+            sasl_config: SASL/SSL config dict for managed Kafka
             **kafka_config: Additional Kafka producer config
         """
         # Lazy import to avoid issues when confluent-kafka is not installed
@@ -95,6 +97,7 @@ class KafkaProducerAdapter(EventProducerPort):
             "acks": "all",
             "retries": 3,
             "retry.backoff.ms": 100,
+            **(sasl_config or {}),
             **kafka_config,
         }
 
@@ -316,6 +319,7 @@ class KafkaConsumerAdapter(EventConsumerPort):
         group_id: str = "curation-consumer",
         input_topic: Optional[str] = None,
         auto_commit: bool = False,
+        sasl_config: Optional[dict] = None,
         **kafka_config,
     ):
         """
@@ -326,6 +330,7 @@ class KafkaConsumerAdapter(EventConsumerPort):
             group_id: Consumer group ID
             input_topic: Default input topic to subscribe to
             auto_commit: Enable auto-commit (False for manual commits)
+            sasl_config: SASL/SSL config dict for managed Kafka
             **kafka_config: Additional Kafka consumer config
         """
         # Lazy import to avoid issues when confluent-kafka is not installed
@@ -355,6 +360,7 @@ class KafkaConsumerAdapter(EventConsumerPort):
             "group.id": group_id,
             "auto.offset.reset": "earliest",
             "enable.auto.commit": auto_commit,
+            **(sasl_config or {}),
             **kafka_config,
         }
 
