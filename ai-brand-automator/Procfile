@@ -5,3 +5,4 @@ ingestion-worker: celery -A brand_automator worker -Q ingestion -l info --concur
 ingestion-consumer: python manage.py run_ingestion --batch-size 10 --poll-timeout 1.0
 curation-worker: celery -A brand_automator worker -Q curation -l info --concurrency=2
 curation-consumer: python manage.py run_curation_consumer --batch-size 10 --poll-timeout 1.0
+rag-index-consumer: python manage.py consume_sync_events --topic rag-sync-ready-topic --group rag-index-consumers --poll-timeout 1.0
