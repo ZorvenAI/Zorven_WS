@@ -8,6 +8,7 @@ Usage:
 
 import signal
 import logging
+import uuid
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -24,6 +25,80 @@ from data_ingestion.domain.exceptions import (
 
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_gcs_path(destination_uri: str) -> str:
+    """Extract the path portion from a gs:// URI.
+
+    Args:
+        destination_uri: Full GCS URI (gs://bucket/path/to/file)
+
+    Returns:
+        Path without bucket prefix (e.g. '1/raw/2026/02/06/file.png')
+    """
+    stripped = destination_uri.replace("gs://", "")
+    parts = stripped.split("/", 1)
+    return parts[1] if len(parts) > 1 else stripped
+
+
+def _update_asset_status(
+    file_id: str,
+    status: str,
+    error_msg: str = "",
+    new_gcs_path: str = "",
+) -> bool:
+    """Update BrandAsset pipeline_status and gcs_path after ingestion.
+
+    Args:
+        file_id: The asset ID (integer string or UUID string)
+        status: The new pipeline status (ingested, failed)
+        error_msg: Error message if status is failed
+        new_gcs_path: New GCS path after file was moved (gs:// URI)
+
+    Returns:
+        True if update succeeded, False otherwise
+    """
+    try:
+        from onboarding.models import BrandAsset
+
+        try:
+            asset_id = int(file_id)
+            asset = BrandAsset.objects.filter(id=asset_id).first()
+        except (ValueError, TypeError):
+            try:
+                trace_uuid = uuid.UUID(file_id)
+                asset = BrandAsset.objects.filter(pipeline_trace_id=trace_uuid).first()
+            except (ValueError, TypeError):
+                asset = None
+
+        if asset:
+            asset.pipeline_status = status
+            update_fields = ["pipeline_status"]
+            if new_gcs_path:
+                asset.gcs_path = _extract_gcs_path(new_gcs_path)
+                update_fields.append("gcs_path")
+            if status == "ingested":
+                # Clear any previous pipeline error on successful ingestion
+                asset.pipeline_error = ""
+                update_fields.append("pipeline_error")
+            elif error_msg:
+                asset.pipeline_error = error_msg
+                update_fields.append("pipeline_error")
+            asset.save(update_fields=update_fields)
+            logger.info(
+                "Updated BrandAsset %s: status=%s, gcs_path=%s",
+                asset.id,
+                status,
+                asset.gcs_path,
+            )
+            return True
+        else:
+            logger.warning("BrandAsset not found for file_id: %s", file_id)
+            return False
+
+    except Exception:
+        logger.exception("Failed to update BrandAsset status")
+        return False
 
 
 def _get_input_topic() -> str:
@@ -166,6 +241,15 @@ class Command(BaseCommand):
             result = self._service.process_event_with_retry(event)
 
             if result:
+                # Update BrandAsset status + gcs_path to new location
+                asset_id = (event.metadata or {}).get("asset_id")
+                if asset_id:
+                    _update_asset_status(
+                        str(asset_id),
+                        "ingested",
+                        new_gcs_path=result.destination_path,
+                    )
+
                 self.stdout.write(
                     self.style.SUCCESS(
                         f"✓ Processed: {event.event_id} -> {result.destination_path}"
@@ -180,6 +264,9 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.ERROR(f"✗ Failed (non-retryable): {event.event_id} - {e}")
             )
+            asset_id = (event.metadata or {}).get("asset_id")
+            if asset_id:
+                _update_asset_status(str(asset_id), "failed", str(e))
             # Send to DLQ
             self._service.send_to_dlq(
                 original_event=event.model_dump(mode="json"),
@@ -191,6 +278,9 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.ERROR(f"✗ Failed after retries: {event.event_id} - {e}")
             )
+            asset_id = (event.metadata or {}).get("asset_id")
+            if asset_id:
+                _update_asset_status(str(asset_id), "failed", str(e))
             # Send to DLQ after max retries
             self._service.send_to_dlq(
                 original_event=event.model_dump(mode="json"),

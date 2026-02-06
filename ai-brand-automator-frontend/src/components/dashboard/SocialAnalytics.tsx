@@ -142,6 +142,7 @@ export default function SocialAnalytics() {
   // Profile connection status
   const [profiles, setProfiles] = useState<SocialProfiles | null>(null);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
+  const [profilesError, setProfilesError] = useState<string | null>(null);
 
   // Twitter Analytics state
   const [showTwitterAnalytics, setShowTwitterAnalytics] = useState(true);
@@ -185,14 +186,19 @@ export default function SocialAnalytics() {
 
   // Fetch profile status
   const fetchProfiles = useCallback(async () => {
+    setProfilesError(null);
     try {
       const response = await apiClient.get('/automation/social-profiles/status/');
       if (response.ok) {
         const data = await response.json();
         setProfiles(data);
+      } else {
+        console.error('Failed to fetch social profiles: HTTP', response.status);
+        setProfilesError(`Failed to load social profiles (HTTP ${response.status})`);
       }
     } catch (error) {
       console.error('Failed to fetch profiles:', error);
+      setProfilesError('Network error loading social profiles');
     } finally {
       setLoadingProfiles(false);
     }
@@ -443,10 +449,24 @@ export default function SocialAnalytics() {
           <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
-          <p>Connect your social accounts to see analytics</p>
-          <a href="/automation" className="text-brand-electric hover:underline mt-2 inline-block">
-            Go to Automation →
-          </a>
+          {profilesError ? (
+            <>
+              <p className="text-yellow-400 mb-2">{profilesError}</p>
+              <button
+                onClick={() => { setLoadingProfiles(true); fetchProfiles(); }}
+                className="text-brand-electric hover:underline mt-1 inline-block"
+              >
+                Retry
+              </button>
+            </>
+          ) : (
+            <>
+              <p>Connect your social accounts to see analytics</p>
+              <a href="/automation" className="text-brand-electric hover:underline mt-2 inline-block">
+                Go to Automation →
+              </a>
+            </>
+          )}
         </div>
       </div>
     );
