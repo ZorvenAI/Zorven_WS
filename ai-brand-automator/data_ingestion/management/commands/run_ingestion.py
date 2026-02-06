@@ -8,6 +8,7 @@ Usage:
 
 import signal
 import logging
+import uuid
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -24,6 +25,52 @@ from data_ingestion.domain.exceptions import (
 
 
 logger = logging.getLogger(__name__)
+
+
+def _update_asset_status(file_id: str, status: str, error_msg: str = "") -> bool:
+    """Update BrandAsset pipeline_status after ingestion.
+
+    Args:
+        file_id: The asset ID (integer string or UUID string)
+        status: The new pipeline status (ingested, failed)
+        error_msg: Error message if status is failed
+
+    Returns:
+        True if update succeeded, False otherwise
+    """
+    try:
+        from onboarding.models import BrandAsset
+
+        try:
+            asset_id = int(file_id)
+            asset = BrandAsset.objects.filter(id=asset_id).first()
+        except (ValueError, TypeError):
+            try:
+                trace_uuid = uuid.UUID(file_id)
+                asset = BrandAsset.objects.filter(pipeline_trace_id=trace_uuid).first()
+            except (ValueError, TypeError):
+                asset = None
+
+        if asset:
+            asset.pipeline_status = status
+            update_fields = ["pipeline_status"]
+            if error_msg:
+                asset.pipeline_error = error_msg
+                update_fields.append("pipeline_error")
+            asset.save(update_fields=update_fields)
+            logger.info(
+                "Updated BrandAsset %s pipeline_status to %s",
+                asset.id,
+                status,
+            )
+            return True
+        else:
+            logger.warning("BrandAsset not found for file_id: %s", file_id)
+            return False
+
+    except Exception as e:
+        logger.error("Failed to update BrandAsset status: %s", e)
+        return False
 
 
 def _get_input_topic() -> str:
@@ -166,6 +213,11 @@ class Command(BaseCommand):
             result = self._service.process_event_with_retry(event)
 
             if result:
+                # Update BrandAsset pipeline_status to "ingested"
+                asset_id = (event.metadata or {}).get("asset_id")
+                if asset_id:
+                    _update_asset_status(str(asset_id), "ingested")
+
                 self.stdout.write(
                     self.style.SUCCESS(
                         f"✓ Processed: {event.event_id} -> {result.destination_path}"
@@ -180,6 +232,9 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.ERROR(f"✗ Failed (non-retryable): {event.event_id} - {e}")
             )
+            asset_id = (event.metadata or {}).get("asset_id")
+            if asset_id:
+                _update_asset_status(str(asset_id), "failed", str(e))
             # Send to DLQ
             self._service.send_to_dlq(
                 original_event=event.model_dump(mode="json"),
@@ -191,6 +246,9 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.ERROR(f"✗ Failed after retries: {event.event_id} - {e}")
             )
+            asset_id = (event.metadata or {}).get("asset_id")
+            if asset_id:
+                _update_asset_status(str(asset_id), "failed", str(e))
             # Send to DLQ after max retries
             self._service.send_to_dlq(
                 original_event=event.model_dump(mode="json"),
