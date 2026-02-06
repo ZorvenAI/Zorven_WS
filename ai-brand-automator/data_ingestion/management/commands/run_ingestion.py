@@ -27,13 +27,33 @@ from data_ingestion.domain.exceptions import (
 logger = logging.getLogger(__name__)
 
 
-def _update_asset_status(file_id: str, status: str, error_msg: str = "") -> bool:
-    """Update BrandAsset pipeline_status after ingestion.
+def _extract_gcs_path(destination_uri: str) -> str:
+    """Extract the path portion from a gs:// URI.
+
+    Args:
+        destination_uri: Full GCS URI (gs://bucket/path/to/file)
+
+    Returns:
+        Path without bucket prefix (e.g. '1/raw/2026/02/06/file.png')
+    """
+    stripped = destination_uri.replace("gs://", "")
+    parts = stripped.split("/", 1)
+    return parts[1] if len(parts) > 1 else stripped
+
+
+def _update_asset_status(
+    file_id: str,
+    status: str,
+    error_msg: str = "",
+    new_gcs_path: str = "",
+) -> bool:
+    """Update BrandAsset pipeline_status and gcs_path after ingestion.
 
     Args:
         file_id: The asset ID (integer string or UUID string)
         status: The new pipeline status (ingested, failed)
         error_msg: Error message if status is failed
+        new_gcs_path: New GCS path after file was moved (gs:// URI)
 
     Returns:
         True if update succeeded, False otherwise
@@ -54,14 +74,18 @@ def _update_asset_status(file_id: str, status: str, error_msg: str = "") -> bool
         if asset:
             asset.pipeline_status = status
             update_fields = ["pipeline_status"]
+            if new_gcs_path:
+                asset.gcs_path = _extract_gcs_path(new_gcs_path)
+                update_fields.append("gcs_path")
             if error_msg:
                 asset.pipeline_error = error_msg
                 update_fields.append("pipeline_error")
             asset.save(update_fields=update_fields)
             logger.info(
-                "Updated BrandAsset %s pipeline_status to %s",
+                "Updated BrandAsset %s: status=%s, gcs_path=%s",
                 asset.id,
                 status,
+                asset.gcs_path,
             )
             return True
         else:
@@ -213,10 +237,14 @@ class Command(BaseCommand):
             result = self._service.process_event_with_retry(event)
 
             if result:
-                # Update BrandAsset pipeline_status to "ingested"
+                # Update BrandAsset status + gcs_path to new location
                 asset_id = (event.metadata or {}).get("asset_id")
                 if asset_id:
-                    _update_asset_status(str(asset_id), "ingested")
+                    _update_asset_status(
+                        str(asset_id),
+                        "ingested",
+                        new_gcs_path=result.destination_path,
+                    )
 
                 self.stdout.write(
                     self.style.SUCCESS(
