@@ -29,9 +29,7 @@ class GCSService:
             if self.credentials_path and os.path.exists(self.credentials_path):
                 credentials = service_account.Credentials.from_service_account_file(
                     self.credentials_path,
-                    scopes=[
-                        "https://www.googleapis.com/auth/devstorage.full_control"
-                    ],
+                    scopes=["https://www.googleapis.com/auth/devstorage.full_control"],
                 )
                 self.client = storage.Client(
                     credentials=credentials, project=self.project_id
