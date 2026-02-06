@@ -19,7 +19,7 @@ app.autodiscover_tasks()
 # Task routing for specialized workers
 # Queue names MUST match the -Q flag in Railway/Procfile worker start commands
 app.conf.task_routes = {
-    # Route rag_index tasks to ingestion queue (consumed by ingestion-worker: -Q ingestion)
+    # Route rag_index tasks to ingestion queue (ingestion-worker)
     "rag_index.tasks.*": {"queue": "ingestion"},
     # Route data_ingestion tasks to ingestion queue (worker: -Q ingestion)
     "data_ingestion.tasks.*": {"queue": "ingestion"},
