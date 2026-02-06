@@ -51,8 +51,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--group",
             type=str,
-            default=getattr(settings, "KAFKA_CONSUMER_GROUP", "rag-index-consumer"),
-            help="Kafka consumer group ID (default: rag-index-consumer)",
+            default=getattr(settings, "KAFKA_CONSUMER_GROUP", "rag-index-consumers"),
+            help="Kafka consumer group ID (default: rag-index-consumers)",
         )
         parser.add_argument(
             "--bootstrap-servers",
@@ -157,6 +157,12 @@ class Command(BaseCommand):
             "enable.auto.commit": False,  # We'll commit manually
             "max.poll.interval.ms": 300000,  # 5 minutes
         }
+
+        # Add SASL/SSL config for managed Kafka (Confluent Cloud, etc.)
+        sasl_config = getattr(settings, "KAFKA_SASL_CONFIG", {})
+        if sasl_config:
+            config.update(sasl_config)
+            logger.info("Kafka SASL/SSL authentication enabled")
 
         try:
             self._consumer = Consumer(config)
