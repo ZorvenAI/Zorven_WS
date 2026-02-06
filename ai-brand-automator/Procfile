@@ -1,1 +1,7 @@
 web: gunicorn brand_automator.wsgi:application --bind 0.0.0.0:$PORT --workers 4 --threads 2 --timeout 120
+worker: celery -A brand_automator worker -l info --concurrency=2
+beat: celery -A brand_automator beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+ingestion-worker: celery -A brand_automator worker -Q ingestion -l info --concurrency=2
+ingestion-consumer: python manage.py run_ingestion --batch-size 10 --poll-timeout 1.0
+curation-worker: celery -A brand_automator worker -Q curation -l info --concurrency=2
+curation-consumer: python manage.py run_curation_consumer --batch-size 10 --poll-timeout 1.0

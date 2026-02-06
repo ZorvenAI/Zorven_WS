@@ -257,10 +257,14 @@ def create_kafka_producer(config: Optional[dict] = None):
     config = config or get_media_curation_config()
     kafka_config = config.get("KAFKA", {})
 
+    # Get SASL/SSL config from Django settings
+    sasl_config = getattr(settings, "KAFKA_SASL_CONFIG", {})
+
     adapter = KafkaProducerAdapter(
         bootstrap_servers=kafka_config.get("BOOTSTRAP_SERVERS", "localhost:9092"),
         dlq_topic=kafka_config.get("DLQ_TOPIC", "curation-dlq"),
         output_topic=kafka_config.get("OUTPUT_TOPIC", "curation-completed"),
+        sasl_config=sasl_config,
     )
 
     logger.info("Kafka producer created")
@@ -282,10 +286,14 @@ def create_kafka_consumer(config: Optional[dict] = None):
     config = config or get_media_curation_config()
     kafka_config = config.get("KAFKA", {})
 
+    # Get SASL/SSL config from Django settings
+    sasl_config = getattr(settings, "KAFKA_SASL_CONFIG", {})
+
     adapter = KafkaConsumerAdapter(
         bootstrap_servers=kafka_config.get("BOOTSTRAP_SERVERS", "localhost:9092"),
         group_id=kafka_config.get("CONSUMER_GROUP", "media-curation-consumers"),
         input_topic=kafka_config.get("INPUT_TOPIC", "curation-needed"),
+        sasl_config=sasl_config,
     )
 
     logger.info("Kafka consumer created")

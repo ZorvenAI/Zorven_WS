@@ -12,25 +12,25 @@
   },
   "services": {
     "web": {
-      "startCommand": "gunicorn brand_automator.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 2 --timeout 120"
+      "startCommand": "/app/entrypoint.sh"
     },
     "celery-worker": {
-      "startCommand": "celery -A brand_automator worker -l info --concurrency=2"
+      "startCommand": "/app/entrypoint-worker.sh celery -A brand_automator worker -l info --concurrency=2"
     },
     "celery-beat": {
-      "startCommand": "celery -A brand_automator beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
+      "startCommand": "/app/entrypoint-worker.sh celery -A brand_automator beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
     },
     "ingestion-worker": {
-      "startCommand": "celery -A brand_automator worker -Q ingestion -l info --concurrency=2"
+      "startCommand": "/app/entrypoint-worker.sh celery -A brand_automator worker -Q ingestion -l info --concurrency=2"
     },
     "ingestion-consumer": {
-      "startCommand": "python manage.py run_ingestion --batch-size 10 --poll-timeout 1.0"
+      "startCommand": "/app/entrypoint-worker.sh python manage.py run_ingestion --batch-size 10 --poll-timeout 1.0"
     },
     "curation-worker": {
-      "startCommand": "celery -A brand_automator worker -Q curation -l info --concurrency=2"
+      "startCommand": "/app/entrypoint-worker.sh celery -A brand_automator worker -Q curation -l info --concurrency=2"
     },
     "curation-consumer": {
-      "startCommand": "python manage.py run_curation_consumer --batch-size 10 --poll-timeout 1.0"
+      "startCommand": "/app/entrypoint-worker.sh python manage.py run_curation_consumer --batch-size 10 --poll-timeout 1.0"
     }
   }
 }

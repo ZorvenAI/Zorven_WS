@@ -36,10 +36,31 @@ class KafkaConfig:
     ENABLE_AUTO_COMMIT = config("KAFKA_ENABLE_AUTO_COMMIT", default=True, cast=bool)
     SESSION_TIMEOUT_MS = config("KAFKA_SESSION_TIMEOUT_MS", default=30000, cast=int)
 
+    # SASL/SSL Authentication (for managed Kafka: Confluent Cloud, Upstash)
+    SECURITY_PROTOCOL = config("KAFKA_SECURITY_PROTOCOL", default="")
+    SASL_MECHANISM = config("KAFKA_SASL_MECHANISM", default="PLAIN")
+    SASL_USERNAME = config("KAFKA_SASL_USERNAME", default="")
+    SASL_PASSWORD = config("KAFKA_SASL_PASSWORD", default="")
+
     # Topics
     TOPIC_GATEWAY_LOGS = "gateway-logs"
     TOPIC_RAW_INGESTION = "raw-ingestion-topic"
     TOPIC_DLQ = "dlq-events"
+
+    @classmethod
+    def get_sasl_config(cls) -> dict:
+        """
+        Build SASL/SSL config dict for confluent-kafka.
+        Returns empty dict when SECURITY_PROTOCOL is not set (local dev).
+        """
+        if not cls.SECURITY_PROTOCOL:
+            return {}
+        return {
+            "security.protocol": cls.SECURITY_PROTOCOL,
+            "sasl.mechanism": cls.SASL_MECHANISM,
+            "sasl.username": cls.SASL_USERNAME,
+            "sasl.password": cls.SASL_PASSWORD,
+        }
 
 
 class KafkaConsumerService:
@@ -82,6 +103,7 @@ class KafkaConsumerService:
                 "auto.offset.reset": KafkaConfig.AUTO_OFFSET_RESET,
                 "enable.auto.commit": KafkaConfig.ENABLE_AUTO_COMMIT,
                 "session.timeout.ms": KafkaConfig.SESSION_TIMEOUT_MS,
+                **KafkaConfig.get_sasl_config(),
             }
 
             self.consumer = Consumer(config)
@@ -356,6 +378,7 @@ class KafkaProducerService:
                 {
                     "bootstrap.servers": KafkaConfig.BOOTSTRAP_SERVERS,
                     "acks": "all",
+                    **KafkaConfig.get_sasl_config(),
                 }
             )
             logger.info("Kafka producer created")

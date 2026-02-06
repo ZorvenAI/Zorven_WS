@@ -33,9 +33,33 @@ RUN addgroup --system --gid 1001 curation \
 
 USER curation
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import redis; r = redis.from_url('${REDIS_URL:-redis://localhost:6379/0}'); r.ping()" || exit 1
+# Health check - verify Kafka connectivity (exits non-zero on failure)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "\
+import os, sys; \
+try:\n    import redis; r = redis.from_url(os.environ.get('REDIS_URL', 'redis://localhost:6379/0')); r.ping(); print('Redis OK')\nexcept Exception as e: print(f'Redis check failed: {e}')\n\
+try:\n    from confluent_kafka.admin import AdminClient; \
+    cfg = {'bootstrap.servers': os.environ.get('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')}; \
+    sp = os.environ.get('KAFKA_SECURITY_PROTOCOL', ''); \
+    cfg.update({'security.protocol': sp, 'sasl.mechanism': os.environ.get('KAFKA_SASL_MECHANISM', 'PLAIN'), 'sasl.username': os.environ.get('KAFKA_SASL_USERNAME', ''), 'sasl.password': os.environ.get('KAFKA_SASL_PASSWORD', '')} if sp else {}); \
+    a = AdminClient(cfg); a.list_topics(timeout=5); print('Kafka OK')\nexcept Exception as e: print(f'Kafka check failed: {e}'); sys.exit(1)\n\
+"
+
+# Create entrypoint for GCS credentials setup
+RUN cat <<'ENTRYPOINT_EOF' > /app/entrypoint-curation.sh && chmod +x /app/entrypoint-curation.sh
+#!/bin/bash
+set -e
+
+# Write GCS credentials file from env var if provided
+if [ -n "$GCS_CREDENTIALS_JSON" ]; then
+  printf '%s' "$GCS_CREDENTIALS_JSON" > /app/gcs-credentials.json
+  chmod 600 /app/gcs-credentials.json
+  export GS_CREDENTIALS_PATH=/app/gcs-credentials.json
+  export GOOGLE_APPLICATION_CREDENTIALS=/app/gcs-credentials.json
+fi
+
+exec "$@"
+ENTRYPOINT_EOF
 
 # Default command - run the Kafka consumer
-CMD ["python", "manage.py", "run_curation_consumer", "--batch-size", "10", "--poll-timeout", "1.0"]
+CMD ["/app/entrypoint-curation.sh", "python", "manage.py", "run_curation_consumer", "--batch-size", "10", "--poll-timeout", "1.0"]
