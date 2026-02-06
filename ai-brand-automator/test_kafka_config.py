@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 """Quick validation of Kafka SASL/SSL configuration changes."""
+import sys
+
 import django
 import os
 
@@ -7,6 +9,8 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "brand_automator.settings")
 django.setup()
 
 from django.conf import settings  # noqa: E402
+
+failed = False
 
 print("=" * 60)
 print("Kafka Configuration Validation")
@@ -23,7 +27,9 @@ print(f"KAFKA_SASL_PASSWORD: {pwd_display}")
 
 print("\n--- KAFKA_SASL_CONFIG ---")
 sasl_config = settings.KAFKA_SASL_CONFIG
-print(f"Result: {sasl_config}")
+# Redact password before printing
+redacted = {k: ("***" if "password" in k else v) for k, v in sasl_config.items()}
+print(f"Result: {redacted}")
 print("(empty dict = local dev, no SASL needed)")
 
 print("\n--- Celery Beat Schedule ---")
@@ -37,6 +43,7 @@ try:
     print("  data_ingestion.factory.create_kafka_producer: OK")
 except Exception as e:
     print(f"  data_ingestion.factory.create_kafka_producer: FAIL - {e}")
+    failed = True
 
 try:
     from media_curation.factory import (  # noqa: F401, F811
@@ -46,15 +53,24 @@ try:
     print("  media_curation.factory.create_kafka_producer: OK")
 except Exception as e:
     print(f"  media_curation.factory.create_kafka_producer: FAIL - {e}")
+    failed = True
 
 try:
     from kafka_service.consumer import KafkaConfig
 
     sasl = KafkaConfig.get_sasl_config()
-    print(f"  kafka_service.KafkaConfig.get_sasl_config(): {sasl}")
+    # Redact password
+    redacted_sasl = {k: ("***" if "password" in k else v) for k, v in sasl.items()}
+    print(f"  kafka_service.KafkaConfig.get_sasl_config(): {redacted_sasl}")
 except Exception as e:
     print(f"  kafka_service.KafkaConfig: FAIL - {e}")
+    failed = True
 
 print("\n" + "=" * 60)
-print("All checks passed!" if True else "Some checks failed!")
-print("=" * 60)
+if failed:
+    print("Some checks FAILED!")
+    print("=" * 60)
+    sys.exit(1)
+else:
+    print("All checks passed!")
+    print("=" * 60)

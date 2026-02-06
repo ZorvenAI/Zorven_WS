@@ -717,9 +717,13 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
-# Kafka consumer tasks — only register when Kafka is configured
+# Explicit flag to enable Kafka consumer Celery tasks.
+# Set to True when a Kafka broker is available (managed or local).
+KAFKA_CONSUMERS_ENABLED = config("KAFKA_CONSUMERS_ENABLED", default=False, cast=bool)
+
+# Kafka consumer tasks — only register when explicitly enabled
 # (prevents error-flooding logs when no Kafka broker is available)
-if KAFKA_BOOTSTRAP_SERVERS and KAFKA_BOOTSTRAP_SERVERS != "localhost:9092":
+if KAFKA_CONSUMERS_ENABLED:
     CELERY_BEAT_SCHEDULE.update(
         {
             "consume-gateway-logs-every-minute": {
