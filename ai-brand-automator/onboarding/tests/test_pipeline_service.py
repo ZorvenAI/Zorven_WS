@@ -84,6 +84,20 @@ class TestPublishAssetEvent:
         result = service.publish_asset_event(sample_brand_asset)
         assert result is None
 
+    @override_settings(ONBOARDING_KAFKA_ENABLED=False)
+    def test_sync_fallback_sets_ingested_status(self, sample_brand_asset):
+        """When Kafka disabled, asset should be marked as ingested but NOT processed."""
+        service = OnboardingPipelineService()
+        sample_brand_asset.pipeline_status = "pending"
+        sample_brand_asset.processed = False
+        sample_brand_asset.save()
+
+        service.publish_asset_event(sample_brand_asset)
+
+        sample_brand_asset.refresh_from_db()
+        assert sample_brand_asset.pipeline_status == "ingested"
+        assert sample_brand_asset.processed is False
+
     def test_publish_updates_asset_trace_id(
         self, sample_brand_asset, mock_kafka_producer
     ):

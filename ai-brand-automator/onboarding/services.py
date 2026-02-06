@@ -63,8 +63,7 @@ class OnboardingPipelineService:
                 extra={"asset_id": asset.id},
             )
             asset.pipeline_status = "ingested"
-            asset.processed = True
-            asset.save(update_fields=["pipeline_status", "processed"])
+            asset.save(update_fields=["pipeline_status"])
             return None
 
         try:

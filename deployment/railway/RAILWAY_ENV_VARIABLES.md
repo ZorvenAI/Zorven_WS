@@ -59,8 +59,8 @@ KAFKA_SASL_MECHANISM=PLAIN
 # Enable Kafka publishing from onboarding file uploads (default: true)
 ONBOARDING_KAFKA_ENABLED=true
 
-# Enable Celery Beat scheduled Kafka consumer tasks (default: false)
-KAFKA_CONSUMERS_ENABLED=true
+# Enable Celery Beat scheduled Kafka consumer tasks (default: false — set to true only after Kafka is configured)
+KAFKA_CONSUMERS_ENABLED=false
 
 # =============================================================================
 # Google Cloud Credentials (for pipeline workers)
