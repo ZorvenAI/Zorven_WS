@@ -58,7 +58,13 @@ class OnboardingPipelineService:
             The trace_id if successful, None if failed
         """
         if not self._kafka_enabled:
-            logger.debug("Kafka disabled, skipping asset event publish")
+            logger.info(
+                "Kafka disabled — marking asset as ingested (sync fallback)",
+                extra={"asset_id": asset.id},
+            )
+            asset.pipeline_status = "ingested"
+            asset.processed = True
+            asset.save(update_fields=["pipeline_status", "processed"])
             return None
 
         try:
