@@ -125,16 +125,12 @@ class TestSignedUrlEndpoint:
 
     @pytest.fixture
     def authenticated_client(self, db, django_user_model):
-        from tenants.models import Tenant, Domain
+        from tenants.models import Tenant
         import uuid
 
-        # Create tenant with unique domain to avoid conflicts
+        # Use the public tenant (created by setup_public_tenant session fixture)
+        tenant = Tenant.objects.get(schema_name="public")
         unique_id = uuid.uuid4().hex[:8]
-        tenant = Tenant.objects.create(
-            schema_name=f"test_signed_url_{unique_id}", name="Test Tenant"
-        )
-        domain_name = f"signedurl-{unique_id}.localhost"
-        Domain.objects.create(domain=domain_name, tenant=tenant, is_primary=True)
 
         # Create user
         user = django_user_model.objects.create_user(
@@ -145,8 +141,7 @@ class TestSignedUrlEndpoint:
 
         client = APIClient()
         client.force_authenticate(user=user)
-        client.defaults["SERVER_NAME"] = domain_name
-        client.handler._force_tenant = tenant
+        client.defaults["SERVER_NAME"] = "localhost"
 
         return client, user, tenant
 
@@ -216,7 +211,7 @@ class TestSignedUrlEndpoint:
             file_name="no-path.pdf",
             file_type="document",
             file_size=1024,
-            gcs_path=None,  # No GCS path
+            gcs_path="",  # Empty GCS path
             pipeline_status="pending",
         )
 
@@ -235,17 +230,13 @@ class TestAssetsListFiltering:
 
     @pytest.fixture
     def authenticated_client_with_assets(self, db, django_user_model):
-        from tenants.models import Tenant, Domain
+        from tenants.models import Tenant
         from onboarding.models import Company, BrandAsset
         import uuid
 
-        # Create tenant with unique domain to avoid conflicts
+        # Use the public tenant (created by setup_public_tenant session fixture)
         unique_id = uuid.uuid4().hex[:8]
-        tenant = Tenant.objects.create(
-            schema_name=f"test_filters_{unique_id}", name="Test Tenant"
-        )
-        domain_name = f"filters-{unique_id}.localhost"
-        Domain.objects.create(domain=domain_name, tenant=tenant, is_primary=True)
+        tenant = Tenant.objects.get(schema_name="public")
 
         # Create user
         user = django_user_model.objects.create_user(
@@ -282,8 +273,7 @@ class TestAssetsListFiltering:
 
         client = APIClient()
         client.force_authenticate(user=user)
-        client.defaults["SERVER_NAME"] = domain_name
-        client.handler._force_tenant = tenant
+        client.defaults["SERVER_NAME"] = "localhost"
 
         return client, assets
 
@@ -412,17 +402,13 @@ class TestAssetsListPagination:
 
     @pytest.fixture
     def authenticated_client_with_many_assets(self, db, django_user_model):
-        from tenants.models import Tenant, Domain
+        from tenants.models import Tenant
         from onboarding.models import Company, BrandAsset
         import uuid
 
-        # Create tenant with unique domain to avoid conflicts
+        # Use the public tenant (created by setup_public_tenant session fixture)
         unique_id = uuid.uuid4().hex[:8]
-        tenant = Tenant.objects.create(
-            schema_name=f"test_pagination_{unique_id}", name="Test Tenant"
-        )
-        domain_name = f"pagination-{unique_id}.localhost"
-        Domain.objects.create(domain=domain_name, tenant=tenant, is_primary=True)
+        tenant = Tenant.objects.get(schema_name="public")
 
         # Create user
         user = django_user_model.objects.create_user(
@@ -450,8 +436,7 @@ class TestAssetsListPagination:
 
         client = APIClient()
         client.force_authenticate(user=user)
-        client.defaults["SERVER_NAME"] = domain_name
-        client.handler._force_tenant = tenant
+        client.defaults["SERVER_NAME"] = "localhost"
 
         return client, assets
 
