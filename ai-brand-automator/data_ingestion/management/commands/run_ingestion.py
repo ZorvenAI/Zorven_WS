@@ -77,7 +77,11 @@ def _update_asset_status(
             if new_gcs_path:
                 asset.gcs_path = _extract_gcs_path(new_gcs_path)
                 update_fields.append("gcs_path")
-            if error_msg:
+            if status == "ingested":
+                # Clear any previous pipeline error on successful ingestion
+                asset.pipeline_error = ""
+                update_fields.append("pipeline_error")
+            elif error_msg:
                 asset.pipeline_error = error_msg
                 update_fields.append("pipeline_error")
             asset.save(update_fields=update_fields)
@@ -92,8 +96,8 @@ def _update_asset_status(
             logger.warning("BrandAsset not found for file_id: %s", file_id)
             return False
 
-    except Exception as e:
-        logger.error("Failed to update BrandAsset status: %s", e)
+    except Exception:
+        logger.exception("Failed to update BrandAsset status")
         return False
 
 
