@@ -8,6 +8,7 @@ import os
 import time
 import logging
 from datetime import timedelta
+import google.auth
 from django.conf import settings
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -35,13 +36,9 @@ class GCSService:
         # Initialize GCS client
         try:
             credentials = self._resolve_credentials()
-            if credentials:
-                self.client = storage.Client(
-                    credentials=credentials, project=self.project_id
-                )
-            else:
-                # Application Default Credentials (GCP environments)
-                self.client = storage.Client(project=self.project_id)
+            self.client = storage.Client(
+                credentials=credentials, project=self.project_id
+            )
         except Exception as e:
             # Fallback: create a mock client for development
             logger.warning("GCS initialization failed: %s. Using mock service.", e)
@@ -58,10 +55,17 @@ class GCSService:
         creds_json = os.environ.get("GCS_CREDENTIALS_JSON", "").strip()
         if creds_json:
             logger.info("Loading GCS credentials from GCS_CREDENTIALS_JSON env var")
-            info = json.loads(creds_json)
-            return service_account.Credentials.from_service_account_info(
-                info, scopes=GCS_SCOPES
-            )
+            try:
+                info = json.loads(creds_json)
+                return service_account.Credentials.from_service_account_info(
+                    info, scopes=GCS_SCOPES
+                )
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(
+                    "Invalid GCS_CREDENTIALS_JSON env var; falling back to "
+                    "file/ADC credentials: %s",
+                    e,
+                )
 
         # 2. Service account key file on disk (local development)
         if self.credentials_path and os.path.exists(self.credentials_path):
@@ -70,9 +74,10 @@ class GCSService:
                 self.credentials_path, scopes=GCS_SCOPES
             )
 
-        # 3. Fall back to Application Default Credentials
+        # 3. Fall back to Application Default Credentials (with explicit scopes)
         logger.info("No explicit GCS credentials found, using ADC")
-        return None
+        credentials, project = google.auth.default(scopes=GCS_SCOPES)
+        return credentials
 
     def upload_file(self, file_obj, file_path, content_type=None, max_retries=3):
         """
