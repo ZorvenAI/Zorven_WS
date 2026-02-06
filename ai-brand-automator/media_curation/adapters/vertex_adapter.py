@@ -195,7 +195,15 @@ class VertexAIAdapter:
             return response.text
 
         except Exception as e:
-            if self._is_quota_error(e):
+            # Check for credential errors — fall back to mock mode
+            if "credentials" in str(e).lower():
+                logger.warning(
+                    f"Vertex AI credentials not available, "
+                    f"switching to mock mode: {e}"
+                )
+                self._vertex_available = False
+                return f"[Mock Vertex AI response] Content from {gcs_uri}"
+            elif self._is_quota_error(e):
                 raise AIModelQuotaExceededError(
                     f"Quota exceeded for Vertex AI: {e}",
                 )
