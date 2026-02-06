@@ -86,9 +86,7 @@ class CloudDLPAdapter(DLPPort):
         except Exception as e:
             self._dlp_available = False
             self.client = None
-            logger.warning(
-                f"DLP client initialization failed (using mock mode): {e}"
-            )
+            logger.warning(f"DLP client initialization failed (using mock mode): {e}")
 
     def _get_info_types_config(
         self, tenant_config: Optional[TenantConfig] = None
