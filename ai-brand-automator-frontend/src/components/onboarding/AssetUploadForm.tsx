@@ -102,20 +102,14 @@ export function AssetUploadForm() {
         formData.append('file', file);
         formData.append('file_type', getFileType(file.type));
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/assets/upload/`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-          },
-          body: formData,
-        });
+        const response = await apiClient.upload('/assets/upload/', formData);
 
         if (response.ok) {
           const data = await response.json();
           setUploadedFiles((prev) => [...prev, data]);
         } else {
           const errorData = await response.json();
-          setError(`Failed to upload ${file.name}: ${errorData.message || 'Unknown error'}`);
+          setError(`Failed to upload ${file.name}: ${errorData.error || errorData.message || 'Unknown error'}`);
         }
       }
     } catch (error) {

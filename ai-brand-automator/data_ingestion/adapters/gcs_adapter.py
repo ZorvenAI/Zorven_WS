@@ -128,6 +128,18 @@ class GCSAdapter(StoragePort):
             # Parse destination
             dest_bucket, dest_blob_name = self._get_bucket_and_blob(destination_path)
 
+            # Guard: if source and destination are the same, skip the move
+            # to avoid copy-then-delete destroying the file.
+            if (
+                source_bucket.name == dest_bucket.name
+                and source_blob_name == dest_blob_name
+            ):
+                logger.info(
+                    "Source and destination are identical, skipping move",
+                    extra={"path": source_path},
+                )
+                return destination_path
+
             # Copy to destination
             source_bucket.copy_blob(
                 source_blob,

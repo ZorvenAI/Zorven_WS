@@ -94,6 +94,32 @@ class TestGCSAdapterWithMock:
                 destination_path="gs://test-bucket/tenant/raw/file.mp4",
             )
 
+    def test_move_file_same_source_and_dest_skips_move(
+        self, gcs_adapter, mock_gcs_client
+    ):
+        """Test that move_file is a no-op when source == destination.
+
+        This prevents the copy-then-delete pattern from destroying
+        the file when retrying an already-ingested asset.
+        """
+        mock_bucket = MagicMock()
+        mock_bucket.name = "test-bucket"
+        mock_blob = MagicMock()
+        mock_blob.exists.return_value = True
+        mock_bucket.blob.return_value = mock_blob
+        mock_gcs_client.bucket.return_value = mock_bucket
+
+        same_path = "gs://test-bucket/1/raw/2026/02/07/abc_file.pdf"
+        result = gcs_adapter.move_file(
+            source_path=same_path,
+            destination_path=same_path,
+        )
+
+        assert result == same_path
+        # copy_blob and delete should NOT be called
+        mock_bucket.copy_blob.assert_not_called()
+        mock_blob.delete.assert_not_called()
+
 
 class TestRedisAdapterWithMock:
     """Tests for RedisAdapter with mocked Redis client."""

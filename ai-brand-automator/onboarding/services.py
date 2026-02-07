@@ -172,6 +172,14 @@ class OnboardingPipelineService:
         """
         Retry pipeline processing for a failed asset.
 
+        Routes the retry to the appropriate pipeline stage based on what has
+        already completed:
+        - If the file is still in _landing/ (or has no path) → re-publish to
+          the ingestion topic so the pipeline can re-run from the start
+        - If the file has already been moved out of _landing/ (e.g. in raw/ or
+          later stages, including curated) → publish directly to the curation
+          topic so ingestion doesn't try to move an already-moved file
+
         Args:
             asset: The BrandAsset to retry
 
@@ -188,7 +196,136 @@ class OnboardingPipelineService:
         asset.pipeline_error = ""
         asset.save(update_fields=["pipeline_error"])
 
+        gcs_path = asset.gcs_path or ""
+
+        # Determine which stage to retry from based on gcs_path location
+        if not gcs_path or "_landing/" in gcs_path:
+            # File still in landing zone (or no path) — start from ingestion
+            return self.publish_asset_event(asset)
+
+        if "/raw/" in gcs_path:
+            # File is already in raw/ zone — skip ingestion, publish to curation
+            return self._publish_curation_event(asset)
+
+        # Path is neither landing nor clearly raw (e.g., legacy assets/ paths);
+        # treat as not-yet-ingested and route through ingestion.
+        logger.warning(
+            "Ambiguous gcs_path for asset %s during retry (%s); "
+            "falling back to ingestion pipeline.",
+            asset.id,
+            gcs_path,
+        )
         return self.publish_asset_event(asset)
+
+    def _publish_curation_event(self, asset: BrandAsset) -> Optional[str]:
+        """
+        Publish an event directly to the curation-needed topic.
+
+        Used when retrying a failed asset that has already been ingested
+        (file is in raw/ zone), so ingestion can be skipped.
+
+        Args:
+            asset: The BrandAsset to publish for curation
+
+        Returns:
+            The new trace_id if successful, None if failed
+        """
+        if not self._kafka_enabled:
+            logger.info(
+                "Kafka disabled — cannot publish curation event",
+                extra={"asset_id": asset.id},
+            )
+            return None
+
+        try:
+            trace_id = uuid4()
+
+            # Detect MIME type
+            mime_type, _ = mimetypes.guess_type(asset.file_name)
+            if not mime_type:
+                mime_type_map = {
+                    "image": "image/jpeg",
+                    "video": "video/mp4",
+                    "document": "application/pdf",
+                    "other": "application/octet-stream",
+                }
+                mime_type = mime_type_map.get(
+                    asset.file_type, "application/octet-stream"
+                )
+
+            bucket = asset.gcs_bucket or self._get_default_bucket()
+            raw_gcs_uri = f"gs://{bucket}/{asset.gcs_path}"
+
+            event = {
+                "event_id": str(uuid4()),
+                "trace_id": str(trace_id),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "tenant_id": str(asset.tenant.id) if asset.tenant else "public",
+                "source_path": raw_gcs_uri,
+                "destination_path": raw_gcs_uri,
+                "status": "raw_stored",
+                "processing_duration_ms": 0,
+                # Curation-expected fields
+                "file_id": str(uuid4()),
+                "raw_gcs_uri": raw_gcs_uri,
+                "mime_type": mime_type,
+                "content_type": "unknown",
+                "source_service": "data-ingestion",
+                "metadata": {
+                    "original_filename": asset.file_name,
+                    "asset_id": asset.id,
+                    "company_id": asset.company.id if asset.company else None,
+                    "uploaded_at": asset.uploaded_at.isoformat(),
+                    "source_service": "onboarding",
+                    "file_size_bytes": asset.file_size,
+                },
+            }
+
+            # Update asset with new trace_id
+            asset.pipeline_trace_id = trace_id
+            asset.pipeline_status = "ingested"  # Already ingested, going to curation
+            asset.save(
+                update_fields=["pipeline_trace_id", "pipeline_status", "pipeline_error"]
+            )
+
+            # Publish directly to curation topic
+            config = getattr(settings, "DATA_INGESTION", {})
+            curation_topic = config.get("KAFKA_OUTPUT_TOPIC", "curation-needed-topic")
+
+            if self.producer is None:
+                logger.error(
+                    "Kafka producer not available for curation retry",
+                    extra={"asset_id": asset.id},
+                )
+                asset.pipeline_status = "failed"
+                asset.pipeline_error = "Kafka producer is not available"
+                asset.save(update_fields=["pipeline_status", "pipeline_error"])
+                return None
+
+            self.producer.publish_raw(curation_topic, event, key=str(trace_id))
+
+            logger.info(
+                "Published curation retry event (skipping ingestion)",
+                extra={
+                    "asset_id": asset.id,
+                    "trace_id": str(trace_id),
+                    "topic": curation_topic,
+                    "raw_gcs_uri": raw_gcs_uri,
+                },
+            )
+
+            return str(trace_id)
+
+        except Exception as e:
+            logger.error(
+                f"Failed to publish curation retry event: {e}",
+                extra={"asset_id": asset.id},
+                exc_info=True,
+            )
+            asset.pipeline_status = "failed"
+            asset.pipeline_error = f"Failed to publish curation retry: {str(e)}"
+            asset.save(update_fields=["pipeline_status", "pipeline_error"])
+            return None
 
     def publish_company_document(self, company_doc: dict) -> str:
         """
