@@ -24,6 +24,86 @@ from data_ingestion.domain.exceptions import (
 logger = logging.getLogger(__name__)
 
 
+def _extract_gcs_path(destination_uri: str) -> str:
+    """Extract the relative path from a gs:// URI.
+
+    Examples:
+        'gs://bucket/1/raw/2026/02/06/file.pdf' -> '1/raw/2026/02/06/file.pdf'
+    """
+    stripped = destination_uri.replace("gs://", "")
+    parts = stripped.split("/", 1)
+    return parts[1] if len(parts) > 1 else stripped
+
+
+def _update_asset_after_ingestion(
+    asset_id: str,
+    status: str,
+    error_msg: str = "",
+    new_gcs_path: str = "",
+) -> bool:
+    """Update BrandAsset pipeline_status and gcs_path after ingestion.
+
+    Args:
+        asset_id: The asset ID (integer as string)
+        status: The new pipeline status (ingested, failed)
+        error_msg: Error message if status is failed
+        new_gcs_path: New GCS path after file was moved (gs:// URI)
+
+    Returns:
+        True if update succeeded, False otherwise
+    """
+    from django.db import close_old_connections
+    from onboarding.models import BrandAsset
+
+    for attempt in range(2):
+        try:
+            if attempt > 0:
+                close_old_connections()
+
+            try:
+                aid = int(asset_id)
+                asset = BrandAsset.objects.filter(id=aid).first()
+            except (ValueError, TypeError):
+                asset = None
+
+            if asset:
+                asset.pipeline_status = status
+                update_fields = ["pipeline_status"]
+                if new_gcs_path:
+                    asset.gcs_path = _extract_gcs_path(new_gcs_path)
+                    update_fields.append("gcs_path")
+                if status == "ingested":
+                    asset.pipeline_error = ""
+                    update_fields.append("pipeline_error")
+                elif error_msg:
+                    asset.pipeline_error = error_msg
+                    update_fields.append("pipeline_error")
+                asset.save(update_fields=update_fields)
+                logger.info(
+                    "Updated BrandAsset %s: status=%s, gcs_path=%s",
+                    asset.id,
+                    status,
+                    asset.gcs_path,
+                )
+                return True
+            else:
+                logger.warning("BrandAsset not found for asset_id: %s", asset_id)
+                return False
+
+        except Exception:
+            if attempt == 0:
+                logger.warning(
+                    "DB error updating BrandAsset (will retry): %s",
+                    asset_id,
+                    exc_info=True,
+                )
+                continue
+            logger.exception("Failed to update BrandAsset status after retry")
+            return False
+
+    return False
+
+
 @shared_task(
     bind=True,
     name="data_ingestion.process_ingestion_event",
@@ -95,6 +175,15 @@ def process_ingestion_event(
         # Create service and process
         service = create_ingestion_service()
         result = service.process_event(event)
+
+        # Update BrandAsset status and gcs_path after successful ingestion
+        asset_id = (metadata or {}).get("asset_id")
+        if asset_id:
+            _update_asset_after_ingestion(
+                str(asset_id),
+                "ingested",
+                new_gcs_path=result.destination_path,
+            )
 
         logger.info(
             "Event processed successfully via Celery",

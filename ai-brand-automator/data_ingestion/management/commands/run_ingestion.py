@@ -58,47 +58,66 @@ def _update_asset_status(
     Returns:
         True if update succeeded, False otherwise
     """
-    try:
-        from onboarding.models import BrandAsset
+    from django.db import close_old_connections
+    from onboarding.models import BrandAsset
 
+    for attempt in range(2):
         try:
-            asset_id = int(file_id)
-            asset = BrandAsset.objects.filter(id=asset_id).first()
-        except (ValueError, TypeError):
-            try:
-                trace_uuid = uuid.UUID(file_id)
-                asset = BrandAsset.objects.filter(pipeline_trace_id=trace_uuid).first()
-            except (ValueError, TypeError):
-                asset = None
+            if attempt > 0:
+                # Retry: close stale connections so Django opens a fresh one.
+                # Long-running Kafka consumers hold connections that
+                # Neon/PostgreSQL can time out (cursor already closed).
+                close_old_connections()
 
-        if asset:
-            asset.pipeline_status = status
-            update_fields = ["pipeline_status"]
-            if new_gcs_path:
-                asset.gcs_path = _extract_gcs_path(new_gcs_path)
-                update_fields.append("gcs_path")
-            if status == "ingested":
-                # Clear any previous pipeline error on successful ingestion
-                asset.pipeline_error = ""
-                update_fields.append("pipeline_error")
-            elif error_msg:
-                asset.pipeline_error = error_msg
-                update_fields.append("pipeline_error")
-            asset.save(update_fields=update_fields)
-            logger.info(
-                "Updated BrandAsset %s: status=%s, gcs_path=%s",
-                asset.id,
-                status,
-                asset.gcs_path,
-            )
-            return True
-        else:
-            logger.warning("BrandAsset not found for file_id: %s", file_id)
+            try:
+                asset_id = int(file_id)
+                asset = BrandAsset.objects.filter(id=asset_id).first()
+            except (ValueError, TypeError):
+                try:
+                    trace_uuid = uuid.UUID(file_id)
+                    asset = BrandAsset.objects.filter(
+                        pipeline_trace_id=trace_uuid
+                    ).first()
+                except (ValueError, TypeError):
+                    asset = None
+
+            if asset:
+                asset.pipeline_status = status
+                update_fields = ["pipeline_status"]
+                if new_gcs_path:
+                    asset.gcs_path = _extract_gcs_path(new_gcs_path)
+                    update_fields.append("gcs_path")
+                if status == "ingested":
+                    # Clear any previous pipeline error on successful ingestion
+                    asset.pipeline_error = ""
+                    update_fields.append("pipeline_error")
+                elif error_msg:
+                    asset.pipeline_error = error_msg
+                    update_fields.append("pipeline_error")
+                asset.save(update_fields=update_fields)
+                logger.info(
+                    "Updated BrandAsset %s: status=%s, gcs_path=%s",
+                    asset.id,
+                    status,
+                    asset.gcs_path,
+                )
+                return True
+            else:
+                logger.warning("BrandAsset not found for file_id: %s", file_id)
+                return False
+
+        except Exception:
+            if attempt == 0:
+                logger.warning(
+                    "DB error updating BrandAsset (will retry): %s",
+                    file_id,
+                    exc_info=True,
+                )
+                continue
+            logger.exception("Failed to update BrandAsset status after retry")
             return False
 
-    except Exception:
-        logger.exception("Failed to update BrandAsset status")
-        return False
+    return False
 
 
 def _get_input_topic() -> str:

@@ -43,35 +43,55 @@ def _update_asset_status(file_id: str, status: str, error_msg: str = "") -> bool
     Returns:
         True if update succeeded, False otherwise
     """
-    try:
-        from onboarding.models import BrandAsset
+    from django.db import close_old_connections
+    from onboarding.models import BrandAsset
 
-        # Try to find asset by ID (could be integer or UUID)
+    for attempt in range(2):
         try:
-            asset_id = int(file_id)
-            asset = BrandAsset.objects.filter(id=asset_id).first()
-        except (ValueError, TypeError):
-            # file_id might be a UUID - try matching by pipeline_trace_id
-            try:
-                trace_uuid = uuid.UUID(file_id)
-                asset = BrandAsset.objects.filter(pipeline_trace_id=trace_uuid).first()
-            except (ValueError, TypeError):
-                asset = None
+            if attempt > 0:
+                close_old_connections()
 
-        if asset:
-            asset.pipeline_status = status
-            if error_msg:
-                asset.pipeline_error = error_msg
-            asset.save(update_fields=["pipeline_status", "pipeline_error"])
-            logger.info(f"Updated BrandAsset {asset.id} pipeline_status to {status}")
-            return True
-        else:
-            logger.warning(f"BrandAsset not found for file_id: {file_id}")
+            # Try to find asset by ID (could be integer or UUID)
+            try:
+                asset_id = int(file_id)
+                asset = BrandAsset.objects.filter(id=asset_id).first()
+            except (ValueError, TypeError):
+                # file_id might be a UUID - try matching by pipeline_trace_id
+                try:
+                    trace_uuid = uuid.UUID(file_id)
+                    asset = BrandAsset.objects.filter(
+                        pipeline_trace_id=trace_uuid
+                    ).first()
+                except (ValueError, TypeError):
+                    asset = None
+
+            if asset:
+                asset.pipeline_status = status
+                if error_msg:
+                    asset.pipeline_error = error_msg
+                asset.save(update_fields=["pipeline_status", "pipeline_error"])
+                logger.info(
+                    "Updated BrandAsset %s pipeline_status to %s",
+                    asset.id,
+                    status,
+                )
+                return True
+            else:
+                logger.warning("BrandAsset not found for file_id: %s", file_id)
+                return False
+
+        except Exception:
+            if attempt == 0:
+                logger.warning(
+                    "DB error updating BrandAsset (will retry): %s",
+                    file_id,
+                    exc_info=True,
+                )
+                continue
+            logger.exception("Failed to update BrandAsset status after retry")
             return False
 
-    except Exception as e:
-        logger.error(f"Failed to update BrandAsset status: {e}")
-        return False
+    return False
 
 
 def _run_async(coro):
