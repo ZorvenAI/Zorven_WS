@@ -187,16 +187,17 @@ class TestBuildIngestionEvent:
 class TestRetryAssetPipeline:
     """Tests for retry_asset_pipeline method."""
 
-    def test_retry_resets_error_and_republishes(
+    def test_retry_landing_asset_republishes_to_ingestion(
         self, sample_brand_asset, mock_kafka_producer
     ):
-        """Should reset error and republish when retrying."""
+        """Should republish to ingestion topic when file is in _landing/."""
         service = OnboardingPipelineService()
         service._producer = mock_kafka_producer
 
-        # Set asset to failed state
+        # Asset still in landing zone
         sample_brand_asset.pipeline_status = "failed"
         sample_brand_asset.pipeline_error = "Previous error"
+        sample_brand_asset.gcs_path = "_landing/1/abc_test_image.jpg"
         sample_brand_asset.save()
 
         result = service.retry_asset_pipeline(sample_brand_asset)
@@ -204,7 +205,54 @@ class TestRetryAssetPipeline:
         sample_brand_asset.refresh_from_db()
         assert result is not None
         assert sample_brand_asset.pipeline_error == ""
-        mock_kafka_producer.publish_raw.assert_called_once()
+        # Should publish to ingestion topic (raw-ingestion-topic)
+        call_args = mock_kafka_producer.publish_raw.call_args
+        assert call_args[0][0] == "raw-ingestion-topic"
+
+    def test_retry_raw_asset_publishes_to_curation(
+        self, sample_brand_asset, mock_kafka_producer
+    ):
+        """Should publish to curation topic when file is already in raw/."""
+        service = OnboardingPipelineService()
+        service._producer = mock_kafka_producer
+
+        # Asset already ingested (in raw zone)
+        sample_brand_asset.pipeline_status = "failed"
+        sample_brand_asset.pipeline_error = "Curation error"
+        sample_brand_asset.gcs_path = "1/raw/2026/02/07/abc_test_image.jpg"
+        sample_brand_asset.save()
+
+        result = service.retry_asset_pipeline(sample_brand_asset)
+
+        sample_brand_asset.refresh_from_db()
+        assert result is not None
+        assert sample_brand_asset.pipeline_error == ""
+        # Should publish to curation topic (curation-needed-topic)
+        call_args = mock_kafka_producer.publish_raw.call_args
+        assert call_args[0][0] == "curation-needed-topic"
+        # Pipeline status should be set to ingested (skipping ingestion)
+        assert sample_brand_asset.pipeline_status == "ingested"
+
+    def test_retry_raw_asset_event_has_curation_fields(
+        self, sample_brand_asset, mock_kafka_producer
+    ):
+        """Curation retry event should have required fields for curation consumer."""
+        service = OnboardingPipelineService()
+        service._producer = mock_kafka_producer
+
+        sample_brand_asset.pipeline_status = "failed"
+        sample_brand_asset.gcs_path = "1/raw/2026/02/07/abc_test_image.jpg"
+        sample_brand_asset.save()
+
+        service.retry_asset_pipeline(sample_brand_asset)
+
+        event = mock_kafka_producer.publish_raw.call_args[0][1]
+        assert "file_id" in event
+        assert "raw_gcs_uri" in event
+        assert "mime_type" in event
+        assert "metadata" in event
+        assert event["metadata"]["asset_id"] == sample_brand_asset.id
+        assert event["raw_gcs_uri"].startswith("gs://")
 
     def test_retry_rejected_for_non_failed_asset(self, sample_brand_asset):
         """Should reject retry for assets not in failed/pending state."""
