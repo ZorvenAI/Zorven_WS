@@ -278,9 +278,7 @@ class OnboardingPipelineService:
 
             # Publish directly to curation topic
             config = getattr(settings, "DATA_INGESTION", {})
-            curation_topic = config.get(
-                "KAFKA_OUTPUT_TOPIC", "curation-needed-topic"
-            )
+            curation_topic = config.get("KAFKA_OUTPUT_TOPIC", "curation-needed-topic")
 
             if self.producer is None:
                 logger.error(
