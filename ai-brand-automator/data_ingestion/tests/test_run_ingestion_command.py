@@ -34,9 +34,9 @@ class TestExtractGcsPath:
         assert _extract_gcs_path(uri) == "tenant/raw/subdir/image.jpg"
 
     def test_no_gs_prefix(self):
-        """If no gs:// prefix, splits on first slash."""
+        """If no gs:// prefix, returns the path unchanged."""
         path = "bucket/some/path.txt"
-        assert _extract_gcs_path(path) == "some/path.txt"
+        assert _extract_gcs_path(path) == "bucket/some/path.txt"
 
     def test_bucket_only(self):
         """Edge case: URI with bucket but no path returns bucket name."""

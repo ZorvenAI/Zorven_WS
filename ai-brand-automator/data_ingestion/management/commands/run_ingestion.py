@@ -27,18 +27,7 @@ from data_ingestion.domain.exceptions import (
 logger = logging.getLogger(__name__)
 
 
-def _extract_gcs_path(destination_uri: str) -> str:
-    """Extract the path portion from a gs:// URI.
-
-    Args:
-        destination_uri: Full GCS URI (gs://bucket/path/to/file)
-
-    Returns:
-        Path without bucket prefix (e.g. '1/raw/2026/02/06/file.png')
-    """
-    stripped = destination_uri.replace("gs://", "")
-    parts = stripped.split("/", 1)
-    return parts[1] if len(parts) > 1 else stripped
+from data_ingestion.domain.path_generator import extract_object_path as _extract_gcs_path  # noqa: E402
 
 
 def _update_asset_status(

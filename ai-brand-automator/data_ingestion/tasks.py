@@ -24,15 +24,7 @@ from data_ingestion.domain.exceptions import (
 logger = logging.getLogger(__name__)
 
 
-def _extract_gcs_path(destination_uri: str) -> str:
-    """Extract the relative path from a gs:// URI.
-
-    Examples:
-        'gs://bucket/1/raw/2026/02/06/file.pdf' -> '1/raw/2026/02/06/file.pdf'
-    """
-    stripped = destination_uri.replace("gs://", "")
-    parts = stripped.split("/", 1)
-    return parts[1] if len(parts) > 1 else stripped
+from data_ingestion.domain.path_generator import extract_object_path as _extract_gcs_path  # noqa: E402
 
 
 def _update_asset_after_ingestion(

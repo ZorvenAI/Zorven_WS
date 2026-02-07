@@ -36,6 +36,20 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR("GCS not configured"))
             return
 
+        # Resolve public tenant ID dynamically for fallback
+        from tenants.models import Tenant
+
+        try:
+            public_tenant = Tenant.objects.get(schema_name="public")
+            public_tenant_id = public_tenant.id
+        except Tenant.DoesNotExist:
+            public_tenant_id = 1
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Public tenant not found, using fallback tenant_id={public_tenant_id}"
+                )
+            )
+
         stale_assets = BrandAsset.objects.filter(gcs_path__startswith="_landing/")
         self.stdout.write(
             f"Found {stale_assets.count()} assets with _landing/ gcs_path"
@@ -43,42 +57,65 @@ class Command(BaseCommand):
 
         fixed = 0
         not_found = 0
+        skipped = 0
 
         for asset in stale_assets:
             old_path = asset.gcs_path
             # Extract the filename (everything after the last /)
             filename = old_path.rsplit("/", 1)[-1]
 
-            # Search for the file in the raw/ zone
-            prefix = f"{asset.tenant_id}/raw/" if asset.tenant_id else "1/raw/"
-            blobs = list(
-                gcs_service.client.list_blobs(
-                    gcs_service.bucket_name,
-                    prefix=prefix,
-                    max_results=500,
-                )
-            )
-            matching = [b for b in blobs if b.name.endswith(filename)]
+            # Build a narrowed prefix using tenant_id and uploaded_at date
+            tenant_id = asset.tenant_id if asset.tenant_id else public_tenant_id
+            if asset.uploaded_at:
+                date_prefix = asset.uploaded_at.strftime("%Y/%m/%d")
+                prefix = f"{tenant_id}/raw/{date_prefix}/"
+            else:
+                prefix = f"{tenant_id}/raw/"
 
-            if matching:
-                new_path = matching[0].name
+            # Stream blobs and stop at first match (no max_results limit)
+            matching_blob = None
+            match_count = 0
+            for blob in gcs_service.client.list_blobs(
+                gcs_service.bucket_name,
+                prefix=prefix,
+            ):
+                if blob.name.endswith(filename):
+                    match_count += 1
+                    if matching_blob is None:
+                        matching_blob = blob
+                    if match_count > 1:
+                        break  # Found ambiguity, stop early
+
+            if match_count > 1:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"  Asset {asset.id}: {old_path} - SKIPPED: "
+                        f"multiple files match '{filename}' in {prefix}"
+                    )
+                )
+                skipped += 1
+            elif matching_blob:
+                new_path = matching_blob.name
                 self.stdout.write(f"  Asset {asset.id}: {old_path} -> {new_path}")
                 if apply:
                     asset.gcs_path = new_path
                     asset.save(update_fields=["gcs_path"])
-                    self.stdout.write(self.style.SUCCESS(f"    Fixed!"))
+                    self.stdout.write(self.style.SUCCESS("    Fixed!"))
                 fixed += 1
             else:
                 self.stdout.write(
                     self.style.WARNING(
-                        f"  Asset {asset.id}: {old_path} - file NOT found in raw/"
+                        f"  Asset {asset.id}: {old_path} - file NOT found in {prefix}"
                     )
                 )
                 not_found += 1
 
         mode = "Fixed" if apply else "Would fix"
         self.stdout.write(
-            self.style.SUCCESS(f"\n{mode} {fixed} assets, {not_found} not found in GCS")
+            self.style.SUCCESS(
+                f"\n{mode} {fixed} assets, {not_found} not found, "
+                f"{skipped} skipped (ambiguous)"
+            )
         )
         if not apply and fixed > 0:
             self.stdout.write("Run with --apply to apply fixes")

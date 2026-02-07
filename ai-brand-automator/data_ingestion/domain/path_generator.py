@@ -59,6 +59,36 @@ def parse_gcs_uri(gcs_uri: str) -> Tuple[str, str]:
     return bucket, object_path
 
 
+def extract_object_path(destination_uri: str) -> str:
+    """Extract the relative object path from a GCS URI or return as-is.
+
+    For gs:// URIs, strips the scheme and bucket to return just the object path.
+    For non-gs:// inputs, treats the value as an object path already and returns
+    it unchanged (with leading slashes normalized).
+
+    Args:
+        destination_uri: Full GCS URI or relative object path
+
+    Returns:
+        Object path without bucket prefix
+
+    Examples:
+        >>> extract_object_path('gs://bucket/1/raw/2026/02/06/file.pdf')
+        '1/raw/2026/02/06/file.pdf'
+        >>> extract_object_path('1/raw/2026/02/06/file.pdf')
+        '1/raw/2026/02/06/file.pdf'
+        >>> extract_object_path('gs://bucket-only')
+        'bucket-only'
+    """
+    if destination_uri.startswith("gs://"):
+        stripped = destination_uri[5:]  # Remove 'gs://' prefix
+        parts = stripped.split("/", 1)
+        return parts[1] if len(parts) > 1 else stripped
+
+    # Non-gs:// input: treat as object path, just normalize leading slashes
+    return destination_uri.lstrip("/")
+
+
 def extract_filename(object_path: str) -> str:
     """
     Extract the filename from a GCS object path.
