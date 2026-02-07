@@ -21,13 +21,19 @@ class TestExtractObjectPath:
     """Tests for extract_object_path shared utility."""
 
     def test_gs_uri_full(self):
-        assert extract_object_path("gs://bucket/1/raw/2026/02/06/file.png") == "1/raw/2026/02/06/file.png"
+        assert (
+            extract_object_path("gs://bucket/1/raw/2026/02/06/file.png")
+            == "1/raw/2026/02/06/file.png"
+        )
 
     def test_gs_uri_bucket_only(self):
         assert extract_object_path("gs://bucket-only") == "bucket-only"
 
     def test_plain_path_returned_as_is(self):
-        assert extract_object_path("1/raw/2026/02/06/file.png") == "1/raw/2026/02/06/file.png"
+        assert (
+            extract_object_path("1/raw/2026/02/06/file.png")
+            == "1/raw/2026/02/06/file.png"
+        )
 
     def test_plain_path_with_leading_slash(self):
         assert extract_object_path("/1/raw/file.png") == "1/raw/file.png"
