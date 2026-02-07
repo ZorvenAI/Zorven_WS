@@ -55,13 +55,21 @@ export const apiClient = {
     const url = env.getApiUrl(endpoint);
     const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
 
+    // Separate headers from the rest of options to avoid override
+    const { headers: optionHeaders, ...restOptions } = options;
+    const isFormData = restOptions.body instanceof FormData;
+
+    const mergedHeaders: Record<string, string> = {
+      // Only set Content-Type for non-FormData requests;
+      // for FormData the browser must set it with the boundary
+      ...(!isFormData && { 'Content-Type': 'application/json' }),
+      ...(token && { 'Authorization': `Bearer ${token}` }),
+      ...(optionHeaders as Record<string, string>),
+    };
+
     const config: RequestInit = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` }),
-        ...options.headers,
-      },
-      ...options,
+      headers: mergedHeaders,
+      ...restOptions,
     };
 
     const response = await fetch(url, config);
@@ -142,6 +150,21 @@ export const apiClient = {
     return this.request(endpoint, {
       method: 'PATCH',
       body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Upload a file using FormData.
+   * Does NOT set Content-Type — the browser adds the multipart boundary automatically.
+   * Includes JWT auth and 401 auto-refresh like request().
+   */
+  async upload(endpoint: string, formData: FormData) {
+    return this.request(endpoint, {
+      method: 'POST',
+      headers: {
+        // Explicitly remove Content-Type so the browser sets it with boundary
+      },
+      body: formData,
     });
   },
 };
@@ -270,18 +293,11 @@ export const assetsApi = {
     formData.append('file', file);
     formData.append('file_type', fileType);
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/assets/upload/`, {
-      method: 'POST',
-      headers: {
-        ...(token && { 'Authorization': `Bearer ${token}` }),
-      },
-      body: formData,
-    });
+    const response = await apiClient.upload('/assets/upload/', formData);
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || 'Failed to upload asset');
+      throw new Error(error.error || error.message || 'Failed to upload asset');
     }
     return response.json();
   },

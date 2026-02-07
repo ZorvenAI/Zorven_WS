@@ -190,16 +190,7 @@ export async function uploadAsset(file: File, fileType: string): Promise<BrandAs
   formData.append('file', file);
   formData.append('file_type', fileType);
 
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/assets/upload/`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-      },
-      body: formData,
-    }
-  );
+  const response = await apiClient.upload('/assets/upload/', formData);
 
   if (!response.ok) {
     const error = await response.json();
