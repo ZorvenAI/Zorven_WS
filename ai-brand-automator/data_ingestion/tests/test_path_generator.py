@@ -12,8 +12,38 @@ from data_ingestion.domain.path_generator import (
     parse_gcs_uri,
     sanitize_tenant_id,
     extract_filename,
+    extract_object_path,
 )
 from data_ingestion.domain.exceptions import PathGenerationError
+
+
+class TestExtractObjectPath:
+    """Tests for extract_object_path shared utility."""
+
+    def test_gs_uri_full(self):
+        assert (
+            extract_object_path("gs://bucket/1/raw/2026/02/06/file.png")
+            == "1/raw/2026/02/06/file.png"
+        )
+
+    def test_gs_uri_bucket_only(self):
+        assert extract_object_path("gs://bucket-only") == "bucket-only"
+
+    def test_plain_path_returned_as_is(self):
+        assert (
+            extract_object_path("1/raw/2026/02/06/file.png")
+            == "1/raw/2026/02/06/file.png"
+        )
+
+    def test_plain_path_with_leading_slash(self):
+        assert extract_object_path("/1/raw/file.png") == "1/raw/file.png"
+
+    def test_empty_string(self):
+        assert extract_object_path("") == ""
+
+    def test_non_gs_scheme(self):
+        """Non-gs:// schemes are treated as plain paths."""
+        assert extract_object_path("s3://bucket/key") == "s3://bucket/key"
 
 
 class TestParseGcsUri:

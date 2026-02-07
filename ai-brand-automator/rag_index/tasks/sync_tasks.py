@@ -33,29 +33,47 @@ def _update_asset_status(asset_id: str, status: str, error_msg: str = "") -> boo
     Returns:
         True if update succeeded, False otherwise
     """
-    try:
-        from onboarding.models import BrandAsset
+    from django.db import close_old_connections
+    from onboarding.models import BrandAsset
 
+    for attempt in range(2):
         try:
-            aid = int(asset_id)
-            asset = BrandAsset.objects.filter(id=aid).first()
-        except (ValueError, TypeError):
-            asset = None
+            if attempt > 0:
+                close_old_connections()
 
-        if asset:
-            asset.pipeline_status = status
-            if error_msg:
-                asset.pipeline_error = error_msg
-            asset.save(update_fields=["pipeline_status", "pipeline_error"])
-            logger.info(f"Updated BrandAsset {asset.id} pipeline_status to {status}")
-            return True
-        else:
-            logger.warning(f"BrandAsset not found for asset_id: {asset_id}")
+            try:
+                aid = int(asset_id)
+                asset = BrandAsset.objects.filter(id=aid).first()
+            except (ValueError, TypeError):
+                asset = None
+
+            if asset:
+                asset.pipeline_status = status
+                if error_msg:
+                    asset.pipeline_error = error_msg
+                asset.save(update_fields=["pipeline_status", "pipeline_error"])
+                logger.info(
+                    "Updated BrandAsset %s pipeline_status to %s",
+                    asset.id,
+                    status,
+                )
+                return True
+            else:
+                logger.warning("BrandAsset not found for asset_id: %s", asset_id)
+                return False
+
+        except Exception:
+            if attempt == 0:
+                logger.warning(
+                    "DB error updating BrandAsset (will retry): %s",
+                    asset_id,
+                    exc_info=True,
+                )
+                continue
+            logger.exception("Failed to update BrandAsset status after retry")
             return False
 
-    except Exception as e:
-        logger.error(f"Failed to update BrandAsset status: {e}")
-        return False
+    return False
 
 
 # ============================================================================
