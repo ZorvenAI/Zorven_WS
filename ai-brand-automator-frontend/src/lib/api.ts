@@ -59,13 +59,19 @@ export const apiClient = {
     const { headers: optionHeaders, ...restOptions } = options;
     const isFormData = restOptions.body instanceof FormData;
 
-    const mergedHeaders: Record<string, string> = {
-      // Only set Content-Type for non-FormData requests;
-      // for FormData the browser must set it with the boundary
-      ...(!isFormData && { 'Content-Type': 'application/json' }),
-      ...(token && { 'Authorization': `Bearer ${token}` }),
-      ...(optionHeaders as Record<string, string>),
-    };
+    // Normalize all HeadersInit shapes (plain object, Headers instance,
+    // or [string,string][]) into a single Headers object so callers can
+    // pass any valid HeadersInit without being silently dropped.
+    const mergedHeaders = new Headers(optionHeaders);
+
+    // Only set Content-Type for non-FormData requests;
+    // for FormData the browser must set it with the boundary
+    if (!isFormData && !mergedHeaders.has('Content-Type')) {
+      mergedHeaders.set('Content-Type', 'application/json');
+    }
+    if (token) {
+      mergedHeaders.set('Authorization', `Bearer ${token}`);
+    }
 
     const config: RequestInit = {
       headers: mergedHeaders,
@@ -82,10 +88,7 @@ export const apiClient = {
           failedQueue.push({ resolve, reject });
         })
           .then(token => {
-            config.headers = {
-              ...config.headers,
-              'Authorization': `Bearer ${token}`,
-            };
+            (config.headers as Headers).set('Authorization', `Bearer ${token}`);
             return fetch(url, config);
           })
           .catch(err => {
@@ -101,10 +104,7 @@ export const apiClient = {
         if (newToken) {
           processQueue(null, newToken);
           // Retry original request with new token
-          config.headers = {
-            ...config.headers,
-            'Authorization': `Bearer ${newToken}`,
-          };
+          (config.headers as Headers).set('Authorization', `Bearer ${newToken}`);
           return fetch(url, config);
         } else {
           // Refresh failed, redirect to login

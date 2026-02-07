@@ -266,6 +266,26 @@ class TestRetryAssetPipeline:
 
         assert result is None
 
+    def test_retry_ambiguous_path_falls_back_to_ingestion(
+        self, sample_brand_asset, mock_kafka_producer
+    ):
+        """Should fall back to ingestion for paths that are neither landing nor raw."""
+        service = OnboardingPipelineService()
+        service._producer = mock_kafka_producer
+
+        # Legacy/ambiguous path (no _landing/ and no /raw/)
+        sample_brand_asset.pipeline_status = "failed"
+        sample_brand_asset.gcs_path = "assets/1/abc_test_image.jpg"
+        sample_brand_asset.save()
+
+        result = service.retry_asset_pipeline(sample_brand_asset)
+
+        sample_brand_asset.refresh_from_db()
+        assert result is not None
+        # Should fall back to ingestion topic
+        call_args = mock_kafka_producer.publish_raw.call_args
+        assert call_args[0][0] == "raw-ingestion-topic"
+
 
 class TestPublishCompanyDocument:
     """Tests for publish_company_document method."""

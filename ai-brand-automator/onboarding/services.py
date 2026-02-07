@@ -172,12 +172,13 @@ class OnboardingPipelineService:
         """
         Retry pipeline processing for a failed asset.
 
-        Routes the retry to the correct pipeline stage based on what has
+        Routes the retry to the appropriate pipeline stage based on what has
         already completed:
-        - If the file is still in _landing/ → re-publish to ingestion topic
-        - If the file is already in raw/ (ingested) → publish directly to
-          curation topic so ingestion doesn't try to move an already-moved file
-        - If the file is already curated → publish directly to RAG index topic
+        - If the file is still in _landing/ (or has no path) → re-publish to
+          the ingestion topic so the pipeline can re-run from the start
+        - If the file has already been moved out of _landing/ (e.g. in raw/ or
+          later stages, including curated) → publish directly to the curation
+          topic so ingestion doesn't try to move an already-moved file
 
         Args:
             asset: The BrandAsset to retry
@@ -198,12 +199,23 @@ class OnboardingPipelineService:
         gcs_path = asset.gcs_path or ""
 
         # Determine which stage to retry from based on gcs_path location
-        if "_landing/" in gcs_path or not gcs_path:
+        if not gcs_path or "_landing/" in gcs_path:
             # File still in landing zone (or no path) — start from ingestion
             return self.publish_asset_event(asset)
 
-        # File is already in raw/ zone — skip ingestion, publish to curation
-        return self._publish_curation_event(asset)
+        if "/raw/" in gcs_path:
+            # File is already in raw/ zone — skip ingestion, publish to curation
+            return self._publish_curation_event(asset)
+
+        # Path is neither landing nor clearly raw (e.g., legacy assets/ paths);
+        # treat as not-yet-ingested and route through ingestion.
+        logger.warning(
+            "Ambiguous gcs_path for asset %s during retry (%s); "
+            "falling back to ingestion pipeline.",
+            asset.id,
+            gcs_path,
+        )
+        return self.publish_asset_event(asset)
 
     def _publish_curation_event(self, asset: BrandAsset) -> Optional[str]:
         """
