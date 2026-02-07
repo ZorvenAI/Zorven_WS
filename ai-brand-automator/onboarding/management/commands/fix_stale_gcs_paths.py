@@ -46,7 +46,8 @@ class Command(BaseCommand):
             public_tenant_id = 1
             self.stdout.write(
                 self.style.WARNING(
-                    f"Public tenant not found, using fallback tenant_id={public_tenant_id}"
+                    "Public tenant not found, "
+                    f"using fallback tenant_id={public_tenant_id}"
                 )
             )
 

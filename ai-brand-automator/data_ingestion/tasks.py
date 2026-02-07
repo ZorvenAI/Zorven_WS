@@ -19,14 +19,12 @@ from data_ingestion.domain.exceptions import (
     NonRetryableError,
     RetryableError,
 )
+from data_ingestion.domain.path_generator import (
+    extract_object_path as _extract_gcs_path,
+)
 
 
 logger = logging.getLogger(__name__)
-
-
-from data_ingestion.domain.path_generator import (
-    extract_object_path as _extract_gcs_path,
-)  # noqa: E402
 
 
 def _update_asset_after_ingestion(
