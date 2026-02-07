@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { uploadAsset } from '@/hooks/useAssets';
+import { uploadAsset, DuplicateFileError } from '@/hooks/useAssets';
 import { apiClient, assetsApi } from '@/lib/api';
 import {
   BrandAsset,
@@ -43,6 +43,12 @@ const MAX_SIZE_MB = 50;
 const LIMIT_OPTIONS = [3, 6, 9] as const;
 const POLLING_INTERVAL = 5000;
 
+interface DuplicateConfirmation {
+  file: File;
+  fileType: string;
+  existingAsset: DuplicateFileError['existingAsset'];
+}
+
 export function FileUploadManager() {
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -53,6 +59,7 @@ export function FileUploadManager() {
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [showAllFiles, setShowAllFiles] = useState(false);
+  const [duplicateConfirm, setDuplicateConfirm] = useState<DuplicateConfirmation | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -192,14 +199,25 @@ export function FileUploadManager() {
             setUploadingFiles((prev) => prev.filter((u) => u.id !== upload.id));
           }, 2000);
         } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : 'Upload failed';
-          setUploadingFiles((prev) =>
-            prev.map((u) =>
-              u.id === upload.id
-                ? { ...u, status: 'error' as const, error: errorMessage }
-                : u
-            )
-          );
+          if (err instanceof DuplicateFileError) {
+            // Show duplicate confirmation dialog
+            setDuplicateConfirm({
+              file: upload.file,
+              fileType: getFileTypeFromMime(upload.file.type),
+              existingAsset: err.existingAsset,
+            });
+            // Remove from uploading list (handled by dialog now)
+            setUploadingFiles((prev) => prev.filter((u) => u.id !== upload.id));
+          } else {
+            const errorMessage = err instanceof Error ? err.message : 'Upload failed';
+            setUploadingFiles((prev) =>
+              prev.map((u) =>
+                u.id === upload.id
+                  ? { ...u, status: 'error' as const, error: errorMessage }
+                  : u
+              )
+            );
+          }
         }
       }
     },
@@ -251,6 +269,24 @@ export function FileUploadManager() {
 
   const removeFailedUpload = useCallback((uploadId: string) => {
     setUploadingFiles((prev) => prev.filter((u) => u.id !== uploadId));
+  }, []);
+
+  const handleDuplicateReplace = useCallback(async () => {
+    if (!duplicateConfirm) return;
+    const { file, fileType } = duplicateConfirm;
+    setDuplicateConfirm(null);
+
+    try {
+      await uploadAsset(file, fileType, true); // replaceExisting = true
+      await refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Replace failed';
+      setError(msg);
+    }
+  }, [duplicateConfirm, refresh]);
+
+  const handleDuplicateSkip = useCallback(() => {
+    setDuplicateConfirm(null);
   }, []);
 
   return (
@@ -452,6 +488,39 @@ export function FileUploadManager() {
           await deleteAsset(Number(fileId));
         }}
       />
+
+      {/* Duplicate File Confirmation Dialog */}
+      {duplicateConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-brand-dark border border-white/20 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-white mb-2">
+              File Already Exists
+            </h3>
+            <p className="text-brand-silver/80 text-sm mb-4">
+              A file named <span className="font-medium text-white">&quot;{duplicateConfirm.existingAsset.file_name}&quot;</span> already exists
+              (uploaded {new Date(duplicateConfirm.existingAsset.uploaded_at).toLocaleDateString()},
+              status: {duplicateConfirm.existingAsset.pipeline_status}).
+            </p>
+            <p className="text-brand-silver/80 text-sm mb-6">
+              Do you want to replace it with the new file?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={handleDuplicateSkip}
+                className="px-4 py-2 text-sm rounded border border-white/20 text-brand-silver hover:bg-white/10 transition-colors"
+              >
+                Keep Existing
+              </button>
+              <button
+                onClick={handleDuplicateReplace}
+                className="px-4 py-2 text-sm rounded bg-brand-electric text-white hover:bg-brand-electric/80 transition-colors"
+              >
+                Replace File
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

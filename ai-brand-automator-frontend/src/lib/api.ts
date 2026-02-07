@@ -286,14 +286,29 @@ export const assetsApi = {
   },
 
   /**
-   * Upload a new asset
+   * Upload a new asset.
+   * @param replaceExisting - If true, replaces an existing file with the same name.
    */
-  async uploadAsset(file: File, fileType: string): Promise<AssetFile> {
+  async uploadAsset(file: File, fileType: string, replaceExisting = false): Promise<AssetFile> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('file_type', fileType);
+    if (replaceExisting) {
+      formData.append('replace_existing', 'true');
+    }
 
     const response = await apiClient.upload('/assets/upload/', formData);
+
+    if (response.status === 409) {
+      const data = await response.json();
+      const err = new Error(data.message || 'A file with this name already exists.') as Error & {
+        isDuplicate: boolean;
+        existingAsset: { id: number; file_name: string; file_size: number; uploaded_at: string; pipeline_status: string };
+      };
+      err.isDuplicate = true;
+      err.existingAsset = data.existing_asset;
+      throw err;
+    }
 
     if (!response.ok) {
       const error = await response.json();

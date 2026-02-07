@@ -183,14 +183,53 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
 }
 
 /**
- * Upload a file and return the created asset
+ * Error thrown when a duplicate file is detected (409 Conflict).
+ * Contains the existing asset info so the UI can prompt for replacement.
  */
-export async function uploadAsset(file: File, fileType: string): Promise<BrandAsset> {
+export class DuplicateFileError extends Error {
+  existingAsset: {
+    id: number;
+    file_name: string;
+    file_size: number;
+    uploaded_at: string;
+    pipeline_status: string;
+  };
+
+  constructor(
+    message: string,
+    existingAsset: DuplicateFileError['existingAsset']
+  ) {
+    super(message);
+    this.name = 'DuplicateFileError';
+    this.existingAsset = existingAsset;
+  }
+}
+
+/**
+ * Upload a file and return the created asset.
+ * @param replaceExisting - If true, replaces an existing file with the same name.
+ */
+export async function uploadAsset(
+  file: File,
+  fileType: string,
+  replaceExisting = false
+): Promise<BrandAsset> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('file_type', fileType);
+  if (replaceExisting) {
+    formData.append('replace_existing', 'true');
+  }
 
   const response = await apiClient.upload('/assets/upload/', formData);
+
+  if (response.status === 409) {
+    const data = await response.json();
+    throw new DuplicateFileError(
+      data.message || 'A file with this name already exists.',
+      data.existing_asset
+    );
+  }
 
   if (!response.ok) {
     const error = await response.json();
