@@ -199,12 +199,18 @@ export function FileUploadManager() {
             setUploadingFiles((prev) => prev.filter((u) => u.id !== upload.id));
           }, 2000);
         } catch (err) {
-          if (err instanceof DuplicateFileError) {
+          // Use name-based check — instanceof can fail across module boundaries in Next.js
+          const isDuplicate =
+            err instanceof DuplicateFileError ||
+            (err instanceof Error && err.name === 'DuplicateFileError' && 'existingAsset' in err);
+
+          if (isDuplicate) {
+            const dupErr = err as DuplicateFileError;
             // Show duplicate confirmation dialog
             setDuplicateConfirm({
               file: upload.file,
               fileType: getFileTypeFromMime(upload.file.type),
-              existingAsset: err.existingAsset,
+              existingAsset: dupErr.existingAsset,
             });
             // Remove from uploading list (handled by dialog now)
             setUploadingFiles((prev) => prev.filter((u) => u.id !== upload.id));

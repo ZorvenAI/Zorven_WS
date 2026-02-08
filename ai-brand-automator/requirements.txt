@@ -38,3 +38,6 @@ tenacity>=8.0.0
 google-cloud-vision>=3.5.0
 google-cloud-dlp>=3.15.0
 google-cloud-aiplatform>=1.38.0
+
+# Document parsing
+python-docx>=1.1.0

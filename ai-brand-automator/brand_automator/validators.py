@@ -111,8 +111,20 @@ def validate_file_upload(
         result["error"] = f"File size exceeds {max_size_mb}MB limit"
         return result
 
-    # Check file type
+    # Check file type — fall back to extension-based guess when browser
+    # reports a generic content type (e.g. application/octet-stream)
+    import mimetypes as _mimetypes
+
     file_type = file.content_type
+    if file_type not in allowed_types and file_type in (
+        "application/octet-stream",
+        "application/x-unknown",
+        "",
+        None,
+    ):
+        guessed, _ = _mimetypes.guess_type(file.name)
+        if guessed and guessed in allowed_types:
+            file_type = guessed
     if file_type not in allowed_types:
         result["valid"] = False
         result["error"] = f"File type {file_type} not allowed"
