@@ -167,13 +167,26 @@ class DocumentProcessor(ContentProcessorPort):
                         f"Document content:\n{text_content[:50000]}"
                     )
                     response = self.model.generate_content(prompt)
-                elif event.mime_type in (
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    "application/msword",
+                elif event.mime_type == (
+                    "application/vnd.openxmlformats-officedocument."
+                    "wordprocessingml.document"
                 ):
-                    # .docx/.doc files: extract text first since Gemini
+                    # .docx files: extract text first since Gemini
                     # doesn't support these as inline_data
                     text_content = self._extract_docx_text(content, event.mime_type)
+                    prompt = (
+                        f"{DOCUMENT_EXTRACTION_PROMPT}\n\n"
+                        f"Document content:\n{text_content[:50000]}"
+                    )
+                    response = self.model.generate_content(prompt)
+                elif event.mime_type == "application/msword":
+                    # Legacy .doc files: binary format, cannot be parsed
+                    # by python-docx. Attempt basic text extraction.
+                    logger.warning(
+                        "Legacy .doc format detected; text extraction may "
+                        "be incomplete. Consider converting to .docx."
+                    )
+                    text_content = self._extract_doc_text_fallback(content)
                     prompt = (
                         f"{DOCUMENT_EXTRACTION_PROMPT}\n\n"
                         f"Document content:\n{text_content[:50000]}"
@@ -267,40 +280,54 @@ class DocumentProcessor(ContentProcessorPort):
     @staticmethod
     def _extract_docx_text(content: bytes, mime_type: str) -> str:
         """
-        Extract text from .docx (or .doc) files.
+        Extract text from .docx files using python-docx.
 
-        Uses python-docx for .docx files. Falls back to raw text
-        extraction for unsupported formats.
+        Falls back to raw text extraction if python-docx
+        is not installed or parsing fails.
         """
-        if mime_type == (
-            "application/vnd.openxmlformats-officedocument."
-            "wordprocessingml.document"
-        ):
-            try:
-                import docx
+        try:
+            import docx
 
-                doc = docx.Document(io.BytesIO(content))
-                paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+            doc = docx.Document(io.BytesIO(content))
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
 
-                # Also extract text from tables
-                for table in doc.tables:
-                    for row in table.rows:
-                        row_text = "\t".join(
-                            cell.text.strip() for cell in row.cells if cell.text.strip()
-                        )
-                        if row_text:
-                            paragraphs.append(row_text)
+            # Also extract text from tables
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = "\t".join(
+                        cell.text.strip() for cell in row.cells if cell.text.strip()
+                    )
+                    if row_text:
+                        paragraphs.append(row_text)
 
-                return "\n\n".join(paragraphs)
-            except ImportError:
-                logger.warning(
-                    "python-docx not installed; falling back to raw text extraction"
-                )
-            except Exception as e:
-                logger.error(f"Failed to parse .docx with python-docx: {e}")
+            return "\n\n".join(paragraphs)
+        except ImportError:
+            logger.warning(
+                "python-docx not installed; falling back to raw text extraction"
+            )
+        except Exception as e:
+            logger.error(f"Failed to parse .docx with python-docx: {e}")
 
-        # Fallback: try to decode as text (works for some .doc files)
+        # Fallback for .docx when python-docx unavailable
         try:
             return content.decode("utf-8", errors="replace")
         except Exception:
             return content.decode("latin-1", errors="replace")
+
+    @staticmethod
+    def _extract_doc_text_fallback(content: bytes) -> str:
+        """
+        Best-effort text extraction from legacy .doc (OLE2) files.
+
+        Legacy .doc is a binary format. This extracts printable ASCII
+        runs, which captures body text but loses formatting. For
+        higher-fidelity extraction, convert to .docx first.
+        """
+        import re
+
+        # Extract runs of printable ASCII (>= 4 chars) from the binary
+        text_runs = re.findall(rb'[\x20-\x7E]{4,}', content)
+        text = "\n".join(run.decode("ascii", errors="replace") for run in text_runs)
+        if not text.strip():
+            text = "[Unable to extract text from legacy .doc format]"
+        return text

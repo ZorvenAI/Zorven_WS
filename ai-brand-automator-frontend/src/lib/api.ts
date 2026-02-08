@@ -1,4 +1,5 @@
 import { env } from './env';
+import { DuplicateFileError } from '@/lib/errors';
 
 let isRefreshing = false;
 let failedQueue: Array<{ resolve: (value: unknown) => void; reject: (reason?: Error) => void }> = [];
@@ -301,13 +302,10 @@ export const assetsApi = {
 
     if (response.status === 409) {
       const data = await response.json();
-      const err = new Error(data.message || 'A file with this name already exists.') as Error & {
-        isDuplicate: boolean;
-        existingAsset: { id: number; file_name: string; file_size: number; uploaded_at: string; pipeline_status: string };
-      };
-      err.isDuplicate = true;
-      err.existingAsset = data.existing_asset;
-      throw err;
+      throw new DuplicateFileError(
+        data.message || 'A file with this name already exists.',
+        data.existing_asset
+      );
     }
 
     if (!response.ok) {

@@ -456,9 +456,15 @@ export function AssetUploadForm() {
 
       {/* Duplicate File Confirmation Dialog */}
       {duplicateConfirm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="duplicate-dialog-title"
+          onKeyDown={(e) => { if (e.key === 'Escape') handleDuplicateSkip(); }}
+        >
           <div className="bg-brand-dark border border-white/20 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-white mb-2">
+            <h3 id="duplicate-dialog-title" className="text-lg font-semibold text-white mb-2">
               File Already Exists
             </h3>
             <p className="text-brand-silver/80 text-sm mb-4">

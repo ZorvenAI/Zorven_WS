@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '@/lib/api';
+export { DuplicateFileError } from '@/lib/errors';
 import { BrandAsset, AssetsListResponse, PipelineStatus } from '@/types/assets';
 
 interface UseAssetsOptions {
@@ -182,28 +183,7 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
   };
 }
 
-/**
- * Error thrown when a duplicate file is detected (409 Conflict).
- * Contains the existing asset info so the UI can prompt for replacement.
- */
-export class DuplicateFileError extends Error {
-  existingAsset: {
-    id: number;
-    file_name: string;
-    file_size: number;
-    uploaded_at: string;
-    pipeline_status: string;
-  };
-
-  constructor(
-    message: string,
-    existingAsset: DuplicateFileError['existingAsset']
-  ) {
-    super(message);
-    this.name = 'DuplicateFileError';
-    this.existingAsset = existingAsset;
-  }
-}
+import { DuplicateFileError } from '@/lib/errors';
 
 /**
  * Upload a file and return the created asset.

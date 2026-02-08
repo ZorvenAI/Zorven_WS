@@ -170,6 +170,12 @@ class BrandAsset(models.Model):
         verbose_name = "Brand Asset"
         verbose_name_plural = "Brand Assets"
         ordering = ["-uploaded_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "company", "file_name"],
+                name="unique_brand_asset_per_tenant_company",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.file_name} ({self.company.name})"
