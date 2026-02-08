@@ -18,6 +18,41 @@ from onboarding.models import BrandAsset
 
 logger = logging.getLogger(__name__)
 
+# Explicit extension-to-MIME mapping — the system /etc/mime.types
+# may be absent in Docker containers, so we cannot rely on
+# mimetypes.guess_type() alone.
+_EXTENSION_MIME_MAP = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "mp4": "video/mp4",
+    "mov": "video/quicktime",
+    "avi": "video/x-msvideo",
+    "pdf": "application/pdf",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "txt": "text/plain",
+    "csv": "text/csv",
+    "html": "text/html",
+    "md": "text/markdown",
+}
+
+
+def _guess_mime_type(filename: str) -> Optional[str]:
+    """Reliably detect MIME type from a filename.
+
+    Uses an explicit built-in mapping first, then falls back to
+    Python's mimetypes module.
+    """
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    mime = _EXTENSION_MIME_MAP.get(ext)
+    if mime:
+        return mime
+    guessed, _ = mimetypes.guess_type(filename)
+    return guessed
+
 
 class OnboardingPipelineService:
     """
@@ -123,15 +158,15 @@ class OnboardingPipelineService:
         Returns:
             Dict representing the ingestion event
         """
-        # Detect MIME type from filename first
-        mime_type, _ = mimetypes.guess_type(asset.file_name)
+        # Detect MIME type from filename
+        mime_type = _guess_mime_type(asset.file_name)
 
-        # Fallback mapping based on file_type if mime detection fails
+        # Last-resort fallback based on file_type category
         if not mime_type:
             mime_type_map = {
                 "image": "image/jpeg",
                 "video": "video/mp4",
-                "document": "application/pdf",
+                "document": "application/octet-stream",
                 "other": "application/octet-stream",
             }
             mime_type = mime_type_map.get(asset.file_type, "application/octet-stream")
@@ -241,12 +276,12 @@ class OnboardingPipelineService:
             trace_id = uuid4()
 
             # Detect MIME type
-            mime_type, _ = mimetypes.guess_type(asset.file_name)
+            mime_type = _guess_mime_type(asset.file_name)
             if not mime_type:
                 mime_type_map = {
                     "image": "image/jpeg",
                     "video": "video/mp4",
-                    "document": "application/pdf",
+                    "document": "application/octet-stream",
                     "other": "application/octet-stream",
                 }
                 mime_type = mime_type_map.get(
