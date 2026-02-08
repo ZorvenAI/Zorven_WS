@@ -660,9 +660,7 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
 
         response_serializer = BrandAssetSerializer(asset)
         replaced = existing_asset is not None and replace_existing
-        response_status = (
-            status.HTTP_200_OK if replaced else status.HTTP_201_CREATED
-        )
+        response_status = status.HTTP_200_OK if replaced else status.HTTP_201_CREATED
         return Response(response_serializer.data, status=response_status)
 
     @action(detail=False, methods=["post"])
