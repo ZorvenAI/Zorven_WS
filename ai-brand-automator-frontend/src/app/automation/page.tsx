@@ -123,6 +123,7 @@ const DOCUMENT_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-powerpoint',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
 ] as const;
 
 // LinkedIn media size limits

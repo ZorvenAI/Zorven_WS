@@ -24,6 +24,18 @@ interface AssetsResponse {
   results: UploadedFile[];
 }
 
+interface DuplicateConfirmation {
+  file: File;
+  fileType: string;
+  existingAsset: {
+    id: number;
+    file_name: string;
+    file_size: number;
+    uploaded_at: string;
+    pipeline_status: string;
+  };
+}
+
 export function AssetUploadForm() {
   const router = useRouter();
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -35,6 +47,7 @@ export function AssetUploadForm() {
   const [loadingUrlId, setLoadingUrlId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [showAllFiles, setShowAllFiles] = useState(false);
+  const [duplicateConfirm, setDuplicateConfirm] = useState<DuplicateConfirmation | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   // Function to fetch assets with limit
@@ -104,7 +117,14 @@ export function AssetUploadForm() {
 
         const response = await apiClient.upload('/assets/upload/', formData);
 
-        if (response.ok) {
+        if (response.status === 409) {
+          const dupData = await response.json();
+          setDuplicateConfirm({
+            file,
+            fileType: getFileType(file.type),
+            existingAsset: dupData.existing_asset,
+          });
+        } else if (response.ok) {
           const data = await response.json();
           setUploadedFiles((prev) => [...prev, data]);
         } else {
@@ -125,6 +145,35 @@ export function AssetUploadForm() {
     if (mimeType === 'application/pdf' || mimeType.includes('document')) return 'document';
     if (mimeType.startsWith('video/')) return 'video';
     return 'other';
+  };
+
+  const handleDuplicateReplace = async () => {
+    if (!duplicateConfirm) return;
+    const { file, fileType } = duplicateConfirm;
+    setDuplicateConfirm(null);
+    setError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('file_type', fileType);
+      formData.append('replace_existing', 'true');
+
+      const response = await apiClient.upload('/assets/upload/', formData);
+      if (response.ok) {
+        await fetchAssets(); // Refresh to show updated file
+      } else {
+        const errorData = await response.json();
+        setError(`Failed to replace ${file.name}: ${errorData.error || errorData.message || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Error replacing file:', err);
+      setError('Failed to replace file. Please try again.');
+    }
+  };
+
+  const handleDuplicateSkip = () => {
+    setDuplicateConfirm(null);
   };
 
   const handleSkip = () => {
@@ -235,7 +284,7 @@ export function AssetUploadForm() {
                 className="sr-only"
                 multiple
                 onChange={handleFileUpload}
-                accept="image/*,.pdf,.doc,.docx,video/*,.mp4,.mov"
+                accept="image/*,.pdf,.doc,.docx,.txt,video/*,.mp4,.mov"
                 disabled={uploading}
               />
             </label>
@@ -404,6 +453,45 @@ export function AssetUploadForm() {
           await handleDelete(fileId, fileName);
         }}
       />
+
+      {/* Duplicate File Confirmation Dialog */}
+      {duplicateConfirm && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="duplicate-dialog-title"
+          onKeyDown={(e) => { if (e.key === 'Escape') handleDuplicateSkip(); }}
+        >
+          <div className="bg-brand-dark border border-white/20 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 id="duplicate-dialog-title" className="text-lg font-semibold text-white mb-2">
+              File Already Exists
+            </h3>
+            <p className="text-brand-silver/80 text-sm mb-4">
+              A file named <span className="font-medium text-white">&quot;{duplicateConfirm.existingAsset.file_name}&quot;</span> already exists
+              (uploaded {new Date(duplicateConfirm.existingAsset.uploaded_at).toLocaleDateString()},
+              status: {duplicateConfirm.existingAsset.pipeline_status}).
+            </p>
+            <p className="text-brand-silver/80 text-sm mb-6">
+              Do you want to replace it with the new file?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={handleDuplicateSkip}
+                className="px-4 py-2 text-sm rounded border border-white/20 text-brand-silver hover:bg-white/10 transition-colors"
+              >
+                Keep Existing
+              </button>
+              <button
+                onClick={handleDuplicateReplace}
+                className="px-4 py-2 text-sm rounded bg-brand-electric text-white hover:bg-brand-electric/80 transition-colors"
+              >
+                Replace File
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

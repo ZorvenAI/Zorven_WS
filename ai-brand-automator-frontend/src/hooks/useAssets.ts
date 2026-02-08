@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '@/lib/api';
+export { DuplicateFileError } from '@/lib/errors';
 import { BrandAsset, AssetsListResponse, PipelineStatus } from '@/types/assets';
 
 interface UseAssetsOptions {
@@ -182,15 +183,33 @@ export function useAssets(options: UseAssetsOptions = {}): UseAssetsReturn {
   };
 }
 
+import { DuplicateFileError } from '@/lib/errors';
+
 /**
- * Upload a file and return the created asset
+ * Upload a file and return the created asset.
+ * @param replaceExisting - If true, replaces an existing file with the same name.
  */
-export async function uploadAsset(file: File, fileType: string): Promise<BrandAsset> {
+export async function uploadAsset(
+  file: File,
+  fileType: string,
+  replaceExisting = false
+): Promise<BrandAsset> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('file_type', fileType);
+  if (replaceExisting) {
+    formData.append('replace_existing', 'true');
+  }
 
   const response = await apiClient.upload('/assets/upload/', formData);
+
+  if (response.status === 409) {
+    const data = await response.json();
+    throw new DuplicateFileError(
+      data.message || 'A file with this name already exists.',
+      data.existing_asset
+    );
+  }
 
   if (!response.ok) {
     const error = await response.json();

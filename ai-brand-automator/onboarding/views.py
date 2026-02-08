@@ -11,6 +11,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.db.models import Count, Q
+from django.db import IntegrityError
 from .models import Company, BrandAsset, OnboardingProgress
 from .serializers import (
     CompanySerializer,
@@ -486,6 +487,7 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             "application/pdf",
             "application/msword",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "text/plain",
         ]
 
         # Validate file
@@ -515,6 +517,37 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
 
         # Get company for the tenant
         company = get_object_or_404(Company, tenant=tenant)
+
+        # Check for duplicate file (same tenant + company + filename)
+        raw_replace = request.data.get("replace_existing", "")
+        if isinstance(raw_replace, bool):
+            replace_existing = raw_replace
+        else:
+            replace_existing = str(raw_replace).lower() in ("true", "1")
+        existing_asset = BrandAsset.objects.filter(
+            tenant=tenant, company=company, file_name=safe_filename
+        ).first()
+
+        if existing_asset and not replace_existing:
+            # Return 409 Conflict with existing asset info
+            logger.info(
+                f"Duplicate upload blocked: '{safe_filename}' already exists "
+                f"as asset {existing_asset.id} for tenant {tenant.id}"
+            )
+            return Response(
+                {
+                    "error": "duplicate_file",
+                    "message": f"A file named '{safe_filename}' already exists.",
+                    "existing_asset": {
+                        "id": existing_asset.id,
+                        "file_name": existing_asset.file_name,
+                        "file_size": existing_asset.file_size,
+                        "uploaded_at": existing_asset.uploaded_at.isoformat(),
+                        "pipeline_status": existing_asset.pipeline_status,
+                    },
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
         # Generate unique GCS path in _landing/ zone for pipeline processing
         # Format: _landing/{tenant_id}/{uuid}_{filename}
@@ -547,24 +580,78 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # Create asset record with the actual bucket used for upload
+        # Handle replacement of existing asset
         actual_bucket = (
             gcs_service.bucket_name if gcs_service.bucket else "brand-automator-assets"
         )
-        asset = BrandAsset.objects.create(
-            tenant=tenant,
-            company=company,
-            file_name=safe_filename,
-            file_type=file_type,
-            file_size=file.size,
-            gcs_path=landing_path,
-            gcs_bucket=actual_bucket,  # Use the actual bucket where file was uploaded
-            processed=False,  # Will be set True after pipeline completes
-            pipeline_status="pending" if gcs_uploaded else "failed",
-            pipeline_error=""
-            if gcs_uploaded
-            else "GCS not configured - file not stored",
-        )
+
+        if existing_asset and replace_existing:
+            # Delete old GCS blob (best-effort)
+            old_gcs_path = existing_asset.gcs_path
+            if old_gcs_path:
+                try:
+                    gcs_client = getattr(gcs_service, "client", None)
+                    if gcs_client:
+                        old_bucket = gcs_client.bucket(
+                            existing_asset.gcs_bucket or actual_bucket
+                        )
+                        old_blob = old_bucket.blob(old_gcs_path)
+                        if old_blob.exists():
+                            old_blob.delete()
+                            logger.info(
+                                f"Deleted old GCS file during replacement: "
+                                f"{old_gcs_path}"
+                            )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to delete old GCS file '{old_gcs_path}' "
+                        f"during replacement: {e}"
+                    )
+
+            # Update existing record instead of creating new one
+            existing_asset.file_type = file_type
+            existing_asset.file_size = file.size
+            existing_asset.gcs_path = landing_path
+            existing_asset.gcs_bucket = actual_bucket
+            existing_asset.processed = False
+            existing_asset.pipeline_status = "pending" if gcs_uploaded else "failed"
+            existing_asset.pipeline_error = (
+                "" if gcs_uploaded else "GCS not configured - file not stored"
+            )
+            existing_asset.pipeline_trace_id = None
+            existing_asset.uploaded_at = timezone.now()
+            existing_asset.save()
+            asset = existing_asset
+            logger.info(
+                f"Replaced existing asset {asset.id} with new upload: "
+                f"'{safe_filename}'"
+            )
+        else:
+            # Create new asset record
+            try:
+                asset = BrandAsset.objects.create(
+                    tenant=tenant,
+                    company=company,
+                    file_name=safe_filename,
+                    file_type=file_type,
+                    file_size=file.size,
+                    gcs_path=landing_path,
+                    gcs_bucket=actual_bucket,
+                    processed=False,
+                    pipeline_status="pending" if gcs_uploaded else "failed",
+                    pipeline_error=""
+                    if gcs_uploaded
+                    else "GCS not configured - file not stored",
+                )
+            except IntegrityError:
+                # Race condition: another request created the same asset
+                return Response(
+                    {
+                        "error": "duplicate_file",
+                        "message": f"A file named '{safe_filename}' already exists.",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
 
         # Trigger data pipeline only if file was uploaded
         if gcs_uploaded:
@@ -572,7 +659,9 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             pipeline_service.publish_asset_event(asset)
 
         response_serializer = BrandAssetSerializer(asset)
-        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        replaced = existing_asset is not None and replace_existing
+        response_status = status.HTTP_200_OK if replaced else status.HTTP_201_CREATED
+        return Response(response_serializer.data, status=response_status)
 
     @action(detail=False, methods=["post"])
     def confirm_gcs_upload(self, request):
@@ -681,25 +770,108 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Create asset record for the direct GCS upload
-        asset = BrandAsset.objects.create(
-            tenant=tenant,
-            company=company,
-            file_name=safe_filename,
-            file_type=file_type,
-            file_size=file_size,
-            gcs_path=gcs_path,
-            gcs_bucket=gcs_bucket,
-            processed=False,  # Will be set True after pipeline completes
-            pipeline_status="pending",
+        # Check for duplicate file (same tenant + company + filename)
+        replace_existing = str(request.data.get("replace_existing", "")).lower() in (
+            "true",
+            "1",
         )
+        existing_asset = BrandAsset.objects.filter(
+            tenant=tenant, company=company, file_name=safe_filename
+        ).first()
+
+        if existing_asset and not replace_existing:
+            logger.info(
+                f"Duplicate confirm_gcs_upload blocked: '{safe_filename}' "
+                f"already exists as asset {existing_asset.id}"
+            )
+            return Response(
+                {
+                    "error": "duplicate_file",
+                    "message": f"A file named '{safe_filename}' already exists.",
+                    "existing_asset": {
+                        "id": existing_asset.id,
+                        "file_name": existing_asset.file_name,
+                        "file_size": existing_asset.file_size,
+                        "uploaded_at": existing_asset.uploaded_at.isoformat(),
+                        "pipeline_status": existing_asset.pipeline_status,
+                    },
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if existing_asset and replace_existing:
+            # Delete old GCS blob (best-effort)
+            old_gcs_path = existing_asset.gcs_path
+            if old_gcs_path:
+                try:
+                    gcs_client = getattr(gcs_service, "client", None)
+                    if gcs_client:
+                        old_bucket_obj = gcs_client.bucket(
+                            existing_asset.gcs_bucket or gcs_bucket
+                        )
+                        old_blob = old_bucket_obj.blob(old_gcs_path)
+                        if old_blob.exists():
+                            old_blob.delete()
+                            logger.info(
+                                f"Deleted old GCS file during confirm replacement: "
+                                f"{old_gcs_path}"
+                            )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to delete old GCS file '{old_gcs_path}' "
+                        f"during confirm replacement: {e}"
+                    )
+
+            # Update existing record
+            existing_asset.file_type = file_type
+            existing_asset.file_size = file_size
+            existing_asset.gcs_path = gcs_path
+            existing_asset.gcs_bucket = gcs_bucket
+            existing_asset.processed = False
+            existing_asset.pipeline_status = "pending"
+            existing_asset.pipeline_error = ""
+            existing_asset.pipeline_trace_id = None
+            existing_asset.uploaded_at = timezone.now()
+            existing_asset.save()
+            asset = existing_asset
+            logger.info(
+                f"Replaced existing asset {asset.id} via confirm_gcs_upload: "
+                f"'{safe_filename}'"
+            )
+        else:
+            # Create new asset record for the direct GCS upload
+            try:
+                asset = BrandAsset.objects.create(
+                    tenant=tenant,
+                    company=company,
+                    file_name=safe_filename,
+                    file_type=file_type,
+                    file_size=file_size,
+                    gcs_path=gcs_path,
+                    gcs_bucket=gcs_bucket,
+                    processed=False,
+                    pipeline_status="pending",
+                )
+            except IntegrityError:
+                return Response(
+                    {
+                        "error": "duplicate_file",
+                        "message": f"A file named '{safe_filename}' already exists.",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
 
         # Trigger data pipeline
         pipeline_service = get_pipeline_service()
         pipeline_service.publish_asset_event(asset)
 
         response_serializer = BrandAssetSerializer(asset)
-        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        response_status = (
+            status.HTTP_200_OK
+            if (existing_asset and replace_existing)
+            else status.HTTP_201_CREATED
+        )
+        return Response(response_serializer.data, status=response_status)
 
     @action(detail=True, methods=["post"])
     def retry_pipeline(self, request, pk=None):
