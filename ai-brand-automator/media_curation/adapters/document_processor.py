@@ -326,7 +326,7 @@ class DocumentProcessor(ContentProcessorPort):
         import re
 
         # Extract runs of printable ASCII (>= 4 chars) from the binary
-        text_runs = re.findall(rb'[\x20-\x7E]{4,}', content)
+        text_runs = re.findall(rb"[\x20-\x7E]{4,}", content)
         text = "\n".join(run.decode("ascii", errors="replace") for run in text_runs)
         if not text.strip():
             text = "[Unable to extract text from legacy .doc format]"

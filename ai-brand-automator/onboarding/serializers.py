@@ -171,16 +171,19 @@ class BrandAssetUploadSerializer(serializers.Serializer):
 
         # Fall back to extension-based MIME guess when the browser sends a
         # generic content type (e.g. application/octet-stream for .docx)
-        if content_type in ("application/octet-stream", "application/x-unknown", "", None):
+        if content_type in (
+            "application/octet-stream",
+            "application/x-unknown",
+            "",
+            None,
+        ):
             import mimetypes
+
             guessed, _ = mimetypes.guess_type(value.name)
             if guessed:
                 content_type = guessed
 
-        if (
-            file_type in allowed_types
-            and content_type not in allowed_types[file_type]
-        ):
+        if file_type in allowed_types and content_type not in allowed_types[file_type]:
             raise serializers.ValidationError(f"Invalid file type for {file_type}")
 
         return value
