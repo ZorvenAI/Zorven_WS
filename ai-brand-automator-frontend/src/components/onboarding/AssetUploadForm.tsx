@@ -284,7 +284,7 @@ export function AssetUploadForm() {
                 className="sr-only"
                 multiple
                 onChange={handleFileUpload}
-                accept="image/*,.pdf,.doc,.docx,video/*,.mp4,.mov"
+                accept="image/*,.pdf,.doc,.docx,.txt,video/*,.mp4,.mov"
                 disabled={uploading}
               />
             </label>

@@ -37,6 +37,7 @@ const ALLOWED_TYPES = [
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
 ];
 
 const MAX_SIZE_MB = 50;
@@ -314,7 +315,7 @@ export function FileUploadManager() {
           type="file"
           className="hidden"
           multiple
-          accept={ALLOWED_TYPES.join(',')}
+          accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,application/pdf,.doc,.docx,.txt"
           onChange={handleFileSelect}
         />
 

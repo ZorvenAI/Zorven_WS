@@ -144,6 +144,7 @@ def validate_file_upload(
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
             "docx"
         ],
+        "text/plain": ["txt"],
     }
 
     if file_type in expected_extensions:
