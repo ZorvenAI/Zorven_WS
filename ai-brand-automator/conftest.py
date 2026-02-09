@@ -290,6 +290,26 @@ def tenant2(db):
 
 
 @pytest.fixture
+def tenant_with_buckets(db, setup_public_tenant):
+    """Create a tenant with custom per-tenant GCS buckets."""
+    from tenants.models import Tenant, Domain
+
+    tenant = Tenant.objects.create(
+        name="Tenant With Buckets",
+        schema_name="tenant_buckets",
+        subscription_status="active",
+        gcs_raw_bucket="tenant-custom-raw",
+        gcs_curated_bucket="tenant-custom-curated",
+    )
+    Domain.objects.create(
+        tenant=tenant,
+        domain="buckets.localhost",
+        is_primary=True,
+    )
+    return tenant
+
+
+@pytest.fixture
 def mock_gemini_api(mocker):
     """Mock Gemini AI API responses"""
     mock_response = {

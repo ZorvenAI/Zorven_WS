@@ -192,6 +192,53 @@ Frontend → GET /api/v1/subscriptions/plans/          → List available plans
 Most apps run in the public (SHARED) schema and query defensively by tenant FK; the `files` app runs in per-tenant schemas as a `TENANT_APP`.
 ```
 
+### Tenant-Scoped GCS Buckets
+
+Each tenant can have its own GCS buckets (optional overrides on the Tenant model):
+
+```
+Tenant Model:
+  gcs_raw_bucket      → Per-tenant raw storage (CharField, blank)
+  gcs_curated_bucket   → Per-tenant curated storage (CharField, blank)
+  get_raw_bucket()     → Returns tenant bucket or falls back to GCS_RAW_BUCKET global
+  get_curated_bucket() → Returns tenant bucket or falls back to GCS_CURATED_BUCKET global
+```
+
+### Redis Key Namespacing
+
+All pipeline Redis keys are prefixed with `tenant_id` when available, ensuring data isolation:
+
+```
+data_ingestion:
+  {tenant_id}:ingestion:dedupe:{event_id}     → Deduplication tracking
+  {tenant_id}:ingestion:status:{trace_id}     → Processing status
+
+media_curation:
+  {tenant_id}:curation:status:{trace_id}      → Curation status
+  {tenant_id}:curation:dedupe:{event_id}      → Deduplication
+  curation:tenant:{tenant_id}                 → Tenant config
+
+rag_index:
+  {tenant_id}:rag_sync:status:{event_id}      → Sync status
+  rag_sync:rate:{key}                         → Rate limiting (global, intentional)
+```
+
+Keys without tenant_id fall back to un-prefixed format for backward compatibility.
+
+### Celery Tenant Scoping
+
+- `publish_scheduled_posts` uses `select_related("tenant")` and logs tenant_id per post.
+- `_update_asset_after_ingestion` and `_update_asset_status` filter BrandAsset queries by `tenant_id` (integer FK) when a valid tenant_id is provided.
+
+### Defensive Access Pattern
+
+All ViewSets use `getattr(request, 'tenant', None)` — never bare `request.tenant`:
+
+```python
+tenant = getattr(request, 'tenant', None)
+qs = Model.objects.filter(tenant=tenant) if tenant else Model.objects.filter(tenant__isnull=True)
+```
+
 ## Process Architecture (Procfile)
 
 | Process | Role | Command |
@@ -210,7 +257,7 @@ Most apps run in the public (SHARED) schema and query defensively by tenant FK; 
 | Service | Purpose | Auth Method |
 |---------|---------|------------|
 | Google Gemini 2.0 Flash | AI content generation | API key (`GOOGLE_API_KEY`) |
-| Google Cloud Storage | File storage (2 buckets) | Service account JSON |
+│ Google Cloud Storage | File storage (2 default + per-tenant buckets) | Service account JSON |
 | Stripe | Payments & subscriptions | Secret key + webhooks |
 | LinkedIn API | OAuth + posting + analytics | OAuth 2.0 + page tokens |
 | Twitter/X API | OAuth + posting + analytics | OAuth 2.0 |

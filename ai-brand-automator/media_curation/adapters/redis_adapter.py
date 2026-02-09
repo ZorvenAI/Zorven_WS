@@ -128,7 +128,6 @@ class RedisAdapter(CachePort):
             f"{tenant_id}:{self.DEDUPE_PREFIX}" if tenant_id else self.DEDUPE_PREFIX
         )
         return f"{prefix}{event_id}"
-        return f"{self.DEDUPE_PREFIX}{event_id}"
 
     def _serialize_status(self, status: CurationStatusRecord) -> str:
         """Serialize status record to JSON."""
