@@ -223,10 +223,10 @@ class SocialProfile(models.Model):
         This is the main method to use before making API calls.
         """
         token = self.refresh_token_if_needed()
-        # Guard against encryption key mismatch — if the decrypted
-        # token still starts with "enc:" it means decryption failed
-        # (e.g. SECRET_KEY changed) and the raw ciphertext was returned.
-        if token and token.startswith("enc:"):
+        # Guard against encryption key mismatch: if decryption did not change
+        # the stored value, assume decryption failed (e.g., key mismatch).
+        stored_ciphertext = getattr(self, "_access_token", None)
+        if token and stored_ciphertext and token == stored_ciphertext:
             raise ValueError(
                 "Token decryption failed. The server encryption key may have "
                 "changed. Please reconnect your account."
@@ -1007,8 +1007,10 @@ class GoogleBusinessProfile(models.Model):
         This is the main method to use before making API calls.
         """
         token = self.refresh_token_if_needed()
-        # Guard against encryption key mismatch
-        if token and token.startswith("enc:"):
+        # Guard against encryption key mismatch: if decryption did not change
+        # the stored value, assume decryption failed (e.g., key mismatch).
+        stored_ciphertext = getattr(self, "_access_token", None)
+        if token and stored_ciphertext and token == stored_ciphertext:
             raise ValueError(
                 "Token decryption failed. The server encryption key may have "
                 "changed. Please reconnect your account."

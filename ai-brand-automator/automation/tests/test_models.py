@@ -7,6 +7,7 @@ and webhook event models.
 
 import pytest
 from datetime import timedelta
+from unittest import mock
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.db import IntegrityError
@@ -305,6 +306,44 @@ class TestSocialProfileModel:
         assert profiles[0] == profile3
         assert profiles[1] == profile2
         assert profiles[2] == profile1
+
+    def test_get_valid_access_token_raises_on_decryption_failure(self, user):
+        """Test that get_valid_access_token raises ValueError when
+        decryption fails (e.g., SECRET_KEY changed) and returns the
+        stored ciphertext instead of the plaintext token."""
+        profile = SocialProfile.objects.create(
+            user=user,
+            platform="linkedin",
+            status="connected",
+            token_expires_at=timezone.now() + timedelta(hours=1),
+        )
+        profile.access_token = "real_access_token"
+        profile.save()
+
+        # Simulate decryption failure: patch decrypt_token to return
+        # the raw ciphertext (i.e., the stored encrypted value)
+        stored_ciphertext = profile._access_token
+        with mock.patch(
+            "automation.models.decrypt_token", return_value=stored_ciphertext
+        ):
+            with pytest.raises(ValueError, match="Token decryption failed"):
+                profile.get_valid_access_token()
+
+    def test_get_valid_access_token_succeeds_when_decryption_works(self, user):
+        """Test that get_valid_access_token returns the token when
+        decryption works correctly (decrypted != stored ciphertext)."""
+        profile = SocialProfile.objects.create(
+            user=user,
+            platform="linkedin",
+            status="connected",
+            token_expires_at=timezone.now() + timedelta(hours=1),
+        )
+        profile.access_token = "real_access_token"
+        profile.save()
+
+        # Normal case: decryption works, token != ciphertext
+        token = profile.get_valid_access_token()
+        assert token == "real_access_token"
 
 
 # =============================================================================

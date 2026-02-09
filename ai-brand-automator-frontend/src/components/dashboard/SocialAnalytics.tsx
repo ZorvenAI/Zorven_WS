@@ -223,12 +223,14 @@ export default function SocialAnalytics() {
         setTwitterAnalyticsData(data);
       } else {
         const errData = await response.json().catch(() => ({}));
-        const msg = errData.error || `HTTP ${response.status}`;
+        const msg = errData.error || errData.detail || `HTTP ${response.status}`;
         console.error('Twitter analytics error:', msg);
+        setTwitterAnalyticsData(null);
         setTwitterAnalyticsError(msg);
       }
     } catch (error) {
       console.error('Failed to fetch Twitter analytics:', error);
+      setTwitterAnalyticsData(null);
       setTwitterAnalyticsError('Network error');
     } finally {
       setTwitterAnalyticsLoading(false);
@@ -281,12 +283,14 @@ export default function SocialAnalytics() {
         setLinkedInAnalyticsData(data);
       } else {
         const errData = await response.json().catch(() => ({}));
-        const msg = errData.error || `HTTP ${response.status}`;
+        const msg = errData.error || errData.detail || `HTTP ${response.status}`;
         console.error('LinkedIn analytics error:', msg);
+        setLinkedInAnalyticsData(null);
         setLinkedInAnalyticsError(msg);
       }
     } catch (error) {
       console.error('Failed to fetch LinkedIn analytics:', error);
+      setLinkedInAnalyticsData(null);
       setLinkedInAnalyticsError('Network error');
     } finally {
       setLinkedInAnalyticsLoading(false);
@@ -339,12 +343,14 @@ export default function SocialAnalytics() {
         setFacebookAnalyticsData(data);
       } else {
         const errData = await response.json().catch(() => ({}));
-        const msg = errData.error || `HTTP ${response.status}`;
+        const msg = errData.error || errData.detail || `HTTP ${response.status}`;
         console.error('Facebook analytics error:', msg);
+        setFacebookAnalyticsData(null);
         setFacebookAnalyticsError(msg);
       }
     } catch (error) {
       console.error('Failed to fetch Facebook analytics:', error);
+      setFacebookAnalyticsData(null);
       setFacebookAnalyticsError('Network error');
     } finally {
       setFacebookAnalyticsLoading(false);
@@ -397,12 +403,14 @@ export default function SocialAnalytics() {
         setInstagramAnalyticsData(data);
       } else {
         const errData = await response.json().catch(() => ({}));
-        const msg = errData.error || `HTTP ${response.status}`;
+        const msg = errData.error || errData.detail || `HTTP ${response.status}`;
         console.error('Instagram analytics error:', msg);
+        setInstagramAnalyticsData(null);
         setInstagramAnalyticsError(msg);
       }
     } catch (error) {
       console.error('Failed to fetch Instagram analytics:', error);
+      setInstagramAnalyticsData(null);
       setInstagramAnalyticsError('Network error');
     } finally {
       setInstagramAnalyticsLoading(false);
