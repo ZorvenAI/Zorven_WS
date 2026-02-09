@@ -26,7 +26,7 @@ class TenantAdmin(admin.ModelAdmin):  # TenantAdminMixin temporarily disabled
     get_primary_domain.admin_order_field = "domains__domain"
 
     fieldsets = (
-        ("Basic Information", {"fields": ("name", "description", "domain")}),
+        ("Basic Information", {"fields": ("name", "description", "schema_name")}),
         (
             "Subscription",
             {"fields": ("subscription_status", "stripe_customer_id")},
