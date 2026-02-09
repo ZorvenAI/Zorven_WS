@@ -32,7 +32,7 @@ from media_curation.ports.dlp_port import PIIFinding
 # Sample UUIDs for consistent testing
 # =============================================================================
 
-SAMPLE_TENANT_ID = UUID("11111111-1111-1111-1111-111111111111")
+SAMPLE_TENANT_ID = "11111111-1111-1111-1111-111111111111"
 SAMPLE_FILE_ID = UUID("22222222-2222-2222-2222-222222222222")
 SAMPLE_TRACE_ID = UUID("33333333-3333-3333-3333-333333333333")
 SAMPLE_EVENT_ID = UUID("44444444-4444-4444-4444-444444444444")
@@ -45,7 +45,7 @@ SAMPLE_DOC_ID = UUID("55555555-5555-5555-5555-555555555555")
 
 
 @pytest.fixture
-def sample_tenant_id() -> UUID:
+def sample_tenant_id() -> str:
     """Return a consistent sample tenant ID."""
     return SAMPLE_TENANT_ID
 

@@ -8,7 +8,6 @@ import asyncio
 import json
 import logging
 import traceback
-import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Optional, Any
@@ -25,21 +24,6 @@ logger = logging.getLogger(__name__)
 
 # Thread pool for async I/O operations
 _executor = ThreadPoolExecutor(max_workers=4)
-
-
-def _parse_tenant_id(raw_tenant_id: str) -> UUID:
-    """
-    Parse tenant_id from string to UUID.
-
-    If the string is already a valid UUID, return it directly.
-    Otherwise, generate a deterministic UUID from the string using UUID5.
-    """
-    try:
-        return UUID(raw_tenant_id)
-    except (ValueError, AttributeError):
-        # Generate a deterministic UUID from the string using namespace
-        namespace = UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # DNS namespace
-        return uuid.uuid5(namespace, str(raw_tenant_id))
 
 
 class KafkaProducerAdapter(EventProducerPort):
@@ -112,7 +96,7 @@ class KafkaProducerAdapter(EventProducerPort):
         doc_dict = {
             "document_id": str(document.document_id),
             "trace_id": str(document.trace_id),
-            "tenant_id": str(document.tenant_id),
+            "tenant_id": document.tenant_id,
             "file_id": str(document.file_id),
             "source_gcs_uri": document.source_gcs_uri,
             "output_gcs_uri": document.output_gcs_uri,
@@ -166,7 +150,7 @@ class KafkaProducerAdapter(EventProducerPort):
 
         def _publish():
             try:
-                key_bytes = (key or str(document.tenant_id)).encode("utf-8")
+                key_bytes = (key or document.tenant_id).encode("utf-8")
                 value_bytes = self._serialize_document(document)
 
                 self.producer.produce(
@@ -218,7 +202,7 @@ class KafkaProducerAdapter(EventProducerPort):
                     "original_event": {
                         "event_id": str(event.event_id),
                         "trace_id": str(event.trace_id),
-                        "tenant_id": str(event.tenant_id),
+                        "tenant_id": event.tenant_id,
                         "file_id": str(event.file_id),
                         "raw_gcs_uri": event.raw_gcs_uri,
                         "mime_type": event.mime_type,
@@ -236,7 +220,7 @@ class KafkaProducerAdapter(EventProducerPort):
 
                 self.producer.produce(
                     topic=self.dlq_topic,
-                    key=str(event.tenant_id).encode("utf-8"),
+                    key=event.tenant_id.encode("utf-8"),
                     value=json.dumps(dlq_payload).encode("utf-8"),
                     callback=self._delivery_callback,
                     headers={
@@ -412,7 +396,7 @@ class KafkaConsumerAdapter(EventConsumerPort):
         event = CurationEvent(
             event_id=event_id,
             trace_id=UUID(event_data.get("trace_id", str(UUID(int=0)))),
-            tenant_id=_parse_tenant_id(event_data["tenant_id"]),
+            tenant_id=event_data["tenant_id"],
             file_id=file_id,
             raw_gcs_uri=raw_gcs_uri,
             mime_type=mime_type,

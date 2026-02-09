@@ -167,7 +167,7 @@ class CurationService:
             extra={
                 "event_id": str(event.event_id),
                 "trace_id": trace_id,
-                "tenant_id": str(event.tenant_id),
+                "tenant_id": event.tenant_id,
                 "file_id": str(event.file_id),
                 "mime_type": event.mime_type,
             },
@@ -537,7 +537,7 @@ class CurationService:
                 traceid=str(event.trace_id),
                 data={
                     "trace_id": str(event.trace_id),
-                    "tenant_id": str(event.tenant_id),
+                    "tenant_id": event.tenant_id,
                     "file_id": str(event.file_id),
                     "document_id": str(doc.document_id),
                     "curated_gcs_uri": doc.output_gcs_uri,
@@ -559,7 +559,7 @@ class CurationService:
                     self.producer.publish_raw(
                         topic=self.output_topic,
                         payload=output_event.model_dump(mode="json"),
-                        key=str(event.tenant_id),
+                        key=event.tenant_id,
                     )
                 )
             finally:
@@ -600,7 +600,7 @@ class CurationService:
                 traceid=str(event.trace_id),
                 data={
                     "trace_id": str(event.trace_id),
-                    "tenant_id": str(event.tenant_id),
+                    "tenant_id": event.tenant_id,
                     "file_id": str(event.file_id),
                     "raw_gcs_uri": event.raw_gcs_uri,
                     "mime_type": event.mime_type,
@@ -616,7 +616,7 @@ class CurationService:
                     self.producer.publish_raw(
                         topic=self.dlq_topic,
                         payload=failed_event.model_dump(mode="json"),
-                        key=str(event.tenant_id),
+                        key=event.tenant_id,
                     )
                 )
             finally:

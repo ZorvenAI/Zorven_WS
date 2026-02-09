@@ -12,7 +12,7 @@ import pytest
 import asyncio
 import json
 from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from uuid import uuid4
 from unittest.mock import patch
 
 from django.conf import settings
@@ -53,7 +53,7 @@ def run_async(coro):
 
 
 # Sample UUIDs for testing
-SAMPLE_TENANT_ID = UUID("11111111-1111-1111-1111-111111111111")
+SAMPLE_TENANT_ID = "11111111-1111-1111-1111-111111111111"
 
 
 # =============================================================================

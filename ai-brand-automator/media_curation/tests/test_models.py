@@ -35,7 +35,7 @@ class TestCurationEvent:
         event = sample_curation_event
         assert isinstance(event.event_id, UUID)
         assert isinstance(event.trace_id, UUID)
-        assert isinstance(event.tenant_id, UUID)
+        assert isinstance(event.tenant_id, str)
         assert event.mime_type == "application/pdf"
         assert event.content_type == ContentType.DOCUMENT
 
@@ -44,7 +44,7 @@ class TestCurationEvent:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://bucket/file.pdf",
             mime_type="application/pdf",
@@ -76,7 +76,7 @@ class TestCurationEvent:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://valid-bucket/path/to/file.pdf",
             mime_type="application/pdf",
@@ -92,7 +92,7 @@ class TestCurationEvent:
             event = CurationEvent(
                 event_id=uuid4(),
                 trace_id=uuid4(),
-                tenant_id=uuid4(),
+                tenant_id=str(uuid4()),
                 file_id=uuid4(),
                 raw_gcs_uri="gs://bucket/file",
                 mime_type="text/plain",
@@ -112,7 +112,7 @@ class TestCurationEvent:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://bucket/file.pdf",
             mime_type="application/pdf",

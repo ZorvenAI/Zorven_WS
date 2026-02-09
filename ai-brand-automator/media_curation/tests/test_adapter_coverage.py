@@ -622,7 +622,7 @@ class TestMediaProcessorsMockMode:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://bucket/video.mp4",
             mime_type="video/mp4",
@@ -654,7 +654,7 @@ class TestMediaProcessorsMockMode:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://bucket/audio.mp3",
             mime_type="audio/mpeg",
@@ -684,7 +684,7 @@ class TestMediaProcessorsMockMode:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://bucket/image.png",
             mime_type="image/png",
@@ -724,7 +724,7 @@ class TestDocumentProcessorExtended:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://bucket/document.pdf",
             mime_type="application/pdf",
@@ -757,7 +757,7 @@ class TestDocumentProcessorExtended:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://bucket/readme.txt",
             mime_type="text/plain",

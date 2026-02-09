@@ -212,7 +212,7 @@ class TestStatusEndpoint:
         mock_status = CurationStatusRecord(
             trace_id=UUID(SAMPLE_TRACE_ID),
             event_id=uuid4(),
-            tenant_id=UUID(SAMPLE_TENANT_ID),
+            tenant_id=SAMPLE_TENANT_ID,
             file_id=uuid4(),
             status=CurationStatus.CURATED,
             message="Success",
@@ -358,7 +358,7 @@ class TestSyncEndpoint:
         mock_doc.document_id = uuid4()
         mock_doc.event_id = uuid4()
         mock_doc.trace_id = uuid4()
-        mock_doc.tenant_id = UUID(SAMPLE_TENANT_ID)
+        mock_doc.tenant_id = SAMPLE_TENANT_ID
         mock_doc.brand_id = None
         mock_doc.source_gcs_uri = "gs://test-bucket/file.pdf"
         mock_doc.curated_gcs_uri = "gs://curated-bucket/output.json"

@@ -121,7 +121,7 @@ class RedisAdapter(CachePort):
             {
                 "trace_id": str(status.trace_id),
                 "event_id": str(status.event_id),
-                "tenant_id": str(status.tenant_id),
+                "tenant_id": status.tenant_id,
                 "file_id": str(status.file_id),
                 "status": status.status.value,
                 "message": status.message,
@@ -137,7 +137,7 @@ class RedisAdapter(CachePort):
         return CurationStatusRecord(
             trace_id=UUID(d["trace_id"]),
             event_id=UUID(d["event_id"]),
-            tenant_id=UUID(d["tenant_id"]),
+            tenant_id=d["tenant_id"],
             file_id=UUID(d["file_id"]),
             status=CurationStatus(d["status"]),
             message=d.get("message"),
@@ -150,7 +150,7 @@ class RedisAdapter(CachePort):
         """Serialize tenant config to JSON."""
         return json.dumps(
             {
-                "tenant_id": str(config.tenant_id),
+                "tenant_id": config.tenant_id,
                 "dlp_enabled": config.dlp_enabled,
                 "dlp_info_types": config.dlp_info_types,
                 "ai_model": config.ai_model,
@@ -163,7 +163,7 @@ class RedisAdapter(CachePort):
         """Deserialize JSON to tenant config."""
         d = json.loads(data)
         return TenantConfig(
-            tenant_id=UUID(d["tenant_id"]),
+            tenant_id=d["tenant_id"],
             dlp_enabled=d.get("dlp_enabled", True),
             dlp_info_types=d.get("dlp_info_types", []),
             ai_model=d.get("ai_model", "gemini-2.0-flash"),

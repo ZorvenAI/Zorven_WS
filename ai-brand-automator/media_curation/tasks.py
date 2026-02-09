@@ -118,7 +118,7 @@ def process_curation_event(
             event_id=UUID(event_id),
             trace_id=UUID(trace_id),
             timestamp=datetime.now(timezone.utc),
-            tenant_id=UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id,
+            tenant_id=tenant_id,
             file_id=uuid4(),  # Generate file ID
             raw_gcs_uri=source_path,
             mime_type=file_type,
@@ -171,7 +171,7 @@ def process_curation_event(
                 event_id=UUID(event_id),
                 trace_id=UUID(trace_id),
                 timestamp=datetime.now(timezone.utc),
-                tenant_id=UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id,
+                tenant_id=tenant_id,
                 file_id=uuid4(),
                 raw_gcs_uri=source_path,
                 mime_type=file_type,

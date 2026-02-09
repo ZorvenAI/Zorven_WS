@@ -446,7 +446,7 @@ class TestProcessEvent:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://bucket/file.txt",
             mime_type="text/plain",
@@ -473,7 +473,7 @@ class TestProcessEvent:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://bucket/file.txt",
             mime_type="text/plain",
@@ -501,7 +501,7 @@ class TestProcessEvent:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://bucket/file.txt",
             mime_type="text/plain",
@@ -531,7 +531,7 @@ class TestSendToDLQ:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://bucket/file.txt",
             mime_type="text/plain",
@@ -553,7 +553,7 @@ class TestSendToDLQ:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://bucket/file.txt",
             mime_type="text/plain",

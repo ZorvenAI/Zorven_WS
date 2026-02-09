@@ -244,7 +244,7 @@ class CurationViewSet(viewsets.ViewSet):
         For production use, prefer the async /curation/ endpoint.
         """
         import time
-        from uuid import UUID
+
         from media_curation.domain.services import CurationService
         from media_curation.domain.models import CurationEvent, ContentType
 
@@ -292,7 +292,7 @@ class CurationViewSet(viewsets.ViewSet):
             event = CurationEvent(
                 event_id=event_id,
                 trace_id=trace_id,
-                tenant_id=UUID(tenant_id) if tenant_id else uuid4(),
+                tenant_id=tenant_id if tenant_id else str(uuid4()),
                 file_id=file_id,
                 raw_gcs_uri=source_path,
                 mime_type=mime_type,
@@ -325,7 +325,7 @@ class CurationViewSet(viewsets.ViewSet):
                     "document_id": document.document_id,
                     "event_id": document.event_id,
                     "trace_id": document.trace_id,
-                    "tenant_id": str(document.tenant_id),
+                    "tenant_id": document.tenant_id,
                     "brand_id": str(document.brand_id) if document.brand_id else None,
                     "source_path": document.source_gcs_uri,
                     "destination_path": document.curated_gcs_uri,
