@@ -65,7 +65,11 @@ class SocialProfileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return SocialProfile.objects.filter(user=self.request.user)
+        tenant = getattr(self.request, "tenant", None)
+        qs = SocialProfile.objects.filter(user=self.request.user)
+        if tenant:
+            qs = qs.filter(tenant=tenant)
+        return qs
 
     @action(detail=True, methods=["post"])
     def disconnect(self, request, pk=None):
@@ -1924,10 +1928,15 @@ class AutomationTaskViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return AutomationTask.objects.filter(user=self.request.user)
+        tenant = getattr(self.request, "tenant", None)
+        qs = AutomationTask.objects.filter(user=self.request.user)
+        if tenant:
+            qs = qs.filter(tenant=tenant)
+        return qs
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        tenant = getattr(self.request, "tenant", None)
+        serializer.save(user=self.request.user, tenant=tenant)
 
 
 class ContentCalendarViewSet(viewsets.ModelViewSet):
@@ -1939,7 +1948,10 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        tenant = getattr(self.request, "tenant", None)
         queryset = ContentCalendar.objects.filter(user=self.request.user)
+        if tenant:
+            queryset = queryset.filter(tenant=tenant)
 
         # Filter by status
         status_filter = self.request.query_params.get("status")
@@ -2070,7 +2082,8 @@ class ContentCalendarViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Auto-link social profiles based on selected platforms."""
-        instance = serializer.save(user=self.request.user)
+        tenant = getattr(self.request, "tenant", None)
+        instance = serializer.save(user=self.request.user, tenant=tenant)
         self._sync_platform_profiles(instance)
 
     def update(self, request, *args, **kwargs):
