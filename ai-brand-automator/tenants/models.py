@@ -48,6 +48,39 @@ class Tenant(TenantMixin):
         default=5, help_text="Storage limit in GB"
     )
 
+    # Per-tenant GCS buckets (optional — defaults to shared buckets from settings)
+    gcs_raw_bucket = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=(
+            "GCS bucket for raw/ingestion assets. "
+            "Leave blank for shared default."
+        ),
+    )
+    gcs_curated_bucket = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="GCS bucket for curated assets. Leave blank for shared default.",
+    )
+
+    def get_raw_bucket(self):
+        """Resolve GCS raw bucket: tenant-specific or shared default."""
+        if self.gcs_raw_bucket:
+            return self.gcs_raw_bucket
+        from django.conf import settings
+
+        pipeline_cfg = getattr(settings, "DATA_INGESTION", {})
+        return pipeline_cfg.get("GCP_BUCKET_NAME", "onboarding-bucket1")
+
+    def get_curated_bucket(self):
+        """Resolve GCS curated bucket: tenant-specific or shared default."""
+        if self.gcs_curated_bucket:
+            return self.gcs_curated_bucket
+        from django.conf import settings
+
+        curation_cfg = getattr(settings, "MEDIA_CURATION", {})
+        return curation_cfg.get("CURATED_BUCKET", "brandsol-curation-bucket")
+
     def save(self, *args, **kwargs):
         # Auto-generate schema_name from name if not provided
         if not self.schema_name:

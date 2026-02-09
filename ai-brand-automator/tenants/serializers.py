@@ -46,6 +46,8 @@ class TenantSerializer(serializers.ModelSerializer):
             "stripe_customer_id",
             "max_users",
             "storage_limit_gb",
+            "gcs_raw_bucket",
+            "gcs_curated_bucket",
             "is_subscription_active",
             "created_at",
             "updated_at",
@@ -82,6 +84,8 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             "subscription_status",
             "max_users",
             "storage_limit_gb",
+            "gcs_raw_bucket",
+            "gcs_curated_bucket",
             "domain",
         ]
 
@@ -136,4 +140,6 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
             "subscription_status",
             "max_users",
             "storage_limit_gb",
+            "gcs_raw_bucket",
+            "gcs_curated_bucket",
         ]

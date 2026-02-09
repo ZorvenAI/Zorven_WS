@@ -33,6 +33,14 @@ class TenantAdmin(admin.ModelAdmin):  # TenantAdminMixin temporarily disabled
         ),
         ("Limits", {"fields": ("max_users", "storage_limit_gb")}),
         (
+            "Storage (GCS)",
+            {
+                "fields": ("gcs_raw_bucket", "gcs_curated_bucket"),
+                "classes": ("collapse",),
+                "description": "Leave blank to use shared default buckets.",
+            },
+        ),
+        (
             "Metadata",
             {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
         ),
