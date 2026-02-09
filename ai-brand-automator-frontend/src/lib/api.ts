@@ -24,7 +24,7 @@ const refreshAccessToken = async (): Promise<string | null> => {
   }
 
   try {
-    const response = await fetch(env.getApiUrl('/auth/token/refresh/'), {
+    const response = await fetch(env.getApiUrl('/auth/refresh/'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -184,6 +184,12 @@ export default function SocialAnalytics() {
   const [instagramUnreadCount, setInstagramUnreadCount] = useState(0);
   const [showInstagramNotifications, setShowInstagramNotifications] = useState(false);
 
+  // Analytics error states
+  const [twitterAnalyticsError, setTwitterAnalyticsError] = useState<string | null>(null);
+  const [linkedInAnalyticsError, setLinkedInAnalyticsError] = useState<string | null>(null);
+  const [facebookAnalyticsError, setFacebookAnalyticsError] = useState<string | null>(null);
+  const [instagramAnalyticsError, setInstagramAnalyticsError] = useState<string | null>(null);
+
   // Fetch profile status
   const fetchProfiles = useCallback(async () => {
     setProfilesError(null);
@@ -209,14 +215,21 @@ export default function SocialAnalytics() {
     if (!profiles?.twitter?.connected) return;
     
     setTwitterAnalyticsLoading(true);
+    setTwitterAnalyticsError(null);
     try {
       const response = await apiClient.get('/automation/twitter/analytics/');
       if (response.ok) {
         const data = await response.json();
         setTwitterAnalyticsData(data);
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        const msg = errData.error || `HTTP ${response.status}`;
+        console.error('Twitter analytics error:', msg);
+        setTwitterAnalyticsError(msg);
       }
     } catch (error) {
       console.error('Failed to fetch Twitter analytics:', error);
+      setTwitterAnalyticsError('Network error');
     } finally {
       setTwitterAnalyticsLoading(false);
     }
@@ -260,14 +273,21 @@ export default function SocialAnalytics() {
     if (!profiles?.linkedin?.connected) return;
     
     setLinkedInAnalyticsLoading(true);
+    setLinkedInAnalyticsError(null);
     try {
       const response = await apiClient.get('/automation/linkedin/analytics/');
       if (response.ok) {
         const data = await response.json();
         setLinkedInAnalyticsData(data);
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        const msg = errData.error || `HTTP ${response.status}`;
+        console.error('LinkedIn analytics error:', msg);
+        setLinkedInAnalyticsError(msg);
       }
     } catch (error) {
       console.error('Failed to fetch LinkedIn analytics:', error);
+      setLinkedInAnalyticsError('Network error');
     } finally {
       setLinkedInAnalyticsLoading(false);
     }
@@ -311,14 +331,21 @@ export default function SocialAnalytics() {
     if (!profiles?.facebook?.connected) return;
     
     setFacebookAnalyticsLoading(true);
+    setFacebookAnalyticsError(null);
     try {
       const response = await apiClient.get('/automation/facebook/analytics/');
       if (response.ok) {
         const data = await response.json();
         setFacebookAnalyticsData(data);
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        const msg = errData.error || `HTTP ${response.status}`;
+        console.error('Facebook analytics error:', msg);
+        setFacebookAnalyticsError(msg);
       }
     } catch (error) {
       console.error('Failed to fetch Facebook analytics:', error);
+      setFacebookAnalyticsError('Network error');
     } finally {
       setFacebookAnalyticsLoading(false);
     }
@@ -362,14 +389,21 @@ export default function SocialAnalytics() {
     if (!profiles?.instagram?.connected) return;
     
     setInstagramAnalyticsLoading(true);
+    setInstagramAnalyticsError(null);
     try {
       const response = await apiClient.get('/automation/instagram/analytics/');
       if (response.ok) {
         const data = await response.json();
         setInstagramAnalyticsData(data);
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        const msg = errData.error || `HTTP ${response.status}`;
+        console.error('Instagram analytics error:', msg);
+        setInstagramAnalyticsError(msg);
       }
     } catch (error) {
       console.error('Failed to fetch Instagram analytics:', error);
+      setInstagramAnalyticsError('Network error');
     } finally {
       setInstagramAnalyticsLoading(false);
     }
@@ -653,7 +687,10 @@ export default function SocialAnalytics() {
               ) : (
                 <div className="text-center py-4 text-brand-silver/70">
                   <p>Failed to load analytics.</p>
-                  <button onClick={fetchTwitterAnalytics} className="text-brand-electric hover:underline mt-1 text-sm">
+                  {twitterAnalyticsError && (
+                    <p className="text-xs text-yellow-400/80 mt-1">{twitterAnalyticsError}</p>
+                  )}
+                  <button onClick={fetchTwitterAnalytics} className="text-brand-electric hover:underline mt-2 text-sm">
                     Try again
                   </button>
                 </div>
@@ -835,7 +872,10 @@ export default function SocialAnalytics() {
               ) : (
                 <div className="text-center py-4 text-brand-silver/70">
                   <p>Failed to load analytics.</p>
-                  <button onClick={fetchLinkedInAnalytics} className="text-[#0A66C2] hover:underline mt-1 text-sm">
+                  {linkedInAnalyticsError && (
+                    <p className="text-xs text-yellow-400/80 mt-1">{linkedInAnalyticsError}</p>
+                  )}
+                  <button onClick={fetchLinkedInAnalytics} className="text-[#0A66C2] hover:underline mt-2 text-sm">
                     Try again
                   </button>
                 </div>
@@ -1040,7 +1080,10 @@ export default function SocialAnalytics() {
               ) : (
                 <div className="text-center py-4 text-brand-silver/70">
                   <p>Failed to load analytics.</p>
-                  <button onClick={fetchFacebookAnalytics} className="text-[#1877F2] hover:underline mt-1 text-sm">
+                  {facebookAnalyticsError && (
+                    <p className="text-xs text-yellow-400/80 mt-1">{facebookAnalyticsError}</p>
+                  )}
+                  <button onClick={fetchFacebookAnalytics} className="text-[#1877F2] hover:underline mt-2 text-sm">
                     Try again
                   </button>
                 </div>
@@ -1254,7 +1297,10 @@ export default function SocialAnalytics() {
               ) : (
                 <div className="text-center py-4 text-brand-silver/70">
                   <p>Failed to load analytics.</p>
-                  <button onClick={fetchInstagramAnalytics} className="text-pink-400 hover:underline mt-1 text-sm">
+                  {instagramAnalyticsError && (
+                    <p className="text-xs text-yellow-400/80 mt-1">{instagramAnalyticsError}</p>
+                  )}
+                  <button onClick={fetchInstagramAnalytics} className="text-pink-400 hover:underline mt-2 text-sm">
                     Try again
                   </button>
                 </div>

@@ -222,7 +222,16 @@ class SocialProfile(models.Model):
         Get a valid access token, refreshing if necessary.
         This is the main method to use before making API calls.
         """
-        return self.refresh_token_if_needed()
+        token = self.refresh_token_if_needed()
+        # Guard against encryption key mismatch — if the decrypted
+        # token still starts with "enc:" it means decryption failed
+        # (e.g. SECRET_KEY changed) and the raw ciphertext was returned.
+        if token and token.startswith("enc:"):
+            raise ValueError(
+                "Token decryption failed. The server encryption key may have "
+                "changed. Please reconnect your account."
+            )
+        return token
 
     def get_page_token(self):
         """
@@ -997,7 +1006,14 @@ class GoogleBusinessProfile(models.Model):
         Get a valid access token, refreshing if necessary.
         This is the main method to use before making API calls.
         """
-        return self.refresh_token_if_needed()
+        token = self.refresh_token_if_needed()
+        # Guard against encryption key mismatch
+        if token and token.startswith("enc:"):
+            raise ValueError(
+                "Token decryption failed. The server encryption key may have "
+                "changed. Please reconnect your account."
+            )
+        return token
 
     def disconnect(self):
         """Disconnect the Google Business Profile."""
