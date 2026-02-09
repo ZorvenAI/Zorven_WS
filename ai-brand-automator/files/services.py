@@ -17,6 +17,52 @@ logger = logging.getLogger(__name__)
 
 GCS_SCOPES = ["https://www.googleapis.com/auth/devstorage.full_control"]
 
+# MIME types that browsers can display inline (used by generate_signed_url)
+_BROWSER_VIEWABLE_TYPES = {
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "image/svg+xml",
+    "text/plain",
+    "text/html",
+    "text/csv",
+    "video/mp4",
+    "video/webm",
+    "audio/mpeg",
+    "audio/wav",
+    "audio/ogg",
+}
+
+# Explicit extension → MIME map for reliable content-type on signed URLs
+_EXTENSION_CONTENT_TYPE = {
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml",
+    ".txt": "text/plain",
+    ".csv": "text/csv",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".ogg": "audio/ogg",
+    ".doc": "application/msword",
+    ".docx": (
+        "application/vnd.openxmlformats-officedocument" ".wordprocessingml.document"
+    ),
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": ("application/vnd.openxmlformats-officedocument" ".spreadsheetml.sheet"),
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": (
+        "application/vnd.openxmlformats-officedocument" ".presentationml.presentation"
+    ),
+}
+
 
 class GCSService:
     """
@@ -173,12 +219,15 @@ class GCSService:
         Args:
             file_path: Path of the file in GCS
             expiration_minutes: How long the URL should be valid (default: 15)
-            for_download: If True, sets content-disposition to attachment
+            for_download: If True, sets content-disposition to attachment.
+                Non-browser-viewable types (e.g. .docx, .xlsx, .pptx) will
+                always be served as attachments even when for_download=False.
             filename: Original filename for download (used with for_download)
 
         Returns:
             dict: Contains 'url' and 'expires_at' timestamp
         """
+
         if not self.bucket:
             # Mock URL for development
             from datetime import datetime, timezone
@@ -200,25 +249,39 @@ class GCSService:
 
             blob = self.bucket.blob(file_path)
 
-            # Note: We don't check if file exists - signed URL generation works
-            # even for non-existent files. GCS returns 404 when accessed.
-            # This allows viewing files in different paths or being processed.
+            # Determine content type from file extension
+            ext = os.path.splitext(file_path)[1].lower()
+            content_type = _EXTENSION_CONTENT_TYPE.get(ext)
 
-            # Build response disposition header if downloading
+            # For non-browser-viewable types, always force
+            # Content-Disposition: attachment even when for_download=False
+            # (i.e. when the caller asks for a "view" URL). Browsers cannot
+            # render .docx, .xlsx, .pptx etc. inline and will show "could not
+            # load plugin", so we override the caller's preference.
+            force_download = (
+                content_type is not None and content_type not in _BROWSER_VIEWABLE_TYPES
+            )
+
+            # Build response disposition header
             response_disposition = None
-            if for_download and filename:
-                # Sanitize filename for header
-                safe_filename = filename.replace('"', '\\"')
-                response_disposition = f'attachment; filename="{safe_filename}"'
+            safe_name = (filename or os.path.basename(file_path)).replace('"', '\\"')
+            if for_download or force_download:
+                response_disposition = f'attachment; filename="{safe_name}"'
 
             # Generate signed URL
             expiration = timedelta(minutes=expiration_minutes)
-            url = blob.generate_signed_url(
-                version="v4",
-                expiration=expiration,
-                method="GET",
-                response_disposition=response_disposition,
-            )
+
+            url_kwargs = {
+                "version": "v4",
+                "expiration": expiration,
+                "method": "GET",
+            }
+            if response_disposition:
+                url_kwargs["response_disposition"] = response_disposition
+            if content_type:
+                url_kwargs["response_type"] = content_type
+
+            url = blob.generate_signed_url(**url_kwargs)
 
             expires_at = datetime.now(timezone.utc) + expiration
 
