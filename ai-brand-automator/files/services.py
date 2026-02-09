@@ -179,6 +179,56 @@ class GCSService:
         Returns:
             dict: Contains 'url' and 'expires_at' timestamp
         """
+        # MIME types that browsers can display inline
+        _BROWSER_VIEWABLE_TYPES = {
+            "application/pdf",
+            "image/png",
+            "image/jpeg",
+            "image/gif",
+            "image/webp",
+            "image/svg+xml",
+            "text/plain",
+            "text/html",
+            "text/csv",
+            "video/mp4",
+            "video/webm",
+            "audio/mpeg",
+            "audio/wav",
+            "audio/ogg",
+        }
+
+        # Explicit MIME map for reliable content-type on signed URLs
+        _EXTENSION_CONTENT_TYPE = {
+            ".pdf": "application/pdf",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+            ".svg": "image/svg+xml",
+            ".txt": "text/plain",
+            ".csv": "text/csv",
+            ".mp4": "video/mp4",
+            ".webm": "video/webm",
+            ".mp3": "audio/mpeg",
+            ".wav": "audio/wav",
+            ".ogg": "audio/ogg",
+            ".doc": "application/msword",
+            ".docx": (
+                "application/vnd.openxmlformats-officedocument"
+                ".wordprocessingml.document"
+            ),
+            ".xls": "application/vnd.ms-excel",
+            ".xlsx": (
+                "application/vnd.openxmlformats-officedocument" ".spreadsheetml.sheet"
+            ),
+            ".ppt": "application/vnd.ms-powerpoint",
+            ".pptx": (
+                "application/vnd.openxmlformats-officedocument"
+                ".presentationml.presentation"
+            ),
+        }
+
         if not self.bucket:
             # Mock URL for development
             from datetime import datetime, timezone
@@ -197,28 +247,41 @@ class GCSService:
 
         try:
             from datetime import datetime, timezone
+            import os as _os
 
             blob = self.bucket.blob(file_path)
 
-            # Note: We don't check if file exists - signed URL generation works
-            # even for non-existent files. GCS returns 404 when accessed.
-            # This allows viewing files in different paths or being processed.
+            # Determine content type from file extension
+            ext = _os.path.splitext(file_path)[1].lower()
+            content_type = _EXTENSION_CONTENT_TYPE.get(ext)
 
-            # Build response disposition header if downloading
+            # For non-browser-viewable types, always force download even when
+            # the caller asks for a "view" URL. Browsers cannot render .docx,
+            # .xlsx, .pptx etc. inline and will show "could not load plugin".
+            force_download = (
+                content_type is not None and content_type not in _BROWSER_VIEWABLE_TYPES
+            )
+
+            # Build response disposition header
             response_disposition = None
-            if for_download and filename:
-                # Sanitize filename for header
-                safe_filename = filename.replace('"', '\\"')
-                response_disposition = f'attachment; filename="{safe_filename}"'
+            safe_name = (filename or _os.path.basename(file_path)).replace('"', '\\"')
+            if for_download or force_download:
+                response_disposition = f'attachment; filename="{safe_name}"'
 
             # Generate signed URL
             expiration = timedelta(minutes=expiration_minutes)
-            url = blob.generate_signed_url(
-                version="v4",
-                expiration=expiration,
-                method="GET",
-                response_disposition=response_disposition,
-            )
+
+            url_kwargs = {
+                "version": "v4",
+                "expiration": expiration,
+                "method": "GET",
+            }
+            if response_disposition:
+                url_kwargs["response_disposition"] = response_disposition
+            if content_type:
+                url_kwargs["response_type"] = content_type
+
+            url = blob.generate_signed_url(**url_kwargs)
 
             expires_at = datetime.now(timezone.utc) + expiration
 
