@@ -38,11 +38,10 @@ class CompanyViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Filter by tenant in multi-tenant setup with optimized queries
-        if hasattr(self.request, "tenant") and self.request.tenant:
-            return Company.objects.filter(tenant=self.request.tenant).select_related(
-                "tenant"
-            )
-        return Company.objects.select_related("tenant").all()
+        tenant = getattr(self.request, "tenant", None)
+        if tenant:
+            return Company.objects.filter(tenant=tenant).select_related("tenant")
+        return Company.objects.select_related("tenant").none()
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -169,7 +168,7 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
                 f"BrandAsset get_queryset: filtered queryset count={qs.count()}"
             )
             return qs
-        qs = BrandAsset.objects.select_related("tenant", "company").all()
+        qs = BrandAsset.objects.select_related("tenant", "company").none()
         logger.info(f"BrandAsset get_queryset: unfiltered queryset count={qs.count()}")
         return qs
 
@@ -973,15 +972,20 @@ class OnboardingProgressViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Filter by tenant in multi-tenant setup
-        if hasattr(self.request, "tenant") and self.request.tenant:
-            return OnboardingProgress.objects.filter(tenant=self.request.tenant)
-        return OnboardingProgress.objects.all()
+        tenant = getattr(self.request, "tenant", None)
+        if tenant:
+            return OnboardingProgress.objects.filter(tenant=tenant)
+        return OnboardingProgress.objects.none()
 
     @action(detail=False, methods=["get"])
     def current(self, request):
         """Get current onboarding progress for the tenant"""
-        # TODO: Get actual tenant from request in multi-tenant setup
-        tenant = request.tenant
+        tenant = getattr(request, "tenant", None)
+        if not tenant:
+            return Response(
+                {"error": "Tenant context required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         progress = get_object_or_404(OnboardingProgress, tenant=tenant)
         serializer = self.get_serializer(progress)
         return Response(serializer.data)
@@ -998,8 +1002,13 @@ class OnboardingProgressViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # TODO: Get actual tenant from request in multi-tenant setup
-        tenant = request.tenant
+        # Get tenant defensively
+        tenant = getattr(request, "tenant", None)
+        if not tenant:
+            return Response(
+                {"error": "Tenant context required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         progress = get_object_or_404(OnboardingProgress, tenant=tenant)
 
         progress.current_step = step

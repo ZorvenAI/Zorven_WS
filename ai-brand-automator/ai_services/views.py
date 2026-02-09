@@ -71,14 +71,14 @@ def chat_with_ai(request):
     message = serializer.validated_data["message"]
     session_id = serializer.validated_data.get("session_id")
 
+    tenant = getattr(request, "tenant", None)
+
     # Get or create chat session
     if session_id:
-        session = get_object_or_404(
-            ChatSession, session_id=session_id, tenant=request.tenant
-        )
+        session = get_object_or_404(ChatSession, session_id=session_id, tenant=tenant)
     else:
         session = ChatSession.objects.create(
-            tenant=request.tenant,
+            tenant=tenant,
             session_id=str(uuid.uuid4()),
             title=f"Chat {timezone.now().strftime('%Y-%m-%d %H:%M')}",
             context={"company": {}},
@@ -86,9 +86,9 @@ def chat_with_ai(request):
 
     # Get company context if available
     try:
-        company = Company.objects.get(tenant=request.tenant)
+        company = Company.objects.get(tenant=tenant)
         context = {
-            "tenant": request.tenant,
+            "tenant": tenant,
             "company": {
                 "name": company.name,
                 "industry": company.industry,
@@ -98,7 +98,7 @@ def chat_with_ai(request):
             },
         }
     except Company.DoesNotExist:
-        context = {"tenant": request.tenant, "company": {}}
+        context = {"tenant": tenant, "company": {}}
 
     # Add user message to session
     session.add_message("user", message)
@@ -126,12 +126,13 @@ def generate_brand_strategy(request):
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    tenant = getattr(request, "tenant", None)
     company_id = serializer.validated_data["company_id"]
-    company = get_object_or_404(Company, id=company_id, tenant=request.tenant)
+    company = get_object_or_404(Company, id=company_id, tenant=tenant)
 
     # Prepare company data for AI
     company_data = {
-        "tenant": request.tenant,
+        "tenant": tenant,
         "name": company.name,
         "industry": company.industry,
         "target_audience": company.target_audience,
@@ -172,12 +173,13 @@ def generate_brand_identity(request):
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    tenant = getattr(request, "tenant", None)
     company_id = serializer.validated_data["company_id"]
-    company = get_object_or_404(Company, id=company_id, tenant=request.tenant)
+    company = get_object_or_404(Company, id=company_id, tenant=tenant)
 
     # Prepare company data for AI
     company_data = {
-        "tenant": request.tenant,
+        "tenant": tenant,
         "name": company.name,
         "industry": company.industry,
         "brand_voice": company.brand_voice,
@@ -215,12 +217,13 @@ def analyze_market(request):
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    tenant = getattr(request, "tenant", None)
     company_id = serializer.validated_data["company_id"]
-    company = get_object_or_404(Company, id=company_id, tenant=request.tenant)
+    company = get_object_or_404(Company, id=company_id, tenant=tenant)
 
     # Prepare company data for AI
     company_data = {
-        "tenant": request.tenant,
+        "tenant": tenant,
         "name": company.name,
         "industry": company.industry,
         "target_audience": company.target_audience,
