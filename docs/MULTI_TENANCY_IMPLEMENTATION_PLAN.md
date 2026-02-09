@@ -173,6 +173,57 @@
 
 ---
 
+## Phase 9: Multi-Tenancy Deployment (Docker Desktop + Railway)
+
+**Goal**: Update all deployment artifacts so the multi-tenancy features work correctly in Docker Desktop (local) and Railway (production).
+
+### 9.1 Migration Command Updates
+
+All startup scripts must use `migrate_schemas --shared --noinput` instead of `migrate --noinput`:
+
+| Task | File | Change |
+|------|------|--------|
+| 9.1.1 | `deployment/scripts/start-backend.sh` | Replace `python manage.py migrate --noinput` → `python manage.py migrate_schemas --shared --noinput` |
+| 9.1.2 | `ai-brand-automator/Dockerfile` | Replace `python manage.py migrate --noinput` → `python manage.py migrate_schemas --shared --noinput` in inline entrypoint |
+| 9.1.3 | Both entrypoints | Add `python create_public_tenant.py` after migrations (idempotent — uses `get_or_create`) |
+| 9.1.4 | Both entrypoints | Ensure `add_production_domains.py` runs after public tenant creation |
+
+### 9.2 Environment Variable Updates
+
+New tenant-related env vars for GCS bucket defaults:
+
+| Task | File | Change |
+|------|------|--------|
+| 9.2.1 | `ai-brand-automator/.env.docker` | Add `GCS_RAW_BUCKET`, `GCS_CURATED_BUCKET` defaults |
+| 9.2.2 | `ai-brand-automator/.env.docker.local` | Same |
+| 9.2.3 | `ai-brand-automator/.env.example` | Add tenant-related env var docs |
+| 9.2.4 | `deployment/.env.production.template` | Add `GCS_RAW_BUCKET`, `GCS_CURATED_BUCKET` |
+| 9.2.5 | `deployment/railway/RAILWAY_ENV_VARIABLES.md` | Document new tenant GCS env vars |
+
+### 9.3 Docker Compose Updates
+
+| Task | File | Change |
+|------|------|--------|
+| 9.3.1 | `ai-brand-automator/docker-compose.yml` | Add `GCS_RAW_BUCKET`, `GCS_CURATED_BUCKET` env vars to backend + all pipeline workers |
+| 9.3.2 | `deployment/docker-compose.yml` | Same for the deployment-level compose |
+
+### 9.4 Railway Configuration Updates
+
+| Task | File | Change |
+|------|------|--------|
+| 9.4.1 | `ai-brand-automator/railway.json` | Add `rag-index-consumer` service (currently missing) |
+| 9.4.2 | `deployment/railway/railway.toml` | Add tenant-related env defaults |
+
+### 9.5 Validation
+
+| Task | Command | Expected |
+|------|---------|----------|
+| 9.5.1 | `docker compose build` (in `ai-brand-automator/`) | All images build cleanly |
+| 9.5.2 | `docker compose up backend redis` | Backend starts, runs `migrate_schemas`, creates public tenant |
+| 9.5.3 | Verify `/health/` endpoint | Returns 200 OK |
+
+---
+
 ## Risk Mitigation
 
 | Risk | Mitigation |
@@ -196,6 +247,8 @@ Phase 4 (Per-tenant GCS)  ◄─────────────────
 Phase 5 (Kafka tenancy) ──► Phase 6 (Redis namespacing) ──► Phase 7 (Celery tasks)
                                                                         │
                                                             Phase 8 (Testing & docs) ◄┘
+                                                                        │
+                                                            Phase 9 (Deployment) ◄─────┘
 ```
 
 Phases 1-3 can be done first and deployed independently. Phases 4-7 are the pipeline changes. Phase 8 validates everything end-to-end.

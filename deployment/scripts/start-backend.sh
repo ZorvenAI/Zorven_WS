@@ -42,9 +42,15 @@ END
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 
-# Run database migrations
-echo "Running database migrations..."
-python manage.py migrate --noinput
+# Run database migrations (django-tenants: migrate shared schema)
+echo "Running database migrations (migrate_schemas)..."
+python manage.py migrate_schemas --shared --noinput
+
+# Bootstrap public tenant and production domains
+echo "Bootstrapping public tenant..."
+python create_public_tenant.py
+echo "Adding production domains..."
+python add_production_domains.py
 
 # Start Gunicorn
 echo "Starting Gunicorn server on port ${PORT:-8000}..."

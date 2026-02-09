@@ -74,6 +74,9 @@ services:
       - SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO,https
       # Port changed to 8001 (Kong is on 8000)
       - PORT=8001
+      # Multi-tenancy: default GCS buckets (tenants can override)
+      - GCS_RAW_BUCKET=${GCS_RAW_BUCKET:-onboarding-bucket1}
+      - GCS_CURATED_BUCKET=${GCS_CURATED_BUCKET:-brandsol-curation-bucket}
     # Port NOT exposed to host - only accessible via Kong
     expose:
       - "8001"
@@ -145,6 +148,9 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - CELERY_CONCURRENCY=2
       - CELERY_LOG_LEVEL=info
+      # Multi-tenancy: default GCS buckets
+      - GCS_RAW_BUCKET=${GCS_RAW_BUCKET:-onboarding-bucket1}
+      - GCS_CURATED_BUCKET=${GCS_CURATED_BUCKET:-brandsol-curation-bucket}
     volumes:
       - ../ai-brand-automator:/app
     depends_on:

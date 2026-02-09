@@ -33,6 +33,9 @@
     },
     "curation-consumer": {
       "startCommand": "/app/entrypoint-worker.sh python manage.py run_curation_consumer --batch-size 10 --poll-timeout 1.0"
+    },
+    "rag-index-consumer": {
+      "startCommand": "/app/entrypoint-worker.sh python manage.py consume_sync_events --topic rag-sync-ready-topic --group rag-index-consumers --poll-timeout 1.0"
     }
   }
 }
