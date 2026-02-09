@@ -22,7 +22,8 @@ def publish_scheduled_posts():
     now = timezone.now()
 
     # Get all scheduled posts that are due (scheduled_date <= now)
-    due_posts = ContentCalendar.objects.filter(
+    # select_related for tenant to avoid N+1 queries during logging
+    due_posts = ContentCalendar.objects.select_related("tenant").filter(
         status="scheduled", scheduled_date__lte=now
     )
 
@@ -30,7 +31,12 @@ def publish_scheduled_posts():
     failed_count = 0
 
     for content in due_posts:
-        logger.info(f"Auto-publishing scheduled post: {content.title}")
+        tenant_id = str(content.tenant_id) if content.tenant_id else "none"
+        logger.info(
+            "Auto-publishing scheduled post: %s (tenant=%s)",
+            content.title,
+            tenant_id,
+        )
 
         results, errors = publish_content(content, log_prefix="Auto-")
         status = update_content_status(content, results, errors)
