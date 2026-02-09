@@ -350,7 +350,9 @@ class IngestionViewSet(ViewSet):
 
         try:
             cache = create_redis_adapter()
-            status_data = cache.get_status(trace_id)
+            tenant = getattr(request, "tenant", None)
+            tenant_id = str(tenant.id) if tenant else None
+            status_data = cache.get_status(trace_id, tenant_id=tenant_id)
 
             if status_data:
                 return Response(

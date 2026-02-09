@@ -74,20 +74,27 @@ class RedisAdapter(CachePort):
             return f"{prefix.rsplit(':', 1)[0]}:***@{rest}"
         return url
 
-    def _dedupe_key(self, event_id: str) -> str:
-        """Generate deduplication key."""
-        return f"{self.DEDUPE_PREFIX}{event_id}"
+    def _dedupe_key(self, event_id: str, tenant_id: Optional[str] = None) -> str:
+        """Generate deduplication key, optionally namespaced by tenant."""
+        prefix = (
+            f"{tenant_id}:{self.DEDUPE_PREFIX}" if tenant_id else self.DEDUPE_PREFIX
+        )
+        return f"{prefix}{event_id}"
 
-    def _status_key(self, trace_id: str) -> str:
-        """Generate status tracking key."""
-        return f"{self.STATUS_PREFIX}{trace_id}"
+    def _status_key(self, trace_id: str, tenant_id: Optional[str] = None) -> str:
+        """Generate status tracking key, optionally namespaced by tenant."""
+        prefix = (
+            f"{tenant_id}:{self.STATUS_PREFIX}" if tenant_id else self.STATUS_PREFIX
+        )
+        return f"{prefix}{trace_id}"
 
-    def is_duplicate(self, event_id: str) -> bool:
+    def is_duplicate(self, event_id: str, tenant_id: Optional[str] = None) -> bool:
         """
         Check if an event has already been processed.
 
         Args:
             event_id: The event ID to check
+            tenant_id: Optional tenant identifier for key namespacing
 
         Returns:
             True if event was already processed, False otherwise
@@ -96,7 +103,7 @@ class RedisAdapter(CachePort):
             CacheOperationError: If there's a Redis error
         """
         try:
-            key = self._dedupe_key(event_id)
+            key = self._dedupe_key(event_id, tenant_id)
             exists = self.client.exists(key)
             return bool(exists)
         except RedisError as e:
@@ -114,6 +121,7 @@ class RedisAdapter(CachePort):
         self,
         event_id: str,
         ttl_seconds: Optional[int] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """
         Mark an event as processed for deduplication.
@@ -121,12 +129,13 @@ class RedisAdapter(CachePort):
         Args:
             event_id: The event ID to mark
             ttl_seconds: TTL in seconds (uses default if not provided)
+            tenant_id: Optional tenant identifier for key namespacing
 
         Raises:
             CacheOperationError: If there's a Redis error
         """
         try:
-            key = self._dedupe_key(event_id)
+            key = self._dedupe_key(event_id, tenant_id)
             ttl = ttl_seconds or self.dedupe_ttl_seconds
 
             # Store timestamp when processed
@@ -157,6 +166,7 @@ class RedisAdapter(CachePort):
         status: str,
         ttl_seconds: Optional[int] = None,
         metadata: Optional[dict] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """
         Update processing status for tracking.
@@ -166,12 +176,13 @@ class RedisAdapter(CachePort):
             status: Current processing status
             ttl_seconds: TTL in seconds (uses default if not provided)
             metadata: Optional additional metadata
+            tenant_id: Optional tenant identifier for key namespacing
 
         Raises:
             CacheOperationError: If there's a Redis error
         """
         try:
-            key = self._status_key(trace_id)
+            key = self._status_key(trace_id, tenant_id)
             ttl = ttl_seconds or self.status_ttl_seconds
 
             # Build status record
@@ -208,12 +219,17 @@ class RedisAdapter(CachePort):
                 cause=e,
             )
 
-    def get_status(self, trace_id: str) -> Optional[dict]:
+    def get_status(
+        self,
+        trace_id: str,
+        tenant_id: Optional[str] = None,
+    ) -> Optional[dict]:
         """
         Get current processing status.
 
         Args:
             trace_id: The trace ID to look up
+            tenant_id: Optional tenant identifier for key namespacing
 
         Returns:
             Status dict with 'status', 'updated_at', and optional 'metadata',
@@ -223,7 +239,7 @@ class RedisAdapter(CachePort):
             CacheOperationError: If there's a Redis error
         """
         try:
-            key = self._status_key(trace_id)
+            key = self._status_key(trace_id, tenant_id)
             data = self.client.hget(key, "data")
 
             if data:

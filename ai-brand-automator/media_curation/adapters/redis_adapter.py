@@ -103,16 +103,31 @@ class RedisAdapter(CachePort):
             return f"{prefix.rsplit(':', 1)[0]}:***@{rest}"
         return url
 
-    def _status_key(self, trace_id: str) -> str:
-        """Generate status tracking key."""
-        return f"{self.STATUS_PREFIX}{trace_id}"
+    def _status_key(
+        self,
+        trace_id: str,
+        tenant_id: Optional[str] = None,
+    ) -> str:
+        """Generate status tracking key, optionally namespaced by tenant."""
+        prefix = (
+            f"{tenant_id}:{self.STATUS_PREFIX}" if tenant_id else self.STATUS_PREFIX
+        )
+        return f"{prefix}{trace_id}"
 
     def _tenant_key(self, tenant_id: str) -> str:
         """Generate tenant config key."""
         return f"{self.TENANT_PREFIX}{tenant_id}"
 
-    def _dedupe_key(self, event_id: str) -> str:
-        """Generate deduplication key."""
+    def _dedupe_key(
+        self,
+        event_id: str,
+        tenant_id: Optional[str] = None,
+    ) -> str:
+        """Generate deduplication key, optionally namespaced by tenant."""
+        prefix = (
+            f"{tenant_id}:{self.DEDUPE_PREFIX}" if tenant_id else self.DEDUPE_PREFIX
+        )
+        return f"{prefix}{event_id}"
         return f"{self.DEDUPE_PREFIX}{event_id}"
 
     def _serialize_status(self, status: CurationStatusRecord) -> str:
@@ -173,9 +188,13 @@ class RedisAdapter(CachePort):
 
     # Status tracking
 
-    async def get_status(self, trace_id: str) -> Optional[CurationStatusRecord]:
+    async def get_status(
+        self,
+        trace_id: str,
+        tenant_id: Optional[str] = None,
+    ) -> Optional[CurationStatusRecord]:
         """Get curation status for a trace_id."""
-        key = self._status_key(trace_id)
+        key = self._status_key(trace_id, tenant_id)
 
         if not self._redis_available:
             data = self._memory_cache.get(key)
@@ -197,9 +216,10 @@ class RedisAdapter(CachePort):
         trace_id: str,
         status: CurationStatusRecord,
         ttl_seconds: Optional[int] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """Store curation status."""
-        key = self._status_key(trace_id)
+        key = self._status_key(trace_id, tenant_id)
         data = self._serialize_status(status)
         ttl = ttl_seconds or self.status_ttl
 
@@ -221,10 +241,11 @@ class RedisAdapter(CachePort):
         self,
         trace_id: str,
         status: CurationStatus,
+        tenant_id: Optional[str] = None,
         **updates: Any,
     ) -> None:
         """Update status fields for existing record."""
-        existing = await self.get_status(trace_id)
+        existing = await self.get_status(trace_id, tenant_id=tenant_id)
         if not existing:
             logger.warning(f"No existing status for trace_id: {trace_id}")
             return
@@ -242,7 +263,7 @@ class RedisAdapter(CachePort):
             updated_at=datetime.now(timezone.utc),
         )
 
-        await self.set_status(trace_id, updated)
+        await self.set_status(trace_id, updated, tenant_id=tenant_id)
 
     # Tenant configuration
 
@@ -292,9 +313,13 @@ class RedisAdapter(CachePort):
 
     # Deduplication
 
-    async def is_duplicate(self, event_id: str) -> bool:
+    async def is_duplicate(
+        self,
+        event_id: str,
+        tenant_id: Optional[str] = None,
+    ) -> bool:
         """Check if event has already been processed."""
-        key = self._dedupe_key(event_id)
+        key = self._dedupe_key(event_id, tenant_id)
 
         if not self._redis_available:
             return key in self._memory_cache
@@ -313,9 +338,10 @@ class RedisAdapter(CachePort):
         self,
         event_id: str,
         ttl_seconds: Optional[int] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """Mark event as processed for deduplication."""
-        key = self._dedupe_key(event_id)
+        key = self._dedupe_key(event_id, tenant_id)
         ttl = ttl_seconds or self.dedupe_ttl
 
         if not self._redis_available:

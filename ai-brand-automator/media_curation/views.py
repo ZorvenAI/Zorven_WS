@@ -173,13 +173,17 @@ class CurationViewSet(viewsets.ViewSet):
 
         # Get status from Redis cache
         cache = create_cache_adapter()
+        tenant = getattr(request, "tenant", None)
+        tenant_id = str(tenant.id) if tenant else None
 
         try:
             # Run async cache lookup
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                status_record = loop.run_until_complete(cache.get_status(trace_id))
+                status_record = loop.run_until_complete(
+                    cache.get_status(trace_id, tenant_id=tenant_id)
+                )
             finally:
                 loop.close()
 

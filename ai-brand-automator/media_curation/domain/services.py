@@ -368,12 +368,15 @@ class CurationService:
                 self._send_to_dlq(event, e)
                 return None
 
-    def get_status(self, trace_id: UUID) -> Optional[CurationStatusRecord]:
+    def get_status(
+        self, trace_id: UUID, tenant_id: Optional[str] = None
+    ) -> Optional[CurationStatusRecord]:
         """
         Get the current status of a curation job.
 
         Args:
             trace_id: The trace ID to look up
+            tenant_id: Optional tenant ID for key namespacing
 
         Returns:
             CurationStatusRecord if found, None otherwise
@@ -383,7 +386,9 @@ class CurationService:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            return loop.run_until_complete(self.cache.get_status(str(trace_id)))
+            return loop.run_until_complete(
+                self.cache.get_status(str(trace_id), tenant_id=tenant_id)
+            )
         finally:
             loop.close()
 
@@ -663,6 +668,7 @@ class CurationService:
                         str(event.trace_id),
                         status_record,
                         ttl_seconds=604800,  # 7 days
+                        tenant_id=event.tenant_id,
                     )
                 )
             finally:

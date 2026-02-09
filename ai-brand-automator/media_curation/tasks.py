@@ -282,18 +282,21 @@ def process_batch(self, events: list[dict]) -> dict:
     name="media_curation.check_status",
     queue="curation",
 )
-def check_status(self, trace_id: str) -> Optional[dict]:
+def check_status(
+    self, trace_id: str, tenant_id: Optional[str] = None
+) -> Optional[dict]:
     """
     Check the curation status of an event by trace_id.
 
     Args:
         trace_id: The trace ID to look up
+        tenant_id: Optional tenant ID for key namespacing
 
     Returns:
         Status dict or None if not found
     """
     cache = create_cache_adapter()
-    status_record = _run_async(cache.get_status(trace_id))
+    status_record = _run_async(cache.get_status(trace_id, tenant_id=tenant_id))
 
     if status_record:
         return {

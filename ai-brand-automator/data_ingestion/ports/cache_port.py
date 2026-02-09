@@ -19,7 +19,7 @@ class CachePort(ABC):
     """
 
     @abstractmethod
-    def is_duplicate(self, event_id: str) -> bool:
+    def is_duplicate(self, event_id: str, tenant_id: Optional[str] = None) -> bool:
         """
         Check if an event has already been processed.
 
@@ -27,6 +27,7 @@ class CachePort(ABC):
 
         Args:
             event_id: Unique event identifier
+            tenant_id: Optional tenant identifier for key namespacing
 
         Returns:
             True if event was already processed (duplicate), False if new
@@ -37,13 +38,19 @@ class CachePort(ABC):
         pass
 
     @abstractmethod
-    def mark_processed(self, event_id: str, ttl_seconds: int = 3600) -> None:
+    def mark_processed(
+        self,
+        event_id: str,
+        ttl_seconds: int = 3600,
+        tenant_id: Optional[str] = None,
+    ) -> None:
         """
         Mark an event as processed to prevent reprocessing.
 
         Args:
             event_id: Unique event identifier
             ttl_seconds: Time-to-live for the deduplication key (default 1 hour)
+            tenant_id: Optional tenant identifier for key namespacing
 
         Raises:
             CacheOperationError: If the cache operation fails
@@ -57,6 +64,7 @@ class CachePort(ABC):
         status: str,
         ttl_seconds: int = 604800,
         metadata: Optional[dict] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """
         Update the processing status for a trace.
@@ -68,6 +76,7 @@ class CachePort(ABC):
             status: Status string (e.g., 'RAW_STORED', 'FAILED')
             ttl_seconds: Time-to-live for the status key (default 7 days)
             metadata: Optional additional metadata to store with status
+            tenant_id: Optional tenant identifier for key namespacing
 
         Raises:
             CacheOperationError: If the cache operation fails
@@ -75,12 +84,17 @@ class CachePort(ABC):
         pass
 
     @abstractmethod
-    def get_status(self, trace_id: str) -> Optional[dict]:
+    def get_status(
+        self,
+        trace_id: str,
+        tenant_id: Optional[str] = None,
+    ) -> Optional[dict]:
         """
         Get the current processing status for a trace.
 
         Args:
             trace_id: Trace identifier
+            tenant_id: Optional tenant identifier for key namespacing
 
         Returns:
             Status dict with 'status' and optional 'metadata', or None if not found
