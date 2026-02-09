@@ -3,12 +3,50 @@
 from django.db import migrations, models
 
 
+def deduplicate_brand_assets(apps, schema_editor):
+    """
+    Remove duplicate BrandAsset rows before adding the unique constraint.
+    Keeps the most recently updated row for each (tenant, company, file_name)
+    combination and deletes the older duplicates.
+    """
+    BrandAsset = apps.get_model("onboarding", "BrandAsset")
+    from django.db.models import Max, Count
+
+    # Find groups with duplicates
+    duplicates = (
+        BrandAsset.objects.values("tenant_id", "company_id", "file_name")
+        .annotate(count=Count("id"), max_id=Max("id"))
+        .filter(count__gt=1)
+    )
+
+    total_deleted = 0
+    for dup in duplicates:
+        # Delete all but the newest (highest id) in each duplicate group
+        deleted, _ = (
+            BrandAsset.objects.filter(
+                tenant_id=dup["tenant_id"],
+                company_id=dup["company_id"],
+                file_name=dup["file_name"],
+            )
+            .exclude(id=dup["max_id"])
+            .delete()
+        )
+        total_deleted += deleted
+
+    if total_deleted:
+        print(f"\n  Removed {total_deleted} duplicate BrandAsset row(s).")
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("onboarding", "0007_backfill_pipeline_status"),
     ]
 
     operations = [
+        migrations.RunPython(
+            deduplicate_brand_assets,
+            reverse_code=migrations.RunPython.noop,
+        ),
         migrations.AddConstraint(
             model_name="brandasset",
             constraint=models.UniqueConstraint(
