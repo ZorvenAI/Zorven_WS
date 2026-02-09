@@ -20,11 +20,11 @@ Use this skill when the user reports issues with the data processing pipeline â€
 ### 1. Check Pipeline Status
 
 ```bash
-# Check if Kafka consumers are running
+# Check if Kafka consumers are running (bounded run)
 cd ai-brand-automator
-python manage.py run_ingestion --check
-python manage.py run_curation_consumer --check
-python manage.py consume_sync_events --check
+python manage.py run_ingestion --max-messages 10 --dry-run
+python manage.py run_curation_consumer --batch-size 1
+python manage.py consume_sync_events --max-messages 10 --dry-run
 ```
 
 ### 2. Check Celery Workers

@@ -1,5 +1,8 @@
 ---
-applyTo: "ai-brand-automator/**/tests/**/*.py"
+applyTo:
+  - "ai-brand-automator/**/tests/**/*.py"
+  - "ai-brand-automator/**/tests.py"
+  - "ai-brand-automator/test_*.py"
 ---
 
 # Testing Instructions

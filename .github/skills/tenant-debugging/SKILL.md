@@ -17,10 +17,10 @@ Use this skill when the user encounters multi-tenancy issues — data from wrong
 
 ## Architecture
 
-AI Brand Automator uses **`django-tenants`** with schema-based multi-tenancy, but currently runs all apps in the **shared (public) schema**. Tenant isolation is enforced via FK filtering, not separate schemas.
+AI Brand Automator uses **`django-tenants`** with schema-based multi-tenancy. Most apps run in the **shared (public) schema** with tenant isolation enforced via FK filtering, while the `files` app is configured as a `TENANT_APP` and runs in per-tenant schemas.
 
 ```python
-# Current approach: All models have a nullable tenant FK
+# Current approach for shared-schema apps: models have a nullable tenant FK
 class SomeModel(models.Model):
     tenant = models.ForeignKey("tenants.Tenant", null=True, on_delete=models.CASCADE)
     # ... other fields

@@ -77,8 +77,8 @@ AI Brand Automator is a multi-tenant SaaS platform where users onboard companies
 Browser → POST /api/v1/auth/register/
        → POST /api/v1/auth/login/ → JWT (access + refresh tokens)
        → POST /api/v1/companies/ (create company)
-       → POST /api/v1/companies/{id}/assets/ (upload brand assets → GCS)
-       → POST /api/v1/companies/{id}/generate-brand-strategy/ (Gemini AI)
+       → POST /api/v1/assets/ (upload brand assets → GCS)
+       → POST /api/v1/companies/{id}/generate_brand_strategy/ (Gemini AI)
 ```
 
 ### 2. Brand Asset Upload & Processing
@@ -189,7 +189,7 @@ Frontend → GET /api/v1/subscriptions/plans/          → List available plans
 │  tenant = ForeignKey(Tenant, null=True)           │
 └─────────────────────────────────────────────────┘
 
-All apps run in SHARED schema. Queries filter by tenant FK defensively.
+Most apps run in the public (SHARED) schema and query defensively by tenant FK; the `files` app runs in per-tenant schemas as a `TENANT_APP`.
 ```
 
 ## Process Architecture (Procfile)

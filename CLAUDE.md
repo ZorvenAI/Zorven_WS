@@ -1,6 +1,6 @@
 # CLAUDE.md — AI Brand Automator
 
-> Model-specific configuration for Claude (Anthropic). This file is a direct manual for Claude models, complementing the general copilot-instructions.md.
+> Model-specific configuration for Claude (Anthropic). This file is a direct manual for Claude models, complementing `.github/copilot-instructions.md`.
 
 ## Context Window Strategy
 
