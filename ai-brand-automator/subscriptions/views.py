@@ -34,18 +34,11 @@ class SubscriptionPlanViewSet(viewsets.ReadOnlyModelViewSet):
 def get_subscription_status(request):
     """Get current subscription status for the tenant"""
     tenant = getattr(request, "tenant", None)
-
     if not tenant:
-        # MVP mode - try to get tenant from user
-        from tenants.models import Tenant
-
-        try:
-            tenant = Tenant.objects.get(schema_name="public")
-        except Tenant.DoesNotExist:
-            return Response(
-                {"error": "Tenant not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     try:
         subscription = Subscription.objects.get(tenant=tenant)
@@ -71,15 +64,10 @@ def create_checkout_session(request):
 
     tenant = getattr(request, "tenant", None)
     if not tenant:
-        from tenants.models import Tenant
-
-        try:
-            tenant = Tenant.objects.get(schema_name="public")
-        except Tenant.DoesNotExist:
-            return Response(
-                {"error": "Tenant not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     try:
         plan = SubscriptionPlan.objects.get(
@@ -132,15 +120,10 @@ def create_portal_session(request):
 
     tenant = getattr(request, "tenant", None)
     if not tenant:
-        from tenants.models import Tenant
-
-        try:
-            tenant = Tenant.objects.get(schema_name="public")
-        except Tenant.DoesNotExist:
-            return Response(
-                {"error": "Tenant not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     if not tenant.stripe_customer_id:
         return Response(
@@ -176,15 +159,10 @@ def cancel_subscription(request):
     """Cancel the current subscription"""
     tenant = getattr(request, "tenant", None)
     if not tenant:
-        from tenants.models import Tenant
-
-        try:
-            tenant = Tenant.objects.get(schema_name="public")
-        except Tenant.DoesNotExist:
-            return Response(
-                {"error": "Tenant not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     try:
         subscription = Subscription.objects.get(tenant=tenant)
@@ -225,15 +203,10 @@ def get_payment_history(request):
     """Get payment history for the tenant"""
     tenant = getattr(request, "tenant", None)
     if not tenant:
-        from tenants.models import Tenant
-
-        try:
-            tenant = Tenant.objects.get(schema_name="public")
-        except Tenant.DoesNotExist:
-            return Response(
-                {"error": "Tenant not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     payments = PaymentHistory.objects.filter(tenant=tenant)[:20]
     serializer = PaymentHistorySerializer(payments, many=True)
@@ -271,15 +244,10 @@ def sync_subscription(request):
     """Sync subscription status from Stripe (for after checkout)"""
     tenant = getattr(request, "tenant", None)
     if not tenant:
-        from tenants.models import Tenant
-
-        try:
-            tenant = Tenant.objects.get(schema_name="public")
-        except Tenant.DoesNotExist:
-            return Response(
-                {"detail": "Tenant not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     try:
         subscription = stripe_service.sync_subscription_from_stripe(tenant)

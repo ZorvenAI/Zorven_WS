@@ -55,20 +55,16 @@ class CompanyViewSet(viewsets.ModelViewSet):
         Create company with proper tenant context.
         Each tenant gets exactly one company (OneToOneField).
         """
-        # Get tenant from request (set by TenantMainMiddleware)
+        # Get tenant from request (set by JWTTenantMiddleware)
         tenant = getattr(self.request, "tenant", None)
 
         if not tenant:
-            # MVP mode: If no tenant context, use public tenant
-            from tenants.models import Tenant
+            from rest_framework.exceptions import PermissionDenied
 
-            try:
-                tenant = Tenant.objects.get(schema_name="public")
-            except Tenant.DoesNotExist:
-                raise ValueError(
-                    "Public tenant not found. Ensure migrations have been run "
-                    "and public tenant exists."
-                )
+            raise PermissionDenied(
+                "No tenant context. Please log in again to obtain "
+                "a valid tenant-scoped token."
+            )
 
         # Check if tenant already has a company (OneToOneField constraint)
         if Company.objects.filter(tenant=tenant).exists():
@@ -500,19 +496,13 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         # Sanitize filename
         safe_filename = sanitize_filename(file.name)
 
-        # Get tenant from request (defensive access for MVP mode)
+        # Get tenant from request (set by JWTTenantMiddleware)
         tenant = getattr(request, "tenant", None)
         if not tenant:
-            # MVP mode: If no tenant context, use public tenant
-            from tenants.models import Tenant
-
-            try:
-                tenant = Tenant.objects.get(schema_name="public")
-            except Tenant.DoesNotExist:
-                raise ValueError(
-                    "Public tenant not found. Ensure migrations have been run "
-                    "and public tenant exists."
-                )
+            return Response(
+                {"error": "No tenant context. Please log in again."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         # Get company for the tenant
         company = get_object_or_404(Company, tenant=tenant)
@@ -681,18 +671,13 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             "company_id": 1  # optional, defaults to tenant's company
         }
         """
-        # Get tenant from request (defensive access for MVP mode)
+        # Get tenant from request (set by JWTTenantMiddleware)
         tenant = getattr(request, "tenant", None)
         if not tenant:
-            from tenants.models import Tenant
-
-            try:
-                tenant = Tenant.objects.get(schema_name="public")
-            except Tenant.DoesNotExist:
-                return Response(
-                    {"error": "Public tenant not found"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+            return Response(
+                {"error": "No tenant context. Please log in again."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         # Validate required fields
         required_fields = ["file_name", "file_type", "file_size", "gcs_path"]

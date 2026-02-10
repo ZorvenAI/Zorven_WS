@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
 from django.core.mail import send_mail
 from django.conf import settings
@@ -18,10 +19,46 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def get_user_tenant(user):
+    """Look up the tenant associated with a user.
+
+    Convention: each user owns a tenant whose schema_name is
+    ``user_<user.id>``.  Returns ``None`` when no matching tenant exists
+    (e.g. superusers who manage the public schema).
+    """
+    from tenants.models import Tenant
+
+    try:
+        return Tenant.objects.get(schema_name=f"user_{user.id}")
+    except Tenant.DoesNotExist:
+        return None
+
+
+class TenantAwareRefreshToken(RefreshToken):
+    """RefreshToken subclass that injects ``tenant_id`` into the JWT."""
+
+    @classmethod
+    def for_user(cls, user):
+        token = super().for_user(user)
+        tenant = get_user_tenant(user)
+        if tenant:
+            token["tenant_id"] = tenant.id
+        return token
+
+
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
     """Custom JWT serializer that accepts email instead of username"""
 
     username_field = "email"
+
+    @classmethod
+    def get_token(cls, user):
+        """Override to inject tenant_id into JWT claims."""
+        token = super().get_token(user)
+        tenant = get_user_tenant(user)
+        if tenant:
+            token["tenant_id"] = tenant.id
+        return token
 
     def validate(self, attrs):
         # Get email and password from request
@@ -122,13 +159,32 @@ class UserRegistrationView(APIView):
                 is_active=True,  # Set to False if email verification required
             )
 
+            # --- Multi-tenancy: create a dedicated tenant for the user ---
+            from tenants.models import Tenant, Domain
+
+            tenant = Tenant(
+                name=f"{first_name} {last_name}",
+                schema_name=f"user_{user.id}",
+                subscription_status="trial",
+            )
+            tenant.save()
+
+            Domain.objects.create(
+                domain=f"user-{user.id}.localhost",
+                tenant=tenant,
+                is_primary=True,
+            )
+
+            logger.info(
+                f"Tenant '{tenant.name}' (schema={tenant.schema_name}) "
+                f"created for user {user.id}"
+            )
+
             # Send verification email
             self._send_verification_email(user)
 
-            # Generate JWT tokens
-            from rest_framework_simplejwt.tokens import RefreshToken
-
-            refresh = RefreshToken.for_user(user)
+            # Generate JWT tokens with tenant_id claim
+            refresh = TenantAwareRefreshToken.for_user(user)
 
             logger.info(f"New user registered: {email}")
 
@@ -140,6 +196,10 @@ class UserRegistrationView(APIView):
                         "email": user.email,
                         "first_name": user.first_name,
                         "last_name": user.last_name,
+                    },
+                    "tenant": {
+                        "id": tenant.id,
+                        "name": tenant.name,
                     },
                     "tokens": {
                         "access": str(refresh.access_token),

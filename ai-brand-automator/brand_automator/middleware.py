@@ -13,6 +13,86 @@ from django.contrib.auth.models import AnonymousUser
 logger = logging.getLogger(__name__)
 
 
+class JWTTenantMiddleware:
+    """Resolve tenant from the ``tenant_id`` claim in the JWT.
+
+    ``DefaultTenantMiddleware`` runs first and sets ``request.tenant`` based
+    on the **hostname**.  In development everyone hits ``localhost``, so that
+    always resolves to the *public* tenant.
+
+    This middleware runs **after** authentication, reads the ``tenant_id``
+    claim from the verified JWT, loads the corresponding ``Tenant`` row,
+    and overwrites ``request.tenant`` so that views see the correct,
+    per-user tenant.
+
+    If the JWT has no ``tenant_id`` (e.g. admin users) the hostname-based
+    tenant set by ``DefaultTenantMiddleware`` is left untouched.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # Only override if the user is authenticated
+        if not hasattr(request, "user") or not request.user.is_authenticated:
+            return self.get_response(request)
+
+        # Try to extract tenant_id from the JWT
+        tenant_id = self._get_tenant_id_from_jwt(request)
+        if tenant_id is None:
+            # Fall back: look up tenant by user convention (user_<id>)
+            tenant_id = self._get_tenant_id_from_user(request.user)
+
+        if tenant_id is not None:
+            from tenants.models import Tenant
+
+            try:
+                tenant = Tenant.objects.get(id=tenant_id)
+                request.tenant = tenant
+                # django-tenants uses connection.set_tenant() for
+                # schema routing — but our shared-schema apps rely
+                # on FK filtering, not schema switching, so we only
+                # need request.tenant to be correct.
+            except Tenant.DoesNotExist:
+                logger.warning(
+                    f"Tenant id={tenant_id} from JWT not found; "
+                    "keeping hostname-based tenant"
+                )
+
+        return self.get_response(request)
+
+    def _get_tenant_id_from_jwt(self, request):
+        """Decode the JWT (already verified by DRF/Kong) to read tenant_id."""
+        auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+        if not auth_header.startswith("Bearer "):
+            return None
+
+        token = auth_header[7:]
+        try:
+            payload = jwt.decode(
+                token,
+                options={
+                    "verify_signature": False,
+                    "verify_exp": False,
+                },
+            )
+            tid = payload.get("tenant_id")
+            return int(tid) if tid is not None else None
+        except (jwt.exceptions.DecodeError, ValueError, TypeError):
+            return None
+
+    def _get_tenant_id_from_user(self, user):
+        """Fallback: look up tenant by ``schema_name = user_<id>``."""
+        from tenants.models import Tenant
+
+        try:
+            return Tenant.objects.values_list("id", flat=True).get(
+                schema_name=f"user_{user.id}"
+            )
+        except Tenant.DoesNotExist:
+            return None
+
+
 class SecurityMiddleware:
     """
     Middleware for additional security measures:

@@ -35,14 +35,12 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         tenant = getattr(self.request, "tenant", None)
         if not tenant:
-            from tenants.models import Tenant
+            from rest_framework.exceptions import PermissionDenied
 
-            try:
-                tenant = Tenant.objects.get(schema_name="public")
-            except Tenant.DoesNotExist:
-                raise ValueError(
-                    "Public tenant not found. Ensure migrations have been run."
-                )
+            raise PermissionDenied(
+                "No tenant context. Please log in again to obtain "
+                "a valid tenant-scoped token."
+            )
         serializer.save(tenant=tenant, session_id=str(uuid.uuid4()))
 
 

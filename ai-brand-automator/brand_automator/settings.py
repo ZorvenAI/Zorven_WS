@@ -128,6 +128,9 @@ MIDDLEWARE = [
     # Kong Authentication Middleware - handles JWT from Kong Gateway
     # This should be after AuthenticationMiddleware to override when Kong is enabled
     "brand_automator.middleware.KongAuthenticationMiddleware",
+    # JWT Tenant Middleware - resolves tenant from JWT tenant_id claim
+    # Must be after auth middleware so request.user is set
+    "brand_automator.middleware.JWTTenantMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # Custom security middleware
