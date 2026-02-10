@@ -324,6 +324,72 @@ def mock_gemini_api(mocker):
     )
 
 
+# --- Membership fixtures ---
+
+
+@pytest.fixture
+def membership_owner(tenant, user):
+    """User as OWNER of tenant."""
+    from tenants.models import Membership
+
+    return Membership.objects.create(
+        user=user,
+        tenant=tenant,
+        role=Membership.Role.OWNER,
+    )
+
+
+@pytest.fixture
+def membership_admin(tenant, db):
+    """A different user as ADMIN of tenant."""
+    admin_member = User.objects.create_user(
+        username="admin_member",
+        email="adminmember@test.com",
+        password="TestPass123!",
+    )
+    from tenants.models import Membership
+
+    return Membership.objects.create(
+        user=admin_member,
+        tenant=tenant,
+        role=Membership.Role.ADMIN,
+    )
+
+
+@pytest.fixture
+def membership_editor(tenant, db):
+    """A different user as EDITOR of tenant."""
+    editor = User.objects.create_user(
+        username="editor",
+        email="editor@test.com",
+        password="TestPass123!",
+    )
+    from tenants.models import Membership
+
+    return Membership.objects.create(
+        user=editor,
+        tenant=tenant,
+        role=Membership.Role.EDITOR,
+    )
+
+
+@pytest.fixture
+def membership_viewer(tenant, db):
+    """A different user as VIEWER of tenant."""
+    viewer = User.objects.create_user(
+        username="viewer",
+        email="viewer@test.com",
+        password="TestPass123!",
+    )
+    from tenants.models import Membership
+
+    return Membership.objects.create(
+        user=viewer,
+        tenant=tenant,
+        role=Membership.Role.VIEWER,
+    )
+
+
 @pytest.fixture
 def mock_gemini_identity(mocker):
     """Mock Gemini AI brand identity generation"""

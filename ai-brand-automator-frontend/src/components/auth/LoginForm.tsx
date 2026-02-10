@@ -20,6 +20,29 @@ export function LoginForm() {
         // Store tokens in localStorage
         localStorage.setItem('access_token', data.access);
         localStorage.setItem('refresh_token', data.refresh);
+
+        // Store tenant info if provided in login response
+        if (data.tenants) {
+          localStorage.setItem('tenants', JSON.stringify(data.tenants));
+        }
+        if (data.active_tenant_id) {
+          localStorage.setItem('active_tenant_id', String(data.active_tenant_id));
+        }
+
+        // Fetch tenants from backend (in case login response omits them)
+        try {
+          const tenantsRes = await apiClient.get('/tenants/me/');
+          if (tenantsRes.ok) {
+            const tenantsList = await tenantsRes.json();
+            localStorage.setItem('tenants', JSON.stringify(tenantsList));
+            if (tenantsList.length > 0 && !data.active_tenant_id) {
+              localStorage.setItem('active_tenant_id', String(tenantsList[0].id));
+            }
+          }
+        } catch {
+          // Non-critical — TenantProvider will retry on mount
+        }
+
         // Redirect to dashboard
         window.location.href = '/dashboard';
       } else {

@@ -50,19 +50,38 @@ from .constants import (
     INSTAGRAM_TEST_ACCESS_TOKEN,
     INSTAGRAM_TEST_USER_TOKEN,
 )
+from tenants.permissions import (
+    RoleBasedPermissionMixin,
+    IsTenantViewer,
+    IsTenantEditor,
+    IsTenantAdmin,
+)
 
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
 
-class SocialProfileViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing social media profiles.
+class SocialProfileViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
+    """ViewSet for managing social media profiles.
+
+    Permissions:
+        - list, retrieve, status: IsTenantViewer
+        - create, update, destroy, disconnect: IsTenantAdmin
     """
 
     serializer_class = SocialProfileSerializer
     permission_classes = [IsAuthenticated]
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "status": [IsAuthenticated, IsTenantViewer],
+        "create": [IsAuthenticated, IsTenantAdmin],
+        "update": [IsAuthenticated, IsTenantAdmin],
+        "partial_update": [IsAuthenticated, IsTenantAdmin],
+        "destroy": [IsAuthenticated, IsTenantAdmin],
+        "disconnect": [IsAuthenticated, IsTenantAdmin],
+    }
 
     def get_queryset(self):
         tenant = getattr(self.request, "tenant", None)
@@ -1919,13 +1938,24 @@ class TwitterMediaStatusView(APIView):
             )
 
 
-class AutomationTaskViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing automation tasks.
+class AutomationTaskViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
+    """ViewSet for managing automation tasks.
+
+    Permissions:
+        - list, retrieve: IsTenantViewer
+        - create, update, destroy: IsTenantEditor
     """
 
     serializer_class = AutomationTaskSerializer
     permission_classes = [IsAuthenticated]
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "create": [IsAuthenticated, IsTenantEditor],
+        "update": [IsAuthenticated, IsTenantEditor],
+        "partial_update": [IsAuthenticated, IsTenantEditor],
+        "destroy": [IsAuthenticated, IsTenantEditor],
+    }
 
     def get_queryset(self):
         tenant = getattr(self.request, "tenant", None)
@@ -1939,13 +1969,27 @@ class AutomationTaskViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user, tenant=tenant)
 
 
-class ContentCalendarViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing content calendar.
+class ContentCalendarViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
+    """ViewSet for managing content calendar.
+
+    Permissions:
+        - list, retrieve, upcoming: IsTenantViewer
+        - create, update, destroy, publish, cancel: IsTenantEditor
     """
 
     serializer_class = ContentCalendarSerializer
     permission_classes = [IsAuthenticated]
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "upcoming": [IsAuthenticated, IsTenantViewer],
+        "create": [IsAuthenticated, IsTenantEditor],
+        "update": [IsAuthenticated, IsTenantEditor],
+        "partial_update": [IsAuthenticated, IsTenantEditor],
+        "destroy": [IsAuthenticated, IsTenantEditor],
+        "publish": [IsAuthenticated, IsTenantEditor],
+        "cancel": [IsAuthenticated, IsTenantEditor],
+    }
 
     def get_queryset(self):
         tenant = getattr(self.request, "tenant", None)

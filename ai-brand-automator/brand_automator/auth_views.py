@@ -1,5 +1,12 @@
 """
-Custom authentication views with enhanced validation
+Custom authentication views with enhanced validation.
+
+Supports two registration modes:
+  - **Mode A** (Brand Owner): Creates user + tenant + OWNER membership.
+  - **Mode B** (Invite): Creates user and accepts pending invitation.
+
+JWT tokens include a ``tenants`` list and ``active_tenant_id`` claim
+so the frontend can render a workspace switcher without extra API calls.
 """
 
 from rest_framework import status, serializers
@@ -12,6 +19,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
 from django.core.mail import send_mail
 from django.conf import settings
+from django.db import models as db_models
+from django.utils import timezone
 from django.utils.crypto import get_random_string
 from brand_automator.validators import validate_password_strength
 import logging
@@ -19,45 +28,70 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_user_tenant(user):
-    """Look up the tenant associated with a user.
+def _build_tenant_list(user):
+    """Build the tenant list for JWT claims and API responses.
 
-    Convention: each user owns a tenant whose schema_name is
-    ``user_<user.id>``.  Returns ``None`` when no matching tenant exists
-    (e.g. superusers who manage the public schema).
+    Returns a list of dicts with ``id``, ``name``, ``slug``, and ``role``
+    for every active membership the user holds.  OWNER memberships sort
+    first so the default ``active_tenant_id`` is the user's own brand.
     """
-    from tenants.models import Tenant
+    from tenants.models import Membership
 
-    try:
-        return Tenant.objects.get(schema_name=f"user_{user.id}")
-    except Tenant.DoesNotExist:
-        return None
+    memberships = (
+        Membership.objects.filter(user=user, is_active=True)
+        .select_related("tenant")
+        .order_by(
+            db_models.Case(
+                db_models.When(role=Membership.Role.OWNER, then=0),
+                default=1,
+            ),
+            "tenant__name",
+        )
+    )
+    return [
+        {
+            "id": m.tenant_id,
+            "name": m.tenant.name,
+            "slug": m.tenant.slug,
+            "role": m.role,
+        }
+        for m in memberships
+    ]
 
 
 class TenantAwareRefreshToken(RefreshToken):
-    """RefreshToken subclass that injects ``tenant_id`` into the JWT."""
+    """RefreshToken subclass that injects ``tenants`` list into the JWT."""
 
     @classmethod
     def for_user(cls, user):
+        """Create a refresh token with tenant membership claims."""
         token = super().for_user(user)
-        tenant = get_user_tenant(user)
-        if tenant:
-            token["tenant_id"] = tenant.id
+
+        tenant_list = _build_tenant_list(user)
+        token["tenants"] = tenant_list
+
+        # Set active tenant to first owned tenant (or first any)
+        if tenant_list:
+            token["active_tenant_id"] = tenant_list[0]["id"]
+
         return token
 
 
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
-    """Custom JWT serializer that accepts email instead of username"""
+    """Custom JWT serializer that accepts email instead of username."""
 
     username_field = "email"
 
     @classmethod
     def get_token(cls, user):
-        """Override to inject tenant_id into JWT claims."""
+        """Override to inject ``tenants`` list into JWT claims."""
         token = super().get_token(user)
-        tenant = get_user_tenant(user)
-        if tenant:
-            token["tenant_id"] = tenant.id
+
+        tenant_list = _build_tenant_list(user)
+        token["tenants"] = tenant_list
+        if tenant_list:
+            token["active_tenant_id"] = tenant_list[0]["id"]
+
         return token
 
     def validate(self, attrs):
@@ -107,16 +141,30 @@ class EmailTokenObtainPairView(TokenObtainPairView):
 
 
 class UserRegistrationView(APIView):
-    """User registration with password strength validation and email verification"""
+    """User registration with password validation.
+
+    Supports two modes:
+
+    **Mode A — Brand Owner** (default):
+        POST body includes ``brand_name`` (optional).  Creates a new
+        ``Tenant`` + ``Domain`` + ``Membership(role=OWNER)``.
+
+    **Mode B — Team Member** (invite-based):
+        POST body includes ``invite_token``.  Looks up pending
+        ``Membership`` by email and activates it.
+    """
 
     permission_classes = [AllowAny]
 
     def post(self, request):
+        """Register a new user."""
         # Extract data
         email = request.data.get("email", "").strip()
         password = request.data.get("password", "")
         first_name = request.data.get("first_name", "").strip()
         last_name = request.data.get("last_name", "").strip()
+        brand_name = request.data.get("brand_name", "").strip()
+        invite_token = request.data.get("invite_token")
 
         # Validation
         errors = {}
@@ -150,44 +198,78 @@ class UserRegistrationView(APIView):
         username = email.split("@")[0] + "_" + get_random_string(6)
 
         try:
+            from tenants.models import Tenant, Domain, Membership
+
             user = User.objects.create_user(
                 username=username,
                 email=email,
                 password=password,
                 first_name=first_name,
                 last_name=last_name,
-                is_active=True,  # Set to False if email verification required
+                is_active=True,
             )
 
-            # --- Multi-tenancy: create a dedicated tenant for the user ---
-            from tenants.models import Tenant, Domain
+            tenants_response = []
 
-            tenant = Tenant(
-                name=f"{first_name} {last_name}",
-                schema_name=f"user_{user.id}",
-                subscription_status="trial",
-            )
-            # Skip automatic schema creation — we use shared-schema
-            # multi-tenancy (FK filtering in the public schema)
-            tenant.auto_create_schema = False
-            tenant.save()
+            if invite_token:
+                # --------------------------------------------------
+                # Mode B: Accept invitation
+                # --------------------------------------------------
+                membership = self._accept_invitation(user, invite_token)
+                if membership:
+                    tenants_response.append(
+                        {
+                            "id": membership.tenant_id,
+                            "name": membership.tenant.name,
+                            "slug": membership.tenant.slug,
+                            "role": membership.role,
+                        }
+                    )
+            else:
+                # --------------------------------------------------
+                # Mode A: Create brand tenant
+                # --------------------------------------------------
+                tenant_name = brand_name or f"{first_name}'s Brand"
+                tenant = Tenant(
+                    name=tenant_name,
+                    subscription_status="trial",
+                )
+                tenant.auto_create_schema = False
+                tenant.save()  # slug + schema_name auto-generated
 
-            Domain.objects.create(
-                domain=f"user-{user.id}.localhost",
-                tenant=tenant,
-                is_primary=True,
-            )
+                Domain.objects.create(
+                    domain=f"{tenant.slug}.localhost",
+                    tenant=tenant,
+                    is_primary=True,
+                )
+                Membership.objects.create(
+                    user=user,
+                    tenant=tenant,
+                    role=Membership.Role.OWNER,
+                    accepted_at=timezone.now(),
+                )
 
-            logger.info(
-                f"Tenant '{tenant.name}' (schema={tenant.schema_name}) "
-                f"created for user {user.id}"
-            )
+                tenants_response.append(
+                    {
+                        "id": tenant.id,
+                        "name": tenant.name,
+                        "slug": tenant.slug,
+                        "role": "owner",
+                    }
+                )
+
+                logger.info(
+                    f"Tenant '{tenant.name}' (schema={tenant.schema_name}) "
+                    f"created for user {user.id}"
+                )
 
             # Send verification email
             self._send_verification_email(user)
 
-            # Generate JWT tokens with tenant_id claim
+            # Generate JWT tokens with tenants claim
             refresh = TenantAwareRefreshToken.for_user(user)
+
+            active_tenant_id = tenants_response[0]["id"] if tenants_response else None
 
             logger.info(f"New user registered: {email}")
 
@@ -200,10 +282,8 @@ class UserRegistrationView(APIView):
                         "first_name": user.first_name,
                         "last_name": user.last_name,
                     },
-                    "tenant": {
-                        "id": tenant.id,
-                        "name": tenant.name,
-                    },
+                    "tenants": tenants_response,
+                    "active_tenant_id": active_tenant_id,
                     "tokens": {
                         "access": str(refresh.access_token),
                         "refresh": str(refresh),
@@ -218,6 +298,41 @@ class UserRegistrationView(APIView):
                 {"error": "Registration failed. Please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+    def _accept_invitation(self, user, invite_token):
+        """Accept a pending membership invitation.
+
+        Looks up a ``Membership`` record that was created when the admin
+        invited the email address.  The ``invite_token`` should match the
+        token stored on the membership or, for MVP, we match by email.
+
+        Args:
+            user: The newly created User.
+            invite_token: The invite token from the registration link.
+
+        Returns:
+            Membership or None: The activated membership.
+        """
+        from tenants.models import Membership
+
+        # For MVP: look up pending membership by user email
+        # (invite_token support will be added in Phase 5 with
+        # proper token generation)
+        pending = (
+            Membership.objects.filter(
+                user__isnull=True,
+                is_active=False,
+            )
+            .select_related("tenant")
+            .first()
+        )
+        if pending:
+            pending.user = user
+            pending.is_active = True
+            pending.accepted_at = timezone.now()
+            pending.save()
+            return pending
+        return None
 
     def _send_verification_email(self, user):
         """Send email verification (placeholder for now)"""

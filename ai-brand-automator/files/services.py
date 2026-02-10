@@ -95,6 +95,22 @@ class GCSService:
         else:
             self.bucket = None
 
+    def get_bucket(self, bucket_name=None):
+        """Return a GCS bucket object.
+
+        If *bucket_name* is provided, return that bucket.
+        Otherwise return the default bucket configured at init time.
+
+        Args:
+            bucket_name: Optional override bucket name.
+
+        Returns:
+            A ``google.cloud.storage.Bucket`` or *None* if no GCS client.
+        """
+        if bucket_name and self.client:
+            return self.client.bucket(bucket_name)
+        return self.bucket
+
     def _resolve_credentials(self):
         """Resolve GCS credentials from env var, file, or return None for ADC."""
         # 1. Inline JSON from environment variable (Railway / Heroku / CI)
@@ -125,27 +141,33 @@ class GCSService:
         credentials, project = google.auth.default(scopes=GCS_SCOPES)
         return credentials
 
-    def upload_file(self, file_obj, file_path, content_type=None, max_retries=3):
+    def upload_file(
+        self, file_obj, file_path, content_type=None, max_retries=3, bucket_name=None
+    ):
         """
-        Upload a file to Google Cloud Storage with retry logic
+        Upload a file to Google Cloud Storage with retry logic.
 
         Args:
-            file_obj: File object to upload
-            file_path: Path in GCS where to store the file
-            content_type: MIME type of the file
-            max_retries: Maximum number of retry attempts (default: 3)
+            file_obj: File object to upload.
+            file_path: Path in GCS where to store the file.
+            content_type: MIME type of the file.
+            max_retries: Maximum number of retry attempts (default: 3).
+            bucket_name: Optional bucket override (for per-tenant routing).
 
         Returns:
-            str: Public URL of the uploaded file
+            str: Public URL of the uploaded file.
         """
-        if not self.bucket:
+        target_bucket = self.get_bucket(bucket_name)
+        target_name = bucket_name or self.bucket_name
+
+        if not target_bucket:
             # Mock upload for development
-            return f"https://storage.googleapis.com/{self.bucket_name}/{file_path}"
+            return f"https://storage.googleapis.com/{target_name}/{file_path}"
 
         last_error = None
         for attempt in range(max_retries):
             try:
-                blob = self.bucket.blob(file_path)
+                blob = target_bucket.blob(file_path)
 
                 # Set content type if provided
                 if content_type:
@@ -177,31 +199,40 @@ class GCSService:
             f"Failed to upload to GCS after {max_retries} attempts: {last_error}"
         )
 
-    def delete_file(self, file_path):
+    def delete_file(self, file_path, bucket_name=None):
         """
-        Delete a file from Google Cloud Storage
+        Delete a file from Google Cloud Storage.
 
         Args:
-            file_path: Path of the file to delete
+            file_path: Path of the file to delete.
+            bucket_name: Optional bucket override (for per-tenant routing).
         """
         try:
-            blob = self.bucket.blob(file_path)
+            target_bucket = self.get_bucket(bucket_name)
+            if not target_bucket:
+                logger.warning("GCS bucket unavailable — cannot delete %s", file_path)
+                return
+            blob = target_bucket.blob(file_path)
             blob.delete()
         except Exception as e:
             raise Exception(f"Failed to delete file from GCS: {str(e)}")
 
-    def file_exists(self, file_path):
+    def file_exists(self, file_path, bucket_name=None):
         """
-        Check if a file exists in Google Cloud Storage
+        Check if a file exists in Google Cloud Storage.
 
         Args:
-            file_path: Path of the file to check
+            file_path: Path of the file to check.
+            bucket_name: Optional bucket override (for per-tenant routing).
 
         Returns:
-            bool: True if file exists, False otherwise
+            bool: True if file exists, False otherwise.
         """
         try:
-            blob = self.bucket.blob(file_path)
+            target_bucket = self.get_bucket(bucket_name)
+            if not target_bucket:
+                return False
+            blob = target_bucket.blob(file_path)
             return blob.exists()
         except Exception:
             return False
@@ -212,28 +243,32 @@ class GCSService:
         expiration_minutes=15,
         for_download=False,
         filename=None,
+        bucket_name=None,
     ):
         """
         Generate a signed URL for temporary access to a file.
 
         Args:
-            file_path: Path of the file in GCS
-            expiration_minutes: How long the URL should be valid (default: 15)
+            file_path: Path of the file in GCS.
+            expiration_minutes: How long the URL should be valid (default: 15).
             for_download: If True, sets content-disposition to attachment.
                 Non-browser-viewable types (e.g. .docx, .xlsx, .pptx) will
                 always be served as attachments even when for_download=False.
-            filename: Original filename for download (used with for_download)
+            filename: Original filename for download (used with for_download).
+            bucket_name: Optional bucket override (for per-tenant routing).
 
         Returns:
-            dict: Contains 'url' and 'expires_at' timestamp
+            dict: Contains 'url' and 'expires_at' timestamp.
         """
+        target_bucket = self.get_bucket(bucket_name)
+        target_name = bucket_name or self.bucket_name
 
-        if not self.bucket:
+        if not target_bucket:
             # Mock URL for development
             from datetime import datetime, timezone
 
             mock_url = (
-                f"https://storage.googleapis.com/{self.bucket_name}/{file_path}"
+                f"https://storage.googleapis.com/{target_name}/{file_path}"
                 f"?mock_signed=true"
             )
             expires_at = datetime.now(timezone.utc) + timedelta(
@@ -247,7 +282,7 @@ class GCSService:
         try:
             from datetime import datetime, timezone
 
-            blob = self.bucket.blob(file_path)
+            blob = target_bucket.blob(file_path)
 
             # Determine content type from file extension
             ext = os.path.splitext(file_path)[1].lower()

@@ -1,10 +1,6 @@
 from django.contrib import admin
 
-# from django.contrib.auth.admin import UserAdmin
-# from django_tenants.admin import TenantAdminMixin  # Temporarily disabled
-from .models import Tenant, Domain
-
-# from .models import User
+from .models import Domain, Membership, Tenant
 
 
 @admin.register(Tenant)
@@ -26,7 +22,10 @@ class TenantAdmin(admin.ModelAdmin):  # TenantAdminMixin temporarily disabled
     get_primary_domain.admin_order_field = "domains__domain"
 
     fieldsets = (
-        ("Basic Information", {"fields": ("name", "description", "schema_name")}),
+        (
+            "Basic Information",
+            {"fields": ("name", "slug", "description", "schema_name")},
+        ),
         (
             "Subscription",
             {"fields": ("subscription_status", "stripe_customer_id")},
@@ -54,21 +53,10 @@ class DomainAdmin(admin.ModelAdmin):
     search_fields = ("domain", "tenant__name")
 
 
-# Custom User admin temporarily disabled
-# @admin.register(User)
-# class CustomUserAdmin(UserAdmin):
-#     list_display = ('username', 'email', 'tenant', 'role', 'is_active')
-#     list_filter = ('tenant', 'role', 'is_active', 'is_staff')
-#     search_fields = ('username', 'email', 'first_name', 'last_name')
-#
-#     fieldsets = UserAdmin.fieldsets + (
-#         ('Tenant Information', {
-#             'fields': ('tenant', 'role', 'avatar', 'phone')
-#         }),
-#     )
-#
-#     add_fieldsets = UserAdmin.add_fieldsets + (
-#         ('Tenant Information', {
-#             'fields': ('tenant', 'role', 'avatar', 'phone')
-#         }),
-#     )
+@admin.register(Membership)
+class MembershipAdmin(admin.ModelAdmin):
+    list_display = ("user", "tenant", "role", "is_active", "invited_at")
+    list_filter = ("role", "is_active")
+    search_fields = ("user__email", "user__username", "tenant__name")
+    raw_id_fields = ("user", "tenant", "invited_by")
+    readonly_fields = ("invited_at",)

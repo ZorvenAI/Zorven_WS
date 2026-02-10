@@ -113,6 +113,10 @@ def process_curation_event(
     )
 
     try:
+        # Extract per-tenant curated bucket from upstream event metadata
+        event_metadata = metadata or {}
+        curated_bucket = event_metadata.pop("curated_bucket", None)
+
         # Build CurationEvent
         event = CurationEvent(
             event_id=UUID(event_id),
@@ -124,7 +128,8 @@ def process_curation_event(
             mime_type=file_type,
             content_type=_detect_content_type(file_type),
             source_service="api",
-            metadata=metadata or {},
+            metadata=event_metadata,
+            curated_bucket=curated_bucket,
         )
 
         # Get curation service and process

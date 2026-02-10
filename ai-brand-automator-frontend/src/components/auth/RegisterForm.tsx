@@ -11,6 +11,7 @@ export function RegisterForm() {
     email: '',
     password: '',
     confirmPassword: '',
+    brandName: '',
   });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -35,11 +36,31 @@ export function RegisterForm() {
         password: formData.password,
         first_name: formData.firstName,
         last_name: formData.lastName,
+        ...(formData.brandName.trim() && { brand_name: formData.brandName.trim() }),
       });
 
       if (response.ok) {
-        alert('Registration successful! You can now login.');
-        window.location.href = '/auth/login';
+        const data = await response.json();
+
+        // Auto-login: store tokens and tenant info
+        if (data.tokens) {
+          localStorage.setItem('access_token', data.tokens.access);
+          localStorage.setItem('refresh_token', data.tokens.refresh);
+
+          if (data.tenants) {
+            localStorage.setItem('tenants', JSON.stringify(data.tenants));
+          }
+          if (data.active_tenant_id) {
+            localStorage.setItem('active_tenant_id', String(data.active_tenant_id));
+          }
+
+          // Go straight to dashboard
+          window.location.href = '/dashboard';
+        } else {
+          // Fallback: older response format without tokens
+          alert('Registration successful! You can now login.');
+          window.location.href = '/auth/login';
+        }
       } else {
         const error = await response.json();
         alert(error.errors ? JSON.stringify(error.errors) : 'Registration failed');
@@ -134,6 +155,23 @@ export function RegisterForm() {
             value={formData.confirmPassword}
             onChange={handleChange}
           />
+        </div>
+        <div>
+          <label htmlFor="brandName" className="block text-sm font-medium text-brand-silver/70 mb-1">
+            Brand Name <span className="text-brand-silver/40">(optional)</span>
+          </label>
+          <input
+            id="brandName"
+            name="brandName"
+            type="text"
+            className="appearance-none relative block w-full px-4 py-3 bg-white/5 border border-white/10 placeholder-brand-silver/50 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-electric/50 focus:border-brand-electric transition-colors sm:text-sm font-body"
+            placeholder="e.g. My Awesome Brand"
+            value={formData.brandName}
+            onChange={handleChange}
+          />
+          <p className="mt-1 text-xs text-brand-silver/50">
+            We&apos;ll create your first workspace with this name.
+          </p>
         </div>
       </div>
 

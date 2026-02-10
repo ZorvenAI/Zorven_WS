@@ -25,16 +25,38 @@ from .services import get_pipeline_service
 from files.services import gcs_service
 from ai_services.services import ai_service
 from brand_automator.validators import validate_file_upload, sanitize_filename
+from tenants.permissions import (
+    RoleBasedPermissionMixin,
+    IsTenantViewer,
+    IsTenantEditor,
+    IsTenantAdmin,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class CompanyViewSet(viewsets.ModelViewSet):
-    """ViewSet for Company model"""
+class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
+    """ViewSet for Company model.
+
+    Permissions:
+        - list, retrieve: IsTenantViewer (any member)
+        - create, update, partial_update, destroy: IsTenantAdmin
+        - generate_brand_strategy, generate_brand_identity: IsTenantEditor
+    """
 
     queryset = Company.objects.select_related("tenant").all()
     serializer_class = CompanySerializer
     permission_classes = [IsAuthenticated]
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "create": [IsAuthenticated, IsTenantAdmin],
+        "update": [IsAuthenticated, IsTenantAdmin],
+        "partial_update": [IsAuthenticated, IsTenantAdmin],
+        "destroy": [IsAuthenticated, IsTenantAdmin],
+        "generate_brand_strategy": [IsAuthenticated, IsTenantEditor],
+        "generate_brand_identity": [IsAuthenticated, IsTenantEditor],
+    }
 
     def get_queryset(self):
         # Filter by tenant in multi-tenant setup with optimized queries
@@ -142,12 +164,32 @@ class CompanyViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class BrandAssetViewSet(viewsets.ModelViewSet):
-    """ViewSet for BrandAsset model"""
+class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
+    """ViewSet for BrandAsset model.
+
+    Permissions:
+        - list, retrieve, signed_url, status: IsTenantViewer
+        - upload, create, update, destroy, confirm_gcs_upload,
+          retry_pipeline, update_pipeline_status: IsTenantEditor
+    """
 
     queryset = BrandAsset.objects.select_related("tenant", "company").all()
     serializer_class = BrandAssetSerializer
     permission_classes = [IsAuthenticated]
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "signed_url": [IsAuthenticated, IsTenantViewer],
+        "status": [IsAuthenticated, IsTenantViewer],
+        "create": [IsAuthenticated, IsTenantEditor],
+        "update": [IsAuthenticated, IsTenantEditor],
+        "partial_update": [IsAuthenticated, IsTenantEditor],
+        "destroy": [IsAuthenticated, IsTenantEditor],
+        "upload": [IsAuthenticated, IsTenantEditor],
+        "confirm_gcs_upload": [IsAuthenticated, IsTenantEditor],
+        "retry_pipeline": [IsAuthenticated, IsTenantEditor],
+        "update_pipeline_status": [IsAuthenticated, IsTenantEditor],
+    }
 
     def get_queryset(self):
         # Filter by tenant in multi-tenant setup with optimized queries
@@ -375,6 +417,7 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
                 file_path=asset.gcs_path,
                 expiration_minutes=expiry_minutes,
                 for_download=False,
+                bucket_name=asset.gcs_bucket,
             )
             logger.info(f"signed_url: view_result={view_result}")
 
@@ -384,6 +427,7 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
                 expiration_minutes=expiry_minutes,
                 for_download=True,
                 filename=asset.file_name,
+                bucket_name=asset.gcs_bucket,
             )
             logger.info(f"signed_url: download_result={download_result}")
 
@@ -544,10 +588,15 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         landing_path = f"_landing/{tenant.id}/{unique_id}_{safe_filename}"
 
         # Upload to Google Cloud Storage
+        # Resolve the tenant-specific bucket (falls back to shared default)
+        raw_bucket = tenant.get_raw_bucket() if tenant else gcs_service.bucket_name
         gcs_uploaded = False
         try:
-            if gcs_service.client and gcs_service.bucket:
-                gcs_service.upload_file(file, landing_path, file.content_type)
+            target_bucket = gcs_service.get_bucket(raw_bucket)
+            if target_bucket:
+                gcs_service.upload_file(
+                    file, landing_path, file.content_type, bucket_name=raw_bucket
+                )
                 gcs_uploaded = True
             else:
                 # GCS not configured - check if we should fail or allow for dev/testing
@@ -570,9 +619,7 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             )
 
         # Handle replacement of existing asset
-        actual_bucket = (
-            gcs_service.bucket_name if gcs_service.bucket else "brand-automator-assets"
-        )
+        actual_bucket = raw_bucket
 
         if existing_asset and replace_existing:
             # Delete old GCS blob (best-effort)
@@ -692,7 +739,10 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         file_type = request.data.get("file_type")
         file_size = request.data.get("file_size")
         gcs_path = request.data.get("gcs_path")
-        gcs_bucket = request.data.get("gcs_bucket", "brand-automator-assets")
+        gcs_bucket = request.data.get(
+            "gcs_bucket",
+            tenant.get_raw_bucket() if tenant else "brand-automator-assets",
+        )
         company_id = request.data.get("company_id")
 
         # Validate file_type
@@ -948,12 +998,26 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         return Response({"status": "updated", "pipeline_status": new_status})
 
 
-class OnboardingProgressViewSet(viewsets.ModelViewSet):
-    """ViewSet for OnboardingProgress model"""
+class OnboardingProgressViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
+    """ViewSet for OnboardingProgress model.
+
+    Permissions:
+        - list, retrieve, current: IsTenantViewer
+        - create, update, update_step: IsTenantEditor
+    """
 
     queryset = OnboardingProgress.objects.all()
     serializer_class = OnboardingProgressSerializer
     permission_classes = [IsAuthenticated]
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "current": [IsAuthenticated, IsTenantViewer],
+        "create": [IsAuthenticated, IsTenantEditor],
+        "update": [IsAuthenticated, IsTenantEditor],
+        "partial_update": [IsAuthenticated, IsTenantEditor],
+        "update_step": [IsAuthenticated, IsTenantEditor],
+    }
 
     def get_queryset(self):
         # Filter by tenant in multi-tenant setup

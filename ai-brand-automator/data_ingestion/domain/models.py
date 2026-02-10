@@ -75,6 +75,14 @@ class IngestionEvent(BaseModel):
     metadata: Optional[dict] = Field(
         default_factory=dict, description="Additional metadata about the file"
     )
+    raw_bucket: Optional[str] = Field(
+        default=None,
+        description="Per-tenant raw bucket override (from tenant.get_raw_bucket())",
+    )
+    curated_bucket: Optional[str] = Field(
+        default=None,
+        description="Per-tenant curated bucket override (from tenant.get_curated_bucket())",
+    )
 
     @field_validator("tenant_id")
     @classmethod

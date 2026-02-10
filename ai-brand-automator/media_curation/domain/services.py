@@ -242,7 +242,10 @@ class CurationService:
                 CurationStatus.PROCESSING,
                 message="Saving curated document",
             )
-            output_uri = self._save_to_storage(curated_doc)
+            output_uri = self._save_to_storage(
+                curated_doc,
+                bucket_override=getattr(event, "curated_bucket", None),
+            )
             curated_doc = curated_doc.model_copy(update={"output_gcs_uri": output_uri})
 
             # 7. Publish rag-sync-ready event
@@ -488,15 +491,20 @@ class CurationService:
             created_at=datetime.now(timezone.utc),
         )
 
-    def _save_to_storage(self, doc: CuratedDocument) -> str:
+    def _save_to_storage(
+        self, doc: CuratedDocument, bucket_override: str | None = None
+    ) -> str:
         """Save curated document to GCS and return the URI."""
         import asyncio
         import json
 
         try:
+            # Use per-tenant bucket override if available
+            bucket = bucket_override or self.output_bucket
+
             # Build the output path
             path = (
-                f"gs://{self.output_bucket}/curated/"
+                f"gs://{bucket}/curated/"
                 f"{doc.tenant_id}/{doc.file_id}/{doc.document_id}.json"
             )
 

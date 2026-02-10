@@ -98,13 +98,14 @@ class TestTenantCreateSerializer:
         assert "domain" in serializer.errors
 
     def test_schema_name_auto_generated(self):
-        """Schema name is auto-generated from tenant name."""
+        """Schema name is auto-generated from tenant name via slug."""
         connection.set_schema_to_public()
         data = {"name": "My Test Company!"}
         serializer = TenantCreateSerializer(data=data)
         assert serializer.is_valid(), serializer.errors
         tenant = serializer.save()
-        assert tenant.schema_name == "tenant_my_test_company_"
+        # slug strips "!" → "my-test-company" → schema "tenant_my_test_company"
+        assert tenant.schema_name == "tenant_my_test_company"
 
     def test_schema_name_collision_avoidance(self):
         """Duplicate schema names get a counter suffix."""

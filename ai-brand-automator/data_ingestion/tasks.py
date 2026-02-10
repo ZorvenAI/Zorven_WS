@@ -125,6 +125,8 @@ def process_ingestion_event(
     source: Optional[str] = None,
     trace_id: Optional[str] = None,
     metadata: Optional[dict] = None,
+    raw_bucket: Optional[str] = None,
+    curated_bucket: Optional[str] = None,
 ) -> dict:
     """
     Process a single ingestion event asynchronously.
@@ -141,6 +143,8 @@ def process_ingestion_event(
         source: Event source (API, GCS_TRIGGER, BATCH, MANUAL)
         trace_id: Optional trace ID for distributed tracing
         metadata: Optional additional metadata
+        raw_bucket: Per-tenant raw GCS bucket override
+        curated_bucket: Per-tenant curated GCS bucket override
 
     Returns:
         Dict with processing result
@@ -170,6 +174,8 @@ def process_ingestion_event(
             source=EventSource(source) if source else EventSource.FRONTEND_UPLOAD,
             trace_id=UUID(trace_id) if trace_id else uuid4(),
             metadata=metadata,
+            raw_bucket=raw_bucket,
+            curated_bucket=curated_bucket,
         )
 
         # Create service and process

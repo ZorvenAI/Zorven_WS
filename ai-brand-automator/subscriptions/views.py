@@ -17,6 +17,7 @@ from .serializers import (
     CreatePortalSessionSerializer,
 )
 from .services import stripe_service
+from tenants.permissions import IsTenantViewer, IsTenantOwner
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +31,9 @@ class SubscriptionPlanViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantViewer])
 def get_subscription_status(request):
-    """Get current subscription status for the tenant"""
+    """Get current subscription status for the tenant."""
     tenant = getattr(request, "tenant", None)
     if not tenant:
         return Response(
@@ -55,9 +56,9 @@ def get_subscription_status(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantOwner])
 def create_checkout_session(request):
-    """Create a Stripe Checkout session for subscription"""
+    """Create a Stripe Checkout session for subscription."""
     serializer = CreateCheckoutSessionSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -111,9 +112,9 @@ def create_checkout_session(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantOwner])
 def create_portal_session(request):
-    """Create a Stripe Customer Portal session"""
+    """Create a Stripe Customer Portal session."""
     serializer = CreatePortalSessionSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -154,9 +155,9 @@ def create_portal_session(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantOwner])
 def cancel_subscription(request):
-    """Cancel the current subscription"""
+    """Cancel the current subscription."""
     tenant = getattr(request, "tenant", None)
     if not tenant:
         return Response(
@@ -198,9 +199,9 @@ def cancel_subscription(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantViewer])
 def get_payment_history(request):
-    """Get payment history for the tenant"""
+    """Get payment history for the tenant."""
     tenant = getattr(request, "tenant", None)
     if not tenant:
         return Response(
@@ -239,9 +240,9 @@ def stripe_webhook(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantOwner])
 def sync_subscription(request):
-    """Sync subscription status from Stripe (for after checkout)"""
+    """Sync subscription status from Stripe (for after checkout)."""
     tenant = getattr(request, "tenant", None)
     if not tenant:
         return Response(

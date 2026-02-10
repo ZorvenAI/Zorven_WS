@@ -13,113 +13,134 @@ from django.contrib.auth.models import AnonymousUser
 logger = logging.getLogger(__name__)
 
 
-class JWTTenantMiddleware:
-    """Resolve tenant from the ``tenant_id`` claim in the JWT.
+class TenantMembershipMiddleware:
+    """Resolve tenant from ``X-Tenant-ID`` header and verify membership.
 
-    ``DefaultTenantMiddleware`` runs first and sets ``request.tenant`` based
-    on the **hostname**.  In development everyone hits ``localhost``, so that
-    always resolves to the *public* tenant.
+    Replaces the old ``JWTTenantMiddleware`` that used a 1-to-1
+    ``user_{id}`` convention.  Now users can belong to multiple tenants
+    via the ``Membership`` model.
 
-    This middleware runs **after** authentication, reads the ``tenant_id``
-    claim from the verified JWT, loads the corresponding ``Tenant`` row,
-    and overwrites ``request.tenant`` so that views see the correct,
-    per-user tenant.
-
-    If the JWT has no ``tenant_id`` (e.g. admin users) the hostname-based
-    tenant set by ``DefaultTenantMiddleware`` is left untouched.
+    Flow:
+        1. Skip if user is not authenticated.
+        2. Skip if path is tenant-exempt (auth routes, health checks).
+        3. Read ``X-Tenant-ID`` from request header.
+        4. If missing: fall back to user's default tenant (first OWNER
+           membership, then first any active membership).
+        5. Verify the user has an active ``Membership`` for that tenant.
+        6. Set ``request.tenant``, ``request.membership``,
+           ``request.user_role``.
+        7. Return 403 if no valid membership found for a specific
+           tenant_id.
     """
+
+    # Paths that don't require tenant context
+    TENANT_EXEMPT_PATHS = [
+        "/api/v1/auth/",
+        "/api/v1/tenants/me/",
+        "/api/v1/tenants/switch/",
+        "/api/v1/tenants/accept-invite/",
+        "/health",
+        "/ready",
+        "/alive",
+        "/admin",
+        "/static",
+        "/media",
+    ]
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        # Only override if the user is authenticated
         if not hasattr(request, "user") or not request.user.is_authenticated:
             return self.get_response(request)
 
-        # Primary: look up tenant by user convention (user_<id>)
-        tenant_id = self._get_tenant_id_from_user(request.user)
+        if self._is_exempt_path(request.path):
+            return self.get_response(request)
+
+        tenant_id = self._get_tenant_id(request)
         if tenant_id is None:
-            # Fallback: extract tenant_id from JWT, but only trust
-            # unverified decode when the request came through Kong
-            # (which already validated the signature).
-            tenant_id = self._get_tenant_id_from_jwt(request)
+            # No tenant specified — use default (first owned tenant)
+            tenant_id = self._get_default_tenant_id(request.user)
 
         if tenant_id is not None:
-            from tenants.models import Tenant
-
-            try:
-                tenant = Tenant.objects.get(id=tenant_id)
-                request.tenant = tenant
-                # django-tenants uses connection.set_tenant() for
-                # schema routing — but our shared-schema apps rely
-                # on FK filtering, not schema switching, so we only
-                # need request.tenant to be correct.
-            except Tenant.DoesNotExist:
-                logger.warning(
-                    f"Tenant id={tenant_id} from JWT not found; "
-                    "keeping hostname-based tenant"
+            membership = self._verify_membership(request.user, tenant_id)
+            if membership:
+                request.tenant = membership.tenant
+                request.membership = membership
+                request.user_role = membership.role
+            else:
+                return JsonResponse(
+                    {"error": "You do not have access to this workspace"},
+                    status=403,
                 )
+        else:
+            # User has no tenants at all — allow through for
+            # tenant creation endpoints
+            request.tenant = None
+            request.membership = None
+            request.user_role = None
 
         return self.get_response(request)
 
-    def _get_tenant_id_from_jwt(self, request):
-        """Extract ``tenant_id`` from the JWT.
+    def _is_exempt_path(self, path):
+        """Check if path is exempt from tenant resolution."""
+        for exempt in self.TENANT_EXEMPT_PATHS:
+            if path.startswith(exempt):
+                return True
+        return False
 
-        When the request came through Kong (``X-Kong-Proxy: true``),
-        the signature has already been validated, so an unverified
-        decode is safe.  For direct backend access the token was
-        already verified by SimpleJWT's ``JWTAuthentication`` before
-        this middleware runs, so we also trust the payload.
+    def _get_tenant_id(self, request):
+        """Extract tenant ID from ``X-Tenant-ID`` header."""
+        header = request.META.get("HTTP_X_TENANT_ID")
+        if header:
+            try:
+                return int(header)
+            except (ValueError, TypeError):
+                return None
+        return None
 
-        As an extra safeguard we still verify the signature using
-        the Django ``SECRET_KEY`` whenever the Kong header is absent.
+    def _get_default_tenant_id(self, user):
+        """Get user's default tenant (first owned, then first any).
+
+        Returns:
+            int or None: The tenant ID of the user's default workspace.
         """
-        auth_header = request.META.get("HTTP_AUTHORIZATION", "")
-        if not auth_header.startswith("Bearer "):
-            return None
+        from django.db import models as db_models
+        from tenants.models import Membership
 
-        token = auth_header[7:]
-        is_kong = request.META.get("HTTP_X_KONG_PROXY") == "true"
-
-        try:
-            if is_kong:
-                # Kong already verified — safe to skip signature check
-                payload = jwt.decode(
-                    token,
-                    options={
-                        "verify_signature": False,
-                        "verify_exp": False,
-                    },
+        membership = (
+            Membership.objects.filter(user=user, is_active=True)
+            .order_by(
+                db_models.Case(
+                    db_models.When(role=Membership.Role.OWNER, then=0),
+                    default=1,
                 )
-            else:
-                # Direct access — verify signature with Django secret
-                payload = jwt.decode(
-                    token,
-                    settings.SECRET_KEY,
-                    algorithms=["HS256"],
-                    options={"verify_exp": False},
-                )
-            tid = payload.get("tenant_id")
-            return int(tid) if tid is not None else None
-        except (
-            jwt.exceptions.DecodeError,
-            jwt.exceptions.InvalidSignatureError,
-            ValueError,
-            TypeError,
-        ):
-            return None
-
-    def _get_tenant_id_from_user(self, user):
-        """Fallback: look up tenant by ``schema_name = user_<id>``."""
-        from tenants.models import Tenant
-
-        try:
-            return Tenant.objects.values_list("id", flat=True).get(
-                schema_name=f"user_{user.id}"
             )
-        except Tenant.DoesNotExist:
-            return None
+            .first()
+        )
+        return membership.tenant_id if membership else None
+
+    def _verify_membership(self, user, tenant_id):
+        """Verify user has active membership for the given tenant.
+
+        Args:
+            user: The authenticated user.
+            tenant_id: The tenant ID to verify membership for.
+
+        Returns:
+            Membership or None: The membership record if valid.
+        """
+        from tenants.models import Membership
+
+        return (
+            Membership.objects.filter(
+                user=user,
+                tenant_id=tenant_id,
+                is_active=True,
+            )
+            .select_related("tenant")
+            .first()
+        )
 
 
 class SecurityMiddleware:
@@ -383,10 +404,11 @@ class KongAuthenticationMiddleware:
                     user = self.User.objects.get(id=user_id)
                     request.user = user
 
-                    # Set tenant context if available
-                    tenant_id = payload.get("tenant_id")
-                    if tenant_id:
-                        request.tenant_id = tenant_id
+                    # Set active_tenant_id from JWT if present
+                    # (TenantMembershipMiddleware will verify membership)
+                    active_tid = payload.get("active_tenant_id")
+                    if active_tid:
+                        request.META["HTTP_X_TENANT_ID"] = str(active_tid)
 
                     # Log successful Kong auth
                     if is_kong_request:

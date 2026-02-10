@@ -17,14 +17,32 @@ from .serializers import (
 )
 from .services import ai_service
 from onboarding.models import Company
+from tenants.permissions import (
+    RoleBasedPermissionMixin,
+    IsTenantViewer,
+    IsTenantEditor,
+)
 
 
-class ChatSessionViewSet(viewsets.ModelViewSet):
-    """ViewSet for ChatSession model"""
+class ChatSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
+    """ViewSet for ChatSession model.
+
+    Permissions:
+        - list, retrieve: IsTenantViewer
+        - create, update, destroy: IsTenantEditor
+    """
 
     queryset = ChatSession.objects.all()
     serializer_class = ChatSessionSerializer
     permission_classes = [IsAuthenticated]
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "create": [IsAuthenticated, IsTenantEditor],
+        "update": [IsAuthenticated, IsTenantEditor],
+        "partial_update": [IsAuthenticated, IsTenantEditor],
+        "destroy": [IsAuthenticated, IsTenantEditor],
+    }
 
     def get_queryset(self):
         tenant = getattr(self.request, "tenant", None)
@@ -44,12 +62,20 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
         serializer.save(tenant=tenant, session_id=str(uuid.uuid4()))
 
 
-class AIGenerationViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for AI generations (read-only)"""
+class AIGenerationViewSet(RoleBasedPermissionMixin, viewsets.ReadOnlyModelViewSet):
+    """ViewSet for AI generations (read-only).
+
+    Permissions:
+        - list, retrieve: IsTenantViewer
+    """
 
     queryset = AIGeneration.objects.all()
     serializer_class = AIGenerationSerializer
     permission_classes = [IsAuthenticated]
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+    }
 
     def get_queryset(self):
         tenant = getattr(self.request, "tenant", None)
@@ -59,9 +85,9 @@ class AIGenerationViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantEditor])
 def chat_with_ai(request):
-    """Chat with AI using brand context"""
+    """Chat with AI using brand context."""
     serializer = ChatMessageSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -123,7 +149,7 @@ def chat_with_ai(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantEditor])
 def generate_brand_strategy(request):
     """Generate brand strategy using AI"""
     serializer = BrandStrategyRequestSerializer(data=request.data)
@@ -170,7 +196,7 @@ def generate_brand_strategy(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantEditor])
 def generate_brand_identity(request):
     """Generate brand identity using AI"""
     serializer = BrandIdentityRequestSerializer(data=request.data)
@@ -214,7 +240,7 @@ def generate_brand_identity(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantEditor])
 def analyze_market(request):
     """Perform market analysis using AI"""
     serializer = MarketAnalysisRequestSerializer(data=request.data)

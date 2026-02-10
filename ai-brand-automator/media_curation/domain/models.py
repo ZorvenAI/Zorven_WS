@@ -67,6 +67,11 @@ class CurationEvent(BaseModel):
     content_type: ContentType = ContentType.UNKNOWN
     source_service: str = "data-ingestion-svc"
     metadata: Optional[dict[str, Any]] = None
+    curated_bucket: Optional[str] = Field(
+        default=None,
+        description="Per-tenant curated bucket override "
+        "(from upstream event payload)",
+    )
 
     # Legacy field aliases for backward compatibility
     @property

@@ -180,7 +180,16 @@ class IngestionService:
                 status=ProcessingStatus.RAW_STORED,
                 processing_duration_ms=processing_duration_ms,
                 file_metadata=file_metadata,
-                metadata=event.metadata,  # Pass through original metadata (asset_id)
+                metadata={
+                    **(event.metadata or {}),
+                    # Carry per-tenant bucket info for downstream consumers
+                    **({"raw_bucket": event.raw_bucket} if event.raw_bucket else {}),
+                    **(
+                        {"curated_bucket": event.curated_bucket}
+                        if event.curated_bucket
+                        else {}
+                    ),
+                },
             )
 
             self._publish_output_event(processed_event, trace_id)
