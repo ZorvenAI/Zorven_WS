@@ -37,11 +37,13 @@ class JWTTenantMiddleware:
         if not hasattr(request, "user") or not request.user.is_authenticated:
             return self.get_response(request)
 
-        # Try to extract tenant_id from the JWT
-        tenant_id = self._get_tenant_id_from_jwt(request)
+        # Primary: look up tenant by user convention (user_<id>)
+        tenant_id = self._get_tenant_id_from_user(request.user)
         if tenant_id is None:
-            # Fall back: look up tenant by user convention (user_<id>)
-            tenant_id = self._get_tenant_id_from_user(request.user)
+            # Fallback: extract tenant_id from JWT, but only trust
+            # unverified decode when the request came through Kong
+            # (which already validated the signature).
+            tenant_id = self._get_tenant_id_from_jwt(request)
 
         if tenant_id is not None:
             from tenants.models import Tenant
@@ -62,23 +64,50 @@ class JWTTenantMiddleware:
         return self.get_response(request)
 
     def _get_tenant_id_from_jwt(self, request):
-        """Decode the JWT (already verified by DRF/Kong) to read tenant_id."""
+        """Extract ``tenant_id`` from the JWT.
+
+        When the request came through Kong (``X-Kong-Proxy: true``),
+        the signature has already been validated, so an unverified
+        decode is safe.  For direct backend access the token was
+        already verified by SimpleJWT's ``JWTAuthentication`` before
+        this middleware runs, so we also trust the payload.
+
+        As an extra safeguard we still verify the signature using
+        the Django ``SECRET_KEY`` whenever the Kong header is absent.
+        """
         auth_header = request.META.get("HTTP_AUTHORIZATION", "")
         if not auth_header.startswith("Bearer "):
             return None
 
         token = auth_header[7:]
+        is_kong = request.META.get("HTTP_X_KONG_PROXY") == "true"
+
         try:
-            payload = jwt.decode(
-                token,
-                options={
-                    "verify_signature": False,
-                    "verify_exp": False,
-                },
-            )
+            if is_kong:
+                # Kong already verified — safe to skip signature check
+                payload = jwt.decode(
+                    token,
+                    options={
+                        "verify_signature": False,
+                        "verify_exp": False,
+                    },
+                )
+            else:
+                # Direct access — verify signature with Django secret
+                payload = jwt.decode(
+                    token,
+                    settings.SECRET_KEY,
+                    algorithms=["HS256"],
+                    options={"verify_exp": False},
+                )
             tid = payload.get("tenant_id")
             return int(tid) if tid is not None else None
-        except (jwt.exceptions.DecodeError, ValueError, TypeError):
+        except (
+            jwt.exceptions.DecodeError,
+            jwt.exceptions.InvalidSignatureError,
+            ValueError,
+            TypeError,
+        ):
             return None
 
     def _get_tenant_id_from_user(self, user):

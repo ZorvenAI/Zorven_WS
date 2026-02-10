@@ -257,7 +257,7 @@ qs = Model.objects.filter(tenant=tenant) if tenant else Model.objects.filter(ten
 | Service | Purpose | Auth Method |
 |---------|---------|------------|
 | Google Gemini 2.0 Flash | AI content generation | API key (`GOOGLE_API_KEY`) |
-│ Google Cloud Storage | File storage (2 default + per-tenant buckets) | Service account JSON |
+| Google Cloud Storage | File storage (2 default + per-tenant buckets) | Service account JSON |
 | Stripe | Payments & subscriptions | Secret key + webhooks |
 | LinkedIn API | OAuth + posting + analytics | OAuth 2.0 + page tokens |
 | Twitter/X API | OAuth + posting + analytics | OAuth 2.0 |

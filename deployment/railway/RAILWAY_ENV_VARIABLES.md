@@ -106,8 +106,8 @@ GS_CREDENTIALS_PATH=/app/gcs-credentials.json
 
 # Multi-tenancy: per-tenant GCS bucket defaults
 # Tenants can override via the Tenant admin model; these are global fallbacks.
-GCS_RAW_BUCKET=onboarding-bucket1
-GCS_CURATED_BUCKET=brandsol-curation-bucket
+RAW_GCP_BUCKET_NAME=onboarding-bucket1
+CURATION_GCP_BUCKET_NAME=brandsol-curation-bucket
 
 # GCP Access Token (for Kong GCS uploads - refresh periodically)
 GCP_ACCESS_TOKEN=<gcp-oauth-access-token>

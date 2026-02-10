@@ -114,7 +114,10 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         """Create tenant and optional initial domain."""
         domain_name = validated_data.pop("domain", None)
         tenant = Tenant(**validated_data)
-        tenant.save()  # Triggers schema_name auto-generation + schema creation
+        # We use shared-schema multi-tenancy (FK filtering), so
+        # prevent django-tenants from creating a separate PG schema.
+        tenant.auto_create_schema = False
+        tenant.save()  # Triggers schema_name auto-generation
 
         # Create initial domain if provided
         if domain_name:

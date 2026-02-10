@@ -71,6 +71,12 @@ def chat_with_ai(request):
 
     tenant = getattr(request, "tenant", None)
 
+    if not tenant:
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     # Get or create chat session
     if session_id:
         session = get_object_or_404(ChatSession, session_id=session_id, tenant=tenant)

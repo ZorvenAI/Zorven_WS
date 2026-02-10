@@ -75,8 +75,8 @@ services:
       # Port changed to 8001 (Kong is on 8000)
       - PORT=8001
       # Multi-tenancy: default GCS buckets (tenants can override)
-      - GCS_RAW_BUCKET=${GCS_RAW_BUCKET:-onboarding-bucket1}
-      - GCS_CURATED_BUCKET=${GCS_CURATED_BUCKET:-brandsol-curation-bucket}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-bucket1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-brandsol-curation-bucket}
     # Port NOT exposed to host - only accessible via Kong
     expose:
       - "8001"
@@ -149,8 +149,8 @@ services:
       - CELERY_CONCURRENCY=2
       - CELERY_LOG_LEVEL=info
       # Multi-tenancy: default GCS buckets
-      - GCS_RAW_BUCKET=${GCS_RAW_BUCKET:-onboarding-bucket1}
-      - GCS_CURATED_BUCKET=${GCS_CURATED_BUCKET:-brandsol-curation-bucket}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-bucket1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-brandsol-curation-bucket}
     volumes:
       - ../ai-brand-automator:/app
     depends_on:
