@@ -167,6 +167,9 @@ class UserRegistrationView(APIView):
                 schema_name=f"user_{user.id}",
                 subscription_status="trial",
             )
+            # Skip automatic schema creation — we use shared-schema
+            # multi-tenancy (FK filtering in the public schema)
+            tenant.auto_create_schema = False
             tenant.save()
 
             Domain.objects.create(
