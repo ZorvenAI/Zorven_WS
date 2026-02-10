@@ -21,7 +21,7 @@ class TestFileBrowserIntegration:
 
     @pytest.fixture
     def authenticated_client_with_company(self, db, django_user_model):
-        from tenants.models import Tenant
+        from tenants.models import Tenant, Membership
         from onboarding.models import Company
         import uuid
 
@@ -36,12 +36,20 @@ class TestFileBrowserIntegration:
             password="testpass123",
         )
 
+        # Create OWNER membership for RBAC
+        Membership.objects.get_or_create(
+            user=user,
+            tenant=tenant,
+            defaults={"role": Membership.Role.OWNER},
+        )
+
         # Create company
         company = Company.objects.create(name="Integration Test Company", tenant=tenant)
 
         client = APIClient()
         client.force_authenticate(user=user)
         client.defaults["SERVER_NAME"] = "localhost"
+        client.credentials(HTTP_X_TENANT_ID=str(tenant.id))
 
         return client, user, tenant, company
 

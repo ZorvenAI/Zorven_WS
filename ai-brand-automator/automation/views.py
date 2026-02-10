@@ -90,6 +90,11 @@ class SocialProfileViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             qs = qs.filter(tenant=tenant)
         return qs
 
+    def perform_create(self, serializer):
+        """Attach the requesting user and active tenant on create."""
+        tenant = getattr(self.request, "tenant", None)
+        serializer.save(user=self.request.user, tenant=tenant)
+
     @action(detail=True, methods=["post"])
     def disconnect(self, request, pk=None):
         """Disconnect a social profile."""

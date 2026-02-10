@@ -318,15 +318,8 @@ class TestFullPipelineE2E:
 class TestAPIToProcessingE2E:
     """End-to-end tests from API to processing."""
 
-    @pytest.fixture
-    def authenticated_client(self):
-        """Create authenticated API client."""
-        from rest_framework.test import APIClient
-
-        client = APIClient()
-        client.defaults["SERVER_NAME"] = "localhost"
-        client.force_authenticate(user=MagicMock(id=1, is_authenticated=True))
-        return client
+    # authenticated_client fixture comes from the global conftest.py
+    # (uses a real Django User instance required by TenantMembershipMiddleware).
 
     @pytest.mark.django_db
     def test_api_to_task_submission(self, authenticated_client):

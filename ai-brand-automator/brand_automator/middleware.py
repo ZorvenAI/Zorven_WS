@@ -51,7 +51,13 @@ class TenantMembershipMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        if not hasattr(request, "user") or not request.user.is_authenticated:
+        # Resolve the authenticated user from all possible sources:
+        # 1. DRF force_authenticate (test clients)
+        # 2. Django session / Kong middleware (request.user)
+        # 3. JWT from Authorization header (prod without Kong)
+        user = self._resolve_user(request)
+
+        if user is None or not user.is_authenticated:
             return self.get_response(request)
 
         if self._is_exempt_path(request.path):
@@ -60,10 +66,10 @@ class TenantMembershipMiddleware:
         tenant_id = self._get_tenant_id(request)
         if tenant_id is None:
             # No tenant specified — use default (first owned tenant)
-            tenant_id = self._get_default_tenant_id(request.user)
+            tenant_id = self._get_default_tenant_id(user)
 
         if tenant_id is not None:
-            membership = self._verify_membership(request.user, tenant_id)
+            membership = self._verify_membership(user, tenant_id)
             if membership:
                 request.tenant = membership.tenant
                 request.membership = membership
@@ -81,6 +87,61 @@ class TenantMembershipMiddleware:
             request.user_role = None
 
         return self.get_response(request)
+
+    def _resolve_user(self, request):
+        """Get the authenticated user from multiple sources.
+
+        Priority:
+            1. ``_force_auth_user`` — set by DRF's ``force_authenticate``
+               in test clients (``ForceAuthClientHandler``).
+            2. ``request.user`` — set by Django's
+               ``AuthenticationMiddleware`` (session) or
+               ``KongAuthenticationMiddleware``.
+            3. JWT from ``Authorization`` header — used in production
+               when Kong gateway is not enabled and DRF's JWT
+               authentication has not yet run (it runs at the view
+               layer, after middleware).
+        """
+        # 1. DRF force_authenticate (used in tests)
+        force_user = getattr(request, "_force_auth_user", None)
+        if force_user is not None:
+            return force_user
+
+        # 2. Django session auth or Kong middleware
+        user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated:
+            return user
+
+        # 3. JWT from Authorization header (production without Kong)
+        return self._try_jwt_auth(request)
+
+    def _try_jwt_auth(self, request):
+        """Attempt JWT authentication from the Authorization header.
+
+        This covers production requests that bypass Kong and go
+        directly to the Django backend.  ``JWTAuthentication`` normally
+        runs in the DRF view layer (after middleware), so we call it
+        here to resolve the user early for tenant resolution.
+
+        Returns:
+            User instance or ``None``.
+        """
+        try:
+            from rest_framework_simplejwt.authentication import (
+                JWTAuthentication,
+            )
+
+            auth = JWTAuthentication()
+            result = auth.authenticate(request)
+            if result:
+                user, _token = result
+                # Also set on the request so downstream middleware
+                # and Django's auth infrastructure see it
+                request.user = user
+                return user
+        except Exception:
+            pass
+        return None
 
     def _is_exempt_path(self, path):
         """Check if path is exempt from tenant resolution."""

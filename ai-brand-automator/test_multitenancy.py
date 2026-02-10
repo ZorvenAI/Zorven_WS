@@ -18,7 +18,6 @@ django.setup()
 
 from tenants.models import Tenant, Domain  # noqa: E402
 from django.db import connection  # noqa: E402
-from django_tenants.utils import schema_context  # noqa: E402
 
 
 @pytest.fixture
@@ -86,10 +85,15 @@ def test_domain_creation(tenant):
 
 
 @pytest.mark.django_db
-def test_schema_creation(tenant):
-    """Test that schema was created in database"""
+def test_schema_not_created(tenant):
+    """Test that per-tenant schema is NOT created (shared-schema architecture).
+
+    With ``auto_create_schema = False``, the platform uses FK-based
+    isolation on the public schema, so no PostgreSQL schema should be
+    created for new tenants.
+    """
     print("=" * 80)
-    print("TEST 3: Schema Verification")
+    print("TEST 3: Schema Should NOT Exist (shared-schema architecture)")
     print("=" * 80)
 
     with connection.cursor() as cursor:
@@ -103,60 +107,66 @@ def test_schema_creation(tenant):
         )
         result = cursor.fetchone()
 
-    if result:
-        print("✅ Schema exists in database!")
-        print(f"   - Schema Name: {result[0]}")
+    if result is None:
+        print("✅ Schema correctly NOT created (shared-schema mode)!")
     else:
-        print("❌ Schema NOT found in database!")
-        print(f"   - Expected: {tenant.schema_name}")
+        print("❌ Schema unexpectedly exists!")
+        print(f"   - Schema Name: {result[0]}")
     print()
 
-    assert result is not None, f"Schema {tenant.schema_name} not found"
+    assert result is None, (
+        f"Schema {tenant.schema_name} should not exist " "with auto_create_schema=False"
+    )
 
 
 @pytest.mark.django_db
 def test_tenant_data_isolation(tenant):
-    """Test that tenant-specific data is isolated"""
+    """Test that tenant-specific data is isolated via FK filtering.
+
+    With the shared-schema architecture, isolation is enforced by
+    filtering on ``tenant`` ForeignKey, not by PostgreSQL schemas.
+    """
     print("=" * 80)
-    print("TEST 4: Tenant Data Isolation")
+    print("TEST 4: Tenant Data Isolation (FK-based)")
     print("=" * 80)
 
-    from django.contrib.auth.models import User
+    from onboarding.models import Company
 
-    # Create user in public schema
-    public_user = User.objects.create_user(
-        username="public_user",
-        email="public@example.com",
-        password="testpass123",
+    # Create a second tenant for isolation test
+    tenant2 = Tenant.objects.create(
+        name="Isolation Test Tenant 2",
+        schema_name="isolation_test_2",
+        subscription_status="active",
     )
-    print(f"✅ Created user in PUBLIC schema: {public_user.username}")
 
-    # Switch to tenant schema and create user there
-    with schema_context(tenant.schema_name):
-        tenant_user = User.objects.create_user(
-            username="tenant_user",
-            email="tenant@example.com",
-            password="testpass123",
-        )
-        print(
-            f"✅ Created user in TENANT schema "
-            f"({tenant.schema_name}): {tenant_user.username}"
-        )
+    # Create companies scoped to each tenant
+    company1 = Company.objects.create(
+        name="Company for Tenant 1",
+        tenant=tenant,
+    )
+    company2 = Company.objects.create(
+        name="Company for Tenant 2",
+        tenant=tenant2,
+    )
+    print(f"✅ Created company for tenant 1: {company1.name}")
+    print(f"✅ Created company for tenant 2: {company2.name}")
 
-        # Count users in tenant schema
-        tenant_users_count = User.objects.count()
-        print(f"   - Users in tenant schema: {tenant_users_count}")
+    # Verify isolation via FK filtering
+    t1_companies = Company.objects.filter(tenant=tenant)
+    t2_companies = Company.objects.filter(tenant=tenant2)
+    print(f"   - Companies for tenant 1: {t1_companies.count()}")
+    print(f"   - Companies for tenant 2: {t2_companies.count()}")
 
-    # Count users in public schema
-    public_users_count = User.objects.count()
-    print(f"   - Users in public schema: {public_users_count}")
+    assert t1_companies.count() == 1
+    assert t2_companies.count() == 1
+    assert t1_companies.first().name == "Company for Tenant 1"
+    assert t2_companies.first().name == "Company for Tenant 2"
 
-    # Verify isolation
-    if tenant_users_count == 1 and public_users_count >= 1:
-        print("✅ Data isolation working correctly!")
-    else:
-        print("❌ Data isolation NOT working!")
+    print("✅ FK-based data isolation working correctly!")
     print()
+
+    # Cleanup
+    tenant2.delete()
 
 
 @pytest.mark.django_db

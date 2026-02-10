@@ -210,6 +210,11 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         logger.info(f"BrandAsset get_queryset: unfiltered queryset count={qs.count()}")
         return qs
 
+    def perform_create(self, serializer):
+        """Attach active tenant on asset creation."""
+        tenant = getattr(self.request, "tenant", None)
+        serializer.save(tenant=tenant)
+
     def destroy(self, request, *args, **kwargs):
         """Delete asset and clean up associated files from GCS."""
         instance = self.get_object()
@@ -1025,6 +1030,11 @@ class OnboardingProgressViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet)
         if tenant:
             return OnboardingProgress.objects.filter(tenant=tenant)
         return OnboardingProgress.objects.none()
+
+    def perform_create(self, serializer):
+        """Attach active tenant on progress creation."""
+        tenant = getattr(self.request, "tenant", None)
+        serializer.save(tenant=tenant)
 
     @action(detail=False, methods=["get"])
     def current(self, request):

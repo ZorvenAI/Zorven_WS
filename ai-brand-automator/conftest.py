@@ -147,16 +147,26 @@ def authenticated_client(api_client, user):
 
 @pytest.fixture
 def authenticated_client_with_tenant(api_client, user, public_tenant):
-    """API client authenticated with test user and tenant context.
+    """API client authenticated with test user, tenant context, and membership.
 
-    Relies on the test handler's `_force_tenant` attribute to ensure
-    request.tenant is available in views that use defensive tenant access.
+    Creates an OWNER membership for the test user on ``public_tenant``
+    and sets the ``X-Tenant-ID`` header so ``TenantMembershipMiddleware``
+    resolves tenant + membership from the database on every request.
     """
+    from tenants.models import Membership
+
     api_client.force_authenticate(user=user)
     api_client.defaults["SERVER_NAME"] = "localhost"
 
-    # Add tenant to handler so middleware/handler logic can set request.tenant
-    api_client.handler._force_tenant = public_tenant
+    # Ensure user has active membership for this tenant
+    Membership.objects.get_or_create(
+        user=user,
+        tenant=public_tenant,
+        defaults={"role": Membership.Role.OWNER},
+    )
+
+    # Set X-Tenant-ID header so middleware resolves naturally
+    api_client.credentials(HTTP_X_TENANT_ID=str(public_tenant.id))
     return api_client
 
 
