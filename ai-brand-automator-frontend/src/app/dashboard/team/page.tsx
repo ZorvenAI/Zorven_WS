@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api';
 import { useTenantContext } from '@/contexts/TenantContext';
@@ -16,6 +16,8 @@ import {
   Mail,
   X,
 } from 'lucide-react';
+
+const subscribeNoop = () => () => {};
 
 // ── Role helpers ──────────────────────────────────────────────────
 
@@ -178,7 +180,7 @@ function MemberRow({
   onRemove: (memberId: number) => void;
 }) {
   const displayEmail = member.user_email || member.invited_email;
-  const isPending = !member.accepted_at;
+  const isPending = !member.is_active;
 
   return (
     <div className="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-white/5 transition-colors group">
@@ -248,6 +250,7 @@ export default function TeamPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showInvite, setShowInvite] = useState(false);
+  const mounted = useSyncExternalStore(subscribeNoop, () => true, () => false);
 
   const fetchMembers = useCallback(async () => {
     if (!activeTenant) return;
@@ -307,10 +310,32 @@ export default function TeamPage() {
     }
   };
 
-  // Redirect if user doesn't have permission
-  if (!loading && !canManageTeam) {
+  // Redirect if user doesn't have permission (only after client mount)
+  if (mounted && !loading && !canManageTeam) {
     router.replace('/dashboard');
     return null;
+  }
+
+  if (!mounted) {
+    return (
+      <main className="min-h-screen bg-brand-midnight">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-2xl font-heading font-bold text-white flex items-center gap-3">
+                <Users className="w-7 h-7 text-brand-electric" />
+                Team Members
+              </h1>
+            </div>
+          </div>
+          <div className="glass-card overflow-hidden">
+            <div className="flex items-center justify-center py-16">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-brand-electric" />
+            </div>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -323,7 +348,7 @@ export default function TeamPage() {
               <Users className="w-7 h-7 text-brand-electric" />
               Team Members
             </h1>
-            {activeTenant && (
+            {mounted && activeTenant && (
               <p className="mt-1 text-sm text-brand-silver/60">
                 Manage members for{' '}
                 <span className="text-brand-silver">{activeTenant.name}</span>

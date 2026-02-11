@@ -93,6 +93,20 @@ services:
           - auth
           - public
 
+      # Invite accept endpoint (must be public for unauthenticated preview)
+      - name: invite-accept-route
+        paths:
+          - /api/v1/tenants/invite/accept
+        strip_path: false
+        preserve_host: true
+        methods:
+          - GET
+          - POST
+          - OPTIONS
+        tags:
+          - auth
+          - public
+
   # ---------------------------------------------------------------------------
   # 3. Health Check Routes (Anonymous)
   # ---------------------------------------------------------------------------

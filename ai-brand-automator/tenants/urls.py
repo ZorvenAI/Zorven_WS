@@ -20,6 +20,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AcceptInviteView,
     CreateTenantView,
     DeleteTenantView,
     DomainViewSet,
@@ -41,6 +42,11 @@ urlpatterns = [
     path("me/", MyTenantsView.as_view(), name="tenant-me"),
     path("create/", CreateTenantView.as_view(), name="tenant-create"),
     path("switch/", TenantSwitchView.as_view(), name="tenant-switch"),
+    path(
+        "invite/accept/",
+        AcceptInviteView.as_view(),
+        name="tenant-accept-invite",
+    ),
     path(
         "<int:tenant_id>/members/",
         MemberListView.as_view(),

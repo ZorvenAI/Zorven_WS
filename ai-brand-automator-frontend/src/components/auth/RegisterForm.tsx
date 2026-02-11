@@ -1,19 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api';
 
-export function RegisterForm() {
+const subscribe = () => () => {};
+
+export function RegisterForm({
+  inviteToken,
+  defaultEmail,
+}: {
+  inviteToken?: string;
+  defaultEmail?: string;
+} = {}) {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    email: '',
+    email: defaultEmail || '',
     password: '',
     confirmPassword: '',
     brandName: '',
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const mounted = useSyncExternalStore(subscribe, () => true, () => false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -37,6 +47,7 @@ export function RegisterForm() {
         first_name: formData.firstName,
         last_name: formData.lastName,
         ...(formData.brandName.trim() && { brand_name: formData.brandName.trim() }),
+        ...(inviteToken && { invite_token: inviteToken }),
       });
 
       if (response.ok) {
@@ -54,12 +65,17 @@ export function RegisterForm() {
             localStorage.setItem('active_tenant_id', String(data.active_tenant_id));
           }
 
-          // Go straight to dashboard
+          // Show success state and redirect
+          setSuccess(true);
+          setIsLoading(false);
           window.location.href = '/dashboard';
+          return;
         } else {
           // Fallback: older response format without tokens
-          alert('Registration successful! You can now login.');
+          setSuccess(true);
+          setIsLoading(false);
           window.location.href = '/auth/login';
+          return;
         }
       } else {
         const error = await response.json();
@@ -72,6 +88,32 @@ export function RegisterForm() {
     
     setIsLoading(false);
   };
+
+  if (success) {
+    return (
+      <div className="mt-8 text-center py-8">
+        <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
+          <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <p className="text-white font-medium">Account created!</p>
+        <p className="text-brand-silver/70 text-sm mt-1">Redirecting to dashboard...</p>
+      </div>
+    );
+  }
+
+  if (!mounted) {
+    return (
+      <div className="mt-8 space-y-6">
+        <div className="space-y-4">
+          <div className="h-[72px]" />
+          <div className="h-[72px]" />
+          <div className="h-[72px]" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <form className="mt-8 space-y-6" onSubmit={handleSubmit}>

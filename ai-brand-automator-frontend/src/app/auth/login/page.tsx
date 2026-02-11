@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { LoginForm } from '@/components/auth/LoginForm';
 
@@ -26,7 +27,9 @@ export default function LoginPage() {
           <p className="text-center text-brand-silver/70 font-body mb-6">
             Welcome back! Enter your credentials to continue.
           </p>
-          <LoginForm />
+          <Suspense>
+            <LoginForm />
+          </Suspense>
         </div>
       </div>
     </div>

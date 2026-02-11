@@ -263,6 +263,17 @@ class UserRegistrationView(APIView):
                     f"created for user {user.id}"
                 )
 
+            # ── Auto-link pending invites by email ──────────────
+            # Regardless of Mode A/B, activate any remaining pending
+            # invites that match the new user's email address.
+            auto_linked = self._auto_link_pending_invites(user, tenants_response)
+            if auto_linked:
+                logger.info(
+                    "Auto-linked %d pending invite(s) for %s",
+                    auto_linked,
+                    user.email,
+                )
+
             # Send verification email
             self._send_verification_email(user)
 
@@ -302,9 +313,9 @@ class UserRegistrationView(APIView):
     def _accept_invitation(self, user, invite_token):
         """Accept a pending membership invitation.
 
-        Looks up a ``Membership`` record that was created when the admin
-        invited the email address.  The ``invite_token`` should match the
-        token stored on the membership or, for MVP, we match by email.
+        Looks up a ``Membership`` record by ``invite_token`` (UUID).
+        Falls back to matching by email for pending invites without
+        a token (legacy records).
 
         Args:
             user: The newly created User.
@@ -315,24 +326,78 @@ class UserRegistrationView(APIView):
         """
         from tenants.models import Membership
 
-        # For MVP: look up pending membership by user email
-        # (invite_token support will be added in Phase 5 with
-        # proper token generation)
+        # Primary: look up by invite_token
         pending = (
             Membership.objects.filter(
+                invite_token=invite_token,
                 user__isnull=True,
                 is_active=False,
             )
             .select_related("tenant")
             .first()
         )
+
+        # Fallback: look up by email for legacy invites
+        if not pending:
+            pending = (
+                Membership.objects.filter(
+                    invited_email=user.email,
+                    user__isnull=True,
+                    is_active=False,
+                )
+                .select_related("tenant")
+                .first()
+            )
+
         if pending:
             pending.user = user
             pending.is_active = True
             pending.accepted_at = timezone.now()
+            pending.invite_token = None  # Consumed
             pending.save()
             return pending
         return None
+
+    @staticmethod
+    def _auto_link_pending_invites(user, tenants_response):
+        """Activate all remaining pending invites matching the user's email.
+
+        This handles the case where an admin invites someone who
+        hasn't registered yet and they later sign up normally
+        (without using the invite link).
+
+        Args:
+            user: The newly created User.
+            tenants_response: List to append activated tenant info to.
+
+        Returns:
+            int: Number of pending invites activated.
+        """
+        from tenants.models import Membership
+
+        pending = Membership.objects.filter(
+            invited_email=user.email,
+            user__isnull=True,
+            is_active=False,
+        ).select_related("tenant")
+
+        count = 0
+        for membership in pending:
+            membership.user = user
+            membership.is_active = True
+            membership.accepted_at = timezone.now()
+            membership.invite_token = None
+            membership.save()
+            tenants_response.append(
+                {
+                    "id": membership.tenant_id,
+                    "name": membership.tenant.name,
+                    "slug": membership.tenant.slug,
+                    "role": membership.role,
+                }
+            )
+            count += 1
+        return count
 
     def _send_verification_email(self, user):
         """Send email verification (placeholder for now)"""

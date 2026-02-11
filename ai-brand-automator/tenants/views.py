@@ -13,13 +13,16 @@ Provides:
 """
 
 import logging
+import uuid
 
+from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.mail import send_mail
 from django.db import connection
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -294,7 +297,7 @@ class MemberListView(APIView):
     permission_classes = [IsAuthenticated, IsTenantAdmin]
 
     def get(self, request, tenant_id):
-        """Return all active memberships for the tenant."""
+        """Return all memberships (active + pending) for the tenant."""
         tenant = getattr(request, "tenant", None)
         if not tenant or tenant.id != tenant_id:
             return Response(
@@ -303,9 +306,9 @@ class MemberListView(APIView):
             )
 
         memberships = (
-            Membership.objects.filter(tenant=tenant, is_active=True)
+            Membership.objects.filter(tenant=tenant)
             .select_related("user")
-            .order_by("role", "user__email")
+            .order_by("-is_active", "role", "user__email")
         )
         serializer = MembershipSerializer(memberships, many=True)
         return Response(serializer.data)
@@ -353,11 +356,32 @@ class InviteMemberView(APIView):
                     status=status.HTTP_409_CONFLICT,
                 )
             # Re-activate a previously removed member
+            token = uuid.uuid4()
             existing.role = role
-            existing.is_active = True
+            existing.is_active = bool(existing.user)  # active only if user exists
             existing.invited_by = request.user
             existing.invited_at = timezone.now()
+            existing.invite_token = token if not existing.user else None
+            if existing.user:
+                existing.accepted_at = timezone.now()
             existing.save()
+
+            inviter_name = request.user.get_full_name() or request.user.email
+            if existing.user:
+                self._send_added_email(
+                    email=existing.user.email,
+                    tenant_name=tenant.name,
+                    inviter_name=inviter_name,
+                    role=role,
+                )
+            else:
+                self._send_invite_email(
+                    email=existing.invited_email or email,
+                    tenant_name=tenant.name,
+                    inviter_name=inviter_name,
+                    role=role,
+                    token=str(token),
+                )
             return Response(
                 MembershipSerializer(existing).data,
                 status=status.HTTP_200_OK,
@@ -365,6 +389,8 @@ class InviteMemberView(APIView):
 
         # Check if user exists in the system
         target_user = User.objects.filter(email=email).first()
+
+        inviter_name = request.user.get_full_name() or request.user.email
 
         if target_user:
             # Existing user — create active membership immediately
@@ -377,9 +403,16 @@ class InviteMemberView(APIView):
                 invited_at=timezone.now(),
                 accepted_at=timezone.now(),
             )
+            self._send_added_email(
+                email=target_user.email,
+                tenant_name=tenant.name,
+                inviter_name=inviter_name,
+                role=role,
+            )
         else:
             # Unknown email — create placeholder membership
             # The user field is nullable for pending invites
+            token = uuid.uuid4()
             membership = Membership.objects.create(
                 user=None,
                 tenant=tenant,
@@ -388,8 +421,15 @@ class InviteMemberView(APIView):
                 invited_email=email,
                 invited_by=request.user,
                 invited_at=timezone.now(),
+                invite_token=token,
             )
-            # TODO: Send invitation email with accept link/token
+            self._send_invite_email(
+                email=email,
+                tenant_name=tenant.name,
+                inviter_name=inviter_name,
+                role=role,
+                token=str(token),
+            )
             logger.info(
                 "Invite sent to %s for workspace '%s' (role=%s)",
                 email,
@@ -400,6 +440,192 @@ class InviteMemberView(APIView):
         return Response(
             MembershipSerializer(membership).data,
             status=status.HTTP_201_CREATED,
+        )
+
+    @staticmethod
+    def _send_invite_email(email, tenant_name, inviter_name, role, token):
+        """Send the invitation email with an accept link.
+
+        Uses the console email backend in dev (prints to stdout).
+        In production, configure EMAIL_HOST env var for real delivery.
+        """
+        frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
+        accept_url = f"{frontend_url}/invite/accept?token={token}"
+
+        subject = f"You've been invited to {tenant_name}"
+        message = (
+            f"Hi,\n\n"
+            f"{inviter_name} has invited you to join "
+            f'"{tenant_name}" as {role}.\n\n'
+            f"Click the link below to accept the invitation:\n"
+            f"{accept_url}\n\n"
+            f"If you don't have an account yet, you'll be able "
+            f"to create one when you accept.\n\n"
+            f"Best regards,\nAI Brand Automator Team"
+        )
+
+        try:
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [email],
+                fail_silently=False,
+            )
+            logger.info("Invitation email sent to %s", email)
+        except Exception as exc:
+            logger.warning("Failed to send invitation email to %s: %s", email, exc)
+
+    @staticmethod
+    def _send_added_email(email, tenant_name, inviter_name, role):
+        """Notify an existing user they've been added to a workspace."""
+        frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
+        dashboard_url = f"{frontend_url}/dashboard"
+
+        subject = f"You've been added to {tenant_name}"
+        message = (
+            f"Hi,\n\n"
+            f"{inviter_name} has added you to "
+            f'"{tenant_name}" as {role}.\n\n'
+            f"You can access the workspace from your dashboard:\n"
+            f"{dashboard_url}\n\n"
+            f"Best regards,\nAI Brand Automator Team"
+        )
+
+        try:
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [email],
+                fail_silently=False,
+            )
+            logger.info("Added-to-workspace email sent to %s", email)
+        except Exception as exc:
+            logger.warning(
+                "Failed to send added-to-workspace email to %s: %s",
+                email,
+                exc,
+            )
+
+
+class AcceptInviteView(APIView):
+    """Accept a workspace invitation via token.
+
+    GET /api/v1/tenants/invite/accept/?token=<uuid>
+
+    Returns the invitation details.  The frontend decides whether to
+    redirect the user to login or registration.
+
+    POST /api/v1/tenants/invite/accept/
+    Body: {"token": "<uuid>"}
+
+    If the user is authenticated, activates the membership immediately.
+    Otherwise returns 401.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        """Preview an invitation (unauthenticated ok)."""
+        token = request.query_params.get("token")
+        if not token:
+            return Response(
+                {"error": "Token is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        membership = (
+            Membership.objects.filter(invite_token=token, user__isnull=True)
+            .select_related("tenant", "invited_by")
+            .first()
+        )
+        if not membership:
+            return Response(
+                {"error": "Invalid or expired invitation."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        inviter_name = ""
+        if membership.invited_by:
+            inviter_name = (
+                membership.invited_by.get_full_name() or membership.invited_by.email
+            )
+
+        return Response(
+            {
+                "email": membership.invited_email,
+                "tenant_name": membership.tenant.name,
+                "role": membership.role,
+                "inviter_name": inviter_name,
+            }
+        )
+
+    def post(self, request):
+        """Accept an invitation (must be authenticated)."""
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {"error": "Authentication required to accept an invite."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        token = request.data.get("token")
+        if not token:
+            return Response(
+                {"error": "Token is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        membership = (
+            Membership.objects.filter(invite_token=token, user__isnull=True)
+            .select_related("tenant")
+            .first()
+        )
+        if not membership:
+            return Response(
+                {"error": "Invalid or expired invitation."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Verify email matches
+        if membership.invited_email != request.user.email:
+            return Response(
+                {"error": "This invitation was sent to a different email."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Check for existing active membership
+        if Membership.objects.filter(
+            user=request.user, tenant=membership.tenant, is_active=True
+        ).exists():
+            return Response(
+                {"error": "You are already a member of this workspace."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        membership.user = request.user
+        membership.is_active = True
+        membership.accepted_at = timezone.now()
+        membership.invite_token = None  # Consumed
+        membership.save()
+
+        logger.info(
+            "User %s accepted invite to workspace '%s'",
+            request.user.email,
+            membership.tenant.name,
+        )
+
+        return Response(
+            {
+                "message": "Invitation accepted.",
+                "tenant": {
+                    "id": membership.tenant.id,
+                    "name": membership.tenant.name,
+                    "slug": membership.tenant.slug,
+                    "role": membership.role,
+                },
+            },
+            status=status.HTTP_200_OK,
         )
 
 

@@ -1,13 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { apiClient } from '@/lib/api';
+
+const subscribe = () => () => {};
 
 export function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const mounted = useSyncExternalStore(subscribe, () => true, () => false);
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirect');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,8 +49,8 @@ export function LoginForm() {
           // Non-critical — TenantProvider will retry on mount
         }
 
-        // Redirect to dashboard
-        window.location.href = '/dashboard';
+        // Redirect to original destination or dashboard
+        window.location.href = redirectTo || '/dashboard';
       } else {
         let error;
         try {
@@ -60,6 +66,17 @@ export function LoginForm() {
     }
     setIsLoading(false);
   };
+
+  if (!mounted) {
+    return (
+      <div className="mt-8 space-y-6">
+        <div className="space-y-4">
+          <div className="h-[72px]" />
+          <div className="h-[72px]" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <form className="mt-8 space-y-6" onSubmit={handleSubmit}>

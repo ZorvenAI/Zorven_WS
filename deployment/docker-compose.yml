@@ -81,6 +81,11 @@ services:
       # Multi-tenancy: GCS bucket auto-provisioning
       - GCS_AUTO_PROVISION=${GCS_AUTO_PROVISION:-false}
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      # Email (Mailgun HTTP API)
+      - EMAIL_BACKEND=brand_automator.email_backends.MailgunAPIBackend
+      - MAILGUN_API_KEY=${MAILGUN_API_KEY:-7776e9d86dc564e3e9bd4921c056ae3e-f9517a64-4481b185}
+      - MAILGUN_DOMAIN=${MAILGUN_DOMAIN:-sandbox3c490c6302904ddda887a78852e81aea.mailgun.org}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL:-AI Brand Automator <postmaster@sandbox3c490c6302904ddda887a78852e81aea.mailgun.org>}
     # Port NOT exposed to host - only accessible via Kong
     expose:
       - "8001"

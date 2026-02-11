@@ -215,6 +215,12 @@ class Membership(models.Model):
     )
     invited_at = models.DateTimeField(default=timezone.now)
     accepted_at = models.DateTimeField(null=True, blank=True)
+    invite_token = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        help_text="Unique token for accepting an invitation via link.",
+    )
 
     class Meta:
         constraints = [
