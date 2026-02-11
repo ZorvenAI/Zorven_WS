@@ -77,6 +77,9 @@ services:
       # Multi-tenancy: default GCS buckets (tenants can override)
       - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-bucket1}
       - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-brandsol-curation-bucket}
+      # Multi-tenancy: GCS bucket auto-provisioning
+      - GCS_AUTO_PROVISION=${GCS_AUTO_PROVISION:-false}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
     # Port NOT exposed to host - only accessible via Kong
     expose:
       - "8001"
@@ -151,6 +154,9 @@ services:
       # Multi-tenancy: default GCS buckets
       - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-bucket1}
       - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-brandsol-curation-bucket}
+      # Multi-tenancy: GCS bucket auto-provisioning
+      - GCS_AUTO_PROVISION=${GCS_AUTO_PROVISION:-false}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
     volumes:
       - ../ai-brand-automator:/app
     depends_on:

@@ -109,6 +109,11 @@ GS_CREDENTIALS_PATH=/app/gcs-credentials.json
 RAW_GCP_BUCKET_NAME=onboarding-bucket1
 CURATION_GCP_BUCKET_NAME=brandsol-curation-bucket
 
+# Multi-tenancy: GCS bucket auto-provisioning
+# Set to true in production so new tenants get GCS buckets automatically.
+GCS_AUTO_PROVISION=true
+GCP_PROJECT_ID=brandsol
+
 # GCP Access Token (for Kong GCS uploads - refresh periodically)
 GCP_ACCESS_TOKEN=<gcp-oauth-access-token>
 

@@ -52,6 +52,12 @@ python create_public_tenant.py
 echo "Adding production domains..."
 python add_production_domains.py
 
+# Multi-tenancy: one-time idempotent migrations
+echo "Running membership migration (idempotent)..."
+python scripts/migrate_to_membership.py --apply || echo "Membership migration skipped or already done"
+echo "Provisioning tenant GCS buckets (idempotent)..."
+python scripts/provision_tenant_buckets.py --apply || echo "Bucket provisioning skipped or already done"
+
 # Start Gunicorn
 echo "Starting Gunicorn server on port ${PORT:-8000}..."
 exec gunicorn brand_automator.wsgi:application \

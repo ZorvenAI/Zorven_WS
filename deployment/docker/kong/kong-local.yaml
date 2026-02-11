@@ -243,9 +243,11 @@ plugins:
         - X-Auth-Token
         - X-Requested-With
         - X-CSRF-Token
+        - X-Tenant-ID
       exposed_headers:
         - X-Auth-Token
         - X-Request-Id
+        - X-Tenant-ID
       credentials: true
       max_age: 3600
       preflight_continue: false

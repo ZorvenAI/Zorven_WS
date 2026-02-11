@@ -26,3 +26,6 @@ PYTHONUNBUFFERED = "1"
 # Multi-tenancy default GCS buckets (tenants can override)
 RAW_GCP_BUCKET_NAME = "onboarding-bucket1"
 CURATION_GCP_BUCKET_NAME = "brandsol-curation-bucket"
+# Multi-tenancy: GCS bucket auto-provisioning
+GCS_AUTO_PROVISION = "true"
+GCP_PROJECT_ID = "brandsol"
