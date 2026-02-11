@@ -12,8 +12,8 @@ WORKDIR /app
 # Copy package files
 COPY ai-brand-automator-frontend/package.json ai-brand-automator-frontend/package-lock.json* ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies (including devDependencies needed for build)
+RUN npm ci
 
 # ==============================================================================
 # Stage 2: Builder

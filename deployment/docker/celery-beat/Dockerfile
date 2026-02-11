@@ -56,4 +56,4 @@ USER appuser
 
 # No health check for beat - it's a scheduler, not a service
 
-CMD ["/app/start.sh"]
+CMD ["bash", "/app/start.sh"]

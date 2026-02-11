@@ -46,9 +46,11 @@ function RoleBadge({ role }: { role: TenantRole }) {
 // ── Invite Modal ──────────────────────────────────────────────────
 
 function InviteModal({
+  tenantId,
   onClose,
   onInvited,
 }: {
+  tenantId: number;
   onClose: () => void;
   onInvited: () => void;
 }) {
@@ -65,7 +67,7 @@ function InviteModal({
     setError('');
     setLoading(true);
     try {
-      const res = await apiClient.post('/tenants/members/invite/', {
+      const res = await apiClient.post(`/tenants/${tenantId}/members/invite/`, {
         email: trimmed,
         role,
       });
@@ -252,7 +254,7 @@ export default function TeamPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await apiClient.get('/tenants/members/');
+      const res = await apiClient.get(`/tenants/${activeTenant.id}/members/`);
       if (res.ok) {
         const data = await res.json();
         setMembers(data);
@@ -271,8 +273,9 @@ export default function TeamPage() {
   }, [fetchMembers]);
 
   const handleRoleChange = async (memberId: number, newRole: TenantRole) => {
+    if (!activeTenant) return;
     try {
-      const res = await apiClient.patch(`/tenants/members/${memberId}/`, {
+      const res = await apiClient.patch(`/tenants/${activeTenant.id}/members/${memberId}/`, {
         role: newRole,
       });
       if (res.ok) {
@@ -289,9 +292,10 @@ export default function TeamPage() {
   };
 
   const handleRemove = async (memberId: number) => {
+    if (!activeTenant) return;
     if (!confirm('Remove this team member?')) return;
     try {
-      const res = await apiClient.delete(`/tenants/members/${memberId}/`);
+      const res = await apiClient.delete(`/tenants/${activeTenant.id}/members/${memberId}/`);
       if (res.ok) {
         setMembers((prev) => prev.filter((m) => m.id !== memberId));
       } else {
@@ -390,8 +394,9 @@ export default function TeamPage() {
       </div>
 
       {/* Invite modal */}
-      {showInvite && (
+      {showInvite && activeTenant && (
         <InviteModal
+          tenantId={activeTenant.id}
           onClose={() => setShowInvite(false)}
           onInvited={fetchMembers}
         />

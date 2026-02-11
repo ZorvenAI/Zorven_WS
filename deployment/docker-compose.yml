@@ -56,6 +56,7 @@ services:
       context: ..
       dockerfile: deployment/docker/backend/Dockerfile
     container_name: ai-brand-automator-backend
+    command: ["bash", "/scripts/start.sh"]
     environment:
       - DEBUG=True
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
@@ -85,6 +86,7 @@ services:
       - "8001"
     volumes:
       - ../ai-brand-automator:/app
+      - ./scripts/start-backend.sh:/scripts/start.sh:ro
       - static_volume:/app/staticfiles
       - media_volume:/app/media
     depends_on:
@@ -111,6 +113,7 @@ services:
         # Frontend now talks to Kong on port 8000
         - NEXT_PUBLIC_API_URL=http://localhost:8000
     container_name: ai-brand-automator-frontend
+    command: ["sh", "-c", "npm install && npm run dev"]
     environment:
       - NODE_ENV=development
       # API URL points to Kong Gateway
@@ -142,6 +145,7 @@ services:
       context: ..
       dockerfile: deployment/docker/celery-worker/Dockerfile
     container_name: ai-brand-automator-celery-worker
+    command: ["bash", "/scripts/start.sh"]
     environment:
       - DEBUG=True
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
@@ -159,6 +163,7 @@ services:
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
     volumes:
       - ../ai-brand-automator:/app
+      - ./scripts/start-celery-worker.sh:/scripts/start.sh:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -176,6 +181,7 @@ services:
       context: ..
       dockerfile: deployment/docker/celery-beat/Dockerfile
     container_name: ai-brand-automator-celery-beat
+    command: ["bash", "/scripts/start.sh"]
     environment:
       - DEBUG=True
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
@@ -185,6 +191,7 @@ services:
       - CELERY_LOG_LEVEL=info
     volumes:
       - ../ai-brand-automator:/app
+      - ./scripts/start-celery-beat.sh:/scripts/start.sh:ro
       - celerybeat_volume:/app/celerybeat
     depends_on:
       redis:
@@ -248,7 +255,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_volume:/var/lib/postgresql/data
     healthcheck:
