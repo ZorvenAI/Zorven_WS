@@ -103,9 +103,9 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
             raise serializers.ValidationError("Email and password are required")
 
         try:
-            # Look up user by email
+            # Look up user by email (case-insensitive)
             # Use filter().first() to handle duplicates gracefully
-            user = User.objects.filter(email=email).first()
+            user = User.objects.filter(email__iexact=email).first()
 
             if not user:
                 raise serializers.ValidationError(
@@ -159,7 +159,7 @@ class UserRegistrationView(APIView):
     def post(self, request):
         """Register a new user."""
         # Extract data
-        email = request.data.get("email", "").strip()
+        email = request.data.get("email", "").strip().lower()
         password = request.data.get("password", "")
         first_name = request.data.get("first_name", "").strip()
         last_name = request.data.get("last_name", "").strip()
@@ -172,7 +172,7 @@ class UserRegistrationView(APIView):
         # Email validation
         if not email:
             errors["email"] = "Email is required"
-        elif User.objects.filter(email=email).exists():
+        elif User.objects.filter(email__iexact=email).exists():
             errors["email"] = "Email already registered"
         elif "@" not in email or "." not in email.split("@")[-1]:
             errors["email"] = "Invalid email format"
@@ -337,11 +337,11 @@ class UserRegistrationView(APIView):
             .first()
         )
 
-        # Fallback: look up by email for legacy invites
+        # Fallback: look up by email for legacy invites (case-insensitive)
         if not pending:
             pending = (
                 Membership.objects.filter(
-                    invited_email=user.email,
+                    invited_email__iexact=user.email,
                     user__isnull=True,
                     is_active=False,
                 )
@@ -376,7 +376,7 @@ class UserRegistrationView(APIView):
         from tenants.models import Membership
 
         pending = Membership.objects.filter(
-            invited_email=user.email,
+            invited_email__iexact=user.email,
             user__isnull=True,
             is_active=False,
         ).select_related("tenant")

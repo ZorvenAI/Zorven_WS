@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenantRole } from '@/hooks/useTenantRole';
 import { apiClient } from '@/lib/api';
 import Link from 'next/link';
 import DatePicker from 'react-datepicker';
@@ -330,6 +331,7 @@ export default function AutomationPage() {
 
 function AutomationPageContent() {
   useAuth();
+  const { canEdit, canManageTeam } = useTenantRole();
   const searchParams = useSearchParams();
   
   const [profiles, setProfiles] = useState<SocialProfilesStatus | null>(null);
@@ -3955,7 +3957,7 @@ function AutomationPageContent() {
                     >
                       View Profile →
                     </a>
-                    {platform === 'linkedin' && (
+                    {canEdit && platform === 'linkedin' && (
                       <button
                         onClick={openLinkedInComposeModal}
                         className="text-sm text-[#0A66C2] hover:text-[#0A66C2]/80 flex items-center gap-1"
@@ -3966,7 +3968,7 @@ function AutomationPageContent() {
                         Create Post
                       </button>
                     )}
-                    {platform === 'twitter' && (
+                    {canEdit && platform === 'twitter' && (
                       <button
                         onClick={openTwitterComposeModal}
                         className="text-sm text-[#1DA1F2] hover:text-[#1DA1F2]/80 flex items-center gap-1"
@@ -3977,7 +3979,7 @@ function AutomationPageContent() {
                         Create Tweet
                       </button>
                     )}
-                    {platform === 'facebook' && (
+                    {canEdit && platform === 'facebook' && (
                       <button
                         onClick={openFacebookComposeModal}
                         className="text-sm text-[#1877F2] hover:text-[#1877F2]/80 flex items-center gap-1"
@@ -3988,7 +3990,7 @@ function AutomationPageContent() {
                         Create Post
                       </button>
                     )}
-                    {platform === 'instagram' && (
+                    {canEdit && platform === 'instagram' && (
                       <button
                         onClick={openInstagramComposeModal}
                         className="text-sm text-pink-400 hover:text-pink-300 flex items-center gap-1"
@@ -5338,7 +5340,7 @@ function AutomationPageContent() {
                 <div className="mt-6 space-y-2">
                   {isConnected ? (
                     <>
-                      {platform === 'linkedin' && (
+                      {canEdit && platform === 'linkedin' && (
                         <button
                           onClick={openLinkedInComposeModal}
                           className="w-full py-2.5 px-4 rounded-lg bg-[#0A66C2] hover:bg-[#004182] text-white font-bold transition-colors"
@@ -5346,7 +5348,7 @@ function AutomationPageContent() {
                           📝 Compose Post
                         </button>
                       )}
-                      {platform === 'twitter' && (
+                      {canEdit && platform === 'twitter' && (
                         <button
                           onClick={openTwitterComposeModal}
                           className="w-full py-2.5 px-4 rounded-lg bg-black hover:bg-gray-800 text-white font-bold transition-colors border border-gray-700"
@@ -5354,7 +5356,7 @@ function AutomationPageContent() {
                           🐦 Compose Tweet
                         </button>
                       )}
-                      {platform === 'facebook' && (
+                      {canEdit && platform === 'facebook' && (
                         <>
                           <button
                             onClick={openFacebookComposeModal}
@@ -5382,7 +5384,7 @@ function AutomationPageContent() {
                           </button>
                         </>
                       )}
-                      {platform === 'instagram' && (
+                      {canEdit && platform === 'instagram' && (
                         <>
                           <button
                             onClick={openInstagramComposeModal}
@@ -5407,32 +5409,42 @@ function AutomationPageContent() {
                           </button>
                         </>
                       )}
-                      <button
-                        onClick={() => handleDisconnect(platform)}
-                        disabled={isLoading}
-                        className="w-full py-2.5 px-4 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-900/20 transition-colors disabled:opacity-50"
-                      >
-                        {isLoading ? 'Disconnecting...' : 'Disconnect'}
-                      </button>
+                      {canManageTeam && (
+                        <button
+                          onClick={() => handleDisconnect(platform)}
+                          disabled={isLoading}
+                          className="w-full py-2.5 px-4 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                        >
+                          {isLoading ? 'Disconnecting...' : 'Disconnect'}
+                        </button>
+                      )}
                     </>
                   ) : config.available ? (
                     <>
-                      <button
-                        onClick={() => handleConnect(platform)}
-                        disabled={isLoading || loading}
-                        className={`w-full py-2.5 px-4 rounded-lg text-white transition-colors disabled:opacity-50 ${config.color} ${config.hoverColor}`}
-                      >
-                        {isLoading ? 'Connecting...' : `Connect ${config.name}`}
-                      </button>
-                      {/* Test Connect Button - Dev Mode Only */}
-                      {(platform === 'linkedin' || platform === 'twitter' || platform === 'facebook' || platform === 'instagram') && (
-                        <button
-                          onClick={() => handleTestConnect(platform)}
-                          disabled={isLoading || loading}
-                          className="w-full py-2 px-4 rounded-lg border border-brand-electric/30 text-brand-electric text-sm hover:bg-brand-electric/10 transition-colors disabled:opacity-50"
-                        >
-                          {isLoading ? 'Creating...' : '🧪 Test Connect (No Real Data)'}
-                        </button>
+                      {canManageTeam ? (
+                        <>
+                          <button
+                            onClick={() => handleConnect(platform)}
+                            disabled={isLoading || loading}
+                            className={`w-full py-2.5 px-4 rounded-lg text-white transition-colors disabled:opacity-50 ${config.color} ${config.hoverColor}`}
+                          >
+                            {isLoading ? 'Connecting...' : `Connect ${config.name}`}
+                          </button>
+                          {/* Test Connect Button - Dev Mode Only */}
+                          {(platform === 'linkedin' || platform === 'twitter' || platform === 'facebook' || platform === 'instagram') && (
+                            <button
+                              onClick={() => handleTestConnect(platform)}
+                              disabled={isLoading || loading}
+                              className="w-full py-2 px-4 rounded-lg border border-brand-electric/30 text-brand-electric text-sm hover:bg-brand-electric/10 transition-colors disabled:opacity-50"
+                            >
+                              {isLoading ? 'Creating...' : '🧪 Test Connect (No Real Data)'}
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-sm text-brand-silver/50 text-center py-2">
+                          Only admins can connect platforms.
+                        </p>
                       )}
                     </>
                   ) : (
@@ -5454,6 +5466,8 @@ function AutomationPageContent() {
           <h2 className="text-2xl font-heading font-bold text-white mb-4">Google Business Profile</h2>
           <GoogleBusinessSection 
             onMessage={(msg) => setMessage(msg)}
+            canEdit={canEdit}
+            canManageTeam={canManageTeam}
           />
         </div>
 
@@ -5461,7 +5475,7 @@ function AutomationPageContent() {
         <div className="mt-12">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-heading font-bold text-white">Content Calendar</h2>
-            {profiles?.linkedin?.connected && (
+            {canEdit && profiles?.linkedin?.connected && (
               <button
                 onClick={() => setShowScheduleModal(true)}
                 className="btn-primary flex items-center gap-2"
@@ -5530,29 +5544,31 @@ function AutomationPageContent() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 ml-4">
-                      <button
-                        onClick={() => openEditModal(post)}
-                        className="px-3 py-1.5 text-xs rounded border border-brand-ghost/30 text-brand-silver hover:bg-white/5 transition-colors"
-                        title="Edit post"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handlePublishNow(post.id)}
-                        className="px-3 py-1.5 text-xs rounded bg-brand-electric hover:bg-brand-electric/80 text-brand-midnight font-bold transition-colors"
-                      >
-                        Publish Now
-                      </button>
-                      <button
-                        onClick={() => handleCancelScheduled(post.id)}
-                        className="px-3 py-1.5 text-xs rounded border border-red-500/30 text-red-400 hover:bg-red-900/20 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                    {canEdit && (
+                      <div className="flex items-center gap-2 ml-4">
+                        <button
+                          onClick={() => openEditModal(post)}
+                          className="px-3 py-1.5 text-xs rounded border border-brand-ghost/30 text-brand-silver hover:bg-white/5 transition-colors"
+                          title="Edit post"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handlePublishNow(post.id)}
+                          className="px-3 py-1.5 text-xs rounded bg-brand-electric hover:bg-brand-electric/80 text-brand-midnight font-bold transition-colors"
+                        >
+                          Publish Now
+                        </button>
+                        <button
+                          onClick={() => handleCancelScheduled(post.id)}
+                          className="px-3 py-1.5 text-xs rounded border border-red-500/30 text-red-400 hover:bg-red-900/20 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               );})}
@@ -5571,7 +5587,7 @@ function AutomationPageContent() {
                   : "Connect your social accounts first, then start scheduling posts to be published automatically."
                 }
               </p>
-              {profiles?.linkedin?.connected && (
+              {canEdit && profiles?.linkedin?.connected && (
                 <button 
                   onClick={() => setShowScheduleModal(true)}
                   className="btn-primary"
@@ -5690,7 +5706,7 @@ function AutomationPageContent() {
                           })}
                         </span>
                         {/* Delete Button - works for all platforms */}
-                        {hasAnyDeletablePostId(post.post_results as Record<string, unknown>, post.platforms) ? (
+                        {canEdit && hasAnyDeletablePostId(post.post_results as Record<string, unknown>, post.platforms) ? (
                           <button
                             onClick={() => handleDeletePost(post)}
                             disabled={deletingPostId === post.id}
@@ -7860,13 +7876,15 @@ function AutomationPageContent() {
                       <div className="w-20 h-32 rounded-lg bg-[#1877F2]/20 border border-[#1877F2]/30 flex items-center justify-center">
                         <span className="text-2xl">{story.media_type === 'VIDEO' ? '🎬' : '📷'}</span>
                       </div>
-                      <button
-                        onClick={() => handleDeleteFacebookStory(story.id)}
-                        disabled={deletingFbStoryId === story.id}
-                        className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                      {canEdit && (
+                        <button
+                          onClick={() => handleDeleteFacebookStory(story.id)}
+                          disabled={deletingFbStoryId === story.id}
+                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
                       >
                         {deletingFbStoryId === story.id ? '...' : '×'}
                       </button>
+                      )}
                       <p className="text-xs text-brand-silver/50 text-center mt-1">
                         {new Date(story.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>

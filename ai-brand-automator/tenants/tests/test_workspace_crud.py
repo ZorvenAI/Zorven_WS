@@ -228,7 +228,8 @@ class TestRegistrationModes:
         Existing user invite:
           1. Owner creates workspace
           2. Owner invites ws_user2 (who exists)
-          3. ws_user2 gets active membership immediately
+          3. ws_user2 gets a pending membership with invite_token
+             (must accept via /invite/accept/ link)
         """
         client = _make_client(ws_user)
         client.post("/api/v1/tenants/create/", {"name": "Invite Existing WS"})
@@ -243,7 +244,8 @@ class TestRegistrationModes:
 
         m = Membership.objects.get(user=ws_user2, tenant=tenant)
         assert m.role == "editor"
-        assert m.is_active is True
+        assert m.is_active is False
+        assert m.invite_token is not None
         assert m.invited_by == ws_user
 
     def test_new_user_invite_creates_pending_membership(self, ws_user):

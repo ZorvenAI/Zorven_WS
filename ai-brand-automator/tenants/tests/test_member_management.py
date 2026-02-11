@@ -142,7 +142,7 @@ class TestInviteMember:
     def test_admin_can_invite_existing_user(
         self, member_tenant, setup_members, admin_member
     ):
-        """ADMIN invites an existing user → membership created immediately."""
+        """ADMIN invites an existing user → pending membership with invite token."""
         invitee = User.objects.create_user(
             username="invitee",
             email="invitee@members.test",
@@ -156,7 +156,8 @@ class TestInviteMember:
         assert resp.status_code == status.HTTP_201_CREATED
         m = Membership.objects.get(user=invitee, tenant=member_tenant)
         assert m.role == "editor"
-        assert m.is_active is True
+        assert m.is_active is False
+        assert m.invite_token is not None
         assert m.invited_by == admin_member
 
     def test_admin_can_invite_unknown_email(
@@ -208,7 +209,7 @@ class TestInviteMember:
     def test_reactivate_removed_member(
         self, member_tenant, setup_members, admin_member
     ):
-        """Inviting a previously removed member re-activates them."""
+        """Inviting a previously removed member creates pending invite."""
         removed = User.objects.create_user(
             username="removed",
             email="removed@members.test",
@@ -228,7 +229,8 @@ class TestInviteMember:
         )
         assert resp.status_code == status.HTTP_200_OK
         m.refresh_from_db()
-        assert m.is_active is True
+        assert m.is_active is False
+        assert m.invite_token is not None
         assert m.role == "editor"
 
 

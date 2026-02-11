@@ -13,6 +13,7 @@ type InviteInfo = {
   tenant_name: string;
   role: string;
   inviter_name: string;
+  has_account?: boolean;
 };
 
 type AcceptResult = {
@@ -249,7 +250,9 @@ function AcceptInviteContent() {
           ) : (
             <div className="space-y-3">
               <p className="text-center text-sm text-brand-silver/70">
-                Sign in or create an account to accept this invitation.
+                {invite?.has_account
+                  ? 'Sign in to accept this invitation.'
+                  : 'Sign in or create an account to accept this invitation.'}
               </p>
               <Link
                 href={`/auth/login?redirect=${encodeURIComponent(`/invite/accept?token=${token}`)}`}
@@ -257,12 +260,14 @@ function AcceptInviteContent() {
               >
                 Sign In to Accept
               </Link>
-              <Link
-                href={`/auth/register?invite_token=${encodeURIComponent(token || '')}&email=${encodeURIComponent(invite?.email || '')}`}
-                className="w-full block text-center text-sm text-brand-electric hover:underline py-2"
-              >
-                Create an Account
-              </Link>
+              {!invite?.has_account && (
+                <Link
+                  href={`/auth/register?invite_token=${encodeURIComponent(token || '')}&email=${encodeURIComponent(invite?.email || '')}`}
+                  className="w-full block text-center text-sm text-brand-electric hover:underline py-2"
+                >
+                  Create an Account
+                </Link>
+              )}
             </div>
           )}
         </div>

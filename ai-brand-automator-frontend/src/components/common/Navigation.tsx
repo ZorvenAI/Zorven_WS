@@ -27,7 +27,7 @@ export function Navigation() {
   const token = useSyncExternalStore(subscribeToToken, getTokenSnapshot, getServerSnapshot);
   const [, forceUpdate] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { canManageTeam } = useTenantRole();
+  const { canManageTeam, canManageBilling, canEdit: canEditFlag } = useTenantRole();
   
   // Derive login state from token
   const isLoggedIn = !!token;
@@ -56,12 +56,19 @@ export function Navigation() {
 
   const navLinks = [
     { href: '/dashboard', label: 'Dashboard', active: pathname === '/dashboard' },
-    { href: '/onboarding', label: 'Onboarding', active: pathname?.startsWith('/onboarding') },
-    { href: '/chat', label: 'Chat', active: pathname === '/chat' },
+    ...(canEditFlag
+      ? [{ href: '/onboarding', label: 'Onboarding', active: pathname?.startsWith('/onboarding') ?? false }]
+      : []),
+    ...(canEditFlag
+      ? [{ href: '/chat', label: 'Chat', active: pathname === '/chat' }]
+      : []),
     { href: '/files', label: 'Files', active: pathname === '/files' },
     { href: '/automation', label: 'Automation', active: pathname === '/automation' },
     ...(canManageTeam
       ? [{ href: '/dashboard/team', label: 'Team', active: pathname === '/dashboard/team' }]
+      : []),
+    ...(canManageBilling
+      ? [{ href: '/billing', label: 'Billing', active: pathname === '/billing' }]
       : []),
   ];
 

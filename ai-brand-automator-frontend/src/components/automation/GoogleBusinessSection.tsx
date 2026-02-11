@@ -13,9 +13,11 @@ import {
 
 interface GoogleBusinessSectionProps {
   onMessage: (message: { type: 'success' | 'error' | 'warning'; text: string }) => void;
+  canEdit?: boolean;
+  canManageTeam?: boolean;
 }
 
-export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSectionProps) {
+export default function GoogleBusinessSection({ onMessage, canEdit = true, canManageTeam = true }: GoogleBusinessSectionProps) {
   // Hooks for handling mock OAuth callback
   const searchParams = useSearchParams();
   
@@ -412,38 +414,46 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
           )}
 
           <div className="flex flex-wrap gap-2">
-          <button
-            onClick={handleConnect}
-            disabled={connecting}
-            className="px-4 py-2 bg-[#4285F4] text-white font-semibold rounded-lg 
-                     hover:bg-[#3367D6] transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md"
-          >
-            {connecting ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Connecting...
-              </>
-            ) : (
-              <>
-                {/* Google "G" Icon */}
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
-                  <path fill="#fff" d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
-                </svg>
-                Connect with Google
-              </>
-            )}
-          </button>
-          <button
-            onClick={handleTestConnect}
-            disabled={connecting}
-            className="px-4 py-2 bg-white/10 text-white border border-white/20 rounded-lg hover:bg-white/20 
-                     transition-colors disabled:opacity-50 text-sm"
-          >
-            Test Mode
-          </button>
+          {canManageTeam ? (
+            <>
+              <button
+                onClick={handleConnect}
+                disabled={connecting}
+                className="px-4 py-2 bg-[#4285F4] text-white font-semibold rounded-lg 
+                         hover:bg-[#3367D6] transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md"
+              >
+                {connecting ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    {/* Google "G" Icon */}
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path fill="#fff" d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
+                    </svg>
+                    Connect with Google
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleTestConnect}
+                disabled={connecting}
+                className="px-4 py-2 bg-white/10 text-white border border-white/20 rounded-lg hover:bg-white/20 
+                         transition-colors disabled:opacity-50 text-sm"
+              >
+                Test Mode
+              </button>
+            </>
+          ) : (
+            <p className="text-sm text-brand-silver/50 py-2">
+              Only admins can connect Google Business Profile.
+            </p>
+          )}
           </div>
         </div>
       ) : (
@@ -527,24 +537,28 @@ export default function GoogleBusinessSection({ onMessage }: GoogleBusinessSecti
                   </svg>
                   {showLocations ? 'Hide' : 'View'} Locations ({locations.length})
                 </button>
-                <button
-                  onClick={() => setShowCreateLocation(!showCreateLocation)}
-                  className="px-3 py-2 bg-[#34A853] text-white font-semibold rounded-lg hover:bg-[#2E9549] 
-                           transition-colors text-sm flex items-center gap-2 shadow-sm"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add Location
-                </button>
-                <button
-                  onClick={handleDisconnect}
-                  disabled={connecting}
-                  className="px-3 py-2 bg-[#EA4335]/20 text-[#EA4335] border border-[#EA4335]/30 rounded-lg hover:bg-[#EA4335]/30 
-                           transition-colors text-sm disabled:opacity-50"
-                >
-                  Disconnect
-                </button>
+                {canEdit && (
+                  <button
+                    onClick={() => setShowCreateLocation(!showCreateLocation)}
+                    className="px-3 py-2 bg-[#34A853] text-white font-semibold rounded-lg hover:bg-[#2E9549] 
+                             transition-colors text-sm flex items-center gap-2 shadow-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Location
+                  </button>
+                )}
+                {canManageTeam && (
+                  <button
+                    onClick={handleDisconnect}
+                    disabled={connecting}
+                    className="px-3 py-2 bg-[#EA4335]/20 text-[#EA4335] border border-[#EA4335]/30 rounded-lg hover:bg-[#EA4335]/30 
+                             transition-colors text-sm disabled:opacity-50"
+                  >
+                    Disconnect
+                  </button>
+                )}
               </div>
 
               {/* Locations List */}

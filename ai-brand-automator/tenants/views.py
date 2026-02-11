@@ -297,7 +297,14 @@ class MemberListView(APIView):
     permission_classes = [IsAuthenticated, IsTenantAdmin]
 
     def get(self, request, tenant_id):
-        """Return all memberships (active + pending) for the tenant."""
+        """Return all memberships (active + pending) for the tenant.
+
+        Excludes soft-deleted members (is_active=False with a linked
+        user and no invite_token).  Pending invitations — both for
+        unregistered users (user is NULL) and existing users who
+        haven't accepted yet (has invite_token) — are returned so
+        admins can see outstanding invites.
+        """
         tenant = getattr(request, "tenant", None)
         if not tenant or tenant.id != tenant_id:
             return Response(
@@ -307,6 +314,11 @@ class MemberListView(APIView):
 
         memberships = (
             Membership.objects.filter(tenant=tenant)
+            .exclude(
+                is_active=False,
+                user__isnull=False,
+                invite_token__isnull=True,
+            )
             .select_related("user")
             .order_by("-is_active", "role", "user__email")
         )
@@ -339,15 +351,17 @@ class InviteMemberView(APIView):
         serializer = InviteMemberSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        email = serializer.validated_data["email"]
+        email = serializer.validated_data["email"].lower()
         role = serializer.validated_data["role"]
 
-        # Check if user already has a membership
-        existing = Membership.objects.filter(user__email=email, tenant=tenant).first()
+        # Check if user already has a membership (case-insensitive)
+        existing = Membership.objects.filter(
+            user__email__iexact=email, tenant=tenant
+        ).first()
         # Also check pending invites by invited_email
         if not existing:
             existing = Membership.objects.filter(
-                invited_email=email, tenant=tenant, user__isnull=True
+                invited_email__iexact=email, tenant=tenant, user__isnull=True
             ).first()
         if existing:
             if existing.is_active:
@@ -358,56 +372,52 @@ class InviteMemberView(APIView):
             # Re-activate a previously removed member
             token = uuid.uuid4()
             existing.role = role
-            existing.is_active = bool(existing.user)  # active only if user exists
+            existing.is_active = False
             existing.invited_by = request.user
             existing.invited_at = timezone.now()
-            existing.invite_token = token if not existing.user else None
-            if existing.user:
-                existing.accepted_at = timezone.now()
+            existing.invite_token = token
+            existing.accepted_at = None
+            if not existing.invited_email:
+                existing.invited_email = email
             existing.save()
 
             inviter_name = request.user.get_full_name() or request.user.email
-            if existing.user:
-                self._send_added_email(
-                    email=existing.user.email,
-                    tenant_name=tenant.name,
-                    inviter_name=inviter_name,
-                    role=role,
-                )
-            else:
-                self._send_invite_email(
-                    email=existing.invited_email or email,
-                    tenant_name=tenant.name,
-                    inviter_name=inviter_name,
-                    role=role,
-                    token=str(token),
-                )
+            self._send_invite_email(
+                email=existing.invited_email or email,
+                tenant_name=tenant.name,
+                inviter_name=inviter_name,
+                role=role,
+                token=str(token),
+            )
             return Response(
                 MembershipSerializer(existing).data,
                 status=status.HTTP_200_OK,
             )
 
-        # Check if user exists in the system
-        target_user = User.objects.filter(email=email).first()
+        # Check if user exists in the system (case-insensitive)
+        target_user = User.objects.filter(email__iexact=email).first()
 
         inviter_name = request.user.get_full_name() or request.user.email
 
         if target_user:
-            # Existing user — create active membership immediately
+            # Existing user — create pending membership with invite token
+            token = uuid.uuid4()
             membership = Membership.objects.create(
                 user=target_user,
                 tenant=tenant,
                 role=role,
-                is_active=True,
+                is_active=False,
+                invited_email=email,
                 invited_by=request.user,
                 invited_at=timezone.now(),
-                accepted_at=timezone.now(),
+                invite_token=token,
             )
-            self._send_added_email(
+            self._send_invite_email(
                 email=target_user.email,
                 tenant_name=tenant.name,
                 inviter_name=inviter_name,
                 role=role,
+                token=str(token),
             )
         else:
             # Unknown email — create placeholder membership
@@ -536,7 +546,7 @@ class AcceptInviteView(APIView):
             )
 
         membership = (
-            Membership.objects.filter(invite_token=token, user__isnull=True)
+            Membership.objects.filter(invite_token=token)
             .select_related("tenant", "invited_by")
             .first()
         )
@@ -554,10 +564,12 @@ class AcceptInviteView(APIView):
 
         return Response(
             {
-                "email": membership.invited_email,
+                "email": membership.invited_email
+                or (membership.user.email if membership.user else ""),
                 "tenant_name": membership.tenant.name,
                 "role": membership.role,
                 "inviter_name": inviter_name,
+                "has_account": membership.user is not None,
             }
         )
 
@@ -577,7 +589,7 @@ class AcceptInviteView(APIView):
             )
 
         membership = (
-            Membership.objects.filter(invite_token=token, user__isnull=True)
+            Membership.objects.filter(invite_token=token)
             .select_related("tenant")
             .first()
         )
@@ -587,17 +599,24 @@ class AcceptInviteView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Verify email matches
-        if membership.invited_email != request.user.email:
+        # Verify email matches (case-insensitive)
+        invite_email = membership.invited_email or (
+            membership.user.email if membership.user else None
+        )
+        if invite_email and invite_email.lower() != request.user.email.lower():
             return Response(
                 {"error": "This invitation was sent to a different email."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Check for existing active membership
-        if Membership.objects.filter(
-            user=request.user, tenant=membership.tenant, is_active=True
-        ).exists():
+        # Check for existing active membership (a different record)
+        if (
+            Membership.objects.filter(
+                user=request.user, tenant=membership.tenant, is_active=True
+            )
+            .exclude(pk=membership.pk)
+            .exists()
+        ):
             return Response(
                 {"error": "You are already a member of this workspace."},
                 status=status.HTTP_409_CONFLICT,
@@ -700,7 +719,14 @@ class MemberDetailView(APIView):
         return Response(MembershipSerializer(membership).data)
 
     def delete(self, request, tenant_id, membership_id):
-        """Remove a member from the workspace (soft-delete)."""
+        """Remove a member from the workspace.
+
+        Active members (with a linked user) are soft-deleted by setting
+        ``is_active=False``.  Pending invitations (no linked user) are
+        hard-deleted since there is no user record to preserve.
+
+        A notification email is sent to the removed user/invitee.
+        """
         membership, error_resp = self._get_membership(request, tenant_id, membership_id)
         if error_resp:
             return error_resp
@@ -713,16 +739,71 @@ class MemberDetailView(APIView):
             )
 
         # Cannot remove yourself (admins can leave via a different flow)
-        if membership.user == request.user:
+        if membership.user and membership.user == request.user:
             return Response(
                 {"error": "Cannot remove yourself. Use Leave Workspace."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        membership.is_active = False
-        membership.save(update_fields=["is_active"])
+        # Capture info for the email before deletion
+        removed_email = (
+            membership.user.email if membership.user else membership.invited_email
+        )
+        tenant_name = membership.tenant.name
+        removed_by = request.user.get_full_name() or request.user.email
+
+        if membership.user:
+            # Soft-delete: keep record for potential re-invitation
+            membership.is_active = False
+            membership.save(update_fields=["is_active"])
+        else:
+            # Pending invite with no user — hard-delete
+            membership.delete()
+
+        # Send removal notification
+        if removed_email:
+            self._send_removed_email(
+                email=removed_email,
+                tenant_name=tenant_name,
+                removed_by=removed_by,
+            )
 
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @staticmethod
+    def _send_removed_email(email, tenant_name, removed_by):
+        """Notify a user they have been removed from a workspace.
+
+        The user's account and access to other workspaces is unaffected.
+        """
+        subject = f"You have been removed from {tenant_name}"
+        message = (
+            f"Hi,\n\n"
+            f"{removed_by} has removed you from "
+            f'the "{tenant_name}" workspace.\n\n'
+            f'This only affects your access to "{tenant_name}". '
+            f"If you belong to other workspaces, your access to "
+            f"those remains unchanged.\n\n"
+            f"If you believe this was a mistake, please contact "
+            f"the workspace administrator.\n\n"
+            f"Best regards,\nAI Brand Automator Team"
+        )
+
+        try:
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [email],
+                fail_silently=False,
+            )
+            logger.info(
+                "Removal notification email sent to %s for workspace %s",
+                email,
+                tenant_name,
+            )
+        except Exception as exc:
+            logger.warning("Failed to send removal email to %s: %s", email, exc)
 
 
 class DeleteTenantView(APIView):
