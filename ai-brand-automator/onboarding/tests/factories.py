@@ -3,10 +3,7 @@ Factory Boy factories for onboarding models
 """
 import factory
 from factory.django import DjangoModelFactory
-from faker import Faker
 from onboarding.models import Company, BrandAsset, OnboardingProgress
-
-fake = Faker()
 
 
 class CompanyFactory(DjangoModelFactory):
@@ -78,7 +75,7 @@ class BrandAssetFactory(DjangoModelFactory):
     class Meta:
         model = BrandAsset
 
-    file_name = factory.Faker("file_name", extension="jpg")
+    file_name = factory.Sequence(lambda n: f"asset_{n}.jpg")
     file_type = factory.Faker(
         "random_element", elements=["image", "video", "document", "other"]
     )
@@ -101,7 +98,7 @@ class BrandAssetFactory(DjangoModelFactory):
 class ImageAssetFactory(BrandAssetFactory):
     """Factory specifically for image assets"""
 
-    file_name = factory.Faker("file_name", extension="jpg")
+    file_name = factory.Sequence(lambda n: f"image_{n}.jpg")
     file_type = "image"
     file_size = factory.Faker("random_int", min=102400, max=2097152)  # 100KB to 2MB
 
@@ -109,7 +106,7 @@ class ImageAssetFactory(BrandAssetFactory):
 class DocumentAssetFactory(BrandAssetFactory):
     """Factory specifically for document assets"""
 
-    file_name = factory.Faker("file_name", extension="pdf")
+    file_name = factory.Sequence(lambda n: f"document_{n}.pdf")
     file_type = "document"
     file_size = factory.Faker("random_int", min=51200, max=1048576)  # 50KB to 1MB
 
