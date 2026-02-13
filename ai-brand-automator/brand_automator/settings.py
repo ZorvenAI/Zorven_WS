@@ -167,9 +167,12 @@ WSGI_APPLICATION = "brand_automator.wsgi.application"
 TESTING = "pytest" in sys.modules or "test" in sys.argv
 
 # Database configuration - supports both DATABASE_URL and individual DB_* vars
-DATABASE_URL = config("DATABASE_URL", default="")
+DATABASE_URL = config("DATABASE_URL", default="").strip()
 
-if DATABASE_URL:
+# Validate DATABASE_URL has a real scheme (not empty or whitespace-only)
+_db_url_valid = DATABASE_URL and "://" in DATABASE_URL
+
+if _db_url_valid:
     # Use DATABASE_URL if available (Railway, Heroku, etc.)
     # Use parse() instead of config() to avoid dj_database_url re-reading
     # os.environ["DATABASE_URL"] which may differ from the decouple value.
