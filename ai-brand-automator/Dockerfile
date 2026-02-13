@@ -50,12 +50,25 @@ fi
 # Startup diagnostics — helps debug deployment issues
 echo "=== Environment Check ==="
 if [ -n "$DATABASE_URL" ]; then
-  echo "DATABASE_URL: set (${#DATABASE_URL} chars)"
+  echo "DATABASE_URL: set"
 else
-  echo "WARNING: DATABASE_URL is NOT set. Set it in Railway service variables."
-  echo "Falling back to individual DB_* variables."
+  echo "WARNING: DATABASE_URL is NOT set in the container environment."
+  echo "  - Verify Railway service variables and any environment groups."
+  echo "  - Confirm the variable is attached to this deployment/service."
 fi
 echo "DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-brand_automator.settings}"
+
+echo "=== python-decouple DATABASE_URL check ==="
+python -c "
+from decouple import config
+value = config('DATABASE_URL', default='', cast=str)
+if not value:
+    print('python-decouple: DATABASE_URL is empty or missing')
+elif '://' not in value:
+    print('python-decouple: DATABASE_URL is missing a URL scheme (e.g. postgres://)')
+else:
+    print('python-decouple: DATABASE_URL OK')
+"
 
 echo "=== Running migrations ==="
 python manage.py migrate_schemas --shared --noinput
