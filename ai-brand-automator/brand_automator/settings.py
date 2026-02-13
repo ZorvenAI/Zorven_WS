@@ -171,9 +171,11 @@ DATABASE_URL = config("DATABASE_URL", default="")
 
 if DATABASE_URL:
     # Use DATABASE_URL if available (Railway, Heroku, etc.)
+    # Use parse() instead of config() to avoid dj_database_url re-reading
+    # os.environ["DATABASE_URL"] which may differ from the decouple value.
     DATABASES = {
-        "default": dj_database_url.config(
-            default=DATABASE_URL,
+        "default": dj_database_url.parse(
+            DATABASE_URL,
             conn_max_age=600,
             conn_health_checks=True,
         )
