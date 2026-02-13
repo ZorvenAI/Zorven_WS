@@ -48,11 +48,23 @@ class TenantGCSService:
         """Create raw + curated GCS buckets for *tenant*.
 
         Idempotent — skips buckets that already exist.
-        Updates the ``Tenant`` record with the bucket names.
+        Updates the ``Tenant`` record with the bucket names **only**
+        when the GCS client is available and buckets are confirmed.
 
         Args:
             tenant: A ``tenants.models.Tenant`` instance.
+
+        Raises:
+            RuntimeError: If the GCS client is unavailable.
         """
+        if self.client is None:
+            logger.warning(
+                "GCS client unavailable — cannot provision buckets "
+                "for tenant '%s'. Tenant will use shared default buckets.",
+                tenant.slug,
+            )
+            raise RuntimeError("GCS client unavailable — bucket provisioning skipped")
+
         raw_name = f"{tenant.slug}-raw"
         curated_name = f"{tenant.slug}-curated"
 

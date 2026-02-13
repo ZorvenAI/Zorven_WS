@@ -61,8 +61,14 @@ export function FileUploadManager({ canEdit = true }: { canEdit?: boolean }) {
   const [dragActive, setDragActive] = useState(false);
   const [showAllFiles, setShowAllFiles] = useState(false);
   const [duplicateConfirm, setDuplicateConfirm] = useState<DuplicateConfirmation | null>(null);
+  const [mounted, setMounted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Avoid hydration mismatch: localStorage-driven canEdit differs between SSR and client
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Function to fetch assets with limit
   const fetchAssets = useCallback(async () => {
@@ -296,10 +302,13 @@ export function FileUploadManager({ canEdit = true }: { canEdit?: boolean }) {
     setDuplicateConfirm(null);
   }, []);
 
+  // Resolve canEdit only after mount to prevent hydration mismatch
+  const effectiveCanEdit = mounted ? canEdit : false;
+
   return (
     <div className="space-y-6">
       {/* Upload Zone */}
-      {canEdit ? (
+      {effectiveCanEdit ? (
       <div
         className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
           dragActive

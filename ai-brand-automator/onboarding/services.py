@@ -94,12 +94,42 @@ class OnboardingPipelineService:
         """
         if not self._kafka_enabled:
             logger.info(
-                "Kafka disabled — marking asset as ingested (sync fallback)",
+                "Kafka disabled — dispatching sync pipeline via Celery",
                 extra={"asset_id": asset.id},
             )
-            asset.pipeline_status = "ingested"
-            asset.save(update_fields=["pipeline_status"])
-            return None
+            try:
+                trace_id = uuid4()
+                event = self._build_ingestion_event(asset, trace_id)
+
+                # Persist trace ID so the asset is traceable
+                asset.pipeline_trace_id = trace_id
+                asset.pipeline_status = "pending"
+                asset.save(update_fields=["pipeline_trace_id", "pipeline_status"])
+
+                from onboarding.tasks import process_asset_pipeline_sync
+
+                process_asset_pipeline_sync.delay(
+                    asset_id=asset.id,
+                    tenant_id=str(asset.tenant.id) if asset.tenant else "public",
+                    event_data=event,
+                )
+                logger.info(
+                    "Queued sync pipeline task for asset %s (trace=%s)",
+                    asset.id,
+                    trace_id,
+                )
+                return str(trace_id)
+            except Exception as e:
+                logger.error(
+                    "Failed to queue sync pipeline: %s",
+                    e,
+                    extra={"asset_id": asset.id},
+                    exc_info=True,
+                )
+                asset.pipeline_status = "failed"
+                asset.pipeline_error = f"Failed to queue pipeline: {e}"
+                asset.save(update_fields=["pipeline_status", "pipeline_error"])
+                return None
 
         try:
             trace_id = uuid4()
@@ -285,10 +315,44 @@ class OnboardingPipelineService:
         """
         if not self._kafka_enabled:
             logger.info(
-                "Kafka disabled — cannot publish curation event",
+                "Kafka disabled — dispatching curation retry via Celery",
                 extra={"asset_id": asset.id},
             )
-            return None
+            try:
+                trace_id = uuid4()
+                event = self._build_ingestion_event(asset, trace_id)
+
+                asset.pipeline_trace_id = trace_id
+                asset.pipeline_status = "ingested"
+                asset.save(
+                    update_fields=[
+                        "pipeline_trace_id",
+                        "pipeline_status",
+                        "pipeline_error",
+                    ]
+                )
+
+                from onboarding.tasks import process_asset_pipeline_sync
+
+                # For curation retry, ingestion already ran; the task will
+                # detect the file is in raw/ and skip ingestion gracefully.
+                process_asset_pipeline_sync.delay(
+                    asset_id=asset.id,
+                    tenant_id=str(asset.tenant.id) if asset.tenant else "public",
+                    event_data=event,
+                )
+                return str(trace_id)
+            except Exception as e:
+                logger.error(
+                    "Failed to queue curation retry: %s",
+                    e,
+                    extra={"asset_id": asset.id},
+                    exc_info=True,
+                )
+                asset.pipeline_status = "failed"
+                asset.pipeline_error = f"Failed to queue curation retry: {e}"
+                asset.save(update_fields=["pipeline_status", "pipeline_error"])
+                return None
 
         try:
             trace_id = uuid4()

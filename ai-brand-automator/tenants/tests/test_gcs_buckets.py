@@ -138,16 +138,18 @@ class TestTenantGCSService:
 
     @patch("tenants.services.TenantGCSService._build_client")
     def test_no_client_skips_provisioning(self, mock_build_client, tenant):
-        """If GCS client can't be created, provisioning is skipped."""
+        """If GCS client can't be created, provisioning raises RuntimeError
+        and does NOT save bucket names to the tenant."""
         mock_build_client.return_value = None
 
         service = TenantGCSService()
-        service.create_tenant_buckets(tenant)
+        with pytest.raises(RuntimeError, match="GCS client unavailable"):
+            service.create_tenant_buckets(tenant)
 
-        # Names should still be set (naming is deterministic)
+        # Bucket names should NOT be set — tenant uses shared defaults
         tenant.refresh_from_db()
-        assert tenant.gcs_raw_bucket == "bucket-test-raw"
-        assert tenant.gcs_curated_bucket == "bucket-test-curated"
+        assert tenant.gcs_raw_bucket == ""
+        assert tenant.gcs_curated_bucket == ""
 
 
 # ── Factory functions with tenant param ─────────────────────────────

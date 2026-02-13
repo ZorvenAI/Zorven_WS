@@ -26,6 +26,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from onboarding.models import Company, OnboardingProgress
 from .models import Domain, Membership, Tenant
 from .permissions import IsTenantAdmin, IsTenantOwner
 from .serializers import (
@@ -224,11 +225,24 @@ class CreateTenantView(APIView):
             accepted_at=timezone.now(),
         )
 
+        # Auto-create a Company so uploads work immediately
+        company = Company.objects.create(
+            tenant=tenant,
+            name=name,
+        )
+        OnboardingProgress.objects.create(
+            tenant=tenant,
+            company=company,
+            current_step="company_info",
+            completed_steps=["company_info"],
+        )
+
         logger.info(
-            "User %s created workspace '%s' (id=%s)",
+            "User %s created workspace '%s' (id=%s) with company '%s'",
             request.user.id,
             tenant.name,
             tenant.id,
+            company.name,
         )
 
         serializer = TenantWithRoleSerializer(tenant, context={"request": request})

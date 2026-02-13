@@ -554,7 +554,18 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             )
 
         # Get company for the tenant
-        company = get_object_or_404(Company, tenant=tenant)
+        company = Company.objects.filter(tenant=tenant).first()
+        if not company:
+            return Response(
+                {
+                    "error": "no_company",
+                    "message": (
+                        "No company found for this workspace. "
+                        "Please complete onboarding first."
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Check for duplicate file (same tenant + company + filename)
         raw_replace = request.data.get("replace_existing", "")
@@ -771,9 +782,28 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
         # Get company for the tenant (or by company_id if provided)
         if company_id:
-            company = get_object_or_404(Company, id=company_id, tenant=tenant)
+            company = Company.objects.filter(id=company_id, tenant=tenant).first()
+            if not company:
+                return Response(
+                    {
+                        "error": "no_company",
+                        "message": "Company not found.",
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
         else:
-            company = get_object_or_404(Company, tenant=tenant)
+            company = Company.objects.filter(tenant=tenant).first()
+            if not company:
+                return Response(
+                    {
+                        "error": "no_company",
+                        "message": (
+                            "No company found for this workspace. "
+                            "Please complete onboarding first."
+                        ),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         # Sanitize filename
         safe_filename = sanitize_filename(file_name)
