@@ -89,7 +89,7 @@ def migrate(apply: bool = False):
                 uid = int(t.schema_name.split("_", 1)[1])
                 user_tenants.append((uid, t))
             except (ValueError, IndexError):
-                pass
+                pass  # schema_name doesn't match user_<int> pattern — skip
         elif t.schema_name.startswith("tenant_"):
             # Check if this was a partially-migrated tenant
             # (has membership but domain may still be old)

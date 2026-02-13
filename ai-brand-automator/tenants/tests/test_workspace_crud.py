@@ -148,8 +148,8 @@ class TestDeleteWorkspace:
         tenant = Tenant.objects.get(name="Delete Me WS")
 
         del_client = _make_client(ws_user, tenant)
-        resp = del_client.delete(f"/api/v1/tenants/{tenant.id}/delete/")
-        assert resp.status_code == status.HTTP_200_OK
+        del_resp = del_client.delete(f"/api/v1/tenants/{tenant.id}/delete/")
+        assert del_resp.status_code == status.HTTP_200_OK
         assert not Tenant.objects.filter(name="Delete Me WS").exists()
 
     def test_admin_cannot_delete_workspace(self, ws_user, ws_user2):

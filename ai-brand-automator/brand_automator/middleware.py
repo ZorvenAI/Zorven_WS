@@ -140,6 +140,9 @@ class TenantMembershipMiddleware:
                 request.user = user
                 return user
         except Exception:
+            # Deliberately broad: any JWT parsing/validation failure
+            # (expired, malformed, missing) should fall through to
+            # anonymous — never block the request pipeline.
             pass
         return None
 

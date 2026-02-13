@@ -132,11 +132,9 @@ def backfill(apply: bool = False):
                             print(f"    ↳ Reassigned {n} ChatSession(s)")
 
                     reassigned_count += 1
-                else:
-                    print(
-                        f"    ↳ [DRY-RUN] Would reassign Company "
-                        f"'{company.name}' + related data"
-                    )
+                # NOTE: No dry-run branch here — when apply=False,
+                # tenant is None so the outer `if public_tenant and
+                # tenant:` guard already skips this block.
 
     # ── Summary ─────────────────────────────────────────────────────
     print(f"\n{'=' * 50}")

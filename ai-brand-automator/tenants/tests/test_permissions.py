@@ -151,8 +151,8 @@ class TestRoleBasedPermissionMixin:
             permission_classes = [HasTenantAccess]
             action = "create"
 
-            def get_permissions(self_inner):
-                return super(FakeViewSet, self_inner).get_permissions()
+            def get_permissions(self):
+                return super(FakeViewSet, self).get_permissions()
 
         vs = FakeViewSet()
         perms = vs.get_permissions()

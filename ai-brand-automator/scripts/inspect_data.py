@@ -45,7 +45,7 @@ def main():
                 uid = int(t.schema_name.split("_", 1)[1])
                 user_tenants[uid] = t
             except (ValueError, IndexError):
-                pass
+                pass  # schema_name doesn't match user_<int> pattern — skip
     print(f"  Tenants with user_N schema: {len(user_tenants)}")
     print("  Of those, have OWNER membership: ", end="")
     has_membership = 0
