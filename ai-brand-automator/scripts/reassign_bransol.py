@@ -21,7 +21,9 @@ print(f"Naveen's tenant: id={naveen_tenant.id}, schema={naveen_tenant.schema_nam
 # Get the company
 company = Company.objects.get(id=COMPANY_ID)
 old_tenant_id = company.tenant_id
-print(f"Company: id={company.id}, name={company.name}, current tenant_id={old_tenant_id}")
+print(
+    f"Company: id={company.id}, name={company.name}, current tenant_id={old_tenant_id}"
+)
 
 # 1. Reassign Company to naveen's tenant
 company.tenant = naveen_tenant
@@ -31,7 +33,9 @@ print(f"  -> Company reassigned to tenant_id={naveen_tenant.id}")
 # 2. Reassign OnboardingProgress
 progress = OnboardingProgress.objects.filter(company=company).first()
 if progress:
-    print(f"OnboardingProgress: id={progress.id}, current tenant_id={progress.tenant_id}")
+    print(
+        f"OnboardingProgress: id={progress.id}, current tenant_id={progress.tenant_id}"
+    )
     progress.tenant = naveen_tenant
     progress.save()
     print(f"  -> OnboardingProgress reassigned to tenant_id={naveen_tenant.id}")
@@ -60,11 +64,16 @@ else:
 
 # Verify
 company.refresh_from_db()
-print(f"\n=== Verification ===")
-print(f"Company '{company.name}' tenant_id={company.tenant_id} (expected {naveen_tenant.id})")
+print("\n=== Verification ===")
+print(
+    f"Company '{company.name}' tenant_id={company.tenant_id}"
+    f" (expected {naveen_tenant.id})"
+)
 prog = OnboardingProgress.objects.filter(company=company).first()
 if prog:
-    print(f"OnboardingProgress tenant_id={prog.tenant_id} (expected {naveen_tenant.id})")
+    print(
+        f"OnboardingProgress tenant_id={prog.tenant_id} (expected {naveen_tenant.id})"
+    )
 asset_count = BrandAsset.objects.filter(tenant=naveen_tenant).count()
 print(f"BrandAssets on naveen's tenant: {asset_count}")
 print("\nDone!")
