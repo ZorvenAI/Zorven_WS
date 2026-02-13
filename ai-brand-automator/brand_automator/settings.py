@@ -167,6 +167,7 @@ WSGI_APPLICATION = "brand_automator.wsgi.application"
 TESTING = "pytest" in sys.modules or "test" in sys.argv
 
 # Database configuration - supports both DATABASE_URL and individual DB_* vars
+# python-decouple checks os.environ FIRST, then falls back to .env files.
 DATABASE_URL = config("DATABASE_URL", default="").strip()
 
 # Validate DATABASE_URL has a real scheme (not empty or whitespace-only)
@@ -174,8 +175,8 @@ _db_url_valid = bool(DATABASE_URL) and DATABASE_URL.find("://") > 0
 
 if _db_url_valid:
     # Use DATABASE_URL if available (Railway, Heroku, etc.)
-    # Use parse() instead of config() to avoid dj_database_url re-reading
-    # os.environ["DATABASE_URL"] which may differ from the decouple value.
+    # Use parse() with the explicit decouple value to avoid dj_database_url
+    # re-reading os.environ["DATABASE_URL"] independently.
     DATABASES = {
         "default": dj_database_url.parse(
             DATABASE_URL,
@@ -186,7 +187,7 @@ if _db_url_valid:
     # Set engine for django-tenants (dj_database_url uses default postgres engine)
     DATABASES["default"]["ENGINE"] = "django_tenants.postgresql_backend"
 else:
-    # Use individual DB_* variables (local development)
+    # Fall back to individual DB_* variables (local development)
     DATABASES = {
         "default": {
             "ENGINE": "django_tenants.postgresql_backend",
