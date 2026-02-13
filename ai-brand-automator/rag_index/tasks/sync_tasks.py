@@ -22,13 +22,16 @@ from rag_index.domain.models import SyncEvent
 logger = logging.getLogger(__name__)
 
 
-def _update_asset_status(asset_id: str, status: str, error_msg: str = "") -> bool:
+def _update_asset_status(
+    asset_id: str, status: str, error_msg: str = "", tenant_id: str = ""
+) -> bool:
     """Update BrandAsset pipeline_status after indexing.
 
     Args:
         asset_id: The asset ID (integer as string)
         status: The new pipeline status (indexed, failed)
         error_msg: Error message if status is failed
+        tenant_id: Optional tenant ID for scoped lookup
 
     Returns:
         True if update succeeded, False otherwise
@@ -43,7 +46,13 @@ def _update_asset_status(asset_id: str, status: str, error_msg: str = "") -> boo
 
             try:
                 aid = int(asset_id)
-                asset = BrandAsset.objects.filter(id=aid).first()
+                qs = BrandAsset.objects.filter(id=aid)
+                if tenant_id:
+                    try:
+                        qs = qs.filter(tenant_id=int(tenant_id))
+                    except (ValueError, TypeError):
+                        pass  # Non-integer tenant_id, skip FK filter
+                asset = qs.first()
             except (ValueError, TypeError):
                 asset = None
 
@@ -252,7 +261,7 @@ def sync_document(
         # Update BrandAsset status to indexed
         asset_id = event.metadata.get("asset_id") if event.metadata else None
         if asset_id:
-            _update_asset_status(str(asset_id), "indexed")
+            _update_asset_status(str(asset_id), "indexed", tenant_id=event.tenant_id)
         else:
             logger.warning(f"No asset_id in metadata for event {event.event_id}")
 

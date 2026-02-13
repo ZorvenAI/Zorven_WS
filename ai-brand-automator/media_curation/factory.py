@@ -144,12 +144,15 @@ class ProcessorFactory:
         self._initialized = False
 
 
-def create_processor_factory(config: Optional[dict] = None) -> ProcessorFactory:
+def create_processor_factory(
+    config: Optional[dict] = None, tenant=None
+) -> ProcessorFactory:
     """
     Create and configure a ProcessorFactory with all processors.
 
     Args:
         config: Optional configuration override
+        tenant: Optional Tenant instance for per-tenant bucket resolution
 
     Returns:
         Configured ProcessorFactory
@@ -167,7 +170,7 @@ def create_processor_factory(config: Optional[dict] = None) -> ProcessorFactory:
     config = config or get_media_curation_config()
 
     # Create storage adapter for processors that need file access
-    storage = create_storage_adapter(config)
+    storage = create_storage_adapter(config, tenant=tenant)
 
     # Create processors
     processors = [
@@ -211,12 +214,13 @@ def create_cache_adapter(config: Optional[dict] = None):
     return adapter
 
 
-def create_storage_adapter(config: Optional[dict] = None):
+def create_storage_adapter(config: Optional[dict] = None, tenant=None):
     """
     Create GCS storage adapter.
 
     Args:
         config: Optional configuration override
+        tenant: Optional Tenant instance for per-tenant bucket resolution
 
     Returns:
         StoragePort implementation
@@ -226,9 +230,17 @@ def create_storage_adapter(config: Optional[dict] = None):
     config = config or get_media_curation_config()
     storage_config = config.get("STORAGE", {})
 
+    # Resolve bucket: per-tenant curated bucket takes priority
+    if tenant is not None and hasattr(tenant, "get_curated_bucket"):
+        default_bucket = tenant.get_curated_bucket()
+    else:
+        default_bucket = storage_config.get(
+            "CURATED_BUCKET", "brandsol-curation-bucket"
+        )
+
     adapter = GCSAdapter(
         project_id=storage_config.get("GCP_PROJECT_ID", config.get("GCP_PROJECT_ID")),
-        default_bucket=storage_config.get("CURATED_BUCKET", "brandsol-curation-bucket"),
+        default_bucket=default_bucket,
         credentials_path=storage_config.get("CREDENTIALS_PATH"),
     )
 
@@ -328,7 +340,7 @@ def create_dlp_adapter(config: Optional[dict] = None):
     return adapter
 
 
-def create_curation_service(config: Optional[dict] = None):
+def create_curation_service(config: Optional[dict] = None, tenant=None):
     """
     Create fully configured CurationService.
 
@@ -336,6 +348,7 @@ def create_curation_service(config: Optional[dict] = None):
 
     Args:
         config: Optional configuration override
+        tenant: Optional Tenant instance for per-tenant bucket resolution
 
     Returns:
         Configured CurationService
@@ -348,15 +361,21 @@ def create_curation_service(config: Optional[dict] = None):
     kafka_config = config.get("KAFKA", {})
     storage_config = config.get("STORAGE", {})  # Match settings.MEDIA_CURATION key
 
+    # Resolve curated bucket: per-tenant takes priority
+    if tenant is not None and hasattr(tenant, "get_curated_bucket"):
+        output_bucket = tenant.get_curated_bucket()
+    else:
+        output_bucket = storage_config.get("CURATED_BUCKET", "curated-documents")
+
     service = CurationService(
-        processor_factory=create_processor_factory(config),
+        processor_factory=create_processor_factory(config, tenant=tenant),
         cache=create_cache_adapter(config),
-        storage=create_storage_adapter(config),
+        storage=create_storage_adapter(config, tenant=tenant),
         producer=create_kafka_producer(config),
         dlp=create_dlp_adapter(config),
         output_topic=kafka_config.get("OUTPUT_TOPIC", "rag-sync-ready"),
         dlq_topic=kafka_config.get("DLQ_TOPIC", "curation-dlq"),
-        output_bucket=storage_config.get("CURATED_BUCKET", "curated-documents"),
+        output_bucket=output_bucket,
     )
 
     logger.info("CurationService created and configured")

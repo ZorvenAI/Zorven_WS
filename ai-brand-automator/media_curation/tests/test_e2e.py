@@ -112,7 +112,7 @@ class TestFullPipelineE2E:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://test-bucket/document.pdf",
             mime_type="application/pdf",
@@ -135,7 +135,7 @@ class TestFullPipelineE2E:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://test-bucket/image.jpg",
             mime_type="image/jpeg",
@@ -155,7 +155,7 @@ class TestFullPipelineE2E:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://test-bucket/video.mp4",
             mime_type="video/mp4",
@@ -175,7 +175,7 @@ class TestFullPipelineE2E:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://test-bucket/audio.mp3",
             mime_type="audio/mpeg",
@@ -195,7 +195,7 @@ class TestFullPipelineE2E:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://test-bucket/text.txt",
             mime_type="text/plain",
@@ -213,7 +213,7 @@ class TestFullPipelineE2E:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://test-bucket/document.pdf",
             mime_type="application/pdf",
@@ -235,7 +235,7 @@ class TestFullPipelineE2E:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://test-bucket/document.pdf",
             mime_type="application/pdf",
@@ -254,7 +254,7 @@ class TestFullPipelineE2E:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://test-bucket/document.pdf",
             mime_type="application/pdf",
@@ -280,7 +280,7 @@ class TestFullPipelineE2E:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://test-bucket/invalid.xyz",
             mime_type="application/octet-stream",
@@ -299,7 +299,7 @@ class TestFullPipelineE2E:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://test-bucket/document.pdf",
             mime_type="application/pdf",
@@ -318,15 +318,8 @@ class TestFullPipelineE2E:
 class TestAPIToProcessingE2E:
     """End-to-end tests from API to processing."""
 
-    @pytest.fixture
-    def authenticated_client(self):
-        """Create authenticated API client."""
-        from rest_framework.test import APIClient
-
-        client = APIClient()
-        client.defaults["SERVER_NAME"] = "localhost"
-        client.force_authenticate(user=MagicMock(id=1, is_authenticated=True))
-        return client
+    # authenticated_client fixture comes from the global conftest.py
+    # (uses a real Django User instance required by TenantMembershipMiddleware).
 
     @pytest.mark.django_db
     def test_api_to_task_submission(self, authenticated_client):
@@ -392,7 +385,7 @@ class TestAPIToProcessingE2E:
         mock_status = CurationStatusRecord(
             trace_id=UUID(trace_id),
             event_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             status=CurationStatus.CURATED,
             message="Processing complete",

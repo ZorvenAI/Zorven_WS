@@ -32,6 +32,7 @@ def _update_asset_after_ingestion(
     status: str,
     error_msg: str = "",
     new_gcs_path: str = "",
+    tenant_id: Optional[str] = None,
 ) -> bool:
     """Update BrandAsset pipeline_status and gcs_path after ingestion.
 
@@ -40,6 +41,7 @@ def _update_asset_after_ingestion(
         status: The new pipeline status (ingested, failed)
         error_msg: Error message if status is failed
         new_gcs_path: New GCS path after file was moved (gs:// URI)
+        tenant_id: Optional tenant ID for scoped lookup
 
     Returns:
         True if update succeeded, False otherwise
@@ -54,7 +56,13 @@ def _update_asset_after_ingestion(
 
             try:
                 aid = int(asset_id)
-                asset = BrandAsset.objects.filter(id=aid).first()
+                qs = BrandAsset.objects.filter(id=aid)
+                if tenant_id:
+                    try:
+                        qs = qs.filter(tenant_id=int(tenant_id))
+                    except (ValueError, TypeError):
+                        pass  # Non-integer tenant_id, skip FK filter
+                asset = qs.first()
             except (ValueError, TypeError):
                 asset = None
 
@@ -117,6 +125,8 @@ def process_ingestion_event(
     source: Optional[str] = None,
     trace_id: Optional[str] = None,
     metadata: Optional[dict] = None,
+    raw_bucket: Optional[str] = None,
+    curated_bucket: Optional[str] = None,
 ) -> dict:
     """
     Process a single ingestion event asynchronously.
@@ -133,6 +143,8 @@ def process_ingestion_event(
         source: Event source (API, GCS_TRIGGER, BATCH, MANUAL)
         trace_id: Optional trace ID for distributed tracing
         metadata: Optional additional metadata
+        raw_bucket: Per-tenant raw GCS bucket override
+        curated_bucket: Per-tenant curated GCS bucket override
 
     Returns:
         Dict with processing result
@@ -162,6 +174,8 @@ def process_ingestion_event(
             source=EventSource(source) if source else EventSource.FRONTEND_UPLOAD,
             trace_id=UUID(trace_id) if trace_id else uuid4(),
             metadata=metadata,
+            raw_bucket=raw_bucket,
+            curated_bucket=curated_bucket,
         )
 
         # Create service and process
@@ -175,6 +189,7 @@ def process_ingestion_event(
                 str(asset_id),
                 "ingested",
                 new_gcs_path=result.destination_path,
+                tenant_id=tenant_id,
             )
 
         logger.info(

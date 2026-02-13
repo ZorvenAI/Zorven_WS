@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.text import slugify
 from django_tenants.models import TenantMixin, DomainMixin
 from django.utils import timezone
 
@@ -7,9 +8,21 @@ class Tenant(TenantMixin):
     """
     Tenant model for multi-tenancy.
     Each tenant represents an enterprise customer.
+
+    We use shared-schema with FK-based tenant filtering,
+    NOT per-tenant PostgreSQL schemas. This flag prevents
+    django-tenants from creating separate schemas on save().
     """
 
+    auto_create_schema = False
+
     name = models.CharField(max_length=100, help_text="Company/Organization name")
+    slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        blank=True,
+        help_text="URL-friendly identifier, auto-generated from name",
+    )
     description = models.TextField(
         blank=True, help_text="Brief description of the company"
     )
@@ -48,15 +61,58 @@ class Tenant(TenantMixin):
         default=5, help_text="Storage limit in GB"
     )
 
+    # Per-tenant GCS buckets (optional — defaults to shared buckets from settings)
+    gcs_raw_bucket = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=(
+            "GCS bucket for raw/ingestion assets. " "Leave blank for shared default."
+        ),
+    )
+    gcs_curated_bucket = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="GCS bucket for curated assets. Leave blank for shared default.",
+    )
+
+    def get_raw_bucket(self):
+        """Resolve GCS raw bucket: tenant-specific or shared default."""
+        if self.gcs_raw_bucket:
+            return self.gcs_raw_bucket
+        from django.conf import settings
+
+        pipeline_cfg = getattr(settings, "DATA_INGESTION", {})
+        return pipeline_cfg.get("GCP_BUCKET_NAME", "onboarding-bucket1")
+
+    def get_curated_bucket(self):
+        """Resolve GCS curated bucket: tenant-specific or shared default."""
+        if self.gcs_curated_bucket:
+            return self.gcs_curated_bucket
+        from django.conf import settings
+
+        curation_cfg = getattr(settings, "MEDIA_CURATION", {})
+        storage_cfg = curation_cfg.get("STORAGE", {})
+        return storage_cfg.get("CURATED_BUCKET", "brandsol-curation-bucket")
+
     def save(self, *args, **kwargs):
-        # Auto-generate schema_name from name if not provided
+        # Auto-generate slug from name if not provided
+        if not self.slug:
+            base_slug = slugify(self.name)
+            if not base_slug:
+                base_slug = "workspace"
+            slug = base_slug
+            counter = 1
+            while Tenant.objects.filter(slug=slug).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = slug
+
+        # Auto-generate schema_name from slug if not provided
         if not self.schema_name:
-            # Create a valid schema name from the tenant name
             import re
 
-            schema_name = re.sub(r"[^a-zA-Z0-9_]", "_", self.name.lower())
+            schema_name = re.sub(r"[^a-zA-Z0-9_]", "_", self.slug)
             schema_name = f"tenant_{schema_name}"
-            # Ensure it's unique
             counter = 1
             original_schema = schema_name
             while Tenant.objects.filter(schema_name=schema_name).exists():
@@ -76,6 +132,30 @@ class Tenant(TenantMixin):
     def is_subscription_active(self):
         return self.subscription_status in ["active", "trial"]
 
+    # --- Membership helper methods ---
+
+    def get_members(self):
+        """Return active memberships for this tenant."""
+        return self.memberships.filter(is_active=True).select_related("user")
+
+    def get_owner(self):
+        """Return the owner's User object, or None."""
+        membership = (
+            self.memberships.filter(role=Membership.Role.OWNER, is_active=True)
+            .select_related("user")
+            .first()
+        )
+        return membership.user if membership else None
+
+    def has_member(self, user):
+        """Check if user has an active membership in this tenant."""
+        return self.memberships.filter(user=user, is_active=True).exists()
+
+    def get_user_role(self, user):
+        """Get user's role in this tenant, or None."""
+        membership = self.memberships.filter(user=user, is_active=True).first()
+        return membership.role if membership else None
+
 
 class Domain(DomainMixin):
     """
@@ -85,37 +165,75 @@ class Domain(DomainMixin):
     pass
 
 
-# Temporarily removed custom User model to allow migrations
-# Will be re-added after initial setup
-# class User(AbstractUser):
-#     """
-#     Custom user model for tenants.
-#     """
-#     # Role-based access
-#     ROLE_CHOICES = [
-#         ('admin', 'Admin'),
-#         ('editor', 'Editor'),
-#         ('viewer', 'Viewer'),
-#     ]
-#     role = models.CharField(
-#         max_length=20, choices=ROLE_CHOICES, default='admin'
-#     )
-#
-#     # Profile information
-#     avatar = models.URLField(
-#         blank=True, null=True, help_text="Profile picture URL"
-#     )
-#     phone = models.CharField(
-#         max_length=20, blank=True, help_text="Phone number"
-#     )
-#
-#     class Meta:
-#         verbose_name = "User"
-#         verbose_name_plural = "Users"
-#
-#     def __str__(self):
-#         return f"{self.username}"
-#
-#     @property
-#     def full_name(self):
-#         return f"{self.first_name} {self.last_name}".strip() or self.username
+class Membership(models.Model):
+    """
+    Join table linking Users to Tenants with role-based access.
+
+    One user can belong to many tenants. One tenant can have many users.
+    The role determines what the user can do within the tenant.
+    """
+
+    class Role(models.TextChoices):
+        OWNER = "owner", "Owner"
+        ADMIN = "admin", "Admin"
+        EDITOR = "editor", "Editor"
+        VIEWER = "viewer", "Viewer"
+
+    user = models.ForeignKey(
+        "auth.User",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="memberships",
+        help_text="Null for pending invitations to users not yet registered.",
+    )
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    role = models.CharField(
+        max_length=20,
+        choices=Role.choices,
+        default=Role.EDITOR,
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Soft-disable without removing the record",
+    )
+    invited_email = models.EmailField(
+        null=True,
+        blank=True,
+        help_text="Email for pending invites (user not yet registered).",
+    )
+    invited_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="invitations_sent",
+    )
+    invited_at = models.DateTimeField(default=timezone.now)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    invite_token = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        help_text="Unique token for accepting an invitation via link.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "tenant"],
+                condition=models.Q(user__isnull=False),
+                name="unique_membership_per_user_tenant",
+            ),
+        ]
+        ordering = ["-invited_at"]
+        verbose_name = "Membership"
+        verbose_name_plural = "Memberships"
+
+    def __str__(self):
+        label = self.user.email if self.user else self.invited_email or "pending"
+        return f"{label} \u2192 {self.tenant.name} ({self.role})"

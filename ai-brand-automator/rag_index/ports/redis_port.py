@@ -27,12 +27,14 @@ class RedisPort(ABC):
         self,
         record: SyncStatusRecord,
         ttl_seconds: int = 86400,  # 24 hours default
+        tenant_id: Optional[str] = None,
     ) -> None:
         """Save a sync status record to Redis.
 
         Args:
             record: The status record to save
             ttl_seconds: Time-to-live in seconds
+            tenant_id: Optional tenant ID for key namespacing
 
         Raises:
             RedisError: If the save operation fails
@@ -42,11 +44,13 @@ class RedisPort(ABC):
     async def get_status(
         self,
         event_id: str,
+        tenant_id: Optional[str] = None,
     ) -> Optional[SyncStatusRecord]:
         """Get a sync status record from Redis.
 
         Args:
             event_id: The event identifier
+            tenant_id: Optional tenant ID for key namespacing
 
         Returns:
             The status record if found, None otherwise
@@ -61,6 +65,7 @@ class RedisPort(ABC):
         event_id: str,
         status: str,
         error_message: Optional[str] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """Update the status of an existing record.
 
@@ -68,6 +73,7 @@ class RedisPort(ABC):
             event_id: The event identifier
             status: The new status value
             error_message: Optional error message for failed status
+            tenant_id: Optional tenant ID for key namespacing
 
         Raises:
             StatusNotFoundError: If the record doesn't exist
@@ -78,11 +84,13 @@ class RedisPort(ABC):
     async def delete_status(
         self,
         event_id: str,
+        tenant_id: Optional[str] = None,
     ) -> bool:
         """Delete a sync status record from Redis.
 
         Args:
             event_id: The event identifier
+            tenant_id: Optional tenant ID for key namespacing
 
         Returns:
             True if deleted, False if not found

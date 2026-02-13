@@ -94,12 +94,42 @@ class OnboardingPipelineService:
         """
         if not self._kafka_enabled:
             logger.info(
-                "Kafka disabled — marking asset as ingested (sync fallback)",
+                "Kafka disabled — dispatching sync pipeline via Celery",
                 extra={"asset_id": asset.id},
             )
-            asset.pipeline_status = "ingested"
-            asset.save(update_fields=["pipeline_status"])
-            return None
+            try:
+                trace_id = uuid4()
+                event = self._build_ingestion_event(asset, trace_id)
+
+                # Persist trace ID so the asset is traceable
+                asset.pipeline_trace_id = trace_id
+                asset.pipeline_status = "pending"
+                asset.save(update_fields=["pipeline_trace_id", "pipeline_status"])
+
+                from onboarding.tasks import process_asset_pipeline_sync
+
+                process_asset_pipeline_sync.delay(
+                    asset_id=asset.id,
+                    tenant_id=str(asset.tenant.id) if asset.tenant else "public",
+                    event_data=event,
+                )
+                logger.info(
+                    "Queued sync pipeline task for asset %s (trace=%s)",
+                    asset.id,
+                    trace_id,
+                )
+                return str(trace_id)
+            except Exception as e:
+                logger.error(
+                    "Failed to queue sync pipeline: %s",
+                    e,
+                    extra={"asset_id": asset.id},
+                    exc_info=True,
+                )
+                asset.pipeline_status = "failed"
+                asset.pipeline_error = f"Failed to queue pipeline: {e}"
+                asset.save(update_fields=["pipeline_status", "pipeline_error"])
+                return None
 
         try:
             trace_id = uuid4()
@@ -172,18 +202,24 @@ class OnboardingPipelineService:
             mime_type = mime_type_map.get(asset.file_type, "application/octet-stream")
 
         # Build the full GCS URI
-        bucket = asset.gcs_bucket or self._get_default_bucket()
+        tenant = asset.tenant
+        bucket = asset.gcs_bucket or self._get_default_bucket(tenant)
         gcs_uri = f"gs://{bucket}/{asset.gcs_path}"
+
+        # Resolve curated bucket for downstream pipeline stages
+        curated_bucket = tenant.get_curated_bucket() if tenant else None
 
         return {
             "event_id": str(uuid4()),
             "trace_id": str(trace_id),
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "source": "django-backend",
-            "tenant_id": str(asset.tenant.id) if asset.tenant else "public",
+            "tenant_id": str(tenant.id) if tenant else "public",
             "file_path": gcs_uri,
             "file_type": mime_type,  # Use detected MIME type
             "file_size_bytes": asset.file_size,
+            "raw_bucket": bucket,
+            "curated_bucket": curated_bucket,
             "metadata": {
                 "original_filename": asset.file_name,
                 "asset_id": asset.id,
@@ -198,8 +234,20 @@ class OnboardingPipelineService:
         config = getattr(settings, "DATA_INGESTION", {})
         return config.get("KAFKA_INPUT_TOPIC", "raw-ingestion-topic")
 
-    def _get_default_bucket(self) -> str:
-        """Get the default GCS bucket name."""
+    def _get_default_bucket(self, tenant=None) -> str:
+        """Get the default GCS bucket name.
+
+        If *tenant* is provided and has a custom raw bucket,
+        that value takes priority over the global setting.
+
+        Args:
+            tenant: Optional ``Tenant`` instance.
+
+        Returns:
+            The bucket name string.
+        """
+        if tenant:
+            return tenant.get_raw_bucket()
         config = getattr(settings, "DATA_INGESTION", {})
         return config.get("GCP_BUCKET_NAME", "onboarding-brandsol-customer-bucket-1")
 
@@ -267,10 +315,44 @@ class OnboardingPipelineService:
         """
         if not self._kafka_enabled:
             logger.info(
-                "Kafka disabled — cannot publish curation event",
+                "Kafka disabled — dispatching curation retry via Celery",
                 extra={"asset_id": asset.id},
             )
-            return None
+            try:
+                trace_id = uuid4()
+                event = self._build_ingestion_event(asset, trace_id)
+
+                asset.pipeline_trace_id = trace_id
+                asset.pipeline_status = "ingested"
+                asset.save(
+                    update_fields=[
+                        "pipeline_trace_id",
+                        "pipeline_status",
+                        "pipeline_error",
+                    ]
+                )
+
+                from onboarding.tasks import process_asset_pipeline_sync
+
+                # For curation retry, ingestion already ran; the task will
+                # detect the file is in raw/ and skip ingestion gracefully.
+                process_asset_pipeline_sync.delay(
+                    asset_id=asset.id,
+                    tenant_id=str(asset.tenant.id) if asset.tenant else "public",
+                    event_data=event,
+                )
+                return str(trace_id)
+            except Exception as e:
+                logger.error(
+                    "Failed to queue curation retry: %s",
+                    e,
+                    extra={"asset_id": asset.id},
+                    exc_info=True,
+                )
+                asset.pipeline_status = "failed"
+                asset.pipeline_error = f"Failed to queue curation retry: {e}"
+                asset.save(update_fields=["pipeline_status", "pipeline_error"])
+                return None
 
         try:
             trace_id = uuid4()
@@ -288,8 +370,11 @@ class OnboardingPipelineService:
                     asset.file_type, "application/octet-stream"
                 )
 
-            bucket = asset.gcs_bucket or self._get_default_bucket()
+            bucket = asset.gcs_bucket or self._get_default_bucket(asset.tenant)
             raw_gcs_uri = f"gs://{bucket}/{asset.gcs_path}"
+
+            # Resolve curated bucket for downstream pipeline stages
+            curated_bucket = asset.tenant.get_curated_bucket() if asset.tenant else None
 
             event = {
                 "event_id": str(uuid4()),
@@ -313,6 +398,8 @@ class OnboardingPipelineService:
                     "uploaded_at": asset.uploaded_at.isoformat(),
                     "source_service": "onboarding",
                     "file_size_bytes": asset.file_size,
+                    "raw_bucket": bucket,
+                    "curated_bucket": curated_bucket,
                 },
             }
 

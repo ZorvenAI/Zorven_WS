@@ -1,0 +1,22 @@
+test: Phase 10 - comprehensive multi-tenancy test suite (94 tests)
+
+New test files covering all Phase 10 test categories:
+
+- test_permissions.py (25 tests): Unit tests for all 6 permission
+  classes and RoleBasedPermissionMixin dispatch logic
+
+- test_role_enforcement.py (17 tests): Integration tests verifying
+  RBAC matrix across CompanyViewSet for all 4 roles + outsider,
+  plus multi-tenant user with different roles per tenant
+
+- test_tenant_switching.py (14 tests): Cross-tenant data isolation,
+  tenant switching via API, MyTenantsView workspace listing
+
+- test_member_management.py (24 tests): Member listing, invites,
+  role updates, member removal with owner protection
+
+- test_workspace_crud.py (14 tests): Workspace creation/deletion,
+  registration modes (brand owner, existing user, pending invite)
+
+Full suite: 1843 passed (94 new), 25 skipped, 0 new failures
+Lint: black + flake8 clean

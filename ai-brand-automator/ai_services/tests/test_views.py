@@ -28,13 +28,15 @@ class TestChatSessionViewSet:
         response = api_client.get(self.url_list())
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_list_sessions_authenticated(self, authenticated_client, public_tenant):
+    def test_list_sessions_authenticated(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test listing chat sessions for authenticated user"""
         # Create sessions for this tenant
         ChatSessionFactory(tenant=public_tenant)
         ChatSessionFactory(tenant=public_tenant)
 
-        response = authenticated_client.get(self.url_list())
+        response = authenticated_client_with_tenant.get(self.url_list())
         assert response.status_code == status.HTTP_200_OK
 
     def test_create_session_authenticated(
@@ -87,12 +89,14 @@ class TestAIGenerationViewSet:
         response = api_client.get(self.url_list())
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_list_generations_authenticated(self, authenticated_client, public_tenant):
+    def test_list_generations_authenticated(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test listing AI generations for authenticated user"""
         AIGenerationFactory(tenant=public_tenant)
         AIGenerationFactory(tenant=public_tenant)
 
-        response = authenticated_client.get(self.url_list())
+        response = authenticated_client_with_tenant.get(self.url_list())
         assert response.status_code == status.HTTP_200_OK
 
     def test_retrieve_generation(self, authenticated_client_with_tenant, public_tenant):
@@ -140,14 +144,18 @@ class TestChatWithAIEndpoint:
         response = api_client.post(self.url(), {"message": "Hello"})
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_chat_missing_message(self, authenticated_client):
+    def test_chat_missing_message(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test chat with missing message field"""
-        response = authenticated_client.post(self.url(), {}, format="json")
+        response = authenticated_client_with_tenant.post(self.url(), {}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_chat_empty_message(self, authenticated_client):
+    def test_chat_empty_message(self, authenticated_client_with_tenant, public_tenant):
         """Test chat with empty message"""
-        response = authenticated_client.post(self.url(), {"message": ""}, format="json")
+        response = authenticated_client_with_tenant.post(
+            self.url(), {"message": ""}, format="json"
+        )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     @patch("ai_services.views.ai_service")
@@ -179,14 +187,18 @@ class TestGenerateBrandStrategyEndpoint:
         response = api_client.post(self.url(), {"company_id": 1})
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_generate_missing_company_id(self, authenticated_client):
+    def test_generate_missing_company_id(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test generate with missing company_id"""
-        response = authenticated_client.post(self.url(), {}, format="json")
+        response = authenticated_client_with_tenant.post(self.url(), {}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_generate_invalid_company_id(self, authenticated_client):
+    def test_generate_invalid_company_id(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test generate with invalid company_id type"""
-        response = authenticated_client.post(
+        response = authenticated_client_with_tenant.post(
             self.url(), {"company_id": "invalid"}, format="json"
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -238,9 +250,11 @@ class TestGenerateBrandIdentityEndpoint:
         response = api_client.post(self.url(), {"company_id": 1})
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_generate_missing_company_id(self, authenticated_client):
+    def test_generate_missing_company_id(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test generate with missing company_id"""
-        response = authenticated_client.post(self.url(), {}, format="json")
+        response = authenticated_client_with_tenant.post(self.url(), {}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     @patch("ai_services.views.ai_service")
@@ -277,9 +291,11 @@ class TestAnalyzeMarketEndpoint:
         response = api_client.post(self.url(), {"company_id": 1})
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_analyze_missing_company_id(self, authenticated_client):
+    def test_analyze_missing_company_id(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test analyze with missing company_id"""
-        response = authenticated_client.post(self.url(), {}, format="json")
+        response = authenticated_client_with_tenant.post(self.url(), {}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     @patch("ai_services.views.ai_service")

@@ -40,13 +40,13 @@ class TestCompanyViewSet:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_list_companies_authenticated(
-        self, authenticated_client, public_tenant, url_list
+        self, authenticated_client_with_tenant, public_tenant, url_list
     ):
         """Test authenticated user can list companies"""
         # Create company in public schema
         CompanyFactory(tenant=public_tenant)
 
-        response = authenticated_client.get(url_list)
+        response = authenticated_client_with_tenant.get(url_list)
         assert response.status_code == status.HTTP_200_OK
         assert "results" in response.data
         # At least the created company should be in results
@@ -66,19 +66,23 @@ class TestCompanyViewSet:
         # 3. MVP mode has nullable tenants and partially disabled middleware
         pass
 
-    def test_retrieve_company_authenticated(self, authenticated_client, company):
+    def test_retrieve_company_authenticated(
+        self, authenticated_client_with_tenant, company
+    ):
         """Test retrieving a single company"""
         company.name = "Test Company"
         company.save()
 
-        response = authenticated_client.get(self.url_detail(company.id))
+        response = authenticated_client_with_tenant.get(self.url_detail(company.id))
         assert response.status_code == status.HTTP_200_OK
         assert response.data["name"] == "Test Company"
         assert response.data["id"] == company.id
 
-    def test_retrieve_nonexistent_company(self, authenticated_client, public_tenant):
+    def test_retrieve_nonexistent_company(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test retrieving a company that doesn't exist"""
-        response = authenticated_client.get(self.url_detail(99999))
+        response = authenticated_client_with_tenant.get(self.url_detail(99999))
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_create_company_unauthenticated(self, api_client, url_list):
@@ -91,7 +95,9 @@ class TestCompanyViewSet:
         response = api_client.post(url_list, data)
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_create_company_authenticated(self, authenticated_client, url_list):
+    def test_create_company_authenticated(
+        self, authenticated_client_with_tenant, public_tenant, url_list
+    ):
         """Test authenticated user can create a company"""
         data = {
             "name": "New Tech Startup",
@@ -102,7 +108,7 @@ class TestCompanyViewSet:
             "brand_voice": "professional",
         }
 
-        response = authenticated_client.post(url_list, data)
+        response = authenticated_client_with_tenant.post(url_list, data)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["name"] == "New Tech Startup"
         assert response.data["industry"] == "Technology"
@@ -111,7 +117,7 @@ class TestCompanyViewSet:
         assert Company.objects.filter(name="New Tech Startup").exists()
 
     def test_create_company_missing_required_field(
-        self, authenticated_client, url_list
+        self, authenticated_client_with_tenant, public_tenant, url_list
     ):
         """Test creating company without required name field"""
         data = {
@@ -119,22 +125,26 @@ class TestCompanyViewSet:
             "brand_voice": "professional",
         }
 
-        response = authenticated_client.post(url_list, data)
+        response = authenticated_client_with_tenant.post(url_list, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "name" in response.data
 
-    def test_create_company_invalid_brand_voice(self, authenticated_client, url_list):
+    def test_create_company_invalid_brand_voice(
+        self, authenticated_client_with_tenant, public_tenant, url_list
+    ):
         """Test creating company with invalid brand_voice choice"""
         data = {
             "name": "Test Company",
             "brand_voice": "invalid_choice",
         }
 
-        response = authenticated_client.post(url_list, data)
+        response = authenticated_client_with_tenant.post(url_list, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "brand_voice" in response.data
 
-    def test_update_company_authenticated(self, authenticated_client, company):
+    def test_update_company_authenticated(
+        self, authenticated_client_with_tenant, company
+    ):
         """Test updating a company"""
         company.description = "Old description"
         company.industry = "Technology"
@@ -147,7 +157,9 @@ class TestCompanyViewSet:
             "target_audience": "Healthcare professionals",
         }
 
-        response = authenticated_client.put(self.url_detail(company.id), data)
+        response = authenticated_client_with_tenant.put(
+            self.url_detail(company.id), data
+        )
         assert response.status_code == status.HTTP_200_OK
 
         # Verify in database
@@ -156,7 +168,7 @@ class TestCompanyViewSet:
         assert company.industry == "Healthcare"
         assert company.target_audience == "Healthcare professionals"
 
-    def test_partial_update_company(self, authenticated_client, company):
+    def test_partial_update_company(self, authenticated_client_with_tenant, company):
         """Test partial update (PATCH) of a company"""
         company.description = "Original description"
         company.industry = "Technology"
@@ -164,7 +176,9 @@ class TestCompanyViewSet:
 
         data = {"description": "Patched description"}
 
-        response = authenticated_client.patch(self.url_detail(company.id), data)
+        response = authenticated_client_with_tenant.patch(
+            self.url_detail(company.id), data
+        )
         assert response.status_code == status.HTTP_200_OK
 
         # Verify in database
@@ -173,11 +187,13 @@ class TestCompanyViewSet:
         # Industry should remain unchanged
         assert company.industry == "Technology"
 
-    def test_delete_company_authenticated(self, authenticated_client, company):
+    def test_delete_company_authenticated(
+        self, authenticated_client_with_tenant, company
+    ):
         """Test deleting a company"""
         company_id = company.id
 
-        response = authenticated_client.delete(self.url_detail(company_id))
+        response = authenticated_client_with_tenant.delete(self.url_detail(company_id))
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
         # Verify company was deleted
@@ -194,7 +210,7 @@ class TestCompanyViewSet:
         assert Company.objects.filter(id=company.id).exists()
 
     def test_generate_brand_strategy_action(
-        self, authenticated_client, company, mock_gemini_api
+        self, authenticated_client_with_tenant, company, mock_gemini_api
     ):
         """Test custom generate_brand_strategy action"""
         company.name = "Test Co"
@@ -205,7 +221,7 @@ class TestCompanyViewSet:
 
         # Use URL pattern matching the actual action route
         url = f"/api/v1/companies/{company.id}/generate_brand_strategy/"
-        response = authenticated_client.post(url)
+        response = authenticated_client_with_tenant.post(url)
 
         # Expect 200 OK with generated strategy
         assert response.status_code == status.HTTP_200_OK
@@ -236,23 +252,25 @@ class TestBrandAssetViewSet:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_list_assets_authenticated(
-        self, authenticated_client, public_tenant, url_list
+        self, authenticated_client_with_tenant, public_tenant, url_list
     ):
         """Test authenticated user can list brand assets"""
         company = CompanyFactory(tenant=public_tenant)
         BrandAssetFactory.create_batch(3, tenant=public_tenant, company=company)
 
-        response = authenticated_client.get(url_list)
+        response = authenticated_client_with_tenant.get(url_list)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) >= 3
 
-    def test_list_assets_ordering(self, authenticated_client, public_tenant, url_list):
+    def test_list_assets_ordering(
+        self, authenticated_client_with_tenant, public_tenant, url_list
+    ):
         """Test that assets are ordered by uploaded_at descending"""
         company = CompanyFactory(tenant=public_tenant)
         BrandAssetFactory(tenant=public_tenant, company=company, file_name="first.jpg")
         BrandAssetFactory(tenant=public_tenant, company=company, file_name="second.jpg")
 
-        response = authenticated_client.get(url_list)
+        response = authenticated_client_with_tenant.get(url_list)
         assert response.status_code == status.HTTP_200_OK
 
         # Most recent should be first (descending order)
@@ -267,7 +285,7 @@ class TestBrandAssetViewSet:
             assert results[0]["file_name"] == "second.jpg"
 
     def test_create_asset_authenticated(
-        self, authenticated_client, public_tenant, url_list
+        self, authenticated_client_with_tenant, public_tenant, url_list
     ):
         """Test creating a brand asset"""
         company = CompanyFactory(tenant=public_tenant)
@@ -281,13 +299,13 @@ class TestBrandAssetViewSet:
             "gcs_bucket": "brand-automator",
         }
 
-        response = authenticated_client.post(url_list, data)
+        response = authenticated_client_with_tenant.post(url_list, data)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["file_name"] == "logo.png"
         assert response.data["file_type"] == "image"
 
     def test_create_asset_invalid_file_type(
-        self, authenticated_client, public_tenant, url_list
+        self, authenticated_client_with_tenant, public_tenant, url_list
     ):
         """Test creating asset with invalid file_type"""
         company = CompanyFactory(tenant=public_tenant)
@@ -300,35 +318,37 @@ class TestBrandAssetViewSet:
             "gcs_path": "test/path",
         }
 
-        response = authenticated_client.post(url_list, data)
+        response = authenticated_client_with_tenant.post(url_list, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "file_type" in response.data
 
-    def test_retrieve_asset(self, authenticated_client, public_tenant):
+    def test_retrieve_asset(self, authenticated_client_with_tenant, public_tenant):
         """Test retrieving a single asset"""
         company = CompanyFactory(tenant=public_tenant)
         asset = BrandAssetFactory(
             tenant=public_tenant, company=company, file_name="brand-guide.pdf"
         )
 
-        response = authenticated_client.get(self.url_detail(asset.id))
+        response = authenticated_client_with_tenant.get(self.url_detail(asset.id))
         assert response.status_code == status.HTTP_200_OK
         assert response.data["file_name"] == "brand-guide.pdf"
         assert response.data["company"] == company.id
 
-    def test_delete_asset(self, authenticated_client, public_tenant):
+    def test_delete_asset(self, authenticated_client_with_tenant, public_tenant):
         """Test deleting a brand asset"""
         company = CompanyFactory(tenant=public_tenant)
         asset = BrandAssetFactory(tenant=public_tenant, company=company)
         asset_id = asset.id
 
-        response = authenticated_client.delete(self.url_detail(asset_id))
+        response = authenticated_client_with_tenant.delete(self.url_detail(asset_id))
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
         # Verify asset was deleted
         assert not BrandAsset.objects.filter(id=asset_id).exists()
 
-    def test_delete_asset_with_gcs_file(self, authenticated_client, public_tenant):
+    def test_delete_asset_with_gcs_file(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test that GCS file is deleted when asset is deleted"""
         from unittest.mock import patch, MagicMock
 
@@ -353,7 +373,9 @@ class TestBrandAssetViewSet:
             mock_gcs_service.client = mock_client
             mock_gcs_service.bucket_name = "default-bucket"
 
-            response = authenticated_client.delete(self.url_detail(asset_id))
+            response = authenticated_client_with_tenant.delete(
+                self.url_detail(asset_id)
+            )
             assert response.status_code == status.HTTP_204_NO_CONTENT
 
             # Verify GCS blob.delete() was called
@@ -363,7 +385,7 @@ class TestBrandAssetViewSet:
         assert not BrandAsset.objects.filter(id=asset_id).exists()
 
     def test_delete_asset_continues_on_gcs_error(
-        self, authenticated_client, public_tenant
+        self, authenticated_client_with_tenant, public_tenant
     ):
         """Test that asset deletion continues even if GCS deletion fails"""
         from unittest.mock import patch, MagicMock
@@ -381,14 +403,16 @@ class TestBrandAssetViewSet:
             mock_gcs_service.client = MagicMock()
             mock_gcs_service.client.bucket.side_effect = Exception("GCS error")
 
-            response = authenticated_client.delete(self.url_detail(asset_id))
+            response = authenticated_client_with_tenant.delete(
+                self.url_detail(asset_id)
+            )
             # Should still succeed despite GCS error
             assert response.status_code == status.HTTP_204_NO_CONTENT
 
         # Verify asset was still deleted from DB
         assert not BrandAsset.objects.filter(id=asset_id).exists()
 
-    def test_status_endpoint(self, authenticated_client, public_tenant):
+    def test_status_endpoint(self, authenticated_client_with_tenant, public_tenant):
         """Test the /assets/status/ endpoint returns correct counts"""
         company = CompanyFactory(tenant=public_tenant)
 
@@ -406,7 +430,7 @@ class TestBrandAssetViewSet:
             tenant=public_tenant, company=company, pipeline_status="failed"
         )
 
-        response = authenticated_client.get(reverse("brandasset-status"))
+        response = authenticated_client_with_tenant.get(reverse("brandasset-status"))
         assert response.status_code == status.HTTP_200_OK
 
         data = response.data
@@ -422,7 +446,7 @@ class TestBrandAssetViewSet:
         assert data["failed_count"] >= 1
 
     def test_status_endpoint_filter_by_pipeline_status(
-        self, authenticated_client, public_tenant
+        self, authenticated_client_with_tenant, public_tenant
     ):
         """Test /assets/status/ filters by pipeline_status parameter"""
         company = CompanyFactory(tenant=public_tenant)
@@ -434,7 +458,7 @@ class TestBrandAssetViewSet:
             tenant=public_tenant, company=company, pipeline_status="indexed"
         )
 
-        response = authenticated_client.get(
+        response = authenticated_client_with_tenant.get(
             reverse("brandasset-status") + "?pipeline_status=pending"
         )
         assert response.status_code == status.HTTP_200_OK
@@ -444,7 +468,7 @@ class TestBrandAssetViewSet:
             assert result["pipeline_status"] == "pending"
 
     def test_status_endpoint_exclude_processed(
-        self, authenticated_client, public_tenant
+        self, authenticated_client_with_tenant, public_tenant
     ):
         """Test /assets/status/ with include_processed=false"""
         company = CompanyFactory(tenant=public_tenant)
@@ -456,7 +480,7 @@ class TestBrandAssetViewSet:
             tenant=public_tenant, company=company, pipeline_status="indexed"
         )
 
-        response = authenticated_client.get(
+        response = authenticated_client_with_tenant.get(
             reverse("brandasset-status") + "?include_processed=false"
         )
         assert response.status_code == status.HTTP_200_OK
@@ -465,7 +489,9 @@ class TestBrandAssetViewSet:
         for result in response.data["results"]:
             assert result["pipeline_status"] != "indexed"
 
-    def test_status_endpoint_ordering(self, authenticated_client, public_tenant):
+    def test_status_endpoint_ordering(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test that /assets/status/ returns assets ordered by -uploaded_at"""
         company = CompanyFactory(tenant=public_tenant)
 
@@ -483,7 +509,7 @@ class TestBrandAssetViewSet:
             pipeline_status="pending",
         )
 
-        response = authenticated_client.get(reverse("brandasset-status"))
+        response = authenticated_client_with_tenant.get(reverse("brandasset-status"))
         assert response.status_code == status.HTTP_200_OK
 
         results = response.data["results"]
@@ -509,19 +535,19 @@ class TestOnboardingProgressViewSet:
         return reverse("onboardingprogress-detail", kwargs={"pk": pk})
 
     def test_list_progress_authenticated(
-        self, authenticated_client, public_tenant, url_list
+        self, authenticated_client_with_tenant, public_tenant, url_list
     ):
         """Test listing onboarding progress records"""
         # Note: Can only create 1 company per tenant due to OneToOne constraint
         company = CompanyFactory(tenant=public_tenant)
         OnboardingProgressFactory(tenant=public_tenant, company=company)
 
-        response = authenticated_client.get(url_list)
+        response = authenticated_client_with_tenant.get(url_list)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) >= 1
 
     def test_create_progress_authenticated(
-        self, authenticated_client, public_tenant, url_list
+        self, authenticated_client_with_tenant, public_tenant, url_list
     ):
         """Test that creating onboarding progress returns proper response"""
         # Note: OnboardingProgress is created when using Factory
@@ -529,7 +555,7 @@ class TestOnboardingProgressViewSet:
         OnboardingProgressFactory(tenant=public_tenant, company=company)
 
         # List to verify progress exists
-        response = authenticated_client.get(url_list)
+        response = authenticated_client_with_tenant.get(url_list)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) >= 1
 
@@ -540,7 +566,7 @@ class TestOnboardingProgressViewSet:
         assert len(progress_items) == 1
         assert progress_items[0]["current_step"] in ["company_info", "brand_strategy"]
 
-    def test_update_progress(self, authenticated_client, public_tenant):
+    def test_update_progress(self, authenticated_client_with_tenant, public_tenant):
         """Test updating onboarding progress"""
         company = CompanyFactory(tenant=public_tenant)
         progress = OnboardingProgressFactory(
@@ -555,7 +581,7 @@ class TestOnboardingProgressViewSet:
             "completed_steps": ["company_info"],
         }
 
-        response = authenticated_client.patch(
+        response = authenticated_client_with_tenant.patch(
             self.url_detail(progress.id), data, format="json"
         )
         assert (
@@ -565,7 +591,7 @@ class TestOnboardingProgressViewSet:
         assert "company_info" in response.data["completed_steps"]
 
     def test_completion_percentage_calculation(
-        self, authenticated_client, public_tenant, url_list
+        self, authenticated_client_with_tenant, public_tenant, url_list
     ):
         """Test that completion_percentage is calculated correctly"""
         company = CompanyFactory(tenant=public_tenant)
@@ -575,13 +601,15 @@ class TestOnboardingProgressViewSet:
             completed_steps=["company_info", "brand_strategy"],
         )
 
-        response = authenticated_client.get(self.url_detail(progress.id))
+        response = authenticated_client_with_tenant.get(self.url_detail(progress.id))
         assert response.status_code == status.HTTP_200_OK
         assert "completion_percentage" in response.data
         # 2 out of 5 steps = 40%
         assert response.data["completion_percentage"] == 40
 
-    def test_mark_onboarding_complete(self, authenticated_client, public_tenant):
+    def test_mark_onboarding_complete(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test marking onboarding as completed"""
         company = CompanyFactory(tenant=public_tenant)
         progress = OnboardingProgressFactory(
@@ -609,7 +637,7 @@ class TestOnboardingProgressViewSet:
             "is_completed": True,
         }
 
-        response = authenticated_client.patch(
+        response = authenticated_client_with_tenant.patch(
             self.url_detail(progress.id), data, format="json"
         )
         assert (
@@ -629,14 +657,16 @@ class TestOnboardingProgressViewSet:
 class TestViewSetPagination:
     """Test pagination for viewsets"""
 
-    def test_company_list_pagination(self, authenticated_client, public_tenant):
+    def test_company_list_pagination(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test that company list is paginated"""
         # Note: Can only create 1 company per tenant due to OneToOne constraint
         # Just test that pagination structure exists
         company = CompanyFactory(tenant=public_tenant)  # noqa: F841
 
         url = reverse("company-list")
-        response = authenticated_client.get(url)
+        response = authenticated_client_with_tenant.get(url)
 
         assert response.status_code == status.HTTP_200_OK
         assert "results" in response.data
@@ -645,13 +675,15 @@ class TestViewSetPagination:
         assert "previous" in response.data
         assert response.data["count"] >= 1
 
-    def test_pagination_page_size(self, authenticated_client, public_tenant):
+    def test_pagination_page_size(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test custom page size parameter"""
         # Create one company (OneToOne constraint)
         company = CompanyFactory(tenant=public_tenant)  # noqa: F841
 
         url = reverse("company-list")
-        response = authenticated_client.get(url, {"page_size": 5})
+        response = authenticated_client_with_tenant.get(url, {"page_size": 5})
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) >= 1

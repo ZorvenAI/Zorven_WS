@@ -27,10 +27,10 @@ ENV KONG_ADMIN_ERROR_LOG=/dev/stderr
 ENV KONG_PLUGINS=bundled,jwt,cors,request-transformer,rate-limiting,response-transformer,http-log
 
 # Copy declarative configuration template
-COPY kong.yaml /usr/local/kong/declarative/kong.yaml.template
+COPY docker/kong/kong.yaml /usr/local/kong/declarative/kong.yaml.template
 
 # Copy custom entrypoint script
-COPY docker-entrypoint.sh /custom-entrypoint.sh
+COPY docker/kong/docker-entrypoint.sh /custom-entrypoint.sh
 
 # Expose ports
 # 8000 - Proxy (HTTP)

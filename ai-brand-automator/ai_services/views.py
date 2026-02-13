@@ -17,14 +17,32 @@ from .serializers import (
 )
 from .services import ai_service
 from onboarding.models import Company
+from tenants.permissions import (
+    RoleBasedPermissionMixin,
+    IsTenantViewer,
+    IsTenantEditor,
+)
 
 
-class ChatSessionViewSet(viewsets.ModelViewSet):
-    """ViewSet for ChatSession model"""
+class ChatSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
+    """ViewSet for ChatSession model.
+
+    Permissions:
+        - list, retrieve: IsTenantViewer
+        - create, update, destroy: IsTenantEditor
+    """
 
     queryset = ChatSession.objects.all()
     serializer_class = ChatSessionSerializer
     permission_classes = [IsAuthenticated]
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "create": [IsAuthenticated, IsTenantEditor],
+        "update": [IsAuthenticated, IsTenantEditor],
+        "partial_update": [IsAuthenticated, IsTenantEditor],
+        "destroy": [IsAuthenticated, IsTenantEditor],
+    }
 
     def get_queryset(self):
         tenant = getattr(self.request, "tenant", None)
@@ -35,23 +53,29 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         tenant = getattr(self.request, "tenant", None)
         if not tenant:
-            from tenants.models import Tenant
+            from rest_framework.exceptions import PermissionDenied
 
-            try:
-                tenant = Tenant.objects.get(schema_name="public")
-            except Tenant.DoesNotExist:
-                raise ValueError(
-                    "Public tenant not found. Ensure migrations have been run."
-                )
+            raise PermissionDenied(
+                "No tenant context. Please log in again to obtain "
+                "a valid tenant-scoped token."
+            )
         serializer.save(tenant=tenant, session_id=str(uuid.uuid4()))
 
 
-class AIGenerationViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for AI generations (read-only)"""
+class AIGenerationViewSet(RoleBasedPermissionMixin, viewsets.ReadOnlyModelViewSet):
+    """ViewSet for AI generations (read-only).
+
+    Permissions:
+        - list, retrieve: IsTenantViewer
+    """
 
     queryset = AIGeneration.objects.all()
     serializer_class = AIGenerationSerializer
     permission_classes = [IsAuthenticated]
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+    }
 
     def get_queryset(self):
         tenant = getattr(self.request, "tenant", None)
@@ -61,9 +85,9 @@ class AIGenerationViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantEditor])
 def chat_with_ai(request):
-    """Chat with AI using brand context"""
+    """Chat with AI using brand context."""
     serializer = ChatMessageSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -71,14 +95,20 @@ def chat_with_ai(request):
     message = serializer.validated_data["message"]
     session_id = serializer.validated_data.get("session_id")
 
+    tenant = getattr(request, "tenant", None)
+
+    if not tenant:
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     # Get or create chat session
     if session_id:
-        session = get_object_or_404(
-            ChatSession, session_id=session_id, tenant=request.tenant
-        )
+        session = get_object_or_404(ChatSession, session_id=session_id, tenant=tenant)
     else:
         session = ChatSession.objects.create(
-            tenant=request.tenant,
+            tenant=tenant,
             session_id=str(uuid.uuid4()),
             title=f"Chat {timezone.now().strftime('%Y-%m-%d %H:%M')}",
             context={"company": {}},
@@ -86,9 +116,9 @@ def chat_with_ai(request):
 
     # Get company context if available
     try:
-        company = Company.objects.get(tenant=request.tenant)
+        company = Company.objects.get(tenant=tenant)
         context = {
-            "tenant": request.tenant,
+            "tenant": tenant,
             "company": {
                 "name": company.name,
                 "industry": company.industry,
@@ -98,7 +128,7 @@ def chat_with_ai(request):
             },
         }
     except Company.DoesNotExist:
-        context = {"tenant": request.tenant, "company": {}}
+        context = {"tenant": tenant, "company": {}}
 
     # Add user message to session
     session.add_message("user", message)
@@ -119,19 +149,20 @@ def chat_with_ai(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantEditor])
 def generate_brand_strategy(request):
     """Generate brand strategy using AI"""
     serializer = BrandStrategyRequestSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    tenant = getattr(request, "tenant", None)
     company_id = serializer.validated_data["company_id"]
-    company = get_object_or_404(Company, id=company_id, tenant=request.tenant)
+    company = get_object_or_404(Company, id=company_id, tenant=tenant)
 
     # Prepare company data for AI
     company_data = {
-        "tenant": request.tenant,
+        "tenant": tenant,
         "name": company.name,
         "industry": company.industry,
         "target_audience": company.target_audience,
@@ -165,19 +196,20 @@ def generate_brand_strategy(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantEditor])
 def generate_brand_identity(request):
     """Generate brand identity using AI"""
     serializer = BrandIdentityRequestSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    tenant = getattr(request, "tenant", None)
     company_id = serializer.validated_data["company_id"]
-    company = get_object_or_404(Company, id=company_id, tenant=request.tenant)
+    company = get_object_or_404(Company, id=company_id, tenant=tenant)
 
     # Prepare company data for AI
     company_data = {
-        "tenant": request.tenant,
+        "tenant": tenant,
         "name": company.name,
         "industry": company.industry,
         "brand_voice": company.brand_voice,
@@ -208,19 +240,20 @@ def generate_brand_identity(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantEditor])
 def analyze_market(request):
     """Perform market analysis using AI"""
     serializer = MarketAnalysisRequestSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    tenant = getattr(request, "tenant", None)
     company_id = serializer.validated_data["company_id"]
-    company = get_object_or_404(Company, id=company_id, tenant=request.tenant)
+    company = get_object_or_404(Company, id=company_id, tenant=tenant)
 
     # Prepare company data for AI
     company_data = {
-        "tenant": request.tenant,
+        "tenant": tenant,
         "name": company.name,
         "industry": company.industry,
         "target_audience": company.target_audience,

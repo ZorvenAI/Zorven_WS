@@ -77,4 +77,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 EXPOSE ${PORT}
 
 # Run the application
-CMD ["/app/start.sh"]
+CMD ["bash", "/app/start.sh"]

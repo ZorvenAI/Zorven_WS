@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenantRole } from '@/hooks/useTenantRole';
 import { SubscriptionStatus } from '@/components/subscription/SubscriptionStatus';
 import { PaymentHistoryTable } from '@/components/subscription/PaymentHistoryTable';
 import {
@@ -18,6 +19,7 @@ const SUPPORT_EMAIL =
 export default function BillingPage() {
   useAuth();
   const router = useRouter();
+  const { canManageBilling } = useTenantRole();
 
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [payments, setPayments] = useState<PaymentHistory[]>([]);
@@ -150,12 +152,12 @@ export default function BillingPage() {
           </h2>
           <SubscriptionStatus
             subscription={subscription}
-            onManageBilling={handleManageBilling}
-            onCancelSubscription={handleCancelSubscription}
+            onManageBilling={canManageBilling ? handleManageBilling : undefined}
+            onCancelSubscription={canManageBilling ? handleCancelSubscription : undefined}
             isLoading={isProcessing}
           />
 
-          {!subscription && (
+          {!subscription && canManageBilling && (
             <div className="mt-4">
               <button
                 onClick={() => router.push('/subscription')}
@@ -163,6 +165,14 @@ export default function BillingPage() {
               >
                 View Available Plans
               </button>
+            </div>
+          )}
+
+          {!canManageBilling && (
+            <div className="mt-4 p-3 bg-white/5 border border-white/10 rounded-lg">
+              <p className="text-sm text-brand-silver/50">
+                Only workspace owners can manage billing and subscriptions.
+              </p>
             </div>
           )}
         </div>
@@ -190,21 +200,23 @@ export default function BillingPage() {
               {SUPPORT_EMAIL}
             </a>
           </p>
-          <div className="mt-4 flex gap-4">
-            <button
-              onClick={handleManageBilling}
-              disabled={!subscription || isProcessing}
-              className="btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Update Payment Method
-            </button>
-            <button
-              onClick={() => router.push('/subscription')}
-              className="btn-secondary"
-            >
-              Change Plan
-            </button>
-          </div>
+          {canManageBilling && (
+            <div className="mt-4 flex gap-4">
+              <button
+                onClick={handleManageBilling}
+                disabled={!subscription || isProcessing}
+                className="btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Update Payment Method
+              </button>
+              <button
+                onClick={() => router.push('/subscription')}
+                className="btn-secondary"
+              >
+                Change Plan
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

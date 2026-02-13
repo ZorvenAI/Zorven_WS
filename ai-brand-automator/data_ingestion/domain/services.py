@@ -119,28 +119,37 @@ class IngestionService:
 
         try:
             # Step 1: Check for duplicate
-            self._check_duplicate(event_id, trace_id)
+            self._check_duplicate(event_id, trace_id, event.tenant_id)
 
             # Step 2: Update status to VALIDATING
-            self._update_status(trace_id, ProcessingStatus.VALIDATING)
+            self._update_status(
+                trace_id,
+                ProcessingStatus.VALIDATING,
+                tenant_id=event.tenant_id,
+            )
 
             # Step 3: Validate file exists in landing zone
             self._validate_file_exists(event.file_path, trace_id)
 
             # Step 4: Update status to MOVING
-            self._update_status(trace_id, ProcessingStatus.MOVING)
+            self._update_status(
+                trace_id,
+                ProcessingStatus.MOVING,
+                tenant_id=event.tenant_id,
+            )
 
             # Step 5: Generate destination path and move file
             destination_path = self._move_file_to_raw(event, trace_id)
 
             # Step 6: Mark as processed (deduplication)
-            self._mark_processed(event_id, trace_id)
+            self._mark_processed(event_id, trace_id, event.tenant_id)
 
             # Step 7: Update status to RAW_STORED
             self._update_status(
                 trace_id,
                 ProcessingStatus.RAW_STORED,
                 metadata={"destination_path": destination_path},
+                tenant_id=event.tenant_id,
             )
 
             # Step 8: Create and publish output event
@@ -171,7 +180,16 @@ class IngestionService:
                 status=ProcessingStatus.RAW_STORED,
                 processing_duration_ms=processing_duration_ms,
                 file_metadata=file_metadata,
-                metadata=event.metadata,  # Pass through original metadata (asset_id)
+                metadata={
+                    **(event.metadata or {}),
+                    # Carry per-tenant bucket info for downstream consumers
+                    **({"raw_bucket": event.raw_bucket} if event.raw_bucket else {}),
+                    **(
+                        {"curated_bucket": event.curated_bucket}
+                        if event.curated_bucket
+                        else {}
+                    ),
+                },
             )
 
             self._publish_output_event(processed_event, trace_id)
@@ -202,6 +220,7 @@ class IngestionService:
                 trace_id,
                 ProcessingStatus.FAILED,
                 metadata={"error": str(e)},
+                tenant_id=event.tenant_id,
             )
             raise NonRetryableError(
                 cause=e,
@@ -223,6 +242,7 @@ class IngestionService:
                     trace_id,
                     ProcessingStatus.FAILED,
                     metadata={"error": str(e)},
+                    tenant_id=event.tenant_id,
                 )
                 raise NonRetryableError(cause=e, trace_id=trace_id)
 
@@ -245,6 +265,7 @@ class IngestionService:
                 trace_id,
                 ProcessingStatus.FAILED,
                 metadata={"error": str(e), "error_type": type(e).__name__},
+                tenant_id=event.tenant_id,
             )
             raise NonRetryableError(
                 cause=e,
@@ -303,10 +324,12 @@ class IngestionService:
                 )
                 raise
 
-    def _check_duplicate(self, event_id: str, trace_id: UUID) -> None:
+    def _check_duplicate(
+        self, event_id: str, trace_id: UUID, tenant_id: str = ""
+    ) -> None:
         """Check if event has already been processed."""
         try:
-            if self.cache.is_duplicate(event_id):
+            if self.cache.is_duplicate(event_id, tenant_id=tenant_id or None):
                 raise DuplicateEventError(
                     event_id=UUID(event_id),
                     trace_id=trace_id,
@@ -353,10 +376,16 @@ class IngestionService:
 
         return result_path
 
-    def _mark_processed(self, event_id: str, trace_id: UUID) -> None:
+    def _mark_processed(
+        self, event_id: str, trace_id: UUID, tenant_id: str = ""
+    ) -> None:
         """Mark event as processed for deduplication."""
         try:
-            self.cache.mark_processed(event_id, ttl_seconds=self.dedupe_ttl_seconds)
+            self.cache.mark_processed(
+                event_id,
+                ttl_seconds=self.dedupe_ttl_seconds,
+                tenant_id=tenant_id or None,
+            )
         except CacheOperationError as e:
             # Log but don't fail - dedup is best-effort
             logger.warning(
@@ -373,6 +402,7 @@ class IngestionService:
         trace_id: UUID,
         status: ProcessingStatus,
         metadata: Optional[dict] = None,
+        tenant_id: str = "",
     ) -> None:
         """Update processing status in cache."""
         try:
@@ -381,6 +411,7 @@ class IngestionService:
                 status=status.value,
                 ttl_seconds=self.status_ttl_seconds,
                 metadata=metadata,
+                tenant_id=tenant_id or None,
             )
         except CacheOperationError as e:
             # Log but don't fail - status tracking is not critical

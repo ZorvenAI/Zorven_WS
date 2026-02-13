@@ -25,6 +25,7 @@ from media_curation.domain.exceptions import (
 
 # Custom strategies
 uuid_strategy = st.uuids()
+tenant_id_strategy = st.uuids().map(str)
 gcs_path_strategy = st.text(
     alphabet=st.characters(
         whitelist_categories=("L", "N"), whitelist_characters="-_./"
@@ -53,7 +54,7 @@ class TestCurationEventProperties:
 
     @pytest.mark.property
     @given(
-        tenant_id=uuid_strategy,
+        tenant_id=tenant_id_strategy,
         file_id=uuid_strategy,
         mime_type=mime_type_strategy,
     )
@@ -69,7 +70,7 @@ class TestCurationEventProperties:
 
         assert isinstance(event.event_id, UUID)
         assert isinstance(event.trace_id, UUID)
-        assert isinstance(event.tenant_id, UUID)
+        assert isinstance(event.tenant_id, str)
         assert isinstance(event.file_id, UUID)
 
     @pytest.mark.property
@@ -78,7 +79,7 @@ class TestCurationEventProperties:
     def test_content_type_derivation(self, mime_type):
         """Property: Content type is correctly derived from MIME type."""
         event = CurationEvent(
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://test-bucket/file",
             mime_type=mime_type,
@@ -104,7 +105,7 @@ class TestCurationEventProperties:
         """Property: Only valid GCS URIs are accepted."""
         # Valid GCS URI should work
         event = CurationEvent(
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri=f"gs://bucket/{path}",
             mime_type="application/pdf",
@@ -114,7 +115,7 @@ class TestCurationEventProperties:
         # Invalid path should fail
         with pytest.raises(Exception):
             CurationEvent(
-                tenant_id=uuid4(),
+                tenant_id=str(uuid4()),
                 file_id=uuid4(),
                 raw_gcs_uri=f"/local/{path}",  # Not a GCS URI
                 mime_type="application/pdf",
@@ -135,7 +136,7 @@ class TestCuratedDocumentProperties:
         doc = CuratedDocument(
             document_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             source_gcs_uri="gs://bucket/file",
             mime_type="application/pdf",
@@ -157,7 +158,7 @@ class TestCuratedDocumentProperties:
         doc = CuratedDocument(
             document_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             source_gcs_uri="gs://bucket/file",
             mime_type="application/pdf",
@@ -177,7 +178,7 @@ class TestCuratedDocumentProperties:
         doc = CuratedDocument(
             document_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             source_gcs_uri="gs://bucket/file",
             mime_type="application/pdf",
@@ -209,7 +210,7 @@ class TestCurationStatusRecordProperties:
         record = CurationStatusRecord(
             trace_id=uuid4(),
             event_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             status=status,
             message=message,
@@ -280,7 +281,7 @@ class TestMetadataProperties:
     def test_event_metadata_preserved(self, metadata):
         """Property: Event metadata is preserved."""
         event = CurationEvent(
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://bucket/file",
             mime_type="application/pdf",

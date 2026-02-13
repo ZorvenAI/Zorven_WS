@@ -35,4 +35,4 @@ exec celery -A brand_automator worker \
     --concurrency=${CELERY_CONCURRENCY:-4} \
     --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-1000} \
     --prefetch-multiplier=${CELERY_PREFETCH_MULTIPLIER:-4} \
-    -Q ${CELERY_QUEUES:-celery,high_priority,low_priority}
+    -Q ${CELERY_QUEUES:-celery,high_priority,low_priority,ingestion,curation}

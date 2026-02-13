@@ -32,7 +32,7 @@ from media_curation.ports.dlp_port import PIIFinding
 # Sample UUIDs for consistent testing
 # =============================================================================
 
-SAMPLE_TENANT_ID = UUID("11111111-1111-1111-1111-111111111111")
+SAMPLE_TENANT_ID = "11111111-1111-1111-1111-111111111111"
 SAMPLE_FILE_ID = UUID("22222222-2222-2222-2222-222222222222")
 SAMPLE_TRACE_ID = UUID("33333333-3333-3333-3333-333333333333")
 SAMPLE_EVENT_ID = UUID("44444444-4444-4444-4444-444444444444")
@@ -45,7 +45,7 @@ SAMPLE_DOC_ID = UUID("55555555-5555-5555-5555-555555555555")
 
 
 @pytest.fixture
-def sample_tenant_id() -> UUID:
+def sample_tenant_id() -> str:
     """Return a consistent sample tenant ID."""
     return SAMPLE_TENANT_ID
 
@@ -527,7 +527,9 @@ class MockCacheAdapter:
         self.get_calls = []
         self.set_calls = []
 
-    async def get_status(self, trace_id: str) -> Optional[CurationStatusRecord]:
+    async def get_status(
+        self, trace_id: str, tenant_id: Optional[str] = None
+    ) -> Optional[CurationStatusRecord]:
         """Get curation status by trace_id."""
         self.get_calls.append(f"status:{trace_id}")
         return self._status_cache.get(trace_id)
@@ -537,6 +539,7 @@ class MockCacheAdapter:
         trace_id: str,
         status: CurationStatusRecord,
         ttl_seconds: Optional[int] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """Set curation status."""
         self.set_calls.append(
@@ -548,6 +551,7 @@ class MockCacheAdapter:
         self,
         trace_id: str,
         status: CurationStatus,
+        tenant_id: Optional[str] = None,
         **updates,
     ) -> None:
         """Update status fields."""
@@ -573,7 +577,9 @@ class MockCacheAdapter:
         )
         self._tenant_config_cache[tenant_id] = config
 
-    async def is_duplicate(self, event_id: str) -> bool:
+    async def is_duplicate(
+        self, event_id: str, tenant_id: Optional[str] = None
+    ) -> bool:
         """Check if event was already processed."""
         return event_id in self._processed_events
 
@@ -581,6 +587,7 @@ class MockCacheAdapter:
         self,
         event_id: str,
         ttl_seconds: Optional[int] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """Mark event as processed."""
         self._processed_events.add(event_id)

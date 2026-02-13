@@ -13,6 +13,200 @@ from django.contrib.auth.models import AnonymousUser
 logger = logging.getLogger(__name__)
 
 
+class TenantMembershipMiddleware:
+    """Resolve tenant from ``X-Tenant-ID`` header and verify membership.
+
+    Replaces the old ``JWTTenantMiddleware`` that used a 1-to-1
+    ``user_{id}`` convention.  Now users can belong to multiple tenants
+    via the ``Membership`` model.
+
+    Flow:
+        1. Skip if user is not authenticated.
+        2. Skip if path is tenant-exempt (auth routes, health checks).
+        3. Read ``X-Tenant-ID`` from request header.
+        4. If missing: fall back to user's default tenant (first OWNER
+           membership, then first any active membership).
+        5. Verify the user has an active ``Membership`` for that tenant.
+        6. Set ``request.tenant``, ``request.membership``,
+           ``request.user_role``.
+        7. Return 403 if no valid membership found for a specific
+           tenant_id.
+    """
+
+    # Paths that don't require tenant context
+    TENANT_EXEMPT_PATHS = [
+        "/api/v1/auth/",
+        "/api/v1/tenants/me/",
+        "/api/v1/tenants/switch/",
+        "/api/v1/tenants/accept-invite/",
+        "/health",
+        "/ready",
+        "/alive",
+        "/admin",
+        "/static",
+        "/media",
+    ]
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # Resolve the authenticated user from all possible sources:
+        # 1. DRF force_authenticate (test clients)
+        # 2. Django session / Kong middleware (request.user)
+        # 3. JWT from Authorization header (prod without Kong)
+        user = self._resolve_user(request)
+
+        if user is None or not user.is_authenticated:
+            return self.get_response(request)
+
+        if self._is_exempt_path(request.path):
+            return self.get_response(request)
+
+        tenant_id = self._get_tenant_id(request)
+        if tenant_id is None:
+            # No tenant specified — use default (first owned tenant)
+            tenant_id = self._get_default_tenant_id(user)
+
+        if tenant_id is not None:
+            membership = self._verify_membership(user, tenant_id)
+            if membership:
+                request.tenant = membership.tenant
+                request.membership = membership
+                request.user_role = membership.role
+            else:
+                return JsonResponse(
+                    {"error": "You do not have access to this workspace"},
+                    status=403,
+                )
+        else:
+            # User has no tenants at all — allow through for
+            # tenant creation endpoints
+            request.tenant = None
+            request.membership = None
+            request.user_role = None
+
+        return self.get_response(request)
+
+    def _resolve_user(self, request):
+        """Get the authenticated user from multiple sources.
+
+        Priority:
+            1. ``_force_auth_user`` — set by DRF's ``force_authenticate``
+               in test clients (``ForceAuthClientHandler``).
+            2. ``request.user`` — set by Django's
+               ``AuthenticationMiddleware`` (session) or
+               ``KongAuthenticationMiddleware``.
+            3. JWT from ``Authorization`` header — used in production
+               when Kong gateway is not enabled and DRF's JWT
+               authentication has not yet run (it runs at the view
+               layer, after middleware).
+        """
+        # 1. DRF force_authenticate (used in tests)
+        force_user = getattr(request, "_force_auth_user", None)
+        if force_user is not None:
+            return force_user
+
+        # 2. Django session auth or Kong middleware
+        user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated:
+            return user
+
+        # 3. JWT from Authorization header (production without Kong)
+        return self._try_jwt_auth(request)
+
+    def _try_jwt_auth(self, request):
+        """Attempt JWT authentication from the Authorization header.
+
+        This covers production requests that bypass Kong and go
+        directly to the Django backend.  ``JWTAuthentication`` normally
+        runs in the DRF view layer (after middleware), so we call it
+        here to resolve the user early for tenant resolution.
+
+        Returns:
+            User instance or ``None``.
+        """
+        try:
+            from rest_framework_simplejwt.authentication import (
+                JWTAuthentication,
+            )
+
+            auth = JWTAuthentication()
+            result = auth.authenticate(request)
+            if result:
+                user, _token = result
+                # Also set on the request so downstream middleware
+                # and Django's auth infrastructure see it
+                request.user = user
+                return user
+        except Exception:
+            # Deliberately broad: any JWT parsing/validation failure
+            # (expired, malformed, missing) should fall through to
+            # anonymous — never block the request pipeline.
+            pass
+        return None
+
+    def _is_exempt_path(self, path):
+        """Check if path is exempt from tenant resolution."""
+        for exempt in self.TENANT_EXEMPT_PATHS:
+            if path.startswith(exempt):
+                return True
+        return False
+
+    def _get_tenant_id(self, request):
+        """Extract tenant ID from ``X-Tenant-ID`` header."""
+        header = request.META.get("HTTP_X_TENANT_ID")
+        if header:
+            try:
+                return int(header)
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    def _get_default_tenant_id(self, user):
+        """Get user's default tenant (first owned, then first any).
+
+        Returns:
+            int or None: The tenant ID of the user's default workspace.
+        """
+        from django.db import models as db_models
+        from tenants.models import Membership
+
+        membership = (
+            Membership.objects.filter(user=user, is_active=True)
+            .order_by(
+                db_models.Case(
+                    db_models.When(role=Membership.Role.OWNER, then=0),
+                    default=1,
+                )
+            )
+            .first()
+        )
+        return membership.tenant_id if membership else None
+
+    def _verify_membership(self, user, tenant_id):
+        """Verify user has active membership for the given tenant.
+
+        Args:
+            user: The authenticated user.
+            tenant_id: The tenant ID to verify membership for.
+
+        Returns:
+            Membership or None: The membership record if valid.
+        """
+        from tenants.models import Membership
+
+        return (
+            Membership.objects.filter(
+                user=user,
+                tenant_id=tenant_id,
+                is_active=True,
+            )
+            .select_related("tenant")
+            .first()
+        )
+
+
 class SecurityMiddleware:
     """
     Middleware for additional security measures:
@@ -274,10 +468,11 @@ class KongAuthenticationMiddleware:
                     user = self.User.objects.get(id=user_id)
                     request.user = user
 
-                    # Set tenant context if available
-                    tenant_id = payload.get("tenant_id")
-                    if tenant_id:
-                        request.tenant_id = tenant_id
+                    # Set active_tenant_id from JWT if present
+                    # (TenantMembershipMiddleware will verify membership)
+                    active_tid = payload.get("active_tenant_id")
+                    if active_tid:
+                        request.META["HTTP_X_TENANT_ID"] = str(active_tid)
 
                     # Log successful Kong auth
                     if is_kong_request:

@@ -14,7 +14,9 @@ from onboarding.tests.factories import CompanyFactory, BrandAssetFactory
 class TestCompleteOnboardingWorkflow:
     """Test complete onboarding workflow from start to finish"""
 
-    def test_complete_onboarding_flow(self, authenticated_client, public_tenant):
+    def test_complete_onboarding_flow(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """
         Test complete onboarding workflow.
         create company -> strategy -> assets -> complete
@@ -30,7 +32,7 @@ class TestCompleteOnboardingWorkflow:
             "brand_voice": "professional",
         }
 
-        response = authenticated_client.post(
+        response = authenticated_client_with_tenant.post(
             reverse("company-list"), company_data, format="json"
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -40,7 +42,7 @@ class TestCompleteOnboardingWorkflow:
         company = Company.objects.get(name="Integration Test Startup")
 
         # Step 2: Generate brand strategy
-        response = authenticated_client.post(
+        response = authenticated_client_with_tenant.post(
             reverse("company-generate-brand-strategy", kwargs={"pk": company.id})
         )
         assert response.status_code == status.HTTP_200_OK
@@ -62,7 +64,7 @@ class TestCompleteOnboardingWorkflow:
             "gcs_bucket": "brand-automator",
         }
 
-        response = authenticated_client.post(
+        response = authenticated_client_with_tenant.post(
             reverse("brandasset-list"), asset_data, format="json"
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -87,7 +89,7 @@ class TestCompleteOnboardingWorkflow:
                 ],
             }
 
-            response = authenticated_client.patch(
+            response = authenticated_client_with_tenant.patch(
                 reverse("onboardingprogress-detail", kwargs={"pk": progress.id}),
                 update_data,
                 format="json",
@@ -108,7 +110,7 @@ class TestCompleteOnboardingWorkflow:
                 "is_completed": True,
             }
 
-            response = authenticated_client.patch(
+            response = authenticated_client_with_tenant.patch(
                 reverse("onboardingprogress-detail", kwargs={"pk": progress.id}),
                 complete_data,
                 format="json",
@@ -117,7 +119,9 @@ class TestCompleteOnboardingWorkflow:
             assert response.data["is_completed"] is True
             assert response.data["completion_percentage"] == 100
 
-    def test_onboarding_with_multiple_assets(self, authenticated_client, public_tenant):
+    def test_onboarding_with_multiple_assets(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test onboarding with multiple brand assets"""
 
         # Create company
@@ -141,14 +145,14 @@ class TestCompleteOnboardingWorkflow:
                 "gcs_bucket": "brand-automator",
             }
 
-            response = authenticated_client.post(
+            response = authenticated_client_with_tenant.post(
                 reverse("brandasset-list"), asset_data, format="json"
             )
             assert response.status_code == status.HTTP_201_CREATED
             created_assets.append(response.data["id"])
 
         # Verify all assets exist
-        response = authenticated_client.get(reverse("brandasset-list"))
+        response = authenticated_client_with_tenant.get(reverse("brandasset-list"))
         assert response.status_code == status.HTTP_200_OK
 
         # Note: Due to tenant filtering, assets may not be visible if created
@@ -169,7 +173,7 @@ class TestCompanyLifecycle:
     """Test complete company lifecycle from creation to deletion"""
 
     def test_company_creation_with_auto_progress(
-        self, authenticated_client, public_tenant
+        self, authenticated_client_with_tenant, public_tenant
     ):
         """Test that creating company doesn't auto-create progress (factory pattern)"""
 
@@ -184,7 +188,7 @@ class TestCompanyLifecycle:
         assert progress_count == 0  # Factory doesn't create progress
 
     def test_company_update_and_retrieve_consistency(
-        self, authenticated_client, public_tenant
+        self, authenticated_client_with_tenant, public_tenant
     ):
         """Test that company updates are immediately reflected in retrieval"""
 
@@ -198,7 +202,7 @@ class TestCompanyLifecycle:
             "target_audience": "Healthcare professionals",
         }
 
-        response = authenticated_client.put(
+        response = authenticated_client_with_tenant.put(
             reverse("company-detail", kwargs={"pk": company.id}),
             update_data,
             format="json",
@@ -206,7 +210,7 @@ class TestCompanyLifecycle:
         assert response.status_code == status.HTTP_200_OK
 
         # Retrieve and verify
-        response = authenticated_client.get(
+        response = authenticated_client_with_tenant.get(
             reverse("company-detail", kwargs={"pk": company.id})
         )
         assert response.status_code == status.HTTP_200_OK
@@ -217,7 +221,9 @@ class TestCompanyLifecycle:
         assert company.description == "Updated integration test description"
         assert company.industry == "Healthcare"
 
-    def test_delete_company_cascade_behavior(self, authenticated_client, public_tenant):
+    def test_delete_company_cascade_behavior(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test that deleting company cascades to related objects"""
 
         company = CompanyFactory(tenant=public_tenant)
@@ -229,7 +235,7 @@ class TestCompanyLifecycle:
         asset_ids = [asset1.id, asset2.id]
 
         # Delete company
-        response = authenticated_client.delete(
+        response = authenticated_client_with_tenant.delete(
             reverse("company-detail", kwargs={"pk": company.id})
         )
         assert response.status_code == status.HTTP_204_NO_CONTENT
@@ -248,7 +254,7 @@ class TestBrandStrategyGeneration:
     """Test AI brand strategy generation integration"""
 
     def test_generate_strategy_updates_company(
-        self, authenticated_client, public_tenant
+        self, authenticated_client_with_tenant, public_tenant
     ):
         """Test that generating strategy updates company fields"""
 
@@ -256,7 +262,7 @@ class TestBrandStrategyGeneration:
         company = CompanyFactory(tenant=public_tenant)
 
         # Generate strategy
-        response = authenticated_client.post(
+        response = authenticated_client_with_tenant.post(
             reverse("company-generate-brand-strategy", kwargs={"pk": company.id})
         )
         assert response.status_code == status.HTTP_200_OK
@@ -276,7 +282,7 @@ class TestBrandStrategyGeneration:
         assert len(company.vision_statement) > 0
 
     def test_generate_strategy_with_existing_data(
-        self, authenticated_client, public_tenant
+        self, authenticated_client_with_tenant, public_tenant
     ):
         """Test generating strategy when company already has strategy data"""
 
@@ -287,7 +293,7 @@ class TestBrandStrategyGeneration:
         )
 
         # Generate new strategy
-        response = authenticated_client.post(
+        response = authenticated_client_with_tenant.post(
             reverse("company-generate-brand-strategy", kwargs={"pk": company.id})
         )
         assert response.status_code == status.HTTP_200_OK
@@ -305,7 +311,7 @@ class TestOnboardingProgressTracking:
     """Test onboarding progress tracking integration"""
 
     def test_progress_percentage_calculation_accuracy(
-        self, authenticated_client, public_tenant
+        self, authenticated_client_with_tenant, public_tenant
     ):
         """Test that completion percentage is calculated correctly across updates"""
 
@@ -318,7 +324,7 @@ class TestOnboardingProgressTracking:
             "completed_steps": [],
         }
 
-        response = authenticated_client.post(
+        response = authenticated_client_with_tenant.post(
             reverse("onboardingprogress-list"), progress_data, format="json"
         )
 
@@ -356,7 +362,7 @@ class TestOnboardingProgressTracking:
                 else "company_info",
             }
 
-            response = authenticated_client.patch(
+            response = authenticated_client_with_tenant.patch(
                 reverse("onboardingprogress-detail", kwargs={"pk": progress_id}),
                 update_data,
                 format="json",
@@ -367,7 +373,9 @@ class TestOnboardingProgressTracking:
             assert response.status_code == status.HTTP_200_OK
             assert response.data["completion_percentage"] == expected_percentage
 
-    def test_progress_step_validation(self, authenticated_client, public_tenant):
+    def test_progress_step_validation(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test that progress updates maintain consistency"""
 
         company = CompanyFactory(tenant=public_tenant)
@@ -378,7 +386,7 @@ class TestOnboardingProgressTracking:
             "completed_steps": [],
         }
 
-        response = authenticated_client.post(
+        response = authenticated_client_with_tenant.post(
             reverse("onboardingprogress-list"), progress_data, format="json"
         )
 
@@ -396,7 +404,7 @@ class TestOnboardingProgressTracking:
             "completed_steps": ["company_info"],
         }
 
-        response = authenticated_client.patch(
+        response = authenticated_client_with_tenant.patch(
             reverse("onboardingprogress-detail", kwargs={"pk": progress_id}),
             update_data,
             format="json",
@@ -407,7 +415,7 @@ class TestOnboardingProgressTracking:
         assert response.status_code == status.HTTP_200_OK
 
         # Verify update persisted
-        response = authenticated_client.get(
+        response = authenticated_client_with_tenant.get(
             reverse("onboardingprogress-detail", kwargs={"pk": progress_id})
         )
         assert response.status_code == status.HTTP_200_OK
@@ -420,7 +428,9 @@ class TestOnboardingProgressTracking:
 class TestErrorHandlingIntegration:
     """Test error handling across integrated components"""
 
-    def test_create_asset_for_nonexistent_company(self, authenticated_client):
+    def test_create_asset_for_nonexistent_company(
+        self, authenticated_client_with_tenant
+    ):
         """Test creating asset with invalid company ID"""
 
         asset_data = {
@@ -432,12 +442,12 @@ class TestErrorHandlingIntegration:
             "gcs_bucket": "test",
         }
 
-        response = authenticated_client.post(
+        response = authenticated_client_with_tenant.post(
             reverse("brandasset-list"), asset_data, format="json"
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_update_nonexistent_progress(self, authenticated_client):
+    def test_update_nonexistent_progress(self, authenticated_client_with_tenant):
         """Test updating non-existent progress record"""
 
         update_data = {
@@ -445,17 +455,19 @@ class TestErrorHandlingIntegration:
             "completed_steps": ["company_info"],
         }
 
-        response = authenticated_client.patch(
+        response = authenticated_client_with_tenant.patch(
             reverse("onboardingprogress-detail", kwargs={"pk": 999999}),
             update_data,
             format="json",
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_generate_strategy_for_nonexistent_company(self, authenticated_client):
+    def test_generate_strategy_for_nonexistent_company(
+        self, authenticated_client_with_tenant
+    ):
         """Test generating strategy for non-existent company"""
 
-        response = authenticated_client.post(
+        response = authenticated_client_with_tenant.post(
             reverse("company-generate-brand-strategy", kwargs={"pk": 999999})
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -466,13 +478,15 @@ class TestErrorHandlingIntegration:
 class TestAPIConsistency:
     """Test API response consistency and data integrity"""
 
-    def test_list_and_detail_consistency(self, authenticated_client, public_tenant):
+    def test_list_and_detail_consistency(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test that list and detail views return consistent data"""
 
         company = CompanyFactory(tenant=public_tenant)
 
         # Get from list
-        response = authenticated_client.get(reverse("company-list"))
+        response = authenticated_client_with_tenant.get(reverse("company-list"))
         assert response.status_code == status.HTTP_200_OK
 
         list_companies = response.data["results"]
@@ -482,7 +496,7 @@ class TestAPIConsistency:
         assert company_in_list is not None
 
         # Get from detail
-        response = authenticated_client.get(
+        response = authenticated_client_with_tenant.get(
             reverse("company-detail", kwargs={"pk": company.id})
         )
         assert response.status_code == status.HTTP_200_OK
@@ -493,13 +507,15 @@ class TestAPIConsistency:
         assert company_in_list["name"] == detail_company["name"]
         assert company_in_list["industry"] == detail_company["industry"]
 
-    def test_pagination_consistency(self, authenticated_client, public_tenant):
+    def test_pagination_consistency(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
         """Test that pagination returns consistent results"""
 
         # Note: Can only create 1 company per tenant, test pagination structure
         company = CompanyFactory(tenant=public_tenant)  # noqa: F841
 
-        response = authenticated_client.get(reverse("company-list"))
+        response = authenticated_client_with_tenant.get(reverse("company-list"))
         assert response.status_code == status.HTTP_200_OK
 
         # Verify pagination structure

@@ -25,24 +25,45 @@ from .services import get_pipeline_service
 from files.services import gcs_service
 from ai_services.services import ai_service
 from brand_automator.validators import validate_file_upload, sanitize_filename
+from tenants.permissions import (
+    RoleBasedPermissionMixin,
+    IsTenantViewer,
+    IsTenantEditor,
+    IsTenantAdmin,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class CompanyViewSet(viewsets.ModelViewSet):
-    """ViewSet for Company model"""
+class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
+    """ViewSet for Company model.
+
+    Permissions:
+        - list, retrieve: IsTenantViewer (any member)
+        - create, update, partial_update, destroy: IsTenantAdmin
+        - generate_brand_strategy, generate_brand_identity: IsTenantEditor
+    """
 
     queryset = Company.objects.select_related("tenant").all()
     serializer_class = CompanySerializer
     permission_classes = [IsAuthenticated]
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "create": [IsAuthenticated, IsTenantAdmin],
+        "update": [IsAuthenticated, IsTenantAdmin],
+        "partial_update": [IsAuthenticated, IsTenantAdmin],
+        "destroy": [IsAuthenticated, IsTenantAdmin],
+        "generate_brand_strategy": [IsAuthenticated, IsTenantEditor],
+        "generate_brand_identity": [IsAuthenticated, IsTenantEditor],
+    }
 
     def get_queryset(self):
         # Filter by tenant in multi-tenant setup with optimized queries
-        if hasattr(self.request, "tenant") and self.request.tenant:
-            return Company.objects.filter(tenant=self.request.tenant).select_related(
-                "tenant"
-            )
-        return Company.objects.select_related("tenant").all()
+        tenant = getattr(self.request, "tenant", None)
+        if tenant:
+            return Company.objects.filter(tenant=tenant).select_related("tenant")
+        return Company.objects.select_related("tenant").none()
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -56,20 +77,16 @@ class CompanyViewSet(viewsets.ModelViewSet):
         Create company with proper tenant context.
         Each tenant gets exactly one company (OneToOneField).
         """
-        # Get tenant from request (set by TenantMainMiddleware)
+        # Get tenant from request (set by JWTTenantMiddleware)
         tenant = getattr(self.request, "tenant", None)
 
         if not tenant:
-            # MVP mode: If no tenant context, use public tenant
-            from tenants.models import Tenant
+            from rest_framework.exceptions import PermissionDenied
 
-            try:
-                tenant = Tenant.objects.get(schema_name="public")
-            except Tenant.DoesNotExist:
-                raise ValueError(
-                    "Public tenant not found. Ensure migrations have been run "
-                    "and public tenant exists."
-                )
+            raise PermissionDenied(
+                "No tenant context. Please log in again to obtain "
+                "a valid tenant-scoped token."
+            )
 
         # Check if tenant already has a company (OneToOneField constraint)
         if Company.objects.filter(tenant=tenant).exists():
@@ -147,12 +164,32 @@ class CompanyViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class BrandAssetViewSet(viewsets.ModelViewSet):
-    """ViewSet for BrandAsset model"""
+class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
+    """ViewSet for BrandAsset model.
+
+    Permissions:
+        - list, retrieve, signed_url, status: IsTenantViewer
+        - upload, create, update, destroy, confirm_gcs_upload,
+          retry_pipeline, update_pipeline_status: IsTenantEditor
+    """
 
     queryset = BrandAsset.objects.select_related("tenant", "company").all()
     serializer_class = BrandAssetSerializer
     permission_classes = [IsAuthenticated]
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "signed_url": [IsAuthenticated, IsTenantViewer],
+        "status": [IsAuthenticated, IsTenantViewer],
+        "create": [IsAuthenticated, IsTenantEditor],
+        "update": [IsAuthenticated, IsTenantEditor],
+        "partial_update": [IsAuthenticated, IsTenantEditor],
+        "destroy": [IsAuthenticated, IsTenantEditor],
+        "upload": [IsAuthenticated, IsTenantEditor],
+        "confirm_gcs_upload": [IsAuthenticated, IsTenantEditor],
+        "retry_pipeline": [IsAuthenticated, IsTenantEditor],
+        "update_pipeline_status": [IsAuthenticated, IsTenantEditor],
+    }
 
     def get_queryset(self):
         # Filter by tenant in multi-tenant setup with optimized queries
@@ -169,9 +206,14 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
                 f"BrandAsset get_queryset: filtered queryset count={qs.count()}"
             )
             return qs
-        qs = BrandAsset.objects.select_related("tenant", "company").all()
+        qs = BrandAsset.objects.select_related("tenant", "company").none()
         logger.info(f"BrandAsset get_queryset: unfiltered queryset count={qs.count()}")
         return qs
+
+    def perform_create(self, serializer):
+        """Attach active tenant on asset creation."""
+        tenant = getattr(self.request, "tenant", None)
+        serializer.save(tenant=tenant)
 
     def destroy(self, request, *args, **kwargs):
         """Delete asset and clean up associated files from GCS."""
@@ -380,6 +422,7 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
                 file_path=asset.gcs_path,
                 expiration_minutes=expiry_minutes,
                 for_download=False,
+                bucket_name=asset.gcs_bucket,
             )
             logger.info(f"signed_url: view_result={view_result}")
 
@@ -389,6 +432,7 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
                 expiration_minutes=expiry_minutes,
                 for_download=True,
                 filename=asset.file_name,
+                bucket_name=asset.gcs_bucket,
             )
             logger.info(f"signed_url: download_result={download_result}")
 
@@ -501,22 +545,27 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         # Sanitize filename
         safe_filename = sanitize_filename(file.name)
 
-        # Get tenant from request (defensive access for MVP mode)
+        # Get tenant from request (set by JWTTenantMiddleware)
         tenant = getattr(request, "tenant", None)
         if not tenant:
-            # MVP mode: If no tenant context, use public tenant
-            from tenants.models import Tenant
-
-            try:
-                tenant = Tenant.objects.get(schema_name="public")
-            except Tenant.DoesNotExist:
-                raise ValueError(
-                    "Public tenant not found. Ensure migrations have been run "
-                    "and public tenant exists."
-                )
+            return Response(
+                {"error": "No tenant context. Please log in again."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         # Get company for the tenant
-        company = get_object_or_404(Company, tenant=tenant)
+        company = Company.objects.filter(tenant=tenant).first()
+        if not company:
+            return Response(
+                {
+                    "error": "no_company",
+                    "message": (
+                        "No company found for this workspace. "
+                        "Please complete onboarding first."
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Check for duplicate file (same tenant + company + filename)
         raw_replace = request.data.get("replace_existing", "")
@@ -555,10 +604,15 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         landing_path = f"_landing/{tenant.id}/{unique_id}_{safe_filename}"
 
         # Upload to Google Cloud Storage
+        # Resolve the tenant-specific bucket (falls back to shared default)
+        raw_bucket = tenant.get_raw_bucket() if tenant else gcs_service.bucket_name
         gcs_uploaded = False
         try:
-            if gcs_service.client and gcs_service.bucket:
-                gcs_service.upload_file(file, landing_path, file.content_type)
+            target_bucket = gcs_service.get_bucket(raw_bucket)
+            if target_bucket:
+                gcs_service.upload_file(
+                    file, landing_path, file.content_type, bucket_name=raw_bucket
+                )
                 gcs_uploaded = True
             else:
                 # GCS not configured - check if we should fail or allow for dev/testing
@@ -581,9 +635,7 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             )
 
         # Handle replacement of existing asset
-        actual_bucket = (
-            gcs_service.bucket_name if gcs_service.bucket else "brand-automator-assets"
-        )
+        actual_bucket = raw_bucket
 
         if existing_asset and replace_existing:
             # Delete old GCS blob (best-effort)
@@ -682,18 +734,13 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
             "company_id": 1  # optional, defaults to tenant's company
         }
         """
-        # Get tenant from request (defensive access for MVP mode)
+        # Get tenant from request (set by JWTTenantMiddleware)
         tenant = getattr(request, "tenant", None)
         if not tenant:
-            from tenants.models import Tenant
-
-            try:
-                tenant = Tenant.objects.get(schema_name="public")
-            except Tenant.DoesNotExist:
-                return Response(
-                    {"error": "Public tenant not found"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+            return Response(
+                {"error": "No tenant context. Please log in again."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         # Validate required fields
         required_fields = ["file_name", "file_type", "file_size", "gcs_path"]
@@ -708,7 +755,10 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         file_type = request.data.get("file_type")
         file_size = request.data.get("file_size")
         gcs_path = request.data.get("gcs_path")
-        gcs_bucket = request.data.get("gcs_bucket", "brand-automator-assets")
+        gcs_bucket = request.data.get(
+            "gcs_bucket",
+            tenant.get_raw_bucket() if tenant else "brand-automator-assets",
+        )
         company_id = request.data.get("company_id")
 
         # Validate file_type
@@ -732,9 +782,28 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
 
         # Get company for the tenant (or by company_id if provided)
         if company_id:
-            company = get_object_or_404(Company, id=company_id, tenant=tenant)
+            company = Company.objects.filter(id=company_id, tenant=tenant).first()
+            if not company:
+                return Response(
+                    {
+                        "error": "no_company",
+                        "message": "Company not found.",
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
         else:
-            company = get_object_or_404(Company, tenant=tenant)
+            company = Company.objects.filter(tenant=tenant).first()
+            if not company:
+                return Response(
+                    {
+                        "error": "no_company",
+                        "message": (
+                            "No company found for this workspace. "
+                            "Please complete onboarding first."
+                        ),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         # Sanitize filename
         safe_filename = sanitize_filename(file_name)
@@ -964,24 +1033,48 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
         return Response({"status": "updated", "pipeline_status": new_status})
 
 
-class OnboardingProgressViewSet(viewsets.ModelViewSet):
-    """ViewSet for OnboardingProgress model"""
+class OnboardingProgressViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
+    """ViewSet for OnboardingProgress model.
+
+    Permissions:
+        - list, retrieve, current: IsTenantViewer
+        - create, update, update_step: IsTenantEditor
+    """
 
     queryset = OnboardingProgress.objects.all()
     serializer_class = OnboardingProgressSerializer
     permission_classes = [IsAuthenticated]
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "current": [IsAuthenticated, IsTenantViewer],
+        "create": [IsAuthenticated, IsTenantEditor],
+        "update": [IsAuthenticated, IsTenantEditor],
+        "partial_update": [IsAuthenticated, IsTenantEditor],
+        "update_step": [IsAuthenticated, IsTenantEditor],
+    }
 
     def get_queryset(self):
         # Filter by tenant in multi-tenant setup
-        if hasattr(self.request, "tenant") and self.request.tenant:
-            return OnboardingProgress.objects.filter(tenant=self.request.tenant)
-        return OnboardingProgress.objects.all()
+        tenant = getattr(self.request, "tenant", None)
+        if tenant:
+            return OnboardingProgress.objects.filter(tenant=tenant)
+        return OnboardingProgress.objects.none()
+
+    def perform_create(self, serializer):
+        """Attach active tenant on progress creation."""
+        tenant = getattr(self.request, "tenant", None)
+        serializer.save(tenant=tenant)
 
     @action(detail=False, methods=["get"])
     def current(self, request):
         """Get current onboarding progress for the tenant"""
-        # TODO: Get actual tenant from request in multi-tenant setup
-        tenant = request.tenant
+        tenant = getattr(request, "tenant", None)
+        if not tenant:
+            return Response(
+                {"error": "Tenant context required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         progress = get_object_or_404(OnboardingProgress, tenant=tenant)
         serializer = self.get_serializer(progress)
         return Response(serializer.data)
@@ -998,8 +1091,13 @@ class OnboardingProgressViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # TODO: Get actual tenant from request in multi-tenant setup
-        tenant = request.tenant
+        # Get tenant defensively
+        tenant = getattr(request, "tenant", None)
+        if not tenant:
+            return Response(
+                {"error": "Tenant context required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         progress = get_object_or_404(OnboardingProgress, tenant=tenant)
 
         progress.current_step = step

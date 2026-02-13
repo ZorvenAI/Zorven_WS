@@ -83,9 +83,18 @@ class RedisAdapter(RedisPort):
                 self._initialized = False
         return self._client
 
-    def _get_status_key(self, event_id: str) -> str:
-        """Get the Redis key for a status record."""
-        return f"{self.STATUS_KEY_PREFIX}{event_id}"
+    def _get_status_key(
+        self,
+        event_id: str,
+        tenant_id: Optional[str] = None,
+    ) -> str:
+        """Get the Redis key for a status record, optionally namespaced by tenant."""
+        prefix = (
+            f"{tenant_id}:{self.STATUS_KEY_PREFIX}"
+            if tenant_id
+            else self.STATUS_KEY_PREFIX
+        )
+        return f"{prefix}{event_id}"
 
     def _get_rate_key(self, key: str = "default") -> str:
         """Get the Redis key for rate limiting."""
@@ -99,6 +108,7 @@ class RedisAdapter(RedisPort):
         self,
         record: SyncStatusRecord,
         ttl_seconds: int = 86400,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """Save a sync status record to Redis."""
         try:
@@ -108,7 +118,7 @@ class RedisAdapter(RedisPort):
                 logger.info(f"[MOCK] Saving status for {record.event_id}")
                 return
 
-            key = self._get_status_key(str(record.event_id))
+            key = self._get_status_key(str(record.event_id), tenant_id)
             data = json.dumps(record.to_dict())
 
             await client.set(key, data, ex=ttl_seconds)
@@ -122,6 +132,7 @@ class RedisAdapter(RedisPort):
     async def get_status(
         self,
         event_id: str,
+        tenant_id: Optional[str] = None,
     ) -> Optional[SyncStatusRecord]:
         """Get a sync status record from Redis."""
         try:
@@ -131,7 +142,7 @@ class RedisAdapter(RedisPort):
                 logger.info(f"[MOCK] Getting status for {event_id}")
                 return None
 
-            key = self._get_status_key(event_id)
+            key = self._get_status_key(event_id, tenant_id)
             data = await client.get(key)
 
             if data is None:
@@ -148,6 +159,7 @@ class RedisAdapter(RedisPort):
         event_id: str,
         status: str,
         error_message: Optional[str] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """Update the status of an existing record."""
         try:
@@ -157,7 +169,7 @@ class RedisAdapter(RedisPort):
                 logger.info(f"[MOCK] Updating status for {event_id} to {status}")
                 return
 
-            key = self._get_status_key(event_id)
+            key = self._get_status_key(event_id, tenant_id)
             data = await client.get(key)
 
             if data is None:
@@ -185,7 +197,11 @@ class RedisAdapter(RedisPort):
             logger.error(f"Failed to update status: {e}")
             raise RedisError(f"Failed to update status: {e}")
 
-    async def delete_status(self, event_id: str) -> bool:
+    async def delete_status(
+        self,
+        event_id: str,
+        tenant_id: Optional[str] = None,
+    ) -> bool:
         """Delete a sync status record from Redis."""
         try:
             client = self._get_client()
@@ -194,7 +210,7 @@ class RedisAdapter(RedisPort):
                 logger.info(f"[MOCK] Deleting status for {event_id}")
                 return True
 
-            key = self._get_status_key(event_id)
+            key = self._get_status_key(event_id, tenant_id)
             result = await client.delete(key)
 
             return result > 0

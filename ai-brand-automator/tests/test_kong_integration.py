@@ -286,7 +286,9 @@ class TestAssetConfirmationEndpoint:
     def api_client(self):
         from rest_framework.test import APIClient
 
-        return APIClient()
+        client = APIClient()
+        client.defaults["SERVER_NAME"] = "localhost"
+        return client
 
     @pytest.fixture
     def authenticated_user(self):
@@ -299,11 +301,17 @@ class TestAssetConfirmationEndpoint:
 
     @pytest.fixture
     def company(self, authenticated_user):
-        from tenants.models import Tenant
+        from tenants.models import Tenant, Membership
         from onboarding.models import Company
 
         tenant, _ = Tenant.objects.get_or_create(
             schema_name="public", defaults={"name": "Public Tenant"}
+        )
+        # Create OWNER membership for RBAC
+        Membership.objects.get_or_create(
+            user=authenticated_user,
+            tenant=tenant,
+            defaults={"role": Membership.Role.OWNER},
         )
         company = Company.objects.create(
             tenant=tenant,
@@ -322,6 +330,7 @@ class TestAssetConfirmationEndpoint:
     ):
         """Confirm GCS upload requires file_name, file_type, file_size, gcs_path"""
         api_client.force_authenticate(user=authenticated_user)
+        api_client.credentials(HTTP_X_TENANT_ID=str(company.tenant.id))
 
         response = api_client.post("/api/v1/assets/confirm_gcs_upload/", {})
         assert response.status_code == 400
@@ -332,6 +341,7 @@ class TestAssetConfirmationEndpoint:
     def test_confirm_gcs_upload_success(self, api_client, authenticated_user, company):
         """Confirm GCS upload creates BrandAsset record"""
         api_client.force_authenticate(user=authenticated_user)
+        api_client.credentials(HTTP_X_TENANT_ID=str(company.tenant.id))
 
         data = {
             "file_name": "test-image.png",

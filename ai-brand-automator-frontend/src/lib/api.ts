@@ -74,6 +74,14 @@ export const apiClient = {
       mergedHeaders.set('Authorization', `Bearer ${token}`);
     }
 
+    // Inject X-Tenant-ID header for multi-tenancy
+    if (typeof window !== 'undefined') {
+      const activeTenantId = localStorage.getItem('active_tenant_id');
+      if (activeTenantId) {
+        mergedHeaders.set('X-Tenant-ID', activeTenantId);
+      }
+    }
+
     const config: RequestInit = {
       headers: mergedHeaders,
       ...restOptions,

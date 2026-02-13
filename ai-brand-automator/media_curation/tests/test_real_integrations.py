@@ -62,7 +62,7 @@ class TestRedisRealConnection:
         status_record = CurationStatusRecord(
             trace_id=trace_id,
             event_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             status=CurationStatus.PROCESSING,
             message="Test processing",
@@ -98,7 +98,7 @@ class TestRedisRealConnection:
         """Test storing and retrieving tenant configuration."""
         from media_curation.domain.models import TenantConfig
 
-        tenant_id = uuid4()
+        tenant_id = str(uuid4())
         config = TenantConfig(
             tenant_id=tenant_id,
             dlp_enabled=True,
@@ -187,7 +187,7 @@ class TestKafkaRealConnection:
         document = CuratedDocument(
             document_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             source_gcs_uri="gs://test-bucket/input.pdf",  # Required field
             output_gcs_uri="gs://test-bucket/output.json",
@@ -210,7 +210,7 @@ class TestKafkaRealConnection:
         event = CurationEvent(
             event_id=uuid4(),
             trace_id=uuid4(),
-            tenant_id=uuid4(),
+            tenant_id=str(uuid4()),
             file_id=uuid4(),
             raw_gcs_uri="gs://test-bucket/failed.pdf",
             mime_type="application/pdf",
@@ -265,7 +265,7 @@ class TestCombinedRealServices:
         )
 
         trace_id = uuid4()
-        tenant_id = uuid4()
+        tenant_id = str(uuid4())
         file_id = uuid4()
         event_id = uuid4()
 

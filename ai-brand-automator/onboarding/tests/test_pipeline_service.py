@@ -78,15 +78,26 @@ class TestPublishAssetEvent:
     """Tests for publish_asset_event method."""
 
     @override_settings(ONBOARDING_KAFKA_ENABLED=False)
-    def test_publish_skipped_when_kafka_disabled(self, sample_brand_asset):
-        """Should return None when Kafka is disabled."""
+    @patch("onboarding.tasks.process_asset_pipeline_sync")
+    def test_publish_dispatches_celery_when_kafka_disabled(
+        self, mock_task, sample_brand_asset
+    ):
+        """Should dispatch Celery pipeline task when Kafka is disabled."""
+        mock_task.delay = MagicMock()
         service = OnboardingPipelineService()
         result = service.publish_asset_event(sample_brand_asset)
-        assert result is None
+
+        # Should return a trace_id (not None)
+        assert result is not None
+        mock_task.delay.assert_called_once()
+        call_kwargs = mock_task.delay.call_args[1]
+        assert call_kwargs["asset_id"] == sample_brand_asset.id
 
     @override_settings(ONBOARDING_KAFKA_ENABLED=False)
-    def test_sync_fallback_sets_ingested_status(self, sample_brand_asset):
-        """When Kafka disabled, asset should be marked as ingested but NOT processed."""
+    @patch("onboarding.tasks.process_asset_pipeline_sync")
+    def test_sync_fallback_keeps_pending_status(self, mock_task, sample_brand_asset):
+        """When Kafka disabled, asset stays pending until Celery task runs."""
+        mock_task.delay = MagicMock()
         service = OnboardingPipelineService()
         sample_brand_asset.pipeline_status = "pending"
         sample_brand_asset.processed = False
@@ -95,8 +106,9 @@ class TestPublishAssetEvent:
         service.publish_asset_event(sample_brand_asset)
 
         sample_brand_asset.refresh_from_db()
-        assert sample_brand_asset.pipeline_status == "ingested"
+        assert sample_brand_asset.pipeline_status == "pending"
         assert sample_brand_asset.processed is False
+        assert sample_brand_asset.pipeline_trace_id is not None
 
     def test_publish_updates_asset_trace_id(
         self, sample_brand_asset, mock_kafka_producer

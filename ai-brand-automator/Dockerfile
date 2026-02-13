@@ -48,9 +48,15 @@ if [ -n "$GCS_CREDENTIALS_JSON" ]; then
 fi
 
 echo "=== Running migrations ==="
-python manage.py migrate --noinput
+python manage.py migrate_schemas --shared --noinput
+echo "=== Bootstrapping public tenant ==="
+python create_public_tenant.py
 echo "=== Setting up production domains ==="
 python add_production_domains.py
+echo "=== Running membership migration (idempotent) ==="
+python scripts/migrate_to_membership.py --apply || echo "Membership migration skipped or already done"
+echo "=== Provisioning tenant GCS buckets (idempotent) ==="
+python scripts/provision_tenant_buckets.py --apply || echo "Bucket provisioning skipped or already done"
 echo "=== Collecting static files ==="
 python manage.py collectstatic --noinput || true
 echo "=== Starting Gunicorn on port $PORT ==="

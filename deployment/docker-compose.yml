@@ -56,6 +56,7 @@ services:
       context: ..
       dockerfile: deployment/docker/backend/Dockerfile
     container_name: ai-brand-automator-backend
+    command: ["bash", "/scripts/start.sh"]
     environment:
       - DEBUG=True
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
@@ -74,11 +75,29 @@ services:
       - SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO,https
       # Port changed to 8001 (Kong is on 8000)
       - PORT=8001
+      # Multi-tenancy: default GCS buckets (tenants can override)
+      # Use the same accessible bucket for all pipeline stages
+      - GS_BUCKET_NAME=${GS_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - GCP_BUCKET_NAME=${GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      # Multi-tenancy: GCS bucket auto-provisioning
+      - GCS_AUTO_PROVISION=${GCS_AUTO_PROVISION:-false}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      # Email (Mailgun HTTP API)
+      - EMAIL_BACKEND=brand_automator.email_backends.MailgunAPIBackend
+      # Pipeline: Kafka enabled (broker runs via with-kafka profile)
+      - ONBOARDING_KAFKA_ENABLED=true
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - MAILGUN_API_KEY=${MAILGUN_API_KEY:-7776e9d86dc564e3e9bd4921c056ae3e-f9517a64-4481b185}
+      - MAILGUN_DOMAIN=${MAILGUN_DOMAIN:-sandbox3c490c6302904ddda887a78852e81aea.mailgun.org}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL:-AI Brand Automator <postmaster@sandbox3c490c6302904ddda887a78852e81aea.mailgun.org>}
     # Port NOT exposed to host - only accessible via Kong
     expose:
       - "8001"
     volumes:
       - ../ai-brand-automator:/app
+      - ./scripts/start-backend.sh:/scripts/start.sh:ro
       - static_volume:/app/staticfiles
       - media_volume:/app/media
     depends_on:
@@ -105,6 +124,7 @@ services:
         # Frontend now talks to Kong on port 8000
         - NEXT_PUBLIC_API_URL=http://localhost:8000
     container_name: ai-brand-automator-frontend
+    command: ["sh", "-c", "npm install && npm run dev"]
     environment:
       - NODE_ENV=development
       # API URL points to Kong Gateway
@@ -136,6 +156,7 @@ services:
       context: ..
       dockerfile: deployment/docker/celery-worker/Dockerfile
     container_name: ai-brand-automator-celery-worker
+    command: ["bash", "/scripts/start.sh"]
     environment:
       - DEBUG=True
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
@@ -145,8 +166,17 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - CELERY_CONCURRENCY=2
       - CELERY_LOG_LEVEL=info
+      # Multi-tenancy: default GCS buckets
+      - GS_BUCKET_NAME=${GS_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - GCP_BUCKET_NAME=${GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      # Multi-tenancy: GCS bucket auto-provisioning
+      - GCS_AUTO_PROVISION=${GCS_AUTO_PROVISION:-false}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
     volumes:
       - ../ai-brand-automator:/app
+      - ./scripts/start-celery-worker.sh:/scripts/start.sh:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -164,6 +194,7 @@ services:
       context: ..
       dockerfile: deployment/docker/celery-beat/Dockerfile
     container_name: ai-brand-automator-celery-beat
+    command: ["bash", "/scripts/start.sh"]
     environment:
       - DEBUG=True
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
@@ -173,6 +204,7 @@ services:
       - CELERY_LOG_LEVEL=info
     volumes:
       - ../ai-brand-automator:/app
+      - ./scripts/start-celery-beat.sh:/scripts/start.sh:ro
       - celerybeat_volume:/app/celerybeat
     depends_on:
       redis:
@@ -236,7 +268,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_volume:/var/lib/postgresql/data
     healthcheck:
@@ -331,6 +363,140 @@ services:
     ports:
       - "8080:8080"
     depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - with-kafka
+
+  # ==========================================================================
+  # Ingestion Consumer - Consumes raw-ingestion-topic, moves files to raw/
+  # ==========================================================================
+  ingestion-consumer:
+    build:
+      context: ..
+      dockerfile: deployment/docker/backend/Dockerfile
+    container_name: ai-brand-automator-ingestion-consumer
+    command: ["python", "manage.py", "run_ingestion", "--batch-size", "10", "--poll-timeout", "1.0"]
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/ai_brand_automator}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      - GS_BUCKET_NAME=${GS_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - GCP_BUCKET_NAME=${GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+    volumes:
+      - ../ai-brand-automator:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - with-kafka
+
+  # ==========================================================================
+  # Curation Consumer - Consumes curation-needed-topic, curates files
+  # ==========================================================================
+  curation-consumer:
+    build:
+      context: ..
+      dockerfile: deployment/docker/backend/Dockerfile
+    container_name: ai-brand-automator-curation-consumer
+    command: ["python", "manage.py", "run_curation_consumer", "--batch-size", "10", "--poll-timeout", "1.0"]
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/ai_brand_automator}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      - GS_BUCKET_NAME=${GS_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - GCP_BUCKET_NAME=${GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+    volumes:
+      - ../ai-brand-automator:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - with-kafka
+
+  # ==========================================================================
+  # RAG Index Consumer - Consumes rag-sync-ready-topic, indexes documents
+  # ==========================================================================
+  rag-index-consumer:
+    build:
+      context: ..
+      dockerfile: deployment/docker/backend/Dockerfile
+    container_name: ai-brand-automator-rag-index-consumer
+    command: ["python", "manage.py", "consume_sync_events", "--topic", "rag-sync-ready-topic", "--group", "rag-index-consumers", "--poll-timeout", "1.0"]
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/ai_brand_automator}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      - GS_BUCKET_NAME=${GS_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - GCP_BUCKET_NAME=${GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      # RAG Index settings
+      - RAG_INDEX_MOCK_MODE=${RAG_INDEX_MOCK_MODE:-true}
+      - VERTEX_AI_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-us-central1}
+      - VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-}
+    volumes:
+      - ../ai-brand-automator:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
       kafka:
         condition: service_healthy
     restart: unless-stopped

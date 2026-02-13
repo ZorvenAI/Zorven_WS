@@ -4,8 +4,8 @@ import { Subscription } from '@/lib/api';
 
 interface SubscriptionStatusProps {
   subscription: Subscription | null;
-  onManageBilling: () => void;
-  onCancelSubscription: () => void;
+  onManageBilling?: () => void;
+  onCancelSubscription?: () => void;
   isLoading?: boolean;
 }
 
@@ -125,14 +125,16 @@ export function SubscriptionStatus({
       )}
 
       <div className="mt-6 flex gap-3">
-        <button
-          onClick={onManageBilling}
-          disabled={isLoading}
-          className="btn-primary flex-1 disabled:cursor-wait disabled:opacity-75"
-        >
-          Manage Billing
-        </button>
-        {!subscription.cancel_at_period_end &&
+        {onManageBilling && (
+          <button
+            onClick={onManageBilling}
+            disabled={isLoading}
+            className="btn-primary flex-1 disabled:cursor-wait disabled:opacity-75"
+          >
+            Manage Billing
+          </button>
+        )}
+        {onCancelSubscription && !subscription.cancel_at_period_end &&
           (subscription.status === 'active' ||
             subscription.status === 'trialing') && (
             <button

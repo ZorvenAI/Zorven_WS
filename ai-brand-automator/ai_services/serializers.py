@@ -27,7 +27,8 @@ class ChatSessionSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        validated_data["tenant"] = self.context["request"].tenant
+        request = self.context.get("request")
+        validated_data["tenant"] = getattr(request, "tenant", None)
         return super().create(validated_data)
 
 

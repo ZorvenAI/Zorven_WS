@@ -5,6 +5,7 @@ Tests cover:
 - export_company_for_rag task
 - batch_export_companies_for_rag task
 - Company document building
+- process_asset_pipeline_sync task (3-stage pipeline)
 """
 
 import uuid
@@ -17,6 +18,8 @@ from onboarding.tasks import (
     export_company_for_rag,
     batch_export_companies_for_rag,
     _build_company_document,
+    process_asset_pipeline_sync,
+    _run_indexing,
 )
 
 
@@ -177,3 +180,301 @@ class TestBatchExportCompaniesForRag:
 
             assert result["status"] == "success"
             assert result["tenant_id"] == public_tenant.id
+
+
+# ── Fixtures for sync pipeline tests ────────────────────────────────
+
+
+@pytest.fixture
+def sample_brand_asset_for_task(db, public_tenant):
+    """Create a sample BrandAsset for sync pipeline testing."""
+    from onboarding.models import BrandAsset
+
+    Company.objects.filter(tenant=public_tenant).delete()
+    company = Company.objects.create(
+        tenant=public_tenant,
+        name="Pipeline Task Co",
+    )
+    return BrandAsset.objects.create(
+        tenant=public_tenant,
+        company=company,
+        file_name="test_doc.pdf",
+        file_type="document",
+        file_size=2048,
+        gcs_path="_landing/1/abc_test_doc.pdf",
+        gcs_bucket="test-bucket",
+        processed=False,
+        pipeline_status="pending",
+    )
+
+
+@pytest.fixture
+def sample_event_data(sample_brand_asset_for_task):
+    """Build a sample event_data dict for the sync pipeline task."""
+    asset = sample_brand_asset_for_task
+    return {
+        "event_id": str(uuid.uuid4()),
+        "trace_id": str(uuid.uuid4()),
+        "timestamp": "2026-02-12T00:00:00+00:00",
+        "source": "django-backend",
+        "tenant_id": str(asset.tenant.id),
+        "file_path": f"gs://test-bucket/{asset.gcs_path}",
+        "file_type": "application/pdf",
+        "file_size_bytes": asset.file_size,
+        "raw_bucket": "test-bucket",
+        "curated_bucket": "test-curated-bucket",
+        "metadata": {
+            "original_filename": asset.file_name,
+            "asset_id": asset.id,
+            "company_id": asset.company.id,
+            "uploaded_at": "2026-02-12T00:00:00+00:00",
+            "source_service": "onboarding",
+        },
+    }
+
+
+# ── Stage 3: _run_indexing tests ────────────────────────────────────
+
+
+class TestRunIndexing:
+    """Tests for the _run_indexing helper (Stage 3)."""
+
+    @pytest.mark.django_db
+    @patch("rag_index.tasks.sync_tasks.get_orchestrator")
+    @patch("rag_index.tasks.sync_tasks.run_async")
+    def test_indexing_calls_orchestrator(
+        self,
+        mock_run_async,
+        mock_get_orch,
+        sample_brand_asset_for_task,
+        sample_event_data,
+    ):
+        """Should dispatch a SyncEvent UPSERT to the orchestrator."""
+        mock_result = MagicMock()
+        mock_result.operation_id = "mock-op-123"
+        mock_result.processing_time_ms = 42
+        mock_run_async.return_value = mock_result
+
+        curation_result = {
+            "status": "success",
+            "document_id": str(uuid.uuid4()),
+            "output_uri": "gs://test-curated-bucket/curated/doc.json",
+        }
+
+        result = _run_indexing(
+            None,
+            sample_brand_asset_for_task.id,
+            str(sample_brand_asset_for_task.tenant.id),
+            sample_event_data,
+            curation_result,
+        )
+
+        assert result["status"] == "success"
+        assert result["operation_id"] == "mock-op-123"
+        mock_run_async.assert_called_once()
+
+        # Verify asset status updated to indexed
+        sample_brand_asset_for_task.refresh_from_db()
+        assert sample_brand_asset_for_task.pipeline_status == "indexed"
+
+    @pytest.mark.django_db
+    def test_indexing_skipped_when_no_output_uri(
+        self,
+        sample_brand_asset_for_task,
+        sample_event_data,
+    ):
+        """Should skip indexing if curation produced no output_uri."""
+        curation_result = {
+            "status": "success",
+            "document_id": str(uuid.uuid4()),
+            "output_uri": "",
+        }
+
+        result = _run_indexing(
+            None,
+            sample_brand_asset_for_task.id,
+            str(sample_brand_asset_for_task.tenant.id),
+            sample_event_data,
+            curation_result,
+        )
+
+        assert result["status"] == "skipped"
+
+    @pytest.mark.django_db
+    @patch("rag_index.tasks.sync_tasks.get_orchestrator")
+    @patch("rag_index.tasks.sync_tasks.run_async")
+    def test_indexing_failure_marks_asset_failed(
+        self,
+        mock_run_async,
+        mock_get_orch,
+        sample_brand_asset_for_task,
+        sample_event_data,
+    ):
+        """Should mark asset as failed when indexing raises."""
+        mock_run_async.side_effect = Exception("Vertex AI unavailable")
+
+        curation_result = {
+            "status": "success",
+            "document_id": str(uuid.uuid4()),
+            "output_uri": "gs://bucket/curated/doc.json",
+        }
+
+        result = _run_indexing(
+            None,
+            sample_brand_asset_for_task.id,
+            str(sample_brand_asset_for_task.tenant.id),
+            sample_event_data,
+            curation_result,
+        )
+
+        assert result["status"] == "failed"
+        assert "Vertex AI unavailable" in result["error"]
+
+        sample_brand_asset_for_task.refresh_from_db()
+        assert sample_brand_asset_for_task.pipeline_status == "failed"
+
+
+# ── Full sync pipeline tests ────────────────────────────────────────
+
+
+class TestProcessAssetPipelineSync:
+    """Tests for the full 3-stage sync pipeline Celery task."""
+
+    @pytest.mark.django_db
+    @patch("onboarding.tasks._run_indexing")
+    @patch("onboarding.tasks._run_curation")
+    @patch("onboarding.tasks._run_ingestion")
+    def test_full_pipeline_runs_all_three_stages(
+        self,
+        mock_ingestion,
+        mock_curation,
+        mock_indexing,
+        sample_brand_asset_for_task,
+        sample_event_data,
+    ):
+        """Should chain ingestion → curation → indexing."""
+        mock_ingestion.return_value = {
+            "status": "success",
+            "destination_path": "gs://bucket/raw/doc.pdf",
+            "trace_id": sample_event_data["trace_id"],
+        }
+        mock_curation.return_value = {
+            "status": "success",
+            "document_id": str(uuid.uuid4()),
+            "output_uri": "gs://bucket/curated/doc.json",
+        }
+        mock_indexing.return_value = {
+            "status": "success",
+            "operation_id": "op-123",
+        }
+
+        result = process_asset_pipeline_sync(
+            asset_id=sample_brand_asset_for_task.id,
+            tenant_id=str(sample_brand_asset_for_task.tenant.id),
+            event_data=sample_event_data,
+        )
+
+        assert result["status"] == "indexed"
+        assert "ingestion" in result
+        assert "curation" in result
+        assert "indexing" in result
+        mock_ingestion.assert_called_once()
+        mock_curation.assert_called_once()
+        mock_indexing.assert_called_once()
+
+    @pytest.mark.django_db
+    @patch("onboarding.tasks._run_curation")
+    @patch("onboarding.tasks._run_ingestion")
+    def test_pipeline_stops_at_ingestion_failure(
+        self,
+        mock_ingestion,
+        mock_curation,
+        sample_brand_asset_for_task,
+        sample_event_data,
+    ):
+        """Should stop after ingestion failure without running curation."""
+        mock_ingestion.return_value = {
+            "status": "failed",
+            "error": "File not found in GCS",
+        }
+
+        result = process_asset_pipeline_sync(
+            asset_id=sample_brand_asset_for_task.id,
+            tenant_id=str(sample_brand_asset_for_task.tenant.id),
+            event_data=sample_event_data,
+        )
+
+        assert result["status"] == "failed"
+        mock_curation.assert_not_called()
+
+    @pytest.mark.django_db
+    @patch("onboarding.tasks._run_indexing")
+    @patch("onboarding.tasks._run_curation")
+    @patch("onboarding.tasks._run_ingestion")
+    def test_pipeline_stops_at_curation_failure(
+        self,
+        mock_ingestion,
+        mock_curation,
+        mock_indexing,
+        sample_brand_asset_for_task,
+        sample_event_data,
+    ):
+        """Should stop after curation failure without running indexing."""
+        mock_ingestion.return_value = {
+            "status": "success",
+            "destination_path": "gs://bucket/raw/doc.pdf",
+            "trace_id": sample_event_data["trace_id"],
+        }
+        mock_curation.return_value = {
+            "status": "failed",
+            "error": "DLP redaction failed",
+        }
+
+        result = process_asset_pipeline_sync(
+            asset_id=sample_brand_asset_for_task.id,
+            tenant_id=str(sample_brand_asset_for_task.tenant.id),
+            event_data=sample_event_data,
+        )
+
+        assert result["status"] == "failed"
+        assert "curation" in result
+        mock_indexing.assert_not_called()
+
+    @pytest.mark.django_db
+    @patch("onboarding.tasks._run_indexing")
+    @patch("onboarding.tasks._run_curation")
+    @patch("onboarding.tasks._run_ingestion")
+    def test_pipeline_returns_failed_on_indexing_failure(
+        self,
+        mock_ingestion,
+        mock_curation,
+        mock_indexing,
+        sample_brand_asset_for_task,
+        sample_event_data,
+    ):
+        """Should still report ingestion/curation when indexing fails."""
+        mock_ingestion.return_value = {
+            "status": "success",
+            "destination_path": "gs://bucket/raw/doc.pdf",
+            "trace_id": sample_event_data["trace_id"],
+        }
+        mock_curation.return_value = {
+            "status": "success",
+            "document_id": str(uuid.uuid4()),
+            "output_uri": "gs://bucket/curated/doc.json",
+        }
+        mock_indexing.return_value = {
+            "status": "failed",
+            "error": "Vertex AI unreachable",
+        }
+
+        result = process_asset_pipeline_sync(
+            asset_id=sample_brand_asset_for_task.id,
+            tenant_id=str(sample_brand_asset_for_task.tenant.id),
+            event_data=sample_event_data,
+        )
+
+        assert result["status"] == "failed"
+        assert result["ingestion"]["status"] == "success"
+        assert result["curation"]["status"] == "success"
+        assert result["indexing"]["status"] == "failed"

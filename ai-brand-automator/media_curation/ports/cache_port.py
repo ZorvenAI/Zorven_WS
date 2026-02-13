@@ -30,12 +30,17 @@ class CachePort(ABC):
     # Status tracking
 
     @abstractmethod
-    async def get_status(self, trace_id: str) -> Optional[CurationStatusRecord]:
+    async def get_status(
+        self,
+        trace_id: str,
+        tenant_id: Optional[str] = None,
+    ) -> Optional[CurationStatusRecord]:
         """
         Get curation status for a trace_id.
 
         Args:
             trace_id: The trace ID to look up
+            tenant_id: Optional tenant ID for key namespacing
 
         Returns:
             CurationStatusRecord or None if not found
@@ -48,6 +53,7 @@ class CachePort(ABC):
         trace_id: str,
         status: CurationStatusRecord,
         ttl_seconds: Optional[int] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """
         Store curation status.
@@ -56,6 +62,7 @@ class CachePort(ABC):
             trace_id: The trace ID
             status: Status record to store
             ttl_seconds: Optional TTL (uses default if not provided)
+            tenant_id: Optional tenant ID for key namespacing
         """
         pass
 
@@ -64,6 +71,7 @@ class CachePort(ABC):
         self,
         trace_id: str,
         status: CurationStatus,
+        tenant_id: Optional[str] = None,
         **updates: Any,
     ) -> None:
         """
@@ -72,6 +80,7 @@ class CachePort(ABC):
         Args:
             trace_id: The trace ID
             status: New status value
+            tenant_id: Optional tenant ID for key namespacing
             **updates: Additional fields to update
         """
         pass
@@ -111,12 +120,17 @@ class CachePort(ABC):
     # Deduplication
 
     @abstractmethod
-    async def is_duplicate(self, event_id: str) -> bool:
+    async def is_duplicate(
+        self,
+        event_id: str,
+        tenant_id: Optional[str] = None,
+    ) -> bool:
         """
         Check if event has already been processed.
 
         Args:
             event_id: The event ID to check
+            tenant_id: Optional tenant ID for key namespacing
 
         Returns:
             True if duplicate, False otherwise
@@ -128,6 +142,7 @@ class CachePort(ABC):
         self,
         event_id: str,
         ttl_seconds: Optional[int] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """
         Mark event as processed for deduplication.
@@ -135,6 +150,7 @@ class CachePort(ABC):
         Args:
             event_id: The event ID
             ttl_seconds: How long to remember (default: 7 days)
+            tenant_id: Optional tenant ID for key namespacing
         """
         pass
 

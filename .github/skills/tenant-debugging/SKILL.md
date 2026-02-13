@@ -115,8 +115,71 @@ def test_tenant_isolation(api_client, public_tenant):
 
 | File | Purpose |
 |------|---------|
-| `tenants/models.py` | Tenant and Domain models |
+| `tenants/models.py` | Tenant and Domain models (incl. `gcs_raw_bucket`, `gcs_curated_bucket`) |
 | `brand_automator/settings.py` | `TENANT_MODEL`, `TENANT_DOMAIN_MODEL`, `SHARED_APPS` config |
 | `brand_automator/middleware.py` | Custom middleware (runs after tenant middleware) |
 | `create_public_tenant.py` | Script to initialize the public tenant |
-| `conftest.py` | Test fixtures for tenant setup |
+| `conftest.py` | Test fixtures for tenant setup (`tenant_with_buckets`, `mock_request_tenant`) |
+| `tests/test_tenant_isolation.py` | Cross-tenant isolation test suite (20 tests) |
+
+## Per-Tenant GCS Buckets
+
+Each tenant can override the global GCS buckets:
+
+```python
+# Tenant model fields
+gcs_raw_bucket      = CharField(max_length=255, blank=True, default="")
+gcs_curated_bucket   = CharField(max_length=255, blank=True, default="")
+
+# Property accessors (fall back to global settings)
+tenant.get_raw_bucket()      # → tenant.gcs_raw_bucket or settings.GCS_RAW_BUCKET
+tenant.get_curated_bucket()  # → tenant.gcs_curated_bucket or settings.GCS_CURATED_BUCKET
+```
+
+**Debug**: If files go to the wrong bucket:
+```python
+from tenants.models import Tenant
+t = Tenant.objects.get(schema_name="my_tenant")
+print(f"Raw: {t.get_raw_bucket()}, Curated: {t.get_curated_bucket()}")
+```
+
+## Redis Key Namespacing
+
+All pipeline Redis keys are tenant-prefixed when `tenant_id` is available:
+
+```
+Pattern: {tenant_id}:{app}:{type}:{id}
+
+data_ingestion:
+  {tenant_id}:ingestion:dedupe:{event_id}
+  {tenant_id}:ingestion:status:{trace_id}
+
+media_curation:
+  {tenant_id}:curation:status:{trace_id}
+  {tenant_id}:curation:dedupe:{event_id}
+  curation:tenant:{tenant_id}              ← already tenant-scoped
+
+rag_index:
+  {tenant_id}:rag_sync:status:{event_id}
+  rag_sync:rate:{key}                      ← intentionally global (rate limiting)
+```
+
+**Debug**: If status lookups return stale/wrong data, check key prefix:
+```bash
+# In redis-cli
+KEYS *ingestion:dedupe:*        # Find all dedupe keys
+KEYS tenant-42:*                # Find all keys for tenant-42
+```
+
+## Celery Tenant Scoping
+
+- `publish_scheduled_posts`: Uses `select_related("tenant")` and logs `tenant_id` per post.
+- `_update_asset_after_ingestion` / `_update_asset_status`: Filter `BrandAsset` by `tenant_id` (integer FK) with safe `int()` conversion — non-integer tenant_ids skip the FK filter.
+
+**Debug**: If Celery tasks update the wrong asset:
+```python
+# Check if BrandAsset.tenant_id matches the event's tenant_id
+from onboarding.models import BrandAsset
+asset = BrandAsset.objects.get(id=123)
+print(f"Asset tenant: {asset.tenant_id}, Expected: {event_tenant_id}")
+```

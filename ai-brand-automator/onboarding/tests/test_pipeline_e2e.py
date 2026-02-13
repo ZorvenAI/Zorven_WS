@@ -329,6 +329,7 @@ class TestE2EFullPipelineFlow:
                 "asset_id": asset.id,
                 "status": "failed",
                 "error": "Processing timeout",
+                "secret": "test-webhook-secret",
             },
             format="json",
         )
@@ -354,6 +355,7 @@ class TestE2EFullPipelineFlow:
             {
                 "asset_id": asset.id,
                 "status": "indexed",
+                "secret": "test-webhook-secret",
             },
             format="json",
         )

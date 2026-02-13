@@ -27,12 +27,13 @@ def get_data_ingestion_config() -> dict:
     return getattr(settings, "DATA_INGESTION", {})
 
 
-def create_gcs_adapter(config: Optional[dict] = None) -> GCSAdapter:
+def create_gcs_adapter(config: Optional[dict] = None, tenant=None) -> GCSAdapter:
     """
     Create a GCS adapter from configuration.
 
     Args:
         config: Optional config dict (uses Django settings if not provided)
+        tenant: Optional Tenant instance for per-tenant bucket resolution
 
     Returns:
         Configured GCSAdapter instance
@@ -41,6 +42,14 @@ def create_gcs_adapter(config: Optional[dict] = None) -> GCSAdapter:
     # Support both nested GCS config and flat keys (GCP_PROJECT_ID, etc.)
     gcs_config = config.get("GCS", {})
 
+    # Resolve bucket: per-tenant raw bucket takes priority
+    if tenant is not None and hasattr(tenant, "get_raw_bucket"):
+        default_bucket = tenant.get_raw_bucket()
+    else:
+        default_bucket = gcs_config.get(
+            "BUCKET_NAME", config.get("GCP_BUCKET_NAME", "onboarding-bucket1")
+        )
+
     return GCSAdapter(
         project_id=gcs_config.get(
             "PROJECT_ID", config.get("GCP_PROJECT_ID", "brandsol")
@@ -48,9 +57,7 @@ def create_gcs_adapter(config: Optional[dict] = None) -> GCSAdapter:
         credentials_path=gcs_config.get(
             "CREDENTIALS_PATH", config.get("GCS_CREDENTIALS_PATH")
         ),
-        default_bucket=gcs_config.get(
-            "BUCKET_NAME", config.get("GCP_BUCKET_NAME", "onboarding-bucket1")
-        ),
+        default_bucket=default_bucket,
     )
 
 
@@ -181,7 +188,9 @@ def create_kafka_consumer(config: Optional[dict] = None) -> KafkaConsumerAdapter
     )
 
 
-def create_ingestion_service(config: Optional[dict] = None) -> IngestionService:
+def create_ingestion_service(
+    config: Optional[dict] = None, tenant=None
+) -> IngestionService:
     """
     Create a fully configured IngestionService with all adapters.
 
@@ -190,6 +199,7 @@ def create_ingestion_service(config: Optional[dict] = None) -> IngestionService:
 
     Args:
         config: Optional config dict (uses Django settings if not provided)
+        tenant: Optional Tenant instance for per-tenant bucket resolution
 
     Returns:
         Configured IngestionService instance
@@ -199,7 +209,7 @@ def create_ingestion_service(config: Optional[dict] = None) -> IngestionService:
     redis_config = config.get("REDIS", {})
 
     # Create adapters
-    storage = create_gcs_adapter(config)
+    storage = create_gcs_adapter(config, tenant=tenant)
     cache = create_redis_adapter(config)
     producer = create_kafka_producer(config)
 

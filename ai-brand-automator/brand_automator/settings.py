@@ -128,6 +128,9 @@ MIDDLEWARE = [
     # Kong Authentication Middleware - handles JWT from Kong Gateway
     # This should be after AuthenticationMiddleware to override when Kong is enabled
     "brand_automator.middleware.KongAuthenticationMiddleware",
+    # Tenant Membership Middleware - resolves tenant from X-Tenant-ID header
+    # and verifies user has active membership; must be after auth middleware
+    "brand_automator.middleware.TenantMembershipMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # Custom security middleware
@@ -227,6 +230,7 @@ CORS_ALLOW_HEADERS = [
     "user-agent",
     "x-csrftoken",
     "x-requested-with",
+    "x-tenant-id",
 ]
 
 # =============================================================================

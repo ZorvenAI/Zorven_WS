@@ -60,13 +60,18 @@ class CurationEvent(BaseModel):
     event_id: UUID = Field(default_factory=uuid4)
     trace_id: UUID = Field(default_factory=uuid4)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    tenant_id: UUID
+    tenant_id: str
     file_id: UUID
     raw_gcs_uri: str  # GCS path: gs://bucket/_raw/tenant/file
     mime_type: str  # MIME type: video/mp4, image/jpeg, etc.
     content_type: ContentType = ContentType.UNKNOWN
     source_service: str = "data-ingestion-svc"
     metadata: Optional[dict[str, Any]] = None
+    curated_bucket: Optional[str] = Field(
+        default=None,
+        description="Per-tenant curated bucket override "
+        "(from upstream event payload)",
+    )
 
     # Legacy field aliases for backward compatibility
     @property
@@ -109,7 +114,7 @@ class TenantConfig(BaseModel):
     Controls behavior like PII redaction rules, model preferences, etc.
     """
 
-    tenant_id: UUID
+    tenant_id: str
     dlp_enabled: bool = True
     dlp_info_types: list[str] = Field(
         default_factory=lambda: [
@@ -193,7 +198,7 @@ class CuratedDocument(BaseModel):
     # Identifiers
     document_id: UUID = Field(default_factory=uuid4)
     trace_id: UUID
-    tenant_id: UUID
+    tenant_id: str
     file_id: UUID
 
     # Source information
@@ -263,7 +268,7 @@ class CuratedDocument(BaseModel):
         """Convert to RAG indexer document format."""
         return {
             "id": str(self.document_id),
-            "tenant_id": str(self.tenant_id),
+            "tenant_id": self.tenant_id,
             "brand_id": self.brand_id,
             "content": self.extracted_text,
             "title": self.title,
@@ -292,7 +297,7 @@ class CurationStatusRecord(BaseModel):
 
     trace_id: UUID
     event_id: UUID
-    tenant_id: UUID
+    tenant_id: str
     file_id: UUID
     status: CurationStatus
     message: str = ""

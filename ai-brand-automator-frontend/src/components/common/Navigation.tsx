@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useSyncExternalStore, useEffect } from 'react';
+import { WorkspaceSwitcher } from '@/components/layout/WorkspaceSwitcher';
+import { useTenantRole } from '@/hooks/useTenantRole';
 
 // External store for localStorage token
 function subscribeToToken(callback: () => void) {
@@ -25,6 +27,7 @@ export function Navigation() {
   const token = useSyncExternalStore(subscribeToToken, getTokenSnapshot, getServerSnapshot);
   const [, forceUpdate] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { canManageTeam, canManageBilling, canEdit: canEditFlag } = useTenantRole();
   
   // Derive login state from token
   const isLoggedIn = !!token;
@@ -39,6 +42,8 @@ export function Navigation() {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('company_id');
+    localStorage.removeItem('tenants');
+    localStorage.removeItem('active_tenant_id');
     forceUpdate(n => n + 1); // Trigger re-render after logout
     setMobileMenuOpen(false);
     router.push('/auth/login');
@@ -51,10 +56,20 @@ export function Navigation() {
 
   const navLinks = [
     { href: '/dashboard', label: 'Dashboard', active: pathname === '/dashboard' },
-    { href: '/onboarding', label: 'Onboarding', active: pathname?.startsWith('/onboarding') },
-    { href: '/chat', label: 'Chat', active: pathname === '/chat' },
+    ...(canEditFlag
+      ? [{ href: '/onboarding', label: 'Onboarding', active: pathname?.startsWith('/onboarding') ?? false }]
+      : []),
+    ...(canEditFlag
+      ? [{ href: '/chat', label: 'Chat', active: pathname === '/chat' }]
+      : []),
     { href: '/files', label: 'Files', active: pathname === '/files' },
     { href: '/automation', label: 'Automation', active: pathname === '/automation' },
+    ...(canManageTeam
+      ? [{ href: '/dashboard/team', label: 'Team', active: pathname === '/dashboard/team' }]
+      : []),
+    ...(canManageBilling
+      ? [{ href: '/billing', label: 'Billing', active: pathname === '/billing' }]
+      : []),
   ];
 
   return (
@@ -65,6 +80,13 @@ export function Navigation() {
             <Link href="/" className="flex-shrink-0 flex items-center">
               <span className="text-lg sm:text-2xl font-heading font-bold text-brand-electric">AI Brand Automator</span>
             </Link>
+
+            {/* Workspace Switcher (desktop) */}
+            {isLoggedIn && (
+              <div className="hidden md:block ml-4">
+                <WorkspaceSwitcher />
+              </div>
+            )}
             
             {/* Desktop Navigation */}
             {isLoggedIn && (
@@ -131,6 +153,10 @@ export function Navigation() {
       {isLoggedIn && mobileMenuOpen && (
         <div className="md:hidden absolute top-16 left-0 right-0 bg-brand-midnight/95 backdrop-blur-lg border-b border-white/10 shadow-xl">
           <div className="px-4 py-3 space-y-1">
+            {/* Mobile workspace switcher */}
+            <div className="pb-2 mb-2 border-b border-white/10">
+              <WorkspaceSwitcher />
+            </div>
             {navLinks.map((link) => (
               <Link
                 key={link.href}

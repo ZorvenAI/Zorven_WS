@@ -167,7 +167,7 @@ class CurationService:
             extra={
                 "event_id": str(event.event_id),
                 "trace_id": trace_id,
-                "tenant_id": str(event.tenant_id),
+                "tenant_id": event.tenant_id,
                 "file_id": str(event.file_id),
                 "mime_type": event.mime_type,
             },
@@ -242,7 +242,10 @@ class CurationService:
                 CurationStatus.PROCESSING,
                 message="Saving curated document",
             )
-            output_uri = self._save_to_storage(curated_doc)
+            output_uri = self._save_to_storage(
+                curated_doc,
+                bucket_override=getattr(event, "curated_bucket", None),
+            )
             curated_doc = curated_doc.model_copy(update={"output_gcs_uri": output_uri})
 
             # 7. Publish rag-sync-ready event
@@ -368,12 +371,15 @@ class CurationService:
                 self._send_to_dlq(event, e)
                 return None
 
-    def get_status(self, trace_id: UUID) -> Optional[CurationStatusRecord]:
+    def get_status(
+        self, trace_id: UUID, tenant_id: Optional[str] = None
+    ) -> Optional[CurationStatusRecord]:
         """
         Get the current status of a curation job.
 
         Args:
             trace_id: The trace ID to look up
+            tenant_id: Optional tenant ID for key namespacing
 
         Returns:
             CurationStatusRecord if found, None otherwise
@@ -383,7 +389,9 @@ class CurationService:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            return loop.run_until_complete(self.cache.get_status(str(trace_id)))
+            return loop.run_until_complete(
+                self.cache.get_status(str(trace_id), tenant_id=tenant_id)
+            )
         finally:
             loop.close()
 
@@ -483,15 +491,20 @@ class CurationService:
             created_at=datetime.now(timezone.utc),
         )
 
-    def _save_to_storage(self, doc: CuratedDocument) -> str:
+    def _save_to_storage(
+        self, doc: CuratedDocument, bucket_override: str | None = None
+    ) -> str:
         """Save curated document to GCS and return the URI."""
         import asyncio
         import json
 
         try:
+            # Use per-tenant bucket override if available
+            bucket = bucket_override or self.output_bucket
+
             # Build the output path
             path = (
-                f"gs://{self.output_bucket}/curated/"
+                f"gs://{bucket}/curated/"
                 f"{doc.tenant_id}/{doc.file_id}/{doc.document_id}.json"
             )
 
@@ -537,7 +550,7 @@ class CurationService:
                 traceid=str(event.trace_id),
                 data={
                     "trace_id": str(event.trace_id),
-                    "tenant_id": str(event.tenant_id),
+                    "tenant_id": event.tenant_id,
                     "file_id": str(event.file_id),
                     "document_id": str(doc.document_id),
                     "curated_gcs_uri": doc.output_gcs_uri,
@@ -559,7 +572,7 @@ class CurationService:
                     self.producer.publish_raw(
                         topic=self.output_topic,
                         payload=output_event.model_dump(mode="json"),
-                        key=str(event.tenant_id),
+                        key=event.tenant_id,
                     )
                 )
             finally:
@@ -600,7 +613,7 @@ class CurationService:
                 traceid=str(event.trace_id),
                 data={
                     "trace_id": str(event.trace_id),
-                    "tenant_id": str(event.tenant_id),
+                    "tenant_id": event.tenant_id,
                     "file_id": str(event.file_id),
                     "raw_gcs_uri": event.raw_gcs_uri,
                     "mime_type": event.mime_type,
@@ -616,7 +629,7 @@ class CurationService:
                     self.producer.publish_raw(
                         topic=self.dlq_topic,
                         payload=failed_event.model_dump(mode="json"),
-                        key=str(event.tenant_id),
+                        key=event.tenant_id,
                     )
                 )
             finally:
@@ -663,6 +676,7 @@ class CurationService:
                         str(event.trace_id),
                         status_record,
                         ttl_seconds=604800,  # 7 days
+                        tenant_id=event.tenant_id,
                     )
                 )
             finally:

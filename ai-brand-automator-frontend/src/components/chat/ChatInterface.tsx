@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { MessageBubble } from './MessageBubble';
 import { FileSearch } from './FileSearch';
 import { apiClient } from '@/lib/api';
+import { useTenantRole } from '@/hooks/useTenantRole';
 
 interface Message {
   id: string;
@@ -14,6 +15,7 @@ interface Message {
 }
 
 export function ChatInterface() {
+  const { canEdit } = useTenantRole();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -129,14 +131,16 @@ export function ChatInterface() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask me about your brand strategy..."
+              placeholder={canEdit ? 'Ask me about your brand strategy...' : 'You need editor access to use the AI chat'}
               className="input-dark flex-1 resize-none"
               rows={1}
+              disabled={!canEdit}
             />
             <button
               onClick={handleSend}
-              disabled={isLoading || !input.trim()}
+              disabled={!canEdit || isLoading || !input.trim()}
               className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              title={!canEdit ? 'You need editor access to send messages' : undefined}
             >
               Send
             </button>

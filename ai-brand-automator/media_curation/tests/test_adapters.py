@@ -33,7 +33,7 @@ def run_async(coro):
 
 
 # Sample UUIDs for testing
-SAMPLE_TENANT_ID = UUID("11111111-1111-1111-1111-111111111111")
+SAMPLE_TENANT_ID = "11111111-1111-1111-1111-111111111111"
 SAMPLE_TRACE_ID = UUID("22222222-2222-2222-2222-222222222222")
 SAMPLE_EVENT_ID = UUID("33333333-3333-3333-3333-333333333333")
 SAMPLE_FILE_ID = UUID("44444444-4444-4444-4444-444444444444")
@@ -263,12 +263,12 @@ class TestRedisAdapterStatusOperations:
 
         run_async(
             redis_adapter.set_tenant_config(
-                tenant_id=str(SAMPLE_TENANT_ID),
+                tenant_id=SAMPLE_TENANT_ID,
                 config=config,
             )
         )
 
-        retrieved = run_async(redis_adapter.get_tenant_config(str(SAMPLE_TENANT_ID)))
+        retrieved = run_async(redis_adapter.get_tenant_config(SAMPLE_TENANT_ID))
         assert retrieved is not None
         assert retrieved.dlp_enabled is True
         assert "EMAIL_ADDRESS" in retrieved.dlp_info_types
@@ -447,7 +447,7 @@ class TestKafkaProducerOperations:
             kafka_producer.publish_curated_document(
                 topic="test-topic",
                 document=sample_curated_document,
-                key=str(sample_curated_document.tenant_id),
+                key=sample_curated_document.tenant_id,
             )
         )
 
@@ -822,7 +822,7 @@ class TestGCSAdapterSaveJson:
         test_id = str(uuid.uuid4())[:8]
         data = {"test": "value"}
         metadata = {
-            "tenant_id": str(SAMPLE_TENANT_ID),
+            "tenant_id": SAMPLE_TENANT_ID,
             "trace_id": str(SAMPLE_TRACE_ID),
         }
         destination = (

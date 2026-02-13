@@ -50,7 +50,7 @@ interface DuplicateConfirmation {
   existingAsset: DuplicateFileError['existingAsset'];
 }
 
-export function FileUploadManager() {
+export function FileUploadManager({ canEdit = true }: { canEdit?: boolean }) {
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -61,8 +61,14 @@ export function FileUploadManager() {
   const [dragActive, setDragActive] = useState(false);
   const [showAllFiles, setShowAllFiles] = useState(false);
   const [duplicateConfirm, setDuplicateConfirm] = useState<DuplicateConfirmation | null>(null);
+  const [mounted, setMounted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Avoid hydration mismatch: localStorage-driven canEdit differs between SSR and client
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Function to fetch assets with limit
   const fetchAssets = useCallback(async () => {
@@ -296,9 +302,13 @@ export function FileUploadManager() {
     setDuplicateConfirm(null);
   }, []);
 
+  // Resolve canEdit only after mount to prevent hydration mismatch
+  const effectiveCanEdit = mounted ? canEdit : false;
+
   return (
     <div className="space-y-6">
       {/* Upload Zone */}
+      {effectiveCanEdit ? (
       <div
         className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
           dragActive
@@ -351,6 +361,13 @@ export function FileUploadManager() {
           </p>
         </div>
       </div>
+      ) : (
+        <div className="border-2 border-dashed border-white/10 rounded-lg p-6 text-center bg-white/5">
+          <p className="text-sm text-brand-silver/50">
+            You need editor access to upload files. Contact your workspace admin to upgrade your role.
+          </p>
+        </div>
+      )}
 
       {/* Uploading Files */}
       {uploadingFiles.length > 0 && (
@@ -464,7 +481,7 @@ export function FileUploadManager() {
           </div>
           <ul className="divide-y divide-white/10 border border-white/10 rounded-lg bg-white/5">
             {assets.map((asset) => (
-              <AssetRow key={asset.id} asset={asset} onRetry={handleRetry} onDelete={deleteAsset} />
+              <AssetRow key={asset.id} asset={asset} onRetry={handleRetry} onDelete={deleteAsset} canEdit={canEdit} />
             ))}
           </ul>
         </div>
@@ -542,9 +559,10 @@ interface AssetRowProps {
   asset: BrandAsset;
   onRetry: (assetId: number) => Promise<void>;
   onDelete: (assetId: number) => Promise<boolean>;
+  canEdit?: boolean;
 }
 
-function AssetRow({ asset, onRetry, onDelete }: AssetRowProps) {
+function AssetRow({ asset, onRetry, onDelete, canEdit = true }: AssetRowProps) {
   const [retrying, setRetrying] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [loadingUrl, setLoadingUrl] = useState(false);
@@ -647,7 +665,7 @@ function AssetRow({ asset, onRetry, onDelete }: AssetRowProps) {
           </button>
         )}
 
-        {asset.pipeline_status === 'failed' && (
+        {asset.pipeline_status === 'failed' && canEdit && (
           <button
             onClick={handleRetry}
             disabled={retrying}
@@ -658,6 +676,7 @@ function AssetRow({ asset, onRetry, onDelete }: AssetRowProps) {
           </button>
         )}
 
+        {canEdit && (
         <button
           onClick={handleDelete}
           disabled={deleting}
@@ -670,6 +689,7 @@ function AssetRow({ asset, onRetry, onDelete }: AssetRowProps) {
             <span>🗑️</span>
           )}
         </button>
+        )}
       </div>
     </li>
   );

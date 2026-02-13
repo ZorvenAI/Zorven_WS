@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenantRole } from '@/hooks/useTenantRole';
 import { FileUploadManager } from '@/components/files/FileUploadManager';
 
 export default function FilesPage() {
   // Protect this route - redirects to login if not authenticated
   useAuth();
+  const { canEdit } = useTenantRole();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-dark via-brand-dark to-brand-purple/20">
@@ -72,7 +74,7 @@ export default function FilesPage() {
           </div>
 
           {/* File Upload Manager */}
-          <FileUploadManager />
+          <FileUploadManager canEdit={canEdit} />
         </div>
 
         {/* Help Section */}

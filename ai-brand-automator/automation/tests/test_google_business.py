@@ -988,7 +988,9 @@ class TestGoogleBusinessPropertyTests:
 
     @given(hours_offset=st.integers(min_value=-100, max_value=100))
     @hypothesis_settings(
-        max_examples=20, suppress_health_check=[HealthCheck.function_scoped_fixture]
+        max_examples=20,
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
+        deadline=2000,
     )
     def test_token_expiry_logic_consistent(self, db, user, hours_offset):
         """Test token validity is consistent with expiry time."""

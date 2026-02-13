@@ -17,6 +17,7 @@ from .serializers import (
     CreatePortalSessionSerializer,
 )
 from .services import stripe_service
+from tenants.permissions import IsTenantViewer, IsTenantOwner
 
 logger = logging.getLogger(__name__)
 
@@ -30,22 +31,15 @@ class SubscriptionPlanViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantViewer])
 def get_subscription_status(request):
-    """Get current subscription status for the tenant"""
+    """Get current subscription status for the tenant."""
     tenant = getattr(request, "tenant", None)
-
     if not tenant:
-        # MVP mode - try to get tenant from user
-        from tenants.models import Tenant
-
-        try:
-            tenant = Tenant.objects.get(schema_name="public")
-        except Tenant.DoesNotExist:
-            return Response(
-                {"error": "Tenant not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     try:
         subscription = Subscription.objects.get(tenant=tenant)
@@ -62,24 +56,19 @@ def get_subscription_status(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantOwner])
 def create_checkout_session(request):
-    """Create a Stripe Checkout session for subscription"""
+    """Create a Stripe Checkout session for subscription."""
     serializer = CreateCheckoutSessionSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     tenant = getattr(request, "tenant", None)
     if not tenant:
-        from tenants.models import Tenant
-
-        try:
-            tenant = Tenant.objects.get(schema_name="public")
-        except Tenant.DoesNotExist:
-            return Response(
-                {"error": "Tenant not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     try:
         plan = SubscriptionPlan.objects.get(
@@ -123,24 +112,19 @@ def create_checkout_session(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantOwner])
 def create_portal_session(request):
-    """Create a Stripe Customer Portal session"""
+    """Create a Stripe Customer Portal session."""
     serializer = CreatePortalSessionSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     tenant = getattr(request, "tenant", None)
     if not tenant:
-        from tenants.models import Tenant
-
-        try:
-            tenant = Tenant.objects.get(schema_name="public")
-        except Tenant.DoesNotExist:
-            return Response(
-                {"error": "Tenant not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     if not tenant.stripe_customer_id:
         return Response(
@@ -171,20 +155,15 @@ def create_portal_session(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantOwner])
 def cancel_subscription(request):
-    """Cancel the current subscription"""
+    """Cancel the current subscription."""
     tenant = getattr(request, "tenant", None)
     if not tenant:
-        from tenants.models import Tenant
-
-        try:
-            tenant = Tenant.objects.get(schema_name="public")
-        except Tenant.DoesNotExist:
-            return Response(
-                {"error": "Tenant not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     try:
         subscription = Subscription.objects.get(tenant=tenant)
@@ -220,20 +199,15 @@ def cancel_subscription(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantViewer])
 def get_payment_history(request):
-    """Get payment history for the tenant"""
+    """Get payment history for the tenant."""
     tenant = getattr(request, "tenant", None)
     if not tenant:
-        from tenants.models import Tenant
-
-        try:
-            tenant = Tenant.objects.get(schema_name="public")
-        except Tenant.DoesNotExist:
-            return Response(
-                {"error": "Tenant not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     payments = PaymentHistory.objects.filter(tenant=tenant)[:20]
     serializer = PaymentHistorySerializer(payments, many=True)
@@ -266,20 +240,15 @@ def stripe_webhook(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantOwner])
 def sync_subscription(request):
-    """Sync subscription status from Stripe (for after checkout)"""
+    """Sync subscription status from Stripe (for after checkout)."""
     tenant = getattr(request, "tenant", None)
     if not tenant:
-        from tenants.models import Tenant
-
-        try:
-            tenant = Tenant.objects.get(schema_name="public")
-        except Tenant.DoesNotExist:
-            return Response(
-                {"detail": "Tenant not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        return Response(
+            {"error": "No tenant context. Please log in again."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     try:
         subscription = stripe_service.sync_subscription_from_stripe(tenant)

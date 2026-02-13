@@ -156,7 +156,7 @@ class TestCurationServiceProcessEvent:
         assert len(mock_storage_adapter.save_calls) == 1
         save_call = mock_storage_adapter.save_calls[0]
         # Check destination_path contains tenant_id
-        assert str(sample_curation_event.tenant_id) in save_call["destination_path"]
+        assert sample_curation_event.tenant_id in save_call["destination_path"]
         assert save_call["content_type"] == "application/json"
 
     def test_success_event_published(
@@ -175,7 +175,7 @@ class TestCurationServiceProcessEvent:
             if e["topic"] == "rag-sync-ready-topic"
         ]
         assert len(success_events) == 1
-        assert success_events[0]["key"] == str(sample_curation_event.tenant_id)
+        assert success_events[0]["key"] == sample_curation_event.tenant_id
 
     def test_processor_not_found_raises_error(
         self,
@@ -299,7 +299,7 @@ class TestCurationServicePIIRedaction:
         loop = asyncio.new_event_loop()
         loop.run_until_complete(
             mock_cache.set_tenant_config(
-                str(sample_curation_event.tenant_id),
+                sample_curation_event.tenant_id,
                 tenant_config,
             )
         )
@@ -648,7 +648,7 @@ class TestCurationServiceTenantConfig:
         loop = asyncio.new_event_loop()
         loop.run_until_complete(
             mock_cache.set_tenant_config(
-                str(sample_curation_event.tenant_id),
+                sample_curation_event.tenant_id,
                 custom_config,
             )
         )

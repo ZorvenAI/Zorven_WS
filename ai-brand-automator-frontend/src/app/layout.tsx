@@ -4,6 +4,7 @@ import "./globals.css";
 import { ToastContainer } from "@/components/common/ToastContainer";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { Navigation } from "@/components/common/Navigation";
+import { TenantProvider } from "@/contexts/TenantContext";
 
 // Default Geist fonts
 const geistSans = Geist({
@@ -56,9 +57,11 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} antialiased bg-brand-midnight text-brand-silver`}
       >
         <ErrorBoundary>
-          <Navigation />
-          {children}
-          <ToastContainer />
+          <TenantProvider>
+            <Navigation />
+            {children}
+            <ToastContainer />
+          </TenantProvider>
         </ErrorBoundary>
       </body>
     </html>

@@ -1,0 +1,24 @@
+# Ignore node_modules (reinstalled in Docker)
+ai-brand-automator-frontend/node_modules
+ai-brand-automator-frontend/.next
+ai-brand-automator-frontend/coverage
+
+# Python cache
+ai-brand-automator/__pycache__
+ai-brand-automator/**/__pycache__
+ai-brand-automator/.pytest_cache
+ai-brand-automator/htmlcov
+ai-brand-automator/db.sqlite3
+ai-brand-automator/media
+ai-brand-automator/logs
+
+# Git
+.git
+.github
+
+# Docs
+docs/
+
+# IDE
+.vscode
+.idea

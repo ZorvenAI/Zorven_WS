@@ -125,7 +125,7 @@ class TestSignedUrlEndpoint:
 
     @pytest.fixture
     def authenticated_client(self, db, django_user_model):
-        from tenants.models import Tenant
+        from tenants.models import Tenant, Membership
         import uuid
 
         # Use the public tenant (created by setup_public_tenant session fixture)
@@ -139,9 +139,17 @@ class TestSignedUrlEndpoint:
             password="testpass123",
         )
 
+        # Create OWNER membership for RBAC
+        Membership.objects.get_or_create(
+            user=user,
+            tenant=tenant,
+            defaults={"role": Membership.Role.OWNER},
+        )
+
         client = APIClient()
         client.force_authenticate(user=user)
         client.defaults["SERVER_NAME"] = "localhost"
+        client.credentials(HTTP_X_TENANT_ID=str(tenant.id))
 
         return client, user, tenant
 
@@ -230,7 +238,7 @@ class TestAssetsListFiltering:
 
     @pytest.fixture
     def authenticated_client_with_assets(self, db, django_user_model):
-        from tenants.models import Tenant
+        from tenants.models import Tenant, Membership
         from onboarding.models import Company, BrandAsset
         import uuid
 
@@ -243,6 +251,13 @@ class TestAssetsListFiltering:
             username=f"testuser2_{unique_id}",
             email=f"test2_{unique_id}@example.com",
             password="testpass123",
+        )
+
+        # Create OWNER membership for RBAC
+        Membership.objects.get_or_create(
+            user=user,
+            tenant=tenant,
+            defaults={"role": Membership.Role.OWNER},
         )
 
         # Create company
@@ -274,6 +289,7 @@ class TestAssetsListFiltering:
         client = APIClient()
         client.force_authenticate(user=user)
         client.defaults["SERVER_NAME"] = "localhost"
+        client.credentials(HTTP_X_TENANT_ID=str(tenant.id))
 
         return client, assets
 
@@ -402,7 +418,7 @@ class TestAssetsListPagination:
 
     @pytest.fixture
     def authenticated_client_with_many_assets(self, db, django_user_model):
-        from tenants.models import Tenant
+        from tenants.models import Tenant, Membership
         from onboarding.models import Company, BrandAsset
         import uuid
 
@@ -415,6 +431,13 @@ class TestAssetsListPagination:
             username=f"testuser3_{unique_id}",
             email=f"test3_{unique_id}@example.com",
             password="testpass123",
+        )
+
+        # Create OWNER membership for RBAC
+        Membership.objects.get_or_create(
+            user=user,
+            tenant=tenant,
+            defaults={"role": Membership.Role.OWNER},
         )
 
         # Create company
@@ -437,6 +460,7 @@ class TestAssetsListPagination:
         client = APIClient()
         client.force_authenticate(user=user)
         client.defaults["SERVER_NAME"] = "localhost"
+        client.credentials(HTTP_X_TENANT_ID=str(tenant.id))
 
         return client, assets
 

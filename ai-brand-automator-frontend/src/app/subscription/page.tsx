@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenantRole } from '@/hooks/useTenantRole';
 import { PlanCard } from '@/components/subscription/PlanCard';
 import { SubscriptionStatus } from '@/components/subscription/SubscriptionStatus';
 import {
@@ -13,6 +14,7 @@ import {
 
 function SubscriptionContent() {
   useAuth();
+  const { canManageBilling } = useTenantRole();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -200,8 +202,8 @@ function SubscriptionContent() {
           <div className="mx-auto mt-12 max-w-md">
             <SubscriptionStatus
               subscription={subscription}
-              onManageBilling={handleManageBilling}
-              onCancelSubscription={handleCancelSubscription}
+              onManageBilling={canManageBilling ? handleManageBilling : undefined}
+              onCancelSubscription={canManageBilling ? handleCancelSubscription : undefined}
               isLoading={isProcessing}
             />
           </div>
@@ -214,11 +216,21 @@ function SubscriptionContent() {
               key={plan.id}
               plan={plan}
               isCurrentPlan={subscription?.plan?.id === plan.id}
-              onSelect={handleSelectPlan}
+              onSelect={canManageBilling ? handleSelectPlan : undefined}
               isLoading={isProcessing}
             />
           ))}
         </div>
+
+        {!canManageBilling && (
+          <div className="mx-auto mt-8 max-w-md">
+            <div className="glass-card p-4 border-white/10">
+              <p className="text-sm text-brand-silver/50 text-center">
+                Only workspace owners can manage billing and change plans.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Back to dashboard link */}
         <div className="mt-12 text-center">

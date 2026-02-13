@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock, AsyncMock
 from uuid import uuid4, UUID
 
-from rest_framework.test import APIClient
 from rest_framework import status
 
 
@@ -18,20 +17,9 @@ SAMPLE_TENANT_ID = "11111111-1111-1111-1111-111111111111"
 SAMPLE_TRACE_ID = "22222222-2222-2222-2222-222222222222"
 
 
-@pytest.fixture
-def api_client():
-    """Create an API client for testing."""
-    client = APIClient()
-    client.defaults["SERVER_NAME"] = "localhost"
-    return client
-
-
-@pytest.fixture
-def authenticated_client(api_client):
-    """Create an authenticated API client."""
-    # Mock authentication
-    api_client.force_authenticate(user=MagicMock(id=1, is_authenticated=True))
-    return api_client
+# api_client and authenticated_client fixtures come from the global
+# conftest.py — they use real Django User instances which is required
+# by TenantMembershipMiddleware (MagicMock users cause DB query errors).
 
 
 class TestCurationEndpoint:
@@ -212,7 +200,7 @@ class TestStatusEndpoint:
         mock_status = CurationStatusRecord(
             trace_id=UUID(SAMPLE_TRACE_ID),
             event_id=uuid4(),
-            tenant_id=UUID(SAMPLE_TENANT_ID),
+            tenant_id=SAMPLE_TENANT_ID,
             file_id=uuid4(),
             status=CurationStatus.CURATED,
             message="Success",
@@ -358,7 +346,7 @@ class TestSyncEndpoint:
         mock_doc.document_id = uuid4()
         mock_doc.event_id = uuid4()
         mock_doc.trace_id = uuid4()
-        mock_doc.tenant_id = UUID(SAMPLE_TENANT_ID)
+        mock_doc.tenant_id = SAMPLE_TENANT_ID
         mock_doc.brand_id = None
         mock_doc.source_gcs_uri = "gs://test-bucket/file.pdf"
         mock_doc.curated_gcs_uri = "gs://curated-bucket/output.json"

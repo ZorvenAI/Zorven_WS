@@ -32,6 +32,13 @@ class SocialProfile(models.Model):
         ("error", "Error"),
     ]
 
+    tenant = models.ForeignKey(
+        "tenants.Tenant",
+        on_delete=models.CASCADE,
+        related_name="social_profiles",
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="social_profiles"
     )
@@ -278,6 +285,13 @@ class AutomationTask(models.Model):
         ("cancelled", "Cancelled"),
     ]
 
+    tenant = models.ForeignKey(
+        "tenants.Tenant",
+        on_delete=models.CASCADE,
+        related_name="automation_tasks",
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="automation_tasks"
     )
@@ -326,6 +340,13 @@ class ContentCalendar(models.Model):
         ("cancelled", "Cancelled"),
     ]
 
+    tenant = models.ForeignKey(
+        "tenants.Tenant",
+        on_delete=models.CASCADE,
+        related_name="scheduled_content",
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="scheduled_content"
     )
@@ -369,6 +390,13 @@ class OAuthState(models.Model):
     """
 
     state = models.CharField(max_length=64, unique=True, db_index=True)
+    tenant = models.ForeignKey(
+        "tenants.Tenant",
+        on_delete=models.CASCADE,
+        related_name="oauth_states",
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="oauth_states"
     )
@@ -578,6 +606,13 @@ class FacebookResumableUpload(models.Model):
         ("cancelled", "Cancelled"),
     ]
 
+    tenant = models.ForeignKey(
+        "tenants.Tenant",
+        on_delete=models.CASCADE,
+        related_name="facebook_uploads",
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="facebook_uploads"
     )
@@ -765,6 +800,13 @@ class InstagramResumableUpload(models.Model):
         ("STORIES", "Story"),
     ]
 
+    tenant = models.ForeignKey(
+        "tenants.Tenant",
+        on_delete=models.CASCADE,
+        related_name="instagram_uploads",
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="instagram_uploads"
     )
@@ -880,6 +922,13 @@ class GoogleBusinessProfile(models.Model):
         ("pending_verification", "Pending Verification"),
     ]
 
+    tenant = models.ForeignKey(
+        "tenants.Tenant",
+        on_delete=models.CASCADE,
+        related_name="google_business_profiles",
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="google_business_profiles"
     )

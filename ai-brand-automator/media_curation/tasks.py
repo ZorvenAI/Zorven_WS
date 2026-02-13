@@ -113,18 +113,23 @@ def process_curation_event(
     )
 
     try:
+        # Extract per-tenant curated bucket from upstream event metadata
+        event_metadata = metadata or {}
+        curated_bucket = event_metadata.pop("curated_bucket", None)
+
         # Build CurationEvent
         event = CurationEvent(
             event_id=UUID(event_id),
             trace_id=UUID(trace_id),
             timestamp=datetime.now(timezone.utc),
-            tenant_id=UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id,
+            tenant_id=tenant_id,
             file_id=uuid4(),  # Generate file ID
             raw_gcs_uri=source_path,
             mime_type=file_type,
             content_type=_detect_content_type(file_type),
             source_service="api",
-            metadata=metadata or {},
+            metadata=event_metadata,
+            curated_bucket=curated_bucket,
         )
 
         # Get curation service and process
@@ -171,7 +176,7 @@ def process_curation_event(
                 event_id=UUID(event_id),
                 trace_id=UUID(trace_id),
                 timestamp=datetime.now(timezone.utc),
-                tenant_id=UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id,
+                tenant_id=tenant_id,
                 file_id=uuid4(),
                 raw_gcs_uri=source_path,
                 mime_type=file_type,
@@ -282,18 +287,21 @@ def process_batch(self, events: list[dict]) -> dict:
     name="media_curation.check_status",
     queue="curation",
 )
-def check_status(self, trace_id: str) -> Optional[dict]:
+def check_status(
+    self, trace_id: str, tenant_id: Optional[str] = None
+) -> Optional[dict]:
     """
     Check the curation status of an event by trace_id.
 
     Args:
         trace_id: The trace ID to look up
+        tenant_id: Optional tenant ID for key namespacing
 
     Returns:
         Status dict or None if not found
     """
     cache = create_cache_adapter()
-    status_record = _run_async(cache.get_status(trace_id))
+    status_record = _run_async(cache.get_status(trace_id, tenant_id=tenant_id))
 
     if status_record:
         return {

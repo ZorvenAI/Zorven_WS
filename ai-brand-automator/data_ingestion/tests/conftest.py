@@ -108,10 +108,15 @@ class MockCachePort(CachePort):
         self.statuses: dict[str, dict] = {}
         self.data: dict[str, str] = {}
 
-    def is_duplicate(self, event_id: str) -> bool:
+    def is_duplicate(self, event_id: str, tenant_id: Optional[str] = None) -> bool:
         return event_id in self.processed
 
-    def mark_processed(self, event_id: str, ttl_seconds: Optional[int] = None) -> None:
+    def mark_processed(
+        self,
+        event_id: str,
+        ttl_seconds: Optional[int] = None,
+        tenant_id: Optional[str] = None,
+    ) -> None:
         self.processed.add(event_id)
 
     def update_status(
@@ -120,6 +125,7 @@ class MockCachePort(CachePort):
         status: str,
         ttl_seconds: Optional[int] = None,
         metadata: Optional[dict] = None,
+        tenant_id: Optional[str] = None,
     ) -> None:
         self.statuses[trace_id] = {
             "status": status,
@@ -127,7 +133,9 @@ class MockCachePort(CachePort):
             "metadata": metadata,
         }
 
-    def get_status(self, trace_id: str) -> Optional[dict]:
+    def get_status(
+        self, trace_id: str, tenant_id: Optional[str] = None
+    ) -> Optional[dict]:
         return self.statuses.get(trace_id)
 
     def get(self, key: str) -> Optional[str]:

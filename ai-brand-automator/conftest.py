@@ -147,16 +147,26 @@ def authenticated_client(api_client, user):
 
 @pytest.fixture
 def authenticated_client_with_tenant(api_client, user, public_tenant):
-    """API client authenticated with test user and tenant context.
+    """API client authenticated with test user, tenant context, and membership.
 
-    Relies on the test handler's `_force_tenant` attribute to ensure
-    request.tenant is available in views that use defensive tenant access.
+    Creates an OWNER membership for the test user on ``public_tenant``
+    and sets the ``X-Tenant-ID`` header so ``TenantMembershipMiddleware``
+    resolves tenant + membership from the database on every request.
     """
+    from tenants.models import Membership
+
     api_client.force_authenticate(user=user)
     api_client.defaults["SERVER_NAME"] = "localhost"
 
-    # Add tenant to handler so middleware/handler logic can set request.tenant
-    api_client.handler._force_tenant = public_tenant
+    # Ensure user has active membership for this tenant
+    Membership.objects.get_or_create(
+        user=user,
+        tenant=public_tenant,
+        defaults={"role": Membership.Role.OWNER},
+    )
+
+    # Set X-Tenant-ID header so middleware resolves naturally
+    api_client.credentials(HTTP_X_TENANT_ID=str(public_tenant.id))
     return api_client
 
 
@@ -290,6 +300,26 @@ def tenant2(db):
 
 
 @pytest.fixture
+def tenant_with_buckets(db, setup_public_tenant):
+    """Create a tenant with custom per-tenant GCS buckets."""
+    from tenants.models import Tenant, Domain
+
+    tenant = Tenant.objects.create(
+        name="Tenant With Buckets",
+        schema_name="tenant_buckets",
+        subscription_status="active",
+        gcs_raw_bucket="tenant-custom-raw",
+        gcs_curated_bucket="tenant-custom-curated",
+    )
+    Domain.objects.create(
+        tenant=tenant,
+        domain="buckets.localhost",
+        is_primary=True,
+    )
+    return tenant
+
+
+@pytest.fixture
 def mock_gemini_api(mocker):
     """Mock Gemini AI API responses"""
     mock_response = {
@@ -301,6 +331,72 @@ def mock_gemini_api(mocker):
     return mocker.patch(
         "ai_services.services.GeminiAIService.generate_brand_strategy",
         return_value=mock_response,
+    )
+
+
+# --- Membership fixtures ---
+
+
+@pytest.fixture
+def membership_owner(tenant, user):
+    """User as OWNER of tenant."""
+    from tenants.models import Membership
+
+    return Membership.objects.create(
+        user=user,
+        tenant=tenant,
+        role=Membership.Role.OWNER,
+    )
+
+
+@pytest.fixture
+def membership_admin(tenant, db):
+    """A different user as ADMIN of tenant."""
+    admin_member = User.objects.create_user(
+        username="admin_member",
+        email="adminmember@test.com",
+        password="TestPass123!",
+    )
+    from tenants.models import Membership
+
+    return Membership.objects.create(
+        user=admin_member,
+        tenant=tenant,
+        role=Membership.Role.ADMIN,
+    )
+
+
+@pytest.fixture
+def membership_editor(tenant, db):
+    """A different user as EDITOR of tenant."""
+    editor = User.objects.create_user(
+        username="editor",
+        email="editor@test.com",
+        password="TestPass123!",
+    )
+    from tenants.models import Membership
+
+    return Membership.objects.create(
+        user=editor,
+        tenant=tenant,
+        role=Membership.Role.EDITOR,
+    )
+
+
+@pytest.fixture
+def membership_viewer(tenant, db):
+    """A different user as VIEWER of tenant."""
+    viewer = User.objects.create_user(
+        username="viewer",
+        email="viewer@test.com",
+        password="TestPass123!",
+    )
+    from tenants.models import Membership
+
+    return Membership.objects.create(
+        user=viewer,
+        tenant=tenant,
+        role=Membership.Role.VIEWER,
     )
 
 

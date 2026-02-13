@@ -5,7 +5,7 @@ import { SubscriptionPlan } from '@/lib/api';
 interface PlanCardProps {
   plan: SubscriptionPlan;
   isCurrentPlan?: boolean;
-  onSelect: (plan: SubscriptionPlan) => void;
+  onSelect?: (plan: SubscriptionPlan) => void;
   isLoading?: boolean;
 }
 
@@ -104,8 +104,8 @@ export function PlanCard({ plan, isCurrentPlan, onSelect, isLoading }: PlanCardP
       </div>
 
       <button
-        onClick={() => onSelect(plan)}
-        disabled={isLoading || isCurrentPlan}
+        onClick={() => onSelect?.(plan)}
+        disabled={isLoading || isCurrentPlan || !onSelect}
         className={`mt-8 w-full rounded-lg px-4 py-3 text-center text-sm font-semibold transition-all ${
           isCurrentPlan
             ? 'cursor-not-allowed bg-white/10 text-brand-silver/50'

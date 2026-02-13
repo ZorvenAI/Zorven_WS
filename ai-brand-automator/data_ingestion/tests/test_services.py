@@ -303,7 +303,7 @@ class TestErrorHandling:
 
         # Create a cache that fails on is_duplicate
         class FailingCache(MockCachePort):
-            def is_duplicate(self, event_id):
+            def is_duplicate(self, event_id, tenant_id=None):
                 raise CacheOperationError(
                     operation="is_duplicate",
                     key=event_id,

@@ -2,17 +2,431 @@
 Celery tasks for onboarding pipeline integration.
 
 These tasks handle asynchronous operations for the data pipeline,
-including exporting company data for RAG indexing.
+including exporting company data for RAG indexing and running the
+full asset processing pipeline when Kafka is disabled.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID, uuid4
 
 from celery import shared_task
 
 from .services import get_pipeline_service
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Sync Pipeline Task — runs ingestion → curation via Celery (no Kafka)
+# ---------------------------------------------------------------------------
+
+
+def _update_asset_status(
+    asset_id: int,
+    status: str,
+    error_msg: str = "",
+    new_gcs_path: str = "",
+) -> bool:
+    """Update BrandAsset pipeline status.
+
+    Args:
+        asset_id: BrandAsset primary key.
+        status: New ``pipeline_status`` value.
+        error_msg: Error message (for ``failed`` status).
+        new_gcs_path: Updated ``gcs_path`` after ingestion move.
+
+    Returns:
+        ``True`` if update succeeded, ``False`` otherwise.
+    """
+    from django.db import close_old_connections
+    from onboarding.models import BrandAsset
+
+    for attempt in range(2):
+        try:
+            if attempt > 0:
+                close_old_connections()
+
+            asset = BrandAsset.objects.filter(id=asset_id).first()
+            if not asset:
+                logger.warning("BrandAsset %s not found for status update", asset_id)
+                return False
+
+            asset.pipeline_status = status
+            update_fields = ["pipeline_status"]
+
+            if new_gcs_path:
+                from data_ingestion.domain.path_generator import (
+                    extract_object_path as _extract,
+                )
+
+                asset.gcs_path = _extract(new_gcs_path)
+                update_fields.append("gcs_path")
+
+            if status == "failed" and error_msg:
+                asset.pipeline_error = error_msg
+                update_fields.append("pipeline_error")
+            elif status in ("ingested", "curated", "indexed"):
+                asset.pipeline_error = ""
+                update_fields.append("pipeline_error")
+
+            asset.save(update_fields=update_fields)
+            logger.info("Updated BrandAsset %s → status=%s", asset.id, status)
+            return True
+
+        except Exception:
+            if attempt == 0:
+                logger.warning(
+                    "DB error updating BrandAsset %s (will retry)",
+                    asset_id,
+                    exc_info=True,
+                )
+                continue
+            logger.exception("Failed to update BrandAsset %s after retry", asset_id)
+            return False
+
+    return False
+
+
+@shared_task(
+    bind=True,
+    name="onboarding.process_asset_pipeline_sync",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=120,
+    max_retries=2,
+    acks_late=True,
+)
+def process_asset_pipeline_sync(
+    self,
+    asset_id: int,
+    tenant_id: str,
+    event_data: dict,
+) -> dict:
+    """
+    Run the full asset pipeline synchronously via Celery.
+
+    This task replaces the Kafka-based pipeline when
+    ``ONBOARDING_KAFKA_ENABLED=false``.  It chains:
+
+    1. **Ingestion** — validate & move file from ``_landing/`` → ``raw/``
+    2. **Curation** — extract text, redact PII, save curated JSON
+    3. **Indexing** — sync curated document to Vertex AI (RAG)
+
+    Both ingestion and curation stages use NoOp Kafka producers so the
+    domain services complete without attempting real Kafka publishes.
+    The indexing stage reuses the ``SyncOrchestrator`` from ``rag_index``.
+
+    Args:
+        asset_id: ``BrandAsset.id``
+        tenant_id: Tenant pk (as string).
+        event_data: Dict built by
+            ``OnboardingPipelineService._build_ingestion_event()``.
+
+    Returns:
+        Dict summarising the pipeline result.
+    """
+    logger.info(
+        "Starting sync pipeline for asset %s (tenant %s)",
+        asset_id,
+        tenant_id,
+    )
+
+    # ---- resolve tenant (optional, for per-tenant bucket resolution) ----
+    tenant = None
+    try:
+        from tenants.models import Tenant
+
+        tenant = Tenant.objects.filter(pk=int(tenant_id)).first()
+    except Exception:
+        pass
+
+    # ======================================================================
+    # Stage 1 — Ingestion
+    # ======================================================================
+    ingestion_result = _run_ingestion(self, asset_id, tenant, event_data)
+    if ingestion_result.get("status") == "failed":
+        return ingestion_result
+
+    # ======================================================================
+    # Stage 2 — Curation
+    # ======================================================================
+    curation_result = _run_curation(
+        self, asset_id, tenant, event_data, ingestion_result
+    )
+    if curation_result.get("status") == "failed":
+        return {
+            "status": "failed",
+            "asset_id": asset_id,
+            "ingestion": ingestion_result,
+            "curation": curation_result,
+        }
+
+    # ======================================================================
+    # Stage 3 — RAG Indexing
+    # ======================================================================
+    indexing_result = _run_indexing(
+        self, asset_id, tenant_id, event_data, curation_result
+    )
+
+    final_status = indexing_result.get("status", "completed")
+    return {
+        "status": "indexed" if final_status == "success" else final_status,
+        "asset_id": asset_id,
+        "ingestion": ingestion_result,
+        "curation": curation_result,
+        "indexing": indexing_result,
+    }
+
+
+def _run_ingestion(self, asset_id: int, tenant, event_data: dict) -> dict:
+    """Execute the ingestion stage with a NoOp Kafka producer."""
+    from data_ingestion.domain.models import IngestionEvent, EventSource
+    from data_ingestion.domain.services import IngestionService
+    from data_ingestion.factory import create_gcs_adapter, create_redis_adapter
+    from data_ingestion.adapters.noop_adapter import NoOpProducerAdapter
+
+    try:
+        # Build IngestionEvent from the event_data dict
+        event = IngestionEvent(
+            event_id=UUID(event_data["event_id"]),
+            tenant_id=event_data.get("tenant_id", "public"),
+            file_path=event_data["file_path"],
+            file_type=event_data.get("file_type", "application/octet-stream"),
+            timestamp=(
+                datetime.fromisoformat(event_data["timestamp"])
+                if event_data.get("timestamp")
+                else datetime.now(timezone.utc)
+            ),
+            source=EventSource.FRONTEND_UPLOAD,
+            trace_id=(
+                UUID(event_data["trace_id"]) if event_data.get("trace_id") else uuid4()
+            ),
+            metadata=event_data.get("metadata"),
+            raw_bucket=event_data.get("raw_bucket"),
+            curated_bucket=event_data.get("curated_bucket"),
+        )
+
+        # Create service with NoOp producer (skip Kafka at step 8)
+        service = IngestionService(
+            storage=create_gcs_adapter(tenant=tenant),
+            cache=create_redis_adapter(),
+            producer=NoOpProducerAdapter(),
+            output_topic="curation-needed-topic",
+            dlq_topic="ingestion-dlq",
+        )
+
+        result = service.process_event(event)
+
+        # Update BrandAsset → ingested
+        _update_asset_status(
+            asset_id,
+            "ingested",
+            new_gcs_path=result.destination_path,
+        )
+
+        logger.info(
+            "Ingestion succeeded for asset %s → %s",
+            asset_id,
+            result.destination_path,
+        )
+        return {
+            "status": "success",
+            "destination_path": result.destination_path,
+            "duration_ms": result.processing_duration_ms,
+            "event_id": str(result.event_id),
+            "trace_id": str(result.trace_id),
+        }
+
+    except Exception as e:
+        error_msg = f"Ingestion failed: {e}"
+        logger.error(error_msg, extra={"asset_id": asset_id}, exc_info=True)
+        _update_asset_status(asset_id, "failed", error_msg=str(e))
+        return {"status": "failed", "error": str(e)}
+
+
+def _run_curation(
+    self,
+    asset_id: int,
+    tenant,
+    event_data: dict,
+    ingestion_result: dict,
+) -> dict:
+    """Execute the curation stage with a NoOp Kafka producer."""
+    from media_curation.domain.models import CurationEvent, ContentType
+    from media_curation.factory import (
+        create_processor_factory,
+        create_cache_adapter,
+        create_storage_adapter,
+        create_dlp_adapter,
+        get_media_curation_config,
+    )
+    from media_curation.domain.services import CurationService
+    from media_curation.adapters.noop_producer import (
+        NoOpProducerAdapter as CurationNoOpProducer,
+    )
+
+    try:
+        config = get_media_curation_config()
+        kafka_config = config.get("KAFKA", {})
+
+        # Resolve curated bucket
+        curated_bucket = event_data.get("curated_bucket")
+        if not curated_bucket and tenant and hasattr(tenant, "get_curated_bucket"):
+            curated_bucket = tenant.get_curated_bucket()
+        storage_bucket = curated_bucket or config.get("STORAGE", {}).get(
+            "CURATED_BUCKET", "brandsol-curation-bucket"
+        )
+
+        # Build CurationEvent from ingestion result
+        dest_path = ingestion_result.get(
+            "destination_path", event_data.get("file_path", "")
+        )
+        mime_type = event_data.get("file_type", "application/octet-stream")
+
+        def _detect(mt: str) -> ContentType:
+            if mt.startswith("video/"):
+                return ContentType.VIDEO
+            if mt.startswith("audio/"):
+                return ContentType.AUDIO
+            if mt.startswith("image/"):
+                return ContentType.IMAGE
+            return ContentType.DOCUMENT
+
+        curation_event = CurationEvent(
+            event_id=uuid4(),
+            trace_id=(
+                UUID(ingestion_result["trace_id"])
+                if ingestion_result.get("trace_id")
+                else uuid4()
+            ),
+            timestamp=datetime.now(timezone.utc),
+            tenant_id=event_data.get("tenant_id", "public"),
+            file_id=uuid4(),
+            raw_gcs_uri=dest_path,
+            mime_type=mime_type,
+            content_type=_detect(mime_type),
+            source_service="data-ingestion",
+            metadata={
+                **(event_data.get("metadata") or {}),
+                "curated_bucket": curated_bucket,
+            },
+            curated_bucket=curated_bucket,
+        )
+
+        # Create CurationService with NoOp producer
+        service = CurationService(
+            processor_factory=create_processor_factory(config, tenant=tenant),
+            cache=create_cache_adapter(config),
+            storage=create_storage_adapter(config, tenant=tenant),
+            producer=CurationNoOpProducer(),
+            dlp=create_dlp_adapter(config),
+            output_topic=kafka_config.get("OUTPUT_TOPIC", "rag-sync-ready-topic"),
+            dlq_topic=kafka_config.get("DLQ_TOPIC", "curation-dlq"),
+            output_bucket=storage_bucket,
+        )
+
+        result = service.process_event(curation_event)
+
+        # Update BrandAsset → curated
+        _update_asset_status(asset_id, "curated")
+
+        logger.info(
+            "Curation succeeded for asset %s (doc_id=%s)",
+            asset_id,
+            result.document_id if result else "N/A",
+        )
+        return {
+            "status": "success",
+            "document_id": str(result.document_id) if result else None,
+            "output_uri": result.output_gcs_uri if result else None,
+        }
+
+    except Exception as e:
+        error_msg = f"Curation failed: {e}"
+        logger.error(error_msg, extra={"asset_id": asset_id}, exc_info=True)
+        # Mark as ingested (curation failed but ingestion succeeded)
+        _update_asset_status(asset_id, "failed", error_msg=str(e))
+        return {"status": "failed", "error": str(e)}
+
+
+def _run_indexing(
+    self,
+    asset_id: int,
+    tenant_id: str,
+    event_data: dict,
+    curation_result: dict,
+) -> dict:
+    """Execute the RAG indexing stage via the existing sync_document task.
+
+    Builds a ``SyncEvent`` dict from the curation output and dispatches
+    it **synchronously** through the ``SyncOrchestrator`` (same pattern
+    as ``sync_document`` Celery task in ``rag_index``).
+
+    Args:
+        self: Parent Celery task (for logging context).
+        asset_id: ``BrandAsset.id``.
+        tenant_id: Tenant pk as string.
+        event_data: Original ingestion event dict.
+        curation_result: Dict returned by ``_run_curation()``.
+
+    Returns:
+        Dict summarising the indexing result.
+    """
+    from rag_index.domain.models import SyncAction, SyncEvent
+    from rag_index.tasks.sync_tasks import get_orchestrator, run_async
+
+    try:
+        output_uri = curation_result.get("output_uri", "")
+        document_id = curation_result.get("document_id", "")
+        trace_id = event_data.get("trace_id", str(uuid4()))
+
+        if not output_uri:
+            logger.warning(
+                "No output_uri from curation for asset %s — skipping indexing",
+                asset_id,
+            )
+            # Still mark curated (indexing skipped, not failed)
+            return {"status": "skipped", "reason": "no output_uri from curation"}
+
+        sync_event = SyncEvent(
+            event_id=uuid4(),
+            trace_id=trace_id,
+            tenant_id=tenant_id,
+            file_id=document_id or str(asset_id),
+            processed_gcs_uri=output_uri,
+            action=SyncAction.UPSERT,
+            metadata={
+                **(event_data.get("metadata") or {}),
+                "asset_id": asset_id,
+                "source_task": "process_asset_pipeline_sync",
+            },
+        )
+
+        orchestrator = get_orchestrator()
+        result = run_async(orchestrator.process_event(sync_event))
+
+        # Update BrandAsset → indexed
+        _update_asset_status(asset_id, "indexed")
+
+        logger.info(
+            "Indexing succeeded for asset %s (operation=%s)",
+            asset_id,
+            result.operation_id if result else "N/A",
+        )
+        return {
+            "status": "success",
+            "operation_id": result.operation_id if result else None,
+            "processing_time_ms": result.processing_time_ms if result else 0,
+        }
+
+    except Exception as e:
+        error_msg = f"Indexing failed: {e}"
+        logger.error(error_msg, extra={"asset_id": asset_id}, exc_info=True)
+        # Curation succeeded; mark as failed with indexing error
+        _update_asset_status(asset_id, "failed", error_msg=str(e))
+        return {"status": "failed", "error": str(e)}
 
 
 @shared_task(bind=True, max_retries=3, ignore_result=True)
