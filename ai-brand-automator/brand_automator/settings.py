@@ -168,11 +168,7 @@ TESTING = "pytest" in sys.modules or "test" in sys.argv
 
 # Database configuration - supports both DATABASE_URL and individual DB_* vars
 # python-decouple checks os.environ FIRST, then falls back to .env files.
-# Safety net: also check os.environ directly in case decouple can't find the
-# value (e.g. no .env file in Docker container and decouple search fails).
 DATABASE_URL = config("DATABASE_URL", default="").strip()
-if not DATABASE_URL:
-    DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 # Validate DATABASE_URL has a real scheme (not empty or whitespace-only)
 _db_url_valid = bool(DATABASE_URL) and DATABASE_URL.find("://") > 0

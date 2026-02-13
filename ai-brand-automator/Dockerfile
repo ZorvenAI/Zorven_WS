@@ -47,9 +47,11 @@ if [ -n "$GCS_CREDENTIALS_JSON" ]; then
   export GOOGLE_APPLICATION_CREDENTIALS=/app/gcs-credentials.json
 fi
 
-# Run database URL diagnostic before anything else
-echo "=== Database URL Diagnostic ==="
-python scripts/check_database_url.py || echo "WARNING: Diagnostic script failed (non-fatal)"
+# Run database URL diagnostic only when explicitly enabled
+if [ "${DB_DIAGNOSTICS:-false}" = "true" ]; then
+  echo "=== Database URL Diagnostic ==="
+  python scripts/check_database_url.py || echo "WARNING: Diagnostic script failed (non-fatal)"
+fi
 
 echo "=== Running migrations ==="
 python manage.py migrate_schemas --shared --noinput

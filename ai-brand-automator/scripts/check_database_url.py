@@ -8,20 +8,15 @@ import sys
 import urllib.parse
 
 
-def mask_url(url):
-    """Return URL with password masked for safe logging."""
+def safe_summary(url):
+    """Return only scheme + length for safe logging (no credentials or host)."""
     if not url:
-        return repr(url)
+        return "empty"
     try:
         parsed = urllib.parse.urlsplit(url)
-        if parsed.password:
-            masked = url.replace(parsed.password, "***")
-            return masked
-        return url
+        return f"scheme={parsed.scheme!r}, len={len(url)}"
     except Exception:
-        # Show first 20 chars + length if unparseable
-        safe = url[:20].replace("\n", "\\n").replace("\r", "\\r")
-        return f"{safe}... (len={len(url)})"
+        return f"unparseable, len={len(url)}"
 
 
 def main():
@@ -34,29 +29,23 @@ def main():
     if raw is None:
         print("[os.environ] DATABASE_URL: NOT SET")
     elif not raw.strip():
-        print(f"[os.environ] DATABASE_URL: SET but EMPTY (len={len(raw)})")
+        print("[os.environ] DATABASE_URL: SET but EMPTY")
     else:
-        print(f"[os.environ] DATABASE_URL: SET (len={len(raw)})")
-        print(f"[os.environ] Masked URL: {mask_url(raw.strip())}")
-        # Parse scheme
-        parsed = urllib.parse.urlsplit(raw.strip())
-        print(f"[os.environ] Scheme: {parsed.scheme!r}")
-        print(f"[os.environ] Host: {parsed.hostname!r}")
+        print(f"[os.environ] DATABASE_URL: SET ({safe_summary(raw.strip())})")
 
     # 2. Check python-decouple
+    decouple_url = ""
     try:
-        from decouple import config
+        from decouple import config as decouple_config
 
-        value = config("DATABASE_URL", default="__NOT_SET__")
+        value = decouple_config("DATABASE_URL", default="__NOT_SET__")
         if value == "__NOT_SET__":
             print("[decouple]   DATABASE_URL: NOT SET (got default)")
         elif not value.strip():
-            print(f"[decouple]   DATABASE_URL: EMPTY (len={len(value)})")
+            print("[decouple]   DATABASE_URL: EMPTY")
         else:
-            print(f"[decouple]   DATABASE_URL: SET (len={len(value)})")
-            print(f"[decouple]   Masked URL: {mask_url(value.strip())}")
-            parsed = urllib.parse.urlsplit(value.strip())
-            print(f"[decouple]   Scheme: {parsed.scheme!r}")
+            decouple_url = value.strip()
+            print(f"[decouple]   DATABASE_URL: SET ({safe_summary(decouple_url)})")
 
         # Check if os.environ and decouple agree
         if raw is not None and value != "__NOT_SET__":
@@ -64,7 +53,6 @@ def main():
                 print("[match]      os.environ and decouple AGREE")
             else:
                 print("[MISMATCH]   os.environ and decouple DISAGREE!")
-                print(f"  os.environ len={len(raw)}, decouple len={len(value)}")
     except Exception as exc:
         print(f"[decouple]   ERROR: {exc!r}")
 
@@ -76,16 +64,38 @@ def main():
             fpath = os.path.join(app_dir, f)
             print(f"  {f} ({os.path.getsize(fpath)} bytes)")
 
-    # 4. Test dj_database_url.parse
-    url_to_parse = (raw or "").strip() if raw else ""
-    if url_to_parse:
-        try:
-            import dj_database_url
+    # 4. Test dj_database_url.parse for BOTH sources
+    try:
+        import dj_database_url
+    except Exception as exc:
+        print(f"\n[dj_db_url]  ERROR: could not import dj_database_url: {exc}")
+        dj_database_url = None
 
-            result = dj_database_url.parse(url_to_parse)
-            print(f"\n[dj_db_url]  Parse OK: engine={result.get('ENGINE')}")
-        except Exception as exc:
-            print(f"\n[dj_db_url]  Parse FAILED: {exc}")
+    if dj_database_url:
+        env_url = (raw or "").strip()
+        if env_url:
+            try:
+                result = dj_database_url.parse(env_url)
+                print(
+                    f"\n[dj_db_url]  os.environ parse: OK "
+                    f"(engine={result.get('ENGINE')})"
+                )
+            except Exception as exc:
+                print(f"\n[dj_db_url]  os.environ parse: FAILED ({exc})")
+        else:
+            print("\n[dj_db_url]  os.environ parse: skipped (not set)")
+
+        if decouple_url:
+            try:
+                result = dj_database_url.parse(decouple_url)
+                print(
+                    f"[dj_db_url]  decouple parse: OK "
+                    f"(engine={result.get('ENGINE')})"
+                )
+            except Exception as exc:
+                print(f"[dj_db_url]  decouple parse: FAILED ({exc})")
+        else:
+            print("[dj_db_url]  decouple parse: skipped (not set)")
 
     print("=" * 60)
     return 0
