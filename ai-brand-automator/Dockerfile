@@ -47,28 +47,11 @@ if [ -n "$GCS_CREDENTIALS_JSON" ]; then
   export GOOGLE_APPLICATION_CREDENTIALS=/app/gcs-credentials.json
 fi
 
-# Startup diagnostics — helps debug deployment issues
-echo "=== Environment Check ==="
-if [ -n "$DATABASE_URL" ]; then
-  echo "DATABASE_URL: set"
-else
-  echo "WARNING: DATABASE_URL is NOT set in the container environment."
-  echo "  - Verify Railway service variables and any environment groups."
-  echo "  - Confirm the variable is attached to this deployment/service."
+# Run database URL diagnostic only when explicitly enabled
+if [ "${DB_DIAGNOSTICS:-false}" = "true" ]; then
+  echo "=== Database URL Diagnostic ==="
+  python scripts/check_database_url.py || echo "WARNING: Diagnostic script failed (non-fatal)"
 fi
-echo "DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-brand_automator.settings}"
-
-echo "=== python-decouple DATABASE_URL check ==="
-python -c "
-from decouple import config
-value = config('DATABASE_URL', default='', cast=str)
-if not value:
-    print('python-decouple: DATABASE_URL is empty or missing')
-elif '://' not in value:
-    print('python-decouple: DATABASE_URL is missing a URL scheme (e.g. postgres://)')
-else:
-    print('python-decouple: DATABASE_URL OK')
-"
 
 echo "=== Running migrations ==="
 python manage.py migrate_schemas --shared --noinput
