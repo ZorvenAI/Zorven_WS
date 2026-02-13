@@ -167,15 +167,18 @@ WSGI_APPLICATION = "brand_automator.wsgi.application"
 TESTING = "pytest" in sys.modules or "test" in sys.argv
 
 # Database configuration - supports both DATABASE_URL and individual DB_* vars
-DATABASE_URL = config("DATABASE_URL", default="").strip()
+# Read from os.environ FIRST (Railway/Heroku inject env vars here),
+# then fall back to python-decouple for local .env development.
+# python-decouple may miss os.environ when no .env file is present in Docker.
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+if not DATABASE_URL:
+    DATABASE_URL = config("DATABASE_URL", default="").strip()
 
 # Validate DATABASE_URL has a real scheme (not empty or whitespace-only)
 _db_url_valid = bool(DATABASE_URL) and DATABASE_URL.find("://") > 0
 
 if _db_url_valid:
     # Use DATABASE_URL if available (Railway, Heroku, etc.)
-    # Use parse() instead of config() to avoid dj_database_url re-reading
-    # os.environ["DATABASE_URL"] which may differ from the decouple value.
     DATABASES = {
         "default": dj_database_url.parse(
             DATABASE_URL,
@@ -186,15 +189,30 @@ if _db_url_valid:
     # Set engine for django-tenants (dj_database_url uses default postgres engine)
     DATABASES["default"]["ENGINE"] = "django_tenants.postgresql_backend"
 else:
-    # Use individual DB_* variables (local development)
+    # Fall back to individual DB_* variables — also check os.environ first
+    _db_host = os.environ.get("DB_HOST", "").strip() or config(
+        "DB_HOST", default="localhost"
+    )
+    _db_name = os.environ.get("DB_NAME", "").strip() or config(
+        "DB_NAME", default="neondb"
+    )
+    _db_user = os.environ.get("DB_USER", "").strip() or config(
+        "DB_USER", default="neondb_owner"
+    )
+    _db_password = os.environ.get("DB_PASSWORD", "").strip() or config(
+        "DB_PASSWORD", default=""
+    )
+    _db_port = os.environ.get("DB_PORT", "").strip() or config(
+        "DB_PORT", default="5432"
+    )
     DATABASES = {
         "default": {
             "ENGINE": "django_tenants.postgresql_backend",
-            "NAME": config("DB_NAME", default="neondb"),
-            "USER": config("DB_USER", default="neondb_owner"),
-            "PASSWORD": config("DB_PASSWORD", default=""),
-            "HOST": config("DB_HOST", default="localhost"),
-            "PORT": config("DB_PORT", default="5432"),
+            "NAME": _db_name,
+            "USER": _db_user,
+            "PASSWORD": _db_password,
+            "HOST": _db_host,
+            "PORT": _db_port,
             "OPTIONS": {
                 "sslmode": config("DB_SSLMODE", default="require"),
                 "channel_binding": config("DB_CHANNEL_BINDING", default="require"),

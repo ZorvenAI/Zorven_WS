@@ -47,6 +47,16 @@ if [ -n "$GCS_CREDENTIALS_JSON" ]; then
   export GOOGLE_APPLICATION_CREDENTIALS=/app/gcs-credentials.json
 fi
 
+# Startup diagnostics — helps debug deployment issues
+echo "=== Environment Check ==="
+if [ -n "$DATABASE_URL" ]; then
+  echo "DATABASE_URL: set (${#DATABASE_URL} chars)"
+else
+  echo "WARNING: DATABASE_URL is NOT set. Set it in Railway service variables."
+  echo "Falling back to individual DB_* variables."
+fi
+echo "DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-brand_automator.settings}"
+
 echo "=== Running migrations ==="
 python manage.py migrate_schemas --shared --noinput
 echo "=== Bootstrapping public tenant ==="
