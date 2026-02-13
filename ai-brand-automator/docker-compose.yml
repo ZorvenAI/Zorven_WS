@@ -106,8 +106,8 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-brand-kafka:9092}
       - KAFKA_CONSUMER_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID:-brand-automator-consumers}
       # Multi-tenancy: default GCS buckets (tenants can override)
-      - GCS_RAW_BUCKET=${GCS_RAW_BUCKET:-onboarding-bucket1}
-      - GCS_CURATED_BUCKET=${GCS_CURATED_BUCKET:-brandsol-curation-bucket}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-bucket1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-brandsol-curation-bucket}
     depends_on:
       redis:
         condition: service_healthy
@@ -219,8 +219,8 @@ services:
       - INGESTION_KAFKA_DLQ_TOPIC=${INGESTION_KAFKA_DLQ_TOPIC:-ingestion-dlq}
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-brand-kafka:9092}
       # Multi-tenancy: default GCS buckets
-      - GCS_RAW_BUCKET=${GCS_RAW_BUCKET:-onboarding-bucket1}
-      - GCS_CURATED_BUCKET=${GCS_CURATED_BUCKET:-brandsol-curation-bucket}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-bucket1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-brandsol-curation-bucket}
     depends_on:
       redis:
         condition: service_healthy
@@ -264,8 +264,8 @@ services:
       - INGESTION_KAFKA_DLQ_TOPIC=${INGESTION_KAFKA_DLQ_TOPIC:-ingestion-dlq}
       - INGESTION_KAFKA_GROUP_ID=${INGESTION_KAFKA_GROUP_ID:-ingestion-svc-group}
       # Multi-tenancy: default GCS buckets
-      - GCS_RAW_BUCKET=${GCS_RAW_BUCKET:-onboarding-bucket1}
-      - GCS_CURATED_BUCKET=${GCS_CURATED_BUCKET:-brandsol-curation-bucket}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-bucket1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-brandsol-curation-bucket}
     depends_on:
       redis:
         condition: service_healthy
@@ -315,8 +315,8 @@ services:
       - KAFKA_CURATION_DLQ_TOPIC=${KAFKA_CURATION_DLQ_TOPIC:-curation-dlq}
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-brand-kafka:9092}
       # Multi-tenancy: default GCS buckets
-      - GCS_RAW_BUCKET=${GCS_RAW_BUCKET:-onboarding-bucket1}
-      - GCS_CURATED_BUCKET=${GCS_CURATED_BUCKET:-brandsol-curation-bucket}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-bucket1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-brandsol-curation-bucket}
     depends_on:
       redis:
         condition: service_healthy
@@ -368,8 +368,8 @@ services:
       - KAFKA_CURATION_DLQ_TOPIC=${KAFKA_CURATION_DLQ_TOPIC:-curation-dlq}
       - KAFKA_CURATION_CONSUMER_GROUP=${KAFKA_CURATION_CONSUMER_GROUP:-media-curation-consumers}
       # Multi-tenancy: default GCS buckets
-      - GCS_RAW_BUCKET=${GCS_RAW_BUCKET:-onboarding-bucket1}
-      - GCS_CURATED_BUCKET=${GCS_CURATED_BUCKET:-brandsol-curation-bucket}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-bucket1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-brandsol-curation-bucket}
     depends_on:
       redis:
         condition: service_healthy
@@ -415,8 +415,8 @@ services:
       - RAG_SYNC_OUTPUT_TOPIC=${RAG_SYNC_OUTPUT_TOPIC:-rag-sync-completed-topic}
       - RAG_SYNC_DLQ_TOPIC=${RAG_SYNC_DLQ_TOPIC:-rag-sync-dlq}
       # Multi-tenancy: default GCS buckets
-      - GCS_RAW_BUCKET=${GCS_RAW_BUCKET:-onboarding-bucket1}
-      - GCS_CURATED_BUCKET=${GCS_CURATED_BUCKET:-brandsol-curation-bucket}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-bucket1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-brandsol-curation-bucket}
     depends_on:
       redis:
         condition: service_healthy
@@ -463,8 +463,8 @@ services:
       - RAG_SYNC_OUTPUT_TOPIC=${RAG_SYNC_OUTPUT_TOPIC:-rag-sync-completed-topic}
       - RAG_SYNC_DLQ_TOPIC=${RAG_SYNC_DLQ_TOPIC:-rag-sync-dlq}
       # Multi-tenancy: default GCS buckets
-      - GCS_RAW_BUCKET=${GCS_RAW_BUCKET:-onboarding-bucket1}
-      - GCS_CURATED_BUCKET=${GCS_CURATED_BUCKET:-brandsol-curation-bucket}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-bucket1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-brandsol-curation-bucket}
     depends_on:
       redis:
         condition: service_healthy
