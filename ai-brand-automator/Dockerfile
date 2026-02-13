@@ -47,9 +47,15 @@ if [ -n "$GCS_CREDENTIALS_JSON" ]; then
   export GOOGLE_APPLICATION_CREDENTIALS=/app/gcs-credentials.json
 fi
 
-# Run database URL diagnostic only when explicitly enabled
+# Always show which database-related env vars are available (names only, no values)
+echo "=== Database Environment Check ==="
+echo "Database-related env vars set in this container:"
+env | grep -iE '^DATABASE|^DB_|^PG|^POSTGRES' | cut -d= -f1 | sort || echo "  (none found)"
+echo "---"
+
+# Run full database URL diagnostic when explicitly enabled
 if [ "${DB_DIAGNOSTICS:-false}" = "true" ]; then
-  echo "=== Database URL Diagnostic ==="
+  echo "=== Database URL Diagnostic (detailed) ==="
   python scripts/check_database_url.py || echo "WARNING: Diagnostic script failed (non-fatal)"
 fi
 

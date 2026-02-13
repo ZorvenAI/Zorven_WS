@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import logging as _logging
 import os
 import sys
 from pathlib import Path
@@ -162,6 +163,7 @@ WSGI_APPLICATION = "brand_automator.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+_db_log = _logging.getLogger(__name__)
 
 # Determine if we're in test mode
 TESTING = "pytest" in sys.modules or "test" in sys.argv
@@ -169,9 +171,27 @@ TESTING = "pytest" in sys.modules or "test" in sys.argv
 # Database configuration - supports both DATABASE_URL and individual DB_* vars
 # python-decouple checks os.environ FIRST, then falls back to .env files.
 DATABASE_URL = config("DATABASE_URL", default="").strip()
+_db_url_source = "DATABASE_URL"
+
+# If DATABASE_URL is empty, try alternative variable names used by
+# Railway, Render, and other PaaS platforms.
+if not DATABASE_URL:
+    _DB_URL_ALTERNATIVES = (
+        "DATABASE_PRIVATE_URL",
+        "DATABASE_PUBLIC_URL",
+        "POSTGRES_URL",
+        "POSTGRESQL_URL",
+    )
+    for _alt_name in _DB_URL_ALTERNATIVES:
+        _alt_url = config(_alt_name, default="").strip()
+        if _alt_url:
+            DATABASE_URL = _alt_url
+            _db_url_source = _alt_name
+            _db_log.info("Using %s (DATABASE_URL was empty)", _alt_name)
+            break
 
 # Validate DATABASE_URL has a real scheme (not empty or whitespace-only)
-_db_url_valid = bool(DATABASE_URL) and DATABASE_URL.find("://") > 0
+_db_url_valid = bool(DATABASE_URL) and "://" in DATABASE_URL
 
 if _db_url_valid:
     # Use DATABASE_URL if available (Railway, Heroku, etc.)
@@ -187,24 +207,39 @@ if _db_url_valid:
         }
         # Set engine for django-tenants
         DATABASES["default"]["ENGINE"] = "django_tenants.postgresql_backend"
+        _db_log.info(
+            "Database configured via %s (scheme: %s)",
+            _db_url_source,
+            DATABASE_URL.split("://")[0],
+        )
     except (ValueError, KeyError) as exc:
-        import logging
-
-        logging.getLogger(__name__).error(
-            "Failed to parse DATABASE_URL: %s. Falling back to individual DB_* vars.",
+        _db_log.error(
+            "Failed to parse %s: %s. Falling back to individual DB_* vars.",
+            _db_url_source,
             exc,
         )
         _db_url_valid = False
 
 if not _db_url_valid:
-    # Fall back to individual DB_* variables (local development)
+    # Fall back to individual DB_* variables (local development or
+    # Railway with individual vars set instead of DATABASE_URL).
+    _db_host = config("DB_HOST", default="").strip()
+    _db_name = config("DB_NAME", default="").strip()
+
+    if not _db_host and not DEBUG:
+        _db_log.critical(
+            "No database configured! Set DATABASE_URL or individual "
+            "DB_HOST/DB_NAME/DB_USER/DB_PASSWORD environment variables. "
+            "The app will fail to connect."
+        )
+
     DATABASES = {
         "default": {
             "ENGINE": "django_tenants.postgresql_backend",
-            "NAME": config("DB_NAME", default="neondb"),
+            "NAME": _db_name or config("DB_NAME", default="neondb"),
             "USER": config("DB_USER", default="neondb_owner"),
             "PASSWORD": config("DB_PASSWORD", default=""),
-            "HOST": config("DB_HOST", default="localhost"),
+            "HOST": _db_host or config("DB_HOST", default="localhost"),
             "PORT": config("DB_PORT", default="5432"),
             "OPTIONS": {
                 "sslmode": config("DB_SSLMODE", default="require"),
@@ -212,6 +247,10 @@ if not _db_url_valid:
             },
         }
     }
+    _db_log.info(
+        "Database configured via individual DB_* vars (host: %s)",
+        _db_host or "localhost (default)",
+    )
 
 # Multi-tenancy settings
 DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
