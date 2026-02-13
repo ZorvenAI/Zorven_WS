@@ -170,7 +170,7 @@ TESTING = "pytest" in sys.modules or "test" in sys.argv
 DATABASE_URL = config("DATABASE_URL", default="").strip()
 
 # Validate DATABASE_URL has a real scheme (not empty or whitespace-only)
-_db_url_valid = DATABASE_URL and "://" in DATABASE_URL
+_db_url_valid = bool(DATABASE_URL) and DATABASE_URL.find("://") > 0
 
 if _db_url_valid:
     # Use DATABASE_URL if available (Railway, Heroku, etc.)
