@@ -190,8 +190,9 @@ if not DATABASE_URL:
             _db_log.info("Using %s (DATABASE_URL was empty)", _alt_name)
             break
 
-# Validate DATABASE_URL has a real scheme (not empty or whitespace-only)
-_db_url_valid = bool(DATABASE_URL) and "://" in DATABASE_URL
+# Validate DATABASE_URL has a real scheme (not empty or whitespace-only).
+# Use find("://") > 0 to reject edge cases like "://bad" (no scheme).
+_db_url_valid = bool(DATABASE_URL) and DATABASE_URL.find("://") > 0
 
 if _db_url_valid:
     # Use DATABASE_URL if available (Railway, Heroku, etc.)
@@ -212,7 +213,9 @@ if _db_url_valid:
             _db_url_source,
             DATABASE_URL.split("://")[0],
         )
-    except (ValueError, KeyError) as exc:
+    except Exception as exc:
+        # dj_database_url can raise ValueError, KeyError, or
+        # django.core.exceptions.ImproperlyConfigured for invalid URLs.
         _db_log.error(
             "Failed to parse %s: %s. Falling back to individual DB_* vars.",
             _db_url_source,
@@ -223,10 +226,16 @@ if _db_url_valid:
 if not _db_url_valid:
     # Fall back to individual DB_* variables (local development or
     # Railway with individual vars set instead of DATABASE_URL).
-    _db_host = config("DB_HOST", default="").strip()
-    _db_name = config("DB_NAME", default="").strip()
+    # Read each var once with its real default to avoid redundant config() calls.
+    _db_name = config("DB_NAME", default="neondb")
+    _db_user = config("DB_USER", default="neondb_owner")
+    _db_password = config("DB_PASSWORD", default="")
+    _db_host = config("DB_HOST", default="localhost")
+    _db_port = config("DB_PORT", default="5432")
+    _db_sslmode = config("DB_SSLMODE", default="require")
+    _db_channel_binding = config("DB_CHANNEL_BINDING", default="require")
 
-    if not _db_host and not DEBUG:
+    if _db_host == "localhost" and not DEBUG:
         _db_log.critical(
             "No database configured! Set DATABASE_URL or individual "
             "DB_HOST/DB_NAME/DB_USER/DB_PASSWORD environment variables. "
@@ -236,20 +245,20 @@ if not _db_url_valid:
     DATABASES = {
         "default": {
             "ENGINE": "django_tenants.postgresql_backend",
-            "NAME": _db_name or config("DB_NAME", default="neondb"),
-            "USER": config("DB_USER", default="neondb_owner"),
-            "PASSWORD": config("DB_PASSWORD", default=""),
-            "HOST": _db_host or config("DB_HOST", default="localhost"),
-            "PORT": config("DB_PORT", default="5432"),
+            "NAME": _db_name,
+            "USER": _db_user,
+            "PASSWORD": _db_password,
+            "HOST": _db_host,
+            "PORT": _db_port,
             "OPTIONS": {
-                "sslmode": config("DB_SSLMODE", default="require"),
-                "channel_binding": config("DB_CHANNEL_BINDING", default="require"),
+                "sslmode": _db_sslmode,
+                "channel_binding": _db_channel_binding,
             },
         }
     }
     _db_log.info(
         "Database configured via individual DB_* vars (host: %s)",
-        _db_host or "localhost (default)",
+        _db_host,
     )
 
 # Multi-tenancy settings

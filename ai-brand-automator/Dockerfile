@@ -50,7 +50,11 @@ fi
 # Always show which database-related env vars are available (names only, no values)
 echo "=== Database Environment Check ==="
 echo "Database-related env vars set in this container:"
-env | grep -iE '^DATABASE|^DB_|^PG|^POSTGRES' | cut -d= -f1 | sort || echo "  (none found)"
+if env | grep -qiE '^DATABASE|^DB_|^PG|^POSTGRES'; then
+  env | grep -iE '^DATABASE|^DB_|^PG|^POSTGRES' | cut -d= -f1 | sort
+else
+  echo "  (none found)"
+fi
 echo "---"
 
 # Run full database URL diagnostic when explicitly enabled
