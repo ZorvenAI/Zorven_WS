@@ -168,25 +168,39 @@ TESTING = "pytest" in sys.modules or "test" in sys.argv
 
 # Database configuration - supports both DATABASE_URL and individual DB_* vars
 # python-decouple checks os.environ FIRST, then falls back to .env files.
+# Safety net: also check os.environ directly in case decouple can't find the
+# value (e.g. no .env file in Docker container and decouple search fails).
 DATABASE_URL = config("DATABASE_URL", default="").strip()
+if not DATABASE_URL:
+    DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 # Validate DATABASE_URL has a real scheme (not empty or whitespace-only)
 _db_url_valid = bool(DATABASE_URL) and DATABASE_URL.find("://") > 0
 
 if _db_url_valid:
     # Use DATABASE_URL if available (Railway, Heroku, etc.)
-    # Use parse() with the explicit decouple value to avoid dj_database_url
+    # Use parse() with the explicit value to avoid dj_database_url
     # re-reading os.environ["DATABASE_URL"] independently.
-    DATABASES = {
-        "default": dj_database_url.parse(
-            DATABASE_URL,
-            conn_max_age=600,
-            conn_health_checks=True,
+    try:
+        DATABASES = {
+            "default": dj_database_url.parse(
+                DATABASE_URL,
+                conn_max_age=600,
+                conn_health_checks=True,
+            )
+        }
+        # Set engine for django-tenants
+        DATABASES["default"]["ENGINE"] = "django_tenants.postgresql_backend"
+    except (ValueError, KeyError) as exc:
+        import logging
+
+        logging.getLogger(__name__).error(
+            "Failed to parse DATABASE_URL: %s. Falling back to individual DB_* vars.",
+            exc,
         )
-    }
-    # Set engine for django-tenants (dj_database_url uses default postgres engine)
-    DATABASES["default"]["ENGINE"] = "django_tenants.postgresql_backend"
-else:
+        _db_url_valid = False
+
+if not _db_url_valid:
     # Fall back to individual DB_* variables (local development)
     DATABASES = {
         "default": {

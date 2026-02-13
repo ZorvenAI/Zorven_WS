@@ -1,10 +1,12 @@
 # Prevent local environment files from entering Docker image
 # Railway/Heroku inject env vars via os.environ, not .env files
 .env
+.env.*
 .env.local
 .env.*.local
 .env.docker
 .env.docker.local
+.env.example
 .env.test
 
 # Python cache
