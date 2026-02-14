@@ -201,6 +201,7 @@ class TestProcessEvent:
                 "42",
                 "ingested",
                 new_gcs_path="gs://bucket/1/raw/2026/02/06/test.png",
+                tenant_id="tenant-1",
             )
 
     def test_non_retryable_failure_calls_update(self, command, ingestion_event):
@@ -218,9 +219,11 @@ class TestProcessEvent:
             command._process_event(ingestion_event)
             mock_update.assert_called_once()
             args = mock_update.call_args[0]
+            kwargs = mock_update.call_args[1]
             assert args[0] == "42"
             assert args[1] == "failed"
             assert "Bad file format" in args[2]
+            assert kwargs.get("tenant_id") == "tenant-1"
 
     def test_retryable_failure_calls_update(self, command, ingestion_event):
         """On RetryableError (exhausted), status set to 'failed'."""
@@ -237,9 +240,11 @@ class TestProcessEvent:
             command._process_event(ingestion_event)
             mock_update.assert_called_once()
             args = mock_update.call_args[0]
+            kwargs = mock_update.call_args[1]
             assert args[0] == "42"
             assert args[1] == "failed"
             assert "Timeout" in args[2]
+            assert kwargs.get("tenant_id") == "tenant-1"
 
     def test_duplicate_event_skips_update(self, command, ingestion_event):
         """Duplicate (None result) does not call _update_asset_status."""

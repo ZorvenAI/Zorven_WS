@@ -35,6 +35,7 @@ def _update_asset_status(
     status: str,
     error_msg: str = "",
     new_gcs_path: str = "",
+    tenant_id: str = "",
 ) -> bool:
     """Update BrandAsset pipeline_status and gcs_path after ingestion.
 
@@ -43,12 +44,16 @@ def _update_asset_status(
         status: The new pipeline status (ingested, failed)
         error_msg: Error message if status is failed
         new_gcs_path: New GCS path after file was moved (gs:// URI)
+        tenant_id: Tenant pk — used for FK-based tenant filtering
 
     Returns:
         True if update succeeded, False otherwise
     """
     from django.db import close_old_connections
     from onboarding.models import BrandAsset
+    from brand_automator.tenant_utils import parse_tenant_pk
+
+    tenant_pk = parse_tenant_pk(tenant_id)
 
     for attempt in range(2):
         try:
@@ -58,42 +63,48 @@ def _update_asset_status(
                 # Neon/PostgreSQL can time out (cursor already closed).
                 close_old_connections()
 
-            try:
-                asset_id = int(file_id)
-                asset = BrandAsset.objects.filter(id=asset_id).first()
-            except (ValueError, TypeError):
-                try:
-                    trace_uuid = uuid.UUID(file_id)
-                    asset = BrandAsset.objects.filter(
-                        pipeline_trace_id=trace_uuid
-                    ).first()
-                except (ValueError, TypeError):
-                    asset = None
+            def _do_update():
+                # Build base filter with optional tenant FK isolation
+                base_qs = BrandAsset.objects.all()
+                if tenant_pk is not None:
+                    base_qs = base_qs.filter(tenant_id=tenant_pk)
 
-            if asset:
-                asset.pipeline_status = status
-                update_fields = ["pipeline_status"]
-                if new_gcs_path:
-                    asset.gcs_path = _extract_gcs_path(new_gcs_path)
-                    update_fields.append("gcs_path")
-                if status == "ingested":
-                    # Clear any previous pipeline error on successful ingestion
-                    asset.pipeline_error = ""
-                    update_fields.append("pipeline_error")
-                elif error_msg:
-                    asset.pipeline_error = error_msg
-                    update_fields.append("pipeline_error")
-                asset.save(update_fields=update_fields)
-                logger.info(
-                    "Updated BrandAsset %s: status=%s, gcs_path=%s",
-                    asset.id,
-                    status,
-                    asset.gcs_path,
-                )
-                return True
-            else:
-                logger.warning("BrandAsset not found for file_id: %s", file_id)
-                return False
+                try:
+                    asset_id = int(file_id)
+                    asset = base_qs.filter(id=asset_id).first()
+                except (ValueError, TypeError):
+                    try:
+                        trace_uuid = uuid.UUID(file_id)
+                        asset = base_qs.filter(pipeline_trace_id=trace_uuid).first()
+                    except (ValueError, TypeError):
+                        asset = None
+
+                if asset:
+                    asset.pipeline_status = status
+                    update_fields = ["pipeline_status"]
+                    if new_gcs_path:
+                        asset.gcs_path = _extract_gcs_path(new_gcs_path)
+                        update_fields.append("gcs_path")
+                    if status == "ingested":
+                        asset.pipeline_error = ""
+                        update_fields.append("pipeline_error")
+                    elif error_msg:
+                        asset.pipeline_error = error_msg
+                        update_fields.append("pipeline_error")
+                    asset.save(update_fields=update_fields)
+                    logger.info(
+                        "Updated BrandAsset %s: status=%s, gcs_path=%s",
+                        asset.id,
+                        status,
+                        asset.gcs_path,
+                    )
+                    return True
+                else:
+                    logger.warning("BrandAsset not found for file_id: %s", file_id)
+                    return False
+
+            result = _do_update()
+            return result
 
         except Exception:
             if attempt == 0:
@@ -256,6 +267,7 @@ class Command(BaseCommand):
                         str(asset_id),
                         "ingested",
                         new_gcs_path=result.destination_path,
+                        tenant_id=event.tenant_id,
                     )
 
                 self.stdout.write(
@@ -274,7 +286,9 @@ class Command(BaseCommand):
             )
             asset_id = (event.metadata or {}).get("asset_id")
             if asset_id:
-                _update_asset_status(str(asset_id), "failed", str(e))
+                _update_asset_status(
+                    str(asset_id), "failed", str(e), tenant_id=event.tenant_id
+                )
             # Send to DLQ
             self._service.send_to_dlq(
                 original_event=event.model_dump(mode="json"),
@@ -288,7 +302,9 @@ class Command(BaseCommand):
             )
             asset_id = (event.metadata or {}).get("asset_id")
             if asset_id:
-                _update_asset_status(str(asset_id), "failed", str(e))
+                _update_asset_status(
+                    str(asset_id), "failed", str(e), tenant_id=event.tenant_id
+                )
             # Send to DLQ after max retries
             self._service.send_to_dlq(
                 original_event=event.model_dump(mode="json"),

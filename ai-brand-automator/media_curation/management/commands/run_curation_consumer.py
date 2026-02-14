@@ -32,53 +32,65 @@ from media_curation.consumer_health import ConsumerHealthTracker
 logger = logging.getLogger(__name__)
 
 
-def _update_asset_status(file_id: str, status: str, error_msg: str = "") -> bool:
+def _update_asset_status(
+    file_id: str, status: str, error_msg: str = "", tenant_id: str = ""
+) -> bool:
     """Update BrandAsset pipeline_status after curation.
 
     Args:
         file_id: The file/asset ID (can be UUID string or int)
         status: The new pipeline status (curated, failed)
         error_msg: Error message if status is failed
+        tenant_id: Tenant pk — used for FK-based tenant filtering
 
     Returns:
         True if update succeeded, False otherwise
     """
     from django.db import close_old_connections
     from onboarding.models import BrandAsset
+    from brand_automator.tenant_utils import parse_tenant_pk
+
+    tenant_pk = parse_tenant_pk(tenant_id)
 
     for attempt in range(2):
         try:
             if attempt > 0:
                 close_old_connections()
 
-            # Try to find asset by ID (could be integer or UUID)
-            try:
-                asset_id = int(file_id)
-                asset = BrandAsset.objects.filter(id=asset_id).first()
-            except (ValueError, TypeError):
-                # file_id might be a UUID - try matching by pipeline_trace_id
-                try:
-                    trace_uuid = uuid.UUID(file_id)
-                    asset = BrandAsset.objects.filter(
-                        pipeline_trace_id=trace_uuid
-                    ).first()
-                except (ValueError, TypeError):
-                    asset = None
+            def _do_update():
+                # Build base filter with optional tenant FK isolation
+                base_qs = BrandAsset.objects.all()
+                if tenant_pk is not None:
+                    base_qs = base_qs.filter(tenant_id=tenant_pk)
 
-            if asset:
-                asset.pipeline_status = status
-                if error_msg:
-                    asset.pipeline_error = error_msg
-                asset.save(update_fields=["pipeline_status", "pipeline_error"])
-                logger.info(
-                    "Updated BrandAsset %s pipeline_status to %s",
-                    asset.id,
-                    status,
-                )
-                return True
-            else:
-                logger.warning("BrandAsset not found for file_id: %s", file_id)
-                return False
+                # Try to find asset by ID (could be integer or UUID)
+                try:
+                    asset_id = int(file_id)
+                    asset = base_qs.filter(id=asset_id).first()
+                except (ValueError, TypeError):
+                    try:
+                        trace_uuid = uuid.UUID(file_id)
+                        asset = base_qs.filter(pipeline_trace_id=trace_uuid).first()
+                    except (ValueError, TypeError):
+                        asset = None
+
+                if asset:
+                    asset.pipeline_status = status
+                    if error_msg:
+                        asset.pipeline_error = error_msg
+                    asset.save(update_fields=["pipeline_status", "pipeline_error"])
+                    logger.info(
+                        "Updated BrandAsset %s pipeline_status to %s",
+                        asset.id,
+                        status,
+                    )
+                    return True
+                else:
+                    logger.warning("BrandAsset not found for file_id: %s", file_id)
+                    return False
+
+            result = _do_update()
+            return result
 
         except Exception:
             if attempt == 0:
@@ -320,7 +332,7 @@ class Command(BaseCommand):
 
                 # Update BrandAsset status to curated (use asset_id from metadata)
                 if asset_id:
-                    _update_asset_status(asset_id, "curated")
+                    _update_asset_status(asset_id, "curated", tenant_id=event.tenant_id)
                 else:
                     logger.warning(
                         f"No asset_id in metadata for event {event.event_id}"
@@ -343,7 +355,12 @@ class Command(BaseCommand):
                     )
                     # Update BrandAsset status to failed
                     if asset_id:
-                        _update_asset_status(asset_id, "failed", str(e))
+                        _update_asset_status(
+                            asset_id,
+                            "failed",
+                            str(e),
+                            tenant_id=event.tenant_id,
+                        )
 
                     self._send_to_dlq(event, e)
                     self.stdout.write(
@@ -371,7 +388,12 @@ class Command(BaseCommand):
                 )
                 # Update BrandAsset status to failed
                 if asset_id:
-                    _update_asset_status(asset_id, "failed", str(e))
+                    _update_asset_status(
+                        asset_id,
+                        "failed",
+                        str(e),
+                        tenant_id=event.tenant_id,
+                    )
 
                 self._send_to_dlq(event, e)
                 self.stdout.write(
@@ -383,7 +405,12 @@ class Command(BaseCommand):
                 logger.exception("Unexpected error processing event")
                 # Update BrandAsset status to failed
                 if asset_id:
-                    _update_asset_status(asset_id, "failed", str(e))
+                    _update_asset_status(
+                        asset_id,
+                        "failed",
+                        str(e),
+                        tenant_id=event.tenant_id,
+                    )
 
                 self._send_to_dlq(event, e)
                 self.stdout.write(
