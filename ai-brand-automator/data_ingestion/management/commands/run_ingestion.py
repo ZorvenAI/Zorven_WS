@@ -30,25 +30,6 @@ from data_ingestion.domain.path_generator import (
 logger = logging.getLogger(__name__)
 
 
-def _resolve_tenant_schema(tenant_id: str):
-    """Resolve Tenant model and return its schema_name.
-
-    Returns the schema_name string, or ``None`` when the tenant cannot be
-    found (falls back to the current search path).
-    """
-    if not tenant_id or tenant_id == "public":
-        return None
-    try:
-        from tenants.models import Tenant
-
-        tenant = Tenant.objects.filter(pk=int(tenant_id)).first()
-        if tenant:
-            return tenant.schema_name
-    except (ValueError, TypeError):
-        pass
-    return None
-
-
 def _update_asset_status(
     file_id: str,
     status: str,
@@ -63,16 +44,16 @@ def _update_asset_status(
         status: The new pipeline status (ingested, failed)
         error_msg: Error message if status is failed
         new_gcs_path: New GCS path after file was moved (gs:// URI)
-        tenant_id: Tenant pk — used to switch to the correct DB schema
+        tenant_id: Tenant pk — used for FK-based tenant filtering
 
     Returns:
         True if update succeeded, False otherwise
     """
     from django.db import close_old_connections
-    from django_tenants.utils import schema_context
     from onboarding.models import BrandAsset
+    from brand_automator.tenant_utils import parse_tenant_pk
 
-    schema = _resolve_tenant_schema(tenant_id)
+    tenant_pk = parse_tenant_pk(tenant_id)
 
     for attempt in range(2):
         try:
@@ -83,15 +64,18 @@ def _update_asset_status(
                 close_old_connections()
 
             def _do_update():
+                # Build base filter with optional tenant FK isolation
+                base_qs = BrandAsset.objects.all()
+                if tenant_pk is not None:
+                    base_qs = base_qs.filter(tenant_id=tenant_pk)
+
                 try:
                     asset_id = int(file_id)
-                    asset = BrandAsset.objects.filter(id=asset_id).first()
+                    asset = base_qs.filter(id=asset_id).first()
                 except (ValueError, TypeError):
                     try:
                         trace_uuid = uuid.UUID(file_id)
-                        asset = BrandAsset.objects.filter(
-                            pipeline_trace_id=trace_uuid
-                        ).first()
+                        asset = base_qs.filter(pipeline_trace_id=trace_uuid).first()
                     except (ValueError, TypeError):
                         asset = None
 
@@ -119,11 +103,7 @@ def _update_asset_status(
                     logger.warning("BrandAsset not found for file_id: %s", file_id)
                     return False
 
-            if schema:
-                with schema_context(schema):
-                    result = _do_update()
-            else:
-                result = _do_update()
+            result = _do_update()
             return result
 
         except Exception:
