@@ -29,9 +29,22 @@ def main():
     if raw is None:
         print("[os.environ] DATABASE_URL: NOT SET")
     elif not raw.strip():
-        print("[os.environ] DATABASE_URL: SET but EMPTY")
+        print(f"[os.environ] DATABASE_URL: SET but EMPTY (len={len(raw)})")
+        # Show raw bytes to detect invisible characters
+        if raw:
+            print(f"[os.environ] Raw bytes: {raw.encode()!r}")
     else:
         print(f"[os.environ] DATABASE_URL: SET ({safe_summary(raw.strip())})")
+        # Check for invisible chars that could break parsing
+        stripped = raw.strip()
+        cleaned = stripped.replace("\ufeff", "").replace("\x00", "")
+        cleaned = "".join(ch for ch in cleaned if ch not in "\n\r\t")
+        if len(cleaned) != len(stripped):
+            print(
+                f"[os.environ] WARNING: invisible chars detected! "
+                f"raw_len={len(stripped)}, clean_len={len(cleaned)}"
+            )
+            print(f"[os.environ] First 30 raw bytes: {stripped[:30].encode()!r}")
 
     # 2. Check python-decouple
     decouple_url = ""

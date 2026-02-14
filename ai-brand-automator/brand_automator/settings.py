@@ -162,16 +162,52 @@ WSGI_APPLICATION = "brand_automator.wsgi.application"
 
 
 # Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 _db_log = _logging.getLogger(__name__)
 
 # Determine if we're in test mode
 TESTING = "pytest" in sys.modules or "test" in sys.argv
 
-# Database configuration - supports both DATABASE_URL and individual DB_* vars
-# python-decouple checks os.environ FIRST, then falls back to .env files.
-DATABASE_URL = config("DATABASE_URL", default="").strip()
+
+def _sanitize_url(raw: str) -> str:
+    """Strip whitespace, quotes, newlines, null bytes, and BOM from a URL.
+
+    Railway/Neon dashboard copy-paste can inject invisible characters
+    or surrounding quotes that break urllib.parse.urlsplit().
+    """
+    if not raw:
+        return ""
+    # Remove BOM, null bytes, carriage returns, and all whitespace
+    cleaned = raw.strip().replace("\ufeff", "").replace("\x00", "")
+    # Remove any newlines or tabs that might be embedded
+    cleaned = "".join(ch for ch in cleaned if ch not in "\n\r\t")
+    # Strip surrounding quotes (single or double) from copy-paste errors
+    if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in "\"'":
+        cleaned = cleaned[1:-1]
+    return cleaned
+
+
+# Database configuration — reads from os.environ DIRECTLY to avoid any
+# python-decouple interference (decouple may read stale .env files when
+# os.environ has the value but with invisible characters).
+# This is the ONE exception to the "never os.environ" rule because
+# DATABASE_URL parsing in prod is critical and hard to debug.
+_raw_db_url = os.environ.get("DATABASE_URL", "")
+DATABASE_URL = _sanitize_url(_raw_db_url)
 _db_url_source = "DATABASE_URL"
+
+# Log what we found for debugging Railway deployments
+if _raw_db_url:
+    _db_log.info(
+        "DATABASE_URL from os.environ: len=%d, first_20=%r, sanitized_len=%d",
+        len(_raw_db_url),
+        _raw_db_url[:20],
+        len(DATABASE_URL),
+    )
+else:
+    _db_log.info("DATABASE_URL not in os.environ, trying decouple + alternatives")
+    # Fall back to decouple for local dev (reads .env file)
+    DATABASE_URL = config("DATABASE_URL", default="").strip()
 
 # If DATABASE_URL is empty, try alternative variable names used by
 # Railway, Render, and other PaaS platforms.
@@ -183,7 +219,9 @@ if not DATABASE_URL:
         "POSTGRESQL_URL",
     )
     for _alt_name in _DB_URL_ALTERNATIVES:
-        _alt_url = config(_alt_name, default="").strip()
+        _alt_url = _sanitize_url(os.environ.get(_alt_name, ""))
+        if not _alt_url:
+            _alt_url = config(_alt_name, default="").strip()
         if _alt_url:
             DATABASE_URL = _alt_url
             _db_url_source = _alt_name

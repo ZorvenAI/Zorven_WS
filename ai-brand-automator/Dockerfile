@@ -57,11 +57,31 @@ else
 fi
 echo "---"
 
-# Run full database URL diagnostic when explicitly enabled
-if [ "${DB_DIAGNOSTICS:-false}" = "true" ]; then
-  echo "=== Database URL Diagnostic (detailed) ==="
-  python scripts/check_database_url.py || echo "WARNING: Diagnostic script failed (non-fatal)"
-fi
+# Always run database URL diagnostic — this is critical for debugging
+echo "=== Database URL Diagnostic ==="
+python scripts/check_database_url.py || echo "WARNING: Diagnostic script failed (non-fatal)"
+
+# Validate DATABASE_URL is usable before running migrations
+python -c "
+import os, urllib.parse
+raw = os.environ.get('DATABASE_URL', '')
+cleaned = raw.strip().replace('\ufeff','').replace('\x00','')
+cleaned = ''.join(ch for ch in cleaned if ch not in '\n\r\t')
+if raw and not cleaned:
+    print('FATAL: DATABASE_URL is set but contains only whitespace/control chars!')
+    exit(1)
+if cleaned:
+    parsed = urllib.parse.urlsplit(cleaned)
+    if not parsed.scheme:
+        print(f'FATAL: DATABASE_URL has no scheme. Raw len={len(raw)}, cleaned={repr(cleaned[:30])}...')
+        exit(1)
+    if not parsed.hostname:
+        print(f'FATAL: DATABASE_URL has no hostname. Scheme={parsed.scheme}')
+        exit(1)
+    print(f'DATABASE_URL OK: scheme={parsed.scheme}, host_len={len(parsed.hostname or \"\")}, path={parsed.path}')
+else:
+    print('WARNING: DATABASE_URL is empty — will fall back to individual DB_* vars')
+" || { echo "=== DATABASE_URL validation failed — check Railway Variables tab ==="; exit 1; }
 
 echo "=== Running migrations ==="
 python manage.py migrate_schemas --shared --noinput
