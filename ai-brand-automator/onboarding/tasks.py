@@ -23,11 +23,31 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+def _resolve_tenant_schema(tenant_id: str):
+    """Resolve Tenant model and return its schema_name.
+
+    Returns the schema_name string, or ``None`` when the tenant cannot be
+    found (falls back to the current search path).
+    """
+    if not tenant_id or tenant_id == "public":
+        return None
+    try:
+        from tenants.models import Tenant
+
+        tenant = Tenant.objects.filter(pk=int(tenant_id)).first()
+        if tenant:
+            return tenant.schema_name
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
 def _update_asset_status(
     asset_id: int,
     status: str,
     error_msg: str = "",
     new_gcs_path: str = "",
+    tenant_id: str = "",
 ) -> bool:
     """Update BrandAsset pipeline status.
 
@@ -36,44 +56,58 @@ def _update_asset_status(
         status: New ``pipeline_status`` value.
         error_msg: Error message (for ``failed`` status).
         new_gcs_path: Updated ``gcs_path`` after ingestion move.
+        tenant_id: Tenant pk — used to switch to the correct DB schema.
 
     Returns:
         ``True`` if update succeeded, ``False`` otherwise.
     """
     from django.db import close_old_connections
+    from django_tenants.utils import schema_context
     from onboarding.models import BrandAsset
+
+    schema = _resolve_tenant_schema(tenant_id)
 
     for attempt in range(2):
         try:
             if attempt > 0:
                 close_old_connections()
 
-            asset = BrandAsset.objects.filter(id=asset_id).first()
-            if not asset:
-                logger.warning("BrandAsset %s not found for status update", asset_id)
-                return False
+            def _do_update():
+                asset = BrandAsset.objects.filter(id=asset_id).first()
+                if not asset:
+                    logger.warning(
+                        "BrandAsset %s not found for status update", asset_id
+                    )
+                    return False
 
-            asset.pipeline_status = status
-            update_fields = ["pipeline_status"]
+                asset.pipeline_status = status
+                update_fields = ["pipeline_status"]
 
-            if new_gcs_path:
-                from data_ingestion.domain.path_generator import (
-                    extract_object_path as _extract,
-                )
+                if new_gcs_path:
+                    from data_ingestion.domain.path_generator import (
+                        extract_object_path as _extract,
+                    )
 
-                asset.gcs_path = _extract(new_gcs_path)
-                update_fields.append("gcs_path")
+                    asset.gcs_path = _extract(new_gcs_path)
+                    update_fields.append("gcs_path")
 
-            if status == "failed" and error_msg:
-                asset.pipeline_error = error_msg
-                update_fields.append("pipeline_error")
-            elif status in ("ingested", "curated", "indexed"):
-                asset.pipeline_error = ""
-                update_fields.append("pipeline_error")
+                if status == "failed" and error_msg:
+                    asset.pipeline_error = error_msg
+                    update_fields.append("pipeline_error")
+                elif status in ("ingested", "curated", "indexed"):
+                    asset.pipeline_error = ""
+                    update_fields.append("pipeline_error")
 
-            asset.save(update_fields=update_fields)
-            logger.info("Updated BrandAsset %s → status=%s", asset.id, status)
-            return True
+                asset.save(update_fields=update_fields)
+                logger.info("Updated BrandAsset %s → status=%s", asset.id, status)
+                return True
+
+            if schema:
+                with schema_context(schema):
+                    result = _do_update()
+            else:
+                result = _do_update()
+            return result
 
         except Exception:
             if attempt == 0:
@@ -224,6 +258,7 @@ def _run_ingestion(self, asset_id: int, tenant, event_data: dict) -> dict:
             asset_id,
             "ingested",
             new_gcs_path=result.destination_path,
+            tenant_id=event_data.get("tenant_id", ""),
         )
 
         logger.info(
@@ -242,7 +277,12 @@ def _run_ingestion(self, asset_id: int, tenant, event_data: dict) -> dict:
     except Exception as e:
         error_msg = f"Ingestion failed: {e}"
         logger.error(error_msg, extra={"asset_id": asset_id}, exc_info=True)
-        _update_asset_status(asset_id, "failed", error_msg=str(e))
+        _update_asset_status(
+            asset_id,
+            "failed",
+            error_msg=str(e),
+            tenant_id=event_data.get("tenant_id", ""),
+        )
         return {"status": "failed", "error": str(e)}
 
 
@@ -330,7 +370,11 @@ def _run_curation(
         result = service.process_event(curation_event)
 
         # Update BrandAsset → curated
-        _update_asset_status(asset_id, "curated")
+        _update_asset_status(
+            asset_id,
+            "curated",
+            tenant_id=event_data.get("tenant_id", ""),
+        )
 
         logger.info(
             "Curation succeeded for asset %s (doc_id=%s)",
@@ -347,7 +391,12 @@ def _run_curation(
         error_msg = f"Curation failed: {e}"
         logger.error(error_msg, extra={"asset_id": asset_id}, exc_info=True)
         # Mark as ingested (curation failed but ingestion succeeded)
-        _update_asset_status(asset_id, "failed", error_msg=str(e))
+        _update_asset_status(
+            asset_id,
+            "failed",
+            error_msg=str(e),
+            tenant_id=event_data.get("tenant_id", ""),
+        )
         return {"status": "failed", "error": str(e)}
 
 
@@ -408,7 +457,7 @@ def _run_indexing(
         result = run_async(orchestrator.process_event(sync_event))
 
         # Update BrandAsset → indexed
-        _update_asset_status(asset_id, "indexed")
+        _update_asset_status(asset_id, "indexed", tenant_id=tenant_id)
 
         logger.info(
             "Indexing succeeded for asset %s (operation=%s)",
@@ -425,7 +474,7 @@ def _run_indexing(
         error_msg = f"Indexing failed: {e}"
         logger.error(error_msg, extra={"asset_id": asset_id}, exc_info=True)
         # Curation succeeded; mark as failed with indexing error
-        _update_asset_status(asset_id, "failed", error_msg=str(e))
+        _update_asset_status(asset_id, "failed", error_msg=str(e), tenant_id=tenant_id)
         return {"status": "failed", "error": str(e)}
 
 

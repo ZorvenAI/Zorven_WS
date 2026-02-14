@@ -27,6 +27,25 @@ from data_ingestion.domain.path_generator import (
 logger = logging.getLogger(__name__)
 
 
+def _resolve_tenant_schema(tenant_id: Optional[str] = None):
+    """Resolve Tenant model and return its schema_name.
+
+    Returns the schema_name string, or ``None`` when the tenant cannot be
+    found (falls back to the current search path).
+    """
+    if not tenant_id or tenant_id == "public":
+        return None
+    try:
+        from tenants.models import Tenant
+
+        tenant = Tenant.objects.filter(pk=int(tenant_id)).first()
+        if tenant:
+            return tenant.schema_name
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
 def _update_asset_after_ingestion(
     asset_id: str,
     status: str,
@@ -41,54 +60,59 @@ def _update_asset_after_ingestion(
         status: The new pipeline status (ingested, failed)
         error_msg: Error message if status is failed
         new_gcs_path: New GCS path after file was moved (gs:// URI)
-        tenant_id: Optional tenant ID for scoped lookup
+        tenant_id: Tenant pk — used to switch to the correct DB schema
 
     Returns:
         True if update succeeded, False otherwise
     """
     from django.db import close_old_connections
+    from django_tenants.utils import schema_context
     from onboarding.models import BrandAsset
+
+    schema = _resolve_tenant_schema(tenant_id)
 
     for attempt in range(2):
         try:
             if attempt > 0:
                 close_old_connections()
 
-            try:
-                aid = int(asset_id)
-                qs = BrandAsset.objects.filter(id=aid)
-                if tenant_id:
-                    try:
-                        qs = qs.filter(tenant_id=int(tenant_id))
-                    except (ValueError, TypeError):
-                        pass  # Non-integer tenant_id, skip FK filter
-                asset = qs.first()
-            except (ValueError, TypeError):
-                asset = None
+            def _do_update():
+                try:
+                    aid = int(asset_id)
+                    asset = BrandAsset.objects.filter(id=aid).first()
+                except (ValueError, TypeError):
+                    asset = None
 
-            if asset:
-                asset.pipeline_status = status
-                update_fields = ["pipeline_status"]
-                if new_gcs_path:
-                    asset.gcs_path = _extract_gcs_path(new_gcs_path)
-                    update_fields.append("gcs_path")
-                if status == "ingested":
-                    asset.pipeline_error = ""
-                    update_fields.append("pipeline_error")
-                elif error_msg:
-                    asset.pipeline_error = error_msg
-                    update_fields.append("pipeline_error")
-                asset.save(update_fields=update_fields)
-                logger.info(
-                    "Updated BrandAsset %s: status=%s, gcs_path=%s",
-                    asset.id,
-                    status,
-                    asset.gcs_path,
-                )
-                return True
+                if asset:
+                    asset.pipeline_status = status
+                    update_fields = ["pipeline_status"]
+                    if new_gcs_path:
+                        asset.gcs_path = _extract_gcs_path(new_gcs_path)
+                        update_fields.append("gcs_path")
+                    if status == "ingested":
+                        asset.pipeline_error = ""
+                        update_fields.append("pipeline_error")
+                    elif error_msg:
+                        asset.pipeline_error = error_msg
+                        update_fields.append("pipeline_error")
+                    asset.save(update_fields=update_fields)
+                    logger.info(
+                        "Updated BrandAsset %s: status=%s, gcs_path=%s",
+                        asset.id,
+                        status,
+                        asset.gcs_path,
+                    )
+                    return True
+                else:
+                    logger.warning("BrandAsset not found for asset_id: %s", asset_id)
+                    return False
+
+            if schema:
+                with schema_context(schema):
+                    result = _do_update()
             else:
-                logger.warning("BrandAsset not found for asset_id: %s", asset_id)
-                return False
+                result = _do_update()
+            return result
 
         except Exception:
             if attempt == 0:

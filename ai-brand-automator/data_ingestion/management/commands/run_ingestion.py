@@ -30,11 +30,31 @@ from data_ingestion.domain.path_generator import (
 logger = logging.getLogger(__name__)
 
 
+def _resolve_tenant_schema(tenant_id: str):
+    """Resolve Tenant model and return its schema_name.
+
+    Returns the schema_name string, or ``None`` when the tenant cannot be
+    found (falls back to the current search path).
+    """
+    if not tenant_id or tenant_id == "public":
+        return None
+    try:
+        from tenants.models import Tenant
+
+        tenant = Tenant.objects.filter(pk=int(tenant_id)).first()
+        if tenant:
+            return tenant.schema_name
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
 def _update_asset_status(
     file_id: str,
     status: str,
     error_msg: str = "",
     new_gcs_path: str = "",
+    tenant_id: str = "",
 ) -> bool:
     """Update BrandAsset pipeline_status and gcs_path after ingestion.
 
@@ -43,12 +63,16 @@ def _update_asset_status(
         status: The new pipeline status (ingested, failed)
         error_msg: Error message if status is failed
         new_gcs_path: New GCS path after file was moved (gs:// URI)
+        tenant_id: Tenant pk — used to switch to the correct DB schema
 
     Returns:
         True if update succeeded, False otherwise
     """
     from django.db import close_old_connections
+    from django_tenants.utils import schema_context
     from onboarding.models import BrandAsset
+
+    schema = _resolve_tenant_schema(tenant_id)
 
     for attempt in range(2):
         try:
@@ -58,42 +82,49 @@ def _update_asset_status(
                 # Neon/PostgreSQL can time out (cursor already closed).
                 close_old_connections()
 
-            try:
-                asset_id = int(file_id)
-                asset = BrandAsset.objects.filter(id=asset_id).first()
-            except (ValueError, TypeError):
+            def _do_update():
                 try:
-                    trace_uuid = uuid.UUID(file_id)
-                    asset = BrandAsset.objects.filter(
-                        pipeline_trace_id=trace_uuid
-                    ).first()
+                    asset_id = int(file_id)
+                    asset = BrandAsset.objects.filter(id=asset_id).first()
                 except (ValueError, TypeError):
-                    asset = None
+                    try:
+                        trace_uuid = uuid.UUID(file_id)
+                        asset = BrandAsset.objects.filter(
+                            pipeline_trace_id=trace_uuid
+                        ).first()
+                    except (ValueError, TypeError):
+                        asset = None
 
-            if asset:
-                asset.pipeline_status = status
-                update_fields = ["pipeline_status"]
-                if new_gcs_path:
-                    asset.gcs_path = _extract_gcs_path(new_gcs_path)
-                    update_fields.append("gcs_path")
-                if status == "ingested":
-                    # Clear any previous pipeline error on successful ingestion
-                    asset.pipeline_error = ""
-                    update_fields.append("pipeline_error")
-                elif error_msg:
-                    asset.pipeline_error = error_msg
-                    update_fields.append("pipeline_error")
-                asset.save(update_fields=update_fields)
-                logger.info(
-                    "Updated BrandAsset %s: status=%s, gcs_path=%s",
-                    asset.id,
-                    status,
-                    asset.gcs_path,
-                )
-                return True
+                if asset:
+                    asset.pipeline_status = status
+                    update_fields = ["pipeline_status"]
+                    if new_gcs_path:
+                        asset.gcs_path = _extract_gcs_path(new_gcs_path)
+                        update_fields.append("gcs_path")
+                    if status == "ingested":
+                        asset.pipeline_error = ""
+                        update_fields.append("pipeline_error")
+                    elif error_msg:
+                        asset.pipeline_error = error_msg
+                        update_fields.append("pipeline_error")
+                    asset.save(update_fields=update_fields)
+                    logger.info(
+                        "Updated BrandAsset %s: status=%s, gcs_path=%s",
+                        asset.id,
+                        status,
+                        asset.gcs_path,
+                    )
+                    return True
+                else:
+                    logger.warning("BrandAsset not found for file_id: %s", file_id)
+                    return False
+
+            if schema:
+                with schema_context(schema):
+                    result = _do_update()
             else:
-                logger.warning("BrandAsset not found for file_id: %s", file_id)
-                return False
+                result = _do_update()
+            return result
 
         except Exception:
             if attempt == 0:
@@ -256,6 +287,7 @@ class Command(BaseCommand):
                         str(asset_id),
                         "ingested",
                         new_gcs_path=result.destination_path,
+                        tenant_id=event.tenant_id,
                     )
 
                 self.stdout.write(
@@ -274,7 +306,9 @@ class Command(BaseCommand):
             )
             asset_id = (event.metadata or {}).get("asset_id")
             if asset_id:
-                _update_asset_status(str(asset_id), "failed", str(e))
+                _update_asset_status(
+                    str(asset_id), "failed", str(e), tenant_id=event.tenant_id
+                )
             # Send to DLQ
             self._service.send_to_dlq(
                 original_event=event.model_dump(mode="json"),
@@ -288,7 +322,9 @@ class Command(BaseCommand):
             )
             asset_id = (event.metadata or {}).get("asset_id")
             if asset_id:
-                _update_asset_status(str(asset_id), "failed", str(e))
+                _update_asset_status(
+                    str(asset_id), "failed", str(e), tenant_id=event.tenant_id
+                )
             # Send to DLQ after max retries
             self._service.send_to_dlq(
                 original_event=event.model_dump(mode="json"),

@@ -32,53 +32,85 @@ from media_curation.consumer_health import ConsumerHealthTracker
 logger = logging.getLogger(__name__)
 
 
-def _update_asset_status(file_id: str, status: str, error_msg: str = "") -> bool:
+def _resolve_tenant_schema(tenant_id: str):
+    """Resolve Tenant model and return its schema_name.
+
+    Returns the schema_name string, or ``None`` when the tenant cannot be
+    found (falls back to the current search path).
+    """
+    if not tenant_id or tenant_id == "public":
+        return None
+    try:
+        from tenants.models import Tenant
+
+        tenant = Tenant.objects.filter(pk=int(tenant_id)).first()
+        if tenant:
+            return tenant.schema_name
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
+def _update_asset_status(
+    file_id: str, status: str, error_msg: str = "", tenant_id: str = ""
+) -> bool:
     """Update BrandAsset pipeline_status after curation.
 
     Args:
         file_id: The file/asset ID (can be UUID string or int)
         status: The new pipeline status (curated, failed)
         error_msg: Error message if status is failed
+        tenant_id: Tenant pk — used to switch to the correct DB schema
 
     Returns:
         True if update succeeded, False otherwise
     """
     from django.db import close_old_connections
+    from django_tenants.utils import schema_context
     from onboarding.models import BrandAsset
+
+    schema = _resolve_tenant_schema(tenant_id)
 
     for attempt in range(2):
         try:
             if attempt > 0:
                 close_old_connections()
 
-            # Try to find asset by ID (could be integer or UUID)
-            try:
-                asset_id = int(file_id)
-                asset = BrandAsset.objects.filter(id=asset_id).first()
-            except (ValueError, TypeError):
-                # file_id might be a UUID - try matching by pipeline_trace_id
+            def _do_update():
+                # Try to find asset by ID (could be integer or UUID)
                 try:
-                    trace_uuid = uuid.UUID(file_id)
-                    asset = BrandAsset.objects.filter(
-                        pipeline_trace_id=trace_uuid
-                    ).first()
+                    asset_id = int(file_id)
+                    asset = BrandAsset.objects.filter(id=asset_id).first()
                 except (ValueError, TypeError):
-                    asset = None
+                    try:
+                        trace_uuid = uuid.UUID(file_id)
+                        asset = BrandAsset.objects.filter(
+                            pipeline_trace_id=trace_uuid
+                        ).first()
+                    except (ValueError, TypeError):
+                        asset = None
 
-            if asset:
-                asset.pipeline_status = status
-                if error_msg:
-                    asset.pipeline_error = error_msg
-                asset.save(update_fields=["pipeline_status", "pipeline_error"])
-                logger.info(
-                    "Updated BrandAsset %s pipeline_status to %s",
-                    asset.id,
-                    status,
-                )
-                return True
+                if asset:
+                    asset.pipeline_status = status
+                    if error_msg:
+                        asset.pipeline_error = error_msg
+                    asset.save(update_fields=["pipeline_status", "pipeline_error"])
+                    logger.info(
+                        "Updated BrandAsset %s pipeline_status to %s",
+                        asset.id,
+                        status,
+                    )
+                    return True
+                else:
+                    logger.warning("BrandAsset not found for file_id: %s", file_id)
+                    return False
+
+            if schema:
+                with schema_context(schema):
+                    result = _do_update()
             else:
-                logger.warning("BrandAsset not found for file_id: %s", file_id)
-                return False
+                result = _do_update()
+            return result
 
         except Exception:
             if attempt == 0:
@@ -320,7 +352,7 @@ class Command(BaseCommand):
 
                 # Update BrandAsset status to curated (use asset_id from metadata)
                 if asset_id:
-                    _update_asset_status(asset_id, "curated")
+                    _update_asset_status(asset_id, "curated", tenant_id=event.tenant_id)
                 else:
                     logger.warning(
                         f"No asset_id in metadata for event {event.event_id}"
@@ -343,7 +375,12 @@ class Command(BaseCommand):
                     )
                     # Update BrandAsset status to failed
                     if asset_id:
-                        _update_asset_status(asset_id, "failed", str(e))
+                        _update_asset_status(
+                            asset_id,
+                            "failed",
+                            str(e),
+                            tenant_id=event.tenant_id,
+                        )
 
                     self._send_to_dlq(event, e)
                     self.stdout.write(
@@ -371,7 +408,12 @@ class Command(BaseCommand):
                 )
                 # Update BrandAsset status to failed
                 if asset_id:
-                    _update_asset_status(asset_id, "failed", str(e))
+                    _update_asset_status(
+                        asset_id,
+                        "failed",
+                        str(e),
+                        tenant_id=event.tenant_id,
+                    )
 
                 self._send_to_dlq(event, e)
                 self.stdout.write(
@@ -383,7 +425,12 @@ class Command(BaseCommand):
                 logger.exception("Unexpected error processing event")
                 # Update BrandAsset status to failed
                 if asset_id:
-                    _update_asset_status(asset_id, "failed", str(e))
+                    _update_asset_status(
+                        asset_id,
+                        "failed",
+                        str(e),
+                        tenant_id=event.tenant_id,
+                    )
 
                 self._send_to_dlq(event, e)
                 self.stdout.write(
