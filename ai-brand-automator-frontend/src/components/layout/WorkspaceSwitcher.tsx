@@ -24,7 +24,7 @@ function RoleBadge({ role }: { role: TenantRole }) {
 }
 
 export function WorkspaceSwitcher() {
-  const { tenants, activeTenant, switchTenant, isLoading } =
+  const { tenants, activeTenant, switchTenant, refreshTenants, isLoading } =
     useTenantContext();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -87,6 +87,9 @@ export function WorkspaceSwitcher() {
         const data = await res.json();
         setCreating(false);
         setBrandName('');
+        // Refresh tenant list first so the new workspace is in localStorage
+        // before the page reload triggered by switchTenant
+        await refreshTenants();
         // Switch to the newly created workspace
         await switchTenant(data.id);
       } else {
