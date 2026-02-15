@@ -71,19 +71,19 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   );
   const [isLoading, setIsLoading] = useState(false);
 
-  // Derive the active tenant object
-  const activeTenant = useMemo(
-    () => tenants.find((t) => t.id === activeTenantId) ?? tenants[0] ?? null,
-    [tenants, activeTenantId]
-  );
-
-  // Sync activeTenantId when activeTenant changes (e.g. first load)
-  useEffect(() => {
-    if (activeTenant && activeTenant.id !== activeTenantId) {
-      setActiveTenantId(activeTenant.id);
-      saveActiveTenantId(activeTenant.id);
-    }
-  }, [activeTenant, activeTenantId]);
+  // Derive the active tenant object.
+  // Only fall back to tenants[0] when no explicit activeTenantId is set.
+  // When activeTenantId IS set but not found in the list, return null
+  // and let refreshTenants resolve it — this prevents the destructive
+  // overwrite that resets to the main workspace after creation.
+  const activeTenant = useMemo(() => {
+    const found = tenants.find((t) => t.id === activeTenantId);
+    if (found) return found;
+    // No explicit ID — default to first workspace
+    if (activeTenantId === null) return tenants[0] ?? null;
+    // Explicit ID but not yet in list (e.g. just created) — wait for refresh
+    return null;
+  }, [tenants, activeTenantId]);
 
   // ── Fetch tenants from backend ────────────────────────────────
 
@@ -102,10 +102,14 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         setTenants(data);
         saveTenants(data);
 
-        // If no active tenant set, default to the first
-        if (!activeTenantId && data.length > 0) {
-          setActiveTenantId(data[0].id);
-          saveActiveTenantId(data[0].id);
+        // If no active tenant set, or active tenant no longer in list
+        // (e.g. removed from workspace), default to the first
+        if (data.length > 0) {
+          const activeFound = activeTenantId !== null && data.some((t) => t.id === activeTenantId);
+          if (!activeFound) {
+            setActiveTenantId(data[0].id);
+            saveActiveTenantId(data[0].id);
+          }
         }
       }
     } catch (err) {

@@ -24,7 +24,7 @@ function RoleBadge({ role }: { role: TenantRole }) {
 }
 
 export function WorkspaceSwitcher() {
-  const { tenants, activeTenant, switchTenant, isLoading } =
+  const { tenants, activeTenant, switchTenant, refreshTenants, isLoading } =
     useTenantContext();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -87,6 +87,9 @@ export function WorkspaceSwitcher() {
         const data = await res.json();
         setCreating(false);
         setBrandName('');
+        // Refresh tenant list first so the new workspace is in localStorage
+        // before the page reload triggered by switchTenant
+        await refreshTenants();
         // Switch to the newly created workspace
         await switchTenant(data.id);
       } else {
@@ -123,7 +126,7 @@ export function WorkspaceSwitcher() {
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute left-0 top-full mt-2 w-72 rounded-xl bg-brand-deep-navy border border-white/10 shadow-2xl backdrop-blur-xl z-[60] overflow-hidden">
+        <div className="absolute left-0 top-full mt-2 w-72 rounded-xl bg-[#111827] border border-white/10 shadow-2xl z-[60] overflow-hidden">
           {/* Workspace list */}
           <div className="p-2 max-h-60 overflow-y-auto">
             <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-brand-silver/50">
