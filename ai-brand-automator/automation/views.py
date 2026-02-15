@@ -5,6 +5,7 @@ Views for the automation app - social media integrations and content scheduling.
 import uuid
 import logging
 from datetime import timedelta
+from django.db.models import Q
 from django.http import HttpResponseRedirect
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -87,7 +88,10 @@ class SocialProfileViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         tenant = getattr(self.request, "tenant", None)
         qs = SocialProfile.objects.filter(user=self.request.user)
         if tenant:
-            qs = qs.filter(tenant=tenant)
+            # Include profiles explicitly assigned to this tenant
+            # AND legacy profiles with no tenant set (unique_together
+            # is [user, platform] without tenant).
+            qs = qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
         return qs
 
     def perform_create(self, serializer):
@@ -160,7 +164,12 @@ class LinkedInConnectView(APIView):
         OAuthState.objects.filter(user=request.user, platform="linkedin").delete()
 
         # Create new state
-        OAuthState.objects.create(state=state, user=request.user, platform="linkedin")
+        OAuthState.objects.create(
+            state=state,
+            user=request.user,
+            platform="linkedin",
+            tenant=getattr(request, "tenant", None),
+        )
 
         # Get the authorization URL
         auth_url = linkedin_service.get_authorization_url(state)
@@ -245,6 +254,7 @@ class LinkedInCallbackView(APIView):
                 user=user,
                 platform="linkedin",
                 defaults={
+                    "tenant": oauth_state.tenant,
                     "access_token": access_token,
                     "refresh_token": refresh_token,
                     "token_expires_at": expires_at,
@@ -298,10 +308,12 @@ class LinkedInTestConnectView(APIView):
         from django.utils import timezone
         from datetime import timedelta
 
+        tenant = getattr(request, "tenant", None)
         social_profile, created = SocialProfile.objects.update_or_create(
             user=request.user,
             platform="linkedin",
             defaults={
+                "tenant": tenant,
                 "access_token": TEST_ACCESS_TOKEN,
                 "refresh_token": TEST_REFRESH_TOKEN,
                 "token_expires_at": timezone.now() + timedelta(days=60),
@@ -2249,6 +2261,7 @@ class TwitterConnectView(APIView):
             platform="twitter",
             state=state,
             code_verifier=code_verifier,  # Store for token exchange
+            tenant=getattr(request, "tenant", None),
         )
 
         try:
@@ -2324,6 +2337,7 @@ class TwitterCallbackView(APIView):
                 user=oauth_state.user,
                 platform="twitter",
                 defaults={
+                    "tenant": oauth_state.tenant,
                     "access_token": token_data["access_token"],
                     "refresh_token": token_data.get("refresh_token"),
                     "token_expires_at": token_data.get("expires_at"),
@@ -2403,10 +2417,12 @@ class TwitterTestConnectView(APIView):
             )
 
         # Create mock profile
+        tenant = getattr(request, "tenant", None)
         profile, created = SocialProfile.objects.update_or_create(
             user=request.user,
             platform="twitter",
             defaults={
+                "tenant": tenant,
                 "access_token": TWITTER_TEST_ACCESS_TOKEN,
                 "refresh_token": TWITTER_TEST_REFRESH_TOKEN,
                 "token_expires_at": timezone.now() + timedelta(days=60),
@@ -3541,6 +3557,7 @@ class FacebookConnectView(APIView):
             user=request.user,
             platform="facebook",
             state=state,
+            tenant=getattr(request, "tenant", None),
         )
 
         try:
@@ -3667,6 +3684,7 @@ class FacebookCallbackView(APIView):
                 user=oauth_state.user,
                 platform="facebook",
                 defaults={
+                    "tenant": oauth_state.tenant,
                     "access_token": user_token,
                     "token_expires_at": token_expires,
                     "profile_id": user_info.get("id"),
@@ -3895,10 +3913,12 @@ class FacebookTestConnectView(APIView):
             )
 
         # Create mock profile
+        tenant = getattr(request, "tenant", None)
         profile, created = SocialProfile.objects.update_or_create(
             user=request.user,
             platform="facebook",
             defaults={
+                "tenant": tenant,
                 "access_token": FACEBOOK_TEST_ACCESS_TOKEN,
                 "page_access_token": FACEBOOK_TEST_PAGE_TOKEN,
                 "page_id": "909373962269929",  # Test page ID
@@ -6038,6 +6058,7 @@ class InstagramConnectView(APIView):
             user=request.user,
             platform="instagram",
             state=state,
+            tenant=getattr(request, "tenant", None),
         )
 
         try:
@@ -6143,6 +6164,7 @@ class InstagramCallbackView(APIView):
                 user=oauth_state.user,
                 platform="instagram",
                 defaults={
+                    "tenant": oauth_state.tenant,
                     "access_token": user_token,
                     "token_expires_at": token_expires,
                     "profile_id": ig_account.get("id"),
@@ -6203,10 +6225,12 @@ class InstagramTestConnectView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        tenant = getattr(request, "tenant", None)
         profile, created = SocialProfile.objects.update_or_create(
             user=request.user,
             platform="instagram",
             defaults={
+                "tenant": tenant,
                 "access_token": INSTAGRAM_TEST_ACCESS_TOKEN,
                 "token_expires_at": timezone.now() + timedelta(days=60),
                 "profile_id": "test_ig_user_id",
@@ -7557,7 +7581,10 @@ class GoogleBusinessConnectView(APIView):
 
         # Create new state
         OAuthState.objects.create(
-            state=state, user=request.user, platform="google_business"
+            state=state,
+            user=request.user,
+            platform="google_business",
+            tenant=getattr(request, "tenant", None),
         )
 
         # Get the authorization URL
@@ -7635,6 +7662,7 @@ class GoogleBusinessCallbackView(APIView):
             profile, created = GoogleBusinessProfile.objects.update_or_create(
                 user=user,
                 defaults={
+                    "tenant": oauth_state.tenant,
                     "status": "connected",
                     "google_account_id": user_info.get("sub"),
                     "google_account_name": user_info.get("name"),
@@ -7701,9 +7729,11 @@ class GoogleBusinessTestConnectView(APIView):
         from .services import google_business_service
 
         # Create or update with mock data
+        tenant = getattr(request, "tenant", None)
         profile, created = GoogleBusinessProfile.objects.update_or_create(
             user=request.user,
             defaults={
+                "tenant": tenant,
                 "status": "connected",
                 "google_account_id": "mock_google_user_id_12345",
                 "google_account_name": "Test User",
