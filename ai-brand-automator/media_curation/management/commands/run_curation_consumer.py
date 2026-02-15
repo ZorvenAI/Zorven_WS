@@ -46,16 +46,19 @@ def _update_asset_status(
     Returns:
         True if update succeeded, False otherwise
     """
-    from django.db import close_old_connections
     from onboarding.models import BrandAsset
-    from brand_automator.tenant_utils import parse_tenant_pk
+    from brand_automator.tenant_utils import (
+        parse_tenant_pk,
+        ensure_public_db_connection,
+    )
 
     tenant_pk = parse_tenant_pk(tenant_id)
 
     for attempt in range(2):
         try:
-            if attempt > 0:
-                close_old_connections()
+            # Pin DB connection to public schema. On retry, also
+            # force-close the stale connection that Neon may have dropped.
+            ensure_public_db_connection(close_existing=(attempt > 0))
 
             def _do_update():
                 # Build base filter with optional tenant FK isolation
