@@ -521,6 +521,7 @@ class LinkedInPostView(APIView):
             )
             content = ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=post_title,
                 content=text,
                 media_urls=media_urns,  # Store media URNs
@@ -539,6 +540,7 @@ class LinkedInPostView(APIView):
             # Create an automation task record
             task = AutomationTask.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 task_type="social_post",
                 status="completed",
                 payload={
@@ -578,6 +580,7 @@ class LinkedInPostView(APIView):
             )
             content = ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=post_title,
                 content=text,
                 media_urls=media_urns,  # Store media URNs
@@ -592,6 +595,7 @@ class LinkedInPostView(APIView):
             # Create an automation task record
             task = AutomationTask.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 task_type="social_post",
                 status="completed",
                 payload={
@@ -662,6 +666,7 @@ class LinkedInPostView(APIView):
                         )
                         content = ContentCalendar.objects.create(
                             user=request.user,
+                            tenant=getattr(request, "tenant", None),
                             title=post_title,
                             content=text,
                             media_urls=media_urns,
@@ -675,6 +680,7 @@ class LinkedInPostView(APIView):
 
                         task = AutomationTask.objects.create(
                             user=request.user,
+                            tenant=getattr(request, "tenant", None),
                             task_type="social_post",
                             status="completed",
                             payload={
@@ -737,6 +743,7 @@ class LinkedInPostView(APIView):
             # Create a failed task record
             AutomationTask.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 task_type="social_post",
                 status="failed",
                 payload={
@@ -854,6 +861,7 @@ class LinkedInCarouselPostView(APIView):
             )
             ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=post_title,
                 content=text,
                 media_urls=media_urns,
@@ -905,6 +913,7 @@ class LinkedInCarouselPostView(APIView):
             )
             content = ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=post_title,
                 content=text,
                 media_urls=media_urns,
@@ -1399,6 +1408,7 @@ class LinkedInDeletePostView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, post_urn):
+        tenant = getattr(request, "tenant", None)
         try:
             profile = SocialProfile.objects.get(
                 user=request.user, platform="linkedin", status="connected"
@@ -1415,10 +1425,13 @@ class LinkedInDeletePostView(APIView):
 
             # Delete from ContentCalendar
             deleted_count = 0
-            for calendar_entry in ContentCalendar.objects.filter(
+            _del_qs = ContentCalendar.objects.filter(
                 user=request.user,
                 status="published",
-            ):
+            )
+            if tenant:
+                _del_qs = _del_qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+            for calendar_entry in _del_qs:
                 # Check if this is a LinkedIn post with matching URN
                 if calendar_entry.post_results:
                     post_id = calendar_entry.post_results.get(
@@ -1455,10 +1468,15 @@ class LinkedInDeletePostView(APIView):
             if success:
                 # Delete from ContentCalendar
                 deleted_count = 0
-                for calendar_entry in ContentCalendar.objects.filter(
+                _del_qs_real = ContentCalendar.objects.filter(
                     user=request.user,
                     status="published",
-                ):
+                )
+                if tenant:
+                    _del_qs_real = _del_qs_real.filter(
+                        Q(tenant=tenant) | Q(tenant__isnull=True)
+                    )
+                for calendar_entry in _del_qs_real:
                     if calendar_entry.post_results:
                         post_id = calendar_entry.post_results.get(
                             "id"
@@ -1978,7 +1996,7 @@ class AutomationTaskViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         tenant = getattr(self.request, "tenant", None)
         qs = AutomationTask.objects.filter(user=self.request.user)
         if tenant:
-            qs = qs.filter(tenant=tenant)
+            qs = qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
         return qs
 
     def perform_create(self, serializer):
@@ -2012,7 +2030,7 @@ class ContentCalendarViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         tenant = getattr(self.request, "tenant", None)
         queryset = ContentCalendar.objects.filter(user=self.request.user)
         if tenant:
-            queryset = queryset.filter(tenant=tenant)
+            queryset = queryset.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
 
         # Filter by status
         status_filter = self.request.query_params.get("status")
@@ -2170,10 +2188,14 @@ class ContentCalendarViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         """Get all scheduled posts (pending and overdue) ordered by date."""
         # Show all scheduled posts - both upcoming and overdue ones
         # that haven't been published
+        tenant = getattr(request, "tenant", None)
         upcoming = ContentCalendar.objects.filter(
             user=request.user,
             status="scheduled",
-        ).order_by("scheduled_date")
+        )
+        if tenant:
+            upcoming = upcoming.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+        upcoming = upcoming.order_by("scheduled_date")
 
         serializer = self.get_serializer(upcoming, many=True)
         return Response(serializer.data)
@@ -2502,6 +2524,7 @@ class TwitterPostView(APIView):
             )
             content = ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=post_title,
                 content=text,
                 media_urls=media_ids,
@@ -2520,6 +2543,7 @@ class TwitterPostView(APIView):
             # Create an automation task record
             task = AutomationTask.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 task_type="social_post",
                 status="completed",
                 payload={
@@ -2629,6 +2653,7 @@ class TwitterPostView(APIView):
             )
             content = ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=post_title,
                 content=text,
                 media_urls=media_ids,
@@ -2643,6 +2668,7 @@ class TwitterPostView(APIView):
             # Create an automation task record
             task = AutomationTask.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 task_type="social_post",
                 status="completed",
                 payload={
@@ -2761,6 +2787,7 @@ class TwitterCarouselPostView(APIView):
             # Create a ContentCalendar entry
             ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=(
                     f"[Carousel] {text[:40]}..."
                     if len(text) > 40
@@ -2806,6 +2833,7 @@ class TwitterCarouselPostView(APIView):
             # Store in ContentCalendar
             ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=(
                     f"[Carousel] {text[:40]}..."
                     if len(text) > 40
@@ -2875,6 +2903,7 @@ class TwitterDeleteTweetView(APIView):
         from .services import twitter_service
         from .constants import TWITTER_TEST_ACCESS_TOKEN
 
+        tenant = getattr(request, "tenant", None)
         try:
             profile = SocialProfile.objects.get(
                 user=request.user, platform="twitter", status="connected"
@@ -2891,10 +2920,13 @@ class TwitterDeleteTweetView(APIView):
 
             # Delete from ContentCalendar
             deleted_count = 0
-            for calendar_entry in ContentCalendar.objects.filter(
+            _del_qs = ContentCalendar.objects.filter(
                 user=request.user,
                 status="published",
-            ):
+            )
+            if tenant:
+                _del_qs = _del_qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+            for calendar_entry in _del_qs:
                 # Check if this is a Twitter post with matching ID
                 if calendar_entry.post_results:
                     # Twitter stores as tweet.id or just id
@@ -2935,10 +2967,15 @@ class TwitterDeleteTweetView(APIView):
             if success:
                 # Delete from ContentCalendar
                 deleted_count = 0
-                for calendar_entry in ContentCalendar.objects.filter(
+                _del_qs2 = ContentCalendar.objects.filter(
                     user=request.user,
                     status="published",
-                ):
+                )
+                if tenant:
+                    _del_qs2 = _del_qs2.filter(
+                        Q(tenant=tenant) | Q(tenant__isnull=True)
+                    )
+                for calendar_entry in _del_qs2:
                     if calendar_entry.post_results:
                         post_id = None
                         if "tweet" in calendar_entry.post_results:
@@ -3114,11 +3151,17 @@ class TwitterAnalyticsView(APIView):
                         raise
 
                 # Get tweet IDs from published posts
-                published_posts = ContentCalendar.objects.filter(
+                _analytics_tenant = getattr(request, "tenant", None)
+                _analytics_qs = ContentCalendar.objects.filter(
                     user=request.user,
                     platforms__contains=["twitter"],
                     status="published",
-                ).order_by("-published_at")[:20]
+                )
+                if _analytics_tenant:
+                    _analytics_qs = _analytics_qs.filter(
+                        Q(tenant=_analytics_tenant) | Q(tenant__isnull=True)
+                    )
+                published_posts = _analytics_qs.order_by("-published_at")[:20]
 
                 tweet_ids = []
                 for post in published_posts:
@@ -3987,6 +4030,7 @@ class FacebookPostView(APIView):
                 # Store in ContentCalendar for history even in test mode
                 ContentCalendar.objects.create(
                     user=request.user,
+                    tenant=getattr(request, "tenant", None),
                     title=message[:50] + "..." if len(message) > 50 else message,
                     content=message,
                     platforms=["facebook"],
@@ -4061,6 +4105,7 @@ class FacebookPostView(APIView):
             # Store in ContentCalendar for history
             ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=message[:50] + "..." if len(message) > 50 else message,
                 content=message,
                 platforms=["facebook"],
@@ -4585,6 +4630,7 @@ class FacebookDeletePostView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, post_id):
+        tenant = getattr(request, "tenant", None)
         try:
             profile = SocialProfile.objects.get(
                 user=request.user, platform="facebook", status="connected"
@@ -4611,10 +4657,13 @@ class FacebookDeletePostView(APIView):
             # In test mode, delete the ContentCalendar record
             deleted_count = 0
             # Find by searching in post_results JSON
-            for calendar_entry in ContentCalendar.objects.filter(
+            _del_qs = ContentCalendar.objects.filter(
                 user=request.user,
                 status="published",
-            ):
+            )
+            if tenant:
+                _del_qs = _del_qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+            for calendar_entry in _del_qs:
                 if not calendar_entry.post_results:
                     continue
 
@@ -4671,10 +4720,15 @@ class FacebookDeletePostView(APIView):
             if success:
                 # Also delete from ContentCalendar
                 deleted_count = 0
-                for calendar_entry in ContentCalendar.objects.filter(
+                _del_qs3 = ContentCalendar.objects.filter(
                     user=request.user,
                     status="published",
-                ):
+                )
+                if tenant:
+                    _del_qs3 = _del_qs3.filter(
+                        Q(tenant=tenant) | Q(tenant__isnull=True)
+                    )
+                for calendar_entry in _del_qs3:
                     if (
                         calendar_entry.post_results
                         and calendar_entry.post_results.get("id") == post_id
@@ -4958,6 +5012,7 @@ class FacebookCarouselPostView(APIView):
             # Save to ContentCalendar for history (even in test mode)
             ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=(
                     f"[Carousel] {message[:40]}..."
                     if len(message) > 40
@@ -5011,6 +5066,7 @@ class FacebookCarouselPostView(APIView):
             # Store in ContentCalendar for history
             ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=message[:50] + "..." if len(message) > 50 else message,
                 content=message,
                 platforms=["facebook"],
@@ -5770,6 +5826,7 @@ class FacebookStoryView(APIView):
             # Save to ContentCalendar for Recent Activity
             ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=f"Facebook Story ({story_type.title()})",
                 content="Story posted via Facebook Page",
                 platforms=["facebook"],
@@ -5832,6 +5889,7 @@ class FacebookStoryView(APIView):
             # Save to ContentCalendar for Recent Activity
             ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=f"Facebook Story ({story_type.title()})",
                 content="Story posted via Facebook Page",
                 platforms=["facebook"],
@@ -6516,6 +6574,7 @@ class InstagramPostView(APIView):
             )
             ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=display_title,
                 content=caption,
                 platforms=["instagram"],
@@ -6550,6 +6609,7 @@ class InstagramPostView(APIView):
                 # Create content calendar entry
                 calendar_entry = ContentCalendar.objects.create(
                     user=request.user,
+                    tenant=getattr(request, "tenant", None),
                     title=caption[:100] if caption else "Instagram Post",
                     content=caption,
                     media_urls=[image_url or video_url],
@@ -6771,6 +6831,7 @@ class InstagramCarouselPostView(APIView):
             )
             ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=display_title,
                 content=caption,
                 platforms=["instagram"],
@@ -6931,6 +6992,7 @@ class InstagramStoryView(APIView):
             # Save to ContentCalendar for Recent Activity
             ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=f"Instagram Story ({'Video' if video_url else 'Image'})",
                 content="Story posted via Instagram",
                 platforms=["instagram"],
@@ -6994,6 +7056,7 @@ class InstagramStoryView(APIView):
             # Save to ContentCalendar for Recent Activity
             ContentCalendar.objects.create(
                 user=request.user,
+                tenant=getattr(request, "tenant", None),
                 title=f"Instagram Story ({'Video' if video_url else 'Image'})",
                 content="Story posted via Instagram",
                 platforms=["instagram"],
