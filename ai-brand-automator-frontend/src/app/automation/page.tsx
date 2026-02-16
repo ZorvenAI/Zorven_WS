@@ -331,8 +331,15 @@ export default function AutomationPage() {
 
 function AutomationPageContent() {
   useAuth();
-  const { canEdit, canManageTeam } = useTenantRole();
+  const tenantRole = useTenantRole();
   const searchParams = useSearchParams();
+
+  // Prevent hydration mismatch: tenant role is unavailable during SSR,
+  // so gate role-dependent UI behind a mount flag.
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => { setHasMounted(true); }, []);
+  const canEdit = hasMounted ? tenantRole.canEdit : false;
+  const canManageTeam = hasMounted ? tenantRole.canManageTeam : false;
   
   const [profiles, setProfiles] = useState<SocialProfilesStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -3853,6 +3860,17 @@ function AutomationPageContent() {
       setEditing(false);
     }
   };
+
+  // Prevent hydration mismatch: role-dependent UI and client-only state
+  // (localStorage-backed TenantContext) differ between server and client.
+  // Render a loading skeleton until the component has mounted on the client.
+  if (!hasMounted) {
+    return (
+      <div className="min-h-screen bg-brand-midnight flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-electric"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-brand-midnight">
