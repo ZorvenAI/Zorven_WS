@@ -4,7 +4,7 @@
 
 ## Context Window Strategy
 
-This project has **1400+ backend tests** and a large codebase. Use these strategies to work efficiently within the context window:
+This project has **1890+ backend tests** and a large codebase. Use these strategies to work efficiently within the context window:
 
 ### Progressive Loading
 
@@ -105,11 +105,15 @@ class Meta:
 ### When Creating Views
 
 ```python
-# Always use defensive tenant access
+# Always use defensive tenant access with backward-compatible Q() filter
+from django.db.models import Q
+
 def get_queryset(self):
     tenant = getattr(self.request, 'tenant', None)
     qs = super().get_queryset()
-    return qs.filter(tenant=tenant) if tenant else qs.filter(tenant__isnull=True)
+    if tenant:
+        return qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+    return qs.filter(tenant__isnull=True)
 ```
 
 ### When Creating Tests
@@ -146,6 +150,12 @@ import { apiClient } from '@/lib/api';
   <h2 className="text-brand-silver font-heading">Title</h2>
   <button className="btn-primary">Action</button>
 </div>
+
+// Guard role-dependent UI against hydration mismatches
+const [hasMounted, setHasMounted] = useState(false);
+useEffect(() => { setHasMounted(true); }, []);
+const canEdit = hasMounted ? tenantRole.canEdit : false;
+if (!hasMounted) return <LoadingSpinner />;
 ```
 
 ## Hexagonal Architecture (Pipeline Apps)

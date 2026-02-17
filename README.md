@@ -1,8 +1,8 @@
 # AI Brand Automator
 
-> **Version**: 2.2.0 (RAG Index Service)  
+> **Version**: 2.3.0 (Multi-Tenancy + Automation Tenant Fixes)  
 > **Status**: ✅ Production Ready  
-> **Last Updated**: February 2, 2026
+> **Last Updated**: February 17, 2026
 
 **Multi-tenant SaaS platform for AI-powered brand building**
 
@@ -88,7 +88,7 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 - **Railway** for production hosting
 - **Docker** for containerization
 - **GitHub Actions** for CI/CD
-- **1000+ tests** (pytest + Hypothesis)
+- **1890+ tests** (pytest + Hypothesis)
 
 ## Project Structure
 
@@ -102,7 +102,7 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 │   │   ├── models.py            # SocialProfile, ContentCalendar, GBP models
 │   │   ├── services.py          # Platform API services
 │   │   ├── tasks.py             # Celery background tasks
-│   │   └── views.py             # OAuth & posting endpoints (5700+ lines)
+│   │   └── views.py             # OAuth & posting endpoints (8300+ lines)
 │   ├── media_curation/          # Media processing pipeline (NEW)
 │   │   ├── adapters/            # Redis, GCS, Kafka, DLP adapters
 │   │   ├── domain/              # Core models and business logic
@@ -133,7 +133,7 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 │       │   ├── dashboard/       # Main dashboard
 │       │   └── subscription/    # Billing management
 │       ├── components/          # React components
-│       ├── hooks/               # Custom hooks (useAuth)
+│       ├── hooks/               # Custom hooks (useAuth, useTenantRole)
 │       └── lib/                 # API client & utilities
 │
 ├── deployment/                  # Railway deployment configs
@@ -387,6 +387,13 @@ curl http://localhost:8002/status    # Kong Admin API
 - `POST /api/v1/auth/login/` - Email-based JWT login
 - `POST /api/v1/auth/token/refresh/` - Refresh access token
 
+### Tenants (Workspaces)
+- `GET /api/v1/tenants/me/` - List user's workspaces with roles
+- `POST /api/v1/tenants/` - Create new workspace
+- `POST /api/v1/tenants/{id}/switch/` - Switch active workspace (issues new JWT)
+- `POST /api/v1/tenants/{id}/invite/` - Invite member to workspace
+- `GET /api/v1/tenants/{id}/members/` - List workspace members
+
 ### Onboarding
 - `GET|POST /api/v1/companies/` - Company CRUD
 - `PUT /api/v1/companies/{id}/` - Update company data
@@ -490,10 +497,10 @@ curl http://localhost:8002/status    # Kong Admin API
 ```bash
 cd ai-brand-automator
 source ../.venv/bin/activate
-pytest -v                      # All tests (680+)
+pytest -v                      # All tests (1890+)
 pytest -m unit                 # Unit tests only
 pytest -m property             # Property-based tests (Hypothesis)
-pytest automation/tests/ -v    # Automation tests (149)
+pytest automation/tests/ -v    # Automation tests (180+)
 pytest media_curation/ -v      # Media curation tests (443)
 pytest --cov=. --cov-report=html  # With coverage
 ```
@@ -525,10 +532,26 @@ npm run build                  # TypeScript compilation check
 The application uses **schema-based multi-tenancy** with django-tenants:
 
 - Each user gets a unique tenant on registration
-- Data is isolated in separate PostgreSQL schemas
+- Data is isolated via tenant FK filtering in the shared (public) schema
 - `PUBLIC_SCHEMA_NAME = 'public'` for shared data
 - `TENANT_MODEL = 'tenants.Tenant'`
 - `TENANT_DOMAIN_MODEL = 'tenants.Domain'`
+- **Workspace Switcher** in the frontend lets users create/switch between workspaces
+- **Role-based access**: owner, admin, editor, viewer roles per workspace
+
+### Tenant-Scoped Queries
+
+All models have a nullable `tenant` FK. Queries use the backward-compatible Q() pattern:
+
+```python
+from django.db.models import Q
+
+tenant = getattr(request, 'tenant', None)
+if tenant:
+    qs = Model.objects.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+else:
+    qs = Model.objects.filter(tenant__isnull=True)
+```
 
 ### Tenant Creation
 
@@ -667,21 +690,23 @@ See [LICENSE.md](docs/LICENSE.md)
 
 ## Status
 
-**Current Version**: 2.1.0 (Media Curation Service)  
+**Current Version**: 2.3.0 (Multi-Tenancy + Automation Tenant Fixes)  
 **Status**: ✅ Production Ready  
 **Deployment**: Railway  
-**Last Updated**: February 2, 2026
+**Last Updated**: February 17, 2026
 
 ### Test Coverage
 | Component | Tests | Status |
 |-----------|-------|--------|
 | Media Curation | 443 | ✅ |
-| Automation | 149 | ✅ |
+| RAG Index | 322 | ✅ |
+| Automation | 180+ | ✅ |
 | GBP | 77 | ✅ |
 | Onboarding | 30+ | ✅ |
 | AI Services | 15+ | ✅ |
 | Files | 10+ | ✅ |
-| **Total** | **680+** | ✅ |
+| Multi-Tenancy | 20+ | ✅ |
+| **Total** | **1890+** | ✅ |
 
 ### Completed Features (MVP)
 - ✅ Multi-tenant authentication
@@ -706,8 +731,12 @@ See [LICENSE.md](docs/LICENSE.md)
 - ✅ MCP Server with 23 tools for AI agents
 - ✅ Railway production deployment
 - ✅ CI/CD with GitHub Actions
-- ✅ 680+ automated tests
+- ✅ 1890+ automated tests
 - ✅ **Media Curation Service** - AI-powered content processing pipeline
+- ✅ **RAG Index Service** - Vertex AI document indexing pipeline
+- ✅ **Multi-Tenancy** - Schema-based tenant isolation with django-tenants
+- ✅ **Workspace Switcher** - Create/switch workspaces in the frontend
+- ✅ **Tenant-Scoped Automation** - All social posting and calendar entries scoped by tenant
 
 ### Media Curation Supported Formats
 
