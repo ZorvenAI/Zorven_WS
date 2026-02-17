@@ -52,6 +52,13 @@ docs/                         → Architecture docs, plans, guides
 5. **Icons**: Prefer `lucide-react`
 6. **Components**: Functional components only, no class-based React
 7. **Design system**: "Digital Twilight" dark theme — use `glass-card`, `bg-brand-midnight`, `text-brand-electric`, `text-brand-silver` classes. See `DESIGN_SYSTEM.md`
+8. **Hydration safety**: Components using `useTenantRole()` or `TenantContext` (localStorage-backed) MUST guard with `hasMounted` before rendering role-dependent JSX:
+```tsx
+const [hasMounted, setHasMounted] = useState(false);
+useEffect(() => setHasMounted(true), []);
+if (!hasMounted) return <LoadingSpinner />;
+// ... role-dependent JSX below
+```
 
 ### Security
 
@@ -63,12 +70,24 @@ docs/                         → Architecture docs, plans, guides
 
 ### Multi-Tenancy Defensive Access
 ```python
-# ✅ CORRECT
+from django.db.models import Q
+
+# ✅ CORRECT — Query (backward-compatible with pre-tenant data)
 tenant = getattr(request, 'tenant', None)
-qs = Model.objects.filter(tenant=tenant) if tenant else Model.objects.filter(tenant__isnull=True)
+qs = Model.objects.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+
+# ✅ CORRECT — Create (always attach tenant)
+obj = Model.objects.create(
+    user=request.user,
+    tenant=getattr(request, 'tenant', None),
+    ...
+)
 
 # ❌ WRONG — AttributeError in tests
 tenant = request.tenant
+
+# ❌ WRONG — Excludes pre-tenant data
+qs = Model.objects.filter(tenant=tenant) if tenant else Model.objects.filter(tenant__isnull=True)
 ```
 
 ### Middleware Order (CRITICAL)
@@ -115,6 +134,8 @@ Backend: `UniqueConstraint(fields=["tenant", "company", "file_name"])` on `Brand
 | Frontend errors | `ai-brand-automator-frontend/src/lib/errors.ts` |
 | Test fixtures | `ai-brand-automator/conftest.py` |
 | Design system | `ai-brand-automator-frontend/DESIGN_SYSTEM.md` |
+| Tenant context | `ai-brand-automator-frontend/src/contexts/TenantContext.tsx` |
+| Tenant hooks | `ai-brand-automator-frontend/src/hooks/useTenantRole.ts` |
 | Architecture | `ARCHITECTURE.md` |
 
 ## Build & Run
@@ -131,7 +152,7 @@ cd ai-brand-automator-frontend && npm run dev
 cd deployment && docker compose up
 
 # Tests
-cd ai-brand-automator && pytest -v          # 1400+ backend tests
+cd ai-brand-automator && pytest -v          # 1890+ backend tests
 cd ai-brand-automator-frontend && npm test  # Jest (60% coverage threshold)
 
 # Format & lint

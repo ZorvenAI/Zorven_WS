@@ -79,6 +79,18 @@ export default function ProtectedPage() {
   }
   ```
 
+## Hydration Safety
+
+Components using `useTenantRole()` or `TenantContext` (which reads from `localStorage`) MUST guard with `hasMounted` before rendering role-dependent JSX. Without this, SSR renders with default values (e.g., `canManageTeam=false`) while the client renders with actual values, causing a hydration mismatch.
+
+```tsx
+const [hasMounted, setHasMounted] = useState(false);
+useEffect(() => setHasMounted(true), []);
+
+if (!hasMounted) return <LoadingSpinner />;
+// ... role-dependent JSX below (canManageTeam, isOwner, etc.)
+```
+
 ## Next.js Conventions
 
 - Use App Router (`app/` directory)

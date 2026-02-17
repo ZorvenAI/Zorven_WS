@@ -29,12 +29,24 @@ class SomeModel(models.Model):
 ## The Golden Rule
 
 ```python
-# ✅ ALWAYS use this pattern
+from django.db.models import Q
+
+# ✅ ALWAYS use this pattern — Query (backward-compatible with pre-tenant data)
 tenant = getattr(request, 'tenant', None)
-qs = Model.objects.filter(tenant=tenant) if tenant else Model.objects.filter(tenant__isnull=True)
+qs = Model.objects.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+
+# ✅ ALWAYS attach tenant on create
+obj = Model.objects.create(
+    user=request.user,
+    tenant=getattr(request, 'tenant', None),
+    ...
+)
 
 # ❌ NEVER do this — crashes in tests and when middleware doesn't set tenant
 tenant = request.tenant
+
+# ❌ NEVER do this — excludes pre-tenant data created before migration
+qs = Model.objects.filter(tenant=tenant) if tenant else Model.objects.filter(tenant__isnull=True)
 ```
 
 ## Common Issues
@@ -110,6 +122,10 @@ def test_tenant_isolation(api_client, public_tenant):
     # Assert tenant B cannot see tenant A's data
     pass
 ```
+
+## Automation Views (PR #153)
+
+The `automation/views.py` file (8300+ lines) contains all scheduling, posting, analytics, and Google Business endpoints. All 26 `.objects.create()` calls and 9 `.objects.filter()` calls were updated to include tenant parameters. Use this as a reference for proper tenant attachment patterns across large ViewSets.
 
 ## Key Files
 

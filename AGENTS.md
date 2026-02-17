@@ -108,7 +108,7 @@ A task is **done** when ALL of the following are true:
 2. **Formatting clean**: `black --check .` and `flake8 .` report zero issues
 3. **TypeScript compiles**: `npx tsc --noEmit` exits cleanly
 4. **No regressions**: Existing tests still pass after changes
-5. **Multi-tenancy safe**: New queries use `getattr(request, 'tenant', None)` pattern
+5. **Multi-tenancy safe**: New queries use `Q(tenant=tenant) | Q(tenant__isnull=True)` pattern; new `.objects.create()` calls include `tenant=getattr(request, 'tenant', None)`
 6. **Migrations created**: If models changed, `makemigrations` was run
 7. **Branch is clean**: Changes committed to a feature/bug branch (never directly to `main`)
 

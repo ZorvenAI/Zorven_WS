@@ -114,6 +114,30 @@ def test_company_name_accepts_any_text(name, api_client):
     assert response.status_code in (201, 400)  # Created or validation error
 ```
 
+## Tenant Isolation Testing
+
+When testing multi-tenancy, verify that data created for one tenant is not visible to another:
+
+```python
+@pytest.mark.django_db
+def test_tenant_isolation(api_client, public_tenant):
+    from django.db.models import Q
+    
+    tenant = public_tenant
+    # Create data for this tenant
+    obj = Model.objects.create(tenant=tenant, ...)
+    
+    # Query with backward-compat pattern
+    qs = Model.objects.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+    assert obj in qs
+    
+    # Verify other tenant can't see it
+    other_qs = Model.objects.filter(Q(tenant=other_tenant) | Q(tenant__isnull=True))
+    assert obj not in other_qs
+```
+
+See `tests/test_tenant_isolation.py` for 20+ comprehensive isolation tests.
+
 ## Test Assertions
 
 - Use `assert` (not `self.assertEqual` — we use pytest, not unittest)

@@ -28,6 +28,12 @@ applyTo: "ai-brand-automator/**/*.py"
 - Use `select_related()` for FK queries in `get_queryset()`
 - Override `get_serializer_class()` for action-specific serializers
 - Override `perform_create()` to attach tenant: `serializer.save(tenant=getattr(self.request, 'tenant', None))`
+- Use `Q(tenant=tenant) | Q(tenant__isnull=True)` for backward-compatible queries (includes pre-tenant data):
+  ```python
+  from django.db.models import Q
+  tenant = getattr(self.request, 'tenant', None)
+  qs = Model.objects.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+  ```
 - Return structured error responses, never raw exceptions
 
 ### Serializers

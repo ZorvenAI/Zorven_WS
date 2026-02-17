@@ -232,12 +232,30 @@ Keys without tenant_id fall back to un-prefixed format for backward compatibilit
 
 ### Defensive Access Pattern
 
-All ViewSets use `getattr(request, 'tenant', None)` — never bare `request.tenant`:
+All ViewSets use `getattr(request, 'tenant', None)` — never bare `request.tenant`.
 
+**Creating objects** — always attach tenant:
 ```python
 tenant = getattr(request, 'tenant', None)
-qs = Model.objects.filter(tenant=tenant) if tenant else Model.objects.filter(tenant__isnull=True)
+obj = Model.objects.create(
+    user=request.user,
+    tenant=tenant,
+    # ... other fields
+)
 ```
+
+**Querying objects** — use backward-compatible Q() pattern to include pre-existing records that have `tenant=NULL`:
+```python
+from django.db.models import Q
+
+tenant = getattr(request, 'tenant', None)
+if tenant:
+    qs = Model.objects.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+else:
+    qs = Model.objects.filter(tenant__isnull=True)
+```
+
+This pattern was applied across all automation views (PR #153) to fix content calendar entries and automation tasks not appearing after the multi-tenancy migration.
 
 ## Process Architecture (Procfile)
 
@@ -271,7 +289,7 @@ qs = Model.objects.filter(tenant=tenant) if tenant else Model.objects.filter(ten
 ## Testing Architecture
 
 ```
-pytest (1400+ tests)
+pytest (1890+ tests)
 ├── Unit tests (70%)        → Models, serializers, utils, encryption
 ├── Integration tests (25%) → Views with DB, API endpoints, Celery tasks
 ├── Property tests (5%)     → Hypothesis-based edge case discovery
@@ -297,3 +315,19 @@ Railway Project
 ```
 
 CI/CD: GitHub Actions → 4 jobs (backend-tests, media-curation, frontend, build-images) → Auto-deploy on `main` merge via Railway.
+
+## Frontend Hydration Safety
+
+Client components that depend on `TenantContext` (which reads from `localStorage`) must guard against SSR/client hydration mismatches:
+
+```tsx
+// Gate role-dependent UI behind a mount flag
+const [hasMounted, setHasMounted] = useState(false);
+useEffect(() => { setHasMounted(true); }, []);
+const canEdit = hasMounted ? tenantRole.canEdit : false;
+
+// Or return a loading spinner until mounted
+if (!hasMounted) return <LoadingSpinner />;
+```
+
+This pattern is applied in the automation page (PR #154), and should be used in any page that conditionally renders different HTML based on tenant role.
