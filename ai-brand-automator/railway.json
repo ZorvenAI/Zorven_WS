@@ -36,6 +36,9 @@
     },
     "rag-index-consumer": {
       "startCommand": "/app/entrypoint-worker.sh python manage.py consume_sync_events --topic rag-sync-ready-topic --group rag-index-consumers --poll-timeout 1.0"
+    },
+    "orchestration-worker": {
+      "startCommand": "/app/entrypoint-worker.sh celery -A brand_automator worker -Q orchestration -l info --concurrency=4"
     }
   }
 }

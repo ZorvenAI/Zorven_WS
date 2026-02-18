@@ -58,6 +58,10 @@ python scripts/migrate_to_membership.py --apply || echo "Membership migration sk
 echo "Provisioning tenant GCS buckets (idempotent)..."
 python scripts/provision_tenant_buckets.py --apply || echo "Bucket provisioning skipped or already done"
 
+# Seed default pipeline manifests
+echo "Seeding default pipeline manifests..."
+python manage.py seed_manifests || echo "Manifest seeding skipped"
+
 # Start Gunicorn
 echo "Starting Gunicorn server on port ${PORT:-8000}..."
 exec gunicorn brand_automator.wsgi:application \

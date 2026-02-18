@@ -93,6 +93,8 @@ echo "=== Running membership migration (idempotent) ==="
 python scripts/migrate_to_membership.py --apply || echo "Membership migration skipped or already done"
 echo "=== Provisioning tenant GCS buckets (idempotent) ==="
 python scripts/provision_tenant_buckets.py --apply || echo "Bucket provisioning skipped or already done"
+echo "=== Seeding default pipeline manifests ==="
+python manage.py seed_manifests || echo "Manifest seeding skipped"
 echo "=== Collecting static files ==="
 python manage.py collectstatic --noinput || true
 echo "=== Starting Gunicorn on port $PORT ==="
