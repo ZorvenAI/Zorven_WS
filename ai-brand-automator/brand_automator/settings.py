@@ -858,9 +858,7 @@ if KAFKA_CONSUMERS_ENABLED:
 
 # --- Pipeline Orchestration Settings ---
 # URL of the external pipeline-orchestrator-svc (LangGraph)
-ORCHESTRATOR_URL = config(
-    "ORCHESTRATOR_URL", default="http://localhost:8010"
-)
+ORCHESTRATOR_URL = config("ORCHESTRATOR_URL", default="http://localhost:8010")
 # Service-to-service auth token for dispatch calls (core-api → orchestrator)
 ORCHESTRATOR_SERVICE_TOKEN = config(
     "ORCHESTRATOR_SERVICE_TOKEN", default="dev-service-token"
@@ -870,6 +868,4 @@ ORCHESTRATOR_CALLBACK_TOKEN = config(
     "ORCHESTRATOR_CALLBACK_TOKEN", default="dev-callback-token"
 )
 # HTTP timeout (seconds) when dispatching jobs to the orchestrator
-ORCHESTRATOR_TIMEOUT = config(
-    "ORCHESTRATOR_TIMEOUT", default=30, cast=int
-)
+ORCHESTRATOR_TIMEOUT = config("ORCHESTRATOR_TIMEOUT", default=30, cast=int)
