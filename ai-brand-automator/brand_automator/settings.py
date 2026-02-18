@@ -97,6 +97,7 @@ SHARED_APPS = [
     "data_ingestion",  # Data ingestion pipeline (Hexagonal Architecture)
     "media_curation",  # Media curation pipeline (Hexagonal Architecture)
     "rag_index",  # RAG Index sync service (Hexagonal Architecture)
+    "orchestration",  # Pipeline orchestration (core-api-service)
 ]
 
 TENANT_APPS = [
@@ -822,6 +823,10 @@ CELERY_BEAT_SCHEDULE = {
         # of timely delivery. For lower frequency, change to 300.0 (5 min).
         "schedule": 60.0,
     },
+    "check-stale-orchestration-jobs": {
+        "task": "orchestration.tasks.check_stale_jobs",
+        "schedule": 300.0,  # Every 5 minutes
+    },
 }
 
 # Explicit flag to enable Kafka consumer Celery tasks.
@@ -850,3 +855,19 @@ if KAFKA_CONSUMERS_ENABLED:
             },
         }
     )
+
+# --- Pipeline Orchestration Settings ---
+# URL of the external pipeline-orchestrator-svc (LangGraph)
+ORCHESTRATOR_URL = config("ORCHESTRATOR_URL", default="http://localhost:8010")
+# Service-to-service auth token for dispatch calls (core-api → orchestrator)
+ORCHESTRATOR_SERVICE_TOKEN = config(
+    "ORCHESTRATOR_SERVICE_TOKEN", default="dev-service-token"
+)
+# Shared secret for authenticating pipeline callbacks (orchestrator → core-api)
+ORCHESTRATOR_CALLBACK_TOKEN = config(
+    "ORCHESTRATOR_CALLBACK_TOKEN", default="dev-callback-token"
+)
+# HTTP timeout (seconds) when dispatching jobs to the orchestrator
+ORCHESTRATOR_TIMEOUT = config("ORCHESTRATOR_TIMEOUT", default=30, cast=int)
+# Backend URL for orchestrator callbacks (used to build callback_url in dispatch)
+BACKEND_URL = config("BACKEND_URL", default="http://localhost:8001")

@@ -64,6 +64,7 @@ export function Navigation() {
       : []),
     { href: '/files', label: 'Files', active: pathname === '/files' },
     { href: '/automation', label: 'Automation', active: pathname === '/automation' },
+    { href: '/dashboard/pipelines', label: 'Pipelines', active: pathname?.startsWith('/dashboard/pipelines') ?? false },
     ...(canManageTeam
       ? [{ href: '/dashboard/team', label: 'Team', active: pathname === '/dashboard/team' }]
       : []),

@@ -89,6 +89,11 @@ services:
       # Pipeline: Kafka enabled (broker runs via with-kafka profile)
       - ONBOARDING_KAFKA_ENABLED=true
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      # Orchestration service configuration
+      - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://localhost:8010}
+      - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
+      - ORCHESTRATOR_TIMEOUT=${ORCHESTRATOR_TIMEOUT:-30}
       - MAILGUN_API_KEY=${MAILGUN_API_KEY:-7776e9d86dc564e3e9bd4921c056ae3e-f9517a64-4481b185}
       - MAILGUN_DOMAIN=${MAILGUN_DOMAIN:-sandbox3c490c6302904ddda887a78852e81aea.mailgun.org}
       - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL:-AI Brand Automator <postmaster@sandbox3c490c6302904ddda887a78852e81aea.mailgun.org>}
@@ -174,6 +179,11 @@ services:
       # Multi-tenancy: GCS bucket auto-provisioning
       - GCS_AUTO_PROVISION=${GCS_AUTO_PROVISION:-false}
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      # Orchestration service configuration
+      - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://localhost:8010}
+      - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
+      - ORCHESTRATOR_TIMEOUT=${ORCHESTRATOR_TIMEOUT:-30}
     volumes:
       - ../ai-brand-automator:/app
       - ./scripts/start-celery-worker.sh:/scripts/start.sh:ro

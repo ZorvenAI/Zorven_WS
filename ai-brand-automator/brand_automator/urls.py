@@ -83,6 +83,8 @@ urlpatterns = [
                 path("curation/", include("media_curation.urls")),
                 # RAG Index (document sync to Vertex AI)
                 path("rag-index/", include("rag_index.api.urls")),
+                # Pipeline Orchestration (job dispatch + callback)
+                path("orchestration/", include("orchestration.urls")),
             ]
         ),
     ),

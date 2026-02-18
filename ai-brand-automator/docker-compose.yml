@@ -108,6 +108,11 @@ services:
       # Multi-tenancy: default GCS buckets (tenants can override)
       - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-bucket1}
       - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-brandsol-curation-bucket}
+      # Orchestration service configuration
+      - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://localhost:8010}
+      - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
+      - ORCHESTRATOR_TIMEOUT=${ORCHESTRATOR_TIMEOUT:-30}
     depends_on:
       redis:
         condition: service_healthy
@@ -149,6 +154,11 @@ services:
       - TWITTER_CLIENT_SECRET=${TWITTER_CLIENT_SECRET:-}
       - FACEBOOK_APP_ID=${FACEBOOK_APP_ID:-}
       - FACEBOOK_APP_SECRET=${FACEBOOK_APP_SECRET:-}
+      # Orchestration service configuration
+      - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://localhost:8010}
+      - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
+      - ORCHESTRATOR_TIMEOUT=${ORCHESTRATOR_TIMEOUT:-30}
     depends_on:
       redis:
         condition: service_healthy

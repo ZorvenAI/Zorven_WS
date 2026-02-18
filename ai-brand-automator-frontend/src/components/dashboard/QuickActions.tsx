@@ -38,6 +38,12 @@ export function QuickActions() {
       visible: canEdit,
     },
     {
+      title: 'Analysis Pipelines',
+      description: 'Run AI brand analyses and view results',
+      href: '/dashboard/pipelines',
+      icon: '🔬',
+    },
+    {
       title: 'Subscription Plans',
       description: 'View and upgrade your subscription',
       href: '/subscription',

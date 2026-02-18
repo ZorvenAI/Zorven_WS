@@ -25,6 +25,8 @@ app.conf.task_routes = {
     "data_ingestion.tasks.*": {"queue": "ingestion"},
     # Route media_curation tasks to curation queue (worker: -Q curation)
     "media_curation.tasks.*": {"queue": "curation"},
+    # Route orchestration tasks to orchestration queue
+    "orchestration.tasks.*": {"queue": "orchestration"},
 }
 
 
