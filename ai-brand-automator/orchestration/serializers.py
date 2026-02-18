@@ -76,6 +76,8 @@ class PipelineManifestSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     f"External node '{node['id']}' must have a 'url' field"
                 )
+            if node["type"] == "external" and "url" in node:
+                self._validate_external_url(node["id"], node["url"])
             if node["type"] == "internal" and "handler" not in node:
                 raise serializers.ValidationError(
                     f"Internal node '{node['id']}' must have a " f"'handler' field"
@@ -103,6 +105,28 @@ class PipelineManifestSerializer(serializers.ModelSerializer):
         # Validate no circular dependencies
         self._validate_no_cycles(value)
         return value
+
+    ALLOWED_URL_PREFIXES = (
+        "http://discovery-agent-svc",
+        "http://intelligence-agent-svc",
+        "http://pipeline-orchestrator-svc",
+        "http://localhost:",
+        "https://discovery-agent-svc",
+        "https://intelligence-agent-svc",
+        "https://pipeline-orchestrator-svc",
+    )
+
+    def _validate_external_url(self, node_id, url):
+        """Reject external node URLs that are not in the allowlist.
+
+        Prevents SSRF by ensuring only known internal service URLs
+        are accepted in manifest definitions.
+        """
+        if not any(url.startswith(prefix) for prefix in self.ALLOWED_URL_PREFIXES):
+            raise serializers.ValidationError(
+                f"External node '{node_id}' has a URL that is not in the "
+                f"allowed service list. Only internal service URLs are permitted."
+            )
 
     def _validate_no_cycles(self, manifest):
         """Topological sort to detect circular dependencies."""
@@ -213,13 +237,18 @@ class AnalysisJobSerializer(serializers.ModelSerializer):
 class CallbackSerializer(serializers.Serializer):
     """Validates callback payload from pipeline-orchestrator-svc."""
 
+    # Maximum allowed size for JSON fields (1 MB)
+    MAX_JSON_SIZE = 1024 * 1024
+
     status = serializers.ChoiceField(
         choices=AnalysisJob.Status.choices,
         required=False,
     )
     progress = serializers.JSONField(required=False)
     result_data = serializers.JSONField(required=False)
-    error_message = serializers.CharField(required=False, allow_blank=True)
+    error_message = serializers.CharField(
+        required=False, allow_blank=True, max_length=10000
+    )
     resolved_manifest_id = serializers.SlugField(
         required=False,
         help_text=(
@@ -227,3 +256,22 @@ class CallbackSerializer(serializers.Serializer):
             "(when job had no explicit manifest)"
         ),
     )
+
+    def _validate_json_size(self, value, field_name):
+        """Reject JSON payloads larger than MAX_JSON_SIZE."""
+        import json
+
+        serialized = json.dumps(value)
+        if len(serialized.encode("utf-8")) > self.MAX_JSON_SIZE:
+            raise serializers.ValidationError(
+                f"{field_name} exceeds maximum size of 1 MB"
+            )
+        return value
+
+    def validate_progress(self, value):
+        """Validate progress JSON size."""
+        return self._validate_json_size(value, "progress")
+
+    def validate_result_data(self, value):
+        """Validate result_data JSON size."""
+        return self._validate_json_size(value, "result_data")

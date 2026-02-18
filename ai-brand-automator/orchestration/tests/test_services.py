@@ -63,8 +63,8 @@ class TestOrchestratorDispatcher:
         assert analysis_job.status == AnalysisJob.Status.QUEUED
 
     @patch("orchestration.services.requests.post")
-    def test_dispatch_http_500(self, mock_post, analysis_job):
-        """HTTP 500 → returns False, job status → FAILED."""
+    def test_dispatch_http_500_leaves_job_queued(self, mock_post, analysis_job):
+        """HTTP 500 (retryable) → returns False, job stays QUEUED for retry."""
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_response.text = "Internal Server Error"
@@ -75,8 +75,23 @@ class TestOrchestratorDispatcher:
 
         assert result is False
         analysis_job.refresh_from_db()
+        assert analysis_job.status == AnalysisJob.Status.QUEUED
+
+    @patch("orchestration.services.requests.post")
+    def test_dispatch_http_400_marks_failed(self, mock_post, analysis_job):
+        """HTTP 400 (non-retryable) → returns False, job → FAILED."""
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.text = "Bad Request"
+        mock_post.return_value = mock_response
+
+        dispatcher = OrchestratorDispatcher()
+        result = dispatcher.dispatch(analysis_job)
+
+        assert result is False
+        analysis_job.refresh_from_db()
         assert analysis_job.status == AnalysisJob.Status.FAILED
-        assert "500" in analysis_job.error_message
+        assert "400" in analysis_job.error_message
 
     @patch("orchestration.services.requests.post")
     def test_dispatch_payload_format(self, mock_post, analysis_job):

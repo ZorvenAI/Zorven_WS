@@ -149,6 +149,46 @@ class TestPipelineManifestSerializer:
         error_msg = str(serializer.errors["manifest_data"])
         assert "handler" in error_msg.lower()
 
+    def test_manifest_external_node_allowed_url(self):
+        """External node with allowed service URL passes."""
+        data = {
+            "pipeline_id": "allowed-ext",
+            "name": "Allowed External",
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "discovery",
+                        "type": "external",
+                        "url": "http://discovery-agent-svc/v1/search",
+                    },
+                ],
+                "edges": [],
+            },
+        }
+        serializer = PipelineManifestSerializer(data=data)
+        assert serializer.is_valid(), serializer.errors
+
+    def test_manifest_external_node_disallowed_url(self):
+        """External node with arbitrary URL is rejected (SSRF prevention)."""
+        data = {
+            "pipeline_id": "ssrf-attempt",
+            "name": "SSRF Attempt",
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "attacker",
+                        "type": "external",
+                        "url": "http://169.254.169.254/latest/meta-data/",
+                    },
+                ],
+                "edges": [],
+            },
+        }
+        serializer = PipelineManifestSerializer(data=data)
+        assert not serializer.is_valid()
+        error_msg = str(serializer.errors["manifest_data"])
+        assert "allowed" in error_msg.lower()
+
 
 @pytest.mark.django_db
 class TestAnalysisJobCreateSerializer:
@@ -244,3 +284,19 @@ class TestCallbackSerializer:
         assert (
             serializer.validated_data["resolved_manifest_id"] == "iso-brand-equity-v1"
         )
+
+    def test_callback_serializer_rejects_oversized_progress(self):
+        """Rejects progress JSON exceeding 1 MB."""
+        oversized = {"data": "x" * (1024 * 1024 + 1)}
+        data = {"progress": oversized}
+        serializer = CallbackSerializer(data=data)
+        assert not serializer.is_valid()
+        assert "progress" in serializer.errors
+
+    def test_callback_serializer_rejects_oversized_result_data(self):
+        """Rejects result_data JSON exceeding 1 MB."""
+        oversized = {"data": "x" * (1024 * 1024 + 1)}
+        data = {"result_data": oversized}
+        serializer = CallbackSerializer(data=data)
+        assert not serializer.is_valid()
+        assert "result_data" in serializer.errors

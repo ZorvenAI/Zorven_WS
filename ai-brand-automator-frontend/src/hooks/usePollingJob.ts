@@ -60,7 +60,7 @@ export function usePollingJob(
     }
   }, []);
 
-  // Initial fetch + polling loop.
+  // Initial fetch + polling loop using setTimeout to prevent overlapping fetches.
   useEffect(() => {
     if (!jobId) {
       setJob(null);
@@ -69,21 +69,33 @@ export function usePollingJob(
     }
 
     setIsLoading(true);
-    fetchJob();
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
 
-    const timer = setInterval(() => {
-      // Stop polling if terminal state.
-      setJob((prev) => {
-        if (prev && (prev.status === 'completed' || prev.status === 'failed')) {
-          clearInterval(timer);
-        }
-        return prev;
-      });
-      // Still fetch (the setJob above is harmless if already cleared).
-      if (jobIdRef.current) fetchJob();
-    }, intervalMs);
+    const poll = async () => {
+      if (cancelled) return;
+      await fetchJob();
+      // Schedule next poll only after fetch completes
+      if (!cancelled) {
+        // Check terminal state via ref to avoid stale closure
+        setJob((prev) => {
+          if (prev && (prev.status === 'completed' || prev.status === 'failed')) {
+            // Terminal state — stop polling
+            return prev;
+          }
+          // Schedule next poll
+          timer = setTimeout(poll, intervalMs);
+          return prev;
+        });
+      }
+    };
 
-    return () => clearInterval(timer);
+    poll();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [jobId, intervalMs, fetchJob]);
 
   return { job, isLoading, error, refresh: fetchJob };

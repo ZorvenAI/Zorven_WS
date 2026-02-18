@@ -74,5 +74,6 @@ def check_stale_jobs():
             status=AnalysisJob.Status.FAILED,
             error_message="Job timed out after 30 minutes",
             completed_at=timezone.now(),
+            updated_at=timezone.now(),
         )
         logger.warning("Marked %d stale orchestration jobs as failed", count)

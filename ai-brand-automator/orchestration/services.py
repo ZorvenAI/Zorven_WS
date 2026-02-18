@@ -75,22 +75,33 @@ class OrchestratorDispatcher:
                 logger.info("Job %s dispatched successfully", job.job_id)
                 return True
 
-            logger.error(
-                "Dispatch failed for job %s: HTTP %s — %s",
+            # 4xx = non-retryable (bad request, auth, etc.) → mark failed
+            if 400 <= response.status_code < 500:
+                logger.error(
+                    "Non-retryable dispatch failure for job %s: HTTP %s — %s",
+                    job.job_id,
+                    response.status_code,
+                    response.text[:500],
+                )
+                job.status = AnalysisJob.Status.FAILED
+                job.error_message = f"Dispatch failed: HTTP {response.status_code}"
+                job.completed_at = timezone.now()
+                job.save(
+                    update_fields=[
+                        "status",
+                        "error_message",
+                        "completed_at",
+                        "updated_at",
+                    ]
+                )
+                return False
+
+            # 5xx = retryable → leave job in current status for Celery retry
+            logger.warning(
+                "Retryable dispatch failure for job %s: HTTP %s — %s",
                 job.job_id,
                 response.status_code,
                 response.text[:500],
-            )
-            job.status = AnalysisJob.Status.FAILED
-            job.error_message = f"Dispatch failed: HTTP {response.status_code}"
-            job.completed_at = timezone.now()
-            job.save(
-                update_fields=[
-                    "status",
-                    "error_message",
-                    "completed_at",
-                    "updated_at",
-                ]
             )
             return False
 
@@ -193,9 +204,5 @@ class OrchestratorDispatcher:
 
     def _build_callback_url(self, job):
         """Build the callback URL for this job."""
-        base_url = getattr(
-            settings,
-            "BACKEND_URL",
-            "http://localhost:8001",
-        )
-        return f"{base_url}/api/v1/orchestration/" f"jobs/{job.job_id}/callback/"
+        base_url = config("BACKEND_URL", default="http://localhost:8001")
+        return f"{base_url}/api/v1/orchestration/jobs/{job.job_id}/callback/"

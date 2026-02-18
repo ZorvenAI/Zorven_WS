@@ -869,3 +869,5 @@ ORCHESTRATOR_CALLBACK_TOKEN = config(
 )
 # HTTP timeout (seconds) when dispatching jobs to the orchestrator
 ORCHESTRATOR_TIMEOUT = config("ORCHESTRATOR_TIMEOUT", default=30, cast=int)
+# Backend URL for orchestrator callbacks (used to build callback_url in dispatch)
+BACKEND_URL = config("BACKEND_URL", default="http://localhost:8001")

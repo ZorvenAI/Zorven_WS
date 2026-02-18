@@ -8,6 +8,7 @@ PipelineManifestViewSet — CRUD for pipeline manifests (admin-only create/updat
 import logging
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -121,64 +122,73 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        job = self.get_object()
-
         serializer = CallbackSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        update_fields = ["updated_at"]
-
-        # Update progress
-        if "progress" in data:
-            job.progress = data["progress"]
-            update_fields.append("progress")
-
-        # Update status
-        if "status" in data:
-            new_status = data["status"]
-            job.status = new_status
-            update_fields.append("status")
-
-            if new_status == AnalysisJob.Status.COMPLETED:
-                job.completed_at = timezone.now()
-                update_fields.append("completed_at")
-            elif new_status == AnalysisJob.Status.FAILED:
-                job.completed_at = timezone.now()
-                update_fields.append("completed_at")
-
-        # Update result_data
-        if "result_data" in data:
-            job.result_data = data["result_data"]
-            update_fields.append("result_data")
-
-        # Update error_message
-        if "error_message" in data:
-            job.error_message = data["error_message"]
-            update_fields.append("error_message")
-
-        # Handle resolved_manifest_id (intent routing resolution)
-        if "resolved_manifest_id" in data and job.manifest is None:
+        with transaction.atomic():
+            # Lock the row to prevent concurrent callback updates
             try:
-                resolved = PipelineManifest.objects.get(
-                    pipeline_id=data["resolved_manifest_id"],
-                    is_active=True,
-                )
-                job.manifest = resolved
-                update_fields.append("manifest")
-                logger.info(
-                    "Job %s: manifest resolved to %s via intent routing",
-                    job.job_id,
-                    data["resolved_manifest_id"],
-                )
-            except PipelineManifest.DoesNotExist:
-                logger.warning(
-                    "Job %s: resolved_manifest_id '%s' not found",
-                    job.job_id,
-                    data["resolved_manifest_id"],
+                job = AnalysisJob.objects.select_for_update().get(job_id=job_id)
+            except AnalysisJob.DoesNotExist:
+                return Response(
+                    {"error": "Job not found"},
+                    status=status.HTTP_404_NOT_FOUND,
                 )
 
-        job.save(update_fields=update_fields)
+            update_fields = ["updated_at"]
+
+            # Update progress
+            if "progress" in data:
+                job.progress = data["progress"]
+                update_fields.append("progress")
+
+            # Update status
+            if "status" in data:
+                new_status = data["status"]
+                job.status = new_status
+                update_fields.append("status")
+
+                if new_status == AnalysisJob.Status.COMPLETED:
+                    job.completed_at = timezone.now()
+                    update_fields.append("completed_at")
+                elif new_status == AnalysisJob.Status.FAILED:
+                    job.completed_at = timezone.now()
+                    update_fields.append("completed_at")
+
+            # Update result_data
+            if "result_data" in data:
+                job.result_data = data["result_data"]
+                update_fields.append("result_data")
+
+            # Update error_message
+            if "error_message" in data:
+                job.error_message = data["error_message"]
+                update_fields.append("error_message")
+
+            # Handle resolved_manifest_id (intent routing resolution)
+            if "resolved_manifest_id" in data and job.manifest is None:
+                try:
+                    resolved = PipelineManifest.objects.get(
+                        pipeline_id=data["resolved_manifest_id"],
+                        is_active=True,
+                    )
+                    job.manifest = resolved
+                    update_fields.append("manifest")
+                    logger.info(
+                        "Job %s: manifest resolved to %s via intent routing",
+                        job.job_id,
+                        data["resolved_manifest_id"],
+                    )
+                except PipelineManifest.DoesNotExist:
+                    logger.warning(
+                        "Job %s: resolved_manifest_id '%s' not found",
+                        job.job_id,
+                        data["resolved_manifest_id"],
+                    )
+
+            job.save(update_fields=update_fields)
+
         logger.info("Job %s callback processed: %s", job.job_id, data)
 
         return Response({"status": "accepted"})
