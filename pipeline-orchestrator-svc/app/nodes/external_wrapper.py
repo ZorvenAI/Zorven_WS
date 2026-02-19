@@ -1,0 +1,71 @@
+"""
+ExternalWrapper — Generic HTTP handler for remote agent services.
+
+Calls an external microservice (e.g., discovery-agent-svc) via HTTP POST,
+passing the current pipeline state and propagating X-Tenant-ID.
+
+Falls back to stub data when the external service is unreachable,
+so pipelines can be tested before agent services are deployed.
+"""
+
+import logging
+
+import httpx
+
+from app.nodes.base import BaseNode
+from app.state.schema import AgentState
+
+logger = logging.getLogger(__name__)
+
+
+class ExternalWrapper(BaseNode):
+    """HTTP wrapper for external agent service calls."""
+
+    def __init__(self, url: str, node_id: str, config: dict | None = None):
+        super().__init__(config)
+        self.url = url
+        self.node_id = node_id
+
+    async def __call__(self, state: AgentState) -> dict:
+        tenant_ctx = state.get("tenant_context", {})
+        tenant_id = (
+            tenant_ctx.get("tenant_id", "") if isinstance(tenant_ctx, dict) else ""
+        )
+
+        payload = {
+            "input_prompt": state.get("input_prompt", ""),
+            "input_context": state.get("input_context", {}),
+            "tenant_context": tenant_ctx,
+            "config": self.config,
+            "previous_outputs": state.get("node_outputs", {}),
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    self.url,
+                    json=payload,
+                    headers={"X-Tenant-ID": str(tenant_id)},
+                )
+                response.raise_for_status()
+                result = response.json()
+
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "External service %s unreachable for node %s: %s. Using stub data.",
+                self.url,
+                self.node_id,
+                str(exc),
+            )
+            result = {
+                "status": "stub",
+                "message": f"External service {self.url} not available",
+                "findings": [f"Stub data: {self.url} was unreachable."],
+                "recommendations": [
+                    "Deploy the agent service and re-run the pipeline."
+                ],
+            }
+
+        node_outputs = dict(state.get("node_outputs", {}))
+        node_outputs[self.node_id] = result
+        return {"node_outputs": node_outputs}

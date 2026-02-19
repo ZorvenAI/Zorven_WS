@@ -10,6 +10,7 @@ import { apiClient } from '@/lib/api';
 import type {
   AnalysisJob,
   CreateJobPayload,
+  ManifestGraphData,
   PipelineManifest,
   PipelineManifestListItem,
 } from '@/types/orchestration';
@@ -74,4 +75,30 @@ export async function listManifests(): Promise<PipelineManifestListItem[]> {
 export async function getManifest(id: number): Promise<PipelineManifest> {
   const res = await apiClient.get(`${BASE}/manifests/${id}/`);
   return parseOrThrow<PipelineManifest>(res);
+}
+
+/**
+ * Fetch the manifest_data graph for a given manifest ID.
+ * Returns null if the manifest does not have graph data.
+ */
+export async function getManifestGraphData(
+  manifestId: number,
+): Promise<ManifestGraphData | null> {
+  try {
+    const manifest = await getManifest(manifestId);
+    const data = manifest.manifest_data;
+    if (
+      data &&
+      typeof data === 'object' &&
+      'nodes' in data &&
+      Array.isArray(data.nodes)
+    ) {
+      return data as unknown as ManifestGraphData;
+    }
+    return null;
+  } catch (err) {
+    // Log the error for debugging — distinguish from "no graph data"
+    console.error('[getManifestGraphData] Failed to fetch manifest:', err);
+    return null;
+  }
 }

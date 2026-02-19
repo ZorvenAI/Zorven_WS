@@ -25,6 +25,7 @@ pytest automation/tests/ -v
 pytest files/tests/ -v
 pytest media_curation/tests/ -v
 pytest onboarding/tests/ -v
+pytest orchestration/tests/ -v
 
 # Run with coverage
 pytest --cov=. --cov-report=term-missing
@@ -40,6 +41,12 @@ python manage.py migrate_schemas --shared --noinput
 # MCP Server (stdio for local, SSE for web)
 python run_mcp_server.py --transport stdio
 python run_mcp_server.py --transport sse --port 8003
+
+# Orchestration worker (separate Celery queue)
+celery -A brand_automator worker -Q orchestration -l info --concurrency=4
+
+# Seed default pipeline manifests (idempotent, run on every deploy)
+python manage.py seed_manifests
 ```
 
 ### Frontend
@@ -87,6 +94,7 @@ cd deployment && docker compose down -v   # Tear down with volumes
 - `ai-brand-automator/brand_automator/settings.py` — Middleware order is critical (see copilot-instructions.md)
 - `ai-brand-automator/brand_automator/middleware.py` — Security-sensitive, test thoroughly
 - `ai-brand-automator/automation/encryption.py` — Token encryption, changes break existing encrypted data
+- `ai-brand-automator/orchestration/management/commands/seed_manifests.py` — Default manifest data, test after changes
 - Any migration file — Never edit existing migrations, always create new ones
 
 ### Safe to Modify
@@ -99,6 +107,7 @@ cd deployment && docker compose down -v   # Tear down with volumes
 - `ai-brand-automator-frontend/src/app/` — Page routes
 - `ai-brand-automator-frontend/src/hooks/` — Custom hooks
 - `ai-brand-automator-frontend/src/lib/` — Utilities
+- `ai-brand-automator/orchestration/` — Pipeline orchestration views, serializers, services, tasks
 
 ## Definition of Done
 
@@ -110,7 +119,8 @@ A task is **done** when ALL of the following are true:
 4. **No regressions**: Existing tests still pass after changes
 5. **Multi-tenancy safe**: New queries use `Q(tenant=tenant) | Q(tenant__isnull=True)` pattern; new `.objects.create()` calls include `tenant=getattr(request, 'tenant', None)`
 6. **Migrations created**: If models changed, `makemigrations` was run
-7. **Branch is clean**: Changes committed to a feature/bug branch (never directly to `main`)
+7. **Manifests seeded**: If orchestration manifests changed, `seed_manifests` was run
+8. **Branch is clean**: Changes committed to a feature/bug branch (never directly to `main`)
 
 ## Git Workflow
 

@@ -13,9 +13,12 @@
 
 import { useState } from 'react';
 import { ClipboardCopy, Download, Check } from 'lucide-react';
+import BrandEquityDashboard from './BrandEquityDashboard';
 
 interface ResultDashboardProps {
   resultData: Record<string, unknown>;
+  /** Optional manifest name — used to route to specialized dashboards. */
+  manifestName?: string | null;
 }
 
 function renderValue(value: unknown): React.ReactNode {
@@ -49,8 +52,20 @@ function sectionTitle(key: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export default function ResultDashboard({ resultData }: ResultDashboardProps) {
+export default function ResultDashboard({
+  resultData,
+  manifestName,
+}: ResultDashboardProps) {
   const [copied, setCopied] = useState(false);
+
+  // Route to specialized dashboard for Brand Equity / ISO pipelines
+  const isBrandEquity =
+    manifestName &&
+    (/brand.?equity/i.test(manifestName) || /iso/i.test(manifestName));
+
+  if (isBrandEquity) {
+    return <BrandEquityDashboard resultData={resultData} />;
+  }
 
   const handleCopy = async () => {
     try {

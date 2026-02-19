@@ -70,3 +70,28 @@ export interface CreateJobPayload {
   input_prompt: string;
   input_context?: Record<string, unknown>;
 }
+
+// ── Manifest Graph Types (for React Flow visualization) ──
+
+export interface ManifestNode {
+  id: string;
+  type: 'internal' | 'external';
+  handler?: string;
+  url?: string;
+  label?: string;
+}
+
+export interface ManifestGraphData {
+  nodes: ManifestNode[];
+  edges: [string, string][];
+  global_config?: Record<string, unknown>;
+}
+
+// ── Log Console ──
+
+export interface LogEntry {
+  timestamp: string;
+  nodeId: string;
+  message: string;
+  level: 'info' | 'success' | 'error';
+}
