@@ -4,7 +4,7 @@
 
 ## Context Window Strategy
 
-This project has **1890+ backend tests** and a large codebase. Use these strategies to work efficiently within the context window:
+This project has **1970+ backend tests** and a large codebase. Use these strategies to work efficiently within the context window:
 
 ### Progressive Loading
 
@@ -42,6 +42,10 @@ User Request → Frontend (Next.js) → API Client → Kong Gateway → Django V
                                                               Serializer → Model → DB
                                                                     ↓
                                                     Celery Task / Kafka Event → Pipeline
+                                                                    ↓
+                                          OrchestratorDispatcher → pipeline-orchestrator-svc
+                                                                    ↓
+                                                    Callback → AnalysisJob (atomic update)
 ```
 
 ### For Multi-File Changes
@@ -179,3 +183,34 @@ factory.py       → Dependency injection wiring
 - Kafka is optional — always handle `KafkaException` gracefully
 - GCS operations should be wrapped in try/except with logging
 - AI (Gemini) calls should have timeouts and fallback responses
+
+## Orchestration-Specific Patterns
+
+When working in `orchestration/`:
+
+### Callback Concurrency Safety
+```python
+# Always use atomic + select_for_update for callback state changes
+with transaction.atomic():
+    try:
+        job = AnalysisJob.objects.select_for_update().get(job_id=job_id)
+    except AnalysisJob.DoesNotExist:
+        return Response({"error": "Job not found"}, status=404)
+    # update fields...
+    job.save(update_fields=update_fields)
+```
+
+### Dispatch Error Handling
+```python
+# 4xx (client error) = non-retryable → mark FAILED immediately
+# 5xx (server error) = retryable → leave in QUEUED for Celery retry
+# ConnectionError/Timeout = retryable → leave in QUEUED for Celery retry
+```
+
+### SSRF Prevention
+Pipeline manifest external node URLs are validated against `ALLOWED_URL_PREFIXES` in `PipelineManifestSerializer`. Only internal service URLs and localhost are permitted.
+
+### Debugging Stuck Jobs
+1. Check `check_stale_jobs` periodic task (runs every 5 min) marks RUNNING jobs > 30 min as FAILED
+2. Check Celery `orchestration` queue: `celery -A brand_automator inspect active -Q orchestration`
+3. Check callback token: `settings.ORCHESTRATOR_CALLBACK_TOKEN` must match between core-api and orchestrator

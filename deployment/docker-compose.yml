@@ -90,10 +90,11 @@ services:
       - ONBOARDING_KAFKA_ENABLED=true
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       # Orchestration service configuration
-      - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://localhost:8010}
+      - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://orchestrator:8010}
       - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
       - ORCHESTRATOR_TIMEOUT=${ORCHESTRATOR_TIMEOUT:-30}
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8001}
       - MAILGUN_API_KEY=${MAILGUN_API_KEY:-7776e9d86dc564e3e9bd4921c056ae3e-f9517a64-4481b185}
       - MAILGUN_DOMAIN=${MAILGUN_DOMAIN:-sandbox3c490c6302904ddda887a78852e81aea.mailgun.org}
       - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL:-AI Brand Automator <postmaster@sandbox3c490c6302904ddda887a78852e81aea.mailgun.org>}
@@ -180,10 +181,11 @@ services:
       - GCS_AUTO_PROVISION=${GCS_AUTO_PROVISION:-false}
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
       # Orchestration service configuration
-      - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://localhost:8010}
+      - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://orchestrator:8010}
       - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
       - ORCHESTRATOR_TIMEOUT=${ORCHESTRATOR_TIMEOUT:-30}
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8001}
     volumes:
       - ../ai-brand-automator:/app
       - ./scripts/start-celery-worker.sh:/scripts/start.sh:ro
@@ -514,6 +516,37 @@ services:
       - app-network
     profiles:
       - with-kafka
+
+  # ==========================================================================
+  # Pipeline Orchestrator — LangGraph-based pipeline execution engine
+  # Receives dispatch requests from backend, executes manifests, reports via callbacks
+  # ==========================================================================
+  orchestrator:
+    build:
+      context: ../pipeline-orchestrator-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-orchestrator
+    environment:
+      - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
+      - ORCHESTRATOR_REDIS_URL=redis://redis:6379/1
+      - ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=
+      - ORCHESTRATOR_LOG_LEVEL=INFO
+    expose:
+      - "8010"
+    ports:
+      - "8010:8010"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
 
 # ==========================================================================
 # Volumes

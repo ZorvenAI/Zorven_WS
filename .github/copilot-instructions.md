@@ -15,7 +15,7 @@ AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand buil
 | AI | Google Gemini 2.0 Flash (`GeminiAIService` singleton) |
 | Database | PostgreSQL (Neon) with `django-tenants` (schema-based multi-tenancy) |
 | Gateway | Kong (DB-less): JWT auth, CORS, rate limiting |
-| Queue | Celery + Redis (beat scheduler), Apache Kafka (event streaming) |
+| Queue | Celery + Redis (beat scheduler, `orchestration` queue), Apache Kafka (event streaming) |
 | Storage | Google Cloud Storage (2 buckets: raw + curated) |
 | Payments | Stripe (Basic $29 / Pro $79 / Enterprise $199) |
 | Deployment | Railway (Docker), GitHub Actions CI/CD |
@@ -42,6 +42,9 @@ docs/                         → Architecture docs, plans, guides
 7. **Encrypted tokens**: OAuth tokens live in `_access_token` columns, exposed via `@property` using `encrypt_token()`/`decrypt_token()`
 8. **Pipeline apps** (`data_ingestion/`, `media_curation/`, `rag_index/`): Use **Hexagonal Architecture** — Pydantic domain models (NOT Django ORM), ABC ports, concrete adapters
 9. **Test client**: Always set `client.defaults["SERVER_NAME"] = "localhost"` for tenant middleware
+10. **Orchestration callbacks**: Use `transaction.atomic()` + `select_for_update()` around job state updates to prevent concurrent callback races
+11. **SSRF prevention**: Validate external URLs in pipeline manifests against `ALLOWED_URL_PREFIXES` allowlist
+12. **JSON size limits**: Validate `progress` and `result_data` payloads ≤ 1 MB in `CallbackSerializer`
 
 ### Frontend
 
@@ -116,6 +119,32 @@ const data = await apiClient.get('/companies/');
 ### File Upload Deduplication
 Backend: `UniqueConstraint(fields=["tenant", "company", "file_name"])` on `BrandAsset`. Returns HTTP 409 with existing asset info. Frontend catches via `DuplicateFileError`, shows replace dialog.
 
+### Orchestration Callback Pattern
+```python
+# Callback endpoint uses service-to-service auth (X-Callback-Token), not JWT
+# Lock job row to prevent concurrent callback races
+with transaction.atomic():
+    try:
+        job = AnalysisJob.objects.select_for_update().get(job_id=job_id)
+    except AnalysisJob.DoesNotExist:
+        return Response({"error": "Job not found"}, status=404)
+    # ... update fields ...
+    job.save(update_fields=update_fields)
+```
+
+### Frontend Polling (setTimeout, not setInterval)
+```tsx
+// usePollingJob.ts — prevents overlapping fetches
+const poll = async () => {
+  await fetchJob();
+  setJob((prev) => {
+    if (prev?.status === 'completed' || prev?.status === 'failed') return prev;
+    timer = setTimeout(poll, intervalMs);
+    return prev;
+  });
+};
+```
+
 ## Key Files Reference
 
 | Purpose | Path |
@@ -137,6 +166,12 @@ Backend: `UniqueConstraint(fields=["tenant", "company", "file_name"])` on `Brand
 | Tenant context | `ai-brand-automator-frontend/src/contexts/TenantContext.tsx` |
 | Tenant hooks | `ai-brand-automator-frontend/src/hooks/useTenantRole.ts` |
 | Architecture | `ARCHITECTURE.md` |
+| Orchestration views | `ai-brand-automator/orchestration/views.py` |
+| Orchestration service | `ai-brand-automator/orchestration/services.py` |
+| Orchestration tasks | `ai-brand-automator/orchestration/tasks.py` |
+| Orchestration types (FE) | `ai-brand-automator-frontend/src/types/orchestration.ts` |
+| Orchestration API (FE) | `ai-brand-automator-frontend/src/lib/orchestration.ts` |
+| Polling hook (FE) | `ai-brand-automator-frontend/src/hooks/usePollingJob.ts` |
 
 ## Build & Run
 
@@ -152,7 +187,7 @@ cd ai-brand-automator-frontend && npm run dev
 cd deployment && docker compose up
 
 # Tests
-cd ai-brand-automator && pytest -v          # 1890+ backend tests
+cd ai-brand-automator && pytest -v          # 1970+ backend tests (87 orchestration)
 cd ai-brand-automator-frontend && npm test  # Jest (60% coverage threshold)
 
 # Format & lint
@@ -170,6 +205,11 @@ STRIPE_SECRET_KEY=<stripe-key>
 DATABASE_URL=<neon-postgres-url>
 KONG_ENABLED=false                           # true only behind Kong
 KAFKA_CONSUMERS_ENABLED=false                # true for Kafka pipeline
+ORCHESTRATOR_URL=http://localhost:8010       # pipeline-orchestrator-svc URL
+ORCHESTRATOR_SERVICE_TOKEN=<service-token>   # Auth for dispatch (core-api → orchestrator)
+ORCHESTRATOR_CALLBACK_TOKEN=<callback-token> # Auth for callbacks (orchestrator → core-api)
+ORCHESTRATOR_TIMEOUT=30                      # HTTP timeout for dispatch calls
+BACKEND_URL=http://localhost:8001            # Used to build callback URL
 
 # Frontend (.env.local)
 NEXT_PUBLIC_API_URL=http://localhost:8000     # Auto-detected via env.ts in browser

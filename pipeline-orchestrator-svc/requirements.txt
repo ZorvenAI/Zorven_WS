@@ -1,0 +1,9 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+httpx>=0.27.0
+redis>=5.0.0
+langgraph>=0.2.0
+langgraph-checkpoint-redis>=0.1.0
+aiokafka>=0.11.0
