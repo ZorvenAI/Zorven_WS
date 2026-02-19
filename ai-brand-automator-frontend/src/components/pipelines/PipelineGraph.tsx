@@ -92,9 +92,19 @@ function topologicalOrder(
     }
   }
 
-  // Include any remaining nodes (isolated or cyclic fallback)
-  for (const n of nodes) {
-    if (!order.includes(n.id)) order.push(n.id);
+  // Include any remaining nodes (isolated or cyclic fallback).
+  // If any nodes remain here, we likely have a cycle or malformed manifest.
+  const remaining = nodes.filter((n) => !order.includes(n.id));
+  if (remaining.length > 0) {
+    // Backend should already validate manifests as acyclic; reaching this
+    // branch indicates a potential bug or data inconsistency.
+    console.warn(
+      '[PipelineGraph] Detected cyclic or unresolvable nodes in manifest:',
+      remaining.map((n) => n.id),
+    );
+    for (const n of remaining) {
+      order.push(n.id);
+    }
   }
 
   return order;

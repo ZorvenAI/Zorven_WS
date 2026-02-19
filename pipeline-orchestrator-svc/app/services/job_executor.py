@@ -28,6 +28,10 @@ class JobExecutor:
             callback_token=settings.CALLBACK_TOKEN,
         )
 
+    async def close(self) -> None:
+        """Close the underlying callback HTTP client."""
+        await self.callback.close()
+
     async def execute(self, request: DispatchRequest) -> None:
         """
         Execute a pipeline job end-to-end.
@@ -93,31 +97,20 @@ class JobExecutor:
             nodes = manifest_data.get("nodes", [])
             node_ids = [n["id"] for n in nodes]
 
-            for node_id in node_ids:
-                # Check cancel flag
-                if await self._is_cancelled(job_id):
-                    logger.info("Job %s cancelled", job_id)
-                    state["progress"][node_id] = {
-                        "status": "failed",
-                        "output": {"reason": "Job cancelled by user"},
-                        "completed_at": self._now_iso(),
-                    }
-                    await self.callback.send_failed(
-                        callback_url,
-                        error_message="Job cancelled by user",
-                        progress=state["progress"],
-                    )
-                    return
+            # Check cancel flag before starting execution
+            if await self._is_cancelled(job_id):
+                logger.info("Job %s cancelled before execution", job_id)
+                await self.callback.send_failed(
+                    callback_url,
+                    error_message="Job cancelled by user",
+                    progress=state["progress"],
+                )
+                return
 
-                # Mark node as running
-                state["progress"][node_id] = {
-                    "status": "running",
-                    "started_at": self._now_iso(),
-                }
-                await self.callback.send_progress(callback_url, state["progress"])
-
-            # Now invoke the compiled graph
-            # LangGraph executes nodes in dependency order
+            # Invoke the compiled graph
+            # LangGraph executes nodes in dependency order.
+            # Per-node progress is reported via the progress dict
+            # updated as the graph transitions state.
             try:
                 result_state = await compiled_graph.ainvoke(
                     state,

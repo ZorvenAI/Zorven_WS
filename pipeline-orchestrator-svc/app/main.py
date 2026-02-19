@@ -43,6 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Start Kafka consumer loop in background if connected
     consumer_task = None
+    executor = None
     if trigger_consumer.is_connected:
         from app.services.job_executor import JobExecutor
 
@@ -60,6 +61,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except asyncio.CancelledError:
             pass
 
+    if executor is not None:
+        await executor.close()
+
     await trigger_consumer.stop()
     await trace_producer.stop()
     await close_redis()
@@ -76,8 +80,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:8000",
+        origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()
     ],
     allow_credentials=True,
     allow_methods=["*"],

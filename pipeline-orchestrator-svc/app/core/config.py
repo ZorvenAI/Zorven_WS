@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # Kafka connection
     KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
 
+    # CORS origins (comma-separated list of allowed origins)
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
+
     # Server
     HOST: str = "0.0.0.0"
     PORT: int = 8010

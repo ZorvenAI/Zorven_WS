@@ -96,7 +96,9 @@ export async function getManifestGraphData(
       return data as unknown as ManifestGraphData;
     }
     return null;
-  } catch {
+  } catch (err) {
+    // Log the error for debugging — distinguish from "no graph data"
+    console.error('[getManifestGraphData] Failed to fetch manifest:', err);
     return null;
   }
 }

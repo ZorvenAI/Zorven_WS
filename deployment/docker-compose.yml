@@ -530,7 +530,12 @@ services:
       - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
       - ORCHESTRATOR_REDIS_URL=redis://redis:6379/1
-      - ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=
+      - ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=${ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS:-}
+      # Kafka integration is disabled by default (empty bootstrap servers).
+      # To enable Kafka when running the full event streaming stack, either:
+      #   export ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      # or uncomment the line below:
+      #   - ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - ORCHESTRATOR_LOG_LEVEL=INFO
     expose:
       - "8010"

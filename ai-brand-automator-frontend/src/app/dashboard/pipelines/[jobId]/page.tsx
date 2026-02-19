@@ -117,7 +117,7 @@ export default function JobDetailPage({ params }: PageProps) {
       setLogEntries((prev) => [...prev, ...newEntries]);
     }
     prevProgressRef.current = job.progress;
-  }, [job, job?.progress]);
+  }, [job?.progress]);
 
   const handleCancel = useCallback(async () => {
     if (!job) return;

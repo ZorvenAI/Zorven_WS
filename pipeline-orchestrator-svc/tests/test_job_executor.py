@@ -140,8 +140,8 @@ class TestJobExecutor:
         executor.callback.send_failed.assert_called()
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
-    async def test_progress_callbacks_sent_per_node(self, mock_get_redis):
-        """Each node execution triggers a progress callback."""
+    async def test_completed_includes_progress_for_all_nodes(self, mock_get_redis):
+        """Completed callback includes progress entries for every node."""
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None
         mock_get_redis.return_value = mock_redis
@@ -155,8 +155,15 @@ class TestJobExecutor:
         request = _make_request()
         await executor.execute(request)
 
-        # Should have at least 2 progress calls (one per node)
-        assert executor.callback.send_progress.call_count >= 2
+        # Completed callback must include progress for all nodes
+        executor.callback.send_completed.assert_called_once()
+        call_kwargs = executor.callback.send_completed.call_args.kwargs
+        progress = call_kwargs.get("progress", {})
+        assert "strategy" in progress
+        assert "report" in progress
+        # All nodes should be marked done
+        for node_id in ("strategy", "report"):
+            assert progress[node_id]["status"] == "done"
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_redis_failure_doesnt_crash(self, mock_get_redis):

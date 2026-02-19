@@ -14,11 +14,28 @@ logger = logging.getLogger(__name__)
 
 
 class CallbackClient:
-    """HTTP client for sending job progress/results to core-api-service."""
+    """HTTP client for sending job progress/results to core-api-service.
+
+    Uses a reusable httpx.AsyncClient to avoid connection pool overhead
+    from creating a new client per request.
+    """
 
     def __init__(self, callback_token: str, timeout: float = 30.0):
         self.callback_token = callback_token
         self.timeout = timeout
+        self._client: httpx.AsyncClient | None = None
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Return a reusable AsyncClient, creating one if needed."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=self.timeout)
+        return self._client
+
+    async def close(self) -> None:
+        """Close the underlying HTTP client. Call on shutdown."""
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -33,19 +50,19 @@ class CallbackClient:
         Returns True on success, False on failure (non-fatal).
         """
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.patch(
-                    callback_url,
-                    json=payload,
-                    headers=self._headers(),
-                )
-                response.raise_for_status()
-                logger.debug(
-                    "Callback sent to %s: %s",
-                    callback_url,
-                    payload.get("status", "progress"),
-                )
-                return True
+            client = await self._get_client()
+            response = await client.patch(
+                callback_url,
+                json=payload,
+                headers=self._headers(),
+            )
+            response.raise_for_status()
+            logger.debug(
+                "Callback sent to %s: %s",
+                callback_url,
+                payload.get("status", "progress"),
+            )
+            return True
         except httpx.HTTPError as exc:
             logger.error(
                 "Callback failed for %s: %s",
