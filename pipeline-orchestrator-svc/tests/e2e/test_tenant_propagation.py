@@ -29,9 +29,7 @@ class TestTenantPropagation:
         executor.callback.send_progress.return_value = True
         executor.callback.send_completed.return_value = True
 
-        request = make_dispatch_request(
-            brand_analysis_manifest, tenant_id="tenant-42"
-        )
+        request = make_dispatch_request(brand_analysis_manifest, tenant_id="tenant-42")
         await executor.execute(request)
 
         assert len(mock_discovery_service) == 1
@@ -53,9 +51,7 @@ class TestTenantPropagation:
         executor.callback.send_progress.return_value = True
         executor.callback.send_completed.return_value = True
 
-        request = make_dispatch_request(
-            brand_analysis_manifest, tenant_id="tenant-99"
-        )
+        request = make_dispatch_request(brand_analysis_manifest, tenant_id="tenant-99")
         await executor.execute(request)
 
         payload = mock_discovery_service[0]["payload"]
@@ -120,9 +116,7 @@ class TestTenantPropagation:
         executor.callback.send_progress.return_value = True
         executor.callback.send_completed.return_value = True
 
-        request = make_dispatch_request(
-            brand_analysis_manifest, tenant_id="tenant-77"
-        )
+        request = make_dispatch_request(brand_analysis_manifest, tenant_id="tenant-77")
         await executor.execute(request)
 
         payload = mock_discovery_service[0]["payload"]

@@ -1,6 +1,6 @@
 """Tests for RedisManager — caching and rate limiting logic."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 from app.cache.redis_manager import (
     PAGE_CACHE_TTL,

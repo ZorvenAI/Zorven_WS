@@ -4,15 +4,12 @@ Verifies the service handles failures in Redis, Tavily, scraping,
 and other external dependencies without crashing.
 """
 
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from httpx import AsyncClient
 
-from app.api import routes
 from app.api.schemas import ExecuteRequest
-from app.cache.redis_manager import RedisManager
 from app.scrapers.browser_engine import BrowserEngine, ScrapeResult
 from app.scrapers.data_cleaner import DataCleaner
 from app.scrapers.search_engine import SearchEngine
@@ -108,7 +105,11 @@ class TestScrapeFailure:
         # Override stub to control URLs
         search_engine._search_stub = MagicMock(
             return_value=[
-                {"title": "OK Page", "url": "https://ok.com", "snippet": "Good content"},
+                {
+                    "title": "OK Page",
+                    "url": "https://ok.com",
+                    "snippet": "Good content",
+                },
                 {"title": "Bad Page", "url": "https://bad.com", "snippet": ""},
             ]
         )

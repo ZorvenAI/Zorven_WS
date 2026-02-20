@@ -79,9 +79,7 @@ class BrowserEngine:
             logger.warning("Timeout scraping %s", url)
             return ScrapeResult(html="", content_type="", status_code=0)
         except httpx.HTTPStatusError as exc:
-            logger.warning(
-                "HTTP %d scraping %s", exc.response.status_code, url
-            )
+            logger.warning("HTTP %d scraping %s", exc.response.status_code, url)
             return ScrapeResult(
                 html="", content_type="", status_code=exc.response.status_code
             )

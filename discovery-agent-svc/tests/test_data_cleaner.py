@@ -14,25 +14,19 @@ class TestHtmlToMarkdown:
 
     def test_strips_script_tags(self) -> None:
         cleaner = DataCleaner()
-        result = cleaner.clean(
-            "<p>Good content</p><script>alert('evil')</script>"
-        )
+        result = cleaner.clean("<p>Good content</p><script>alert('evil')</script>")
         assert "alert" not in result
         assert "Good content" in result
 
     def test_strips_style_tags(self) -> None:
         cleaner = DataCleaner()
-        result = cleaner.clean(
-            "<style>body{color:red}</style><p>Visible text</p>"
-        )
+        result = cleaner.clean("<style>body{color:red}</style><p>Visible text</p>")
         assert "color:red" not in result
         assert "Visible text" in result
 
     def test_strips_nav_elements(self) -> None:
         cleaner = DataCleaner()
-        result = cleaner.clean(
-            "<nav><a href='/'>Home</a></nav><p>Main content</p>"
-        )
+        result = cleaner.clean("<nav><a href='/'>Home</a></nav><p>Main content</p>")
         assert "Main content" in result
         # nav should be stripped
         assert "<nav>" not in result
@@ -55,9 +49,7 @@ class TestHtmlToMarkdown:
 
     def test_only_scripts_returns_empty(self) -> None:
         cleaner = DataCleaner()
-        result = cleaner.clean(
-            "<script>var x = 1;</script><style>.a{}</style>"
-        )
+        result = cleaner.clean("<script>var x = 1;</script><style>.a{}</style>")
         assert result == ""
 
     def test_truncates_long_content(self) -> None:

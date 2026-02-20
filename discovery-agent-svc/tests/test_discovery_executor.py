@@ -31,17 +31,29 @@ def _make_executor(
     """Create an executor with mocked dependencies."""
     mock_search = AsyncMock()
     mock_search.search = AsyncMock(
-        return_value=search_results
-        if search_results is not None
-        else [
-            {"title": "Result 1", "url": "https://example.com/1", "snippet": "Finding about markets"},
-            {"title": "Result 2", "url": "https://example.com/2", "snippet": "Competitor data"},
-        ]
+        return_value=(
+            search_results
+            if search_results is not None
+            else [
+                {
+                    "title": "Result 1",
+                    "url": "https://example.com/1",
+                    "snippet": "Finding about markets",
+                },
+                {
+                    "title": "Result 2",
+                    "url": "https://example.com/2",
+                    "snippet": "Competitor data",
+                },
+            ]
+        )
     )
 
     mock_browser = AsyncMock()
     mock_browser.scrape = AsyncMock(
-        return_value=ScrapeResult(html=scrape_html, content_type="text/html", status_code=200)
+        return_value=ScrapeResult(
+            html=scrape_html, content_type="text/html", status_code=200
+        )
     )
 
     from app.scrapers.data_cleaner import DataCleaner
@@ -138,11 +150,17 @@ class TestSearchAndScrape:
     async def test_skips_downloadable_files(self) -> None:
         executor, _, mock_browser, _ = _make_executor(
             search_results=[
-                {"title": "PDF Report", "url": "https://example.com/report.pdf", "snippet": "A PDF"},
+                {
+                    "title": "PDF Report",
+                    "url": "https://example.com/report.pdf",
+                    "snippet": "A PDF",
+                },
             ]
         )
         mock_browser.scrape = AsyncMock(
-            return_value=ScrapeResult(html="", content_type="application/pdf", status_code=200)
+            return_value=ScrapeResult(
+                html="", content_type="application/pdf", status_code=200
+            )
         )
         request = _make_request()
         response = await executor.execute(request, "tenant-1")
@@ -175,7 +193,9 @@ class TestEmptyResults:
         )
         mock_browser = AsyncMock()
         mock_browser.scrape = AsyncMock(
-            return_value=ScrapeResult(html="<p>Hi</p>", content_type="text/html", status_code=200)
+            return_value=ScrapeResult(
+                html="<p>Hi</p>", content_type="text/html", status_code=200
+            )
         )
         from app.scrapers.data_cleaner import DataCleaner
 

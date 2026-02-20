@@ -1,6 +1,6 @@
 """Tests for SearchEngine — Tavily integration with caching."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from app.scrapers.search_engine import SearchEngine
 
@@ -39,7 +39,15 @@ class TestCacheIntegration:
 
     async def test_returns_cached_result_on_hit(self) -> None:
         mock_redis = AsyncMock()
-        cached_data = {"results": [{"title": "Cached", "url": "https://cached.com", "snippet": "From cache"}]}
+        cached_data = {
+            "results": [
+                {
+                    "title": "Cached",
+                    "url": "https://cached.com",
+                    "snippet": "From cache",
+                }
+            ]
+        }
         mock_redis.get_cached_search = AsyncMock(return_value=cached_data)
 
         engine = SearchEngine(tavily_api_key="", redis_manager=mock_redis)
@@ -73,7 +81,11 @@ class TestTavilyMode:
         mock_client = MagicMock()
         mock_client.search.return_value = {
             "results": [
-                {"title": "Real Result", "url": "https://real.com", "content": "Real content"}
+                {
+                    "title": "Real Result",
+                    "url": "https://real.com",
+                    "content": "Real content",
+                }
             ]
         }
         engine._tavily_client = mock_client

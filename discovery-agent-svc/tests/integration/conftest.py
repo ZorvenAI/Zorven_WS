@@ -6,7 +6,7 @@ All tests marked with @pytest.mark.integration.
 
 import os
 from typing import Any, AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 import redis.asyncio as aioredis
@@ -14,7 +14,6 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api import routes
 from app.cache.redis_manager import RedisManager
-from app.core.config import settings
 from app.main import app
 from app.scrapers.browser_engine import BrowserEngine, ScrapeResult
 from app.scrapers.data_cleaner import DataCleaner
@@ -37,7 +36,9 @@ async def redis_client() -> AsyncGenerator[aioredis.Redis, None]:
 
 
 @pytest.fixture
-async def redis_manager(redis_client: aioredis.Redis) -> AsyncGenerator[RedisManager, None]:
+async def redis_manager(
+    redis_client: aioredis.Redis,
+) -> AsyncGenerator[RedisManager, None]:
     """RedisManager wired to real Redis."""
     manager = RedisManager(REDIS_URL)
     manager._redis = redis_client
@@ -110,18 +111,20 @@ def browser_engine_with_mock(
     """BrowserEngine backed by real Redis, HTTP mocked."""
     engine = BrowserEngine(timeout=10, redis_manager=redis_manager)
 
-    original_scrape = engine.scrape
-
     async def mock_scrape(url: str, tenant_id: str = "") -> ScrapeResult:
         # Check real Redis cache first
         if engine.redis_manager:
             cached = await engine.redis_manager.get_cached_page(url)
             if cached is not None:
-                return ScrapeResult(html=cached, content_type="text/markdown", status_code=200)
+                return ScrapeResult(
+                    html=cached, content_type="text/markdown", status_code=200
+                )
 
         # Return mock HTML instead of making real HTTP request
         html = mock_html_pages.get(url, "")
-        return ScrapeResult(html=html, content_type="text/html", status_code=200 if html else 404)
+        return ScrapeResult(
+            html=html, content_type="text/html", status_code=200 if html else 404
+        )
 
     engine.scrape = mock_scrape
     return engine

@@ -1,6 +1,7 @@
 """E2E test: competitor-audit pipeline flow.
 
-Pipeline: RouterNode → competitor_research (discovery) → gap_analyzer (intelligence, stubbed) → report_generator
+Pipeline: RouterNode -> competitor_research (discovery)
+-> gap_analyzer (intelligence, stubbed) -> report_generator
 """
 
 from unittest.mock import AsyncMock, patch
@@ -77,7 +78,12 @@ class TestCompetitorAuditPipeline:
         call_kwargs = executor.callback.send_completed.call_args.kwargs
         progress = call_kwargs["progress"]
 
-        for node_id in ["intent_router", "competitor_research", "gap_analyzer", "report_generator"]:
+        for node_id in [
+            "intent_router",
+            "competitor_research",
+            "gap_analyzer",
+            "report_generator",
+        ]:
             assert node_id in progress
             assert progress[node_id]["status"] == "done"
 

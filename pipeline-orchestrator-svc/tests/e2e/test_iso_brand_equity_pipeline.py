@@ -1,6 +1,7 @@
 """E2E test: iso-brand-equity pipeline flow.
 
-Pipeline: RouterNode → web_research (discovery) → valuation_logic (intelligence, stubbed) → manager
+Pipeline: RouterNode -> web_research (discovery)
+-> valuation_logic (intelligence, stubbed) -> manager
 
 This manifest uses ManagerNode as terminal, which aggregates findings and
 recommendations from all node outputs into result_data. The intelligence
@@ -89,8 +90,10 @@ class TestIsoBrandEquityPipeline:
         assert len(result_data["findings"]) > 0
 
         # Should include findings from discovery response
-        assert any("brand equity" in f.lower() or "market" in f.lower()
-                    for f in result_data["findings"])
+        assert any(
+            "brand equity" in f.lower() or "market" in f.lower()
+            for f in result_data["findings"]
+        )
 
         # Should include findings from intelligence stub
         assert any("stub" in f.lower() for f in result_data["findings"])
@@ -114,7 +117,9 @@ class TestIsoBrandEquityPipeline:
         await executor.execute(request)
 
         payload = mock_discovery_service[0]["payload"]
-        assert payload["config"]["focus"] == "royalty_rates,market_trends,brand_rankings"
+        assert (
+            payload["config"]["focus"] == "royalty_rates,market_trends,brand_rankings"
+        )
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_progress_has_all_four_nodes_done(

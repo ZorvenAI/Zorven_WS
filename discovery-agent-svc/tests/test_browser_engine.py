@@ -3,9 +3,8 @@
 from unittest.mock import AsyncMock
 
 import httpx
-import pytest
 
-from app.scrapers.browser_engine import BrowserEngine, ScrapeResult
+from app.scrapers.browser_engine import BrowserEngine
 
 
 class TestScraping:

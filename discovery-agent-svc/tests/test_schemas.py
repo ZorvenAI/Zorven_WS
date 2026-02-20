@@ -112,7 +112,9 @@ class TestSourceItem:
         assert item.type == "document"
 
     def test_financial_source(self) -> None:
-        item = SourceItem(type="financial", title="10-K Filing", url="https://sec.gov/...")
+        item = SourceItem(
+            type="financial", title="10-K Filing", url="https://sec.gov/..."
+        )
         assert item.type == "financial"
 
     def test_defaults(self) -> None:
@@ -238,7 +240,12 @@ class TestTraceEvent:
         event = TraceEvent(job_id="j1", message="m1")
         data = event.model_dump()
         assert set(data.keys()) == {
-            "job_id", "node_id", "status", "message", "metadata", "timestamp"
+            "job_id",
+            "node_id",
+            "status",
+            "message",
+            "metadata",
+            "timestamp",
         }
 
 
@@ -286,5 +293,10 @@ class TestAuditEvent:
         )
         data = event.model_dump()
         assert set(data.keys()) == {
-            "job_id", "tenant_id", "url", "raw_html", "cleaned_markdown", "timestamp"
+            "job_id",
+            "tenant_id",
+            "url",
+            "raw_html",
+            "cleaned_markdown",
+            "timestamp",
         }

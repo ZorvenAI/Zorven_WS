@@ -1,6 +1,6 @@
 """Tests for FileHandler — GCS upload and ingestion event emission."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from app.services.file_handler import FileHandler
 
@@ -27,7 +27,9 @@ class TestGCSUpload:
         assert handler._stub_mode is True
         result = await handler.handle_downloadable(
             url="https://example.com/data.xlsx",
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content_type=(
+                "application/vnd.openxmlformats" "-officedocument.spreadsheetml.sheet"
+            ),
             content_bytes=b"excel content",
             tenant_id="tenant-1",
         )

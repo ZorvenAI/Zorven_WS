@@ -5,13 +5,10 @@ and routed through FileHandler instead of the HTML cleaning pipeline.
 """
 
 import json
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from httpx import AsyncClient
 
-from app.scrapers.browser_engine import ScrapeResult
 from app.scrapers.data_cleaner import DataCleaner
 from app.services.file_handler import FileHandler
 
@@ -27,10 +24,13 @@ class TestFileDetection:
 
     async def test_excel_detected_as_downloadable(self) -> None:
         cleaner = DataCleaner()
-        assert cleaner.is_downloadable(
-            "data.xlsx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ) is True
+        assert (
+            cleaner.is_downloadable(
+                "data.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            is True
+        )
 
     async def test_html_not_downloadable(self) -> None:
         cleaner = DataCleaner()
@@ -122,7 +122,9 @@ class TestIngestionEventEmission:
         handler = FileHandler(kafka_producer=mock_producer)
         await handler.handle_downloadable(
             url="https://example.com/data.xlsx",
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content_type=(
+                "application/vnd.openxmlformats" "-officedocument.spreadsheetml.sheet"
+            ),
             content_bytes=b"excel content",
             tenant_id="tenant-1",
             job_id="job-42",
@@ -135,7 +137,10 @@ class TestIngestionEventEmission:
         event = json.loads(raw_event)
         assert event["source"] == "api-integration"
         assert event["tenant_id"] == "tenant-1"
-        assert event["file_type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        assert (
+            event["file_type"]
+            == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
         assert event["metadata"]["source_url"] == "https://example.com/data.xlsx"
         assert event["metadata"]["job_id"] == "job-42"
         assert "event_id" in event

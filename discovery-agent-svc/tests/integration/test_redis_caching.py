@@ -3,9 +3,6 @@
 Verifies search cache, page cache, and TTL behavior.
 """
 
-from typing import Any
-from unittest.mock import MagicMock
-
 import pytest
 import redis.asyncio as aioredis
 
@@ -35,11 +32,11 @@ class TestSearchCache:
         search_engine_with_mock: SearchEngine,
     ) -> None:
         # First call — hits the stub
-        results1 = await search_engine_with_mock.search("brand analysis")
+        await search_engine_with_mock.search("brand analysis")
         call_count_after_first = search_engine_with_mock._search_stub.call_count
 
         # Second call — should come from cache
-        results2 = await search_engine_with_mock.search("brand analysis")
+        await search_engine_with_mock.search("brand analysis")
         call_count_after_second = search_engine_with_mock._search_stub.call_count
 
         # Stub should not have been called a second time

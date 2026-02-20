@@ -36,9 +36,7 @@ class SearchEngine:
         else:
             logger.info("Search engine running in stub mode (no API key)")
 
-    async def search(
-        self, query: str, max_results: int = 5
-    ) -> list[dict[str, str]]:
+    async def search(self, query: str, max_results: int = 5) -> list[dict[str, str]]:
         """
         Search the web for the given query.
 
@@ -59,9 +57,7 @@ class SearchEngine:
 
         # Cache results
         if self.redis_manager and results:
-            await self.redis_manager.set_cached_search(
-                query, {"results": results}
-            )
+            await self.redis_manager.set_cached_search(query, {"results": results})
 
         return results
 
@@ -92,8 +88,6 @@ class SearchEngine:
     @staticmethod
     def _search_stub(query: str, max_results: int) -> list[dict[str, str]]:
         """Return realistic mock search results based on query keywords."""
-        keywords = query.lower().split()
-
         stub_sources = [
             {
                 "title": f"Market Analysis: {query[:60]}",

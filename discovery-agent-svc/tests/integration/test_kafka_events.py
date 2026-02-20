@@ -3,13 +3,10 @@
 Uses a capture fixture instead of a real Kafka broker.
 """
 
-import json
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
-from app.api.schemas import ExecuteRequest
 from app.messaging.kafka_producer import AuditProducer, TraceProducer
 
 pytestmark = pytest.mark.integration
@@ -80,6 +77,4 @@ class TestAuditEventEmission:
         assert not producer.is_connected
 
         # Should not raise
-        await producer.send_audit(
-            "job-1", "tenant-1", "https://x.com", "html", "md"
-        )
+        await producer.send_audit("job-1", "tenant-1", "https://x.com", "html", "md")

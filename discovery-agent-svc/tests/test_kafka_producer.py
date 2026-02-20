@@ -1,7 +1,6 @@
 """Tests for Kafka producers — trace and audit event emission."""
 
-import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 from app.messaging.kafka_producer import AuditProducer, TraceProducer
 
@@ -92,8 +91,7 @@ class TestAuditProducer:
         producer._connected = True
 
         await producer.send_audit(
-            "job-1", "tenant-1", "https://example.com",
-            "<h1>Raw</h1>", "# Cleaned"
+            "job-1", "tenant-1", "https://example.com", "<h1>Raw</h1>", "# Cleaned"
         )
         event = mock_kafka.send_and_wait.call_args.args[1]
         assert event["raw_html"] == "<h1>Raw</h1>"

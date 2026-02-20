@@ -5,7 +5,7 @@ The ExecuteRequest matches the payload sent by the orchestrator's
 ExternalWrapper (pipeline-orchestrator-svc/app/nodes/external_wrapper.py).
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -27,9 +27,7 @@ class ExecuteRequest(BaseModel):
     {input_prompt, input_context, tenant_context, config, previous_outputs}
     """
 
-    input_prompt: str = Field(
-        ..., description="The user's query or analysis request"
-    )
+    input_prompt: str = Field(..., description="The user's query or analysis request")
     input_context: dict[str, Any] = Field(
         default_factory=dict, description="Additional context from the user"
     )

@@ -88,7 +88,12 @@ class TestContentStrategyPipeline:
         call_kwargs = executor.callback.send_completed.call_args.kwargs
         progress = call_kwargs["progress"]
 
-        for node_id in ["intent_router", "audience_analyzer", "content_planner", "calendar_builder"]:
+        for node_id in [
+            "intent_router",
+            "audience_analyzer",
+            "content_planner",
+            "calendar_builder",
+        ]:
             assert node_id in progress
             assert progress[node_id]["status"] == "done"
 

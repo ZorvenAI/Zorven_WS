@@ -25,8 +25,6 @@ from app.api.schemas import (
     ManifestNode,
     TenantContext,
 )
-from app.services.job_executor import JobExecutor
-
 
 # ---------------------------------------------------------------------------
 # Discovery Agent Mock — implements the real discovery ExecuteResponse contract
@@ -74,9 +72,21 @@ def _build_discovery_response(payload: dict[str, Any]) -> dict[str, Any]:
 
     # Mock search results (matches SearchEngine._search_stub)
     sources = [
-        {"type": "web", "title": f"Market Analysis: {query[:40]}", "url": "https://example.com/market-analysis"},
-        {"type": "web", "title": f"Industry Report: {query[:40]}", "url": "https://example.com/industry-report"},
-        {"type": "web", "title": f"Competitive Intel: {query[:40]}", "url": "https://example.com/competitive-intel"},
+        {
+            "type": "web",
+            "title": f"Market Analysis: {query[:40]}",
+            "url": "https://example.com/market-analysis",
+        },
+        {
+            "type": "web",
+            "title": f"Industry Report: {query[:40]}",
+            "url": "https://example.com/industry-report",
+        },
+        {
+            "type": "web",
+            "title": f"Competitive Intel: {query[:40]}",
+            "url": "https://example.com/competitive-intel",
+        },
     ]
 
     # Findings from "cleaned" HTML (simulating DataCleaner output)
@@ -94,7 +104,8 @@ def _build_discovery_response(payload: dict[str, Any]) -> dict[str, Any]:
     raw_context = (
         "# Market Analysis\n\nThe brand equity market shows strong growth in Q4.\n\n"
         "---\n\n"
-        "# Industry Report\n\nFinancial benchmarks indicate premium brand positioning.\n\n"
+        "# Industry Report\n\n"
+        "Financial benchmarks indicate premium brand positioning.\n\n"
         "---\n\n"
         "# Competitive Intelligence\n\nSWOT analysis reveals strong market positioning."
     )
@@ -112,6 +123,7 @@ def _build_discovery_response(payload: dict[str, Any]) -> dict[str, Any]:
 # Seed manifest definitions (matching seed_manifests.py)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def brand_analysis_manifest() -> ManifestData:
     """brand-analysis seed manifest."""
@@ -124,7 +136,9 @@ def brand_analysis_manifest() -> ManifestData:
                 url="http://discovery-agent-svc/v1/search",
                 config={"focus": "market_trends,competitors"},
             ),
-            ManifestNode(id="brand_strategist", type="internal", handler="StrategyNode"),
+            ManifestNode(
+                id="brand_strategist", type="internal", handler="StrategyNode"
+            ),
             ManifestNode(id="report_generator", type="internal", handler="ReportNode"),
         ],
         edges=[
@@ -200,9 +214,13 @@ def content_strategy_manifest() -> ManifestData:
     return ManifestData(
         nodes=[
             ManifestNode(id="intent_router", type="internal", handler="RouterNode"),
-            ManifestNode(id="audience_analyzer", type="internal", handler="AudienceNode"),
+            ManifestNode(
+                id="audience_analyzer", type="internal", handler="AudienceNode"
+            ),
             ManifestNode(id="content_planner", type="internal", handler="PlannerNode"),
-            ManifestNode(id="calendar_builder", type="internal", handler="CalendarNode"),
+            ManifestNode(
+                id="calendar_builder", type="internal", handler="CalendarNode"
+            ),
         ],
         edges=[
             ["intent_router", "audience_analyzer"],
@@ -216,6 +234,7 @@ def content_strategy_manifest() -> ManifestData:
 # ---------------------------------------------------------------------------
 # pytest-httpx configuration — apply to all E2E tests
 # ---------------------------------------------------------------------------
+
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Allow unused httpx_mock callbacks and reusable responses for all E2E tests."""
@@ -231,6 +250,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 # Mock infrastructure
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_discovery_service(httpx_mock):
     """
@@ -243,11 +263,13 @@ def mock_discovery_service(httpx_mock):
 
     def discovery_callback(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
-        captured_requests.append({
-            "url": str(request.url),
-            "headers": dict(request.headers),
-            "payload": payload,
-        })
+        captured_requests.append(
+            {
+                "url": str(request.url),
+                "headers": dict(request.headers),
+                "payload": payload,
+            }
+        )
         response_data = _build_discovery_response(payload)
         return httpx.Response(status_code=200, json=response_data)
 
@@ -310,7 +332,9 @@ def mock_redis_cancel():
     mock_redis = AsyncMock()
     mock_redis.get.return_value = None  # not cancelled
 
-    with patch("app.services.job_executor.get_redis", new_callable=AsyncMock) as mock_get_redis:
+    with patch(
+        "app.services.job_executor.get_redis", new_callable=AsyncMock
+    ) as mock_get_redis:
         mock_get_redis.return_value = mock_redis
         yield mock_redis
 
@@ -318,6 +342,7 @@ def mock_redis_cancel():
 # ---------------------------------------------------------------------------
 # Dispatch request factory
 # ---------------------------------------------------------------------------
+
 
 def make_dispatch_request(
     manifest: ManifestData,
@@ -337,7 +362,9 @@ def make_dispatch_request(
             gcs_processed_bucket=f"brand-automator-curated/{tenant_id}/",
             rag_data_store_id="ds-123",
         ),
-        callback_url=f"http://backend:8001/api/v1/orchestration/jobs/{job_id}/callback/",
+        callback_url=(
+            f"http://backend:8001/api/v1/orchestration/jobs/{job_id}/callback/"
+        ),
     )
 
 
@@ -352,7 +379,9 @@ def make_auto_detect_request(
         input_prompt=input_prompt,
         input_context={},
         tenant_context=TenantContext(tenant_id="1"),
-        callback_url=f"http://backend:8001/api/v1/orchestration/jobs/{job_id}/callback/",
+        callback_url=(
+            f"http://backend:8001/api/v1/orchestration/jobs/{job_id}/callback/"
+        ),
         available_manifests=[
             AvailableManifest(
                 pipeline_id="iso-brand-equity",

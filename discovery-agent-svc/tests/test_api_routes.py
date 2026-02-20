@@ -89,9 +89,7 @@ class TestExecuteEndpoint:
             assert "title" in source
             assert "url" in source
 
-    async def test_execute_empty_body_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_execute_empty_body_returns_422(self, client: AsyncClient) -> None:
         response = await client.post("/v1/execute", content=b"")
         assert response.status_code == 422
 
@@ -119,9 +117,7 @@ class TestExecuteEndpoint:
         # Should still work with default tenant
         assert response.status_code == 200
 
-    async def test_execute_minimal_payload(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_execute_minimal_payload(self, client: AsyncClient) -> None:
         response = await client.post(
             "/v1/execute",
             json={"input_prompt": "test query"},
@@ -172,16 +168,12 @@ class TestSearchAlias:
 class TestSeedManifestFocusValues:
     """Verify all three config.focus values from seed manifests work."""
 
-    async def test_iso_brand_equity_focus(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_iso_brand_equity_focus(self, client: AsyncClient) -> None:
         response = await client.post(
             "/v1/search",
             json={
                 "input_prompt": "Brand equity valuation",
-                "config": {
-                    "focus": "royalty_rates,market_trends,brand_rankings"
-                },
+                "config": {"focus": "royalty_rates,market_trends,brand_rankings"},
             },
         )
         assert response.status_code == 200
@@ -190,9 +182,7 @@ class TestSeedManifestFocusValues:
         assert "market_trends" in data["query"]
         assert "brand_rankings" in data["query"]
 
-    async def test_brand_analysis_focus(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_brand_analysis_focus(self, client: AsyncClient) -> None:
         response = await client.post(
             "/v1/search",
             json={
@@ -205,9 +195,7 @@ class TestSeedManifestFocusValues:
         assert "market_trends" in data["query"]
         assert "competitors" in data["query"]
 
-    async def test_competitor_audit_focus(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_competitor_audit_focus(self, client: AsyncClient) -> None:
         response = await client.post(
             "/v1/search",
             json={

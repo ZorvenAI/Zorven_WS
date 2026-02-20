@@ -14,7 +14,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
-from typing import Any, Optional
+from typing import Any
 
 from app.api.schemas import SourceItem
 
@@ -53,9 +53,7 @@ class FileHandler:
                         project=self.gcs_project_id,
                     )
                 else:
-                    self._gcs_client = storage.Client(
-                        project=self.gcs_project_id
-                    )
+                    self._gcs_client = storage.Client(project=self.gcs_project_id)
             except Exception as exc:
                 logger.error("Failed to initialize GCS client: %s", exc)
                 self._stub_mode = True
@@ -143,7 +141,10 @@ class FileHandler:
         }
 
         try:
-            if hasattr(self.kafka_producer, "_producer") and self.kafka_producer._producer:
+            if (
+                hasattr(self.kafka_producer, "_producer")
+                and self.kafka_producer._producer
+            ):
                 await self.kafka_producer._producer.send_and_wait(
                     "raw-ingestion-topic",
                     json.dumps(event).encode("utf-8"),

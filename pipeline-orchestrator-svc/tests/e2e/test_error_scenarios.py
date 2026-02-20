@@ -7,7 +7,6 @@ callbacks, and invalid manifests without crashing.
 from unittest.mock import AsyncMock, patch
 
 import httpx
-import pytest
 
 from app.api.schemas import ManifestData, ManifestNode
 from app.services.job_executor import JobExecutor
@@ -195,7 +194,9 @@ class TestCallbackFailure:
         # send_running succeeds but send_completed fails
         executor.callback.send_running.return_value = True
         executor.callback.send_progress.return_value = True
-        executor.callback.send_completed.side_effect = Exception("Callback URL unreachable")
+        executor.callback.send_completed.side_effect = Exception(
+            "Callback URL unreachable"
+        )
         executor.callback.send_failed.return_value = True
 
         request = make_dispatch_request(brand_analysis_manifest)

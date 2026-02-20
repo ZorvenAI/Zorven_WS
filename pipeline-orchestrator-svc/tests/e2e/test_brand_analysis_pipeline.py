@@ -111,7 +111,12 @@ class TestBrandAnalysisPipeline:
         call_kwargs = executor.callback.send_completed.call_args.kwargs
         progress = call_kwargs.get("progress", {})
 
-        expected_nodes = ["intent_router", "market_research", "brand_strategist", "report_generator"]
+        expected_nodes = [
+            "intent_router",
+            "market_research",
+            "brand_strategist",
+            "report_generator",
+        ]
         for node_id in expected_nodes:
             assert node_id in progress, f"Missing progress for {node_id}"
             assert progress[node_id]["status"] == "done", f"{node_id} not done"
@@ -120,7 +125,7 @@ class TestBrandAnalysisPipeline:
     async def test_discovery_receives_correct_payload(
         self, mock_get_redis, brand_analysis_manifest, mock_discovery_service
     ):
-        """Discovery receives input_prompt, config.focus, tenant_context, previous_outputs."""
+        """Discovery receives input_prompt, config, tenant_context."""
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None
         mock_get_redis.return_value = mock_redis

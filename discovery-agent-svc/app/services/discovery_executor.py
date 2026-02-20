@@ -90,9 +90,7 @@ class DiscoveryExecutor:
             if not url:
                 continue
 
-            logger.debug(
-                "Scraping %d/%d: %s", i + 1, len(search_results), url
-            )
+            logger.debug("Scraping %d/%d: %s", i + 1, len(search_results), url)
 
             # Scrape the URL
             scrape_result = await self.browser_engine.scrape(url, tenant_id)
@@ -101,9 +99,7 @@ class DiscoveryExecutor:
             if scrape_result.content_type and self.data_cleaner.is_downloadable(
                 url, scrape_result.content_type
             ):
-                sources.append(
-                    SourceItem(type="document", title=title or url, url=url)
-                )
+                sources.append(SourceItem(type="document", title=title or url, url=url))
                 findings.append(f"Downloadable document found: {title or url}")
                 continue
 
@@ -121,9 +117,7 @@ class DiscoveryExecutor:
 
                 if cleaned:
                     raw_parts.append(cleaned)
-                    sources.append(
-                        SourceItem(type="web", title=title or url, url=url)
-                    )
+                    sources.append(SourceItem(type="web", title=title or url, url=url))
 
                     # Extract key finding from snippet or cleaned content
                     if snippet:
@@ -165,16 +159,12 @@ class DiscoveryExecutor:
         return " ".join(parts)
 
     @staticmethod
-    def _build_recommendations(
-        query: str, findings: list[str]
-    ) -> list[str]:
+    def _build_recommendations(query: str, findings: list[str]) -> list[str]:
         """Build simple recommendations based on the search results."""
         recommendations = []
 
         if not findings:
-            recommendations.append(
-                "No results found. Try broadening the search query."
-            )
+            recommendations.append("No results found. Try broadening the search query.")
         else:
             recommendations.append(
                 f"Review the {len(findings)} findings for actionable insights."
