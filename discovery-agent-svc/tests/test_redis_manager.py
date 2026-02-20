@@ -155,7 +155,7 @@ class TestConnection:
         manager._redis = mock_redis
 
         await manager.close()
-        mock_redis.close.assert_called_once()
+        mock_redis.aclose.assert_called_once()
         assert manager._redis is None
 
     async def test_close_when_not_connected(self) -> None:

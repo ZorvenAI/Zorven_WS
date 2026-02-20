@@ -43,7 +43,7 @@ class RedisManager:
     async def close(self) -> None:
         """Close the Redis connection."""
         if self._redis is not None:
-            await self._redis.close()
+            await self._redis.aclose()
             self._redis = None
 
     @staticmethod
