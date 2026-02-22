@@ -223,11 +223,19 @@
     margin-bottom: 0.25rem;
   }
 
-  /* Navigation bar */
+  /* Navigation bar (top) */
   .nav-dark {
     background: rgba(10, 11, 16, 0.95);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* Sidebar navigation (left) */
+  .sidebar-nav {
+    background: rgba(10, 11, 16, 0.98);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   /* Dashboard card */

@@ -5,6 +5,8 @@
  * Renders:
  *   - Radial gauge meters for each equity pillar (Awareness, Sentiment, Financials)
  *   - Central brand equity score
+ *   - NPV valuation bar and 5-year forecast chart (when valuation data present)
+ *   - BSI pillar radar chart (when pillar data present)
  *   - Grounding citations with source links
  *   - Structured findings & recommendations
  *
@@ -22,6 +24,9 @@ import {
   Globe,
   DollarSign,
 } from 'lucide-react';
+import { formatCompact, formatPercent } from '@/lib/utils/iso-formatters';
+import NpvChart from '@/components/dashboard/npv-chart';
+import PillarRadar from '@/components/dashboard/pillar-radar';
 
 interface BrandEquityDashboardProps {
   resultData: Record<string, unknown>;
@@ -128,6 +133,36 @@ export default function BrandEquityDashboard({
     | { type?: string; title?: string; url?: string }[]
     | undefined;
 
+  // ISO 10668 valuation data (from intelligence-agent-svc via ManagerNode)
+  const valuation = resultData.valuation as
+    | {
+        brand_value_npv?: number;
+        royalty_rate?: number;
+        discount_rate?: number;
+        tax_rate?: number;
+        horizon_years?: number;
+        annual_royalties?: number[];
+        methodology?: string;
+      }
+    | undefined;
+
+  // BSI pillar data for radar chart — extracted from node_results
+  const nodeResults = resultData.node_results as Record<string, Record<string, unknown>> | undefined;
+  const bsiPillars: { name: string; score: number; weight?: number }[] = [];
+  if (nodeResults) {
+    for (const output of Object.values(nodeResults)) {
+      const bsi = output?.bsi as { pillars?: { name: string; score: number; weight?: number }[] } | undefined;
+      if (bsi?.pillars && bsi.pillars.length > 0) {
+        bsiPillars.push(...bsi.pillars);
+        break;
+      }
+    }
+  }
+
+  const hasValuation = valuation && typeof valuation.brand_value_npv === 'number';
+  const hasAnnualRoyalties = valuation?.annual_royalties && valuation.annual_royalties.length > 0;
+  const hasRadarData = bsiPillars.length >= 3;
+
   const hasPillars =
     awareness !== null || sentiment !== null || financials !== null;
 
@@ -181,6 +216,54 @@ export default function BrandEquityDashboard({
           </button>
         </div>
       </div>
+
+      {/* NPV Valuation bar */}
+      {hasValuation && (
+        <div className="flex items-center justify-between rounded-lg bg-white/5 px-5 py-3">
+          <div>
+            <span className="text-xs font-medium text-brand-silver/50 uppercase tracking-widest">
+              Brand Valuation (NPV)
+            </span>
+            <p className="text-xl font-heading font-bold text-white">
+              {formatCompact(valuation.brand_value_npv!)}
+            </p>
+          </div>
+          <div className="flex gap-6 text-right">
+            {valuation.royalty_rate != null && (
+              <div>
+                <span className="text-[10px] text-brand-silver/40 uppercase">Royalty</span>
+                <p className="text-sm font-medium text-brand-silver">
+                  {formatPercent(valuation.royalty_rate)}
+                </p>
+              </div>
+            )}
+            {valuation.discount_rate != null && (
+              <div>
+                <span className="text-[10px] text-brand-silver/40 uppercase">WACC</span>
+                <p className="text-sm font-medium text-brand-silver">
+                  {formatPercent(valuation.discount_rate)}
+                </p>
+              </div>
+            )}
+            {valuation.horizon_years != null && (
+              <div>
+                <span className="text-[10px] text-brand-silver/40 uppercase">Horizon</span>
+                <p className="text-sm font-medium text-brand-silver">
+                  {valuation.horizon_years}yr
+                </p>
+              </div>
+            )}
+            {valuation.methodology && (
+              <div>
+                <span className="text-[10px] text-brand-silver/40 uppercase">Method</span>
+                <p className="text-sm font-medium text-brand-silver capitalize">
+                  {valuation.methodology.replace('_', ' ')}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Central score */}
       {score !== null && (
@@ -260,6 +343,31 @@ export default function BrandEquityDashboard({
           )}
           {financials !== null && (
             <RadialGauge label="Financials" score={financials} color="#14b8a6" />
+          )}
+        </div>
+      )}
+
+      {/* Charts row: NPV forecast + BSI radar */}
+      {(hasAnnualRoyalties || hasRadarData) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-2">
+          {hasAnnualRoyalties && (
+            <div className="flex flex-col items-center">
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+                5-Year Royalty Relief Forecast
+              </h4>
+              <NpvChart
+                annualRoyalties={valuation!.annual_royalties!}
+                totalNpv={valuation!.brand_value_npv}
+              />
+            </div>
+          )}
+          {hasRadarData && (
+            <div className="flex flex-col items-center">
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+                BSI Pillar Comparison
+              </h4>
+              <PillarRadar pillars={bsiPillars} />
+            </div>
           )}
         </div>
       )}
