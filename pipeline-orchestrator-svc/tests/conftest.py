@@ -29,7 +29,7 @@ def valid_dispatch_payload():
                 {
                     "id": "web_research",
                     "type": "external",
-                    "url": "http://discovery-agent-svc/v1/search",
+                    "url": "http://discovery-agent-svc:8020/v1/search",
                     "config": {"focus": "market_trends"},
                 },
             ],

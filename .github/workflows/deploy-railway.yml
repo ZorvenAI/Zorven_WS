@@ -22,6 +22,9 @@ jobs:
     outputs:
       backend-changed: ${{ steps.changes.outputs.backend }}
       frontend-changed: ${{ steps.changes.outputs.frontend }}
+      orchestrator-changed: ${{ steps.changes.outputs.orchestrator }}
+      discovery-changed: ${{ steps.changes.outputs.discovery }}
+      intelligence-changed: ${{ steps.changes.outputs.intelligence }}
     
     steps:
       - uses: actions/checkout@v4
@@ -34,9 +37,12 @@ jobs:
           # Ensure there is a previous commit to diff against.
           # If there is no HEAD~1 (e.g., first commit), treat everything as changed.
           if ! git rev-parse HEAD~1 >/dev/null 2>&1; then
-            echo "No previous commit found; treating backend and frontend as changed."
+            echo "No previous commit found; treating all services as changed."
             echo "backend=true" >> "$GITHUB_OUTPUT"
             echo "frontend=true" >> "$GITHUB_OUTPUT"
+            echo "orchestrator=true" >> "$GITHUB_OUTPUT"
+            echo "discovery=true" >> "$GITHUB_OUTPUT"
+            echo "intelligence=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           
@@ -52,6 +58,27 @@ jobs:
             echo "frontend=true" >> "$GITHUB_OUTPUT"
           else
             echo "frontend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if pipeline-orchestrator-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^pipeline-orchestrator-svc/'; then
+            echo "orchestrator=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "orchestrator=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if discovery-agent-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^discovery-agent-svc/'; then
+            echo "discovery=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "discovery=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if intelligence-agent-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^intelligence-agent-svc/'; then
+            echo "intelligence=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "intelligence=false" >> "$GITHUB_OUTPUT"
           fi
 
   # ==========================================================================
@@ -214,13 +241,133 @@ jobs:
           fi
 
   # ==========================================================================
+  # Deploy Pipeline Orchestrator to Railway (Optional - skipped if service doesn't exist)
+  # ==========================================================================
+  deploy-orchestrator:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.orchestrator-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Orchestrator
+        working-directory: pipeline-orchestrator-svc
+        run: |
+          if [ -n "${{ secrets.RAILWAY_ORCHESTRATOR_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_ORCHESTRATOR_SERVICE }} --detach
+          else
+            echo "RAILWAY_ORCHESTRATOR_SERVICE not set, skipping orchestrator deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for orchestrator deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          ORCH_URL="${{ secrets.RAILWAY_ORCHESTRATOR_URL }}"
+          if [ -n "$ORCH_URL" ]; then
+            curl -f "${ORCH_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_ORCHESTRATOR_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
+  # Deploy Discovery Agent to Railway (Optional - skipped if service doesn't exist)
+  # ==========================================================================
+  deploy-discovery-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.discovery-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Discovery Agent
+        working-directory: discovery-agent-svc
+        run: |
+          if [ -n "${{ secrets.RAILWAY_DISCOVERY_AGENT_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_DISCOVERY_AGENT_SERVICE }} --detach
+          else
+            echo "RAILWAY_DISCOVERY_AGENT_SERVICE not set, skipping discovery-agent deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for discovery-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          DISC_URL="${{ secrets.RAILWAY_DISCOVERY_AGENT_URL }}"
+          if [ -n "$DISC_URL" ]; then
+            curl -f "${DISC_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_DISCOVERY_AGENT_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
+  # Deploy Intelligence Agent to Railway (Optional - skipped if service doesn't exist)
+  # ==========================================================================
+  deploy-intelligence-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.intelligence-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Intelligence Agent
+        working-directory: intelligence-agent-svc
+        run: |
+          if [ -n "${{ secrets.RAILWAY_INTELLIGENCE_AGENT_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_INTELLIGENCE_AGENT_SERVICE }} --detach
+          else
+            echo "RAILWAY_INTELLIGENCE_AGENT_SERVICE not set, skipping intelligence-agent deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for intelligence-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          INTEL_URL="${{ secrets.RAILWAY_INTELLIGENCE_AGENT_URL }}"
+          if [ -n "$INTEL_URL" ]; then
+            curl -f "${INTEL_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_INTELLIGENCE_AGENT_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
   # Post-Deployment Notification
   # ==========================================================================
   notify:
     runs-on: ubuntu-latest
-    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server]
+    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent]
     if: always()
-    
+
     steps:
       - name: Deployment Summary
         run: |
@@ -233,5 +380,8 @@ jobs:
           echo "| Celery Worker | ${{ needs.deploy-celery-worker.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Celery Beat | ${{ needs.deploy-celery-beat.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| MCP Server | ${{ needs.deploy-mcp-server.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pipeline Orchestrator | ${{ needs.deploy-orchestrator.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Discovery Agent | ${{ needs.deploy-discovery-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Intelligence Agent | ${{ needs.deploy-intelligence-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

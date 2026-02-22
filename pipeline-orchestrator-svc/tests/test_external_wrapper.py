@@ -29,13 +29,13 @@ class TestExternalWrapper:
     async def test_successful_http_call(self, httpx_mock):
         """External service returns valid JSON."""
         httpx_mock.add_response(
-            url="http://discovery-agent-svc/v1/search",
+            url="http://discovery-agent-svc:8020/v1/search",
             method="POST",
             json={"analysis": "market trends found", "findings": ["Trend A"]},
         )
 
         wrapper = ExternalWrapper(
-            url="http://discovery-agent-svc/v1/search",
+            url="http://discovery-agent-svc:8020/v1/search",
             node_id="web_research",
         )
         result = await wrapper(_base_state())
@@ -47,13 +47,13 @@ class TestExternalWrapper:
     async def test_sends_tenant_id_header(self, httpx_mock):
         """Request includes X-Tenant-ID header from tenant_context."""
         httpx_mock.add_response(
-            url="http://discovery-agent-svc/v1/search",
+            url="http://discovery-agent-svc:8020/v1/search",
             method="POST",
             json={"result": "ok"},
         )
 
         wrapper = ExternalWrapper(
-            url="http://discovery-agent-svc/v1/search",
+            url="http://discovery-agent-svc:8020/v1/search",
             node_id="web_research",
         )
         await wrapper(_base_state())
@@ -83,13 +83,13 @@ class TestExternalWrapper:
     async def test_fallback_on_500_error(self, httpx_mock):
         """On 5xx response, returns stub data."""
         httpx_mock.add_response(
-            url="http://discovery-agent-svc/v1/search",
+            url="http://discovery-agent-svc:8020/v1/search",
             method="POST",
             status_code=500,
         )
 
         wrapper = ExternalWrapper(
-            url="http://discovery-agent-svc/v1/search",
+            url="http://discovery-agent-svc:8020/v1/search",
             node_id="web_research",
         )
         result = await wrapper(_base_state())

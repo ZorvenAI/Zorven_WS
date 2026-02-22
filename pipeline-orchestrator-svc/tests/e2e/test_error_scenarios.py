@@ -28,7 +28,7 @@ class TestDiscoveryServiceDown:
 
         # Register 500 response for discovery
         httpx_mock.add_response(
-            url="http://discovery-agent-svc/v1/search",
+            url="http://discovery-agent-svc:8020/v1/search",
             method="POST",
             status_code=500,
         )
@@ -57,7 +57,7 @@ class TestDiscoveryServiceDown:
 
         httpx_mock.add_exception(
             httpx.ConnectError("Connection refused"),
-            url="http://discovery-agent-svc/v1/search",
+            url="http://discovery-agent-svc:8020/v1/search",
             method="POST",
         )
 

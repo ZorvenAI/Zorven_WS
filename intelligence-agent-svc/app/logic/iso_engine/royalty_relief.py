@@ -1,0 +1,301 @@
+"""
+Royalty Relief brand valuation engine — ISO 10668 compliant.
+
+Implements the Royalty Relief methodology:
+  NPV = Sum[ (Revenue_t x RoyaltyRate x (1 - TaxRate)) / (1 + DiscountRate)^t ]
+
+Uses NumPy for vectorized financial calculations to avoid
+floating-point accumulation errors in high-value valuations.
+"""
+
+import logging
+from typing import Any
+
+import numpy as np
+
+from app.api.schemas import ValuationResult
+
+logger = logging.getLogger(__name__)
+
+# Default royalty rates by sector (ISO 10668 typical ranges: 2%-5%)
+SECTOR_ROYALTY_RATES: dict[str, float] = {
+    "technology": 0.04,
+    "software": 0.045,
+    "consumer_goods": 0.035,
+    "retail": 0.03,
+    "financial_services": 0.025,
+    "healthcare": 0.045,
+    "pharmaceuticals": 0.05,
+    "automotive": 0.03,
+    "luxury": 0.05,
+    "media": 0.04,
+    "default": 0.04,
+}
+
+# Default growth rate for stub revenue estimation
+DEFAULT_GROWTH_RATE = 0.05
+
+
+class RoyaltyReliefEngine:
+    """ISO 10668 compliant Royalty Relief brand valuation."""
+
+    def calculate_npv(
+        self,
+        projected_revenues: list[float],
+        royalty_rate: float,
+        discount_rate: float,
+        tax_rate: float = 0.25,
+    ) -> ValuationResult:
+        """
+        Calculate the Net Present Value of brand royalty savings.
+
+        NPV = Sum[ (Revenue_t x RoyaltyRate x (1 - TaxRate)) / (1 + r)^t ]
+
+        Args:
+            projected_revenues: Revenue forecast for each year (list length = horizon).
+            royalty_rate: Comparable royalty rate (e.g., 0.045 for 4.5%).
+            discount_rate: WACC or risk-adjusted discount rate.
+            tax_rate: Corporate tax rate (default 25%).
+
+        Returns:
+            ValuationResult with NPV and per-year breakdown.
+        """
+        if not projected_revenues:
+            return ValuationResult(
+                brand_value_npv=0.0,
+                royalty_rate=royalty_rate,
+                discount_rate=discount_rate,
+                tax_rate=tax_rate,
+                horizon_years=0,
+                annual_royalties=[],
+                methodology="royalty_relief",
+            )
+
+        years = np.arange(1, len(projected_revenues) + 1)
+        revenues = np.array(projected_revenues, dtype=np.float64)
+
+        # Post-tax royalty savings per year
+        royalties = revenues * royalty_rate * (1 - tax_rate)
+
+        # Discount factors
+        discount_factors = (1 + discount_rate) ** years
+
+        # Present values
+        present_values = royalties / discount_factors
+
+        npv = float(np.sum(present_values))
+
+        logger.info(
+            "Royalty Relief NPV: $%.2f (rate=%.3f, discount=%.3f, years=%d)",
+            npv,
+            royalty_rate,
+            discount_rate,
+            len(projected_revenues),
+        )
+
+        return ValuationResult(
+            brand_value_npv=round(npv, 2),
+            royalty_rate=royalty_rate,
+            discount_rate=discount_rate,
+            tax_rate=tax_rate,
+            horizon_years=len(projected_revenues),
+            annual_royalties=[round(float(r), 2) for r in royalties],
+            methodology="royalty_relief",
+        )
+
+    def estimate_revenues_from_context(
+        self,
+        previous_outputs: dict[str, Any],
+        input_context: dict[str, Any],
+        horizon_years: int = 5,
+    ) -> list[float]:
+        """
+        Extract or estimate a multi-year revenue forecast.
+
+        Priority:
+        1. input_context.projected_revenues — user-provided forecast
+        2. input_context.base_revenue + growth — single year extrapolated
+        3. previous_outputs discovery findings — attempt extraction
+        4. Fallback — stub revenue projection ($10M base, 5% growth)
+        """
+        # 1. Direct revenue forecast from user
+        if "projected_revenues" in input_context:
+            revenues = input_context["projected_revenues"]
+            if isinstance(revenues, list) and len(revenues) > 0:
+                logger.info("Using user-provided revenue forecast (%d years)", len(revenues))
+                return [float(r) for r in revenues]
+
+        # 2. Base revenue + growth rate
+        base_revenue = input_context.get("base_revenue") or input_context.get(
+            "annual_revenue"
+        )
+        if base_revenue is not None:
+            base = float(base_revenue)
+            growth = float(input_context.get("growth_rate", DEFAULT_GROWTH_RATE))
+            revenues = [base * (1 + growth) ** t for t in range(horizon_years)]
+            logger.info(
+                "Extrapolated revenues from base $%.0f at %.1f%% growth",
+                base,
+                growth * 100,
+            )
+            return revenues
+
+        # 3. Try to extract from discovery findings (structured fields)
+        for node_id, output in previous_outputs.items():
+            if isinstance(output, dict):
+                rev = output.get("estimated_revenue") or output.get("revenue")
+                if rev is not None:
+                    base = float(rev)
+                    revenues = [
+                        base * (1 + DEFAULT_GROWTH_RATE) ** t
+                        for t in range(horizon_years)
+                    ]
+                    logger.info(
+                        "Extracted revenue from node '%s': $%.0f", node_id, base
+                    )
+                    return revenues
+
+        # 4. Try to parse revenue from discovery raw_context or findings text
+        extracted = self._extract_revenue_from_text(previous_outputs)
+        if extracted is not None:
+            revenues = [
+                extracted * (1 + DEFAULT_GROWTH_RATE) ** t
+                for t in range(horizon_years)
+            ]
+            logger.info(
+                "Extracted revenue from discovery text: $%.0f", extracted
+            )
+            return revenues
+
+        # 5. Stub fallback
+        stub_base = 10_000_000.0
+        revenues = [
+            stub_base * (1 + DEFAULT_GROWTH_RATE) ** t for t in range(horizon_years)
+        ]
+        logger.warning(
+            "No revenue data found — using stub projection ($%.0fM base)", stub_base / 1e6
+        )
+        return revenues
+
+    @staticmethod
+    def select_royalty_rate(
+        sector: str, benchmarks: dict[str, float] | None = None
+    ) -> float:
+        """
+        Select the appropriate royalty rate for a sector.
+
+        Args:
+            sector: Industry sector (e.g., "technology", "healthcare").
+            benchmarks: Optional cached benchmark rates by sector.
+
+        Returns:
+            Royalty rate as a float (e.g., 0.045 for 4.5%).
+        """
+        sector_lower = sector.lower().strip()
+
+        # Check cached benchmarks first
+        if benchmarks and sector_lower in benchmarks:
+            return benchmarks[sector_lower]
+
+        # Fall back to built-in defaults
+        return SECTOR_ROYALTY_RATES.get(sector_lower, SECTOR_ROYALTY_RATES["default"])
+
+    @staticmethod
+    def _extract_revenue_from_text(
+        previous_outputs: dict[str, Any],
+    ) -> float | None:
+        """
+        Try to extract a revenue figure from discovery text outputs.
+
+        Searches raw_context and findings for patterns like:
+          "$51.2 billion", "$51.2B", "revenue of $51.2 billion",
+          "$12.5 million", "$12.5M"
+        """
+        import re
+
+        texts: list[str] = []
+        for node_id, output in previous_outputs.items():
+            if isinstance(output, dict):
+                raw_ctx = output.get("raw_context", "")
+                if raw_ctx:
+                    texts.append(raw_ctx)
+                findings = output.get("findings", [])
+                if isinstance(findings, list):
+                    texts.extend(str(f) for f in findings)
+
+        if not texts:
+            return None
+
+        combined = " ".join(texts)
+
+        # Match patterns: $X.Y billion/million/B/M
+        patterns = [
+            # "$51.2 billion" or "$51.2billion"
+            r"\$\s*([\d,.]+)\s*billion",
+            r"\$\s*([\d,.]+)\s*B\b",
+            # "$12.5 million" or "$12.5million"
+            r"\$\s*([\d,.]+)\s*million",
+            r"\$\s*([\d,.]+)\s*M\b",
+            # "revenue of $X,XXX,XXX" or "revenue: $X,XXX"
+            r"revenue[^$]*\$\s*([\d,.]+)",
+        ]
+
+        multipliers = {
+            "billion": 1e9,
+            "B": 1e9,
+            "million": 1e6,
+            "M": 1e6,
+        }
+
+        for pattern in patterns:
+            match = re.search(pattern, combined, re.IGNORECASE)
+            if match:
+                try:
+                    value_str = match.group(1).replace(",", "")
+                    value = float(value_str)
+                    # Determine multiplier from pattern context
+                    full_match = match.group(0).lower()
+                    if "billion" in full_match or full_match.endswith("b"):
+                        value *= 1e9
+                    elif "million" in full_match or full_match.endswith("m"):
+                        value *= 1e6
+                    elif value < 1000:
+                        # Small number without unit — likely in millions
+                        value *= 1e6
+                    if value > 0:
+                        logger.info(
+                            "Parsed revenue from text: $%.0f (pattern: %s)",
+                            value,
+                            pattern,
+                        )
+                        return value
+                except (ValueError, IndexError):
+                    continue
+
+        return None
+
+    @staticmethod
+    def build_rationale(
+        result: ValuationResult,
+        sector: str,
+        bsi_score: int | None = None,
+    ) -> str:
+        """Build a human-readable rationale for the valuation."""
+        lines = [
+            f"Methodology: Royalty Relief (ISO 10668)",
+            f"Sector: {sector}",
+            f"Royalty Rate: {result.royalty_rate:.1%}",
+            f"Discount Rate (WACC): {result.discount_rate:.1%}",
+            f"Tax Rate: {result.tax_rate:.1%}",
+            f"Forecast Horizon: {result.horizon_years} years",
+        ]
+        if bsi_score is not None:
+            lines.append(f"Brand Strength Index (BSI): {bsi_score}/100")
+        lines.append(
+            f"Brand Value (NPV): ${result.brand_value_npv:,.2f}",
+        )
+        lines.append("")
+        lines.append("Annual Post-Tax Royalties:")
+        for i, royalty in enumerate(result.annual_royalties, 1):
+            lines.append(f"  Year {i}: ${royalty:,.2f}")
+        return "\n".join(lines)

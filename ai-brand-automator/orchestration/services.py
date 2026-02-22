@@ -174,10 +174,11 @@ class OrchestratorDispatcher:
         }
 
         # When manifest is null (auto-detect mode), include catalog
+        # with full manifest_data so orchestrator can execute after routing
         if job.manifest is None:
             payload["available_manifests"] = list(
                 PipelineManifest.objects.filter(is_active=True).values(
-                    "pipeline_id", "name", "description"
+                    "pipeline_id", "name", "description", "manifest_data"
                 )
             )
 
