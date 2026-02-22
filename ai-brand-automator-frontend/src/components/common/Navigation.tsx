@@ -2,11 +2,29 @@
 
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { useState, useSyncExternalStore, useEffect } from 'react';
+import { useState, useSyncExternalStore, useEffect, useCallback } from 'react';
+import {
+  LayoutDashboard,
+  Compass,
+  MessageSquare,
+  FolderOpen,
+  Zap,
+  GitBranch,
+  Bot,
+  BarChart3,
+  Users,
+  CreditCard,
+  PanelLeftClose,
+  PanelLeft,
+  Menu,
+  X,
+  LogOut,
+} from 'lucide-react';
 import { WorkspaceSwitcher } from '@/components/layout/WorkspaceSwitcher';
 import { useTenantRole } from '@/hooks/useTenantRole';
 
-// External store for localStorage token
+// ── Auth token store ──
+
 function subscribeToToken(callback: () => void) {
   window.addEventListener('storage', callback);
   return () => window.removeEventListener('storage', callback);
@@ -21,22 +39,58 @@ function getServerSnapshot() {
   return null;
 }
 
-export function Navigation() {
+// ── Sidebar collapsed state (localStorage) ──
+
+function readCollapsed(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem('sidebar_collapsed') === '1';
+}
+
+// ── Types ──
+
+interface NavLink {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+}
+
+// ── Main component ──
+
+export function Navigation({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const token = useSyncExternalStore(subscribeToToken, getTokenSnapshot, getServerSnapshot);
   const [, forceUpdate] = useState(0);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { canManageTeam, canManageBilling, canEdit: canEditFlag } = useTenantRole();
-  
-  // Derive login state from token
+
   const isLoggedIn = !!token;
 
-  // Close mobile menu when route changes
+  // Sidebar state
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
+
+  // Read persisted state on mount (requestAnimationFrame avoids sync setState in effect)
   useEffect(() => {
-    // Use requestAnimationFrame to avoid synchronous setState in effect
-    requestAnimationFrame(() => setMobileMenuOpen(false));
+    requestAnimationFrame(() => {
+      setCollapsed(readCollapsed());
+      setHasMounted(true);
+    });
+  }, []);
+
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    requestAnimationFrame(() => setMobileOpen(false));
   }, [pathname]);
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem('sidebar_collapsed', next ? '1' : '0');
+      return next;
+    });
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
@@ -44,148 +98,180 @@ export function Navigation() {
     localStorage.removeItem('company_id');
     localStorage.removeItem('tenants');
     localStorage.removeItem('active_tenant_id');
-    forceUpdate(n => n + 1); // Trigger re-render after logout
-    setMobileMenuOpen(false);
+    forceUpdate((n) => n + 1);
+    setMobileOpen(false);
     router.push('/auth/login');
   };
 
-  // Don't show navigation on auth pages
+  // On auth pages, render children without shell
   if (pathname?.startsWith('/auth/')) {
-    return null;
+    return <>{children}</>;
   }
 
-  const navLinks = [
-    { href: '/dashboard', label: 'Dashboard', active: pathname === '/dashboard' },
+  // Icon size for nav links
+  const iconCls = 'w-5 h-5 shrink-0';
+
+  const navLinks: NavLink[] = [
+    { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className={iconCls} />, active: pathname === '/dashboard' },
     ...(canEditFlag
-      ? [{ href: '/onboarding', label: 'Onboarding', active: pathname?.startsWith('/onboarding') ?? false }]
+      ? [{ href: '/onboarding', label: 'Onboarding', icon: <Compass className={iconCls} />, active: pathname?.startsWith('/onboarding') ?? false }]
       : []),
     ...(canEditFlag
-      ? [{ href: '/chat', label: 'Chat', active: pathname === '/chat' }]
+      ? [{ href: '/chat', label: 'Chat', icon: <MessageSquare className={iconCls} />, active: pathname === '/chat' }]
       : []),
-    { href: '/files', label: 'Files', active: pathname === '/files' },
-    { href: '/automation', label: 'Automation', active: pathname === '/automation' },
-    { href: '/dashboard/pipelines', label: 'Pipelines', active: pathname?.startsWith('/dashboard/pipelines') ?? false },
+    { href: '/files', label: 'Files', icon: <FolderOpen className={iconCls} />, active: pathname === '/files' },
+    { href: '/automation', label: 'Automation', icon: <Zap className={iconCls} />, active: pathname === '/automation' },
+    { href: '/dashboard/pipelines', label: 'Pipelines', icon: <GitBranch className={iconCls} />, active: pathname?.startsWith('/dashboard/pipelines') ?? false },
     ...(canEditFlag
-      ? [{ href: '/dashboard/ai-assistant', label: 'AI Assistant', active: pathname?.startsWith('/dashboard/ai-assistant') ?? false }]
+      ? [{ href: '/dashboard/ai-assistant', label: 'AI Assistant', icon: <Bot className={iconCls} />, active: pathname?.startsWith('/dashboard/ai-assistant') ?? false }]
       : []),
-    { href: '/dashboard/analysis', label: 'Reports', active: pathname?.startsWith('/dashboard/analysis') ?? false },
+    { href: '/dashboard/analysis', label: 'Reports', icon: <BarChart3 className={iconCls} />, active: pathname?.startsWith('/dashboard/analysis') ?? false },
     ...(canManageTeam
-      ? [{ href: '/dashboard/team', label: 'Team', active: pathname === '/dashboard/team' }]
+      ? [{ href: '/dashboard/team', label: 'Team', icon: <Users className={iconCls} />, active: pathname === '/dashboard/team' }]
       : []),
     ...(canManageBilling
-      ? [{ href: '/billing', label: 'Billing', active: pathname === '/billing' }]
+      ? [{ href: '/billing', label: 'Billing', icon: <CreditCard className={iconCls} />, active: pathname === '/billing' }]
       : []),
   ];
 
+  // Sidebar width classes
+  const sidebarW = collapsed ? 'w-16' : 'w-56';
+  const contentPl = collapsed ? 'md:pl-16' : 'md:pl-56';
+
   return (
-    <nav className="nav-dark relative z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          <div className="flex items-center">
-            <Link href="/" className="flex-shrink-0 flex items-center">
-              <span className="text-lg sm:text-2xl font-heading font-bold text-brand-electric">AI Brand Automator</span>
-            </Link>
+    <>
+      {/* ── Fixed top bar ── */}
+      <header className="fixed top-0 left-0 right-0 h-14 z-40 nav-dark flex items-center justify-between px-4">
+        <div className="flex items-center gap-3">
+          {/* Mobile hamburger */}
+          {isLoggedIn && (
+            <button
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="md:hidden p-1.5 rounded-md text-brand-silver hover:text-white hover:bg-white/10 transition-colors"
+              aria-label="Toggle sidebar"
+            >
+              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          )}
 
-            {/* Workspace Switcher (desktop) */}
-            {isLoggedIn && (
-              <div className="hidden md:block ml-4">
-                <WorkspaceSwitcher />
-              </div>
-            )}
-            
-            {/* Desktop Navigation */}
-            {isLoggedIn && (
-              <div className="hidden md:ml-10 md:flex md:space-x-8">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
-                      link.active
-                        ? 'border-brand-electric text-white'
-                        : 'border-transparent text-brand-silver/70 hover:border-brand-ghost hover:text-white'
-                    }`}
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Desktop Logout/Login */}
-            {isLoggedIn ? (
-              <button
-                onClick={handleLogout}
-                className="hidden sm:block text-sm text-brand-silver/70 hover:text-brand-electric transition-colors px-3 py-1.5 rounded-md hover:bg-white/5"
-              >
-                Logout
-              </button>
-            ) : (
-              <Link
-                href="/auth/login"
-                className="btn-primary text-sm"
-              >
-                Login
-              </Link>
-            )}
-
-            {/* Mobile Menu Button */}
-            {isLoggedIn && (
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="md:hidden inline-flex items-center justify-center p-2 rounded-md text-brand-silver hover:text-white hover:bg-white/10 transition-colors"
-                aria-expanded={mobileMenuOpen}
-                aria-label="Toggle navigation menu"
-              >
-                {mobileMenuOpen ? (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                ) : (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  </svg>
-                )}
-              </button>
-            )}
-          </div>
+          {/* Logo */}
+          <Link href="/" className="flex items-center">
+            <span className="text-lg font-heading font-bold text-brand-electric">
+              AI Brand Automator
+            </span>
+          </Link>
         </div>
-      </div>
 
-      {/* Mobile Menu Dropdown */}
-      {isLoggedIn && mobileMenuOpen && (
-        <div className="md:hidden absolute top-16 left-0 right-0 bg-brand-midnight/95 backdrop-blur-lg border-b border-white/10 shadow-xl">
-          <div className="px-4 py-3 space-y-1">
-            {/* Mobile workspace switcher */}
-            <div className="pb-2 mb-2 border-b border-white/10">
-              <WorkspaceSwitcher />
-            </div>
+        <div className="flex items-center gap-3">
+          {/* Workspace Switcher */}
+          {isLoggedIn && hasMounted && <WorkspaceSwitcher />}
+
+          {/* Logout / Login */}
+          {isLoggedIn ? (
+            <button
+              onClick={handleLogout}
+              className="hidden sm:flex items-center gap-1.5 text-sm text-brand-silver/70 hover:text-brand-electric transition-colors px-2 py-1.5 rounded-md hover:bg-white/5"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden lg:inline">Logout</span>
+            </button>
+          ) : (
+            <Link href="/auth/login" className="btn-primary text-sm">
+              Login
+            </Link>
+          )}
+        </div>
+      </header>
+
+      {/* ── Mobile backdrop ── */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* ── Sidebar ── */}
+      {isLoggedIn && (
+        <aside
+          className={`
+            fixed top-14 bottom-0 z-30 sidebar-nav
+            flex flex-col
+            transition-all duration-300 ease-in-out
+            ${/* Desktop: always visible, respects collapsed */ ''}
+            hidden md:flex ${sidebarW}
+            ${/* Mobile: overlay, always expanded width */ ''}
+            ${mobileOpen ? '!flex w-56 shadow-2xl' : ''}
+          `}
+        >
+          {/* Nav links */}
+          <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`block px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                  link.active
-                    ? 'bg-brand-electric/20 text-brand-electric'
-                    : 'text-brand-silver hover:bg-white/10 hover:text-white'
-                }`}
+                title={collapsed && !mobileOpen ? link.label : undefined}
+                onClick={() => setMobileOpen(false)}
+                className={`
+                  flex items-center gap-3 rounded-lg px-3 py-2.5
+                  text-sm font-medium transition-colors
+                  ${link.active
+                    ? 'bg-brand-electric/10 text-brand-electric border-l-2 border-brand-electric -ml-0.5 pl-[10px]'
+                    : 'text-brand-silver/70 hover:bg-white/5 hover:text-white'
+                  }
+                `}
               >
-                {link.label}
+                {link.icon}
+                {(!collapsed || mobileOpen) && (
+                  <span className="truncate">{link.label}</span>
+                )}
               </Link>
             ))}
-            <div className="border-t border-white/10 mt-2 pt-2">
+          </nav>
+
+          {/* Collapse toggle (desktop only) */}
+          <div className="hidden md:block border-t border-white/8 p-2">
+            <button
+              onClick={toggleCollapsed}
+              className="flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-sm text-brand-silver/50 hover:text-white hover:bg-white/5 transition-colors"
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {collapsed ? (
+                <PanelLeft className="w-5 h-5 shrink-0" />
+              ) : (
+                <>
+                  <PanelLeftClose className="w-5 h-5 shrink-0" />
+                  <span className="truncate">Collapse</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Mobile logout */}
+          {mobileOpen && (
+            <div className="md:hidden border-t border-white/8 p-2">
               <button
                 onClick={handleLogout}
-                className="w-full text-left px-4 py-3 rounded-lg text-base font-medium text-red-400 hover:bg-red-500/10 transition-colors"
+                className="flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
               >
-                Logout
+                <LogOut className="w-5 h-5 shrink-0" />
+                <span>Logout</span>
               </button>
             </div>
-          </div>
-        </div>
+          )}
+        </aside>
       )}
-    </nav>
+
+      {/* ── Content area ── */}
+      <div
+        className={`
+          pt-14 min-h-screen
+          transition-all duration-300 ease-in-out
+          ${isLoggedIn ? contentPl : ''}
+        `}
+      >
+        {children}
+      </div>
+    </>
   );
 }

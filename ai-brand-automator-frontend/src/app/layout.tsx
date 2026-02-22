@@ -58,8 +58,7 @@ export default function RootLayout({
       >
         <ErrorBoundary>
           <TenantProvider>
-            <Navigation />
-            {children}
+            <Navigation>{children}</Navigation>
             <ToastContainer />
           </TenantProvider>
         </ErrorBoundary>
