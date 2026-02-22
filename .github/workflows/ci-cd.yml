@@ -162,6 +162,96 @@ jobs:
           files: ./ai-brand-automator/coverage.xml
           flags: media-curation
   
+  # Pipeline Orchestrator Tests
+  orchestrator-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd pipeline-orchestrator-svc
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: |
+          cd pipeline-orchestrator-svc
+          pytest tests/ -v --cov=app --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./pipeline-orchestrator-svc/coverage.xml
+          flags: orchestrator
+
+  # Discovery Agent Tests
+  discovery-agent-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd discovery-agent-svc
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: |
+          cd discovery-agent-svc
+          pytest tests/ -v -m "not integration" --cov=app --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./discovery-agent-svc/coverage.xml
+          flags: discovery-agent
+
+  # Intelligence Agent Tests
+  intelligence-agent-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd intelligence-agent-svc
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: |
+          cd intelligence-agent-svc
+          pytest tests/ -v -m "not integration" --cov=app --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./intelligence-agent-svc/coverage.xml
+          flags: intelligence-agent
+
   # Frontend Tests
   frontend-tests:
     runs-on: ubuntu-latest
@@ -207,10 +297,48 @@ jobs:
           files: ./ai-brand-automator-frontend/coverage/coverage-final.json
           flags: frontend
   
+  # Integration Tests (cross-service, Docker-based)
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: [orchestrator-tests, discovery-agent-tests, intelligence-agent-tests]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build test stack
+        run: |
+          cd tests/integration
+          docker compose -f docker-compose.test.yml up -d --build --wait
+        timeout-minutes: 10
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install test dependencies
+        run: pip install -r tests/integration/requirements.txt
+
+      - name: Run Phase 1 - Contract Tests
+        run: pytest -c tests/integration/pytest.ini tests/integration/phase1_contracts/ -v --timeout=60
+
+      - name: Run Phase 2 - Domain Tests
+        run: pytest -c tests/integration/pytest.ini tests/integration/phase2_domain/ -v --timeout=120
+
+      - name: Run Phase 3 - Stress Tests
+        run: pytest -c tests/integration/pytest.ini tests/integration/phase3_stress/ -v --timeout=300
+
+      - name: Teardown
+        if: always()
+        run: |
+          cd tests/integration
+          docker compose -f docker-compose.test.yml down -v
+
   # Build Docker Images
   build-images:
     runs-on: ubuntu-latest
-    needs: [backend-tests, test-media-curation, frontend-tests]
+    needs: [backend-tests, test-media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, frontend-tests, integration-tests]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     
     steps:
@@ -238,3 +366,18 @@ jobs:
         run: |
           cd ai-brand-automator
           docker build -f Dockerfile.curation-consumer -t ai-brand-automator-curation:${{ github.sha }} .
+
+      - name: Build orchestrator image
+        run: |
+          cd pipeline-orchestrator-svc
+          docker build -t ai-brand-automator-orchestrator:${{ github.sha }} .
+
+      - name: Build discovery agent image
+        run: |
+          cd discovery-agent-svc
+          docker build -t ai-brand-automator-discovery:${{ github.sha }} .
+
+      - name: Build intelligence agent image
+        run: |
+          cd intelligence-agent-svc
+          docker build -t ai-brand-automator-intelligence:${{ github.sha }} .

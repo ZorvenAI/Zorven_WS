@@ -1,7 +1,5 @@
 """Tests for all 7 internal node stubs."""
 
-import pytest
-
 from app.nodes.internal.audience_node import AudienceNode
 from app.nodes.internal.calendar_node import CalendarNode
 from app.nodes.internal.manager_node import ManagerNode
@@ -160,3 +158,36 @@ class TestManagerNode:
         rd = result["result_data"]
         assert len(rd["findings"]) >= 1
         assert len(rd["recommendations"]) >= 1
+        assert rd["score"] == 0
+
+    async def test_extracts_bsi_score(self):
+        """ManagerNode extracts BSI score from intelligence agent output."""
+        node = ManagerNode()
+        state = _base_state(
+            node_outputs={
+                "valuation_logic": {
+                    "findings": ["Brand value estimated at $1.2M"],
+                    "recommendations": ["Improve awareness"],
+                    "bsi": {
+                        "score": 72,
+                        "pillars": [
+                            {"name": "Financial", "score": 65},
+                            {"name": "Behavioral", "score": 78},
+                            {"name": "Legal", "score": 70},
+                        ],
+                        "data_completeness": 0.67,
+                    },
+                    "valuation": {
+                        "brand_value_npv": 1245177.38,
+                        "royalty_rate": 0.04,
+                    },
+                },
+            }
+        )
+        result = await node(state)
+        rd = result["result_data"]
+        assert rd["score"] == 72
+        assert rd["financials"] == 65
+        assert rd["awareness"] == 78
+        assert rd["sentiment"] == 70
+        assert rd["valuation"]["brand_value_npv"] == 1245177.38

@@ -42,11 +42,12 @@ class TenantContext(BaseModel):
 
 
 class AvailableManifest(BaseModel):
-    """Lightweight manifest entry for intent routing."""
+    """Manifest entry for intent routing, optionally includes full manifest_data."""
 
     pipeline_id: str
     name: str
     description: str = ""
+    manifest_data: Optional[dict] = None
 
 
 class DispatchRequest(BaseModel):

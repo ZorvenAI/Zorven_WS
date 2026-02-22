@@ -1,0 +1,35 @@
+version: "3.8"
+
+services:
+  intelligence-agent:
+    build: .
+    ports:
+      - "8030:8030"
+    environment:
+      INTELLIGENCE_HOST: "0.0.0.0"
+      INTELLIGENCE_PORT: "8030"
+      INTELLIGENCE_REDIS_URL: "redis://redis:6379/3"
+      INTELLIGENCE_KAFKA_BOOTSTRAP_SERVERS: ""
+      INTELLIGENCE_GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      INTELLIGENCE_LOG_LEVEL: "INFO"
+      INTELLIGENCE_GCS_PROJECT_ID: ""
+      INTELLIGENCE_GCS_BUCKET_NAME: ""
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8030/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6382:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

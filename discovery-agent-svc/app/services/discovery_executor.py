@@ -128,7 +128,11 @@ class DiscoveryExecutor:
                         if finding_text:
                             findings.append(finding_text)
             else:
-                logger.debug("Empty content from %s, skipping", url)
+                # Scraping failed — still use the search snippet as a finding
+                if snippet:
+                    findings.append(snippet)
+                    sources.append(SourceItem(type="web", title=title or url, url=url))
+                logger.debug("Scraping failed for %s, using snippet", url)
 
         # Build recommendations based on findings
         recommendations = self._build_recommendations(query, findings)

@@ -133,7 +133,7 @@ def brand_analysis_manifest() -> ManifestData:
             ManifestNode(
                 id="market_research",
                 type="external",
-                url="http://discovery-agent-svc/v1/search",
+                url="http://discovery-agent-svc:8020/v1/search",
                 config={"focus": "market_trends,competitors"},
             ),
             ManifestNode(
@@ -159,13 +159,13 @@ def iso_brand_equity_manifest() -> ManifestData:
             ManifestNode(
                 id="web_research",
                 type="external",
-                url="http://discovery-agent-svc/v1/search",
+                url="http://discovery-agent-svc:8020/v1/search",
                 config={"focus": "royalty_rates,market_trends,brand_rankings"},
             ),
             ManifestNode(
                 id="valuation_logic",
                 type="external",
-                url="http://intelligence-agent-svc/v1/execute",
+                url="http://intelligence-agent-svc:8030/v1/execute",
                 config={"focus": "brand_valuation,royalty_rates"},
             ),
             ManifestNode(id="manager", type="internal", handler="ManagerNode"),
@@ -188,13 +188,13 @@ def competitor_audit_manifest() -> ManifestData:
             ManifestNode(
                 id="competitor_research",
                 type="external",
-                url="http://discovery-agent-svc/v1/search",
+                url="http://discovery-agent-svc:8020/v1/search",
                 config={"focus": "competitors,market_share"},
             ),
             ManifestNode(
                 id="gap_analyzer",
                 type="external",
-                url="http://intelligence-agent-svc/v1/execute",
+                url="http://intelligence-agent-svc:8030/v1/execute",
                 config={"focus": "competitive_gaps"},
             ),
             ManifestNode(id="report_generator", type="internal", handler="ReportNode"),
@@ -275,7 +275,7 @@ def mock_discovery_service(httpx_mock):
 
     httpx_mock.add_callback(
         discovery_callback,
-        url=re.compile(r"http://discovery-agent-svc/.*"),
+        url=re.compile(r"http://discovery-agent-svc:8020/.*"),
         method="POST",
         is_reusable=True,
     )
@@ -295,7 +295,7 @@ def mock_discovery_service(httpx_mock):
 
     httpx_mock.add_callback(
         intelligence_stub,
-        url=re.compile(r"http://intelligence-agent-svc/.*"),
+        url=re.compile(r"http://intelligence-agent-svc:8030/.*"),
         method="POST",
         is_reusable=True,
     )
@@ -368,6 +368,29 @@ def make_dispatch_request(
     )
 
 
+def _brand_analysis_manifest_data() -> dict:
+    """brand-analysis manifest_data dict for auto-detect tests."""
+    return {
+        "nodes": [
+            {"id": "intent_router", "type": "internal", "handler": "RouterNode"},
+            {
+                "id": "market_research",
+                "type": "external",
+                "url": "http://discovery-agent-svc:8020/v1/search",
+                "config": {"focus": "market_trends,competitors"},
+            },
+            {"id": "brand_strategist", "type": "internal", "handler": "StrategyNode"},
+            {"id": "report_generator", "type": "internal", "handler": "ReportNode"},
+        ],
+        "edges": [
+            ["intent_router", "market_research"],
+            ["market_research", "brand_strategist"],
+            ["brand_strategist", "report_generator"],
+        ],
+        "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+    }
+
+
 def make_auto_detect_request(
     input_prompt: str = "Analyze brand positioning for Acme Corp",
     job_id: str = "e2e-auto-detect-001",
@@ -387,21 +410,114 @@ def make_auto_detect_request(
                 pipeline_id="iso-brand-equity",
                 name="ISO Brand Equity",
                 description="ISO 10668 brand valuation",
+                manifest_data={
+                    "nodes": [
+                        {
+                            "id": "intent_router",
+                            "type": "internal",
+                            "handler": "RouterNode",
+                        },
+                        {
+                            "id": "web_research",
+                            "type": "external",
+                            "url": "http://discovery-agent-svc:8020/v1/search",
+                            "config": {
+                                "focus": "royalty_rates,market_trends,brand_rankings"
+                            },
+                        },
+                        {
+                            "id": "valuation_logic",
+                            "type": "external",
+                            "url": "http://intelligence-agent-svc:8030/v1/execute",
+                            "config": {"focus": "brand_valuation,royalty_rates"},
+                        },
+                        {"id": "manager", "type": "internal", "handler": "ManagerNode"},
+                    ],
+                    "edges": [
+                        ["intent_router", "web_research"],
+                        ["web_research", "valuation_logic"],
+                        ["valuation_logic", "manager"],
+                    ],
+                    "global_config": {"model": "gemini-2.0-flash", "temperature": 0.3},
+                },
             ),
             AvailableManifest(
                 pipeline_id="brand-analysis",
                 name="Brand Analysis",
                 description="Brand positioning analysis",
+                manifest_data=_brand_analysis_manifest_data(),
             ),
             AvailableManifest(
                 pipeline_id="competitor-audit",
                 name="Competitor Audit",
                 description="Competitive gap analysis",
+                manifest_data={
+                    "nodes": [
+                        {
+                            "id": "intent_router",
+                            "type": "internal",
+                            "handler": "RouterNode",
+                        },
+                        {
+                            "id": "competitor_research",
+                            "type": "external",
+                            "url": "http://discovery-agent-svc:8020/v1/search",
+                            "config": {"focus": "competitors,market_share"},
+                        },
+                        {
+                            "id": "gap_analyzer",
+                            "type": "external",
+                            "url": "http://intelligence-agent-svc:8030/v1/execute",
+                            "config": {"focus": "competitive_gaps"},
+                        },
+                        {
+                            "id": "report_generator",
+                            "type": "internal",
+                            "handler": "ReportNode",
+                        },
+                    ],
+                    "edges": [
+                        ["intent_router", "competitor_research"],
+                        ["competitor_research", "gap_analyzer"],
+                        ["gap_analyzer", "report_generator"],
+                    ],
+                    "global_config": {"model": "gemini-2.0-flash", "temperature": 0.5},
+                },
             ),
             AvailableManifest(
                 pipeline_id="content-strategy",
                 name="Content Strategy",
                 description="Content calendar planning",
+                manifest_data={
+                    "nodes": [
+                        {
+                            "id": "intent_router",
+                            "type": "internal",
+                            "handler": "RouterNode",
+                        },
+                        {
+                            "id": "audience_analyzer",
+                            "type": "internal",
+                            "handler": "AudienceNode",
+                        },
+                        {
+                            "id": "content_planner",
+                            "type": "internal",
+                            "handler": "PlannerNode",
+                        },
+                        {
+                            "id": "calendar_builder",
+                            "type": "internal",
+                            "handler": "CalendarNode",
+                        },
+                    ],
+                    "edges": [
+                        ["intent_router", "audience_analyzer"],
+                        ["audience_analyzer", "content_planner"],
+                        ["content_planner", "calendar_builder"],
+                    ],
+                    "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+                },
             ),
         ],
     )

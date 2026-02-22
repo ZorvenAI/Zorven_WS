@@ -61,25 +61,35 @@ class JobExecutor:
             manifest_data = self._extract_manifest_data(request)
             if manifest_data is None:
                 state = await self._handle_intent_routing(state, request)
-                # After routing, we still don't have a manifest to execute
-                # In auto-detect mode, we just report the resolved manifest ID
-                # and complete with the routing result
-                await self.callback.send_completed(
-                    callback_url,
-                    result_data={
-                        "summary": (
-                            "Intent routing completed. "
-                            f"Resolved manifest: {state.get('resolved_manifest_id')}"
-                        ),
-                        "resolved_manifest_id": state.get("resolved_manifest_id"),
-                        "findings": ["Auto-detect routing completed."],
-                        "recommendations": [
-                            "Re-run with the resolved manifest for full analysis."
-                        ],
-                    },
-                    progress=state["progress"],
-                )
-                return
+                resolved_id = state.get("resolved_manifest_id")
+
+                # Look up the full manifest_data from available_manifests
+                manifest_data = self._find_resolved_manifest(request, resolved_id)
+                if manifest_data is None:
+                    # No manifest_data available — cannot execute
+                    await self.callback.send_completed(
+                        callback_url,
+                        result_data={
+                            "summary": (
+                                "Intent routing completed. "
+                                f"Resolved manifest: {resolved_id}"
+                            ),
+                            "resolved_manifest_id": resolved_id,
+                            "findings": ["Auto-detect routing completed."],
+                            "recommendations": [
+                                "Re-run with the resolved manifest "
+                                "for full analysis."
+                            ],
+                        },
+                        progress=state["progress"],
+                    )
+                    return
+
+                # Initialize progress for the resolved manifest's nodes
+                for node in manifest_data.get("nodes", []):
+                    nid = node["id"]
+                    if nid not in state["progress"]:
+                        state["progress"][nid] = {"status": "pending"}
 
             # Build the LangGraph
             try:
@@ -270,6 +280,18 @@ class JobExecutor:
         )
 
         return state
+
+    @staticmethod
+    def _find_resolved_manifest(
+        request: DispatchRequest, resolved_id: str | None
+    ) -> dict[str, Any] | None:
+        """Find the full manifest_data for a resolved pipeline_id."""
+        if not resolved_id or not request.available_manifests:
+            return None
+        for manifest in request.available_manifests:
+            if manifest.pipeline_id == resolved_id and manifest.manifest_data:
+                return manifest.manifest_data
+        return None
 
     async def _is_cancelled(self, job_id: str) -> bool:
         """Check if a cancel flag is set in Redis for this job."""

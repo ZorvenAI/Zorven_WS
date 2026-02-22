@@ -2,8 +2,6 @@
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 
 class TestHealthEndpoint:
     """GET /health — no auth required."""

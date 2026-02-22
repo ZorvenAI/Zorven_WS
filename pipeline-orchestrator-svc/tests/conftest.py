@@ -29,7 +29,7 @@ def valid_dispatch_payload():
                 {
                     "id": "web_research",
                     "type": "external",
-                    "url": "http://discovery-agent-svc/v1/search",
+                    "url": "http://discovery-agent-svc:8020/v1/search",
                     "config": {"focus": "market_trends"},
                 },
             ],
@@ -44,7 +44,11 @@ def valid_dispatch_payload():
             "gcs_processed_bucket": "brand-automator-curated/1/",
             "rag_data_store_id": "ds-123",
         },
-        "callback_url": "http://backend:8001/api/v1/orchestration/jobs/550e8400-e29b-41d4-a716-446655440000/callback/",
+        "callback_url": (
+            "http://backend:8001/api/v1/orchestration"
+            "/jobs/550e8400-e29b-41d4-a716-446655440000"
+            "/callback/"
+        ),
     }
 
 

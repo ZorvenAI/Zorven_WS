@@ -159,7 +159,7 @@ class TestPipelineManifestSerializer:
                     {
                         "id": "discovery",
                         "type": "external",
-                        "url": "http://discovery-agent-svc/v1/search",
+                        "url": "http://discovery-agent-svc:8020/v1/search",
                     },
                 ],
                 "edges": [],

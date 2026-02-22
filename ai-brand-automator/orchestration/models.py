@@ -29,7 +29,7 @@ class PipelineManifest(models.Model):
             {
                 "id": "web_research",
                 "type": "external",
-                "url": "http://discovery-agent-svc/v1/search",
+                "url": "http://discovery-agent-svc:8020/v1/search",
                 "config": {"timeout": 60}
             }
         ],

@@ -553,6 +553,78 @@ services:
     networks:
       - app-network
 
+  # ==========================================================================
+  # Discovery Agent — Web research and content curation
+  # Searches via Tavily, scrapes URLs, cleans HTML, returns structured findings
+  # ==========================================================================
+  discovery-agent-svc:
+    build:
+      context: ../discovery-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-discovery-agent
+    environment:
+      - DISCOVERY_REDIS_URL=redis://redis:6379/2
+      - DISCOVERY_KAFKA_BOOTSTRAP_SERVERS=${DISCOVERY_KAFKA_BOOTSTRAP_SERVERS:-}
+      # Kafka integration is disabled by default (empty bootstrap servers).
+      # To enable Kafka when running the full event streaming stack, either:
+      #   export DISCOVERY_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      # or uncomment the line below:
+      #   - DISCOVERY_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DISCOVERY_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - DISCOVERY_LOG_LEVEL=INFO
+    expose:
+      - "8020"
+    ports:
+      - "8020:8020"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Intelligence Agent — ISO 10668 brand valuation and analytical intelligence
+  # Royalty Relief NPV, BSI scoring, competitive gap analysis, theme extraction
+  # ==========================================================================
+  intelligence-agent-svc:
+    build:
+      context: ../intelligence-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-intelligence-agent
+    environment:
+      - INTELLIGENCE_REDIS_URL=redis://redis:6379/3
+      - INTELLIGENCE_KAFKA_BOOTSTRAP_SERVERS=${INTELLIGENCE_KAFKA_BOOTSTRAP_SERVERS:-}
+      # Kafka integration is disabled by default (empty bootstrap servers).
+      # To enable Kafka when running the full event streaming stack, either:
+      #   export INTELLIGENCE_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      # or uncomment the line below:
+      #   - INTELLIGENCE_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - INTELLIGENCE_GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - INTELLIGENCE_GCS_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - INTELLIGENCE_GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}
+      - INTELLIGENCE_LOG_LEVEL=INFO
+    expose:
+      - "8030"
+    ports:
+      - "8030:8030"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8030/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
 # ==========================================================================
 # Volumes
 # ==========================================================================

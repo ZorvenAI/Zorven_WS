@@ -14,7 +14,7 @@ def _brand_analysis_manifest():
             {
                 "id": "market_research",
                 "type": "external",
-                "url": "http://discovery-agent-svc/v1/search",
+                "url": "http://discovery-agent-svc:8020/v1/search",
                 "config": {"focus": "market_trends,competitors"},
             },
             {
@@ -44,13 +44,13 @@ def _iso_brand_equity_manifest():
             {
                 "id": "web_research",
                 "type": "external",
-                "url": "http://discovery-agent-svc/v1/search",
+                "url": "http://discovery-agent-svc:8020/v1/search",
                 "config": {"focus": "royalty_rates,market_trends,brand_rankings"},
             },
             {
                 "id": "valuation_logic",
                 "type": "external",
-                "url": "http://intelligence-agent-svc/v1/iso-calc",
+                "url": "http://intelligence-agent-svc:8030/v1/iso-calc",
                 "config": {"method": "royalty_relief", "horizon_years": 5},
             },
             {"id": "manager", "type": "internal", "handler": "ManagerNode"},
@@ -71,13 +71,13 @@ def _competitor_audit_manifest():
             {
                 "id": "competitor_research",
                 "type": "external",
-                "url": "http://discovery-agent-svc/v1/search",
+                "url": "http://discovery-agent-svc:8020/v1/search",
                 "config": {"focus": "competitors,market_share"},
             },
             {
                 "id": "gap_analyzer",
                 "type": "external",
-                "url": "http://intelligence-agent-svc/v1/analyze",
+                "url": "http://intelligence-agent-svc:8030/v1/analyze",
                 "config": {"analysis_type": "competitive_gap"},
             },
             {

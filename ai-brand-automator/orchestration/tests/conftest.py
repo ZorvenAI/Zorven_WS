@@ -49,12 +49,12 @@ def external_agent_manifest_data():
             {
                 "id": "web_research",
                 "type": "external",
-                "url": "http://discovery-agent-svc/v1/search",
+                "url": "http://discovery-agent-svc:8020/v1/search",
             },
             {
                 "id": "valuation",
                 "type": "external",
-                "url": "http://intelligence-agent-svc/v1/iso-calc",
+                "url": "http://intelligence-agent-svc:8030/v1/iso-calc",
             },
         ],
         "edges": [

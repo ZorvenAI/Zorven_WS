@@ -1,9 +1,6 @@
 """Tests for Kafka producer and consumer."""
 
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from app.messaging.kafka_producer import TraceProducer
 from app.messaging.kafka_consumer import TriggerConsumer

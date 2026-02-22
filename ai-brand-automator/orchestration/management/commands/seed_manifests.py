@@ -33,7 +33,7 @@ class Command(BaseCommand):
                     {
                         "id": "web_research",
                         "type": "external",
-                        "url": ("http://discovery-agent-svc" "/v1/search"),
+                        "url": "http://discovery-agent-svc:8020/v1/search",
                         "config": {
                             "focus": (
                                 "royalty_rates," "market_trends," "brand_rankings"
@@ -43,7 +43,7 @@ class Command(BaseCommand):
                     {
                         "id": "valuation_logic",
                         "type": "external",
-                        "url": ("http://intelligence-agent-svc" "/v1/iso-calc"),
+                        "url": "http://intelligence-agent-svc:8030/v1/iso-calc",
                         "config": {
                             "method": "royalty_relief",
                             "horizon_years": 5,
@@ -82,7 +82,7 @@ class Command(BaseCommand):
                     {
                         "id": "market_research",
                         "type": "external",
-                        "url": ("http://discovery-agent-svc" "/v1/search"),
+                        "url": "http://discovery-agent-svc:8020/v1/search",
                         "config": {
                             "focus": "market_trends,competitors",
                         },
@@ -126,7 +126,7 @@ class Command(BaseCommand):
                     {
                         "id": "competitor_research",
                         "type": "external",
-                        "url": ("http://discovery-agent-svc" "/v1/search"),
+                        "url": "http://discovery-agent-svc:8020/v1/search",
                         "config": {
                             "focus": "competitors,market_share",
                         },
@@ -134,7 +134,7 @@ class Command(BaseCommand):
                     {
                         "id": "gap_analyzer",
                         "type": "external",
-                        "url": ("http://intelligence-agent-svc" "/v1/analyze"),
+                        "url": "http://intelligence-agent-svc:8030/v1/analyze",
                         "config": {
                             "analysis_type": "competitive_gap",
                         },
@@ -201,7 +201,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write("Seeding default pipeline manifests...")
         for manifest_cfg in self.MANIFESTS:
-            obj, created = PipelineManifest.objects.get_or_create(
+            obj, created = PipelineManifest.objects.update_or_create(
                 pipeline_id=manifest_cfg["pipeline_id"],
                 version=1,
                 defaults={
@@ -211,6 +211,6 @@ class Command(BaseCommand):
                     "tenant": None,  # Available to all tenants
                 },
             )
-            status = "Created" if created else "Already exists"
+            status = "Created" if created else "Updated"
             self.stdout.write(f"  {status}: {obj.name}")
         self.stdout.write(self.style.SUCCESS("Pipeline manifest seeding complete."))
