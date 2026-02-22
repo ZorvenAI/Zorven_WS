@@ -65,6 +65,10 @@ export function Navigation() {
     { href: '/files', label: 'Files', active: pathname === '/files' },
     { href: '/automation', label: 'Automation', active: pathname === '/automation' },
     { href: '/dashboard/pipelines', label: 'Pipelines', active: pathname?.startsWith('/dashboard/pipelines') ?? false },
+    ...(canEditFlag
+      ? [{ href: '/dashboard/ai-assistant', label: 'AI Assistant', active: pathname?.startsWith('/dashboard/ai-assistant') ?? false }]
+      : []),
+    { href: '/dashboard/analysis', label: 'Reports', active: pathname?.startsWith('/dashboard/analysis') ?? false },
     ...(canManageTeam
       ? [{ href: '/dashboard/team', label: 'Team', active: pathname === '/dashboard/team' }]
       : []),
