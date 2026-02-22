@@ -321,13 +321,13 @@ jobs:
         run: pip install -r tests/integration/requirements.txt
 
       - name: Run Phase 1 - Contract Tests
-        run: pytest tests/integration/phase1_contracts/ -v --timeout=60
+        run: pytest -c tests/integration/pytest.ini tests/integration/phase1_contracts/ -v --timeout=60
 
       - name: Run Phase 2 - Domain Tests
-        run: pytest tests/integration/phase2_domain/ -v --timeout=120
+        run: pytest -c tests/integration/pytest.ini tests/integration/phase2_domain/ -v --timeout=120
 
       - name: Run Phase 3 - Stress Tests
-        run: pytest tests/integration/phase3_stress/ -v --timeout=300
+        run: pytest -c tests/integration/pytest.ini tests/integration/phase3_stress/ -v --timeout=300
 
       - name: Teardown
         if: always()

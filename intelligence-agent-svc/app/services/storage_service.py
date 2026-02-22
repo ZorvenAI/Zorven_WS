@@ -5,6 +5,7 @@ In stub mode (no GCS config), returns None to signal missing data.
 The ProxyEngine uses this to decide the calculation strategy.
 """
 
+import asyncio
 import json
 import logging
 from typing import Any, Optional
@@ -76,13 +77,16 @@ class StorageService:
             blob_path = f"{tenant_id}/processed/{filename}"
             blob = bucket.blob(blob_path)
 
-            if not blob.exists():
+            # GCS client is synchronous — run blocking I/O in a
+            # thread so we don't block the async event loop.
+            exists = await asyncio.to_thread(blob.exists)
+            if not exists:
                 logger.info(
                     "Financial data not found: gs://%s/%s", self.bucket_name, blob_path
                 )
                 return None
 
-            content = blob.download_as_text()
+            content = await asyncio.to_thread(blob.download_as_text)
             data = json.loads(content)
             logger.info("Fetched financial data for tenant %s", tenant_id)
             return data

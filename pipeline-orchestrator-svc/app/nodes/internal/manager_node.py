@@ -56,6 +56,9 @@ class ManagerNode(BaseNode):
                         elif "behavioral" in name or "awareness" in name:
                             result_data["awareness"] = pillar_score
                         elif "legal" in name:
+                            # Maps ISO 10668 Legal pillar to the "sentiment"
+                            # gauge on the BrandEquityDashboard frontend
+                            # component for backward compatibility.
                             result_data["sentiment"] = pillar_score
         else:
             result_data["score"] = 0
