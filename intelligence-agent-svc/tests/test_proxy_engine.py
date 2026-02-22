@@ -20,16 +20,12 @@ class TestProxyEngine:
 
     def test_missing_financial_price_premium_mode(self):
         """No financial data → PRICE_PREMIUM_MODE."""
-        strategy = self.engine.get_calculation_strategy(
-            {"financial_data": None}
-        )
+        strategy = self.engine.get_calculation_strategy({"financial_data": None})
         assert strategy == "PRICE_PREMIUM_MODE"
 
     def test_empty_financial_price_premium_mode(self):
         """Empty financial data dict → PRICE_PREMIUM_MODE."""
-        strategy = self.engine.get_calculation_strategy(
-            {"financial_data": {}}
-        )
+        strategy = self.engine.get_calculation_strategy({"financial_data": {}})
         assert strategy == "PRICE_PREMIUM_MODE"
 
     def test_redistribute_all_pillars(self):

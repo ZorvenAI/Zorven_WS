@@ -68,9 +68,7 @@ class RedisManager:
             logger.warning("Redis error in get_benchmarks: %s", exc)
             return None
 
-    async def set_benchmarks(
-        self, sector: str, data: dict[str, Any]
-    ) -> None:
+    async def set_benchmarks(self, sector: str, data: dict[str, Any]) -> None:
         """Cache benchmark data with 30-day TTL."""
         try:
             r = await self._get_redis()
@@ -122,9 +120,7 @@ class RedisManager:
             logger.warning("Redis error in get_cached_result: %s", exc)
             return None
 
-    async def set_cached_result(
-        self, cache_key: str, result: dict[str, Any]
-    ) -> None:
+    async def set_cached_result(self, cache_key: str, result: dict[str, Any]) -> None:
         """Cache analysis result with 4-hour TTL."""
         try:
             r = await self._get_redis()

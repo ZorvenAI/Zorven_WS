@@ -47,23 +47,45 @@ NEGATIVE_KEYWORDS: dict[str, float] = {
 # Theme categories and their trigger keywords
 THEME_CATEGORIES: dict[str, list[str]] = {
     "market_position": [
-        "market share", "market position", "competitive", "leader",
-        "ranking", "positioning",
+        "market share",
+        "market position",
+        "competitive",
+        "leader",
+        "ranking",
+        "positioning",
     ],
     "financial_performance": [
-        "revenue", "profit", "margin", "growth rate", "earnings",
-        "financial", "sales",
+        "revenue",
+        "profit",
+        "margin",
+        "growth rate",
+        "earnings",
+        "financial",
+        "sales",
     ],
     "brand_perception": [
-        "brand", "awareness", "loyalty", "sentiment", "reputation",
-        "perception", "trust",
+        "brand",
+        "awareness",
+        "loyalty",
+        "sentiment",
+        "reputation",
+        "perception",
+        "trust",
     ],
     "innovation": [
-        "innovation", "technology", "digital", "R&D", "patent",
+        "innovation",
+        "technology",
+        "digital",
+        "R&D",
+        "patent",
         "product development",
     ],
     "regulatory": [
-        "regulation", "compliance", "legal", "trademark", "patent",
+        "regulation",
+        "compliance",
+        "legal",
+        "trademark",
+        "patent",
         "intellectual property",
     ],
 }
@@ -90,17 +112,18 @@ class ThemeAnalyzer:
             if found_keywords:
                 # Count findings mentioning this theme
                 relevant_findings = [
-                    f for f in findings
-                    if any(kw in f.lower() for kw in keywords)
+                    f for f in findings if any(kw in f.lower() for kw in keywords)
                 ]
                 sentiment = self._sentiment_for_texts(relevant_findings)
 
-                themes.append({
-                    "category": category,
-                    "keywords_found": found_keywords,
-                    "sentiment": round(sentiment, 1),
-                    "finding_count": len(relevant_findings),
-                })
+                themes.append(
+                    {
+                        "category": category,
+                        "keywords_found": found_keywords,
+                        "sentiment": round(sentiment, 1),
+                        "finding_count": len(relevant_findings),
+                    }
+                )
 
         # Sort by finding count (most relevant first)
         themes.sort(key=lambda t: t["finding_count"], reverse=True)

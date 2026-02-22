@@ -1,7 +1,5 @@
 """Tests for competitive gap analysis."""
 
-import pytest
-
 from app.logic.analysis.competitive_gap import CompetitiveGapAnalyzer
 
 
@@ -93,9 +91,7 @@ class TestCompetitiveGapAnalyzer:
         )
         # Should have extracted from raw_context paragraphs
         total = (
-            len(result["strengths"])
-            + len(result["gaps"])
-            + len(result["weaknesses"])
+            len(result["strengths"]) + len(result["gaps"]) + len(result["weaknesses"])
         )
         assert total > 0
 

@@ -1,5 +1,7 @@
 """Tests for the Brand Strength Index (BSI) calculator."""
 
+import pytest
+
 from app.logic.iso_engine.bsi_calculator import BSICalculator
 from app.logic.iso_engine.proxy_engine import ProxyEngine
 
@@ -116,9 +118,7 @@ class TestBSICalculator:
         result = self.calc.derive_index(
             financial_data={"revenue_growth": 0.10},
         )
-        financial_pillar = next(
-            p for p in result.pillars if p.name == "financial"
-        )
+        financial_pillar = next(p for p in result.pillars if p.name == "financial")
         assert "revenue_growth" in financial_pillar.rationale
 
     def test_pillar_rationale_without_data(self):
@@ -126,6 +126,3 @@ class TestBSICalculator:
         result = self.calc.derive_index()
         for pillar in result.pillars:
             assert "stub" in pillar.rationale.lower()
-
-
-import pytest

@@ -1,7 +1,5 @@
 """Tests for the callback client — HTTP PATCH to core-api-service."""
 
-import pytest
-
 from app.services.callback_client import CallbackClient
 
 CALLBACK_URL = "http://backend:8001/api/v1/orchestration/jobs/test-123/callback/"

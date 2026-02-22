@@ -77,7 +77,9 @@ class StorageService:
             blob = bucket.blob(blob_path)
 
             if not blob.exists():
-                logger.info("Financial data not found: gs://%s/%s", self.bucket_name, blob_path)
+                logger.info(
+                    "Financial data not found: gs://%s/%s", self.bucket_name, blob_path
+                )
                 return None
 
             content = blob.download_as_text()

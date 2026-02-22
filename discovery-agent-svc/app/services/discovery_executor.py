@@ -131,9 +131,7 @@ class DiscoveryExecutor:
                 # Scraping failed — still use the search snippet as a finding
                 if snippet:
                     findings.append(snippet)
-                    sources.append(
-                        SourceItem(type="web", title=title or url, url=url)
-                    )
+                    sources.append(SourceItem(type="web", title=title or url, url=url))
                 logger.debug("Scraping failed for %s, using snippet", url)
 
         # Build recommendations based on findings

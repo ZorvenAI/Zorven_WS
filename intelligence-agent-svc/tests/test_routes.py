@@ -1,7 +1,5 @@
 """Tests for API routes and response shapes."""
 
-import pytest
-
 
 class TestHealthEndpoint:
     """Verify /health endpoint."""
@@ -91,9 +89,7 @@ class TestAnalyzeEndpoint:
         payload = {
             "input_prompt": "Analyze gaps",
             "config": {},
-            "previous_outputs": {
-                "research": {"findings": ["Market is growing"]}
-            },
+            "previous_outputs": {"research": {"findings": ["Market is growing"]}},
         }
         response = await client.post(
             "/v1/analyze",
@@ -138,9 +134,7 @@ class TestExecuteEndpoint:
         """Execute with no specific config → general analysis."""
         payload = {
             "input_prompt": "Analyze the market trends",
-            "previous_outputs": {
-                "web": {"findings": ["Revenue growth 10%"]}
-            },
+            "previous_outputs": {"web": {"findings": ["Revenue growth 10%"]}},
         }
         response = await client.post(
             "/v1/execute",
@@ -160,33 +154,23 @@ class TestResponseShape:
         for endpoint in ["/v1/execute", "/v1/iso-calc", "/v1/analyze"]:
             payload = {
                 "input_prompt": "Test",
-                "previous_outputs": {
-                    "n": {"findings": ["test finding"]}
-                },
+                "previous_outputs": {"n": {"findings": ["test finding"]}},
             }
-            response = await client.post(
-                endpoint, json=payload, headers=tenant_headers
-            )
+            response = await client.post(endpoint, json=payload, headers=tenant_headers)
             data = response.json()
-            assert isinstance(data["findings"], list), (
-                f"{endpoint} did not return findings as list"
-            )
+            assert isinstance(
+                data["findings"], list
+            ), f"{endpoint} did not return findings as list"
 
-    async def test_response_always_has_recommendations(
-        self, client, tenant_headers
-    ):
+    async def test_response_always_has_recommendations(self, client, tenant_headers):
         """All endpoints must return recommendations list."""
         for endpoint in ["/v1/execute", "/v1/iso-calc", "/v1/analyze"]:
             payload = {
                 "input_prompt": "Test",
-                "previous_outputs": {
-                    "n": {"findings": ["test finding"]}
-                },
+                "previous_outputs": {"n": {"findings": ["test finding"]}},
             }
-            response = await client.post(
-                endpoint, json=payload, headers=tenant_headers
-            )
+            response = await client.post(endpoint, json=payload, headers=tenant_headers)
             data = response.json()
-            assert isinstance(data["recommendations"], list), (
-                f"{endpoint} did not return recommendations as list"
-            )
+            assert isinstance(
+                data["recommendations"], list
+            ), f"{endpoint} did not return recommendations as list"

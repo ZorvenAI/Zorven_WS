@@ -59,9 +59,7 @@ class IntelligenceExecutor:
         self.redis_manager = redis_manager
         self.gemini_client = gemini_client
 
-    async def execute(
-        self, request: ExecuteRequest, tenant_id: str
-    ) -> ExecuteResponse:
+    async def execute(self, request: ExecuteRequest, tenant_id: str) -> ExecuteResponse:
         """
         Route to the appropriate analysis based on config.
 
@@ -106,9 +104,7 @@ class IntelligenceExecutor:
 
         # Cache the result
         if self.redis_manager:
-            await self.redis_manager.set_cached_result(
-                cache_key, response.model_dump()
-            )
+            await self.redis_manager.set_cached_result(cache_key, response.model_dump())
 
         return response
 
@@ -131,9 +127,7 @@ class IntelligenceExecutor:
         input_context = request.input_context
         previous_outputs = request.previous_outputs
 
-        horizon_years = int(
-            config.get("horizon_years", settings.DEFAULT_HORIZON_YEARS)
-        )
+        horizon_years = int(config.get("horizon_years", settings.DEFAULT_HORIZON_YEARS))
         tax_rate = float(config.get("tax_rate", settings.DEFAULT_TAX_RATE))
         sector = str(input_context.get("sector", "default"))
 
@@ -147,9 +141,7 @@ class IntelligenceExecutor:
         # 1. Fetch financial data from GCS
         financial_data = None
         if self.storage_service:
-            financial_data = await self.storage_service.fetch_financial_data(
-                tenant_id
-            )
+            financial_data = await self.storage_service.fetch_financial_data(tenant_id)
 
         # 2. Determine calculation strategy
         data_manifest = {
@@ -175,9 +167,7 @@ class IntelligenceExecutor:
         if behavioral_data is None:
             all_findings = self._collect_findings(previous_outputs)
             if all_findings:
-                sentiment = self.theme_analyzer.calculate_sentiment_score(
-                    all_findings
-                )
+                sentiment = self.theme_analyzer.calculate_sentiment_score(all_findings)
                 themes = self.theme_analyzer.extract_themes(all_findings)
                 # Derive brand awareness proxy from theme coverage
                 brand_themes = [
@@ -205,9 +195,7 @@ class IntelligenceExecutor:
         )
 
         # 6. Select royalty rate (BSI can influence rate selection)
-        royalty_rate = RoyaltyReliefEngine.select_royalty_rate(
-            sector, benchmarks
-        )
+        royalty_rate = RoyaltyReliefEngine.select_royalty_rate(sector, benchmarks)
         # Adjust royalty rate based on BSI (higher BSI → higher royalty rate)
         if bsi_result.score > 75:
             royalty_rate *= 1.1  # 10% premium for strong brands
@@ -406,12 +394,14 @@ class IntelligenceExecutor:
 
         if bsi.data_completeness < 1.0:
             recommendations.append(
-                "Provide complete financial and legal data for a more accurate valuation."
+                "Provide complete financial and legal data"
+                " for a more accurate valuation."
             )
 
         if bsi.score < 50:
             recommendations.append(
-                "Consider improving brand awareness and customer loyalty to increase BSI."
+                "Consider improving brand awareness"
+                " and customer loyalty to increase BSI."
             )
         elif bsi.score >= 75:
             recommendations.append(

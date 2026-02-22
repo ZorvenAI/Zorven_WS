@@ -1,7 +1,7 @@
 """Shared test fixtures for intelligence-agent-svc."""
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient

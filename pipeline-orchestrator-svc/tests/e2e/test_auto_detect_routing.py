@@ -140,10 +140,9 @@ class TestAutoDetectRouting:
         # Result comes from actual pipeline execution, not stub routing
         assert "findings" in result_data
         assert len(result_data["findings"]) > 0
-        # Should contain real findings from discovery, not "Auto-detect routing completed"
-        assert not any(
-            "auto-detect" in f.lower() for f in result_data["findings"]
-        )
+        # Should contain real findings from discovery,
+        # not "Auto-detect routing completed"
+        assert not any("auto-detect" in f.lower() for f in result_data["findings"])
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_defaults_to_brand_analysis_on_ambiguous_prompt(

@@ -1,7 +1,5 @@
 """Tests for theme extraction and sentiment analysis."""
 
-import pytest
-
 from app.logic.analysis.theme_analyzer import ThemeAnalyzer
 
 

@@ -31,9 +31,7 @@ class RAGAdapter:
                 location,
             )
 
-    async def query(
-        self, query: str, data_store_id: str = ""
-    ) -> list[str]:
+    async def query(self, query: str, data_store_id: str = "") -> list[str]:
         """
         Query Vertex AI RAG for relevant historical findings.
 
@@ -57,9 +55,7 @@ class RAGAdapter:
             # Use Vertex AI Search to query the data store
             # This is a simplified interface — production would use
             # the full Vertex AI Search SDK
-            logger.info(
-                "RAG query: '%s' (store: %s)", query[:50], data_store_id
-            )
+            logger.info("RAG query: '%s' (store: %s)", query[:50], data_store_id)
 
             # TODO: Implement full Vertex AI Search query
             # For now, return empty until RAG infrastructure is deployed

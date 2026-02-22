@@ -1,7 +1,5 @@
 """Tests for all 7 internal node stubs."""
 
-import pytest
-
 from app.nodes.internal.audience_node import AudienceNode
 from app.nodes.internal.calendar_node import CalendarNode
 from app.nodes.internal.manager_node import ManagerNode

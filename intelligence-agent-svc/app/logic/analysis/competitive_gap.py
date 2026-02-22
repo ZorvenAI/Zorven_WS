@@ -13,15 +13,31 @@ logger = logging.getLogger(__name__)
 
 # Keywords indicating competitive strengths
 STRENGTH_KEYWORDS = [
-    "leading", "dominant", "strong", "innovative", "growth",
-    "market leader", "premium", "established", "trusted",
+    "leading",
+    "dominant",
+    "strong",
+    "innovative",
+    "growth",
+    "market leader",
+    "premium",
+    "established",
+    "trusted",
 ]
 
 # Keywords indicating competitive weaknesses or gaps
 GAP_KEYWORDS = [
-    "gap", "weakness", "lacking", "behind", "trailing",
-    "underperforming", "limited", "missing", "opportunity",
-    "decline", "erosion", "vulnerable",
+    "gap",
+    "weakness",
+    "lacking",
+    "behind",
+    "trailing",
+    "underperforming",
+    "limited",
+    "missing",
+    "opportunity",
+    "decline",
+    "erosion",
+    "vulnerable",
 ]
 
 
@@ -60,9 +76,7 @@ class CompetitiveGapAnalyzer:
             return await self._ai_analysis(discovery_data, config, gemini_client)
         return self._rule_based_analysis(discovery_data)
 
-    def _extract_discovery_data(
-        self, previous_outputs: dict[str, Any]
-    ) -> list[str]:
+    def _extract_discovery_data(self, previous_outputs: dict[str, Any]) -> list[str]:
         """Extract findings from all upstream discovery nodes."""
         all_findings: list[str] = []
         for node_id, output in previous_outputs.items():
@@ -81,9 +95,7 @@ class CompetitiveGapAnalyzer:
                     all_findings.extend(paragraphs[:10])
         return all_findings
 
-    def _rule_based_analysis(
-        self, findings: list[str]
-    ) -> dict[str, Any]:
+    def _rule_based_analysis(self, findings: list[str]) -> dict[str, Any]:
         """Keyword-based competitive gap extraction."""
         strengths: list[str] = []
         weaknesses: list[str] = []
@@ -106,7 +118,8 @@ class CompetitiveGapAnalyzer:
         market_opportunities = []
         if gaps:
             market_opportunities.append(
-                f"Address {len(gaps)} identified competitive gaps to strengthen market position."
+                f"Address {len(gaps)} identified competitive"
+                " gaps to strengthen market position."
             )
         if not strengths:
             market_opportunities.append(
@@ -124,9 +137,8 @@ class CompetitiveGapAnalyzer:
             "strengths": strengths,
             "weaknesses": weaknesses,
             "gaps": gaps or ["No significant competitive gaps identified."],
-            "market_opportunities": market_opportunities or [
-                "Continue monitoring competitive landscape."
-            ],
+            "market_opportunities": market_opportunities
+            or ["Continue monitoring competitive landscape."],
         }
 
     async def _ai_analysis(

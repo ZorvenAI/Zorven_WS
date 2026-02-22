@@ -412,12 +412,18 @@ def make_auto_detect_request(
                 description="ISO 10668 brand valuation",
                 manifest_data={
                     "nodes": [
-                        {"id": "intent_router", "type": "internal", "handler": "RouterNode"},
+                        {
+                            "id": "intent_router",
+                            "type": "internal",
+                            "handler": "RouterNode",
+                        },
                         {
                             "id": "web_research",
                             "type": "external",
                             "url": "http://discovery-agent-svc:8020/v1/search",
-                            "config": {"focus": "royalty_rates,market_trends,brand_rankings"},
+                            "config": {
+                                "focus": "royalty_rates,market_trends,brand_rankings"
+                            },
                         },
                         {
                             "id": "valuation_logic",
@@ -447,7 +453,11 @@ def make_auto_detect_request(
                 description="Competitive gap analysis",
                 manifest_data={
                     "nodes": [
-                        {"id": "intent_router", "type": "internal", "handler": "RouterNode"},
+                        {
+                            "id": "intent_router",
+                            "type": "internal",
+                            "handler": "RouterNode",
+                        },
                         {
                             "id": "competitor_research",
                             "type": "external",
@@ -460,7 +470,11 @@ def make_auto_detect_request(
                             "url": "http://intelligence-agent-svc:8030/v1/execute",
                             "config": {"focus": "competitive_gaps"},
                         },
-                        {"id": "report_generator", "type": "internal", "handler": "ReportNode"},
+                        {
+                            "id": "report_generator",
+                            "type": "internal",
+                            "handler": "ReportNode",
+                        },
                     ],
                     "edges": [
                         ["intent_router", "competitor_research"],
@@ -476,10 +490,26 @@ def make_auto_detect_request(
                 description="Content calendar planning",
                 manifest_data={
                     "nodes": [
-                        {"id": "intent_router", "type": "internal", "handler": "RouterNode"},
-                        {"id": "audience_analyzer", "type": "internal", "handler": "AudienceNode"},
-                        {"id": "content_planner", "type": "internal", "handler": "PlannerNode"},
-                        {"id": "calendar_builder", "type": "internal", "handler": "CalendarNode"},
+                        {
+                            "id": "intent_router",
+                            "type": "internal",
+                            "handler": "RouterNode",
+                        },
+                        {
+                            "id": "audience_analyzer",
+                            "type": "internal",
+                            "handler": "AudienceNode",
+                        },
+                        {
+                            "id": "content_planner",
+                            "type": "internal",
+                            "handler": "PlannerNode",
+                        },
+                        {
+                            "id": "calendar_builder",
+                            "type": "internal",
+                            "handler": "CalendarNode",
+                        },
                     ],
                     "edges": [
                         ["intent_router", "audience_analyzer"],

@@ -4,9 +4,7 @@ These tests mock the Redis client to avoid requiring a live Redis instance.
 Integration tests with real Redis are in tests/integration/.
 """
 
-from unittest.mock import AsyncMock, patch
-
-import pytest
+from unittest.mock import AsyncMock
 
 from app.cache.redis_manager import RedisManager
 

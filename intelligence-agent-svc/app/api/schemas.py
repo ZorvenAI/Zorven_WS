@@ -10,7 +10,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # Tenant context (same as discovery-agent-svc)
 # ---------------------------------------------------------------------------
@@ -33,9 +32,7 @@ class TenantContext(BaseModel):
 class ExecuteRequest(BaseModel):
     """Request body for POST /v1/execute, /v1/iso-calc, /v1/analyze."""
 
-    input_prompt: str = Field(
-        ..., description="The user's query or analysis request"
-    )
+    input_prompt: str = Field(..., description="The user's query or analysis request")
     input_context: dict[str, Any] = Field(
         default_factory=dict, description="Additional context from the user"
     )
@@ -60,9 +57,7 @@ class ExecuteRequest(BaseModel):
 class PillarScore(BaseModel):
     """A single BSI pillar score."""
 
-    name: str = Field(
-        ..., description="Pillar name: financial, behavioral, or legal"
-    )
+    name: str = Field(..., description="Pillar name: financial, behavioral, or legal")
     weight: float = Field(..., description="Pillar weight (0.0–1.0)")
     score: float = Field(..., description="Pillar score (0–100)")
     rationale: str = Field(

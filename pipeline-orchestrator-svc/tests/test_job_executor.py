@@ -1,8 +1,6 @@
 """Tests for the job executor — end-to-end pipeline execution."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import AsyncMock, patch
 
 from app.api.schemas import DispatchRequest, ManifestData, ManifestNode, TenantContext
 from app.services.job_executor import JobExecutor
@@ -34,7 +32,9 @@ def _make_request(manifest=_UNSET, available_manifests=None, job_id="test-job-12
             gcs_processed_bucket="curated/",
             rag_data_store_id="ds-1",
         ),
-        callback_url="http://backend:8001/api/v1/orchestration/jobs/test-job-123/callback/",
+        callback_url=(
+            "http://backend:8001/api/v1/orchestration" "/jobs/test-job-123/callback/"
+        ),
         available_manifests=available_manifests,
     )
 

@@ -1,7 +1,5 @@
 """Tests for ExternalWrapper — HTTP calls to external agent services."""
 
-import pytest
-
 from app.nodes.external_wrapper import ExternalWrapper
 from app.state.schema import AgentState
 

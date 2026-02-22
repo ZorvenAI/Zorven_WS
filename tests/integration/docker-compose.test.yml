@@ -1,0 +1,70 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  orchestrator:
+    build:
+      context: ../../pipeline-orchestrator-svc
+      dockerfile: Dockerfile
+    environment:
+      - ORCHESTRATOR_REDIS_URL=redis://redis:6379/1
+      - ORCHESTRATOR_SERVICE_TOKEN=test-service-token
+      - ORCHESTRATOR_CALLBACK_TOKEN=test-callback-token
+      - ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=
+    ports:
+      - "18010:8010"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  discovery-agent-svc:
+    build:
+      context: ../../discovery-agent-svc
+      dockerfile: Dockerfile
+    environment:
+      - DISCOVERY_REDIS_URL=redis://redis:6379/2
+      - DISCOVERY_TAVILY_API_KEY=
+      - DISCOVERY_KAFKA_BOOTSTRAP_SERVERS=
+      - DISCOVERY_RATE_LIMIT_PER_MINUTE=1000
+    ports:
+      - "18020:8020"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  intelligence-agent-svc:
+    build:
+      context: ../../intelligence-agent-svc
+      dockerfile: Dockerfile
+    environment:
+      - INTELLIGENCE_REDIS_URL=redis://redis:6379/3
+      - INTELLIGENCE_GEMINI_API_KEY=
+      - INTELLIGENCE_KAFKA_BOOTSTRAP_SERVERS=
+      - INTELLIGENCE_RATE_LIMIT_PER_MINUTE=1000
+    ports:
+      - "18030:8030"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8030/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

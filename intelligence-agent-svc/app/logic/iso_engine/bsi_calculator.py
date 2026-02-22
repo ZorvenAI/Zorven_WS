@@ -116,7 +116,11 @@ class BSICalculator:
         overall_score = int(round(weighted_sum))
         overall_score = max(0, min(100, overall_score))
 
-        logger.info("BSI score: %d/100 (completeness: %.0f%%)", overall_score, data_completeness * 100)
+        logger.info(
+            "BSI score: %d/100 (completeness: %.0f%%)",
+            overall_score,
+            data_completeness * 100,
+        )
 
         return BSIResult(
             score=overall_score,
@@ -124,9 +128,7 @@ class BSICalculator:
             data_completeness=round(data_completeness, 2),
         )
 
-    def _score_pillar(
-        self, pillar_name: str, data: dict[str, Any] | None
-    ) -> float:
+    def _score_pillar(self, pillar_name: str, data: dict[str, Any] | None) -> float:
         """Score a single pillar (0–100)."""
         if not data:
             return STUB_SCORES.get(pillar_name, 50.0)
@@ -203,6 +205,12 @@ class BSICalculator:
     ) -> str:
         """Build rationale string for a pillar score."""
         if not data:
-            return f"{pillar_name.title()} pillar scored using stub defaults (no data provided)."
+            return (
+                f"{pillar_name.title()} pillar scored"
+                " using stub defaults (no data provided)."
+            )
         metrics = ", ".join(f"{k}={v}" for k, v in data.items() if k != "score")
-        return f"{pillar_name.title()} scored {score:.1f}/100 based on: {metrics or 'pre-computed score'}."
+        return (
+            f"{pillar_name.title()} scored {score:.1f}/100"
+            f" based on: {metrics or 'pre-computed score'}."
+        )

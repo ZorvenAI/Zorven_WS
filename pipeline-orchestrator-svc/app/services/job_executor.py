@@ -64,9 +64,7 @@ class JobExecutor:
                 resolved_id = state.get("resolved_manifest_id")
 
                 # Look up the full manifest_data from available_manifests
-                manifest_data = self._find_resolved_manifest(
-                    request, resolved_id
-                )
+                manifest_data = self._find_resolved_manifest(request, resolved_id)
                 if manifest_data is None:
                     # No manifest_data available — cannot execute
                     await self.callback.send_completed(

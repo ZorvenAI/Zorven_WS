@@ -122,7 +122,9 @@ class RoyaltyReliefEngine:
         if "projected_revenues" in input_context:
             revenues = input_context["projected_revenues"]
             if isinstance(revenues, list) and len(revenues) > 0:
-                logger.info("Using user-provided revenue forecast (%d years)", len(revenues))
+                logger.info(
+                    "Using user-provided revenue forecast (%d years)", len(revenues)
+                )
                 return [float(r) for r in revenues]
 
         # 2. Base revenue + growth rate
@@ -159,12 +161,9 @@ class RoyaltyReliefEngine:
         extracted = self._extract_revenue_from_text(previous_outputs)
         if extracted is not None:
             revenues = [
-                extracted * (1 + DEFAULT_GROWTH_RATE) ** t
-                for t in range(horizon_years)
+                extracted * (1 + DEFAULT_GROWTH_RATE) ** t for t in range(horizon_years)
             ]
-            logger.info(
-                "Extracted revenue from discovery text: $%.0f", extracted
-            )
+            logger.info("Extracted revenue from discovery text: $%.0f", extracted)
             return revenues
 
         # 5. Stub fallback
@@ -173,7 +172,8 @@ class RoyaltyReliefEngine:
             stub_base * (1 + DEFAULT_GROWTH_RATE) ** t for t in range(horizon_years)
         ]
         logger.warning(
-            "No revenue data found — using stub projection ($%.0fM base)", stub_base / 1e6
+            "No revenue data found — using stub projection ($%.0fM base)",
+            stub_base / 1e6,
         )
         return revenues
 
@@ -240,13 +240,6 @@ class RoyaltyReliefEngine:
             r"revenue[^$]*\$\s*([\d,.]+)",
         ]
 
-        multipliers = {
-            "billion": 1e9,
-            "B": 1e9,
-            "million": 1e6,
-            "M": 1e6,
-        }
-
         for pattern in patterns:
             match = re.search(pattern, combined, re.IGNORECASE)
             if match:
@@ -282,7 +275,7 @@ class RoyaltyReliefEngine:
     ) -> str:
         """Build a human-readable rationale for the valuation."""
         lines = [
-            f"Methodology: Royalty Relief (ISO 10668)",
+            "Methodology: Royalty Relief (ISO 10668)",
             f"Sector: {sector}",
             f"Royalty Rate: {result.royalty_rate:.1%}",
             f"Discount Rate (WACC): {result.discount_rate:.1%}",

@@ -1,7 +1,5 @@
 """Tests for the Royalty Relief NPV calculation engine."""
 
-import pytest
-
 from app.logic.iso_engine.royalty_relief import RoyaltyReliefEngine
 
 
@@ -75,7 +73,7 @@ class TestRoyaltyReliefEngine:
             royalty_rate=0.04,
             discount_rate=0.10,
         )
-        increasing = [1_000_000 * (1.05 ** t) for t in range(5)]
+        increasing = [1_000_000 * (1.05**t) for t in range(5)]
         increasing_result = self.engine.calculate_npv(
             projected_revenues=increasing,
             royalty_rate=0.04,
@@ -138,9 +136,7 @@ class TestRevenueEstimation:
     def test_discovery_extraction(self):
         """Revenue extracted from previous node outputs."""
         revenues = self.engine.estimate_revenues_from_context(
-            previous_outputs={
-                "financial_research": {"estimated_revenue": 2_000_000}
-            },
+            previous_outputs={"financial_research": {"estimated_revenue": 2_000_000}},
             input_context={},
             horizon_years=3,
         )
@@ -171,10 +167,7 @@ class TestRoyaltyRateSelection:
 
     def test_benchmark_override(self):
         benchmarks = {"technology": 0.06}
-        assert (
-            RoyaltyReliefEngine.select_royalty_rate("technology", benchmarks)
-            == 0.06
-        )
+        assert RoyaltyReliefEngine.select_royalty_rate("technology", benchmarks) == 0.06
 
     def test_case_insensitive(self):
         assert RoyaltyReliefEngine.select_royalty_rate("Technology") == 0.04
