@@ -3,8 +3,12 @@
 Calls intelligence-agent-svc /v1/iso-calc with controlled inputs and
 verifies the returned NPV against hand-calculated benchmarks.
 
-NPV formula:
+Explicit period:
   NPV = Sum[ (Revenue_t x RoyaltyRate x (1 - TaxRate)) / (1 + DiscountRate)^t ]
+
+Terminal value (Gordon Growth Model, g=2.5%):
+  TV  = (Final_Royalty x (1 + g)) / (DiscountRate - g)
+  Total NPV = Explicit NPV + PV(TV)
 """
 
 import pytest
@@ -20,15 +24,16 @@ class TestNPVBenchmarks:
     """Validate Royalty Relief NPV against known calculations."""
 
     async def test_npv_known_inputs(self, http_client, tenant_headers):
-        """Revenue $10M x 5yr, rate=4%, discount=10%, tax=25% -> NPV ~$1,137,236.
+        """Revenue $10M x 5yr, rate=4%, discount=10%, tax=25%.
 
-        Manual:
-          Year 1: 10,000,000 x 0.04 x 0.75 / 1.10^1 = 272,727.27
-          Year 2: 10,000,000 x 0.04 x 0.75 / 1.10^2 = 247,933.88
-          Year 3: 10,000,000 x 0.04 x 0.75 / 1.10^3 = 225,394.44
-          Year 4: 10,000,000 x 0.04 x 0.75 / 1.10^4 = 204,904.03
-          Year 5: 10,000,000 x 0.04 x 0.75 / 1.10^5 = 186,276.39
-                                                 Total: 1,137,236.01
+        Explicit period:
+          Year 1-5: 10,000,000 x 0.04 x 0.75 / 1.10^t -> sum = 1,137,236.01
+
+        Terminal value (g=2.5%):
+          TV = (300,000 x 1.025) / (0.10 - 0.025) = 4,100,000.00
+          PV(TV) = 4,100,000 / 1.10^5 = 2,545,777.45
+
+        Total NPV = 1,137,236.01 + 2,545,777.45 = 3,683,013.46
         """
         payload = make_agent_payload(
             input_prompt="NPV benchmark: 5-year flat $10M technology",
@@ -57,7 +62,7 @@ class TestNPVBenchmarks:
         data = resp.json()
 
         val = data["valuation"]
-        expected_npv = 1_137_236.01
+        expected_npv = 3_683_013.46
         assert (
             abs(val["brand_value_npv"] - expected_npv) < 5.0
         ), f"NPV {val['brand_value_npv']:.2f} not within $5 of {expected_npv:.2f}"
@@ -87,7 +92,13 @@ class TestNPVBenchmarks:
         assert val["horizon_years"] >= 1
 
     async def test_npv_single_year(self, http_client, tenant_headers):
-        """One year: $10M x 0.04 x 0.75 / 1.10 = $272,727.27."""
+        """One year explicit + terminal value.
+
+        Explicit: $10M x 0.04 x 0.75 / 1.10 = $272,727.27
+        TV = (300,000 x 1.025) / (0.10 - 0.025) = $4,100,000.00
+        PV(TV) = $4,100,000 / 1.10 = $3,727,272.73
+        Total = $4,000,000.00
+        """
         payload = make_agent_payload(
             input_prompt="NPV benchmark: single year $10M",
             config={"method": "royalty_relief"},
@@ -104,7 +115,7 @@ class TestNPVBenchmarks:
         assert resp.status_code == 200
         data = resp.json()
         val = data["valuation"]
-        expected = 272_727.27
+        expected = 4_000_000.00
         assert abs(val["brand_value_npv"] - expected) < 1.0
         assert val["horizon_years"] == 1
 
@@ -131,8 +142,8 @@ class TestNPVBenchmarks:
         data = resp.json()
         val = data["valuation"]
 
-        # NPV should be higher than flat $10M case
-        flat_npv = 1_137_236.01
+        # NPV should be higher than flat $10M case (including terminal value)
+        flat_npv = 3_683_013.46
         assert val["brand_value_npv"] > flat_npv
         assert val["horizon_years"] == 5
 
