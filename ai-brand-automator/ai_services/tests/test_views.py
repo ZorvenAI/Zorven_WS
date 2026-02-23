@@ -335,16 +335,26 @@ class TestChatWithAIPipelineIntegration:
         return reverse("chat_with_ai")
 
     @patch("orchestration.tasks.dispatch_job_task")
+    @patch("ai_services.services.GeminiAIService.extract_target_brand")
     @patch("ai_services.services.GeminiAIService.classify_intent")
     def test_analysis_message_triggers_pipeline(
         self,
         mock_classify,
+        mock_extract,
         mock_dispatch,
         authenticated_client_with_tenant,
         public_tenant,
     ):
         """Analysis request should create job and return pipeline_job."""
         mock_classify.return_value = {"intent": "pipeline", "confidence": 0.9}
+        mock_extract.return_value = {
+            "company_name": "Acme Corp",
+            "sector": "technology",
+            "base_revenue": 1_000_000,
+            "growth_rate": 0.05,
+            "brand_awareness": 50,
+            "profit_margin": 0.10,
+        }
 
         response = authenticated_client_with_tenant.post(
             self.url(),
@@ -382,16 +392,26 @@ class TestChatWithAIPipelineIntegration:
         assert response.data["response"] == "Hello!"
 
     @patch("orchestration.tasks.dispatch_job_task")
+    @patch("ai_services.services.GeminiAIService.extract_target_brand")
     @patch("ai_services.services.GeminiAIService.classify_intent")
     def test_pipeline_job_linked_to_session(
         self,
         mock_classify,
+        mock_extract,
         mock_dispatch,
         authenticated_client_with_tenant,
         public_tenant,
     ):
         """Pipeline job should record chat session_id in input_context."""
         mock_classify.return_value = {"intent": "pipeline", "confidence": 0.8}
+        mock_extract.return_value = {
+            "company_name": "Test Brand",
+            "sector": "technology",
+            "base_revenue": 5_000_000,
+            "growth_rate": 0.08,
+            "brand_awareness": 60,
+            "profit_margin": 0.12,
+        }
 
         response = authenticated_client_with_tenant.post(
             self.url(),
