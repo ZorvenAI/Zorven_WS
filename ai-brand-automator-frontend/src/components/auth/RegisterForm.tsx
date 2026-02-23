@@ -68,7 +68,7 @@ export function RegisterForm({
           // Show success state and redirect
           setSuccess(true);
           setIsLoading(false);
-          window.location.href = '/dashboard';
+          window.location.href = '/chat';
           return;
         } else {
           // Fallback: older response format without tokens

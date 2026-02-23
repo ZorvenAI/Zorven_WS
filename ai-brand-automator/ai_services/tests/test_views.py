@@ -158,11 +158,17 @@ class TestChatWithAIEndpoint:
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    @patch("ai_services.services.GeminiAIService.classify_intent")
     @patch("ai_services.views.ai_service")
     def test_chat_with_valid_message(
-        self, mock_ai_service, authenticated_client_with_tenant, public_tenant
+        self,
+        mock_ai_service,
+        mock_classify,
+        authenticated_client_with_tenant,
+        public_tenant,
     ):
         """Test chat with valid message"""
+        mock_classify.return_value = {"intent": "conversation", "confidence": 1.0}
         mock_ai_service.chat_with_brand_context.return_value = "AI Response"
 
         response = authenticated_client_with_tenant.post(
@@ -170,8 +176,8 @@ class TestChatWithAIEndpoint:
         )
 
         assert response.status_code == status.HTTP_200_OK
-        # Ensure the AI service was invoked
         assert mock_ai_service.chat_with_brand_context.called
+        assert response.data["pipeline_job"] is None
 
 
 @pytest.mark.django_db
@@ -317,3 +323,85 @@ class TestAnalyzeMarketEndpoint:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data["success"] is True
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestChatWithAIPipelineIntegration:
+    """Tests for pipeline dispatch via chat endpoint."""
+
+    def url(self):
+        return reverse("chat_with_ai")
+
+    @patch("orchestration.tasks.dispatch_job_task")
+    @patch("ai_services.services.GeminiAIService.classify_intent")
+    def test_analysis_message_triggers_pipeline(
+        self,
+        mock_classify,
+        mock_dispatch,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        """Analysis request should create job and return pipeline_job."""
+        mock_classify.return_value = {"intent": "pipeline", "confidence": 0.9}
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"message": "Perform a brand valuation analysis for Acme Corp"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["pipeline_job"] is not None
+        assert "job_id" in response.data["pipeline_job"]
+        assert response.data["pipeline_job"]["status"] == "queued"
+        mock_dispatch.delay.assert_called_once()
+
+    @patch("ai_services.services.GeminiAIService.classify_intent")
+    @patch("ai_services.views.ai_service")
+    def test_conversational_message_no_pipeline(
+        self,
+        mock_ai,
+        mock_classify,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        """Conversational message should NOT trigger pipeline."""
+        mock_classify.return_value = {"intent": "conversation", "confidence": 1.0}
+        mock_ai.chat_with_brand_context.return_value = "Hello!"
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"message": "What is a brand voice?"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["pipeline_job"] is None
+        assert response.data["response"] == "Hello!"
+
+    @patch("orchestration.tasks.dispatch_job_task")
+    @patch("ai_services.services.GeminiAIService.classify_intent")
+    def test_pipeline_job_linked_to_session(
+        self,
+        mock_classify,
+        mock_dispatch,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        """Pipeline job should record chat session_id in input_context."""
+        mock_classify.return_value = {"intent": "pipeline", "confidence": 0.8}
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"message": "Run a brand equity analysis"},
+            format="json",
+        )
+
+        from orchestration.models import AnalysisJob
+
+        job = AnalysisJob.objects.get(
+            job_id=response.data["pipeline_job"]["job_id"]
+        )
+        assert job.input_context["source"] == "chat"
+        assert job.input_context["session_id"] == response.data["session_id"]

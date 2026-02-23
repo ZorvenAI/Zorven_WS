@@ -15,7 +15,7 @@ from .serializers import (
     BrandIdentityRequestSerializer,
     MarketAnalysisRequestSerializer,
 )
-from .services import ai_service
+from .services import ai_service, GeminiAIService
 from onboarding.models import Company
 from tenants.permissions import (
     RoleBasedPermissionMixin,
@@ -130,19 +130,115 @@ def chat_with_ai(request):
     except Company.DoesNotExist:
         context = {"tenant": tenant, "company": {}}
 
-    # Add user message to session
+    # Classify intent: pipeline analysis vs. conversation
+    intent_result = GeminiAIService.classify_intent(message)
+
+    if intent_result["intent"] == "pipeline":
+        # Lazy imports to avoid circular dependency with orchestration app
+        from orchestration.models import AnalysisJob
+        from orchestration.tasks import dispatch_job_task
+
+        # Build brand-specific context for the pipeline.
+        # First, try to extract the target brand from the message
+        # (e.g., "calculate brand equity for Nike" → Nike).
+        # If not found, fall back to the tenant's own company data.
+        target_brand = GeminiAIService.extract_target_brand(message)
+
+        # Check if brand lookup returned an error
+        if target_brand and "error" in target_brand:
+            ai_response = target_brand["error"]
+            session.add_message("user", message)
+            session.add_message("assistant", ai_response)
+            return Response(
+                {
+                    "session_id": session.session_id,
+                    "response": ai_response,
+                    "pipeline_job": None,
+                    "session": ChatSessionSerializer(session).data,
+                }
+            )
+
+        job_context = {
+            "source": "chat",
+            "session_id": session.session_id,
+        }
+        if target_brand:
+            # Use the looked-up brand data
+            job_context["company_name"] = target_brand.get("company_name", "")
+            job_context["sector"] = target_brand.get("sector", "default")
+            if "base_revenue" in target_brand:
+                job_context["base_revenue"] = target_brand["base_revenue"]
+            if "growth_rate" in target_brand:
+                job_context["growth_rate"] = target_brand["growth_rate"]
+            if "brand_awareness" in target_brand:
+                job_context["brand_awareness"] = target_brand["brand_awareness"]
+            if "profit_margin" in target_brand:
+                job_context["profit_margin"] = target_brand["profit_margin"]
+            if "customer_loyalty" in target_brand:
+                job_context["customer_loyalty"] = target_brand[
+                    "customer_loyalty"
+                ]
+            if "market_share" in target_brand:
+                job_context["market_share"] = target_brand["market_share"]
+        else:
+            # Fall back to the tenant's own company data
+            company_info = context.get("company", {})
+            if company_info:
+                job_context["company_name"] = company_info.get("name", "")
+                job_context["sector"] = company_info.get(
+                    "industry", "default"
+                )
+                job_context["target_audience"] = company_info.get(
+                    "target_audience", ""
+                )
+                job_context["brand_voice"] = company_info.get(
+                    "brand_voice", ""
+                )
+                job_context["core_problem"] = company_info.get(
+                    "core_problem", ""
+                )
+
+        # Create analysis job linked to this chat session
+        job = AnalysisJob.objects.create(
+            tenant=tenant,
+            input_prompt=message,
+            input_context=job_context,
+            created_by=request.user,
+        )
+        dispatch_job_task.delay(job.id)
+
+        ai_response = (
+            "I've started a brand analysis pipeline for your request. "
+            "You can track the progress below."
+        )
+
+        session.add_message("user", message)
+        session.add_message(
+            "assistant", ai_response, metadata={"job_id": str(job.job_id)}
+        )
+
+        return Response(
+            {
+                "session_id": session.session_id,
+                "response": ai_response,
+                "pipeline_job": {
+                    "job_id": str(job.job_id),
+                    "status": job.status,
+                },
+                "session": ChatSessionSerializer(session).data,
+            }
+        )
+
+    # Normal conversation flow
     session.add_message("user", message)
-
-    # Get AI response
     ai_response = ai_service.chat_with_brand_context(message, context)
-
-    # Add AI response to session
     session.add_message("assistant", ai_response)
 
     return Response(
         {
             "session_id": session.session_id,
             "response": ai_response,
+            "pipeline_job": None,
             "session": ChatSessionSerializer(session).data,
         }
     )

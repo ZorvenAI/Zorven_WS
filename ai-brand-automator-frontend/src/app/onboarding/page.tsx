@@ -15,7 +15,7 @@ export default function OnboardingPage() {
       router.push('/onboarding/step-1');
     } else {
       // Viewers cannot access onboarding
-      router.push('/dashboard');
+      router.push('/chat');
     }
   }, [router, canEdit]);
 }

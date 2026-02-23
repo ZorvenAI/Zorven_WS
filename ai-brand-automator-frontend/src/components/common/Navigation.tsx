@@ -112,12 +112,12 @@ export function Navigation({ children }: { children: React.ReactNode }) {
   const iconCls = 'w-5 h-5 shrink-0';
 
   const navLinks: NavLink[] = [
+    ...(canEditFlag
+      ? [{ href: '/chat', label: 'AI Chat', icon: <MessageSquare className={iconCls} />, active: pathname === '/chat' }]
+      : []),
     { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className={iconCls} />, active: pathname === '/dashboard' },
     ...(canEditFlag
       ? [{ href: '/onboarding', label: 'Onboarding', icon: <Compass className={iconCls} />, active: pathname?.startsWith('/onboarding') ?? false }]
-      : []),
-    ...(canEditFlag
-      ? [{ href: '/chat', label: 'Chat', icon: <MessageSquare className={iconCls} />, active: pathname === '/chat' }]
       : []),
     { href: '/files', label: 'Files', icon: <FolderOpen className={iconCls} />, active: pathname === '/files' },
     { href: '/automation', label: 'Automation', icon: <Zap className={iconCls} />, active: pathname === '/automation' },

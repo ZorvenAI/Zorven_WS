@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import { MessageBubble } from './MessageBubble';
 import { FileSearch } from './FileSearch';
 import { apiClient } from '@/lib/api';
@@ -12,10 +11,14 @@ interface Message {
   content: string;
   isUser: boolean;
   timestamp: Date;
+  pipelineJobId?: string | null;
 }
 
 export function ChatInterface() {
-  const { canEdit } = useTenantRole();
+  const { canEdit: canEditFlag } = useTenantRole();
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => { requestAnimationFrame(() => setHasMounted(true)); }, []);
+  const canEdit = hasMounted ? canEditFlag : false;
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -51,6 +54,7 @@ export function ChatInterface() {
           content: data.response || 'I understand you\'re asking about brand strategy. Let me analyze your company data and provide some insights.',
           isUser: false,
           timestamp: new Date(),
+          pipelineJobId: data.pipeline_job?.job_id ?? null,
         };
         setMessages(prev => [...prev, aiMessage]);
       } else {
@@ -83,31 +87,19 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full overflow-hidden">
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="bg-brand-midnight/80 backdrop-blur border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-lg sm:text-xl font-heading font-semibold text-white truncate">AI Brand Assistant</h1>
-              <p className="text-xs sm:text-sm text-brand-silver/70 hidden sm:block">Get insights and generate content for your brand</p>
-            </div>
-            <Link 
-              href="/dashboard" 
-              className="flex items-center gap-1 sm:gap-2 text-brand-silver hover:text-brand-electric transition-colors text-xs sm:text-sm flex-shrink-0"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-              <span className="hidden sm:inline">Back to Dashboard</span>
-              <span className="sm:hidden">Back</span>
-            </Link>
+        <div className="shrink-0 bg-brand-midnight/80 backdrop-blur border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4">
+          <div>
+            <h1 className="text-lg sm:text-xl font-heading font-semibold text-white truncate">AI Brand Assistant</h1>
+            <p className="text-xs sm:text-sm text-brand-silver/70 hidden sm:block">Ask anything about your brand or run an analysis pipeline</p>
           </div>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 bg-brand-midnight">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 bg-brand-midnight">
           {messages.map((message) => (
             <MessageBubble key={message.id} message={message} />
           ))}
@@ -125,8 +117,8 @@ export function ChatInterface() {
         </div>
 
         {/* Input */}
-        <div className="bg-brand-midnight/80 backdrop-blur border-t border-white/10 px-6 py-4">
-          <div className="flex space-x-4">
+        <div className="shrink-0 bg-brand-midnight/80 backdrop-blur border-t border-white/10 px-4 sm:px-6 py-4">
+          <div className="flex space-x-3 sm:space-x-4">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -148,8 +140,8 @@ export function ChatInterface() {
         </div>
       </div>
 
-      {/* File Search Sidebar */}
-      <div className="w-80 bg-brand-midnight border-l border-white/10">
+      {/* File Search Sidebar — hidden on small screens */}
+      <div className="hidden xl:block w-80 shrink-0 bg-brand-midnight border-l border-white/10 overflow-y-auto">
         <FileSearch />
       </div>
     </div>
