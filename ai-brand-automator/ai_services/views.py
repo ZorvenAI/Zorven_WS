@@ -175,9 +175,7 @@ def chat_with_ai(request):
             if "profit_margin" in target_brand:
                 job_context["profit_margin"] = target_brand["profit_margin"]
             if "customer_loyalty" in target_brand:
-                job_context["customer_loyalty"] = target_brand[
-                    "customer_loyalty"
-                ]
+                job_context["customer_loyalty"] = target_brand["customer_loyalty"]
             if "market_share" in target_brand:
                 job_context["market_share"] = target_brand["market_share"]
         else:
@@ -185,18 +183,10 @@ def chat_with_ai(request):
             company_info = context.get("company", {})
             if company_info:
                 job_context["company_name"] = company_info.get("name", "")
-                job_context["sector"] = company_info.get(
-                    "industry", "default"
-                )
-                job_context["target_audience"] = company_info.get(
-                    "target_audience", ""
-                )
-                job_context["brand_voice"] = company_info.get(
-                    "brand_voice", ""
-                )
-                job_context["core_problem"] = company_info.get(
-                    "core_problem", ""
-                )
+                job_context["sector"] = company_info.get("industry", "default")
+                job_context["target_audience"] = company_info.get("target_audience", "")
+                job_context["brand_voice"] = company_info.get("brand_voice", "")
+                job_context["core_problem"] = company_info.get("core_problem", "")
 
         # Create analysis job linked to this chat session
         job = AnalysisJob.objects.create(

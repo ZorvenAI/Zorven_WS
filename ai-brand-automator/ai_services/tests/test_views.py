@@ -2,6 +2,7 @@
 Unit tests for ai_services views.
 Tests ChatSessionViewSet, AIGenerationViewSet, and API endpoints.
 """
+
 import pytest
 import uuid
 from unittest.mock import patch
@@ -400,8 +401,6 @@ class TestChatWithAIPipelineIntegration:
 
         from orchestration.models import AnalysisJob
 
-        job = AnalysisJob.objects.get(
-            job_id=response.data["pipeline_job"]["job_id"]
-        )
+        job = AnalysisJob.objects.get(job_id=response.data["pipeline_job"]["job_id"])
         assert job.input_context["source"] == "chat"
         assert job.input_context["session_id"] == response.data["session_id"]

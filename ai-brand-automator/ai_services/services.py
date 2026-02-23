@@ -76,9 +76,11 @@ class GeminiAIService:
                         f"{company_data.get('core_problem', 'key challenges')} "
                         f"for our customers."
                     ),
-                    "values": ", ".join(values)
-                    if values
-                    else "Innovation, Customer Focus, Excellence, Integrity",
+                    "values": (
+                        ", ".join(values)
+                        if values
+                        else "Innovation, Customer Focus, Excellence, Integrity"
+                    ),
                     "positioning_statement": positioning
                     or (
                         f"The leading {company_data.get('industry', 'solution')} "
@@ -257,11 +259,31 @@ class GeminiAIService:
         return result
 
     # Stop words that should not be treated as company names
-    _STOP_WORDS = frozenset({
-        "the", "a", "an", "my", "our", "this", "that", "for",
-        "and", "or", "of", "in", "to", "is", "it", "can",
-        "you", "please", "brand", "equity", "value",
-    })
+    _STOP_WORDS = frozenset(
+        {
+            "the",
+            "a",
+            "an",
+            "my",
+            "our",
+            "this",
+            "that",
+            "for",
+            "and",
+            "or",
+            "of",
+            "in",
+            "to",
+            "is",
+            "it",
+            "can",
+            "you",
+            "please",
+            "brand",
+            "equity",
+            "value",
+        }
+    )
 
     @staticmethod
     def extract_target_brand(message: str) -> Optional[Dict[str, Any]]:
@@ -301,11 +323,7 @@ class GeminiAIService:
             match = re.search(pattern, message, re.IGNORECASE)
             if match:
                 name = match.group(1).strip().rstrip(".,!?")
-                if (
-                    len(name) > 1
-                    and name.lower()
-                    not in GeminiAIService._STOP_WORDS
-                ):
+                if len(name) > 1 and name.lower() not in GeminiAIService._STOP_WORDS:
                     company_name = name
                     break
 
@@ -327,8 +345,7 @@ class GeminiAIService:
         result = GeminiAIService._gemini_estimate(company_name)
         if result:
             logger.info(
-                "Gemini provided data for %s: sector=%s, revenue=$%s, "
-                "awareness=%s",
+                "Gemini provided data for %s: sector=%s, revenue=$%s, " "awareness=%s",
                 company_name,
                 result.get("sector"),
                 f"{result.get('base_revenue', 0):,}",
@@ -340,21 +357,22 @@ class GeminiAIService:
         if ai_service.model is None:
             reason = (
                 f"I couldn't retrieve financial data for "
-                f"\"{company_name}\". The AI service (Gemini) is not "
+                f'"{company_name}". The AI service (Gemini) is not '
                 f"configured. Please ensure the GOOGLE_API_KEY is set "
                 f"so I can look up real company data."
             )
         else:
             reason = (
                 f"I couldn't find reliable public financial data for "
-                f"\"{company_name}\". This may be because the company "
+                f'"{company_name}". This may be because the company '
                 f"is private, too new, or the name wasn't recognized. "
                 f"Please verify the company name and try again, or "
                 f"try a publicly traded company."
             )
 
         logger.warning(
-            "Could not determine financial data for %s", company_name,
+            "Could not determine financial data for %s",
+            company_name,
         )
         return {"error": reason, "company_name": company_name}
 
@@ -368,7 +386,7 @@ class GeminiAIService:
                 return None
 
             prompt = (
-                f'Look up the real, publicly available financial data '
+                f"Look up the real, publicly available financial data "
                 f'for "{company_name}". Provide the data as a JSON '
                 f"object with ONLY these keys:\n"
                 f'  "company_name": the official company name (string)\n'
@@ -419,8 +437,12 @@ class GeminiAIService:
 
             # Validate required fields
             required = {
-                "company_name", "sector", "base_revenue",
-                "growth_rate", "brand_awareness", "profit_margin",
+                "company_name",
+                "sector",
+                "base_revenue",
+                "growth_rate",
+                "brand_awareness",
+                "profit_margin",
             }
             if not required.issubset(data.keys()):
                 logger.warning(
@@ -452,13 +474,9 @@ class GeminiAIService:
 
             # Validate that the returned company matches the request
             # (prevents Gemini hallucinating a different company)
-            input_clean = (
-                company_name.lower()
-                .replace(".", "").replace(",", "").strip()
-            )
+            input_clean = company_name.lower().replace(".", "").replace(",", "").strip()
             result_clean = (
-                data["company_name"].lower()
-                .replace(".", "").replace(",", "").strip()
+                data["company_name"].lower().replace(".", "").replace(",", "").strip()
             )
             result_words = result_clean.split()
             input_words = input_clean.split()
@@ -468,10 +486,7 @@ class GeminiAIService:
                 input_clean in result_clean
                 or result_clean in input_clean
                 # Any input word (>2 chars) appears in result
-                or any(
-                    w in result_clean
-                    for w in input_words if len(w) > 2
-                )
+                or any(w in result_clean for w in input_words if len(w) > 2)
                 # Any result word (>2 chars) starts with input
                 # (e.g., "spacex" → "space" in result)
                 or any(
@@ -496,7 +511,9 @@ class GeminiAIService:
 
         except Exception as e:
             logger.warning(
-                "Gemini estimation failed for %s: %s", company_name, e,
+                "Gemini estimation failed for %s: %s",
+                company_name,
+                e,
             )
             return None
 
@@ -509,17 +526,35 @@ class GeminiAIService:
         msg = message.lower()
 
         pipeline_keywords = [
-            "analyze", "analyse", "valuation", "brand equity",
-            "brand valuation", "iso 10668", "royalty relief",
-            "brand strength", "bsi", "npv", "market research",
-            "competitor analysis", "run pipeline", "run analysis",
-            "perform analysis", "evaluate brand", "assess brand",
+            "analyze",
+            "analyse",
+            "valuation",
+            "brand equity",
+            "brand valuation",
+            "iso 10668",
+            "royalty relief",
+            "brand strength",
+            "bsi",
+            "npv",
+            "market research",
+            "competitor analysis",
+            "run pipeline",
+            "run analysis",
+            "perform analysis",
+            "evaluate brand",
+            "assess brand",
         ]
 
         pipeline_phrases = [
-            "can you analyze", "can you analyse", "run a",
-            "perform a", "evaluate my", "assess my", "calculate",
-            "what is my brand worth", "how strong is my brand",
+            "can you analyze",
+            "can you analyse",
+            "run a",
+            "perform a",
+            "evaluate my",
+            "assess my",
+            "calculate",
+            "what is my brand worth",
+            "how strong is my brand",
         ]
 
         score = 0
