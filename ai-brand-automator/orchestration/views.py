@@ -8,6 +8,7 @@ PipelineManifestViewSet — CRUD for pipeline manifests (admin-only create/updat
 import logging
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -189,9 +190,56 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
             job.save(update_fields=update_fields)
 
+        # Cache job status in Redis for fast polling
+        try:
+            cache_data = {
+                "status": job.status,
+                "progress": job.progress,
+            }
+            if job.status == AnalysisJob.Status.COMPLETED:
+                cache_data["result_data"] = job.result_data
+                cache_data["manifest_name"] = (
+                    job.manifest.name if job.manifest else None
+                )
+            elif job.status == AnalysisJob.Status.FAILED:
+                cache_data["error_message"] = job.error_message
+            cache.set(f"job:status:{job.job_id}", cache_data, timeout=3600)
+        except Exception:
+            pass  # Cache failures should not break the callback
+
         logger.info("Job %s callback processed: %s", job.job_id, data)
 
         return Response({"status": "accepted"})
+
+    @action(detail=True, methods=["get"], url_path="quick-status")
+    def quick_status(self, request, job_id=None):
+        """Fast status check from Redis cache, falls back to DB.
+
+        Returns a lightweight response optimized for polling.
+        """
+        cached = cache.get(f"job:status:{job_id}")
+        if cached:
+            return Response(cached)
+
+        # Fall back to DB
+        job = self.get_object()
+        data = {
+            "status": job.status,
+            "progress": job.progress,
+        }
+        if job.status == AnalysisJob.Status.COMPLETED:
+            data["result_data"] = job.result_data
+            data["manifest_name"] = job.manifest.name if job.manifest else None
+        elif job.status == AnalysisJob.Status.FAILED:
+            data["error_message"] = job.error_message
+
+        # Populate cache for subsequent polls
+        try:
+            cache.set(f"job:status:{job_id}", data, timeout=3600)
+        except Exception:
+            pass
+
+        return Response(data)
 
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, job_id=None):

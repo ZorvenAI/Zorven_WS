@@ -573,63 +573,126 @@ class GeminiAIService:
             return {"intent": "pipeline", "confidence": min(score / 6, 1.0)}
         return {"intent": "conversation", "confidence": 1.0 - (score / 6)}
 
-    def chat_with_brand_context(self, message: str, context: Dict[str, Any]) -> str:
+    def chat_with_brand_context(
+        self,
+        message: str,
+        context: Dict[str, Any],
+        history: Optional[List[Dict[str, str]]] = None,
+    ) -> Dict[str, str]:
+        """Chat using Gemini with brand context and conversation history.
+
+        Args:
+            message: User's message text.
+            context: Brand/company context dict.
+            history: Previous messages as list of {"role", "content"} dicts.
+
+        Returns:
+            {"content": str, "thinking": str}
         """
-        Chat with AI using brand context
-        """
-        # Sanitize user message to prevent prompt injection
         sanitized_message = sanitize_ai_prompt(message)
-
-        prompt = self._build_chat_prompt(sanitized_message, context)
-
-        # TODO: Replace with actual Gemini API call
+        system_prompt = self._build_chat_system_prompt(context)
         start_time = time.time()
 
-        # Simple mock responses based on message content
-        if "vision" in message.lower():
-            response = (
-                "Your vision statement should be aspirational and "
-                "forward-looking. Consider what impact you want to have "
-                "on your industry in 5-10 years."
+        if not self.model:
+            content = self._fallback_chat_response(sanitized_message, context)
+            return {"content": content, "thinking": ""}
+
+        try:
+            # Build Gemini chat history from previous messages
+            chat_history = []
+            if history:
+                for msg in history[-10:]:  # Last 10 messages for context
+                    role = "model" if msg["role"] == "assistant" else "user"
+                    chat_history.append({"role": role, "parts": [msg["content"]]})
+
+            chat = self.model.start_chat(history=chat_history)
+            response = chat.send_message(
+                f"{system_prompt}\n\nUser: {sanitized_message}",
+                generation_config=genai.GenerationConfig(
+                    temperature=0.7, max_output_tokens=2048
+                ),
             )
-        elif "mission" in message.lower():
-            response = (
-                "Your mission statement should explain how you serve "
-                "your customers and solve their problems today."
-            )
-        elif "values" in message.lower():
-            response = (
-                "Core values should guide your company's behavior and "
-                "decision-making. Choose 3-5 values that truly "
-                "represent your brand."
-            )
-        elif "positioning" in message.lower():
-            response = (
-                "Positioning is about how you want customers to perceive your "
-                "brand relative to competitors. Focus on your unique strengths."
-            )
-        else:
-            response = (
-                "I'm here to help you build a strong brand strategy. "
-                "What specific aspect would you like to discuss?"
-            )
+            content = response.text
+
+        except Exception as e:
+            logger.error("Gemini chat failed: %s", e, exc_info=True)
+            content = self._fallback_chat_response(sanitized_message, context)
 
         processing_time = time.time() - start_time
 
-        # Log the generation
         try:
             AIGeneration.objects.create(
                 tenant=context.get("tenant"),
                 content_type="content",
-                prompt=prompt,
-                response=response,
-                tokens_used=80,
+                prompt=sanitized_message,
+                response=content,
+                tokens_used=len(sanitized_message.split()) + len(content.split()),
                 processing_time=processing_time,
             )
         except Exception as e:
-            logger.error(f"Failed to log chat AI generation: {str(e)}", exc_info=True)
+            logger.error("Failed to log chat AI generation: %s", e, exc_info=True)
 
-        return response
+        return {"content": content, "thinking": ""}
+
+    def generate_title(self, first_message: str) -> str:
+        """Generate a concise 3-6 word session title from the first message."""
+        if not self.model:
+            # Simple truncation fallback
+            words = first_message.split()[:6]
+            return " ".join(words)
+
+        try:
+            safe_msg = sanitize_ai_prompt(first_message)
+            response = self.model.generate_content(
+                f"Generate a concise title (3-6 words, no quotes) for a "
+                f"chat conversation that starts with this message:\n\n"
+                f"{safe_msg}\n\n"
+                f"Respond with ONLY the title, nothing else.",
+                generation_config=genai.GenerationConfig(
+                    temperature=0.3, max_output_tokens=30
+                ),
+            )
+            title = response.text.strip().strip("\"'")
+            return title[:255] if title else first_message[:50]
+        except Exception as e:
+            logger.warning("Title generation failed: %s", e)
+            words = first_message.split()[:6]
+            return " ".join(words)
+
+    @staticmethod
+    def _fallback_chat_response(message: str, context: Dict[str, Any]) -> str:
+        """Provide a helpful response when Gemini is not configured."""
+        company = context.get("company", {})
+        name = company.get("name", "your company")
+        return (
+            f"I'm your brand strategy assistant for {name}. "
+            f"I can help with brand positioning, identity, messaging, "
+            f"and market analysis. However, the AI service (Gemini) is "
+            f"not currently configured, so my responses are limited. "
+            f"Please ensure the GOOGLE_API_KEY environment variable is "
+            f"set for full AI-powered conversations."
+        )
+
+    def _build_chat_system_prompt(self, context: Dict[str, Any]) -> str:
+        """Build a system prompt for conversational chat with brand context."""
+        company = context.get("company", {})
+        parts = [
+            "You are BrandForge AI, an expert brand strategy assistant.",
+            "You help users build, evaluate, and improve their brands.",
+            "Provide thoughtful, actionable advice using markdown formatting.",
+            "Use headings, bullet points, and bold text for clarity.",
+        ]
+        if company.get("name"):
+            parts.append(f"\nCompany: {company['name']}")
+        if company.get("industry"):
+            parts.append(f"Industry: {company['industry']}")
+        if company.get("target_audience"):
+            parts.append(f"Target Audience: {company['target_audience']}")
+        if company.get("core_problem"):
+            parts.append(f"Core Problem: {company['core_problem']}")
+        if company.get("brand_voice"):
+            parts.append(f"Brand Voice: {company['brand_voice']}")
+        return "\n".join(parts)
 
     def analyze_market(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -715,24 +778,6 @@ Messaging Guide: [2-3 sentences about tone, voice, and communication style]
 Use actual hex color codes (like #1a365d, #319795).
 Ensure recommendations align with the brand voice and target audience.
 """
-
-    def _build_chat_prompt(self, message: str, context: Dict[str, Any]) -> str:
-        """Build prompt for chat interactions"""
-        company_info = context.get("company", {})
-        return f"""
-        You are an AI brand strategist helping a company build their brand.
-
-        Company Context:
-        - Name: {company_info.get('name', 'N/A')}
-        - Industry: {company_info.get('industry', 'N/A')}
-        - Target Audience: {company_info.get('target_audience', 'N/A')}
-        - Core Problem: {company_info.get('core_problem', 'N/A')}
-        - Brand Voice: {company_info.get('brand_voice', 'N/A')}
-
-        User Message: {message}
-
-        Provide helpful, professional advice about brand strategy and building.
-        """
 
     def _build_market_analysis_prompt(self, company_data: Dict[str, Any]) -> str:
         """Build prompt for market analysis"""

@@ -2,6 +2,7 @@
 Unit tests for ai_services.services module.
 Tests GeminiAIService with mocked Gemini API.
 """
+
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -265,12 +266,41 @@ class TestGenerateBrandIdentity:
 class TestChatWithBrandContext:
     """Tests for chat_with_brand_context method"""
 
-    def test_vision_keyword_response(self, public_tenant):
-        """Test response when message contains 'vision'"""
+    def test_fallback_response_without_model(self, public_tenant):
+        """Test fallback when Gemini is not configured"""
         with patch.object(GeminiAIService, "__init__", lambda self: None):
             service = GeminiAIService()
             service.model = None
             service.api_key = None
+
+            context = {
+                "tenant": public_tenant,
+                "company": {"name": "Test Co", "industry": "Technology"},
+            }
+
+            result = service.chat_with_brand_context("Hello!", context)
+
+            assert isinstance(result, dict)
+            assert "content" in result
+            assert "thinking" in result
+            assert "Test Co" in result["content"]
+            assert "Gemini" in result["content"]
+
+    @patch("ai_services.services.genai")
+    def test_real_gemini_chat(self, mock_genai, public_tenant):
+        """Test chat with mocked Gemini model"""
+        mock_chat = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = "Here's my advice on branding..."
+        mock_chat.send_message.return_value = mock_response
+
+        mock_model = MagicMock()
+        mock_model.start_chat.return_value = mock_chat
+
+        with patch.object(GeminiAIService, "__init__", lambda self: None):
+            service = GeminiAIService()
+            service.model = mock_model
+            service.api_key = "test-key"
 
             context = {
                 "tenant": public_tenant,
@@ -278,13 +308,71 @@ class TestChatWithBrandContext:
             }
 
             result = service.chat_with_brand_context(
-                "Help me with my vision statement", context
+                "What makes a strong brand?", context
             )
 
-            assert "vision" in result.lower()
+            assert result["content"] == "Here's my advice on branding..."
+            assert result["thinking"] == ""
+            mock_model.start_chat.assert_called_once()
+            mock_chat.send_message.assert_called_once()
 
-    def test_mission_keyword_response(self, public_tenant):
-        """Test response when message contains 'mission'"""
+    @patch("ai_services.services.genai")
+    def test_chat_passes_history(self, mock_genai, public_tenant):
+        """Test that conversation history is passed to Gemini"""
+        mock_chat = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = "Follow-up response"
+        mock_chat.send_message.return_value = mock_response
+
+        mock_model = MagicMock()
+        mock_model.start_chat.return_value = mock_chat
+
+        with patch.object(GeminiAIService, "__init__", lambda self: None):
+            service = GeminiAIService()
+            service.model = mock_model
+            service.api_key = "test-key"
+
+            context = {
+                "tenant": public_tenant,
+                "company": {"name": "Test Co"},
+            }
+            history = [
+                {"role": "user", "content": "Hello"},
+                {"role": "assistant", "content": "Hi there!"},
+            ]
+
+            service.chat_with_brand_context("Follow up", context, history)
+
+            # History should be passed to start_chat
+            call_args = mock_model.start_chat.call_args
+            assert len(call_args.kwargs["history"]) == 2
+            assert call_args.kwargs["history"][0]["role"] == "user"
+            assert call_args.kwargs["history"][1]["role"] == "model"
+
+    @patch("ai_services.services.genai")
+    def test_chat_falls_back_on_exception(self, mock_genai, public_tenant):
+        """Test fallback when Gemini raises an exception"""
+        mock_model = MagicMock()
+        mock_model.start_chat.side_effect = Exception("API Error")
+
+        with patch.object(GeminiAIService, "__init__", lambda self: None):
+            service = GeminiAIService()
+            service.model = mock_model
+            service.api_key = "test-key"
+
+            context = {
+                "tenant": public_tenant,
+                "company": {"name": "Test Co"},
+            }
+
+            result = service.chat_with_brand_context("Hello", context)
+
+            assert isinstance(result, dict)
+            assert "content" in result
+            assert "Test Co" in result["content"]
+
+    def test_returns_dict_format(self, public_tenant):
+        """Test that return value is always a dict with content and thinking"""
         with patch.object(GeminiAIService, "__init__", lambda self: None):
             service = GeminiAIService()
             service.model = None
@@ -292,48 +380,83 @@ class TestChatWithBrandContext:
 
             context = {
                 "tenant": public_tenant,
-                "company": {"name": "Test Co", "industry": "Technology"},
+                "company": {"name": "Test Co"},
             }
 
-            result = service.chat_with_brand_context(
-                "What should my mission be?", context
-            )
+            result = service.chat_with_brand_context("Hello", context)
 
-            assert "mission" in result.lower()
+            assert isinstance(result, dict)
+            assert "content" in result
+            assert "thinking" in result
+            assert isinstance(result["content"], str)
+            assert isinstance(result["thinking"], str)
 
-    def test_values_keyword_response(self, public_tenant):
-        """Test response when message contains 'values'"""
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestGenerateTitle:
+    """Tests for generate_title method"""
+
+    def test_fallback_title_without_model(self):
+        """Test title generation without Gemini (truncation fallback)"""
         with patch.object(GeminiAIService, "__init__", lambda self: None):
             service = GeminiAIService()
             service.model = None
-            service.api_key = None
 
-            context = {
-                "tenant": public_tenant,
-                "company": {"name": "Test Co", "industry": "Technology"},
-            }
-
-            result = service.chat_with_brand_context(
-                "Help define my company values", context
+            title = service.generate_title(
+                "What is the best strategy for brand positioning?"
             )
+            # Should return first 6 words
+            assert len(title.split()) <= 6
 
-            assert "values" in result.lower()
+    @patch("ai_services.services.genai")
+    def test_title_with_gemini(self, mock_genai):
+        """Test title generation with mocked Gemini"""
+        mock_response = MagicMock()
+        mock_response.text = "Brand Positioning Strategy"
 
-    def test_generic_response(self, public_tenant):
-        """Test generic response for unrecognized keywords"""
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = mock_response
+
         with patch.object(GeminiAIService, "__init__", lambda self: None):
             service = GeminiAIService()
-            service.model = None
-            service.api_key = None
+            service.model = mock_model
 
-            context = {
-                "tenant": public_tenant,
-                "company": {"name": "Test Co", "industry": "Technology"},
-            }
+            title = service.generate_title("Help me with brand positioning")
 
-            result = service.chat_with_brand_context("Hello there!", context)
+            assert title == "Brand Positioning Strategy"
+            mock_model.generate_content.assert_called_once()
 
-            assert "brand strategy" in result.lower()
+    @patch("ai_services.services.genai")
+    def test_title_strips_quotes(self, mock_genai):
+        """Test that quotes are stripped from title"""
+        mock_response = MagicMock()
+        mock_response.text = '"Brand Strategy Discussion"'
+
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = mock_response
+
+        with patch.object(GeminiAIService, "__init__", lambda self: None):
+            service = GeminiAIService()
+            service.model = mock_model
+
+            title = service.generate_title("Let's discuss brand strategy")
+
+            assert title == "Brand Strategy Discussion"
+
+    @patch("ai_services.services.genai")
+    def test_title_fallback_on_exception(self, mock_genai):
+        """Test fallback when Gemini fails during title generation"""
+        mock_model = MagicMock()
+        mock_model.generate_content.side_effect = Exception("API Error")
+
+        with patch.object(GeminiAIService, "__init__", lambda self: None):
+            service = GeminiAIService()
+            service.model = mock_model
+
+            title = service.generate_title("What makes a strong brand identity?")
+            # Should fall back to first 6 words
+            assert len(title.split()) <= 6
 
 
 @pytest.mark.django_db

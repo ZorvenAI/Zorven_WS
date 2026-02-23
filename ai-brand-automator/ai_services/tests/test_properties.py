@@ -2,6 +2,7 @@
 Property-based tests using Hypothesis for ai_services app.
 Tests invariants and edge cases through automated random data generation.
 """
+
 import pytest
 import uuid
 from hypothesis import given, assume, strategies as st, settings, HealthCheck
@@ -11,10 +12,9 @@ from ai_services.models import ChatSession, AIGeneration
 from ai_services.serializers import (
     ChatSessionSerializer,
     AIGenerationSerializer,
-    ChatMessageSerializer,
+    ChatInputSerializer,
 )
 from ai_services.tests.factories import ChatSessionFactory, AIGenerationFactory
-
 
 # Suppress health check for function-scoped fixtures
 # Reduced max_examples for faster CI runs (each creates a new tenant)
@@ -176,8 +176,8 @@ class TestAIGenerationProperties:
 
 @pytest.mark.django_db
 @pytest.mark.property
-class TestChatMessageSerializerProperties:
-    """Property-based tests for ChatMessageSerializer"""
+class TestChatInputSerializerProperties:
+    """Property-based tests for ChatInputSerializer"""
 
     @property_settings
     @given(message=st.text(min_size=1, max_size=1000))
@@ -185,7 +185,7 @@ class TestChatMessageSerializerProperties:
         """Property: Any non-empty string is valid for message"""
         assume(len(message.strip()) > 0)
 
-        serializer = ChatMessageSerializer(data={"message": message})
+        serializer = ChatInputSerializer(data={"message": message})
         assert serializer.is_valid(), f"Failed for message: {repr(message)}"
 
     @property_settings
@@ -197,7 +197,7 @@ class TestChatMessageSerializerProperties:
         """Property: Message serializer accepts any session_id"""
         assume(len(message.strip()) > 0)
 
-        serializer = ChatMessageSerializer(
+        serializer = ChatInputSerializer(
             data={"message": message, "session_id": session_id}
         )
         assert serializer.is_valid()

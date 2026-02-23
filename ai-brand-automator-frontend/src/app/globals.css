@@ -310,6 +310,19 @@
   }
 }
 
+/* ===== Code Highlighting (highlight.js dark theme) ===== */
+.hljs {
+  background: rgba(0, 0, 0, 0.3) !important;
+  color: #E1E1E6 !important;
+}
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section, .hljs-link { color: #c792ea; }
+.hljs-string, .hljs-attr { color: #c3e88d; }
+.hljs-number, .hljs-built_in, .hljs-type { color: #f78c6c; }
+.hljs-comment, .hljs-quote { color: #546e7a; font-style: italic; }
+.hljs-title, .hljs-name { color: #82aaff; }
+.hljs-variable, .hljs-template-variable { color: #f07178; }
+.hljs-meta { color: #ffcb6b; }
+
 /* Pulse animation for AI effects */
 @keyframes pulse {
   0%, 100% {

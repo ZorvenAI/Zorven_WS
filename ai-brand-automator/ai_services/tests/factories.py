@@ -1,12 +1,13 @@
 """
 Factory Boy factories for ai_services models
 """
+
 import factory
 import uuid
 from factory.django import DjangoModelFactory
 from django.utils import timezone
 
-from ai_services.models import ChatSession, AIGeneration
+from ai_services.models import ChatSession, ChatMessage, SessionAttachment, AIGeneration
 from tenants.models import Tenant
 
 
@@ -36,6 +37,34 @@ class ChatSessionFactory(DjangoModelFactory):
     context = factory.LazyFunction(dict)
     created_at = factory.LazyFunction(timezone.now)
     last_activity = factory.LazyFunction(timezone.now)
+
+
+class ChatMessageFactory(DjangoModelFactory):
+    """Factory for ChatMessage model"""
+
+    class Meta:
+        model = ChatMessage
+
+    session = factory.SubFactory(ChatSessionFactory)
+    role = "user"
+    content = factory.Faker("sentence", nb_words=10)
+    metadata = factory.LazyFunction(dict)
+    thinking = ""
+    created_at = factory.LazyFunction(timezone.now)
+
+
+class SessionAttachmentFactory(DjangoModelFactory):
+    """Factory for SessionAttachment model"""
+
+    class Meta:
+        model = SessionAttachment
+
+    message = factory.SubFactory(ChatMessageFactory)
+    asset = None
+    file_name = factory.Faker("file_name", extension="pdf")
+    file_type = "document"
+    file_size = factory.Faker("random_int", min=1024, max=5_000_000)
+    pipeline_status = "pending"
 
 
 class AIGenerationFactory(DjangoModelFactory):
