@@ -29,6 +29,7 @@ export function ChatInterface() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -45,10 +46,18 @@ export function ChatInterface() {
     setIsLoading(true);
 
     try {
-      const response = await apiClient.post('/ai/chat/', { message: input });
+      const body: Record<string, string> = { message: input };
+      if (sessionId) {
+        body.session_id = sessionId;
+      }
+      const response = await apiClient.post('/ai/chat/', body);
 
       if (response.ok) {
         const data = await response.json();
+        // Persist session_id for conversation continuity
+        if (data.session_id && !sessionId) {
+          setSessionId(data.session_id);
+        }
         const aiMessage: Message = {
           id: (Date.now() + 1).toString(),
           content: data.response || 'I understand you\'re asking about brand strategy. Let me analyze your company data and provide some insights.',

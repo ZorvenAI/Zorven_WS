@@ -122,14 +122,22 @@ class RoyaltyReliefEngine:
 
         explicit_npv = float(np.sum(present_values))
 
-        # Terminal value — captures ongoing brand value beyond forecast
-        # Only apply if discount rate exceeds terminal growth rate
+        # Terminal value (Gordon Growth Model) — captures ongoing brand
+        # value beyond the explicit forecast horizon.
+        # Requires discount_rate > terminal_growth_rate.
         terminal_value_pv = 0.0
-        if discount_rate > terminal_growth_rate:
+        if discount_rate <= terminal_growth_rate:
+            logger.warning(
+                "Skipping terminal value: discount_rate (%.4f) must exceed "
+                "terminal_growth_rate (%.4f). Returning explicit NPV only.",
+                discount_rate,
+                terminal_growth_rate,
+            )
+        else:
             final_royalty = float(royalties[-1])
-            terminal_value = (
-                final_royalty * (1 + terminal_growth_rate)
-            ) / (discount_rate - terminal_growth_rate)
+            terminal_value = (final_royalty * (1 + terminal_growth_rate)) / (
+                discount_rate - terminal_growth_rate
+            )
             # Discount terminal value back to present
             terminal_discount = (1 + discount_rate) ** len(projected_revenues)
             terminal_value_pv = terminal_value / terminal_discount
@@ -234,17 +242,13 @@ class RoyaltyReliefEngine:
         if company_name:
             import hashlib
 
-            name_hash = int(
-                hashlib.md5(company_name.encode()).hexdigest()[:8], 16
-            )
+            name_hash = int(hashlib.md5(company_name.encode()).hexdigest()[:8], 16)
             # Map to a multiplier between 0.80 and 1.20
             variation = 0.80 + (name_hash % 4001) / 10000.0
             stub_base *= variation
 
         growth = float(input_context.get("growth_rate", DEFAULT_GROWTH_RATE))
-        revenues = [
-            stub_base * (1 + growth) ** t for t in range(horizon_years)
-        ]
+        revenues = [stub_base * (1 + growth) ** t for t in range(horizon_years)]
         logger.warning(
             "No revenue data found — using stub projection "
             "(sector=%s, base=$%.0fM, company=%s)",

@@ -385,9 +385,12 @@ class GeminiAIService:
             if ai_service.model is None:
                 return None
 
+            # Sanitize company name to prevent prompt injection
+            safe_name = sanitize_ai_prompt(company_name)
+
             prompt = (
                 f"Look up the real, publicly available financial data "
-                f'for "{company_name}". Provide the data as a JSON '
+                f'for "{safe_name}". Provide the data as a JSON '
                 f"object with ONLY these keys:\n"
                 f'  "company_name": the official company name (string)\n'
                 f'  "sector": one of: technology, software, '

@@ -15,6 +15,8 @@ Wire order:
   6. Return ExecuteResponse
 """
 
+import hashlib
+import json
 import logging
 from typing import Any, Optional
 
@@ -83,9 +85,18 @@ class IntelligenceExecutor:
                     f"Max {settings.RATE_LIMIT_PER_MINUTE} requests per minute.",
                 )
 
-        # Check result cache — include input_context so different brands
-        # with similar prompts don't collide in cache
-        cache_key = f"{tenant_id}:{request.input_prompt}:{request.input_context}:{config}"
+        # Check result cache — canonical JSON + hash for stable, fixed-length keys
+        cache_payload = json.dumps(
+            {
+                "prompt": request.input_prompt,
+                "context": request.input_context,
+                "config": config,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        cache_hash = hashlib.sha256(cache_payload.encode()).hexdigest()[:16]
+        cache_key = f"{tenant_id}:{cache_hash}"
         if self.redis_manager:
             cached = await self.redis_manager.get_cached_result(cache_key)
             if cached:
@@ -255,12 +266,14 @@ class IntelligenceExecutor:
             if cached_wacc is not None:
                 discount_rate = cached_wacc
 
-        # 8. Calculate NPV
+        # 8. Calculate NPV (with terminal value)
+        terminal_growth = settings.DEFAULT_TERMINAL_GROWTH_RATE
         valuation = self.royalty_engine.calculate_npv(
             projected_revenues=projected_revenues,
             royalty_rate=royalty_rate,
             discount_rate=discount_rate,
             tax_rate=tax_rate,
+            terminal_growth_rate=terminal_growth,
         )
 
         # 9. Build rationale
