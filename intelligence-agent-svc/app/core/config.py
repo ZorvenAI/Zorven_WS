@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     DEFAULT_HORIZON_YEARS: int = 5
     DEFAULT_TAX_RATE: float = 0.25
     DEFAULT_DISCOUNT_RATE: float = 0.10
+    DEFAULT_TERMINAL_GROWTH_RATE: float = 0.025  # Long-term GDP-like growth
 
 
 settings = Settings()

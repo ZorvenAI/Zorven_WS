@@ -15,6 +15,8 @@ Wire order:
   6. Return ExecuteResponse
 """
 
+import hashlib
+import json
 import logging
 from typing import Any, Optional
 
@@ -83,8 +85,18 @@ class IntelligenceExecutor:
                     f"Max {settings.RATE_LIMIT_PER_MINUTE} requests per minute.",
                 )
 
-        # Check result cache
-        cache_key = f"{tenant_id}:{request.input_prompt}:{config}"
+        # Check result cache — canonical JSON + hash for stable, fixed-length keys
+        cache_payload = json.dumps(
+            {
+                "prompt": request.input_prompt,
+                "context": request.input_context,
+                "config": config,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        cache_hash = hashlib.sha256(cache_payload.encode()).hexdigest()[:16]
+        cache_key = f"{tenant_id}:{cache_hash}"
         if self.redis_manager:
             cached = await self.redis_manager.get_cached_result(cache_key)
             if cached:
@@ -143,6 +155,26 @@ class IntelligenceExecutor:
         if self.storage_service:
             financial_data = await self.storage_service.fetch_financial_data(tenant_id)
 
+        # 1b. Derive financial metrics from input_context when GCS unavailable
+        if financial_data is None and input_context.get("base_revenue"):
+            growth = float(input_context.get("growth_rate", 0.05))
+            margin = float(input_context.get("profit_margin", 0.10))
+            financial_data = {
+                "revenue_growth": growth,
+                "profit_margin": margin,
+            }
+            # Include market share if available from Gemini lookup
+            ctx_market_share = input_context.get("market_share")
+            if ctx_market_share is not None:
+                financial_data["market_share"] = float(ctx_market_share)
+            logger.info(
+                "Derived financial data from input_context: "
+                "growth=%.2f, margin=%.2f, market_share=%s",
+                growth,
+                margin,
+                ctx_market_share,
+            )
+
         # 2. Determine calculation strategy
         data_manifest = {
             "financial_data": financial_data,
@@ -158,7 +190,7 @@ class IntelligenceExecutor:
 
         # 4. Estimate revenue forecast
         projected_revenues = self.royalty_engine.estimate_revenues_from_context(
-            previous_outputs, input_context, horizon_years
+            previous_outputs, input_context, horizon_years, sector=sector
         )
 
         # 5. Calculate BSI
@@ -187,11 +219,35 @@ class IntelligenceExecutor:
                     len(all_findings),
                     sentiment,
                 )
+
+        # Override behavioral metrics with input_context if provided
+        # (Gemini-estimated data is more accurate than generic discovery)
+        ctx_awareness = input_context.get("brand_awareness")
+        if ctx_awareness is not None:
+            if behavioral_data is None:
+                behavioral_data = {}
+            behavioral_data["brand_awareness"] = float(ctx_awareness)
+            logger.info(
+                "Using brand_awareness from input_context: %.1f",
+                float(ctx_awareness),
+            )
+        ctx_loyalty = input_context.get("customer_loyalty")
+        if ctx_loyalty is not None:
+            if behavioral_data is None:
+                behavioral_data = {}
+            behavioral_data["customer_loyalty"] = float(ctx_loyalty)
+            logger.info(
+                "Using customer_loyalty from input_context: %.1f",
+                float(ctx_loyalty),
+            )
         legal_data = input_context.get("legal_data")
+        # Pass company name as brand seed for deterministic per-brand variation
+        brand_seed = str(input_context.get("company_name", ""))
         bsi_result = self.bsi_calculator.derive_index(
             financial_data=financial_data,
             behavioral_data=behavioral_data,
             legal_data=legal_data,
+            brand_seed=brand_seed,
         )
 
         # 6. Select royalty rate (BSI can influence rate selection)
@@ -210,12 +266,14 @@ class IntelligenceExecutor:
             if cached_wacc is not None:
                 discount_rate = cached_wacc
 
-        # 8. Calculate NPV
+        # 8. Calculate NPV (with terminal value)
+        terminal_growth = settings.DEFAULT_TERMINAL_GROWTH_RATE
         valuation = self.royalty_engine.calculate_npv(
             projected_revenues=projected_revenues,
             royalty_rate=royalty_rate,
             discount_rate=discount_rate,
             tax_rate=tax_rate,
+            terminal_growth_rate=terminal_growth,
         )
 
         # 9. Build rationale

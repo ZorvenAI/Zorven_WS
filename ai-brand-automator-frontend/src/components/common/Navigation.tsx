@@ -111,25 +111,30 @@ export function Navigation({ children }: { children: React.ReactNode }) {
   // Icon size for nav links
   const iconCls = 'w-5 h-5 shrink-0';
 
+  // Guard role-dependent flags behind hasMounted to prevent hydration mismatches
+  const canEdit = hasMounted ? canEditFlag : false;
+  const canTeam = hasMounted ? canManageTeam : false;
+  const canBilling = hasMounted ? canManageBilling : false;
+
   const navLinks: NavLink[] = [
-    { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className={iconCls} />, active: pathname === '/dashboard' },
-    ...(canEditFlag
-      ? [{ href: '/onboarding', label: 'Onboarding', icon: <Compass className={iconCls} />, active: pathname?.startsWith('/onboarding') ?? false }]
+    ...(canEdit
+      ? [{ href: '/chat', label: 'AI Chat', icon: <MessageSquare className={iconCls} />, active: pathname === '/chat' }]
       : []),
-    ...(canEditFlag
-      ? [{ href: '/chat', label: 'Chat', icon: <MessageSquare className={iconCls} />, active: pathname === '/chat' }]
+    { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className={iconCls} />, active: pathname === '/dashboard' },
+    ...(canEdit
+      ? [{ href: '/onboarding', label: 'Onboarding', icon: <Compass className={iconCls} />, active: pathname?.startsWith('/onboarding') ?? false }]
       : []),
     { href: '/files', label: 'Files', icon: <FolderOpen className={iconCls} />, active: pathname === '/files' },
     { href: '/automation', label: 'Automation', icon: <Zap className={iconCls} />, active: pathname === '/automation' },
     { href: '/dashboard/pipelines', label: 'Pipelines', icon: <GitBranch className={iconCls} />, active: pathname?.startsWith('/dashboard/pipelines') ?? false },
-    ...(canEditFlag
+    ...(canEdit
       ? [{ href: '/dashboard/ai-assistant', label: 'AI Assistant', icon: <Bot className={iconCls} />, active: pathname?.startsWith('/dashboard/ai-assistant') ?? false }]
       : []),
     { href: '/dashboard/analysis', label: 'Reports', icon: <BarChart3 className={iconCls} />, active: pathname?.startsWith('/dashboard/analysis') ?? false },
-    ...(canManageTeam
+    ...(canTeam
       ? [{ href: '/dashboard/team', label: 'Team', icon: <Users className={iconCls} />, active: pathname === '/dashboard/team' }]
       : []),
-    ...(canManageBilling
+    ...(canBilling
       ? [{ href: '/billing', label: 'Billing', icon: <CreditCard className={iconCls} />, active: pathname === '/billing' }]
       : []),
   ];

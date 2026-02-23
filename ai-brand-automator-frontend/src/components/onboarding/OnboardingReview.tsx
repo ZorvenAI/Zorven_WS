@@ -76,8 +76,8 @@ export function OnboardingReview() {
         const data = await response.json();
         // Update company data with generated strategy
         setCompany(prev => prev ? { ...prev, ...data } : null);
-        alert('Brand strategy generated successfully! Redirecting to dashboard...');
-        setTimeout(() => router.push('/dashboard'), 1500);
+        alert('Brand strategy generated successfully! Redirecting to AI Chat...');
+        setTimeout(() => router.push('/chat'), 1500);
       } else {
         const errorData = await response.json();
         setError(errorData.message || 'Failed to generate brand strategy');
@@ -297,10 +297,10 @@ export function OnboardingReview() {
           </button>
           <button
             type="button"
-            onClick={() => router.push('/dashboard')}
+            onClick={() => router.push('/chat')}
             className="btn-primary"
           >
-            Complete & Go to Dashboard
+            Complete & Start Chatting
           </button>
         </div>
       </div>

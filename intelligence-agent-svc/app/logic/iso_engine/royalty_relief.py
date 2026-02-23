@@ -27,6 +27,12 @@ SECTOR_ROYALTY_RATES: dict[str, float] = {
     "healthcare": 0.045,
     "pharmaceuticals": 0.05,
     "automotive": 0.03,
+    "aerospace": 0.05,
+    "defense": 0.05,
+    "industrial": 0.035,
+    "electric_vehicles": 0.04,
+    "energy": 0.04,
+    "telecommunications": 0.035,
     "luxury": 0.05,
     "media": 0.04,
     "default": 0.04,
@@ -34,6 +40,28 @@ SECTOR_ROYALTY_RATES: dict[str, float] = {
 
 # Default growth rate for stub revenue estimation
 DEFAULT_GROWTH_RATE = 0.05
+
+# Sector-specific stub base revenues (used when no real data is available).
+# Avoids returning identical valuations for all brands.
+SECTOR_STUB_REVENUES: dict[str, float] = {
+    "technology": 15_000_000.0,
+    "software": 12_000_000.0,
+    "consumer_goods": 25_000_000.0,
+    "retail": 30_000_000.0,
+    "financial_services": 50_000_000.0,
+    "healthcare": 20_000_000.0,
+    "pharmaceuticals": 35_000_000.0,
+    "automotive": 80_000_000.0,
+    "aerospace": 60_000_000.0,
+    "defense": 70_000_000.0,
+    "industrial": 40_000_000.0,
+    "electric_vehicles": 50_000_000.0,
+    "energy": 100_000_000.0,
+    "telecommunications": 45_000_000.0,
+    "luxury": 18_000_000.0,
+    "media": 8_000_000.0,
+    "default": 10_000_000.0,
+}
 
 
 class RoyaltyReliefEngine:
@@ -45,17 +73,26 @@ class RoyaltyReliefEngine:
         royalty_rate: float,
         discount_rate: float,
         tax_rate: float = 0.25,
+        terminal_growth_rate: float = 0.025,
     ) -> ValuationResult:
         """
         Calculate the Net Present Value of brand royalty savings.
 
-        NPV = Sum[ (Revenue_t x RoyaltyRate x (1 - TaxRate)) / (1 + r)^t ]
+        Explicit period:
+          NPV = Sum[ (Revenue_t x RoyaltyRate x (1 - TaxRate)) / (1 + r)^t ]
+
+        Terminal value (Gordon Growth Model) captures brand value beyond
+        the explicit forecast horizon:
+          TV = (Final Royalty x (1 + g)) / (r - g)
+          PV(TV) = TV / (1 + r)^T
 
         Args:
-            projected_revenues: Revenue forecast for each year (list length = horizon).
+            projected_revenues: Revenue forecast for each year.
             royalty_rate: Comparable royalty rate (e.g., 0.045 for 4.5%).
             discount_rate: WACC or risk-adjusted discount rate.
             tax_rate: Corporate tax rate (default 25%).
+            terminal_growth_rate: Long-term sustainable growth rate
+                for terminal value (default 2.5%).
 
         Returns:
             ValuationResult with NPV and per-year breakdown.
@@ -80,14 +117,39 @@ class RoyaltyReliefEngine:
         # Discount factors
         discount_factors = (1 + discount_rate) ** years
 
-        # Present values
+        # Present values of explicit forecast period
         present_values = royalties / discount_factors
 
-        npv = float(np.sum(present_values))
+        explicit_npv = float(np.sum(present_values))
+
+        # Terminal value (Gordon Growth Model) — captures ongoing brand
+        # value beyond the explicit forecast horizon.
+        # Requires discount_rate > terminal_growth_rate.
+        terminal_value_pv = 0.0
+        if discount_rate <= terminal_growth_rate:
+            logger.warning(
+                "Skipping terminal value: discount_rate (%.4f) must exceed "
+                "terminal_growth_rate (%.4f). Returning explicit NPV only.",
+                discount_rate,
+                terminal_growth_rate,
+            )
+        else:
+            final_royalty = float(royalties[-1])
+            terminal_value = (final_royalty * (1 + terminal_growth_rate)) / (
+                discount_rate - terminal_growth_rate
+            )
+            # Discount terminal value back to present
+            terminal_discount = (1 + discount_rate) ** len(projected_revenues)
+            terminal_value_pv = terminal_value / terminal_discount
+
+        npv = explicit_npv + terminal_value_pv
 
         logger.info(
-            "Royalty Relief NPV: $%.2f (rate=%.3f, discount=%.3f, years=%d)",
+            "Royalty Relief NPV: $%.2f (explicit=$%.2f, terminal=$%.2f, "
+            "rate=%.3f, discount=%.3f, years=%d)",
             npv,
+            explicit_npv,
+            terminal_value_pv,
             royalty_rate,
             discount_rate,
             len(projected_revenues),
@@ -108,6 +170,7 @@ class RoyaltyReliefEngine:
         previous_outputs: dict[str, Any],
         input_context: dict[str, Any],
         horizon_years: int = 5,
+        sector: str = "default",
     ) -> list[float]:
         """
         Extract or estimate a multi-year revenue forecast.
@@ -116,7 +179,7 @@ class RoyaltyReliefEngine:
         1. input_context.projected_revenues — user-provided forecast
         2. input_context.base_revenue + growth — single year extrapolated
         3. previous_outputs discovery findings — attempt extraction
-        4. Fallback — stub revenue projection ($10M base, 5% growth)
+        4. Fallback — sector + brand-seeded stub revenue projection
         """
         # 1. Direct revenue forecast from user
         if "projected_revenues" in input_context:
@@ -166,14 +229,32 @@ class RoyaltyReliefEngine:
             logger.info("Extracted revenue from discovery text: $%.0f", extracted)
             return revenues
 
-        # 5. Stub fallback
-        stub_base = 10_000_000.0
-        revenues = [
-            stub_base * (1 + DEFAULT_GROWTH_RATE) ** t for t in range(horizon_years)
-        ]
+        # 5. Stub fallback — use sector-specific base and brand name seed
+        #    for variation so different brands produce different valuations
+        sector_lower = sector.lower().strip()
+        stub_base = SECTOR_STUB_REVENUES.get(
+            sector_lower, SECTOR_STUB_REVENUES["default"]
+        )
+
+        # Use company name hash to add deterministic per-brand variation
+        # (±20% around the sector base), so "Acme" and "Zenith" differ
+        company_name = input_context.get("company_name", "")
+        if company_name:
+            import hashlib
+
+            name_hash = int(hashlib.md5(company_name.encode()).hexdigest()[:8], 16)
+            # Map to a multiplier between 0.80 and 1.20
+            variation = 0.80 + (name_hash % 4001) / 10000.0
+            stub_base *= variation
+
+        growth = float(input_context.get("growth_rate", DEFAULT_GROWTH_RATE))
+        revenues = [stub_base * (1 + growth) ** t for t in range(horizon_years)]
         logger.warning(
-            "No revenue data found — using stub projection ($%.0fM base)",
+            "No revenue data found — using stub projection "
+            "(sector=%s, base=$%.0fM, company=%s)",
+            sector_lower,
             stub_base / 1e6,
+            company_name or "unknown",
         )
         return revenues
 

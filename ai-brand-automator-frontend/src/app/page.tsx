@@ -12,7 +12,7 @@ export default function Home() {
     // Check if user is authenticated
     const token = localStorage.getItem('access_token');
     if (token) {
-      router.push('/dashboard');
+      router.push('/chat');
       return; // Don't set loaded if redirecting
     }
     // Use requestAnimationFrame to avoid synchronous setState in effect

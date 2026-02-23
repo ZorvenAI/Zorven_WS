@@ -12,12 +12,14 @@ class TestRoyaltyReliefEngine:
     def test_npv_with_known_values(self):
         """Verify NPV against hand-calculated expected value.
 
-        Year 1: 1,000,000 * 0.05 * 0.75 / 1.10^1 = 34,090.91
-        Year 2: 1,000,000 * 0.05 * 0.75 / 1.10^2 = 30,991.74
-        Year 3: 1,000,000 * 0.05 * 0.75 / 1.10^3 = 28,174.31
-        Year 4: 1,000,000 * 0.05 * 0.75 / 1.10^4 = 25,613.01
-        Year 5: 1,000,000 * 0.05 * 0.75 / 1.10^5 = 23,284.55
-        Total ≈ 142,154.52
+        Explicit period (flat $1M revenue):
+        Year 1-5: 1,000,000 * 0.05 * 0.75 / 1.10^t → sum ≈ 142,154.52
+
+        Terminal value (Gordon Growth, g=2.5%):
+        TV = (37,500 * 1.025) / (0.10 - 0.025) = 512,500.00
+        PV(TV) = 512,500 / 1.10^5 ≈ 318,222.16
+
+        Total NPV ≈ 142,154.52 + 318,222.16 = 460,376.68
         """
         result = self.engine.calculate_npv(
             projected_revenues=[1_000_000] * 5,
@@ -25,7 +27,7 @@ class TestRoyaltyReliefEngine:
             discount_rate=0.10,
             tax_rate=0.25,
         )
-        assert abs(result.brand_value_npv - 142154.52) < 1.0
+        assert abs(result.brand_value_npv - 460376.68) < 1.0
         assert result.royalty_rate == 0.05
         assert result.discount_rate == 0.10
         assert result.tax_rate == 0.25
@@ -55,14 +57,23 @@ class TestRoyaltyReliefEngine:
         assert result.annual_royalties == []
 
     def test_single_year_horizon(self):
-        """Single year: 500,000 * 0.04 * 0.75 / 1.08 = 13,888.89"""
+        """Single year explicit + terminal value.
+
+        Explicit: 500,000 * 0.04 * 0.75 / 1.08 = 13,888.89
+        TV = (15,000 * 1.025) / (0.08 - 0.025) = 279,545.45
+        PV(TV) = 279,545.45 / 1.08 = 258,838.38
+        Total ≈ 272,727.27
+        """
         result = self.engine.calculate_npv(
             projected_revenues=[500_000],
             royalty_rate=0.04,
             discount_rate=0.08,
             tax_rate=0.25,
         )
-        expected = 500_000 * 0.04 * 0.75 / 1.08
+        explicit = 500_000 * 0.04 * 0.75 / 1.08
+        tv = (15_000 * 1.025) / (0.08 - 0.025)
+        pv_tv = tv / 1.08
+        expected = explicit + pv_tv
         assert abs(result.brand_value_npv - expected) < 0.01
         assert result.horizon_years == 1
 

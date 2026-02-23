@@ -10,6 +10,7 @@ When data for a pillar is missing, the ProxyEngine redistributes
 weights across available pillars (normalized to sum to 1.0).
 """
 
+import hashlib
 import logging
 from typing import Any
 
@@ -45,6 +46,7 @@ class BSICalculator:
         behavioral_data: dict[str, Any] | None = None,
         legal_data: dict[str, Any] | None = None,
         weights: dict[str, float] | None = None,
+        brand_seed: str = "",
     ) -> BSIResult:
         """
         Calculate BSI from available pillar data.
@@ -54,6 +56,8 @@ class BSICalculator:
             behavioral_data: Awareness, sentiment, loyalty metrics.
             legal_data: Trademark, geographic coverage metrics.
             weights: Custom pillar weights (default: 40/35/25).
+            brand_seed: Brand/company name used to vary stub scores
+                so different brands produce distinct BSI values.
 
         Returns:
             BSIResult with overall score, per-pillar breakdown, and data completeness.
@@ -100,7 +104,7 @@ class BSICalculator:
         for pillar_name in available_pillars:
             data = pillar_data.get(pillar_name)
             weight = effective_weights.get(pillar_name, 0.0)
-            score = self._score_pillar(pillar_name, data)
+            score = self._score_pillar(pillar_name, data, brand_seed=brand_seed)
             rationale = self._pillar_rationale(pillar_name, data, score)
 
             pillar_scores.append(
@@ -128,10 +132,15 @@ class BSICalculator:
             data_completeness=round(data_completeness, 2),
         )
 
-    def _score_pillar(self, pillar_name: str, data: dict[str, Any] | None) -> float:
+    def _score_pillar(
+        self,
+        pillar_name: str,
+        data: dict[str, Any] | None,
+        brand_seed: str = "",
+    ) -> float:
         """Score a single pillar (0–100)."""
         if not data:
-            return STUB_SCORES.get(pillar_name, 50.0)
+            return self._seeded_stub_score(pillar_name, brand_seed)
 
         # Check if data contains a pre-computed score
         if "score" in data:
@@ -149,25 +158,80 @@ class BSICalculator:
         if pillar_name == "legal":
             return self._score_legal(data)
 
-        return STUB_SCORES.get(pillar_name, 50.0)
+        return self._seeded_stub_score(pillar_name, brand_seed)
+
+    @staticmethod
+    def _seeded_stub_score(pillar_name: str, brand_seed: str) -> float:
+        """Return a deterministic stub score seeded by brand name.
+
+        Different brands get different stub scores (±15 around the base),
+        avoiding identical BSI results when real data is unavailable.
+        """
+        base = STUB_SCORES.get(pillar_name, 50.0)
+        if not brand_seed:
+            return base
+        seed_str = f"{brand_seed}:{pillar_name}"
+        h = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
+        # Map hash to offset between -15 and +15
+        offset = (h % 3001) / 100.0 - 15.0
+        return max(10.0, min(95.0, base + offset))
 
     @staticmethod
     def _score_financial(data: dict[str, Any]) -> float:
-        """Score financial pillar from metrics."""
+        """Score financial pillar from metrics.
+
+        Scoring bands:
+          Revenue growth: <3%=30, 3-8%=50-65, 8-15%=65-80, 15-30%=80-90, >30%=90+
+          Profit margin:  <0%=20, 0-5%=35-50, 5-15%=50-70, 15-25%=70-85, >25%=85+
+          Market share:   0-5%=30-50, 5-20%=50-75, 20-40%=75-90, >40%=90+
+        """
         score = 50.0  # Base score
+
         growth = data.get("revenue_growth")
         if growth is not None:
-            # >10% growth = 80+, 5-10% = 60-80, <5% = 40-60
-            score = min(100, max(0, 40 + float(growth) * 400))
+            g = float(growth)
+            if g < 0:
+                score = max(10, 30 + g * 100)    # Negative growth penalized
+            elif g < 0.03:
+                score = 30 + g * 667             # 0-3% → 30-50
+            elif g < 0.08:
+                score = 50 + (g - 0.03) * 300    # 3-8% → 50-65
+            elif g < 0.15:
+                score = 65 + (g - 0.08) * 214    # 8-15% → 65-80
+            elif g < 0.30:
+                score = 80 + (g - 0.15) * 67     # 15-30% → 80-90
+            else:
+                score = min(100, 90 + (g - 0.30) * 33)  # >30% → 90+
+
         margin = data.get("profit_margin")
         if margin is not None:
-            margin_score = min(100, max(0, float(margin) * 200))
+            m = float(margin)
+            if m < 0:
+                margin_score = max(10, 20 + m * 100)    # Negative margin
+            elif m < 0.05:
+                margin_score = 35 + m * 300              # 0-5% → 35-50
+            elif m < 0.15:
+                margin_score = 50 + (m - 0.05) * 200    # 5-15% → 50-70
+            elif m < 0.25:
+                margin_score = 70 + (m - 0.15) * 150    # 15-25% → 70-85
+            else:
+                margin_score = min(100, 85 + (m - 0.25) * 60)  # >25% → 85+
             score = (score + margin_score) / 2
+
         market_share = data.get("market_share")
         if market_share is not None:
-            share_score = min(100, max(0, float(market_share) * 300))
+            ms = float(market_share)
+            if ms < 0.05:
+                share_score = 30 + ms * 400          # 0-5% → 30-50
+            elif ms < 0.20:
+                share_score = 50 + (ms - 0.05) * 167  # 5-20% → 50-75
+            elif ms < 0.40:
+                share_score = 75 + (ms - 0.20) * 75   # 20-40% → 75-90
+            else:
+                share_score = min(100, 90 + (ms - 0.40) * 17)  # >40% → 90+
             score = (score * 2 + share_score) / 3
-        return score
+
+        return max(0, min(100, score))
 
     @staticmethod
     def _score_behavioral(data: dict[str, Any]) -> float:

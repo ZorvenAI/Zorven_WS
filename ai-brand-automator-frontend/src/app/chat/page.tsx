@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 export default function ChatPage() {
   useAuth(); // Protect this route
   return (
-    <div className="h-screen bg-brand-midnight">
+    <div className="h-[calc(100vh-3.5rem)] bg-brand-midnight">
       <ChatInterface />
     </div>
   );
