@@ -14,6 +14,20 @@ KEYWORD_MAP: dict[str, list[str]] = {
     "competitor-audit": ["competitor", "audit", "gap", "competitive"],
     "content-strategy": ["content", "strategy", "calendar", "editorial"],
     "brand-analysis": ["brand", "analysis", "positioning", "market"],
+    "general-chat": [
+        "document",
+        "file",
+        "upload",
+        "pdf",
+        "summary",
+        "summarize",
+        "what does",
+        "explain",
+        "tell me about",
+        "find",
+        "search",
+        "look up",
+    ],
 }
 
 
@@ -26,7 +40,7 @@ class RouterNode(BaseNode):
 
         available_ids = {m["pipeline_id"] for m in available} if available else set()
 
-        resolved_id = "brand-analysis"  # default fallback
+        resolved_id = "general-chat"  # default fallback
         best_score = 0
 
         for pipeline_id, keywords in KEYWORD_MAP.items():

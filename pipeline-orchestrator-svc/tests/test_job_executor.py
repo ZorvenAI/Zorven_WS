@@ -2,7 +2,13 @@
 
 from unittest.mock import AsyncMock, patch
 
-from app.api.schemas import DispatchRequest, ManifestData, ManifestNode, TenantContext
+from app.api.schemas import (
+    AvailableManifest,
+    DispatchRequest,
+    ManifestData,
+    ManifestNode,
+    TenantContext,
+)
 from app.services.job_executor import JobExecutor
 
 # Use a sentinel to distinguish "no manifest" from "explicit None"
@@ -164,6 +170,21 @@ class TestJobExecutor:
         # All nodes should be marked done
         for node_id in ("strategy", "report"):
             assert progress[node_id]["status"] == "done"
+
+    def test_general_chat_inline_manifest(self):
+        """Inline fallback manifest for general-chat when no Django manifest available."""
+        request = _make_request(manifest=None, available_manifests=[])
+        result = JobExecutor._find_resolved_manifest(request, "general-chat")
+        assert result is not None
+        assert len(result["nodes"]) == 1
+        assert result["nodes"][0]["handler"] == "DefaultAgentNode"
+        assert result["edges"] == []
+
+    def test_find_resolved_manifest_returns_none_for_unknown(self):
+        """Unknown pipeline_id without inline fallback returns None."""
+        request = _make_request(manifest=None, available_manifests=[])
+        result = JobExecutor._find_resolved_manifest(request, "unknown-pipeline")
+        assert result is None
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_redis_failure_doesnt_crash(self, mock_get_redis):

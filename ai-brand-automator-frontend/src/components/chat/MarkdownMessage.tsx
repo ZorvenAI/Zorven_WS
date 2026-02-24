@@ -85,12 +85,12 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
             </p>
           ),
           ul: ({ children }) => (
-            <ul className="text-sm list-disc list-inside space-y-1 mb-2 ml-1">
+            <ul className="text-sm list-disc list-outside space-y-1 mb-2 ml-5">
               {children}
             </ul>
           ),
           ol: ({ children }) => (
-            <ol className="text-sm list-decimal list-inside space-y-1 mb-2 ml-1">
+            <ol className="text-sm list-decimal list-outside space-y-1 mb-2 ml-5">
               {children}
             </ol>
           ),

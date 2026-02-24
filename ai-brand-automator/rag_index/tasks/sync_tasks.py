@@ -121,13 +121,13 @@ def get_orchestrator():
     from rag_index.services import SyncOrchestrator
 
     # Check if we're in test/mock mode
-    mock_mode = getattr(settings, "RAG_INDEX_MOCK_MODE", True)
+    mock_mode = getattr(settings, "RAG_INDEX_MOCK_MODE", False)
 
     # Create adapters
     vertex_ai = VertexAIAdapter(
-        project_id=getattr(settings, "GCP_PROJECT_ID", "test-project"),
-        location=getattr(settings, "GCP_LOCATION", "us-central1"),
-        data_store_id=getattr(settings, "VERTEX_AI_DATA_STORE_ID", "test-store"),
+        project_id=getattr(settings, "VERTEX_AI_PROJECT_ID", "brandsol-project"),
+        location=getattr(settings, "VERTEX_AI_LOCATION", "global"),
+        data_store_id=getattr(settings, "VERTEX_AI_DATA_STORE_ID", "prevision-rag-dev"),
         mock_mode=mock_mode,
     )
 

@@ -5,7 +5,7 @@ matching on input_prompt to select the best pipeline from available_manifests.
 The executor then builds and executes the resolved manifest's full pipeline.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.job_executor import JobExecutor
 
@@ -144,14 +144,48 @@ class TestAutoDetectRouting:
         # not "Auto-detect routing completed"
         assert not any("auto-detect" in f.lower() for f in result_data["findings"])
 
+    @patch(
+        "app.nodes.internal.default_agent_node.DefaultAgentNode._emit_trace",
+        new_callable=AsyncMock,
+    )
+    @patch("app.nodes.internal.default_agent_node.genai")
+    @patch("app.nodes.tools.vertex_search_tool.get_redis")
+    @patch("app.nodes.tools.vertex_search_tool.discoveryengine")
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
-    async def test_defaults_to_brand_analysis_on_ambiguous_prompt(
-        self, mock_get_redis, mock_discovery_service
+    async def test_defaults_to_general_chat_on_ambiguous_prompt(
+        self,
+        mock_get_redis,
+        mock_de,
+        mock_search_redis,
+        mock_genai,
+        mock_trace,
+        mock_discovery_service,
     ):
-        """Ambiguous input → falls back to brand-analysis default → executes."""
+        """Ambiguous input → falls back to general-chat default → executes."""
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None
         mock_get_redis.return_value = mock_redis
+
+        # Mock Vertex search (empty results)
+        mock_search_redis_inst = AsyncMock()
+        mock_search_redis_inst.get.return_value = None
+        mock_search_redis.return_value = mock_search_redis_inst
+        mock_response = MagicMock()
+        mock_response.results = []
+        mock_client = MagicMock()
+        mock_client.search.return_value = mock_response
+        mock_de.SearchServiceClient.return_value = mock_client
+        mock_de.SearchRequest = MagicMock()
+
+        # Mock Gemini
+        mock_gen_response = MagicMock()
+        mock_gen_response.text = "Here is a general answer."
+        mock_model = MagicMock()
+        mock_model.generate_content_async = AsyncMock(
+            return_value=mock_gen_response
+        )
+        mock_genai.GenerativeModel.return_value = mock_model
+        mock_genai.types.GenerationConfig = MagicMock()
 
         executor = JobExecutor()
         executor.callback = AsyncMock()
@@ -166,7 +200,7 @@ class TestAutoDetectRouting:
         await executor.execute(request)
 
         call_kwargs = executor.callback.send_resolved_manifest.call_args.kwargs
-        assert call_kwargs["manifest_id"] == "brand-analysis"
+        assert call_kwargs["manifest_id"] == "general-chat"
         executor.callback.send_completed.assert_called_once()
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
@@ -185,7 +219,9 @@ class TestAutoDetectRouting:
         executor.callback.send_completed.return_value = True
         executor.callback.send_resolved_manifest.return_value = True
 
-        request = make_auto_detect_request()
+        request = make_auto_detect_request(
+            input_prompt="Analyze brand positioning and market analysis"
+        )
         await executor.execute(request)
 
         # Discovery was actually called (brand-analysis has an external node)

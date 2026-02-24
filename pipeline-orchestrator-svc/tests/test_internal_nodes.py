@@ -34,10 +34,10 @@ def _base_state(**overrides) -> AgentState:
 class TestRouterNode:
     """Test intent routing via keyword matching."""
 
-    async def test_default_resolves_brand_analysis(self):
+    async def test_default_resolves_general_chat(self):
         node = RouterNode()
         result = await node(_base_state(input_prompt="hello world"))
-        assert result["resolved_manifest_id"] == "brand-analysis"
+        assert result["resolved_manifest_id"] == "general-chat"
 
     async def test_keyword_iso_brand_equity(self):
         node = RouterNode()
@@ -53,6 +53,19 @@ class TestRouterNode:
         node = RouterNode()
         result = await node(_base_state(input_prompt="content strategy calendar"))
         assert result["resolved_manifest_id"] == "content-strategy"
+
+    async def test_keyword_general_chat_document(self):
+        node = RouterNode()
+        result = await node(
+            _base_state(input_prompt="summarize the document I uploaded")
+        )
+        assert result["resolved_manifest_id"] == "general-chat"
+
+    async def test_keyword_general_chat_fallback(self):
+        """No-keyword queries default to general-chat."""
+        node = RouterNode()
+        result = await node(_base_state(input_prompt="what is the weather"))
+        assert result["resolved_manifest_id"] == "general-chat"
 
     async def test_respects_available_manifests(self):
         node = RouterNode()

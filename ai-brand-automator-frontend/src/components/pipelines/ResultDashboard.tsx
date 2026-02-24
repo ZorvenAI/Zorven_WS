@@ -14,6 +14,7 @@
 import { useState } from 'react';
 import { ClipboardCopy, Download, Check } from 'lucide-react';
 import BrandEquityDashboard from './BrandEquityDashboard';
+import { MarkdownMessage } from '@/components/chat/MarkdownMessage';
 
 interface ResultDashboardProps {
   resultData: Record<string, unknown>;
@@ -22,18 +23,24 @@ interface ResultDashboardProps {
 }
 
 function renderValue(value: unknown): React.ReactNode {
-  if (typeof value === 'string') return <p className="text-sm text-brand-silver">{value}</p>;
+  if (typeof value === 'string') return <MarkdownMessage content={value} />;
   if (typeof value === 'number' || typeof value === 'boolean')
     return <p className="text-sm text-brand-silver">{String(value)}</p>;
   if (Array.isArray(value)) {
     return (
-      <ul className="list-disc list-inside space-y-1">
+      <div className="space-y-2">
         {value.map((item, i) => (
-          <li key={i} className="text-sm text-brand-silver">
-            {typeof item === 'object' ? JSON.stringify(item) : String(item)}
-          </li>
+          <div key={i}>
+            {typeof item === 'string' ? (
+              <MarkdownMessage content={item} />
+            ) : (
+              <pre className="text-xs text-brand-silver/80 bg-white/5 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
+                {JSON.stringify(item, null, 2)}
+              </pre>
+            )}
+          </div>
         ))}
-      </ul>
+      </div>
     );
   }
   if (value && typeof value === 'object') {
@@ -148,7 +155,7 @@ export default function ResultDashboard({
           <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Summary
           </h4>
-          <p className="text-sm text-brand-silver leading-relaxed">{summary}</p>
+          <MarkdownMessage content={summary} />
         </section>
       )}
 
@@ -158,13 +165,11 @@ export default function ResultDashboard({
           <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Key Findings
           </h4>
-          <ul className="list-disc list-inside space-y-1">
-            {findings.map((f, i) => (
-              <li key={i} className="text-sm text-brand-silver">
-                {f}
-              </li>
-            ))}
-          </ul>
+          {findings.map((f, i) => (
+            <div key={i} className="mb-2">
+              <MarkdownMessage content={f} />
+            </div>
+          ))}
         </section>
       )}
 
@@ -174,13 +179,11 @@ export default function ResultDashboard({
           <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations
           </h4>
-          <ol className="list-decimal list-inside space-y-1">
-            {recommendations.map((r, i) => (
-              <li key={i} className="text-sm text-brand-silver">
-                {r}
-              </li>
-            ))}
-          </ol>
+          {recommendations.map((r, i) => (
+            <div key={i} className="mb-2">
+              <MarkdownMessage content={r} />
+            </div>
+          ))}
         </section>
       )}
 

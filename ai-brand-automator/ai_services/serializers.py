@@ -103,6 +103,11 @@ class ChatInputSerializer(serializers.Serializer):
 
     message = serializers.CharField(required=True)
     session_id = serializers.CharField(required=False, allow_blank=True)
+    attachment_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
 
 
 class AIGenerationSerializer(serializers.ModelSerializer):

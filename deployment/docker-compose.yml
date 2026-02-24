@@ -97,6 +97,12 @@ services:
       - BACKEND_URL=${BACKEND_URL:-http://backend:8001}
       # Orchestration Kafka integration
       - ORCHESTRATION_KAFKA_ENABLED=${ORCHESTRATION_KAFKA_ENABLED:-false}
+      # Vertex AI Search / RAG Index settings
+      - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol-project}
+      - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
+      - VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-prevision-rag-dev}
+      - VERTEX_AI_MOCK_MODE=${VERTEX_AI_MOCK_MODE:-false}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
       - MAILGUN_API_KEY=${MAILGUN_API_KEY:-7776e9d86dc564e3e9bd4921c056ae3e-f9517a64-4481b185}
       - MAILGUN_DOMAIN=${MAILGUN_DOMAIN:-sandbox3c490c6302904ddda887a78852e81aea.mailgun.org}
       - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL:-AI Brand Automator <postmaster@sandbox3c490c6302904ddda887a78852e81aea.mailgun.org>}
@@ -169,6 +175,7 @@ services:
       - DEBUG=True
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
       - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/ai_brand_automator}
+      - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
@@ -191,6 +198,12 @@ services:
       # Orchestration Kafka integration
       - ORCHESTRATION_KAFKA_ENABLED=${ORCHESTRATION_KAFKA_ENABLED:-false}
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-}
+      # Vertex AI Search / RAG Index settings
+      - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol-project}
+      - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
+      - VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-prevision-rag-dev}
+      - VERTEX_AI_MOCK_MODE=${VERTEX_AI_MOCK_MODE:-false}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
     volumes:
       - ../ai-brand-automator:/app
       - ./scripts/start-celery-worker.sh:/scripts/start.sh:ro
@@ -538,8 +551,16 @@ services:
       - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
       - ORCHESTRATOR_REDIS_URL=redis://redis:6379/1
-      - ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=${ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS:-}
+      - ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=${ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
       - ORCHESTRATOR_LOG_LEVEL=INFO
+      # Vertex AI Search / Gemini (Default Agent Node - RAG queries)
+      - ORCHESTRATOR_VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol-project}
+      - ORCHESTRATOR_VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
+      - ORCHESTRATOR_VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-prevision-rag-dev}
+      - ORCHESTRATOR_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
+    volumes:
+      - ../ai-brand-automator/credentials:/app/credentials:ro
     expose:
       - "8010"
     ports:

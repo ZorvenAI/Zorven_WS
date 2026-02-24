@@ -485,6 +485,22 @@ def make_auto_detect_request(
                 },
             ),
             AvailableManifest(
+                pipeline_id="general-chat",
+                name="General Chat (RAG)",
+                description="Conversational AI with knowledge base retrieval",
+                manifest_data={
+                    "nodes": [
+                        {
+                            "id": "default_agent",
+                            "type": "internal",
+                            "handler": "DefaultAgentNode",
+                        }
+                    ],
+                    "edges": [],
+                    "global_config": {},
+                },
+            ),
+            AvailableManifest(
                 pipeline_id="content-strategy",
                 name="Content Strategy",
                 description="Content calendar planning",

@@ -36,5 +36,19 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
 
+    # Vertex AI Search (RAG queries)
+    VERTEX_AI_PROJECT_ID: str = "brandsol-project"
+    VERTEX_AI_LOCATION: str = "global"
+    VERTEX_AI_DATA_STORE_ID: str = "prevision-rag-dev"
+
+    # Gemini (answer synthesis)
+    GOOGLE_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_TEMPERATURE: float = 0.3
+
+    # RAG query cache
+    RAG_QUERY_CACHE_TTL: int = 3600
+    RAG_SESSION_FILES_TTL: int = 86400
+
 
 settings = Settings()

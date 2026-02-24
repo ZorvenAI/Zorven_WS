@@ -9,6 +9,7 @@ BaseNode subclasses for use in the LangGraph.
 from app.nodes.base import BaseNode
 from app.nodes.internal.audience_node import AudienceNode
 from app.nodes.internal.calendar_node import CalendarNode
+from app.nodes.internal.default_agent_node import DefaultAgentNode
 from app.nodes.internal.manager_node import ManagerNode
 from app.nodes.internal.planner_node import PlannerNode
 from app.nodes.internal.report_node import ReportNode
@@ -23,6 +24,7 @@ INTERNAL_HANDLERS: dict[str, type[BaseNode]] = {
     "AudienceNode": AudienceNode,
     "PlannerNode": PlannerNode,
     "CalendarNode": CalendarNode,
+    "DefaultAgentNode": DefaultAgentNode,
 }
 
 

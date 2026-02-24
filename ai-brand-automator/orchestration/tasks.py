@@ -16,6 +16,45 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
+def _refresh_attachment_paths(job):
+    """Re-read BrandAsset GCS paths so the orchestrator gets current locations.
+
+    The data pipeline may move files from _landing/ to raw/ between the
+    time the job is created and when it is dispatched.  We wait briefly
+    for the pipeline to finish processing, then snapshot the latest path.
+    """
+    import time
+
+    ctx = job.input_context
+    if not ctx or not ctx.get("attachments"):
+        return
+
+    from onboarding.models import BrandAsset
+
+    # Give the data pipeline a moment to move files from _landing/ → raw/
+    # and update BrandAsset.gcs_path.  Without this pause the orchestrator
+    # may try to download from the stale _landing/ path and get a 404.
+    time.sleep(3)
+
+    changed = False
+    for att in ctx["attachments"]:
+        asset_id = att.get("asset_id")
+        if not asset_id:
+            continue
+        try:
+            asset = BrandAsset.objects.get(id=asset_id)
+            if asset.gcs_path != att.get("gcs_path"):
+                att["gcs_path"] = asset.gcs_path
+                att["gcs_bucket"] = asset.gcs_bucket
+                changed = True
+        except BrandAsset.DoesNotExist:
+            pass
+
+    if changed:
+        job.input_context = ctx
+        job.save(update_fields=["input_context", "updated_at"])
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=10)
 def dispatch_job_task(self, job_id):
     """
@@ -33,6 +72,9 @@ def dispatch_job_task(self, job_id):
     except AnalysisJob.DoesNotExist:
         logger.error("dispatch_job_task: Job %s not found", job_id)
         return
+
+    # Refresh attachment GCS paths in case the data pipeline updated them
+    _refresh_attachment_paths(job)
 
     if getattr(django_settings, "ORCHESTRATION_KAFKA_ENABLED", False):
         from .kafka_producer import KafkaTriggerProducer

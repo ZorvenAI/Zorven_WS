@@ -61,9 +61,13 @@ class ChatSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             .order_by("-created_at")
             .values("content")[:1]
         )
-        return ChatSession.objects.filter(tenant=tenant).annotate(
-            _message_count=Count("chat_messages"),
-            _last_message_preview=Subquery(last_msg_subquery),
+        return (
+            ChatSession.objects.filter(tenant=tenant)
+            .annotate(
+                _message_count=Count("chat_messages"),
+                _last_message_preview=Subquery(last_msg_subquery),
+            )
+            .order_by("-last_activity")
         )
 
     def list(self, request, *args, **kwargs):
@@ -201,12 +205,14 @@ def chat_with_ai(request):
         )
 
     try:
-        return _process_chat_message(request, session, message, tenant, is_new_session)
+        return _process_chat_message(
+            request, session, message, tenant, is_new_session, serializer
+        )
     finally:
         cache.delete(lock_key)
 
 
-def _process_chat_message(request, session, message, tenant, is_new_session):
+def _process_chat_message(request, session, message, tenant, is_new_session, serializer):
     """Process a chat message (extracted for write-lock wrapper)."""
     # Get company context if available
     try:
@@ -226,6 +232,104 @@ def _process_chat_message(request, session, message, tenant, is_new_session):
 
     # Classify intent: pipeline analysis vs. conversation
     intent_result = GeminiAIService.classify_intent(message)
+
+    # Force RAG intent when attachments are provided — the user attached
+    # a file and expects it to be analyzed, regardless of keyword score.
+    attachment_ids = serializer.validated_data.get("attachment_ids", [])
+    if attachment_ids and intent_result["intent"] != "pipeline":
+        intent_result = {"intent": "rag", "confidence": 1.0}
+
+    if intent_result["intent"] == "rag":
+        # RAG / document query — dispatch to orchestrator general-chat pipeline
+        from orchestration.models import AnalysisJob
+        from orchestration.tasks import dispatch_job_task
+
+        # Build chat history for context
+        history_msgs = ChatMessage.objects.filter(session=session).order_by(
+            "-created_at"
+        )[:10]
+        chat_history = [
+            {"role": m.role, "content": m.content} for m in reversed(history_msgs)
+        ]
+
+        # Look up chat attachments if provided
+        attachments_data = []
+        if attachment_ids:
+            attachments = SessionAttachment.objects.filter(
+                id__in=attachment_ids,
+                session=session,
+            ).select_related("asset")
+            for att in attachments:
+                if att.asset and att.asset.gcs_path:
+                    attachments_data.append({
+                        "id": att.id,
+                        "asset_id": att.asset.id,
+                        "file_name": att.file_name,
+                        "file_type": att.file_type,
+                        "gcs_bucket": att.asset.gcs_bucket,
+                        "gcs_path": att.asset.gcs_path,
+                    })
+
+        job_context = {
+            "source": "chat",
+            "session_id": session.session_id,
+            "chat_history": chat_history,
+            "attachments": attachments_data,
+        }
+
+        job = AnalysisJob.objects.create(
+            tenant=tenant,
+            input_prompt=message,
+            input_context=job_context,
+            created_by=request.user,
+        )
+        dispatch_job_task.delay(job.id)
+
+        cache.set(
+            f"lock:chat:pipeline:{session.session_id}",
+            str(job.job_id),
+            timeout=300,
+        )
+
+        ai_response = (
+            "I'm searching through your uploaded documents to answer "
+            "your question. You can track the progress below."
+        )
+
+        user_msg = ChatMessage.objects.create(
+            session=session, role="user", content=message
+        )
+
+        # Link pending attachments to the user message
+        if attachment_ids:
+            SessionAttachment.objects.filter(
+                id__in=attachment_ids, session=session
+            ).update(message=user_msg)
+        ChatMessage.objects.create(
+            session=session,
+            role="assistant",
+            content=ai_response,
+            metadata={"job_id": str(job.job_id)},
+        )
+        session.last_activity = timezone.now()
+        session.save(update_fields=["last_activity"])
+        _maybe_auto_title(session, message, is_new_session)
+        _invalidate_session_list_cache(tenant)
+
+        return Response(
+            {
+                "session_id": session.session_id,
+                "response": ai_response,
+                "thinking": "",
+                "pipeline_job": {
+                    "job_id": str(job.job_id),
+                    "status": job.status,
+                },
+                "user_message_id": user_msg.id,
+                "session_pk": session.pk,
+                "session": ChatSessionSerializer(session).data,
+            }
+        )
 
     if intent_result["intent"] == "pipeline":
         # Lazy imports to avoid circular dependency with orchestration app
@@ -536,8 +640,8 @@ def upload_chat_attachment(request):
     Required form fields:
         - file: the uploaded file
         - session_id: chat session UUID
-        - message_id: ChatMessage pk to attach to
     Optional:
+        - message_id: ChatMessage pk to attach to (omit for pre-upload)
         - file_type: one of image/video/document/other (auto-detected if omitted)
     """
     from onboarding.models import BrandAsset
@@ -561,14 +665,16 @@ def upload_chat_attachment(request):
 
     session_id = request.data.get("session_id")
     message_id = request.data.get("message_id")
-    if not session_id or not message_id:
+    if not session_id:
         return Response(
-            {"error": "session_id and message_id are required."},
+            {"error": "session_id is required."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     session = get_object_or_404(ChatSession, session_id=session_id, tenant=tenant)
-    message = get_object_or_404(ChatMessage, id=message_id, session=session)
+    message = None
+    if message_id:
+        message = get_object_or_404(ChatMessage, id=message_id, session=session)
 
     # File validation
     allowed_types = [
@@ -641,21 +747,30 @@ def upload_chat_attachment(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-    # Create BrandAsset record (reuse existing pipeline integration)
-    asset = BrandAsset.objects.create(
+    # Create or reuse BrandAsset record.
+    # Chat users may re-upload the same filename; the unique constraint
+    # on (tenant, company, file_name) would block a second create, so
+    # we update the existing asset's GCS path to the new upload location.
+    asset, _created = BrandAsset.objects.update_or_create(
         tenant=tenant,
         company=company,
         file_name=safe_filename,
-        file_type=file_type,
-        file_size=uploaded_file.size,
-        gcs_path=landing_path,
-        gcs_bucket=raw_bucket,
-        processed=False,
-        pipeline_status="pending" if gcs_uploaded else "failed",
-        pipeline_error="" if gcs_uploaded else "GCS not configured",
+        defaults={
+            "file_type": file_type,
+            "file_size": uploaded_file.size,
+            "gcs_path": landing_path,
+            "gcs_bucket": raw_bucket,
+            "processed": False,
+            "pipeline_status": "pending" if gcs_uploaded else "failed",
+            "pipeline_error": "" if gcs_uploaded else "GCS not configured",
+        },
     )
 
-    # Trigger data pipeline
+    # Trigger data pipeline for RAG indexing.
+    # The pipeline will move the file from _landing/ → raw/ and update
+    # BrandAsset.gcs_path.  The Celery dispatch task refreshes attachment
+    # paths (_refresh_attachment_paths) before sending to the orchestrator,
+    # so the orchestrator will use whichever path is current.
     if gcs_uploaded:
         try:
             from onboarding.services import get_pipeline_service
@@ -668,6 +783,7 @@ def upload_chat_attachment(request):
     # Create SessionAttachment
     attachment = SessionAttachment.objects.create(
         message=message,
+        session=session,
         asset=asset,
         file_name=safe_filename,
         file_type=file_type,
