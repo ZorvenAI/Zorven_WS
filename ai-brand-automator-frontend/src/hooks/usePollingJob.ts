@@ -1,16 +1,17 @@
 /**
  * usePollingJob — polls an analysis job while it is in-flight.
  *
- * Fetches the job every `intervalMs` (default 3 s) while status is
- * "queued" or "running".  Stops automatically on "completed" / "failed"
+ * Uses the lightweight `/quick-status` endpoint (Redis-cached) while the
+ * job is "queued" or "running", then fetches the full job detail once a
+ * terminal state is reached.  Stops automatically on "completed" / "failed"
  * or when the component unmounts.
  */
 
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getJob } from '@/lib/orchestration';
-import type { AnalysisJob } from '@/types/orchestration';
+import { getJob, getJobQuickStatus } from '@/lib/orchestration';
+import type { AnalysisJob, QuickStatus } from '@/types/orchestration';
 
 interface UsePollingJobOptions {
   /** Polling interval in ms (default 3000). */
@@ -19,6 +20,8 @@ interface UsePollingJobOptions {
 
 interface UsePollingJobReturn {
   job: AnalysisJob | null;
+  /** Lightweight quick-status data updated on every poll cycle. */
+  quickStatus: QuickStatus | null;
   isLoading: boolean;
   error: string | null;
   /** Force an immediate re-fetch. */
@@ -32,6 +35,7 @@ export function usePollingJob(
   const { intervalMs = 3000 } = options;
 
   const [job, setJob] = useState<AnalysisJob | null>(null);
+  const [quickStatus, setQuickStatus] = useState<QuickStatus | null>(null);
   const [isLoading, setIsLoading] = useState(!!jobId);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,12 +43,11 @@ export function usePollingJob(
   const jobIdRef = useRef(jobId);
   jobIdRef.current = jobId;
 
-  const fetchJob = useCallback(async () => {
+  const fetchFull = useCallback(async () => {
     const id = jobIdRef.current;
     if (!id) return;
     try {
       const data = await getJob(id);
-      // Only update if we are still looking at the same job.
       if (jobIdRef.current === id) {
         setJob(data);
         setError(null);
@@ -64,6 +67,7 @@ export function usePollingJob(
   useEffect(() => {
     if (!jobId) {
       setJob(null);
+      setQuickStatus(null);
       setIsLoading(false);
       return;
     }
@@ -74,29 +78,48 @@ export function usePollingJob(
 
     const poll = async () => {
       if (cancelled) return;
-      await fetchJob();
-      // Schedule next poll only after fetch completes
-      if (!cancelled) {
-        // Check terminal state via ref to avoid stale closure
-        setJob((prev) => {
-          if (prev && (prev.status === 'completed' || prev.status === 'failed')) {
-            // Terminal state — stop polling
-            return prev;
-          }
-          // Schedule next poll
+      const id = jobIdRef.current;
+      if (!id) return;
+
+      try {
+        const qs = await getJobQuickStatus(id);
+        if (cancelled || jobIdRef.current !== id) return;
+
+        setQuickStatus(qs);
+        setError(null);
+        setIsLoading(false);
+
+        // On terminal state, fetch full job detail and stop polling
+        if (qs.status === 'completed' || qs.status === 'failed') {
+          await fetchFull();
+          return; // stop polling
+        }
+
+        // Schedule next poll
+        timer = setTimeout(poll, intervalMs);
+      } catch (err) {
+        if (!cancelled && jobIdRef.current === id) {
+          setError(err instanceof Error ? err.message : 'Failed to fetch status');
+          setIsLoading(false);
+          // Retry after interval even on error
           timer = setTimeout(poll, intervalMs);
-          return prev;
-        });
+        }
       }
     };
 
-    poll();
+    // Start with a full fetch to populate job state, then switch to quick-status
+    (async () => {
+      await fetchFull();
+      if (!cancelled) {
+        timer = setTimeout(poll, intervalMs);
+      }
+    })();
 
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [jobId, intervalMs, fetchJob]);
+  }, [jobId, intervalMs, fetchFull]);
 
-  return { job, isLoading, error, refresh: fetchJob };
+  return { job, quickStatus, isLoading, error, refresh: fetchFull };
 }

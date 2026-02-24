@@ -685,6 +685,20 @@ KAFKA_SASL_CONFIG = (
 )
 
 # =============================================================================
+# Orchestration Kafka Integration
+# =============================================================================
+# Enable Kafka-based dispatch (vs HTTP) and Kafka consumers for results/traces.
+# When False, the existing HTTP dispatch + HTTP callback flow is used.
+ORCHESTRATION_KAFKA_ENABLED = config(
+    "ORCHESTRATION_KAFKA_ENABLED", default=False, cast=bool
+)
+KAFKA_TOPIC_PIPELINE_TRIGGER = "pipeline-trigger-topic"
+KAFKA_TOPIC_AGENT_TRACE = "agent-trace-topic"
+KAFKA_TOPIC_PIPELINE_RESULT = "pipeline-result-topic"
+KAFKA_TOPIC_ORCHESTRATION_DLQ = "orchestration-dlq"
+ORCHESTRATION_KAFKA_GROUP_ID = "orchestration-result-consumers"
+
+# =============================================================================
 # Data Ingestion Configuration (Hexagonal Architecture Pipeline)
 # =============================================================================
 DATA_INGESTION = {
@@ -876,6 +890,21 @@ if KAFKA_CONSUMERS_ENABLED:
                 "task": "kafka_service.tasks.process_dlq_events",
                 "schedule": 300.0,
                 "kwargs": {"max_messages": 20},
+            },
+        }
+    )
+
+# Orchestration Kafka consumers — only register when explicitly enabled
+if ORCHESTRATION_KAFKA_ENABLED:
+    CELERY_BEAT_SCHEDULE.update(
+        {
+            "consume-pipeline-results-every-10s": {
+                "task": "orchestration.tasks.consume_pipeline_results",
+                "schedule": 10.0,
+            },
+            "consume-agent-traces-every-5s": {
+                "task": "orchestration.tasks.consume_agent_traces",
+                "schedule": 5.0,
             },
         }
     )

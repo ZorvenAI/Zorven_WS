@@ -180,6 +180,18 @@ def chat_with_ai(request):
         )
         is_new_session = True
 
+    # Check if a pipeline job is still running for this session
+    pipeline_lock_key = f"lock:chat:pipeline:{session.session_id}"
+    pipeline_job_id = cache.get(pipeline_lock_key)
+    if pipeline_job_id:
+        return Response(
+            {
+                "error": "A pipeline analysis is still running for this session.",
+                "pipeline_job_id": pipeline_job_id,
+            },
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
     # Acquire write lock to prevent concurrent writes to same session
     lock_key = f"chat:lock:{session.session_id}"
     if not cache.add(lock_key, "1", timeout=30):
@@ -247,9 +259,18 @@ def _process_chat_message(request, session, message, tenant, is_new_session):
                 }
             )
 
+        # Inject recent chat history for context-aware pipeline reasoning
+        history_msgs = ChatMessage.objects.filter(session=session).order_by(
+            "-created_at"
+        )[:10]
+        chat_history = [
+            {"role": m.role, "content": m.content} for m in reversed(history_msgs)
+        ]
+
         job_context = {
             "source": "chat",
             "session_id": session.session_id,
+            "chat_history": chat_history,
         }
         if target_brand:
             job_context["company_name"] = target_brand.get("company_name", "")
@@ -280,6 +301,15 @@ def _process_chat_message(request, session, message, tenant, is_new_session):
             created_by=request.user,
         )
         dispatch_job_task.delay(job.id)
+
+        # Set pipeline lock (5 min TTL) to prevent concurrent chat messages
+        # while the pipeline runs. Cleared when result_handler processes
+        # a terminal status.
+        cache.set(
+            f"lock:chat:pipeline:{session.session_id}",
+            str(job.job_id),
+            timeout=300,
+        )
 
         ai_response = (
             "I've started a brand analysis pipeline for your request. "

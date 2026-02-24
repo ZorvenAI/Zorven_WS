@@ -89,7 +89,7 @@ export default function JobDetailPage({ params }: PageProps) {
   const router = useRouter();
   const { jobId } = use(params);
 
-  const { job, isLoading, error, refresh } = usePollingJob(jobId);
+  const { job, quickStatus, isLoading, error, refresh } = usePollingJob(jobId);
   const [cancelling, setCancelling] = useState(false);
   const [manifestData, setManifestData] = useState<ManifestGraphData | null>(
     null,
@@ -226,8 +226,10 @@ export default function JobDetailPage({ params }: PageProps) {
                     />
                   ) : (
                     <ThoughtTrace
-                      progress={job.progress}
+                      progress={quickStatus?.progress ?? job.progress}
                       jobStatus={job.status}
+                      lastThought={quickStatus?.last_thought}
+                      progressPercent={quickStatus?.progress_percent}
                     />
                   )}
                 </div>

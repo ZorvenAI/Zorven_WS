@@ -95,6 +95,8 @@ services:
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
       - ORCHESTRATOR_TIMEOUT=${ORCHESTRATOR_TIMEOUT:-30}
       - BACKEND_URL=${BACKEND_URL:-http://backend:8001}
+      # Orchestration Kafka integration
+      - ORCHESTRATION_KAFKA_ENABLED=${ORCHESTRATION_KAFKA_ENABLED:-false}
       - MAILGUN_API_KEY=${MAILGUN_API_KEY:-7776e9d86dc564e3e9bd4921c056ae3e-f9517a64-4481b185}
       - MAILGUN_DOMAIN=${MAILGUN_DOMAIN:-sandbox3c490c6302904ddda887a78852e81aea.mailgun.org}
       - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL:-AI Brand Automator <postmaster@sandbox3c490c6302904ddda887a78852e81aea.mailgun.org>}
@@ -170,7 +172,7 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-      - CELERY_CONCURRENCY=2
+      - CELERY_CONCURRENCY=4
       - CELERY_LOG_LEVEL=info
       # Multi-tenancy: default GCS buckets
       - GS_BUCKET_NAME=${GS_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
@@ -186,6 +188,9 @@ services:
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
       - ORCHESTRATOR_TIMEOUT=${ORCHESTRATOR_TIMEOUT:-30}
       - BACKEND_URL=${BACKEND_URL:-http://backend:8001}
+      # Orchestration Kafka integration
+      - ORCHESTRATION_KAFKA_ENABLED=${ORCHESTRATION_KAFKA_ENABLED:-false}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-}
     volumes:
       - ../ai-brand-automator:/app
       - ./scripts/start-celery-worker.sh:/scripts/start.sh:ro
@@ -214,6 +219,9 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - CELERY_LOG_LEVEL=info
+      # Orchestration Kafka integration
+      - ORCHESTRATION_KAFKA_ENABLED=${ORCHESTRATION_KAFKA_ENABLED:-false}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-}
     volumes:
       - ../ai-brand-automator:/app
       - ./scripts/start-celery-beat.sh:/scripts/start.sh:ro
@@ -531,11 +539,6 @@ services:
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
       - ORCHESTRATOR_REDIS_URL=redis://redis:6379/1
       - ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=${ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS:-}
-      # Kafka integration is disabled by default (empty bootstrap servers).
-      # To enable Kafka when running the full event streaming stack, either:
-      #   export ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      # or uncomment the line below:
-      #   - ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - ORCHESTRATOR_LOG_LEVEL=INFO
     expose:
       - "8010"

@@ -1,14 +1,15 @@
 """
 Unit tests for orchestration Celery tasks.
 
-Tests verify dispatch_job_task retry behaviour and
-check_stale_jobs periodic cleanup logic.
+Tests verify dispatch_job_task retry behaviour, Kafka/HTTP dispatch branching,
+consumer task wiring, and check_stale_jobs periodic cleanup logic.
 """
 
 from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
+from django.test import override_settings
 from django.utils import timezone
 
 from orchestration.models import AnalysisJob
@@ -20,14 +21,28 @@ class TestDispatchJobTask:
     """Tests for dispatch_job_task Celery task."""
 
     @patch("orchestration.services.OrchestratorDispatcher")
-    def test_calls_dispatcher(self, MockDispatcher, analysis_job):
-        """Task creates dispatcher and calls dispatch()."""
+    def test_calls_http_dispatcher_when_kafka_disabled(
+        self, MockDispatcher, analysis_job
+    ):
+        """Default (Kafka disabled) uses OrchestratorDispatcher (HTTP)."""
         mock_instance = MockDispatcher.return_value
         mock_instance.dispatch.return_value = True
 
         dispatch_job_task(analysis_job.id)
 
         MockDispatcher.assert_called_once()
+        mock_instance.dispatch.assert_called_once()
+
+    @override_settings(ORCHESTRATION_KAFKA_ENABLED=True)
+    @patch("orchestration.kafka_producer.KafkaTriggerProducer")
+    def test_calls_kafka_producer_when_enabled(self, MockKafkaProducer, analysis_job):
+        """ORCHESTRATION_KAFKA_ENABLED=True uses KafkaTriggerProducer."""
+        mock_instance = MockKafkaProducer.return_value
+        mock_instance.dispatch.return_value = True
+
+        dispatch_job_task(analysis_job.id)
+
+        MockKafkaProducer.assert_called_once()
         mock_instance.dispatch.assert_called_once()
 
     @patch("orchestration.services.OrchestratorDispatcher")
@@ -46,6 +61,37 @@ class TestDispatchJobTask:
         with pytest.raises(Exception):
             # Apply task eagerly so retry raises immediately
             dispatch_job_task.apply(args=[analysis_job.id]).get()
+
+
+@pytest.mark.django_db
+class TestConsumerTasks:
+    """Tests for consume_pipeline_results and consume_agent_traces tasks."""
+
+    @patch("orchestration.kafka_consumers.ResultConsumer")
+    def test_consume_pipeline_results_delegates(self, MockConsumer):
+        """consume_pipeline_results delegates to ResultConsumer."""
+        from orchestration.tasks import consume_pipeline_results
+
+        mock_instance = MockConsumer.return_value
+        mock_instance.consume.return_value = 5
+
+        result = consume_pipeline_results(max_messages=10, timeout=1.0)
+
+        assert result == 5
+        mock_instance.consume.assert_called_once_with(10, 1.0)
+
+    @patch("orchestration.kafka_consumers.TraceConsumer")
+    def test_consume_agent_traces_delegates(self, MockConsumer):
+        """consume_agent_traces delegates to TraceConsumer."""
+        from orchestration.tasks import consume_agent_traces
+
+        mock_instance = MockConsumer.return_value
+        mock_instance.consume.return_value = 12
+
+        result = consume_agent_traces(max_messages=50, timeout=2.0)
+
+        assert result == 12
+        mock_instance.consume.assert_called_once_with(50, 2.0)
 
 
 @pytest.mark.django_db

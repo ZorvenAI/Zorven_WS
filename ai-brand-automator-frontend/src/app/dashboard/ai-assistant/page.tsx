@@ -38,7 +38,7 @@ export default function AiAssistantPage() {
   const [cancelling, setCancelling] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
-  const { job, error: pollError } = usePollingJob(activeJobId);
+  const { job, quickStatus, error: pollError } = usePollingJob(activeJobId);
 
   // Derive the current phase
   const phase: Phase = (() => {
@@ -244,8 +244,10 @@ export default function AiAssistantPage() {
                 </button>
               </div>
               <ThoughtTrace
-                progress={job.progress}
+                progress={quickStatus?.progress ?? job.progress}
                 jobStatus={job.status}
+                lastThought={quickStatus?.last_thought}
+                progressPercent={quickStatus?.progress_percent}
               />
             </div>
           </div>
