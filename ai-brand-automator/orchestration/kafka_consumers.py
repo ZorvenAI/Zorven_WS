@@ -177,9 +177,7 @@ class TraceConsumer:
             cache.set(cache_key, cached, timeout=3600)
 
         except Exception:
-            logger.exception(
-                "TraceConsumer: failed to update Redis for job %s", job_id
-            )
+            logger.exception("TraceConsumer: failed to update Redis for job %s", job_id)
 
 
 def _calc_percent(progress):
@@ -187,7 +185,5 @@ def _calc_percent(progress):
     if not progress:
         return 0
     total = len(progress)
-    done = sum(
-        1 for v in progress.values() if v.get("status") in ("done", "failed")
-    )
+    done = sum(1 for v in progress.values() if v.get("status") in ("done", "failed"))
     return int((done / total) * 100) if total else 0

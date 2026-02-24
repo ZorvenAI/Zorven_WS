@@ -132,9 +132,7 @@ def _update_redis_cache(job):
         }
         if job.status == AnalysisJob.Status.COMPLETED:
             cache_data["result_data"] = job.result_data
-            cache_data["manifest_name"] = (
-                job.manifest.name if job.manifest else None
-            )
+            cache_data["manifest_name"] = job.manifest.name if job.manifest else None
         elif job.status == AnalysisJob.Status.FAILED:
             cache_data["error_message"] = job.error_message
         cache.set(f"job:status:{job.job_id}", cache_data, timeout=3600)

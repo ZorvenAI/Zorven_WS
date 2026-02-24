@@ -19,9 +19,7 @@ class TestKafkaTriggerProducer:
     """Tests for KafkaTriggerProducer.dispatch()."""
 
     @patch("kafka_service.consumer.KafkaProducerService")
-    def test_dispatch_success_updates_job(
-        self, MockProducer, analysis_job
-    ):
+    def test_dispatch_success_updates_job(self, MockProducer, analysis_job):
         """Successful dispatch sets job to RUNNING with started_at."""
         mock_producer = MockProducer.return_value
 
@@ -36,9 +34,7 @@ class TestKafkaTriggerProducer:
         mock_producer.flush.assert_called_once()
 
     @patch("kafka_service.consumer.KafkaProducerService")
-    def test_dispatch_sends_to_correct_topic(
-        self, MockProducer, analysis_job
-    ):
+    def test_dispatch_sends_to_correct_topic(self, MockProducer, analysis_job):
         """Message published to pipeline-trigger-topic."""
         mock_producer = MockProducer.return_value
 
@@ -49,9 +45,7 @@ class TestKafkaTriggerProducer:
         assert call_args[0][0] == "pipeline-trigger-topic"
 
     @patch("kafka_service.consumer.KafkaProducerService")
-    def test_dispatch_payload_has_required_fields(
-        self, MockProducer, analysis_job
-    ):
+    def test_dispatch_payload_has_required_fields(self, MockProducer, analysis_job):
         """Payload contains job_id, input_prompt, callback_url, etc."""
         mock_producer = MockProducer.return_value
 
@@ -64,9 +58,7 @@ class TestKafkaTriggerProducer:
         assert "callback_url" in payload
 
     @patch("kafka_service.consumer.KafkaProducerService")
-    def test_dispatch_uses_tenant_id_as_key(
-        self, MockProducer, analysis_job
-    ):
+    def test_dispatch_uses_tenant_id_as_key(self, MockProducer, analysis_job):
         """Message key is set to tenant_id for Kafka partitioning."""
         mock_producer = MockProducer.return_value
 
@@ -77,9 +69,7 @@ class TestKafkaTriggerProducer:
         assert call_kwargs["key"] == str(analysis_job.tenant.id)
 
     @patch("kafka_service.consumer.KafkaProducerService")
-    def test_dispatch_failure_returns_false(
-        self, MockProducer, analysis_job
-    ):
+    def test_dispatch_failure_returns_false(self, MockProducer, analysis_job):
         """Kafka error returns False and does not update job status."""
         mock_producer = MockProducer.return_value
         mock_producer.send.side_effect = Exception("Kafka down")
@@ -92,9 +82,7 @@ class TestKafkaTriggerProducer:
         assert analysis_job.status == AnalysisJob.Status.QUEUED
 
     @patch("kafka_service.consumer.KafkaProducerService")
-    def test_dispatch_no_tenant_key_is_none(
-        self, MockProducer, auto_detect_job
-    ):
+    def test_dispatch_no_tenant_key_is_none(self, MockProducer, auto_detect_job):
         """Job without tenant uses None as message key."""
         mock_producer = MockProducer.return_value
         # auto_detect_job has tenant set; create one without

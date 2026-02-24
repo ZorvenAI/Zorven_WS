@@ -57,13 +57,9 @@ class KafkaTriggerProducer:
             job.started_at = timezone.now()
             job.save(update_fields=["status", "started_at", "updated_at"])
 
-            logger.info(
-                "Job %s dispatched via Kafka to %s", job.job_id, topic
-            )
+            logger.info("Job %s dispatched via Kafka to %s", job.job_id, topic)
             return True
 
         except Exception as exc:
-            logger.error(
-                "Kafka dispatch failed for job %s: %s", job.job_id, exc
-            )
+            logger.error("Kafka dispatch failed for job %s: %s", job.job_id, exc)
             return False

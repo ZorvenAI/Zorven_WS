@@ -264,8 +264,7 @@ def _process_chat_message(request, session, message, tenant, is_new_session):
             "-created_at"
         )[:10]
         chat_history = [
-            {"role": m.role, "content": m.content}
-            for m in reversed(history_msgs)
+            {"role": m.role, "content": m.content} for m in reversed(history_msgs)
         ]
 
         job_context = {

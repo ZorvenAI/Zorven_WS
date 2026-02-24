@@ -20,9 +20,7 @@ class TestHandlePipelineResult:
 
     def test_updates_status_to_running(self, analysis_job):
         """Status updated to RUNNING."""
-        result = handle_pipeline_result(
-            str(analysis_job.job_id), status="running"
-        )
+        result = handle_pipeline_result(str(analysis_job.job_id), status="running")
         assert result is True
         analysis_job.refresh_from_db()
         assert analysis_job.status == AnalysisJob.Status.RUNNING
@@ -57,9 +55,7 @@ class TestHandlePipelineResult:
     def test_updates_progress_only(self, running_job):
         """Progress-only update (no status change)."""
         progress = {"researcher": {"status": "done"}}
-        result = handle_pipeline_result(
-            str(running_job.job_id), progress=progress
-        )
+        result = handle_pipeline_result(str(running_job.job_id), progress=progress)
         assert result is True
         running_job.refresh_from_db()
         assert running_job.status == AnalysisJob.Status.RUNNING
@@ -99,9 +95,7 @@ class TestHandlePipelineResult:
         assert cached["status"] == "failed"
         assert cached["error_message"] == "Boom"
 
-    def test_resolved_manifest_updates_job(
-        self, auto_detect_job, pipeline_manifest
-    ):
+    def test_resolved_manifest_updates_job(self, auto_detect_job, pipeline_manifest):
         """resolved_manifest_id links the manifest FK."""
         handle_pipeline_result(
             str(auto_detect_job.job_id),
@@ -138,9 +132,7 @@ class TestHandlePipelineResult:
         assert cache.get(lock_key) is None
 
     @patch("orchestration.result_handler._save_final_chat_message")
-    def test_chat_message_created_on_completion(
-        self, mock_save, running_job
-    ):
+    def test_chat_message_created_on_completion(self, mock_save, running_job):
         """_save_final_chat_message called on COMPLETED."""
         handle_pipeline_result(
             str(running_job.job_id),
@@ -150,9 +142,7 @@ class TestHandlePipelineResult:
         mock_save.assert_called_once()
 
     @patch("orchestration.result_handler._save_final_chat_message")
-    def test_chat_message_not_created_on_failure(
-        self, mock_save, running_job
-    ):
+    def test_chat_message_not_created_on_failure(self, mock_save, running_job):
         """_save_final_chat_message not called on FAILED."""
         handle_pipeline_result(
             str(running_job.job_id),

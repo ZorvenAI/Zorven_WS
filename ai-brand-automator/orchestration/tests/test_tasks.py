@@ -35,9 +35,7 @@ class TestDispatchJobTask:
 
     @override_settings(ORCHESTRATION_KAFKA_ENABLED=True)
     @patch("orchestration.kafka_producer.KafkaTriggerProducer")
-    def test_calls_kafka_producer_when_enabled(
-        self, MockKafkaProducer, analysis_job
-    ):
+    def test_calls_kafka_producer_when_enabled(self, MockKafkaProducer, analysis_job):
         """ORCHESTRATION_KAFKA_ENABLED=True uses KafkaTriggerProducer."""
         mock_instance = MockKafkaProducer.return_value
         mock_instance.dispatch.return_value = True
