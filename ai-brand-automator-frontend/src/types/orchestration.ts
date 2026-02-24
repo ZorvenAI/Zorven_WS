@@ -63,6 +63,18 @@ export interface AnalysisJob {
   updated_at: string;
 }
 
+/** Lightweight response from the /quick-status endpoint (Redis-cached). */
+export interface QuickStatus {
+  status: JobStatus;
+  progress: Record<string, AgentProgress>;
+  current_node: string | null;
+  progress_percent: number;
+  last_thought: string | null;
+  result_data?: Record<string, unknown>;
+  manifest_name?: string | null;
+  error_message?: string;
+}
+
 // ── Request payloads ──
 
 export interface CreateJobPayload {

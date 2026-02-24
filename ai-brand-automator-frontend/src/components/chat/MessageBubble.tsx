@@ -24,7 +24,7 @@ export interface MessageBubbleProps {
 }
 
 function PipelineInlineCard({ jobId }: { jobId: string }) {
-  const { job, isLoading } = usePollingJob(jobId);
+  const { job, quickStatus, isLoading } = usePollingJob(jobId);
 
   if (isLoading && !job) {
     return (
@@ -43,7 +43,12 @@ function PipelineInlineCard({ jobId }: { jobId: string }) {
     <div className="mt-3 rounded-lg bg-white/5 border border-white/10 overflow-hidden">
       {(job.status === 'queued' || job.status === 'running') && (
         <div className="p-3">
-          <ThoughtTrace progress={job.progress} jobStatus={job.status} />
+          <ThoughtTrace
+            progress={quickStatus?.progress ?? job.progress}
+            jobStatus={job.status}
+            lastThought={quickStatus?.last_thought}
+            progressPercent={quickStatus?.progress_percent}
+          />
         </div>
       )}
       {job.status === 'completed' && job.result_data && (

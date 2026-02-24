@@ -1,8 +1,10 @@
 """
 Celery tasks for the orchestration app.
 
-dispatch_job_task — async dispatch to pipeline-orchestrator-svc.
-check_stale_jobs — periodic cleanup of stuck/timed-out jobs.
+dispatch_job_task       — async dispatch to pipeline-orchestrator-svc.
+check_stale_jobs        — periodic cleanup of stuck/timed-out jobs.
+consume_pipeline_results — Kafka consumer for pipeline result events.
+consume_agent_traces     — Kafka consumer for real-time agent trace events.
 """
 
 import logging
@@ -22,8 +24,9 @@ def dispatch_job_task(self, job_id):
     Wrapped in a Celery task so the view returns immediately.
     Retries up to 3 times on connection errors (10s delay).
     """
+    from django.conf import settings as django_settings
+
     from .models import AnalysisJob
-    from .services import OrchestratorDispatcher
 
     try:
         job = AnalysisJob.objects.get(id=job_id)
@@ -31,7 +34,15 @@ def dispatch_job_task(self, job_id):
         logger.error("dispatch_job_task: Job %s not found", job_id)
         return
 
-    dispatcher = OrchestratorDispatcher()
+    if getattr(django_settings, "ORCHESTRATION_KAFKA_ENABLED", False):
+        from .kafka_producer import KafkaTriggerProducer
+
+        dispatcher = KafkaTriggerProducer()
+    else:
+        from .services import OrchestratorDispatcher
+
+        dispatcher = OrchestratorDispatcher()
+
     success = dispatcher.dispatch(job)
 
     if not success:
@@ -77,3 +88,35 @@ def check_stale_jobs():
             updated_at=timezone.now(),
         )
         logger.warning("Marked %d stale orchestration jobs as failed", count)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=30)
+def consume_pipeline_results(self, max_messages=50, timeout=5.0):
+    """Consume pipeline result events from Kafka.
+
+    Scheduled via CELERY_BEAT_SCHEDULE when ORCHESTRATION_KAFKA_ENABLED=True.
+    """
+    try:
+        from .kafka_consumers import ResultConsumer
+
+        count = ResultConsumer().consume(max_messages, timeout)
+        return count
+    except Exception as exc:
+        logger.error("consume_pipeline_results failed: %s", exc)
+        raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=15)
+def consume_agent_traces(self, max_messages=100, timeout=2.0):
+    """Consume agent trace events from Kafka for real-time UI updates.
+
+    Scheduled via CELERY_BEAT_SCHEDULE when ORCHESTRATION_KAFKA_ENABLED=True.
+    """
+    try:
+        from .kafka_consumers import TraceConsumer
+
+        count = TraceConsumer().consume(max_messages, timeout)
+        return count
+    except Exception as exc:
+        logger.error("consume_agent_traces failed: %s", exc)
+        raise self.retry(exc=exc)

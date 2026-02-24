@@ -9,7 +9,6 @@ import logging
 
 from django.conf import settings
 from django.core.cache import cache
-from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -25,6 +24,7 @@ from tenants.permissions import (
 )
 
 from .models import AnalysisJob, PipelineManifest
+from .result_handler import handle_pipeline_result
 from .serializers import (
     AnalysisJobCreateSerializer,
     AnalysisJobSerializer,
@@ -127,88 +127,22 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        with transaction.atomic():
-            # Lock the row to prevent concurrent callback updates
-            try:
-                job = AnalysisJob.objects.select_for_update().get(job_id=job_id)
-            except AnalysisJob.DoesNotExist:
-                return Response(
-                    {"error": "Job not found"},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
+        found = handle_pipeline_result(
+            job_id,
+            status=data.get("status"),
+            progress=data.get("progress"),
+            result_data=data.get("result_data"),
+            error_message=data.get("error_message"),
+            resolved_manifest_id=data.get("resolved_manifest_id"),
+        )
 
-            update_fields = ["updated_at"]
+        if not found:
+            return Response(
+                {"error": "Job not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-            # Update progress
-            if "progress" in data:
-                job.progress = data["progress"]
-                update_fields.append("progress")
-
-            # Update status
-            if "status" in data:
-                new_status = data["status"]
-                job.status = new_status
-                update_fields.append("status")
-
-                if new_status == AnalysisJob.Status.COMPLETED:
-                    job.completed_at = timezone.now()
-                    update_fields.append("completed_at")
-                elif new_status == AnalysisJob.Status.FAILED:
-                    job.completed_at = timezone.now()
-                    update_fields.append("completed_at")
-
-            # Update result_data
-            if "result_data" in data:
-                job.result_data = data["result_data"]
-                update_fields.append("result_data")
-
-            # Update error_message
-            if "error_message" in data:
-                job.error_message = data["error_message"]
-                update_fields.append("error_message")
-
-            # Handle resolved_manifest_id (intent routing resolution)
-            if "resolved_manifest_id" in data and job.manifest is None:
-                try:
-                    resolved = PipelineManifest.objects.get(
-                        pipeline_id=data["resolved_manifest_id"],
-                        is_active=True,
-                    )
-                    job.manifest = resolved
-                    update_fields.append("manifest")
-                    logger.info(
-                        "Job %s: manifest resolved to %s via intent routing",
-                        job.job_id,
-                        data["resolved_manifest_id"],
-                    )
-                except PipelineManifest.DoesNotExist:
-                    logger.warning(
-                        "Job %s: resolved_manifest_id '%s' not found",
-                        job.job_id,
-                        data["resolved_manifest_id"],
-                    )
-
-            job.save(update_fields=update_fields)
-
-        # Cache job status in Redis for fast polling
-        try:
-            cache_data = {
-                "status": job.status,
-                "progress": job.progress,
-            }
-            if job.status == AnalysisJob.Status.COMPLETED:
-                cache_data["result_data"] = job.result_data
-                cache_data["manifest_name"] = (
-                    job.manifest.name if job.manifest else None
-                )
-            elif job.status == AnalysisJob.Status.FAILED:
-                cache_data["error_message"] = job.error_message
-            cache.set(f"job:status:{job.job_id}", cache_data, timeout=3600)
-        except Exception:
-            pass  # Cache failures should not break the callback
-
-        logger.info("Job %s callback processed: %s", job.job_id, data)
-
+        logger.info("Job %s callback processed: %s", job_id, data)
         return Response({"status": "accepted"})
 
     @action(detail=True, methods=["get"], url_path="quick-status")
@@ -216,20 +150,31 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         """Fast status check from Redis cache, falls back to DB.
 
         Returns a lightweight response optimized for polling.
+        Includes trace fields (current_node, progress_percent, last_thought)
+        populated by the Kafka TraceConsumer.
         """
         cached = cache.get(f"job:status:{job_id}")
         if cached:
+            # Ensure trace fields are present even if not yet set
+            cached.setdefault("current_node", None)
+            cached.setdefault("progress_percent", 0)
+            cached.setdefault("last_thought", None)
             return Response(cached)
 
         # Fall back to DB
         job = self.get_object()
+        progress = job.progress or {}
         data = {
             "status": job.status,
-            "progress": job.progress,
+            "progress": progress,
+            "current_node": None,
+            "progress_percent": self._calc_percent(progress),
+            "last_thought": None,
         }
         if job.status == AnalysisJob.Status.COMPLETED:
             data["result_data"] = job.result_data
             data["manifest_name"] = job.manifest.name if job.manifest else None
+            data["progress_percent"] = 100
         elif job.status == AnalysisJob.Status.FAILED:
             data["error_message"] = job.error_message
 
@@ -240,6 +185,19 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             pass
 
         return Response(data)
+
+    @staticmethod
+    def _calc_percent(progress):
+        """Estimate overall progress from per-agent statuses."""
+        if not progress:
+            return 0
+        total = len(progress)
+        done = sum(
+            1
+            for v in progress.values()
+            if isinstance(v, dict) and v.get("status") in ("done", "failed")
+        )
+        return int((done / total) * 100) if total else 0
 
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, job_id=None):

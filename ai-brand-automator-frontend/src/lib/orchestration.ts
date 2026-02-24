@@ -13,6 +13,7 @@ import type {
   ManifestGraphData,
   PipelineManifest,
   PipelineManifestListItem,
+  QuickStatus,
 } from '@/types/orchestration';
 
 const BASE = '/orchestration';
@@ -63,6 +64,12 @@ export async function createJob(data: CreateJobPayload): Promise<AnalysisJob> {
 export async function cancelJob(jobId: string): Promise<{ status: string }> {
   const res = await apiClient.post(`${BASE}/jobs/${jobId}/cancel/`, {});
   return parseOrThrow<{ status: string }>(res);
+}
+
+/** Lightweight quick-status check (Redis-cached, optimized for polling). */
+export async function getJobQuickStatus(jobId: string): Promise<QuickStatus> {
+  const res = await apiClient.get(`${BASE}/jobs/${jobId}/quick-status/`);
+  return parseOrThrow<QuickStatus>(res);
 }
 
 // ── Manifests ──

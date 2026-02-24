@@ -685,6 +685,20 @@ KAFKA_SASL_CONFIG = (
 )
 
 # =============================================================================
+# Orchestration Kafka Integration
+# =============================================================================
+# Enable Kafka-based dispatch (vs HTTP) and Kafka consumers for results/traces.
+# When False, the existing HTTP dispatch + HTTP callback flow is used.
+ORCHESTRATION_KAFKA_ENABLED = config(
+    "ORCHESTRATION_KAFKA_ENABLED", default=False, cast=bool
+)
+KAFKA_TOPIC_PIPELINE_TRIGGER = "pipeline-trigger-topic"
+KAFKA_TOPIC_AGENT_TRACE = "agent-trace-topic"
+KAFKA_TOPIC_PIPELINE_RESULT = "pipeline-result-topic"
+KAFKA_TOPIC_ORCHESTRATION_DLQ = "orchestration-dlq"
+ORCHESTRATION_KAFKA_GROUP_ID = "orchestration-result-consumers"
+
+# =============================================================================
 # Data Ingestion Configuration (Hexagonal Architecture Pipeline)
 # =============================================================================
 DATA_INGESTION = {
@@ -839,6 +853,15 @@ CELERY_ENABLE_UTC = True
 
 # Celery Beat Configuration (for periodic tasks)
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+
+# Route Kafka consumer tasks to low_priority queue so they don't starve
+# dispatch and other high-priority tasks.
+CELERY_TASK_ROUTES = {
+    "orchestration.tasks.consume_pipeline_results": {"queue": "low_priority"},
+    "orchestration.tasks.consume_agent_traces": {"queue": "low_priority"},
+    "orchestration.tasks.dispatch_job_task": {"queue": "high_priority"},
+    "kafka_service.tasks.*": {"queue": "low_priority"},
+}
 CELERY_BEAT_SCHEDULE = {
     "publish-scheduled-posts": {
         "task": "automation.publish_scheduled_posts",
@@ -876,6 +899,21 @@ if KAFKA_CONSUMERS_ENABLED:
                 "task": "kafka_service.tasks.process_dlq_events",
                 "schedule": 300.0,
                 "kwargs": {"max_messages": 20},
+            },
+        }
+    )
+
+# Orchestration Kafka consumers — only register when explicitly enabled
+if ORCHESTRATION_KAFKA_ENABLED:
+    CELERY_BEAT_SCHEDULE.update(
+        {
+            "consume-pipeline-results-every-10s": {
+                "task": "orchestration.tasks.consume_pipeline_results",
+                "schedule": 10.0,
+            },
+            "consume-agent-traces-every-5s": {
+                "task": "orchestration.tasks.consume_agent_traces",
+                "schedule": 5.0,
             },
         }
     )
