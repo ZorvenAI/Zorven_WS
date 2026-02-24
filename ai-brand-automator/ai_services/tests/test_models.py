@@ -1,15 +1,18 @@
 """
 Unit tests for ai_services models.
-Tests ChatSession and AIGeneration models.
+Tests ChatSession, ChatMessage, and AIGeneration models.
 """
+
 import pytest
 from django.db import IntegrityError
 from django.utils import timezone
 from datetime import timedelta
 
-from ai_services.models import ChatSession, AIGeneration
+from ai_services.models import ChatSession, ChatMessage, SessionAttachment, AIGeneration
 from ai_services.tests.factories import (
     ChatSessionFactory,
+    ChatMessageFactory,
+    SessionAttachmentFactory,
     AIGenerationFactory,
 )
 
@@ -128,6 +131,183 @@ class TestChatSessionModel:
         assert sessions[0] == session3
         assert sessions[1] == session2
         assert sessions[2] == session1
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestChatMessageModel:
+    """Tests for ChatMessage model"""
+
+    def test_create_chat_message(self, public_tenant):
+        """Test creating a chat message with valid data"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session, role="user", content="Hello")
+        assert msg.pk is not None
+        assert msg.session == session
+        assert msg.role == "user"
+        assert msg.content == "Hello"
+        assert msg.metadata == {}
+        assert msg.thinking == ""
+
+    def test_message_roles(self, public_tenant):
+        """Test all valid role choices"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        for role in ("user", "assistant", "system"):
+            msg = ChatMessageFactory(session=session, role=role)
+            assert msg.role == role
+
+    def test_message_ordering_by_created_at(self, public_tenant):
+        """Test messages are ordered by created_at ascending"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg1 = ChatMessageFactory(
+            session=session,
+            created_at=timezone.now() - timedelta(minutes=3),
+        )
+        msg2 = ChatMessageFactory(
+            session=session,
+            created_at=timezone.now() - timedelta(minutes=2),
+        )
+        msg3 = ChatMessageFactory(
+            session=session,
+            created_at=timezone.now() - timedelta(minutes=1),
+        )
+
+        messages = list(ChatMessage.objects.filter(session=session))
+        assert messages[0] == msg1
+        assert messages[1] == msg2
+        assert messages[2] == msg3
+
+    def test_cascade_delete_on_session(self, public_tenant):
+        """Test that deleting a session deletes its messages"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        ChatMessageFactory(session=session)
+        ChatMessageFactory(session=session)
+        assert ChatMessage.objects.filter(session=session).count() == 2
+
+        session.delete()
+        assert ChatMessage.objects.filter(session=session).count() == 0
+
+    def test_message_with_metadata(self, public_tenant):
+        """Test message with metadata"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        meta = {"job_id": "abc-123"}
+        msg = ChatMessageFactory(session=session, metadata=meta)
+        msg.refresh_from_db()
+        assert msg.metadata == meta
+
+    def test_message_with_thinking(self, public_tenant):
+        """Test message with thinking content"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(
+            session=session,
+            role="assistant",
+            thinking="Let me analyze this...",
+        )
+        msg.refresh_from_db()
+        assert msg.thinking == "Let me analyze this..."
+
+    def test_str_representation(self, public_tenant):
+        """Test __str__ method"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session, role="user", content="Hello there!")
+        assert "user: Hello there!" in str(msg)
+
+    def test_related_name_chat_messages(self, public_tenant):
+        """Test session.chat_messages reverse relation"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        ChatMessageFactory(session=session, role="user")
+        ChatMessageFactory(session=session, role="assistant")
+
+        assert session.chat_messages.count() == 2
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestSessionAttachmentModel:
+    """Tests for SessionAttachment model"""
+
+    def test_create_attachment(self, public_tenant):
+        """Test creating a session attachment"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session, role="user")
+        att = SessionAttachmentFactory(
+            message=msg,
+            file_name="test.pdf",
+            file_type="document",
+            file_size=1024,
+        )
+        assert att.pk is not None
+        assert att.message == msg
+        assert att.file_name == "test.pdf"
+        assert att.file_type == "document"
+        assert att.file_size == 1024
+        assert att.pipeline_status == "pending"
+        assert att.asset is None
+
+    def test_attachment_cascade_delete_on_message(self, public_tenant):
+        """Test that deleting a message deletes its attachments"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session)
+        SessionAttachmentFactory(message=msg)
+        SessionAttachmentFactory(message=msg)
+        assert SessionAttachment.objects.filter(message=msg).count() == 2
+
+        msg.delete()
+        assert SessionAttachment.objects.count() == 0
+
+    def test_attachment_str(self, public_tenant):
+        """Test __str__ method"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session)
+        att = SessionAttachmentFactory(
+            message=msg, file_name="report.pdf", pipeline_status="indexed"
+        )
+        assert "report.pdf" in str(att)
+        assert "indexed" in str(att)
+
+    def test_attachment_pipeline_statuses(self, public_tenant):
+        """Test all valid pipeline_status values"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session)
+        for s in ("pending", "processing", "indexed", "failed"):
+            att = SessionAttachmentFactory(message=msg, pipeline_status=s)
+            assert att.pipeline_status == s
+
+    def test_related_name_attachments(self, public_tenant):
+        """Test message.attachments reverse relation"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session)
+        SessionAttachmentFactory(message=msg)
+        SessionAttachmentFactory(message=msg)
+        assert msg.attachments.count() == 2
+
+    def test_asset_set_null_on_delete(self, public_tenant):
+        """Test that deleting an asset sets attachment.asset to NULL"""
+        from onboarding.models import Company, BrandAsset
+
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session)
+
+        company = Company.objects.create(
+            tenant=public_tenant,
+            name="Test Co",
+            industry="tech",
+        )
+        asset = BrandAsset.objects.create(
+            tenant=public_tenant,
+            company=company,
+            file_name="test.pdf",
+            file_type="document",
+            file_size=1024,
+            gcs_path="test/path.pdf",
+            pipeline_status="pending",
+        )
+        att = SessionAttachmentFactory(message=msg, asset=asset)
+        assert att.asset == asset
+
+        asset.delete()
+        att.refresh_from_db()
+        assert att.asset is None
 
 
 @pytest.mark.django_db

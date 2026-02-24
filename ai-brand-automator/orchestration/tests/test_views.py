@@ -451,3 +451,104 @@ class TestJobLifecycle:
         assert response.status_code == 201
         job = AnalysisJob.objects.get(job_id=response.data["job_id"])
         mock_delay.assert_called_once_with(job.id)
+
+
+# ── Redis Caching ────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestJobStatusCaching:
+    """Tests for Redis job status caching on callback and quick-status."""
+
+    @patch("orchestration.tasks.dispatch_job_task.delay")
+    def test_callback_caches_status(
+        self,
+        mock_delay,
+        tenant,
+        membership_editor,
+        pipeline_manifest,
+        api_client,
+    ):
+        """Callback should cache job status in Redis."""
+        from django.conf import settings
+        from django.core.cache import cache
+
+        client = _make_client(membership_editor.user, tenant)
+        response = client.post(
+            "/api/v1/orchestration/jobs/",
+            {"manifest": pipeline_manifest.id, "input_prompt": "Cache test"},
+            format="json",
+        )
+        job_id = response.data["job_id"]
+
+        # Callback: COMPLETED
+        api_client.patch(
+            f"/api/v1/orchestration/jobs/{job_id}/callback/",
+            {"status": "completed", "result_data": {"score": 90}},
+            format="json",
+            HTTP_X_CALLBACK_TOKEN=settings.ORCHESTRATOR_CALLBACK_TOKEN,
+        )
+
+        cached = cache.get(f"job:status:{job_id}")
+        assert cached is not None
+        assert cached["status"] == "completed"
+        assert cached["result_data"]["score"] == 90
+
+    @patch("orchestration.tasks.dispatch_job_task.delay")
+    def test_quick_status_returns_cached(
+        self,
+        mock_delay,
+        tenant,
+        membership_editor,
+        pipeline_manifest,
+        api_client,
+    ):
+        """quick-status should return cached data without DB query."""
+        from django.conf import settings
+
+        client = _make_client(membership_editor.user, tenant)
+        response = client.post(
+            "/api/v1/orchestration/jobs/",
+            {"manifest": pipeline_manifest.id, "input_prompt": "Quick test"},
+            format="json",
+        )
+        job_id = response.data["job_id"]
+
+        # Callback to populate cache
+        api_client.patch(
+            f"/api/v1/orchestration/jobs/{job_id}/callback/",
+            {"status": "running", "progress": {"agent1": {"status": "running"}}},
+            format="json",
+            HTTP_X_CALLBACK_TOKEN=settings.ORCHESTRATOR_CALLBACK_TOKEN,
+        )
+
+        # Quick status should return cached data
+        response = client.get(f"/api/v1/orchestration/jobs/{job_id}/quick-status/")
+        assert response.status_code == 200
+        assert response.data["status"] == "running"
+
+    @patch("orchestration.tasks.dispatch_job_task.delay")
+    def test_quick_status_falls_back_to_db(
+        self,
+        mock_delay,
+        tenant,
+        membership_editor,
+        pipeline_manifest,
+    ):
+        """quick-status falls back to DB when cache is empty."""
+        from django.core.cache import cache
+
+        client = _make_client(membership_editor.user, tenant)
+        response = client.post(
+            "/api/v1/orchestration/jobs/",
+            {"manifest": pipeline_manifest.id, "input_prompt": "Fallback test"},
+            format="json",
+        )
+        job_id = response.data["job_id"]
+
+        # Ensure no cache
+        cache.delete(f"job:status:{job_id}")
+
+        response = client.get(f"/api/v1/orchestration/jobs/{job_id}/quick-status/")
+        assert response.status_code == 200
+        assert response.data["status"] == "queued"

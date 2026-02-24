@@ -9,7 +9,11 @@ from unittest.mock import patch
 from rest_framework import status
 from django.urls import reverse
 
-from ai_services.tests.factories import ChatSessionFactory, AIGenerationFactory
+from ai_services.tests.factories import (
+    ChatSessionFactory,
+    ChatMessageFactory,
+    AIGenerationFactory,
+)
 from onboarding.tests.factories import CompanyFactory
 
 
@@ -72,6 +76,26 @@ class TestChatSessionViewSet:
         response = authenticated_client_with_tenant.delete(self.url_detail(session.id))
         # Deleting an existing session should succeed
         assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    def test_messages_endpoint(self, authenticated_client_with_tenant, public_tenant):
+        """Test retrieving messages for a session via nested endpoint"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        ChatMessageFactory(session=session, role="user", content="Hi")
+        ChatMessageFactory(session=session, role="assistant", content="Hello!")
+
+        url = reverse("chatsession-messages", kwargs={"pk": session.pk})
+        response = authenticated_client_with_tenant.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        # Response is paginated: {count, results, ...}
+        results = response.data.get("results", response.data)
+        if isinstance(results, dict):
+            results = results.get("results", [])
+        assert len(results) == 2
+        assert results[0]["role"] == "user"
+        assert results[0]["content"] == "Hi"
+        assert results[1]["role"] == "assistant"
+        assert results[1]["content"] == "Hello!"
 
 
 @pytest.mark.django_db
@@ -159,18 +183,23 @@ class TestChatWithAIEndpoint:
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    @patch("ai_services.views._maybe_auto_title")
     @patch("ai_services.services.GeminiAIService.classify_intent")
     @patch("ai_services.views.ai_service")
     def test_chat_with_valid_message(
         self,
         mock_ai_service,
         mock_classify,
+        mock_auto_title,
         authenticated_client_with_tenant,
         public_tenant,
     ):
-        """Test chat with valid message"""
+        """Test chat with valid message returns dict response"""
         mock_classify.return_value = {"intent": "conversation", "confidence": 1.0}
-        mock_ai_service.chat_with_brand_context.return_value = "AI Response"
+        mock_ai_service.chat_with_brand_context.return_value = {
+            "content": "AI Response",
+            "thinking": "",
+        }
 
         response = authenticated_client_with_tenant.post(
             self.url(), {"message": "Hello, AI!"}, format="json"
@@ -179,6 +208,44 @@ class TestChatWithAIEndpoint:
         assert response.status_code == status.HTTP_200_OK
         assert mock_ai_service.chat_with_brand_context.called
         assert response.data["pipeline_job"] is None
+        assert response.data["response"] == "AI Response"
+        assert "thinking" in response.data
+
+    @patch("ai_services.views._maybe_auto_title")
+    @patch("ai_services.services.GeminiAIService.classify_intent")
+    @patch("ai_services.views.ai_service")
+    def test_chat_creates_chat_message_records(
+        self,
+        mock_ai_service,
+        mock_classify,
+        mock_auto_title,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        """Test that chat creates ChatMessage records instead of JSONField"""
+        from ai_services.models import ChatMessage, ChatSession
+
+        mock_classify.return_value = {"intent": "conversation", "confidence": 1.0}
+        mock_ai_service.chat_with_brand_context.return_value = {
+            "content": "AI Response",
+            "thinking": "Let me think...",
+        }
+
+        response = authenticated_client_with_tenant.post(
+            self.url(), {"message": "Hello, AI!"}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        session_id = response.data["session_id"]
+        session = ChatSession.objects.get(session_id=session_id)
+
+        # Should have 2 ChatMessage records (user + assistant)
+        messages = ChatMessage.objects.filter(session=session).order_by("created_at")
+        assert messages.count() == 2
+        assert messages[0].role == "user"
+        assert messages[0].content == "Hello, AI!"
+        assert messages[1].role == "assistant"
+        assert messages[1].content == "AI Response"
 
 
 @pytest.mark.django_db
@@ -368,18 +435,23 @@ class TestChatWithAIPipelineIntegration:
         assert response.data["pipeline_job"]["status"] == "queued"
         mock_dispatch.delay.assert_called_once()
 
+    @patch("ai_services.views._maybe_auto_title")
     @patch("ai_services.services.GeminiAIService.classify_intent")
     @patch("ai_services.views.ai_service")
     def test_conversational_message_no_pipeline(
         self,
         mock_ai,
         mock_classify,
+        mock_auto_title,
         authenticated_client_with_tenant,
         public_tenant,
     ):
         """Conversational message should NOT trigger pipeline."""
         mock_classify.return_value = {"intent": "conversation", "confidence": 1.0}
-        mock_ai.chat_with_brand_context.return_value = "Hello!"
+        mock_ai.chat_with_brand_context.return_value = {
+            "content": "Hello!",
+            "thinking": "",
+        }
 
         response = authenticated_client_with_tenant.post(
             self.url(),
@@ -424,3 +496,181 @@ class TestChatWithAIPipelineIntegration:
         job = AnalysisJob.objects.get(job_id=response.data["pipeline_job"]["job_id"])
         assert job.input_context["source"] == "chat"
         assert job.input_context["session_id"] == response.data["session_id"]
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestUploadChatAttachmentEndpoint:
+    """Tests for upload_chat_attachment endpoint"""
+
+    def url(self):
+        return reverse("upload_chat_attachment")
+
+    def test_upload_unauthenticated(self, api_client):
+        """Test that unauthenticated users cannot upload"""
+        response = api_client.post(self.url(), {})
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_upload_no_file(self, authenticated_client_with_tenant, public_tenant):
+        """Test upload without a file"""
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"session_id": "abc", "message_id": "1"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "No file" in response.data["error"]
+
+    def test_upload_missing_session_id(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        """Test upload without session_id"""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        f = SimpleUploadedFile("test.pdf", b"content", content_type="application/pdf")
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"file": f, "message_id": "1"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    @patch("files.services.gcs_service")
+    def test_upload_success(
+        self,
+        mock_gcs,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        """Test successful file upload creates SessionAttachment"""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from ai_services.models import SessionAttachment
+
+        # Setup: mock GCS to skip real upload
+        mock_gcs.get_bucket.return_value = None  # GCS not configured
+
+        CompanyFactory(tenant=public_tenant)
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session, role="user", content="Upload test")
+
+        f = SimpleUploadedFile(
+            "test.pdf", b"pdf-content", content_type="application/pdf"
+        )
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {
+                "file": f,
+                "session_id": session.session_id,
+                "message_id": str(msg.id),
+            },
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["file_name"] == "test.pdf"
+        assert response.data["file_type"] == "document"
+        assert SessionAttachment.objects.filter(message=msg).count() == 1
+
+    def test_upload_invalid_session(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        """Test upload with non-existent session"""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        f = SimpleUploadedFile("test.pdf", b"content", content_type="application/pdf")
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {
+                "file": f,
+                "session_id": "nonexistent-uuid",
+                "message_id": "999",
+            },
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestChatWriteLock:
+    """Tests for Redis write lock in chat_with_ai."""
+
+    def url(self):
+        return reverse("chat_with_ai")
+
+    @patch("ai_services.views._maybe_auto_title")
+    @patch("ai_services.services.GeminiAIService.classify_intent")
+    @patch("ai_services.views.ai_service")
+    def test_write_lock_prevents_concurrent_sends(
+        self,
+        mock_ai,
+        mock_classify,
+        mock_title,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        """Second send to same session should be rejected while lock held."""
+        from django.core.cache import cache
+
+        mock_classify.return_value = {"intent": "conversation", "confidence": 1.0}
+        mock_ai.chat_with_brand_context.return_value = {
+            "content": "Response",
+            "thinking": "",
+        }
+
+        # First send creates a session
+        resp1 = authenticated_client_with_tenant.post(
+            self.url(), {"message": "Hello"}, format="json"
+        )
+        assert resp1.status_code == status.HTTP_200_OK
+        sid = resp1.data["session_id"]
+
+        # Simulate an active lock on that session
+        cache.add(f"chat:lock:{sid}", "1", timeout=30)
+
+        # Second send should be rejected
+        resp2 = authenticated_client_with_tenant.post(
+            self.url(), {"message": "Another", "session_id": sid}, format="json"
+        )
+        assert resp2.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+
+        # Clean up
+        cache.delete(f"chat:lock:{sid}")
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestSessionListCaching:
+    """Tests for session list caching per tenant."""
+
+    def url(self):
+        return reverse("chatsession-list")
+
+    def test_list_sessions_populates_cache(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        """Listing sessions should populate cache."""
+        from django.core.cache import cache
+
+        cache_key = f"chat:sessions:{public_tenant.id}:" f"page=:page_size=:ordering="
+        cache.delete(cache_key)
+
+        ChatSessionFactory(tenant=public_tenant)
+        response = authenticated_client_with_tenant.get(self.url())
+        assert response.status_code == status.HTTP_200_OK
+
+        cached = cache.get(cache_key)
+        assert cached is not None
+
+    def test_delete_session_invalidates_cache(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        """Deleting a session should invalidate cache."""
+        from django.core.cache import cache
+
+        session = ChatSessionFactory(tenant=public_tenant)
+        cache_key = f"chat:sessions:{public_tenant.id}:" f"page=:page_size=:ordering="
+        cache.set(cache_key, "stale-data", timeout=60)
+
+        authenticated_client_with_tenant.delete(
+            reverse("chatsession-detail", kwargs={"pk": session.pk})
+        )
+
+        cached = cache.get(cache_key)
+        assert cached is None

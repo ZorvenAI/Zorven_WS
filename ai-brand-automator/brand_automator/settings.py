@@ -801,6 +801,30 @@ MEDIA_CURATION = {
 }
 
 # =============================================================================
+# Django Cache Configuration (Redis)
+# =============================================================================
+REDIS_URL = config("REDIS_URL", default="redis://localhost:6379/1")
+
+if "pytest" in sys.modules:
+    # Use in-memory cache during tests to avoid requiring Redis
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "KEY_PREFIX": "ba:",
+            "TIMEOUT": 300,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+            "KEY_PREFIX": "ba:",
+            "TIMEOUT": 300,  # 5 minutes default
+        }
+    }
+
+# =============================================================================
 # Celery Configuration
 # =============================================================================
 CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="redis://localhost:6379/0")

@@ -15,7 +15,10 @@
     "next": "^15.5.9",
     "react": "19.2.3",
     "react-datepicker": "^9.1.0",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -2,17 +2,25 @@
 Unit tests for ai_services serializers.
 Tests ChatSessionSerializer, AIGenerationSerializer, and request serializers.
 """
+
 import pytest
 
 from ai_services.serializers import (
     ChatSessionSerializer,
+    ChatMessageModelSerializer,
+    SessionAttachmentSerializer,
     AIGenerationSerializer,
-    ChatMessageSerializer,
+    ChatInputSerializer,
     BrandStrategyRequestSerializer,
     BrandIdentityRequestSerializer,
     MarketAnalysisRequestSerializer,
 )
-from ai_services.tests.factories import ChatSessionFactory, AIGenerationFactory
+from ai_services.tests.factories import (
+    ChatSessionFactory,
+    ChatMessageFactory,
+    SessionAttachmentFactory,
+    AIGenerationFactory,
+)
 
 
 @pytest.mark.django_db
@@ -102,8 +110,31 @@ class TestChatSessionSerializer:
             "created_at",
             "updated_at",
             "last_activity",
+            "last_message_preview",
+            "message_count",
         }
         assert set(serializer.data.keys()) == expected_fields
+
+    def test_last_message_preview(self, public_tenant):
+        """Test last_message_preview returns last message content"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        ChatMessageFactory(session=session, role="user", content="First message")
+        ChatMessageFactory(
+            session=session, role="assistant", content="This is the last response"
+        )
+
+        serializer = ChatSessionSerializer(session)
+        assert serializer.data["last_message_preview"] == "This is the last response"
+
+    def test_message_count(self, public_tenant):
+        """Test message_count returns number of ChatMessage records"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        ChatMessageFactory(session=session, role="user")
+        ChatMessageFactory(session=session, role="assistant")
+        ChatMessageFactory(session=session, role="user")
+
+        serializer = ChatSessionSerializer(session)
+        assert serializer.data["message_count"] == 3
 
 
 @pytest.mark.django_db
@@ -176,27 +207,130 @@ class TestAIGenerationSerializer:
 
 @pytest.mark.django_db
 @pytest.mark.unit
-class TestChatMessageSerializer:
-    """Tests for ChatMessageSerializer"""
+class TestChatMessageModelSerializer:
+    """Tests for ChatMessageModelSerializer (ChatMessage model)"""
+
+    def test_serialize_chat_message(self, public_tenant):
+        """Test serializing a ChatMessage"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(
+            session=session,
+            role="assistant",
+            content="Hello!",
+            thinking="Let me think...",
+            metadata={"model": "gemini-2.0"},
+        )
+
+        serializer = ChatMessageModelSerializer(msg)
+        data = serializer.data
+
+        assert data["id"] == msg.id
+        assert data["role"] == "assistant"
+        assert data["content"] == "Hello!"
+        assert data["thinking"] == "Let me think..."
+        assert data["metadata"] == {"model": "gemini-2.0"}
+        assert "created_at" in data
+
+    def test_expected_fields(self, public_tenant):
+        """Test serializer contains expected fields"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session)
+        serializer = ChatMessageModelSerializer(msg)
+
+        expected = {
+            "id",
+            "role",
+            "content",
+            "metadata",
+            "thinking",
+            "created_at",
+            "attachments",
+        }
+        assert set(serializer.data.keys()) == expected
+
+    def test_attachments_included(self, public_tenant):
+        """Test that attachments are included in serialized output"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session, role="user")
+        SessionAttachmentFactory(message=msg, file_name="doc.pdf")
+        SessionAttachmentFactory(message=msg, file_name="img.png")
+
+        serializer = ChatMessageModelSerializer(msg)
+        assert len(serializer.data["attachments"]) == 2
+        names = {a["file_name"] for a in serializer.data["attachments"]}
+        assert names == {"doc.pdf", "img.png"}
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestSessionAttachmentSerializer:
+    """Tests for SessionAttachmentSerializer"""
+
+    def test_serialize_attachment(self, public_tenant):
+        """Test serializing a session attachment"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session)
+        att = SessionAttachmentFactory(
+            message=msg,
+            file_name="report.pdf",
+            file_type="document",
+            file_size=2048,
+            pipeline_status="indexed",
+        )
+
+        serializer = SessionAttachmentSerializer(att)
+        data = serializer.data
+
+        assert data["id"] == att.id
+        assert data["file_name"] == "report.pdf"
+        assert data["file_type"] == "document"
+        assert data["file_size"] == 2048
+        assert data["pipeline_status"] == "indexed"
+        assert "created_at" in data
+
+    def test_expected_fields(self, public_tenant):
+        """Test serializer contains expected fields"""
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session)
+        att = SessionAttachmentFactory(message=msg)
+        serializer = SessionAttachmentSerializer(att)
+
+        expected = {
+            "id",
+            "message",
+            "asset",
+            "file_name",
+            "file_type",
+            "file_size",
+            "pipeline_status",
+            "created_at",
+        }
+        assert set(serializer.data.keys()) == expected
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestChatInputSerializer:
+    """Tests for ChatInputSerializer (chat input)"""
 
     def test_valid_message(self):
         """Test valid message data"""
         data = {"message": "Hello, AI!"}
-        serializer = ChatMessageSerializer(data=data)
+        serializer = ChatInputSerializer(data=data)
         assert serializer.is_valid()
         assert serializer.validated_data["message"] == "Hello, AI!"
 
     def test_message_required(self):
         """Test that message is required"""
         data = {}
-        serializer = ChatMessageSerializer(data=data)
+        serializer = ChatInputSerializer(data=data)
         assert not serializer.is_valid()
         assert "message" in serializer.errors
 
     def test_empty_message_invalid(self):
         """Test that empty message is invalid"""
         data = {"message": ""}
-        serializer = ChatMessageSerializer(data=data)
+        serializer = ChatInputSerializer(data=data)
         assert not serializer.is_valid()
 
     def test_message_with_session_id(self):
@@ -205,20 +339,20 @@ class TestChatMessageSerializer:
             "message": "Hello",
             "session_id": "existing-session-123",
         }
-        serializer = ChatMessageSerializer(data=data)
+        serializer = ChatInputSerializer(data=data)
         assert serializer.is_valid()
         assert serializer.validated_data["session_id"] == "existing-session-123"
 
     def test_session_id_optional(self):
         """Test that session_id is optional"""
         data = {"message": "Hello"}
-        serializer = ChatMessageSerializer(data=data)
+        serializer = ChatInputSerializer(data=data)
         assert serializer.is_valid()
 
     def test_session_id_can_be_blank(self):
         """Test that session_id can be blank"""
         data = {"message": "Hello", "session_id": ""}
-        serializer = ChatMessageSerializer(data=data)
+        serializer = ChatInputSerializer(data=data)
         assert serializer.is_valid()
 
 

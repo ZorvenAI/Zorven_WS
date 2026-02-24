@@ -42,7 +42,10 @@ class ChatSession(models.Model):
         return f"{self.title or 'Chat Session'} ({self.tenant.name})"
 
     def add_message(self, role, content, metadata=None):
-        """Add a message to the session"""
+        """Add a message to the session (legacy JSONField method).
+
+        Prefer creating ChatMessage objects directly for new code.
+        """
         message = {
             "role": role,
             "content": content,
@@ -52,6 +55,83 @@ class ChatSession(models.Model):
         self.messages.append(message)
         self.last_activity = timezone.now()
         self.save()
+
+
+class ChatMessage(models.Model):
+    """Individual chat message — replaces ChatSession.messages JSONField.
+
+    Enables proper pagination, querying by role, indexing, and richer
+    per-message metadata (thinking, attachments) that a JSONField cannot
+    efficiently support.
+    """
+
+    class Role(models.TextChoices):
+        USER = "user", "User"
+        ASSISTANT = "assistant", "Assistant"
+        SYSTEM = "system", "System"
+
+    session = models.ForeignKey(
+        ChatSession,
+        on_delete=models.CASCADE,
+        related_name="chat_messages",
+    )
+    role = models.CharField(max_length=10, choices=Role.choices)
+    content = models.TextField()
+    metadata = models.JSONField(default=dict, blank=True)
+    thinking = models.TextField(
+        blank=True,
+        default="",
+        help_text="AI reasoning/thinking content for display",
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["session", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.role}: {self.content[:50]}"
+
+
+class SessionAttachment(models.Model):
+    """File attached to a chat message, processed through data pipeline."""
+
+    PIPELINE_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("processing", "Processing"),
+        ("indexed", "Indexed"),
+        ("failed", "Failed"),
+    ]
+
+    message = models.ForeignKey(
+        ChatMessage,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    asset = models.ForeignKey(
+        "onboarding.BrandAsset",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="chat_attachments",
+    )
+    file_name = models.CharField(max_length=255)
+    file_type = models.CharField(max_length=50)
+    file_size = models.PositiveIntegerField(default=0)
+    pipeline_status = models.CharField(
+        max_length=20,
+        choices=PIPELINE_STATUS_CHOICES,
+        default="pending",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.file_name} ({self.pipeline_status})"
 
 
 class AIGeneration(models.Model):

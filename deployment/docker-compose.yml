@@ -86,8 +86,8 @@ services:
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
       # Email (Mailgun HTTP API)
       - EMAIL_BACKEND=brand_automator.email_backends.MailgunAPIBackend
-      # Pipeline: Kafka enabled (broker runs via with-kafka profile)
-      - ONBOARDING_KAFKA_ENABLED=true
+      # Pipeline: Use Celery sync pipeline (set true only with --profile with-kafka)
+      - ONBOARDING_KAFKA_ENABLED=${ONBOARDING_KAFKA_ENABLED:-false}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       # Orchestration service configuration
       - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://orchestrator:8010}
