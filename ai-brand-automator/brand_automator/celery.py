@@ -1,6 +1,7 @@
 """
 Celery configuration for the AI Brand Automator project.
 """
+
 import os
 from celery import Celery
 
@@ -25,8 +26,14 @@ app.conf.task_routes = {
     "data_ingestion.tasks.*": {"queue": "ingestion"},
     # Route media_curation tasks to curation queue (worker: -Q curation)
     "media_curation.tasks.*": {"queue": "curation"},
-    # Route orchestration tasks to orchestration queue
+    # Orchestration: dispatch on high_priority, consumers on low_priority
+    # to prevent Kafka consumer tasks from starving dispatch tasks.
+    "orchestration.tasks.dispatch_job_task": {"queue": "high_priority"},
+    "orchestration.tasks.consume_pipeline_results": {"queue": "low_priority"},
+    "orchestration.tasks.consume_agent_traces": {"queue": "low_priority"},
     "orchestration.tasks.*": {"queue": "orchestration"},
+    # Kafka service consumers on low_priority queue
+    "kafka_service.tasks.*": {"queue": "low_priority"},
 }
 
 

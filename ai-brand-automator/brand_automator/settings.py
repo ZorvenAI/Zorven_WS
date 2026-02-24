@@ -853,15 +853,6 @@ CELERY_ENABLE_UTC = True
 
 # Celery Beat Configuration (for periodic tasks)
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
-
-# Route Kafka consumer tasks to low_priority queue so they don't starve
-# dispatch and other high-priority tasks.
-CELERY_TASK_ROUTES = {
-    "orchestration.tasks.consume_pipeline_results": {"queue": "low_priority"},
-    "orchestration.tasks.consume_agent_traces": {"queue": "low_priority"},
-    "orchestration.tasks.dispatch_job_task": {"queue": "high_priority"},
-    "kafka_service.tasks.*": {"queue": "low_priority"},
-}
 CELERY_BEAT_SCHEDULE = {
     "publish-scheduled-posts": {
         "task": "automation.publish_scheduled_posts",
