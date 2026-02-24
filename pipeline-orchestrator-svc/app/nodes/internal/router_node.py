@@ -40,7 +40,7 @@ class RouterNode(BaseNode):
 
         available_ids = {m["pipeline_id"] for m in available} if available else set()
 
-        resolved_id = "general-chat"  # default fallback
+        resolved_id = "brand-analysis"  # default fallback
         best_score = 0
 
         for pipeline_id, keywords in KEYWORD_MAP.items():

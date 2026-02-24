@@ -161,7 +161,7 @@ class TestAutoDetectRouting:
         mock_trace,
         mock_discovery_service,
     ):
-        """Ambiguous input → falls back to general-chat default → executes."""
+        """Ambiguous input → falls back to brand-analysis default → executes."""
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None
         mock_get_redis.return_value = mock_redis
@@ -200,7 +200,7 @@ class TestAutoDetectRouting:
         await executor.execute(request)
 
         call_kwargs = executor.callback.send_resolved_manifest.call_args.kwargs
-        assert call_kwargs["manifest_id"] == "general-chat"
+        assert call_kwargs["manifest_id"] == "brand-analysis"
         executor.callback.send_completed.assert_called_once()
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)

@@ -212,7 +212,9 @@ def chat_with_ai(request):
         cache.delete(lock_key)
 
 
-def _process_chat_message(request, session, message, tenant, is_new_session, serializer):
+def _process_chat_message(
+    request, session, message, tenant, is_new_session, serializer
+):
     """Process a chat message (extracted for write-lock wrapper)."""
     # Get company context if available
     try:
@@ -261,14 +263,16 @@ def _process_chat_message(request, session, message, tenant, is_new_session, ser
             ).select_related("asset")
             for att in attachments:
                 if att.asset and att.asset.gcs_path:
-                    attachments_data.append({
-                        "id": att.id,
-                        "asset_id": att.asset.id,
-                        "file_name": att.file_name,
-                        "file_type": att.file_type,
-                        "gcs_bucket": att.asset.gcs_bucket,
-                        "gcs_path": att.asset.gcs_path,
-                    })
+                    attachments_data.append(
+                        {
+                            "id": att.id,
+                            "asset_id": att.asset.id,
+                            "file_name": att.file_name,
+                            "file_type": att.file_type,
+                            "gcs_bucket": att.asset.gcs_bucket,
+                            "gcs_path": att.asset.gcs_path,
+                        }
+                    )
 
         job_context = {
             "source": "chat",

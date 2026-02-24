@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.nodes.base import BaseNode
 from app.nodes.tools.vertex_search_tool import SearchChunk, VertexSearchTool
 from app.state.schema import AgentState
+from app.utils.prompt_sanitizer import sanitize_ai_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ class DefaultAgentNode(BaseNode):
 
     async def __call__(self, state: AgentState) -> dict:
         job_id = state.get("job_id", "")
-        input_prompt = state.get("input_prompt", "")
+        input_prompt = sanitize_ai_prompt(state.get("input_prompt", ""))
         input_context: dict[str, Any] = state.get("input_context", {}) or {}
         tenant_context: dict[str, Any] = state.get("tenant_context", {}) or {}
 
