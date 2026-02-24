@@ -5,7 +5,7 @@ Covers ResultConsumer delegation to handle_pipeline_result,
 TraceConsumer Redis updates, status mapping, and missing-field handling.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from django.core.cache import cache

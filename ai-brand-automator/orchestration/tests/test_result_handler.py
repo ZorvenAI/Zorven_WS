@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 from django.core.cache import cache
 
-from orchestration.models import AnalysisJob, PipelineManifest
+from orchestration.models import AnalysisJob
 from orchestration.result_handler import handle_pipeline_result
 
 

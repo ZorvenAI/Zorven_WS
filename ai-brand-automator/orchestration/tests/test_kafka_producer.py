@@ -5,10 +5,9 @@ Verifies payload construction, job status transitions, Kafka error handling,
 and tenant-based partitioning key.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from django.utils import timezone
 
 from orchestration.kafka_producer import KafkaTriggerProducer
 from orchestration.models import AnalysisJob

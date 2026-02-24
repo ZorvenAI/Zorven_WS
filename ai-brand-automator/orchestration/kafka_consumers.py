@@ -7,9 +7,7 @@ TraceConsumer   — consumes ``agent-trace-topic``, updates Redis only
                   (lightweight "AI is thinking…" display).
 """
 
-import json
 import logging
-import time
 
 from django.conf import settings
 from django.core.cache import cache
@@ -51,7 +49,7 @@ class ResultConsumer:
 
         Returns the number of messages successfully processed.
         """
-        from kafka_service.consumer import KafkaConfig, KafkaConsumerService
+        from kafka_service.consumer import KafkaConsumerService
 
         from .result_handler import handle_pipeline_result
 
