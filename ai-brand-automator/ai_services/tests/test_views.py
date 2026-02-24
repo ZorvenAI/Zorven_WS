@@ -87,11 +87,15 @@ class TestChatSessionViewSet:
         response = authenticated_client_with_tenant.get(url)
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 2
-        assert response.data[0]["role"] == "user"
-        assert response.data[0]["content"] == "Hi"
-        assert response.data[1]["role"] == "assistant"
-        assert response.data[1]["content"] == "Hello!"
+        # Response is paginated: {count, results, ...}
+        results = response.data.get("results", response.data)
+        if isinstance(results, dict):
+            results = results.get("results", [])
+        assert len(results) == 2
+        assert results[0]["role"] == "user"
+        assert results[0]["content"] == "Hi"
+        assert results[1]["role"] == "assistant"
+        assert results[1]["content"] == "Hello!"
 
 
 @pytest.mark.django_db
@@ -644,7 +648,7 @@ class TestSessionListCaching:
         """Listing sessions should populate cache."""
         from django.core.cache import cache
 
-        cache_key = f"chat:sessions:{public_tenant.id}"
+        cache_key = f"chat:sessions:{public_tenant.id}:" f"page=:page_size=:ordering="
         cache.delete(cache_key)
 
         ChatSessionFactory(tenant=public_tenant)
@@ -661,7 +665,7 @@ class TestSessionListCaching:
         from django.core.cache import cache
 
         session = ChatSessionFactory(tenant=public_tenant)
-        cache_key = f"chat:sessions:{public_tenant.id}"
+        cache_key = f"chat:sessions:{public_tenant.id}:" f"page=:page_size=:ordering="
         cache.set(cache_key, "stale-data", timeout=60)
 
         authenticated_client_with_tenant.delete(

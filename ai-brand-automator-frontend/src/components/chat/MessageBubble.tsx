@@ -78,9 +78,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(message.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API may fail in non-secure contexts
+    }
   };
 
   return (
@@ -128,6 +132,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             <button
               onClick={handleCopy}
               className="opacity-0 group-hover:opacity-100 transition-opacity text-brand-silver/30 hover:text-brand-silver/60"
+              aria-label="Copy message"
               title="Copy message"
             >
               {copied ? (

@@ -35,3 +35,14 @@ def auto_title_session(self, session_id):
     session.title = title[:255]
     session.save(update_fields=["title"])
     logger.info("Auto-titled session %s: '%s'", session.session_id, session.title)
+
+    # Invalidate cached session list so sidebar shows new title
+    if session.tenant_id:
+        from django.core.cache import cache
+
+        try:
+            cache.delete(
+                f"chat:sessions:{session.tenant_id}:" f"page=:page_size=:ordering="
+            )
+        except Exception:
+            pass

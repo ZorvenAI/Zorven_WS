@@ -177,6 +177,7 @@ export function ChatInput({
               </span>
               <button
                 onClick={() => removeFile(pf.id)}
+                aria-label={`Remove ${pf.file.name}`}
                 className="ml-0.5 p-0.5 rounded hover:bg-white/10 text-brand-silver/40 hover:text-white transition-colors"
               >
                 <X className="w-3 h-3" />
@@ -192,6 +193,7 @@ export function ChatInput({
           onClick={() => fileInputRef.current?.click()}
           disabled={disabled}
           className="p-2.5 rounded-lg text-brand-silver/40 hover:text-brand-silver hover:bg-white/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          aria-label="Attach file"
           title="Attach file"
         >
           <Paperclip className="w-4 h-4" />
@@ -229,6 +231,7 @@ export function ChatInput({
             (!input.trim() && pendingFiles.length === 0)
           }
           className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed p-2.5"
+          aria-label="Send message"
           title={disabledTitle}
         >
           <Send className="w-4 h-4" />

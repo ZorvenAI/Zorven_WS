@@ -185,41 +185,17 @@ export function ChatInterface() {
           setMessages((prev) => [...prev, aiMessage]);
           setSidebarRefreshKey((k) => k + 1);
 
-          // Upload files if any, attaching to the user message
-          if (files.length > 0 && currentSessionId) {
-            // Get the user message ID from the session
-            const sessResp = await apiClient.get('/ai/chat-sessions/');
-            if (sessResp.ok) {
-              const sessData = await sessResp.json();
-              const sessList = Array.isArray(sessData) ? sessData : sessData.results ?? [];
-              const sess = sessList.find(
-                (s: { session_id: string }) => s.session_id === currentSessionId
-              );
-              if (sess) {
-                const msgsResp = await apiClient.get(
-                  `/ai/chat-sessions/${sess.id}/messages/`
-                );
-                if (msgsResp.ok) {
-                  const msgsData = await msgsResp.json();
-                  const msgsList = Array.isArray(msgsData) ? msgsData : msgsData.results ?? [];
-                  // Find the last user message
-                  const lastUserMsg = [...msgsList]
-                    .reverse()
-                    .find((m: { role: string }) => m.role === 'user');
-                  if (lastUserMsg) {
-                    for (const file of files) {
-                      const formData = new FormData();
-                      formData.append('file', file);
-                      formData.append('session_id', currentSessionId);
-                      formData.append('message_id', String(lastUserMsg.id));
-                      try {
-                        await apiClient.upload('/ai/chat/upload/', formData);
-                      } catch (err) {
-                        console.error('File upload failed:', err);
-                      }
-                    }
-                  }
-                }
+          // Upload files using message_id returned directly from the chat response
+          if (files.length > 0 && currentSessionId && data.user_message_id) {
+            for (const file of files) {
+              const formData = new FormData();
+              formData.append('file', file);
+              formData.append('session_id', currentSessionId);
+              formData.append('message_id', String(data.user_message_id));
+              try {
+                await apiClient.upload('/ai/chat/upload/', formData);
+              } catch (err) {
+                console.error('File upload failed:', err);
               }
             }
           }

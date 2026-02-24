@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 import uuid
 
+from django.db.models import Count, Subquery, OuterRef
 from .models import ChatSession, ChatMessage, SessionAttachment, AIGeneration
 from .serializers import (
     ChatSessionSerializer,
@@ -53,28 +54,39 @@ class ChatSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         tenant = getattr(self.request, "tenant", None)
-        if tenant:
-            return ChatSession.objects.filter(tenant=tenant)
-        return ChatSession.objects.none()
+        if not tenant:
+            return ChatSession.objects.none()
+        last_msg_subquery = (
+            ChatMessage.objects.filter(session=OuterRef("pk"))
+            .order_by("-created_at")
+            .values("content")[:1]
+        )
+        return ChatSession.objects.filter(tenant=tenant).annotate(
+            _message_count=Count("chat_messages"),
+            _last_message_preview=Subquery(last_msg_subquery),
+        )
 
     def list(self, request, *args, **kwargs):
         """List sessions with per-tenant caching."""
         tenant = getattr(request, "tenant", None)
+        cache_key = None
         if tenant:
-            cache_key = f"chat:sessions:{tenant.id}"
+            page = request.query_params.get("page", "")
+            page_size = request.query_params.get("page_size", "")
+            ordering = request.query_params.get("ordering", "")
+            cache_key = (
+                f"chat:sessions:{tenant.id}:"
+                f"page={page}:page_size={page_size}:ordering={ordering}"
+            )
             cached = cache.get(cache_key)
             if cached is not None:
                 return Response(cached)
 
         response = super().list(request, *args, **kwargs)
 
-        if tenant and response.status_code == 200:
+        if cache_key and response.status_code == 200:
             try:
-                cache.set(
-                    f"chat:sessions:{tenant.id}",
-                    response.data,
-                    timeout=60,  # 1 minute TTL
-                )
+                cache.set(cache_key, response.data, timeout=60)
             except Exception:
                 pass
 
@@ -99,10 +111,18 @@ class ChatSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def messages(self, request, pk=None):
-        """List all messages for a chat session."""
+        """List messages for a chat session with pagination."""
         session = self.get_object()
-        messages = ChatMessage.objects.filter(session=session)
-        serializer = ChatMessageModelSerializer(messages, many=True)
+        queryset = ChatMessage.objects.filter(session=session).prefetch_related(
+            "attachments"
+        )
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = ChatMessageModelSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = ChatMessageModelSerializer(queryset, many=True)
         return Response(serializer.data)
 
 
@@ -205,7 +225,9 @@ def _process_chat_message(request, session, message, tenant, is_new_session):
         # Check if brand lookup returned an error
         if target_brand and "error" in target_brand:
             ai_response = target_brand["error"]
-            ChatMessage.objects.create(session=session, role="user", content=message)
+            user_msg = ChatMessage.objects.create(
+                session=session, role="user", content=message
+            )
             ChatMessage.objects.create(
                 session=session, role="assistant", content=ai_response
             )
@@ -219,6 +241,8 @@ def _process_chat_message(request, session, message, tenant, is_new_session):
                     "response": ai_response,
                     "thinking": "",
                     "pipeline_job": None,
+                    "user_message_id": user_msg.id,
+                    "session_pk": session.pk,
                     "session": ChatSessionSerializer(session).data,
                 }
             )
@@ -262,7 +286,9 @@ def _process_chat_message(request, session, message, tenant, is_new_session):
             "You can track the progress below."
         )
 
-        ChatMessage.objects.create(session=session, role="user", content=message)
+        user_msg = ChatMessage.objects.create(
+            session=session, role="user", content=message
+        )
         ChatMessage.objects.create(
             session=session,
             role="assistant",
@@ -283,19 +309,22 @@ def _process_chat_message(request, session, message, tenant, is_new_session):
                     "job_id": str(job.job_id),
                     "status": job.status,
                 },
+                "user_message_id": user_msg.id,
+                "session_pk": session.pk,
                 "session": ChatSessionSerializer(session).data,
             }
         )
 
     # Normal conversation flow — use ChatMessage model
-    ChatMessage.objects.create(session=session, role="user", content=message)
-
-    # Build history from ChatMessage records for Gemini context
+    # Build history BEFORE persisting current message to avoid duplicating
+    # the user turn (it's sent separately as the current message to Gemini)
     history = list(
         ChatMessage.objects.filter(session=session)
         .order_by("created_at")
         .values("role", "content")
     )
+
+    user_msg = ChatMessage.objects.create(session=session, role="user", content=message)
 
     ai_result = ai_service.chat_with_brand_context(message, context, history)
 
@@ -316,16 +345,22 @@ def _process_chat_message(request, session, message, tenant, is_new_session):
             "response": ai_result["content"],
             "thinking": ai_result.get("thinking", ""),
             "pipeline_job": None,
+            "user_message_id": user_msg.id,
+            "session_pk": session.pk,
             "session": ChatSessionSerializer(session).data,
         }
     )
 
 
 def _invalidate_session_list_cache(tenant):
-    """Clear the cached session list for a tenant."""
+    """Clear the cached session list for a tenant.
+
+    Deletes the default (un-paginated) cache key. Paginated variants
+    expire naturally via the 60-second TTL.
+    """
     if tenant:
         try:
-            cache.delete(f"chat:sessions:{tenant.id}")
+            cache.delete(f"chat:sessions:{tenant.id}:page=:page_size=:ordering=")
         except Exception:
             pass
 
@@ -476,7 +511,7 @@ def upload_chat_attachment(request):
         - file_type: one of image/video/document/other (auto-detected if omitted)
     """
     from onboarding.models import BrandAsset
-    from onboarding.views import validate_file_upload, sanitize_filename
+    from brand_automator.validators import validate_file_upload, sanitize_filename
     from files.services import gcs_service
 
     tenant = getattr(request, "tenant", None)
@@ -569,10 +604,10 @@ def upload_chat_attachment(request):
                 "GCS not configured, chat attachment record created "
                 "without file storage."
             )
-    except Exception as e:
-        logger.error(f"GCS upload failed for chat attachment: {e}")
+    except Exception:
+        logger.exception("GCS upload failed for chat attachment.")
         return Response(
-            {"error": f"Failed to upload file: {e}"},
+            {"error": "Failed to upload file."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 

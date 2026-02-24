@@ -21,10 +21,7 @@ class ChatMessageModelSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at"]
 
     def get_attachments(self, obj):
-        atts = obj.attachments.all()
-        if not atts.exists():
-            return []
-        return SessionAttachmentSerializer(atts, many=True).data
+        return SessionAttachmentSerializer(obj.attachments.all(), many=True).data
 
 
 class ChatSessionSerializer(serializers.ModelSerializer):
@@ -57,17 +54,24 @@ class ChatSessionSerializer(serializers.ModelSerializer):
         ]
 
     def get_last_message_preview(self, obj):
+        # Prefer annotated value from queryset to avoid N+1
+        annotated = getattr(obj, "_last_message_preview", None)
+        if annotated:
+            return annotated[:80]
+        # Fallback: single query
         last_msg = (
             ChatMessage.objects.filter(session=obj)
             .order_by("-created_at")
             .values_list("content", flat=True)
             .first()
         )
-        if last_msg:
-            return last_msg[:80]
-        return ""
+        return last_msg[:80] if last_msg else ""
 
     def get_message_count(self, obj):
+        # Prefer annotated count from queryset to avoid N+1
+        annotated = getattr(obj, "_message_count", None)
+        if annotated is not None:
+            return annotated
         return ChatMessage.objects.filter(session=obj).count()
 
     def create(self, validated_data):
