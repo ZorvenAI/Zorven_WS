@@ -86,13 +86,11 @@ services:
       - "8001"
     environment:
       - DEBUG=True
-      # Use .env file for database settings (Neon cloud DB)
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT:-5432}
+      # Local Docker DB (overrides DATABASE_URL from .env which points to Neon)
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/ai_brand_automator
       - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - SECRET_KEY=${SECRET_KEY:-django-insecure-changeme}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GS_BUCKET_NAME=${GS_BUCKET_NAME}
@@ -105,9 +103,11 @@ services:
       # Kafka Settings
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-brand-kafka:9092}
       - KAFKA_CONSUMER_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID:-brand-automator-consumers}
+      # Use Celery sync pipeline by default (set true only with --profile with-kafka)
+      - ONBOARDING_KAFKA_ENABLED=${ONBOARDING_KAFKA_ENABLED:-false}
       # Multi-tenancy: default GCS buckets (tenants can override)
-      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-bucket1}
-      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-brandsol-curation-bucket}
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
       # Orchestration service configuration
       - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://localhost:8010}
       - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
@@ -135,11 +135,8 @@ services:
       - .:/app
     environment:
       - DEBUG=True
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT:-5432}
+      # Local Docker DB (overrides DATABASE_URL from .env which points to Neon)
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/ai_brand_automator
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
@@ -147,6 +144,11 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GS_BUCKET_NAME=${GS_BUCKET_NAME}
       - GS_PROJECT_ID=${GS_PROJECT_ID}
+      # Use Celery sync pipeline by default (set true only with --profile with-kafka)
+      - ONBOARDING_KAFKA_ENABLED=${ONBOARDING_KAFKA_ENABLED:-false}
+      # Multi-tenancy: default GCS buckets
+      - RAW_GCP_BUCKET_NAME=${RAW_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - CURATION_GCP_BUCKET_NAME=${CURATION_GCP_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
       # Social Platform OAuth (for automation publishing)
       - LINKEDIN_CLIENT_ID=${LINKEDIN_CLIENT_ID:-}
       - LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET:-}
