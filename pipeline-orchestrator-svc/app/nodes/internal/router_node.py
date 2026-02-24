@@ -14,6 +14,20 @@ KEYWORD_MAP: dict[str, list[str]] = {
     "competitor-audit": ["competitor", "audit", "gap", "competitive"],
     "content-strategy": ["content", "strategy", "calendar", "editorial"],
     "brand-analysis": ["brand", "analysis", "positioning", "market"],
+    "general-chat": [
+        "document",
+        "file",
+        "upload",
+        "pdf",
+        "summary",
+        "summarize",
+        "what does",
+        "explain",
+        "tell me about",
+        "find",
+        "search",
+        "look up",
+    ],
 }
 
 

@@ -55,11 +55,6 @@ export function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
-
   // Track scroll position to show/hide scroll-to-bottom button
   const handleScroll = useCallback(() => {
     const el = messagesContainerRef.current;
@@ -72,76 +67,120 @@ export function ChatInterface() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
+  // Persist sessionId to localStorage so sidebar can restore it on remount
+  useEffect(() => {
+    if (sessionId) {
+      localStorage.setItem('active_chat_session', sessionId);
+    }
+  }, [sessionId]);
+
   const handleNewChat = useCallback(() => {
     setSessionId(null);
     setMessages([WELCOME_MESSAGE]);
+    localStorage.removeItem('active_chat_session');
+  }, []);
+
+  const loadSession = useCallback(async (targetSessionId: string) => {
+    setIsLoadingSession(true);
+    setSessionId(targetSessionId);
+
+    try {
+      // Find the session pk from the sessions list (cache-bust to avoid stale browser cache)
+      const sessionsResp = await apiClient.get(
+        `/ai/chat-sessions/?_t=${Date.now()}`
+      );
+      if (!sessionsResp.ok) {
+        setIsLoadingSession(false);
+        return;
+      }
+      const sessionsData = await sessionsResp.json();
+      const list = Array.isArray(sessionsData)
+        ? sessionsData
+        : sessionsData.results ?? [];
+      const session = list.find(
+        (s: { session_id: string }) =>
+          s.session_id === targetSessionId
+      );
+      if (!session) {
+        // Session no longer exists — clear stale reference
+        setSessionId(null);
+        setMessages([WELCOME_MESSAGE]);
+        setIsLoadingSession(false);
+        return;
+      }
+
+      // Load messages
+      const msgResp = await apiClient.get(
+        `/ai/chat-sessions/${session.id}/messages/`
+      );
+      if (msgResp.ok) {
+        const msgData = await msgResp.json();
+        const loaded: Message[] = (
+          Array.isArray(msgData) ? msgData : msgData.results ?? []
+        ).map(
+          (m: {
+            id: number;
+            role: string;
+            content: string;
+            thinking?: string;
+            metadata?: { job_id?: string };
+            attachments?: Attachment[];
+            created_at: string;
+          }) => ({
+            id: String(m.id),
+            content: m.content,
+            isUser: m.role === 'user',
+            timestamp: new Date(m.created_at),
+            thinking: m.thinking || '',
+            pipelineJobId: m.metadata?.job_id ?? null,
+            attachments: m.attachments ?? [],
+          })
+        );
+        setMessages(
+          loaded.length > 0 ? loaded : [WELCOME_MESSAGE]
+        );
+      }
+    } catch (err) {
+      console.error('Failed to load session:', err);
+    }
+    setIsLoadingSession(false);
+  }, []);
+
+  // Read localStorage once on mount to seed the initial session ID.
+  // This prevents the sidebar from auto-selecting a different session.
+  const initialSessionRef = useRef<string | null>(
+    typeof window !== 'undefined'
+      ? localStorage.getItem('active_chat_session')
+      : null
+  );
+  useEffect(() => {
+    const saved = initialSessionRef.current;
+    if (saved && !sessionId) {
+      // Kick off the session load asynchronously — allowed because we
+      // only trigger an external fetch, not a synchronous setState cascade.
+      (async () => {
+        try {
+          await loadSession(saved);
+        } catch {
+          // Session may no longer exist; sidebar auto-select will handle it.
+        }
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSelectSession = useCallback(
     async (selectedSessionId: string) => {
       if (selectedSessionId === sessionId) return;
-
-      setIsLoadingSession(true);
-      setSessionId(selectedSessionId);
-
-      try {
-        // Find the session pk from the sessions list
-        const sessionsResp = await apiClient.get('/ai/chat-sessions/');
-        if (!sessionsResp.ok) {
-          setIsLoadingSession(false);
-          return;
-        }
-        const sessionsData = await sessionsResp.json();
-        const list = Array.isArray(sessionsData)
-          ? sessionsData
-          : sessionsData.results ?? [];
-        const session = list.find(
-          (s: { session_id: string }) =>
-            s.session_id === selectedSessionId
-        );
-        if (!session) {
-          setIsLoadingSession(false);
-          return;
-        }
-
-        // Load messages
-        const msgResp = await apiClient.get(
-          `/ai/chat-sessions/${session.id}/messages/`
-        );
-        if (msgResp.ok) {
-          const msgData = await msgResp.json();
-          const loaded: Message[] = (
-            Array.isArray(msgData) ? msgData : msgData.results ?? []
-          ).map(
-            (m: {
-              id: number;
-              role: string;
-              content: string;
-              thinking?: string;
-              metadata?: { job_id?: string };
-              attachments?: Attachment[];
-              created_at: string;
-            }) => ({
-              id: String(m.id),
-              content: m.content,
-              isUser: m.role === 'user',
-              timestamp: new Date(m.created_at),
-              thinking: m.thinking || '',
-              pipelineJobId: m.metadata?.job_id ?? null,
-              attachments: m.attachments ?? [],
-            })
-          );
-          setMessages(
-            loaded.length > 0 ? loaded : [WELCOME_MESSAGE]
-          );
-        }
-      } catch (err) {
-        console.error('Failed to load session:', err);
-      }
-      setIsLoadingSession(false);
+      await loadSession(selectedSessionId);
     },
-    [sessionId]
+    [sessionId, loadSession]
   );
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isLoading]);
 
   const handleSend = useCallback(
     async (message: string, files: File[]) => {
@@ -158,15 +197,61 @@ export function ChatInterface() {
       setIsLoading(true);
 
       try {
-        const body: Record<string, string> = { message: message || 'Attached files for analysis' };
-        if (sessionId) {
-          body.session_id = sessionId;
+        // Upload files FIRST so attachment IDs can be sent with the message
+        const attachmentIds: number[] = [];
+        let uploadSessionId = sessionId;
+
+        if (files.length > 0) {
+          // For new conversations, create session first via a lightweight chat call
+          if (!uploadSessionId) {
+            const initResp = await apiClient.post('/ai/chat/', {
+              message: 'Starting new conversation',
+            });
+            if (initResp.ok) {
+              const initData = await initResp.json();
+              uploadSessionId = initData.session_id;
+              if (uploadSessionId) {
+                setSessionId(uploadSessionId);
+                setSidebarRefreshKey((k) => k + 1);
+              }
+            }
+          }
+
+          if (uploadSessionId) {
+            for (const file of files) {
+              const formData = new FormData();
+              formData.append('file', file);
+              formData.append('session_id', uploadSessionId);
+              try {
+                const uploadResp = await apiClient.upload('/ai/chat/upload/', formData);
+                if (uploadResp.ok) {
+                  const uploadData = await uploadResp.json();
+                  if (uploadData.id) {
+                    attachmentIds.push(uploadData.id);
+                  }
+                }
+              } catch (err) {
+                console.error('File upload failed:', err);
+              }
+            }
+          }
         }
+
+        // Send message WITH attachment_ids
+        const body: Record<string, unknown> = {
+          message: message || 'Attached files for analysis',
+        };
+        if (uploadSessionId || sessionId) {
+          body.session_id = uploadSessionId || sessionId;
+        }
+        if (attachmentIds.length > 0) {
+          body.attachment_ids = attachmentIds;
+        }
+
         const response = await apiClient.post('/ai/chat/', body);
 
         if (response.ok) {
           const data = await response.json();
-          const currentSessionId = data.session_id || sessionId;
 
           // Persist session_id for conversation continuity
           if (data.session_id && !sessionId) {
@@ -184,21 +269,6 @@ export function ChatInterface() {
           };
           setMessages((prev) => [...prev, aiMessage]);
           setSidebarRefreshKey((k) => k + 1);
-
-          // Upload files using message_id returned directly from the chat response
-          if (files.length > 0 && currentSessionId && data.user_message_id) {
-            for (const file of files) {
-              const formData = new FormData();
-              formData.append('file', file);
-              formData.append('session_id', currentSessionId);
-              formData.append('message_id', String(data.user_message_id));
-              try {
-                await apiClient.upload('/ai/chat/upload/', formData);
-              } catch (err) {
-                console.error('File upload failed:', err);
-              }
-            }
-          }
         } else {
           setMessages((prev) => [
             ...prev,

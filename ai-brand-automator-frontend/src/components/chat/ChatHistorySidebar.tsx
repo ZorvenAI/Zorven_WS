@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '@/lib/api';
 import { Plus, Trash2, MessageSquare, Loader2 } from 'lucide-react';
 
@@ -74,14 +74,58 @@ export function ChatHistorySidebar({
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const didAutoSelect = useRef(false);
+  const propsRef = useRef({ activeSessionId, onSelectSession });
+  propsRef.current = { activeSessionId, onSelectSession };
+
+  useEffect(() => {
+    if (activeSessionId) {
+      didAutoSelect.current = true;
+    }
+  }, [activeSessionId]);
 
   const fetchSessions = useCallback(async () => {
     try {
-      const response = await apiClient.get('/ai/chat-sessions/');
+      // Cache-bust to prevent stale browser-cached responses
+      const response = await apiClient.get(
+        `/ai/chat-sessions/?_t=${Date.now()}`
+      );
       if (response.ok) {
         const data = await response.json();
         const list = Array.isArray(data) ? data : data.results ?? [];
         setSessions(list);
+
+        // Auto-select a session on first load
+        if (
+          !didAutoSelect.current &&
+          !propsRef.current.activeSessionId &&
+          list.length > 0
+        ) {
+          didAutoSelect.current = true;
+
+          // Prefer the last active session stored in localStorage
+          const savedSessionId =
+            typeof window !== 'undefined'
+              ? localStorage.getItem('active_chat_session')
+              : null;
+          const savedExists =
+            savedSessionId &&
+            list.some(
+              (s: ChatSessionSummary) => s.session_id === savedSessionId
+            );
+
+          if (savedExists) {
+            propsRef.current.onSelectSession(savedSessionId);
+          } else {
+            // Fall back to most recent session by last_activity
+            const sorted = [...list].sort(
+              (a: ChatSessionSummary, b: ChatSessionSummary) =>
+                new Date(b.last_activity).getTime() -
+                new Date(a.last_activity).getTime()
+            );
+            propsRef.current.onSelectSession(sorted[0].session_id);
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to fetch chat sessions:', err);

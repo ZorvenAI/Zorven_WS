@@ -522,12 +522,52 @@ class GeminiAIService:
 
     @staticmethod
     def classify_intent(message: str) -> Dict[str, Any]:
-        """Classify message as 'pipeline' or 'conversation'.
+        """Classify message as 'pipeline', 'rag', or 'conversation'.
 
-        Returns: {"intent": "pipeline"|"conversation", "confidence": float}
+        Returns: {"intent": "pipeline"|"rag"|"conversation", "confidence": float}
         """
         msg = message.lower()
 
+        # --- RAG / document query detection (checked first) ---
+        rag_keywords = [
+            "document",
+            "file",
+            "uploaded",
+            "summarize",
+            "summary",
+            "rag store",
+            "rag",
+            "knowledge base",
+            "search my data",
+            "find in my files",
+            "what does the file say",
+            "from my documents",
+            "from the rag",
+            "onboarded",
+        ]
+        rag_phrases = [
+            "tell me about",
+            "what does",
+            "look up",
+            "find in",
+            "search for",
+            "from the rag store",
+            "from my files",
+            "from my documents",
+        ]
+
+        rag_score = 0
+        for kw in rag_keywords:
+            if kw in msg:
+                rag_score += 1
+        for phrase in rag_phrases:
+            if phrase in msg:
+                rag_score += 2
+
+        if rag_score >= 2:
+            return {"intent": "rag", "confidence": min(rag_score / 6, 1.0)}
+
+        # --- Pipeline / brand analysis detection ---
         pipeline_keywords = [
             "analyze",
             "analyse",

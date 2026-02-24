@@ -109,6 +109,15 @@ class SessionAttachment(models.Model):
         ChatMessage,
         on_delete=models.CASCADE,
         related_name="attachments",
+        null=True,
+        blank=True,
+    )
+    session = models.ForeignKey(
+        ChatSession,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+        null=True,
+        blank=True,
     )
     asset = models.ForeignKey(
         "onboarding.BrandAsset",

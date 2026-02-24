@@ -286,11 +286,27 @@ class JobExecutor:
         request: DispatchRequest, resolved_id: str | None
     ) -> dict[str, Any] | None:
         """Find the full manifest_data for a resolved pipeline_id."""
-        if not resolved_id or not request.available_manifests:
+        if not resolved_id:
             return None
-        for manifest in request.available_manifests:
-            if manifest.pipeline_id == resolved_id and manifest.manifest_data:
-                return manifest.manifest_data
+        if request.available_manifests:
+            for manifest in request.available_manifests:
+                if manifest.pipeline_id == resolved_id and manifest.manifest_data:
+                    return manifest.manifest_data
+
+        # Inline fallback for general-chat (single-node RAG pipeline)
+        if resolved_id == "general-chat":
+            return {
+                "nodes": [
+                    {
+                        "id": "default_agent",
+                        "type": "internal",
+                        "handler": "DefaultAgentNode",
+                    }
+                ],
+                "edges": [],
+                "global_config": {},
+            }
+
         return None
 
     async def _is_cancelled(self, job_id: str) -> bool:

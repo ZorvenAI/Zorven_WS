@@ -157,6 +157,25 @@ class Command(BaseCommand):
             },
         },
         {
+            "pipeline_id": "general-chat",
+            "name": "General Chat (RAG)",
+            "description": (
+                "Conversational AI assistant with knowledge "
+                "base retrieval from uploaded documents"
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "default_agent",
+                        "type": "internal",
+                        "handler": "DefaultAgentNode",
+                    }
+                ],
+                "edges": [],
+                "global_config": {},
+            },
+        },
+        {
             "pipeline_id": "content-strategy",
             "name": "Content Strategy",
             "description": (

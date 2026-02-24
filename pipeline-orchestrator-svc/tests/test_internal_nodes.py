@@ -54,6 +54,19 @@ class TestRouterNode:
         result = await node(_base_state(input_prompt="content strategy calendar"))
         assert result["resolved_manifest_id"] == "content-strategy"
 
+    async def test_keyword_general_chat_document(self):
+        node = RouterNode()
+        result = await node(
+            _base_state(input_prompt="summarize the document I uploaded")
+        )
+        assert result["resolved_manifest_id"] == "general-chat"
+
+    async def test_no_keyword_defaults_brand_analysis(self):
+        """No-keyword queries default to brand-analysis."""
+        node = RouterNode()
+        result = await node(_base_state(input_prompt="what is the weather"))
+        assert result["resolved_manifest_id"] == "brand-analysis"
+
     async def test_respects_available_manifests(self):
         node = RouterNode()
         result = await node(

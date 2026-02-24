@@ -5,6 +5,7 @@ Concrete implementation of VertexAIPort for interacting with
 Google Cloud Vertex AI Discovery Engine.
 """
 
+import json
 import logging
 from typing import Any, Optional
 
@@ -51,11 +52,11 @@ class VertexAIAdapter(VertexAIPort):
             mock_mode: If True, use mock mode without real Vertex AI calls
         """
         self.project_id = project_id or getattr(
-            settings, "VERTEX_AI_PROJECT_ID", "prevision-ai"
+            settings, "VERTEX_AI_PROJECT_ID", "brandsol-project"
         )
         self.location = location or getattr(settings, "VERTEX_AI_LOCATION", "global")
         self.data_store_id = data_store_id or getattr(
-            settings, "VERTEX_AI_DATA_STORE_ID", "prevision-docs"
+            settings, "VERTEX_AI_DATA_STORE_ID", "prevision-rag-dev"
         )
         self.mock_mode = mock_mode or getattr(settings, "VERTEX_AI_MOCK_MODE", False)
         self._client = None
@@ -126,10 +127,14 @@ class VertexAIAdapter(VertexAIPort):
 
             from google.cloud import discoveryengine_v1 as discoveryengine
 
-            # Create document with structured data
+            # Create document with structured data (NO_CONTENT data stores)
+            if isinstance(document_content, str):
+                json_str = document_content
+            else:
+                json_str = json.dumps(document_content, default=str)
             document = discoveryengine.Document(
                 id=document_id,
-                json_data=str(document_content),
+                json_data=json_str,
             )
 
             # Create or update the document
