@@ -7,7 +7,7 @@ as orchestrator callbacks) and are NOT exposed through Kong.
 import logging
 
 from django.conf import settings
-from django.db.models import F, Q
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny
