@@ -143,9 +143,7 @@ class TestUpdateSessionTitleInternal:
         session.refresh_from_db()
         assert len(session.title) == 255
 
-    def test_invalidates_cache_after_update(
-        self, api_client, public_tenant
-    ):
+    def test_invalidates_cache_after_update(self, api_client, public_tenant):
         """Cache key is deleted after title update."""
         from unittest.mock import patch
 

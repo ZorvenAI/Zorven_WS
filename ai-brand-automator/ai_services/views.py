@@ -520,9 +520,7 @@ def _maybe_auto_title(session, message, is_new_session):
                 {
                     "session_id": session.session_id,
                     "session_pk": session.pk,
-                    "tenant_id": (
-                        str(session.tenant_id) if session.tenant_id else ""
-                    ),
+                    "tenant_id": (str(session.tenant_id) if session.tenant_id else ""),
                     "first_message": message[:2000],
                 },
                 key=str(session.tenant_id) if session.tenant_id else None,
@@ -530,9 +528,7 @@ def _maybe_auto_title(session, message, is_new_session):
             producer.flush(timeout=2.0)
             return
         except Exception:
-            logger.warning(
-                "Kafka titling publish failed, falling back to Celery"
-            )
+            logger.warning("Kafka titling publish failed, falling back to Celery")
 
     # Celery fallback
     try:
