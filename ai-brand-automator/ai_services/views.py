@@ -1,5 +1,6 @@
 import logging
 
+from django.conf import settings
 from django.core.cache import cache
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes, action
@@ -507,12 +508,91 @@ def _maybe_auto_title(session, message, is_new_session):
     """Dispatch auto-titling for new sessions."""
     if not is_new_session:
         return
+
+    # Try Kafka first (if enabled)
+    if getattr(settings, "TITLING_KAFKA_ENABLED", False):
+        try:
+            from kafka_service.consumer import KafkaProducerService
+
+            producer = KafkaProducerService()
+            producer.send(
+                "chat-titling-topic",
+                {
+                    "session_id": session.session_id,
+                    "session_pk": session.pk,
+                    "tenant_id": (
+                        str(session.tenant_id) if session.tenant_id else ""
+                    ),
+                    "first_message": message[:2000],
+                },
+                key=str(session.tenant_id) if session.tenant_id else None,
+            )
+            producer.flush(timeout=2.0)
+            return
+        except Exception:
+            logger.warning(
+                "Kafka titling publish failed, falling back to Celery"
+            )
+
+    # Celery fallback
     try:
         from .tasks import auto_title_session
 
         auto_title_session.delay(session.id)
     except Exception:
         pass
+
+
+@api_view(["PATCH"])
+@permission_classes([])
+def update_session_title_internal(request, session_id):
+    """Internal endpoint for the titling worker to update session titles.
+
+    Authenticates via X-Worker-Token header (service-to-service).
+    """
+    # Verify worker token
+    token = request.META.get("HTTP_X_WORKER_TOKEN", "")
+    expected_token = getattr(settings, "WORKER_TOKEN", "")
+    if not expected_token or token != expected_token:
+        logger.warning(
+            "Invalid worker token for title update on session %s", session_id
+        )
+        return Response(
+            {"error": "Invalid worker token"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    try:
+        session = ChatSession.objects.get(session_id=session_id)
+    except ChatSession.DoesNotExist:
+        return Response(
+            {"error": "Session not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Skip if already titled (not a default timestamp title)
+    if session.title and not session.title.startswith("Chat "):
+        return Response({"status": "already_titled"})
+
+    title = request.data.get("title", "")
+    if not title:
+        return Response(
+            {"error": "Title is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    session.title = title[:255]
+    session.save(update_fields=["title"])
+    logger.info(
+        "Internal title update for session %s: '%s'",
+        session_id,
+        session.title,
+    )
+
+    # Invalidate cached session list
+    _invalidate_session_list_cache(session.tenant)
+
+    return Response({"status": "updated"})
 
 
 @api_view(["POST"])

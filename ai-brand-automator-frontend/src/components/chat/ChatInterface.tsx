@@ -257,6 +257,30 @@ export function ChatInterface() {
           if (data.session_id && !sessionId) {
             setSessionId(data.session_id);
             setSidebarRefreshKey((k) => k + 1);
+
+            // Auto-titling runs async (Celery/Kafka ~1-2s). Poll the
+            // session endpoint until the title changes from the default
+            // "Chat ..." placeholder, then refresh the sidebar once.
+            const newPk = data.session_pk ?? data.session?.id;
+            if (newPk) {
+              let attempts = 0;
+              const pollTitle = setInterval(async () => {
+                attempts++;
+                try {
+                  const r = await apiClient.get(
+                    `/ai/chat-sessions/${newPk}/?_t=${Date.now()}`
+                  );
+                  if (r.ok) {
+                    const s = await r.json();
+                    if (s.title && !s.title.startsWith('Chat ')) {
+                      clearInterval(pollTitle);
+                      setSidebarRefreshKey((k) => k + 1);
+                    }
+                  }
+                } catch { /* ignore */ }
+                if (attempts >= 5) clearInterval(pollTitle);
+              }, 2000);
+            }
           }
 
           const aiMessage: Message = {

@@ -8,6 +8,7 @@ from .views import (
     generate_brand_strategy,
     generate_brand_identity,
     analyze_market,
+    update_session_title_internal,
 )
 
 router = DefaultRouter()
@@ -28,4 +29,9 @@ urlpatterns = router.urls + [
         name="generate_brand_identity",
     ),
     path("analyze/market/", analyze_market, name="analyze_market"),
+    path(
+        "internal/title-session/<str:session_id>/",
+        update_session_title_internal,
+        name="update_session_title_internal",
+    ),
 ]

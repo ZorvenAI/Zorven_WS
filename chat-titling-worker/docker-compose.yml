@@ -1,0 +1,35 @@
+version: "3.8"
+
+services:
+  titling-worker:
+    build: .
+    ports:
+      - "8040:8040"
+    environment:
+      TITLING_HOST: "0.0.0.0"
+      TITLING_PORT: "8040"
+      TITLING_REDIS_URL: "redis://redis:6379/4"
+      TITLING_KAFKA_BOOTSTRAP_SERVERS: ""
+      TITLING_GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
+      TITLING_CORE_API_URL: "http://localhost:8001"
+      TITLING_WORKER_TOKEN: "${WORKER_TOKEN:-dev-worker-token}"
+      TITLING_LOG_LEVEL: "INFO"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8040/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6382:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
