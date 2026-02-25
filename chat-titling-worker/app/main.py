@@ -79,6 +79,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shutdown
     await consumer.stop()
     consume_task.cancel()
+    try:
+        await consume_task
+    except asyncio.CancelledError:
+        pass
     await api_client.close()
     await redis_manager.close()
     routes.consumer = None
@@ -95,9 +99,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        origin.strip()
-        for origin in settings.CORS_ORIGINS.split(",")
-        if origin.strip()
+        origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()
     ],
     allow_credentials=True,
     allow_methods=["*"],

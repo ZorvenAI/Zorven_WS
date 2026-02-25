@@ -546,6 +546,8 @@ def update_session_title_internal(request, session_id):
 
     Authenticates via X-Worker-Token header (service-to-service).
     """
+    import re
+
     # Verify worker token
     token = request.META.get("HTTP_X_WORKER_TOKEN", "")
     expected_token = getattr(settings, "WORKER_TOKEN", "")
@@ -566,11 +568,36 @@ def update_session_title_internal(request, session_id):
             status=status.HTTP_404_NOT_FOUND,
         )
 
+    # Verify tenant ID if provided (prevents cross-tenant title injection)
+    claimed_tenant = request.META.get("HTTP_X_TENANT_ID", "")
+    if claimed_tenant and str(session.tenant_id) != claimed_tenant:
+        logger.warning(
+            "Tenant mismatch for session %s: claimed=%s actual=%s",
+            session_id,
+            claimed_tenant,
+            session.tenant_id,
+        )
+        return Response(
+            {"error": "Tenant mismatch"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     # Skip if already titled (not a default timestamp title)
     if session.title and not session.title.startswith("Chat "):
         return Response({"status": "already_titled"})
 
     title = request.data.get("title", "")
+    if not title:
+        return Response(
+            {"error": "Title is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Sanitize: strip HTML tags and control characters
+    title = re.sub(r"<[^>]+>", "", title)
+    title = re.sub(r"[\x00-\x1f\x7f]", "", title)
+    title = title.strip()
+
     if not title:
         return Response(
             {"error": "Title is required"},
@@ -585,8 +612,14 @@ def update_session_title_internal(request, session_id):
         session.title,
     )
 
-    # Invalidate cached session list
-    _invalidate_session_list_cache(session.tenant)
+    # Invalidate cached session list (use tenant_id to avoid extra DB query)
+    if session.tenant_id:
+        try:
+            cache.delete(
+                f"chat:sessions:{session.tenant_id}:page=:page_size=:ordering="
+            )
+        except Exception:
+            pass
 
     return Response({"status": "updated"})
 

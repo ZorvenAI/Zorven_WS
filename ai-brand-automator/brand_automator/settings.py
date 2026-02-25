@@ -938,7 +938,10 @@ BACKEND_URL = config("BACKEND_URL", default="http://localhost:8001")
 # --------------------------------------------------------------------------
 # Chat Titling Worker
 # --------------------------------------------------------------------------
-# Shared secret for authenticating title updates (titling-worker → core-api)
-WORKER_TOKEN = config("WORKER_TOKEN", default="dev-worker-token")
+# Shared secret for authenticating title updates (titling-worker → core-api).
+# Defaults to a dev-only value; in production (DEBUG=False) it must be set
+# explicitly via the WORKER_TOKEN env var or the endpoint will reject all
+# requests (fail closed).
+WORKER_TOKEN = config("WORKER_TOKEN", default="dev-worker-token" if DEBUG else "")
 # Enable Kafka-based titling (set true when chat-titling-worker is deployed)
 TITLING_KAFKA_ENABLED = config("TITLING_KAFKA_ENABLED", default=False, cast=bool)

@@ -5,6 +5,7 @@ Tests for the internal title-update endpoint used by chat-titling-worker.
 import uuid
 
 import pytest
+from django.conf import settings
 from django.urls import reverse
 from rest_framework import status
 
@@ -22,6 +23,9 @@ class TestUpdateSessionTitleInternal:
             kwargs={"session_id": session_id},
         )
 
+    def _worker_token_header(self):
+        return {"HTTP_X_WORKER_TOKEN": settings.WORKER_TOKEN}
+
     def test_update_title_with_valid_token(self, api_client, public_tenant):
         """PATCH with correct token updates the session title."""
         session = ChatSessionFactory(
@@ -33,7 +37,7 @@ class TestUpdateSessionTitleInternal:
             self.url(session.session_id),
             {"title": "NVIDIA Brand Analysis"},
             format="json",
-            HTTP_X_WORKER_TOKEN="dev-worker-token",
+            **self._worker_token_header(),
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -87,7 +91,7 @@ class TestUpdateSessionTitleInternal:
             self.url(session.session_id),
             {"title": "New Title"},
             format="json",
-            HTTP_X_WORKER_TOKEN="dev-worker-token",
+            **self._worker_token_header(),
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -102,7 +106,7 @@ class TestUpdateSessionTitleInternal:
             self.url("nonexistent-session-id"),
             {"title": "Test Title"},
             format="json",
-            HTTP_X_WORKER_TOKEN="dev-worker-token",
+            **self._worker_token_header(),
         )
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -118,7 +122,7 @@ class TestUpdateSessionTitleInternal:
             self.url(session.session_id),
             {"title": ""},
             format="json",
-            HTTP_X_WORKER_TOKEN="dev-worker-token",
+            **self._worker_token_header(),
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -135,13 +139,52 @@ class TestUpdateSessionTitleInternal:
             self.url(session.session_id),
             {"title": long_title},
             format="json",
-            HTTP_X_WORKER_TOKEN="dev-worker-token",
+            **self._worker_token_header(),
         )
 
         assert response.status_code == status.HTTP_200_OK
 
         session.refresh_from_db()
         assert len(session.title) == 255
+
+    def test_title_sanitized_of_html(self, api_client, public_tenant):
+        """HTML tags are stripped from the title to prevent XSS."""
+        session = ChatSessionFactory(
+            tenant=public_tenant,
+            title="Chat 2026-02-25 14:30",
+        )
+
+        response = api_client.patch(
+            self.url(session.session_id),
+            {"title": "<script>alert('x')</script>Brand Analysis"},
+            format="json",
+            **self._worker_token_header(),
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        session.refresh_from_db()
+        assert "<script>" not in session.title
+        assert "Brand Analysis" in session.title
+
+    def test_tenant_id_mismatch_returns_403(self, api_client, public_tenant):
+        """X-Tenant-ID that doesn't match the session's tenant returns 403."""
+        session = ChatSessionFactory(
+            tenant=public_tenant,
+            title="Chat 2026-02-25 14:30",
+        )
+
+        response = api_client.patch(
+            self.url(session.session_id),
+            {"title": "Should Not Update"},
+            format="json",
+            **self._worker_token_header(),
+            HTTP_X_TENANT_ID="wrong-tenant-id",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+        session.refresh_from_db()
+        assert session.title == "Chat 2026-02-25 14:30"
 
     def test_invalidates_cache_after_update(self, api_client, public_tenant):
         """Cache key is deleted after title update."""
@@ -157,7 +200,7 @@ class TestUpdateSessionTitleInternal:
                 self.url(session.session_id),
                 {"title": "NVIDIA Analysis"},
                 format="json",
-                HTTP_X_WORKER_TOKEN="dev-worker-token",
+                **self._worker_token_header(),
             )
 
             assert response.status_code == status.HTTP_200_OK

@@ -4,6 +4,7 @@ Title generator — generates concise session titles using Gemini Flash.
 Falls back to word truncation when the API key is empty or on error.
 """
 
+import asyncio
 import logging
 import re
 
@@ -28,9 +29,7 @@ class TitleGenerator:
             except Exception as exc:
                 logger.warning("Failed to configure Gemini: %s", exc)
 
-    async def generate(
-        self, first_message: str, first_response: str = ""
-    ) -> str:
+    async def generate(self, first_message: str, first_response: str = "") -> str:
         """Generate a concise title from the first chat message."""
         if not self._model:
             return self._fallback_title(first_message)
@@ -38,22 +37,31 @@ class TitleGenerator:
         try:
             import google.generativeai as genai
 
+            # Sanitize user content to prevent prompt injection
+            sanitized_message = self._sanitize_input(first_message[:2000])
+            sanitized_response = self._sanitize_input(first_response[:500])
+
             prompt = (
                 "You are a session namer. Based on the following user message, "
                 "generate a 3 to 5-word title for the chat session. "
                 "Do not use punctuation. Do not use quotes. "
                 "Example: 'Tesla Q4 Revenue Review'\n\n"
-                f"Input: {first_message[:2000]}"
+                f"Input: {sanitized_message}"
             )
-            if first_response:
-                prompt += f"\n\nAssistant response context: {first_response[:500]}"
+            if sanitized_response:
+                prompt += f"\n\nAssistant response context: {sanitized_response}"
 
-            response = self._model.generate_content(
+            config = genai.GenerationConfig(
+                temperature=0.1,
+                max_output_tokens=30,
+            )
+
+            # Run synchronous Gemini call in a thread to avoid blocking
+            # the async event loop.
+            response = await asyncio.to_thread(
+                self._model.generate_content,
                 prompt,
-                generation_config=genai.GenerationConfig(
-                    temperature=0.1,
-                    max_output_tokens=30,
-                ),
+                generation_config=config,
             )
             title = response.text.strip()
             title = self._clean_title(title)
@@ -66,6 +74,19 @@ class TitleGenerator:
         except Exception as exc:
             logger.warning("Title generation failed: %s", exc)
             return self._fallback_title(first_message)
+
+    @staticmethod
+    def _sanitize_input(text: str) -> str:
+        """Sanitize user-provided text before embedding in the prompt.
+
+        Strips control characters and collapses excessive whitespace to
+        reduce prompt injection surface.
+        """
+        # Remove control characters
+        text = re.sub(r"[\x00-\x1f\x7f]", "", text)
+        # Collapse whitespace
+        text = " ".join(text.split())
+        return text
 
     @staticmethod
     def _clean_title(title: str) -> str:

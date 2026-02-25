@@ -102,7 +102,9 @@ class TestTitleGenerator:
 
     def test_clean_title_collapses_whitespace(self):
         """Clean title collapses internal whitespace."""
-        assert TitleGenerator._clean_title("  Too   Many  Spaces  ") == "Too Many Spaces"
+        assert (
+            TitleGenerator._clean_title("  Too   Many  Spaces  ") == "Too Many Spaces"
+        )
 
     async def test_generate_with_first_response(self):
         """First response context is included in prompt."""
@@ -123,3 +125,15 @@ class TestTitleGenerator:
         call_args = mock_model.generate_content.call_args
         prompt = call_args[0][0]
         assert "Assistant response context:" in prompt
+
+    def test_sanitize_input_strips_control_chars(self):
+        """Control characters are removed from input."""
+        result = TitleGenerator._sanitize_input("Hello\x00World\x1f!")
+        assert result == "HelloWorld!"
+        assert "\x00" not in result
+        assert "\x1f" not in result
+
+    def test_sanitize_input_collapses_whitespace(self):
+        """Excessive whitespace is collapsed."""
+        result = TitleGenerator._sanitize_input("  Too   many   spaces  ")
+        assert result == "Too many spaces"

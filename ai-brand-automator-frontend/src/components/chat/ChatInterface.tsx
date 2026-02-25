@@ -54,6 +54,7 @@ export function ChatInterface() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const titlePollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track scroll position to show/hide scroll-to-bottom button
   const handleScroll = useCallback(() => {
@@ -66,6 +67,16 @@ export function ChatInterface() {
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
+
+  // Clean up title-poll timer on unmount or session change
+  useEffect(() => {
+    return () => {
+      if (titlePollTimerRef.current) {
+        clearTimeout(titlePollTimerRef.current);
+        titlePollTimerRef.current = null;
+      }
+    };
+  }, [sessionId]);
 
   // Persist sessionId to localStorage so sidebar can restore it on remount
   useEffect(() => {
@@ -261,10 +272,12 @@ export function ChatInterface() {
             // Auto-titling runs async (Celery/Kafka ~1-2s). Poll the
             // session endpoint until the title changes from the default
             // "Chat ..." placeholder, then refresh the sidebar once.
+            // Uses recursive setTimeout to avoid overlapping requests and
+            // stores the timer in a ref for cleanup on unmount.
             const newPk = data.session_pk ?? data.session?.id;
             if (newPk) {
               let attempts = 0;
-              const pollTitle = setInterval(async () => {
+              const pollOnce = async () => {
                 attempts++;
                 try {
                   const r = await apiClient.get(
@@ -273,13 +286,19 @@ export function ChatInterface() {
                   if (r.ok) {
                     const s = await r.json();
                     if (s.title && !s.title.startsWith('Chat ')) {
-                      clearInterval(pollTitle);
+                      titlePollTimerRef.current = null;
                       setSidebarRefreshKey((k) => k + 1);
+                      return;
                     }
                   }
                 } catch { /* ignore */ }
-                if (attempts >= 5) clearInterval(pollTitle);
-              }, 2000);
+                if (attempts < 5) {
+                  titlePollTimerRef.current = setTimeout(pollOnce, 2000);
+                } else {
+                  titlePollTimerRef.current = null;
+                }
+              };
+              titlePollTimerRef.current = setTimeout(pollOnce, 2000);
             }
           }
 
