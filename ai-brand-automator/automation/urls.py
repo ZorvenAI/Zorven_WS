@@ -4,6 +4,11 @@ URL configuration for the automation app.
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from .internal_views import (
+    InternalPublishView,
+    InternalSocialProfilesView,
+    InternalUserRoleView,
+)
 from .views import (
     SocialProfileViewSet,
     AutomationTaskViewSet,
@@ -468,6 +473,24 @@ urlpatterns = [
         "google-business/categories/",
         GoogleBusinessCategoriesView.as_view(),
         name="google-business-categories",
+    ),
+    # =========================================================================
+    # Internal service-to-service endpoints (social-agent-svc)
+    # =========================================================================
+    path(
+        "internal/social-profiles/",
+        InternalSocialProfilesView.as_view(),
+        name="internal-social-profiles",
+    ),
+    path(
+        "internal/publish/",
+        InternalPublishView.as_view(),
+        name="internal-publish",
+    ),
+    path(
+        "internal/user-role/",
+        InternalUserRoleView.as_view(),
+        name="internal-user-role",
     ),
     # Router URLs
     path("", include(router.urls)),

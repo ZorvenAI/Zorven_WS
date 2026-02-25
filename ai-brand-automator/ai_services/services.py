@@ -592,6 +592,15 @@ class GeminiAIService:
             "article",
             "write about",
             "publish",
+            "social",
+            "linkedin",
+            "twitter",
+            "tweet",
+            "facebook",
+            "instagram",
+            "post to",
+            "share on",
+            "promote",
         ]
 
         pipeline_phrases = [
@@ -608,6 +617,12 @@ class GeminiAIService:
             "author a blog",
             "write an article",
             "create a blog post",
+            "post to linkedin",
+            "post to twitter",
+            "share on social",
+            "promote on social media",
+            "tweet about",
+            "post on facebook",
         ]
 
         score = 0

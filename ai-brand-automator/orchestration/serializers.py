@@ -110,11 +110,13 @@ class PipelineManifestSerializer(serializers.ModelSerializer):
         "http://discovery-agent-svc",
         "http://intelligence-agent-svc",
         "http://content-agent-svc",
+        "http://social-agent-svc",
         "http://pipeline-orchestrator-svc",
         "http://localhost:",
         "https://discovery-agent-svc",
         "https://intelligence-agent-svc",
         "https://content-agent-svc",
+        "https://social-agent-svc",
         "https://pipeline-orchestrator-svc",
     )
 

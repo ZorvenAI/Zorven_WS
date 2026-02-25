@@ -200,15 +200,23 @@ export function ChatHistorySidebar({
               {group.sessions.map((session) => {
                 const isActive = activeSessionId === session.session_id;
                 return (
-                  <button
+                  <div
                     key={session.session_id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onSelectSession(session.session_id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onSelectSession(session.session_id);
+                      }
+                    }}
                     onBlur={() => {
                       if (deleteConfirm === session.session_id) {
                         setTimeout(() => setDeleteConfirm(null), 200);
                       }
                     }}
-                    className={`group w-full text-left px-2 py-2 rounded-lg mb-0.5 transition-colors ${
+                    className={`group w-full text-left px-2 py-2 rounded-lg mb-0.5 transition-colors cursor-pointer ${
                       isActive
                         ? 'bg-white/10 text-white'
                         : 'text-brand-silver hover:bg-white/5'
@@ -249,7 +257,7 @@ export function ChatHistorySidebar({
                         </p>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>

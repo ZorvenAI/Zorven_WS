@@ -193,6 +193,15 @@ def _build_result_summary(job):
     # If the orchestrator provides a ready-made summary, use it
     if "final_response" in result:
         return result["final_response"]
+
+    # Check for social promotion results
+    node_results = result.get("node_results", {})
+    social_output = node_results.get("social_promoter", {})
+    blog_output = node_results.get("blog_author", {})
+
+    if social_output or blog_output:
+        return _build_content_social_summary(blog_output, social_output)
+
     if "summary" in result:
         return result["summary"]
 
@@ -202,3 +211,68 @@ def _build_result_summary(job):
         f"{manifest_name} analysis completed successfully. "
         "View the full results in the pipeline card above."
     )
+
+
+def _build_content_social_summary(blog_output, social_output):
+    """Build a rich summary for blog authoring + social promotion pipelines."""
+    parts = []
+
+    # Blog section
+    blog_content = blog_output.get("blog_content", "")
+    if blog_content:
+        # Extract title from first H1 line
+        title = ""
+        for line in blog_content.split("\n"):
+            if line.startswith("# "):
+                title = line.lstrip("# ").strip()
+                break
+        if title:
+            parts.append(f"**Blog authored:** {title}")
+        word_count = blog_output.get("word_count", 0)
+        if word_count:
+            parts.append(f"Word count: {word_count}")
+        gcs_uri = blog_output.get("gcs_uri", "")
+        if gcs_uri:
+            parts.append(f"Saved to: `{gcs_uri}`")
+        parts.append("")  # blank line
+
+    # Social section
+    adapted_posts = social_output.get("adapted_posts", [])
+    publish_results = social_output.get("publish_results", [])
+    platforms_posted = social_output.get("platforms_posted", [])
+    draft_stored = social_output.get("draft_stored", False)
+
+    if adapted_posts:
+        parts.append(
+            f"**Social content adapted** for " f"{len(adapted_posts)} platform(s)."
+        )
+
+    if platforms_posted:
+        parts.append(f"**Published to:** {', '.join(platforms_posted)}")
+        for pr in publish_results:
+            if pr.get("status") == "published" and pr.get("post_url"):
+                parts.append(f"- {pr['platform']}: {pr['post_url']}")
+
+    # Scheduled posts
+    scheduled = [pr for pr in publish_results if pr.get("status") == "scheduled"]
+    if scheduled:
+        names = ", ".join(pr.get("platform", "?") for pr in scheduled)
+        sched_msg = f"**Scheduled on:** {names}"
+        first_date = scheduled[0].get("scheduled_date")
+        if first_date:
+            sched_msg += f" for {first_date}"
+        parts.append(sched_msg)
+
+    if draft_stored and not platforms_posted and not scheduled:
+        parts.append("**Drafts saved** for admin approval.")
+
+    # Failed platforms
+    failed = [pr for pr in publish_results if pr.get("status") == "failed"]
+    if failed:
+        names = ", ".join(pr.get("platform", "?") for pr in failed)
+        parts.append(f"Failed on: {names}")
+
+    if not parts:
+        return "Content pipeline completed successfully."
+
+    return "\n".join(parts)
