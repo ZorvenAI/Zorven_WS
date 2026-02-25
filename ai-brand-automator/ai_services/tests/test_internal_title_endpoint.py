@@ -2,8 +2,6 @@
 Tests for the internal title-update endpoint used by chat-titling-worker.
 """
 
-import uuid
-
 import pytest
 from django.conf import settings
 from django.urls import reverse
