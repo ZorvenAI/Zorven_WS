@@ -586,6 +586,12 @@ class GeminiAIService:
             "perform analysis",
             "evaluate brand",
             "assess brand",
+            "blog",
+            "write a blog",
+            "author",
+            "article",
+            "write about",
+            "publish",
         ]
 
         pipeline_phrases = [
@@ -598,6 +604,10 @@ class GeminiAIService:
             "calculate",
             "what is my brand worth",
             "how strong is my brand",
+            "write a blog",
+            "author a blog",
+            "write an article",
+            "create a blog post",
         ]
 
         score = 0

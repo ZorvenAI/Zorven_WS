@@ -176,6 +176,53 @@ class Command(BaseCommand):
             },
         },
         {
+            "pipeline_id": "blog-authoring",
+            "name": "Blog Authoring",
+            "description": (
+                "Research a topic and author a data-backed, "
+                "SEO/AEO/GEO-compliant blog post in brand voice"
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "web_research",
+                        "type": "external",
+                        "url": "http://discovery-agent-svc:8020/v1/search",
+                        "config": {
+                            "focus": "topic_research,statistics,trends",
+                        },
+                    },
+                    {
+                        "id": "blog_author",
+                        "type": "external",
+                        "url": "http://content-agent-svc:8050/v1/execute",
+                        "config": {
+                            "output_format": "markdown",
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "web_research"],
+                    ["web_research", "blog_author"],
+                    ["blog_author", "manager"],
+                ],
+                "global_config": {
+                    "model": "gemini-2.0-flash",
+                    "temperature": 0.7,
+                },
+            },
+        },
+        {
             "pipeline_id": "content-strategy",
             "name": "Content Strategy",
             "description": (

@@ -10,6 +10,7 @@ from app.nodes.base import BaseNode
 from app.state.schema import AgentState
 
 KEYWORD_MAP: dict[str, list[str]] = {
+    "blog-authoring": ["blog", "write", "author", "article", "post", "publish"],
     "iso-brand-equity": ["brand equity", "valuation", "iso", "royalty", "10668"],
     "competitor-audit": ["competitor", "audit", "gap", "competitive"],
     "content-strategy": ["content", "strategy", "calendar", "editorial"],
