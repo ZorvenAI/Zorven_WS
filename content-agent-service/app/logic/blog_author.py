@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 from app.api.schemas import Citation
+from app.utils.prompt_sanitizer import sanitize_ai_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,9 @@ class BlogAuthor:
             if c.source_url
         )
 
+        safe_topic = sanitize_ai_prompt(topic)
+        safe_context = sanitize_ai_prompt(research_context[:4000])
+
         prompt = (
             f"## System Instructions\n"
             f"You are a content writer for {brand_persona.get('name', 'a brand')}.\n"
@@ -77,9 +81,9 @@ class BlogAuthor:
             f"[Source Title](URL) format.\n"
             f"Available citations:\n{citation_text or 'No citations available.'}\n\n"
             f"## Research Context\n"
-            f"{self._sanitize(research_context[:4000])}\n\n"
+            f"{safe_context}\n\n"
             f"## Task\n"
-            f"Write a 800-1200 word blog post about \"{topic}\" in Markdown format.\n"
+            f"Write a 800-1200 word blog post about \"{safe_topic}\" in Markdown format.\n"
             f"Include:\n"
             f"- H1 title as the first line\n"
             f"- H2 sections for each major topic\n"
@@ -189,7 +193,3 @@ class BlogAuthor:
 
         return blog
 
-    @staticmethod
-    def _sanitize(text: str) -> str:
-        """Strip control characters from text."""
-        return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)

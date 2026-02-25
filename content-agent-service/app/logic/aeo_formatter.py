@@ -10,6 +10,8 @@ import logging
 import re
 from typing import Any
 
+from app.utils.prompt_sanitizer import sanitize_ai_prompt
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,15 +43,18 @@ class AEOFormatter:
         keywords: list[str],
     ) -> dict[str, Any]:
         """Use Gemini to generate FAQ items from blog content."""
+        safe_topic = sanitize_ai_prompt(topic)
+        safe_content = sanitize_ai_prompt(blog_content[:3000])
+
         prompt = (
             "You are an AEO (Answer Engine Optimization) expert. "
             "Based on the following blog content, generate 3-5 FAQ items "
             "that users would naturally ask about this topic.\n\n"
             "Return ONLY valid JSON with this structure:\n"
             '{"faq_items": [{"question": "...", "answer": "..."}]}\n\n'
-            f"Topic: {topic}\n"
+            f"Topic: {safe_topic}\n"
             f"Keywords: {', '.join(keywords[:5])}\n"
-            f"Blog content (first 3000 chars):\n{blog_content[:3000]}\n"
+            f"Blog content (first 3000 chars):\n{safe_content}\n"
         )
 
         try:

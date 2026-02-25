@@ -11,6 +11,8 @@ import re
 from collections import Counter
 from typing import Any
 
+from app.utils.prompt_sanitizer import sanitize_ai_prompt
+
 logger = logging.getLogger(__name__)
 
 
@@ -42,6 +44,9 @@ class SEOOptimizer:
         brand_persona: dict[str, Any],
     ) -> dict[str, Any]:
         """Use Gemini to generate SEO data."""
+        safe_topic = sanitize_ai_prompt(topic)
+        safe_context = sanitize_ai_prompt(research_context[:2000])
+
         prompt = (
             "You are an SEO expert. Analyze the following blog topic and research "
             "context. Return ONLY valid JSON with these keys:\n"
@@ -50,11 +55,11 @@ class SEOOptimizer:
             '- "meta_description": meta description (max 160 characters)\n'
             '- "headers": list of suggested H2 section headers\n'
             '- "slug": URL-friendly slug\n\n'
-            f"Topic: {self._sanitize(topic)}\n"
+            f"Topic: {safe_topic}\n"
             f"Industry: {brand_persona.get('industry', 'General')}\n"
             f"Target Audience: {brand_persona.get('target_audience', '')}\n"
             f"Research Context (first 2000 chars): "
-            f"{self._sanitize(research_context[:2000])}\n"
+            f"{safe_context}\n"
         )
 
         try:
@@ -134,7 +139,3 @@ class SEOOptimizer:
         slug = re.sub(r"-+", "-", slug)
         return slug[:80]
 
-    @staticmethod
-    def _sanitize(text: str) -> str:
-        """Strip control characters from text."""
-        return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)

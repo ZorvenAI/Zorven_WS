@@ -705,7 +705,7 @@ services:
       # or uncomment the line below:
       #   - CONTENT_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - CONTENT_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-      - CONTENT_GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
+      - CONTENT_GCS_PROJECT_ID=${GCP_PROJECT_ID:-}
       - CONTENT_GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}
       - CONTENT_CORE_API_URL=http://backend:8001
       - CONTENT_CORE_API_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}

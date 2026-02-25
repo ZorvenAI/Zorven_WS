@@ -48,7 +48,7 @@ class CoreApiClient:
         Fetch brand persona data for a tenant.
 
         GET {base_url}/api/v1/onboarding/companies/
-        Headers: X-Tenant-ID, Authorization: Token {service_token}
+        Headers: X-Tenant-ID, X-Service-Token
 
         Returns the first company's brand data, or a default persona on failure.
         """
@@ -56,7 +56,7 @@ class CoreApiClient:
             client = self._get_client()
             headers = {
                 "X-Tenant-ID": tenant_id,
-                "Authorization": f"Token {self.service_token}",
+                "X-Service-Token": self.service_token,
             }
 
             url = f"{self.base_url}/api/v1/onboarding/companies/"
