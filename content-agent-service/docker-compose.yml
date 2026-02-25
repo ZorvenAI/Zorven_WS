@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  content-agent:
+    build: .
+    ports:
+      - "8050:8050"
+    environment:
+      CONTENT_HOST: "0.0.0.0"
+      CONTENT_PORT: "8050"
+      CONTENT_REDIS_URL: "redis://redis:6379/5"
+      CONTENT_KAFKA_BOOTSTRAP_SERVERS: ""
+      CONTENT_GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
+      CONTENT_GCS_PROJECT_ID: ""
+      CONTENT_GCS_BUCKET_NAME: ""
+      CONTENT_CORE_API_URL: "http://localhost:8001"
+      CONTENT_CORE_API_TOKEN: "dev-service-token"
+      CONTENT_LOG_LEVEL: "INFO"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8050/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6383:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
