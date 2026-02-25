@@ -223,6 +223,100 @@ class Command(BaseCommand):
             },
         },
         {
+            "pipeline_id": "social-promotion",
+            "name": "Social Media Promotion",
+            "description": (
+                "Research a topic, author a blog post, and "
+                "automatically promote it across social media platforms"
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "web_research",
+                        "type": "external",
+                        "url": "http://discovery-agent-svc:8020/v1/search",
+                        "config": {
+                            "focus": "topic_research,statistics,trends",
+                        },
+                    },
+                    {
+                        "id": "blog_author",
+                        "type": "external",
+                        "url": "http://content-agent-svc:8050/v1/execute",
+                        "config": {
+                            "output_format": "markdown",
+                        },
+                    },
+                    {
+                        "id": "social_promoter",
+                        "type": "external",
+                        "url": "http://social-agent-svc:8060/v1/execute",
+                        "config": {
+                            "platforms": ["linkedin", "twitter"],
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "web_research"],
+                    ["web_research", "blog_author"],
+                    ["blog_author", "social_promoter"],
+                    ["social_promoter", "manager"],
+                ],
+                "global_config": {
+                    "model": "gemini-2.0-flash",
+                    "temperature": 0.7,
+                },
+            },
+        },
+        {
+            "pipeline_id": "social-post",
+            "name": "Social Media Post",
+            "description": (
+                "Post content directly to connected "
+                "social media platforms"
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "social_promoter",
+                        "type": "external",
+                        "url": "http://social-agent-svc:8060/v1/execute",
+                        "config": {
+                            "platforms": ["linkedin", "twitter"],
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "social_promoter"],
+                    ["social_promoter", "manager"],
+                ],
+                "global_config": {
+                    "model": "gemini-2.0-flash",
+                    "temperature": 0.7,
+                },
+            },
+        },
+        {
             "pipeline_id": "content-strategy",
             "name": "Content Strategy",
             "description": (

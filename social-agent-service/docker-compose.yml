@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  social-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: social-agent-svc
+    environment:
+      - SOCIAL_REDIS_URL=redis://redis:6379/6
+      - SOCIAL_KAFKA_BOOTSTRAP_SERVERS=
+      - SOCIAL_GOOGLE_API_KEY=AIzaSyAGcaE8aGhDqa-kJOt6uFwsDiq-8ybqf6k
+      - SOCIAL_CORE_API_URL=http://localhost:8001
+      - SOCIAL_CORE_API_TOKEN=dev-service-token
+      - SOCIAL_LOG_LEVEL=INFO
+    ports:
+      - "8060:8060"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8060/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: social-agent-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6384:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped

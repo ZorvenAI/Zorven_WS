@@ -80,6 +80,31 @@ class TestRouterNode:
         # iso-brand-equity is not in available_manifests, falls back
         assert result["resolved_manifest_id"] == "brand-analysis"
 
+    async def test_social_promotion_with_linkedin(self):
+        """'write a blog and post it in LinkedIn' → social-promotion."""
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt="write a blog on Brand planning and post it in LinkedIn"
+            )
+        )
+        assert result["resolved_manifest_id"] == "social-promotion"
+
+    async def test_social_promotion_with_twitter(self):
+        node = RouterNode()
+        result = await node(
+            _base_state(input_prompt="share this on twitter")
+        )
+        assert result["resolved_manifest_id"] == "social-promotion"
+
+    async def test_blog_without_social_routes_to_blog(self):
+        """'write a blog about Tesla' without platform → blog-authoring."""
+        node = RouterNode()
+        result = await node(
+            _base_state(input_prompt="write a blog about Tesla")
+        )
+        assert result["resolved_manifest_id"] == "blog-authoring"
+
 
 class TestStrategyNode:
     async def test_returns_strategy_data(self):

@@ -726,6 +726,81 @@ services:
     networks:
       - app-network
 
+  # ==========================================================================
+  # MCP Server — Model Context Protocol server (SSE transport)
+  # Exposes automation tools (scheduling, publishing, profiles) to AI agents
+  # ==========================================================================
+  mcp-server:
+    build:
+      context: ..
+      dockerfile: deployment/docker/backend/Dockerfile
+    container_name: ai-brand-automator-mcp-server
+    command: ["python", "run_mcp_server.py", "--transport", "sse", "--port", "8085", "--host", "0.0.0.0"]
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/ai_brand_automator}
+      - REDIS_URL=redis://redis:6379/0
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
+    volumes:
+      - ../ai-brand-automator:/app
+    expose:
+      - "8085"
+    ports:
+      - "8085:8085"
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Social Agent — Social media promotion and publishing
+  # Adapts blog content to platform-specific posts, delegates publishing to Django
+  # ==========================================================================
+  social-agent-svc:
+    build:
+      context: ../social-agent-service
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-social-agent
+    environment:
+      - SOCIAL_REDIS_URL=redis://redis:6379/6
+      - SOCIAL_KAFKA_BOOTSTRAP_SERVERS=${SOCIAL_KAFKA_BOOTSTRAP_SERVERS:-}
+      # Kafka integration is disabled by default (empty bootstrap servers).
+      # To enable Kafka when running the full event streaming stack, either:
+      #   export SOCIAL_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      # or uncomment the line below:
+      #   - SOCIAL_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SOCIAL_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - SOCIAL_CORE_API_URL=http://backend:8001
+      - SOCIAL_CORE_API_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - SOCIAL_MCP_SERVER_URL=http://mcp-server:8085/sse
+      - SOCIAL_LOG_LEVEL=INFO
+    expose:
+      - "8060"
+    ports:
+      - "8060:8060"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8060/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
 # ==========================================================================
 # Volumes
 # ==========================================================================

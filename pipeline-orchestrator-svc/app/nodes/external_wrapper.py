@@ -32,9 +32,14 @@ class ExternalWrapper(BaseNode):
             tenant_ctx.get("tenant_id", "") if isinstance(tenant_ctx, dict) else ""
         )
 
+        input_context = dict(state.get("input_context", {}))
+        job_id = state.get("job_id", "")
+        if job_id:
+            input_context["job_id"] = job_id
+
         payload = {
             "input_prompt": state.get("input_prompt", ""),
-            "input_context": state.get("input_context", {}),
+            "input_context": input_context,
             "tenant_context": tenant_ctx,
             "config": self.config,
             "previous_outputs": state.get("node_outputs", {}),

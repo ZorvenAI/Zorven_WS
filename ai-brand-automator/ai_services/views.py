@@ -278,6 +278,8 @@ def _process_chat_message(
         job_context = {
             "source": "chat",
             "session_id": session.session_id,
+            "user_id": request.user.id,
+            "user_email": request.user.email,
             "chat_history": chat_history,
             "attachments": attachments_data,
         }
@@ -379,6 +381,8 @@ def _process_chat_message(
         job_context = {
             "source": "chat",
             "session_id": session.session_id,
+            "user_id": request.user.id,
+            "user_email": request.user.email,
             "chat_history": chat_history,
         }
         if target_brand:
@@ -420,10 +424,28 @@ def _process_chat_message(
             timeout=300,
         )
 
-        ai_response = (
-            "I've started a brand analysis pipeline for your request. "
-            "You can track the progress below."
+        # Detect social intent for a friendlier response message
+        _msg_lower = message.lower()
+        _social_cues = (
+            "linkedin", "twitter", "tweet", "facebook",
+            "instagram", "social", "post to", "share on", "promote",
         )
+        if any(cue in _msg_lower for cue in _social_cues):
+            ai_response = (
+                "I'm working on your request — researching the topic, "
+                "authoring the content, and preparing social posts. "
+                "You can track the progress below."
+            )
+        elif any(cue in _msg_lower for cue in ("blog", "write", "article", "author")):
+            ai_response = (
+                "I've started a blog authoring pipeline for your request. "
+                "You can track the progress below."
+            )
+        else:
+            ai_response = (
+                "I've started a brand analysis pipeline for your request. "
+                "You can track the progress below."
+            )
 
         user_msg = ChatMessage.objects.create(
             session=session, role="user", content=message

@@ -423,6 +423,10 @@ Example: Schedule a multi-platform post
                             "items": {"type": "string", "format": "uri"},
                             "description": "Optional: URLs of images/videos to attach. Required for Instagram.",
                         },
+                        "tenant_id": {
+                            "type": "string",
+                            "description": "Optional tenant ID for multi-tenant context (set by pipeline agents).",
+                        },
                     },
                     "required": [
                         "user_email",
@@ -1709,26 +1713,51 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
             if p not in valid_platforms:
                 raise ValueError(f"Invalid platform: {p}")
 
-        # Create content
-        content = ContentCalendar.objects.create(
-            user=user,
-            title=arguments["title"],
-            content=arguments["content"],
-            platforms=platforms,
-            scheduled_date=scheduled_date,
-            media_urls=arguments.get("media_urls", []),
-            status="scheduled",
-        )
+        # Optional tenant context for multi-tenant pipeline usage
+        tenant_id = arguments.get("tenant_id")
 
-        # Associate with social profiles
-        for platform in platforms:
-            try:
-                profile = SocialProfile.objects.get(
-                    user=user, platform=platform, status="connected"
+        # Create content
+        create_kwargs = {
+            "user": user,
+            "title": arguments["title"],
+            "content": arguments["content"],
+            "platforms": platforms,
+            "scheduled_date": scheduled_date,
+            "media_urls": arguments.get("media_urls", []),
+            "status": "scheduled",
+        }
+        if tenant_id:
+            create_kwargs["tenant_id"] = tenant_id
+        content = ContentCalendar.objects.create(**create_kwargs)
+
+        # Associate with social profiles — prefer user's own, fall back to tenant members
+        if tenant_id:
+            from django.db.models import Q
+            from tenants.models import Membership
+            member_user_ids = list(
+                Membership.objects.filter(
+                    tenant_id=tenant_id, is_active=True,
+                ).values_list("user_id", flat=True)
+            )
+            for platform in platforms:
+                profile = (
+                    SocialProfile.objects.filter(
+                        Q(user=user, platform=platform, status="connected")
+                        | Q(tenant__isnull=True, user_id__in=member_user_ids,
+                            platform=platform, status="connected")
+                    ).first()
                 )
-                content.social_profiles.add(profile)
-            except SocialProfile.DoesNotExist:
-                pass  # Profile not connected, skip
+                if profile:
+                    content.social_profiles.add(profile)
+        else:
+            for platform in platforms:
+                try:
+                    profile = SocialProfile.objects.get(
+                        user=user, platform=platform, status="connected"
+                    )
+                    content.social_profiles.add(profile)
+                except SocialProfile.DoesNotExist:
+                    pass  # Profile not connected, skip
 
         return {
             "success": True,
