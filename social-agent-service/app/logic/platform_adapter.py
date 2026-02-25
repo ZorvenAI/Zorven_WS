@@ -50,9 +50,7 @@ class PlatformAdapter:
                     platform,
                     exc,
                 )
-                post = self._stub_adapt(
-                    blog_content, seo_meta, brand_persona, platform
-                )
+                post = self._stub_adapt(blog_content, seo_meta, brand_persona, platform)
                 posts.append(post)
 
         return posts
@@ -65,9 +63,11 @@ class PlatformAdapter:
         platform: str,
     ) -> SocialPost:
         """Use Gemini to generate a platform-specific post."""
-        brand_name = brand_persona.get("name", "the brand")
-        brand_voice = brand_persona.get("brand_voice", "professional")
-        keywords = seo_meta.get("keywords", [])
+        brand_name = sanitize_ai_prompt(str(brand_persona.get("name", "the brand")))
+        brand_voice = sanitize_ai_prompt(
+            str(brand_persona.get("brand_voice", "professional"))
+        )
+        keywords = [sanitize_ai_prompt(str(kw)) for kw in seo_meta.get("keywords", [])]
 
         sanitized_content = sanitize_ai_prompt(blog_content[:3000])
 

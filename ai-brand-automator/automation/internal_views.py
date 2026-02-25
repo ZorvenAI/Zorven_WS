@@ -75,8 +75,16 @@ class InternalSocialProfilesView(APIView):
                 Q(tenant_id=tenant_id)
                 | Q(tenant__isnull=True, user_id__in=member_user_ids),
                 status="connected",
-            ).values(
-                "id", "platform", "status", "profile_name", "profile_url", "user_id"
+            )
+            .order_by("platform", "id")
+            .values(
+                "id",
+                "platform",
+                "status",
+                "profile_name",
+                "profile_url",
+                "user_id",
+                "tenant_id",
             )
         )
 
@@ -88,7 +96,9 @@ class InternalSocialProfilesView(APIView):
                 if (preferred_user_id and str(p["user_id"]) == str(preferred_user_id))
                 else 1
             )
-            return (p["platform"], is_preferred)
+            # Tenant-linked profiles rank above unlinked (tenant__isnull=True)
+            is_tenant_linked = 0 if p.get("tenant_id") else 1
+            return (p["platform"], is_preferred, is_tenant_linked)
 
         profiles.sort(key=_sort_key)
 
@@ -175,7 +185,8 @@ class InternalPublishView(APIView):
         # Sort: preferred user's profiles first, then tenant-linked, then others
         def _sort_key(p):
             is_preferred = 0 if (user_id and str(p.user_id) == str(user_id)) else 1
-            return (p.platform, is_preferred)
+            is_tenant_linked = 0 if p.tenant_id else 1
+            return (p.platform, is_preferred, is_tenant_linked)
 
         all_profiles.sort(key=_sort_key)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -16,7 +17,7 @@ from app.api.schemas import (
     SocialPost,
 )
 from app.cache.redis_manager import RedisManager
-from app.logic.asset_resolver import AssetResolver
+from app.core.config import settings
 from app.logic.platform_adapter import PlatformAdapter
 from app.logic.action_resolver import ActionResolver, ResolvedAction
 from app.messaging.kafka_producer import SocialAuditProducer, TraceProducer
@@ -33,7 +34,6 @@ class SocialExecutor:
     def __init__(
         self,
         platform_adapter: PlatformAdapter,
-        asset_resolver: AssetResolver,
         core_api_client: CoreApiClient,
         redis_manager: RedisManager,
         trace_producer: TraceProducer,
@@ -42,7 +42,6 @@ class SocialExecutor:
         mcp_client: McpClient | None = None,
     ) -> None:
         self._adapter = platform_adapter
-        self._asset_resolver = asset_resolver
         self._core_api = core_api_client
         self._redis = redis_manager
         self._trace = trace_producer
@@ -50,33 +49,20 @@ class SocialExecutor:
         self._action_resolver = action_resolver
         self._mcp = mcp_client
 
-    async def execute(
-        self, request: ExecuteRequest, tenant_id: str
-    ) -> ExecuteResponse:
+    async def execute(self, request: ExecuteRequest, tenant_id: str) -> ExecuteResponse:
         """Full social promotion flow."""
         job_id = request.input_context.get("job_id", "unknown")
 
         # 1. Rate limit check
-        within_limit = await self._redis.check_rate_limit(tenant_id)
+        within_limit = await self._redis.check_rate_limit(
+            tenant_id, limit=settings.RATE_LIMIT_PER_MINUTE
+        )
         if not within_limit:
-            raise HTTPException(
-                status_code=429, detail="Rate limit exceeded"
-            )
-
-        # 2. Cache check
-        cache_key = self._build_cache_key(tenant_id, request)
-        cached = await self._redis.get_cached_result(cache_key)
-        if cached:
-            logger.info("Cache hit for job %s", job_id)
-            return ExecuteResponse(**cached)
+            raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
         await self._emit_trace(job_id, "Starting social promotion")
 
-        # 3. Fetch brand persona
-        persona = await self._core_api.fetch_brand_persona(tenant_id)
-        await self._emit_trace(job_id, "Fetched brand persona")
-
-        # 4. Extract blog content from previous outputs
+        # 2. Extract blog content from previous outputs
         blog_output = request.previous_outputs.get("blog_author", {})
         blog_content = blog_output.get("blog_content", "")
         seo_meta = blog_output.get("seo_meta", {})
@@ -87,7 +73,7 @@ class SocialExecutor:
             blog_content = request.input_prompt
             logger.info("No blog_author output — using input_prompt as content")
 
-        # 5. Determine target platforms (intersect with connected profiles)
+        # 3. Determine target platforms (intersect with connected profiles)
         user_id = request.input_context.get("user_id")
         profiles = await self._core_api.fetch_social_profiles(
             tenant_id, user_id=user_id
@@ -109,6 +95,13 @@ class SocialExecutor:
         platforms = [p for p in requested if p in connected_platforms]
         unavailable = [p for p in requested if p not in connected_platforms]
 
+        # 4. Cache check (uses effective platforms, not request config)
+        cache_key = self._build_cache_key(tenant_id, blog_content, platforms)
+        cached = await self._redis.get_cached_result(cache_key)
+        if cached:
+            logger.info("Cache hit for job %s", job_id)
+            return ExecuteResponse(**cached)
+
         if unavailable:
             logger.warning(
                 "Job %s: requested platforms not connected: %s",
@@ -129,9 +122,11 @@ class SocialExecutor:
                 ],
             )
 
-        await self._emit_trace(
-            job_id, f"Target platforms: {', '.join(platforms)}"
-        )
+        await self._emit_trace(job_id, f"Target platforms: {', '.join(platforms)}")
+
+        # 5. Fetch brand persona
+        persona = await self._core_api.fetch_brand_persona(tenant_id)
+        await self._emit_trace(job_id, "Fetched brand persona")
 
         # 6. Fetch user role
         user_id = request.input_context.get("user_id")
@@ -161,25 +156,17 @@ class SocialExecutor:
             await self._emit_trace(
                 job_id,
                 f"Action: {action.action}"
-                + (
-                    f" at {action.scheduled_date}"
-                    if action.scheduled_date
-                    else ""
-                ),
+                + (f" at {action.scheduled_date}" if action.scheduled_date else ""),
             )
 
         # 8. Acquire post locks
         locked_platforms: list[str] = []
         for post in adapted_posts:
-            acquired = await self._redis.acquire_post_lock(
-                tenant_id, post.platform
-            )
+            acquired = await self._redis.acquire_post_lock(tenant_id, post.platform)
             if acquired:
                 locked_platforms.append(post.platform)
             else:
-                logger.warning(
-                    "Duplicate post lock for %s — skipping", post.platform
-                )
+                logger.warning("Duplicate post lock for %s — skipping", post.platform)
 
         # 9. Publish or draft
         publish_results: list[PublishResult] = []
@@ -269,9 +256,7 @@ class SocialExecutor:
                             status=pub_status,
                             post_id=str(post_id) if post_id else None,
                             post_url=str(post_url) if post_url else None,
-                            error=(
-                                platform_errors[0] if platform_errors else None
-                            ),
+                            error=(platform_errors[0] if platform_errors else None),
                         )
                     )
 
@@ -300,15 +285,11 @@ class SocialExecutor:
             f"Adapted content for {len(adapted_posts)} platform(s)",
         ]
         if unavailable:
-            findings.append(
-                f"Not connected: {', '.join(unavailable)} — skipped"
-            )
+            findings.append(f"Not connected: {', '.join(unavailable)} — skipped")
         if draft_stored:
             findings.append("Content saved as drafts for admin approval")
         if platforms_posted:
-            findings.append(
-                f"Published to: {', '.join(platforms_posted)}"
-            )
+            findings.append(f"Published to: {', '.join(platforms_posted)}")
         if platforms_scheduled:
             sched_msg = f"Scheduled on: {', '.join(platforms_scheduled)}"
             if action.scheduled_date:
@@ -462,12 +443,8 @@ class SocialExecutor:
         )
 
     def _build_cache_key(
-        self, tenant_id: str, request: ExecuteRequest
+        self, tenant_id: str, blog_content: str, platforms: list[str]
     ) -> str:
-        blog_content = request.previous_outputs.get("blog_author", {}).get(
-            "blog_content", request.input_prompt
-        )
-        platforms = request.config.get("platforms", [])
         raw = f"{tenant_id}:{blog_content[:500]}:{','.join(sorted(platforms))}"
         return hashlib.md5(raw.encode()).hexdigest()
 
@@ -477,9 +454,7 @@ class SocialExecutor:
         message: str,
         status: str = "PROCESSING",
     ) -> None:
-        await self._trace.send_step(
-            job_id=job_id, message=message, status=status
-        )
+        await self._trace.send_step(job_id=job_id, message=message, status=status)
 
 
 # Platform aliases → canonical platform name
@@ -493,6 +468,10 @@ _PLATFORM_ALIASES: dict[str, str] = {
     "insta": "instagram",
 }
 
+# Short aliases that need word-boundary matching to avoid false positives
+# (e.g. "x" matching "next", "example"; "fb" matching "cfb").
+_SHORT_ALIASES = {"x", "fb"}
+
 
 def _extract_platforms_from_prompt(prompt: str) -> list[str]:
     """Parse the user's prompt for explicit platform mentions.
@@ -500,10 +479,17 @@ def _extract_platforms_from_prompt(prompt: str) -> list[str]:
     Returns a deduplicated list of canonical platform names, or an empty
     list if no platforms are mentioned (so the caller falls back to
     manifest config or connected profiles).
+
+    Short aliases ('x', 'fb') use word-boundary regex to avoid false
+    positives on words like 'next' or 'example'.
     """
     lower = prompt.lower()
     found: dict[str, None] = {}  # ordered set
     for alias, canonical in _PLATFORM_ALIASES.items():
-        if alias in lower and canonical not in found:
-            found[canonical] = None
+        if alias in _SHORT_ALIASES:
+            if re.search(rf"\b{alias}\b", lower) and canonical not in found:
+                found[canonical] = None
+        else:
+            if alias in lower and canonical not in found:
+                found[canonical] = None
     return list(found)

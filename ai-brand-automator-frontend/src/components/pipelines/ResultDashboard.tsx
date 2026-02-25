@@ -297,16 +297,17 @@ export default function ResultDashboard({
                       Failed{pr.error ? `: ${pr.error}` : ''}
                     </span>
                   )}
-                  {pr.post_url && (
-                    <a
-                      href={pr.post_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-brand-electric hover:underline"
-                    >
-                      View <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
+                  {pr.post_url &&
+                    /^https?:\/\//i.test(pr.post_url) && (
+                      <a
+                        href={pr.post_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-brand-electric hover:underline"
+                      >
+                        View <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
                 </div>
               </div>
             ))}

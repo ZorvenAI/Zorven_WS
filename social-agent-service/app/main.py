@@ -15,7 +15,6 @@ from app.api import routes
 from app.cache.redis_manager import RedisManager
 from app.core.config import settings
 from app.core.logging_config import setup_logging
-from app.logic.asset_resolver import AssetResolver
 from app.logic.platform_adapter import PlatformAdapter
 from app.messaging.kafka_consumer import ContentPublishedConsumer
 from app.messaging.kafka_producer import SocialAuditProducer, TraceProducer
@@ -61,7 +60,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Logic components
     platform_adapter = PlatformAdapter(gemini_model=gemini_model)
-    asset_resolver = AssetResolver(core_api_client)
     action_resolver = ActionResolver(gemini_model=gemini_model)
 
     # MCP client (optional)
@@ -75,7 +73,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Executor
     executor = SocialExecutor(
         platform_adapter=platform_adapter,
-        asset_resolver=asset_resolver,
         core_api_client=core_api_client,
         redis_manager=redis_manager,
         trace_producer=trace_producer,

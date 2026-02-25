@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from app.utils.prompt_sanitizer import sanitize_ai_prompt
+
 logger = logging.getLogger(__name__)
 
 # Gemini tool declarations for function-calling
@@ -105,9 +107,7 @@ class ActionResolver:
     def __init__(self, gemini_model: Any = None) -> None:
         self._model = gemini_model
 
-    async def resolve(
-        self, prompt: str, platforms: list[str]
-    ) -> ResolvedAction:
+    async def resolve(self, prompt: str, platforms: list[str]) -> ResolvedAction:
         """Resolve the user's intended action from their prompt.
 
         Tries Gemini function-calling first, falls back to keyword matching.
@@ -159,9 +159,11 @@ class ActionResolver:
                                 ),
                                 description=v.get("description", ""),
                                 **(
-                                    {"items": genai.protos.Schema(
-                                        type=genai.protos.Type.STRING
-                                    )}
+                                    {
+                                        "items": genai.protos.Schema(
+                                            type=genai.protos.Type.STRING
+                                        )
+                                    }
                                     if v.get("type") == "array"
                                     else {}
                                 ),
@@ -182,9 +184,11 @@ class ActionResolver:
             "Call the appropriate function."
         )
 
+        sanitized_prompt = sanitize_ai_prompt(prompt)
+
         response = await asyncio.to_thread(
             self._model.generate_content,
-            [system_prompt, prompt],
+            [system_prompt, sanitized_prompt],
             tools=[tools],
             generation_config={"temperature": 0.0},
         )
@@ -196,9 +200,7 @@ class ActionResolver:
                     fc = part.function_call
                     if fc.name == "schedule_post":
                         scheduled_date = dict(fc.args).get("scheduled_date")
-                        scheduled_date = _normalize_date(
-                            scheduled_date, prompt
-                        )
+                        scheduled_date = _normalize_date(scheduled_date, prompt)
                         return ResolvedAction(
                             action="schedule",
                             scheduled_date=scheduled_date,
@@ -208,9 +210,7 @@ class ActionResolver:
         # No function call returned — default to publish_now
         return ResolvedAction(action="publish_now")
 
-    def _keyword_resolve(
-        self, prompt: str, platforms: list[str]
-    ) -> ResolvedAction:
+    def _keyword_resolve(self, prompt: str, platforms: list[str]) -> ResolvedAction:
         """Keyword-based fallback for action resolution."""
         lower = prompt.lower()
 
@@ -283,9 +283,7 @@ def _extract_date_from_prompt(prompt: str) -> str:
         elif ampm == "am" and hour == 12:
             hour = 0
         dt = now + timedelta(days=1)
-        return dt.replace(
-            hour=hour, minute=minute, second=0, microsecond=0
-        ).isoformat()
+        return dt.replace(hour=hour, minute=minute, second=0, microsecond=0).isoformat()
 
     # Default: 24 hours from now
     return _default_scheduled_date()

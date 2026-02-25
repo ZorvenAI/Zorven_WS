@@ -45,10 +45,6 @@ def _make_executor(
         ]
     )
 
-    # Asset resolver
-    asset_resolver = MagicMock()
-    asset_resolver.resolve = AsyncMock(return_value=[])
-
     # Core API client
     core_api_client = MagicMock()
     core_api_client.fetch_brand_persona = AsyncMock(
@@ -97,7 +93,6 @@ def _make_executor(
 
     return SocialExecutor(
         platform_adapter=platform_adapter,
-        asset_resolver=asset_resolver,
         core_api_client=core_api_client,
         redis_manager=redis_manager,
         trace_producer=trace_producer,

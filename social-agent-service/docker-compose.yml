@@ -9,9 +9,9 @@ services:
     environment:
       - SOCIAL_REDIS_URL=redis://redis:6379/6
       - SOCIAL_KAFKA_BOOTSTRAP_SERVERS=
-      - SOCIAL_GOOGLE_API_KEY=AIzaSyAGcaE8aGhDqa-kJOt6uFwsDiq-8ybqf6k
-      - SOCIAL_CORE_API_URL=http://localhost:8001
-      - SOCIAL_CORE_API_TOKEN=dev-service-token
+      - SOCIAL_GOOGLE_API_KEY=${SOCIAL_GOOGLE_API_KEY:-}
+      - SOCIAL_CORE_API_URL=${SOCIAL_CORE_API_URL:-http://localhost:8001}
+      - SOCIAL_CORE_API_TOKEN=${SOCIAL_CORE_API_TOKEN:-dev-service-token}
       - SOCIAL_LOG_LEVEL=INFO
     ports:
       - "8060:8060"
