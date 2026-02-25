@@ -282,8 +282,7 @@ class Command(BaseCommand):
             "pipeline_id": "social-post",
             "name": "Social Media Post",
             "description": (
-                "Post content directly to connected "
-                "social media platforms"
+                "Post content directly to connected " "social media platforms"
             ),
             "manifest_data": {
                 "nodes": [

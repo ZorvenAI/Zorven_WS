@@ -66,7 +66,8 @@ class InternalSocialProfilesView(APIView):
         # Include profiles linked to this tenant OR unlinked profiles
         # whose owner is an active member of this tenant.
         member_user_ids = Membership.objects.filter(
-            tenant_id=tenant_id, is_active=True,
+            tenant_id=tenant_id,
+            is_active=True,
         ).values_list("user_id", flat=True)
 
         profiles = list(
@@ -74,14 +75,19 @@ class InternalSocialProfilesView(APIView):
                 Q(tenant_id=tenant_id)
                 | Q(tenant__isnull=True, user_id__in=member_user_ids),
                 status="connected",
+            ).values(
+                "id", "platform", "status", "profile_name", "profile_url", "user_id"
             )
-            .values("id", "platform", "status", "profile_name", "profile_url", "user_id")
         )
 
         # Deduplicate: one profile per platform.
         # Priority: preferred user's profile > tenant-linked > other members.
         def _sort_key(p):
-            is_preferred = 0 if (preferred_user_id and str(p["user_id"]) == str(preferred_user_id)) else 1
+            is_preferred = (
+                0
+                if (preferred_user_id and str(p["user_id"]) == str(preferred_user_id))
+                else 1
+            )
             return (p["platform"], is_preferred)
 
         profiles.sort(key=_sort_key)
@@ -153,7 +159,8 @@ class InternalPublishView(APIView):
         # Include tenant-linked AND unlinked profiles owned by tenant members.
         # Deduplicate: one profile per platform, prefer requesting user's profile.
         member_user_ids = Membership.objects.filter(
-            tenant_id=tenant_id, is_active=True,
+            tenant_id=tenant_id,
+            is_active=True,
         ).values_list("user_id", flat=True)
 
         all_profiles = list(
@@ -282,12 +289,8 @@ class InternalUserRoleView(APIView):
 
         if user_id:
             try:
-                membership = tenant.memberships.get(
-                    user_id=user_id, is_active=True
-                )
-                return Response(
-                    {"role": membership.role, "user_id": int(user_id)}
-                )
+                membership = tenant.memberships.get(user_id=user_id, is_active=True)
+                return Response({"role": membership.role, "user_id": int(user_id)})
             except Exception:
                 # Fall through to owner role
                 pass
@@ -295,10 +298,6 @@ class InternalUserRoleView(APIView):
         # Fallback: return owner role
         owner = tenant.get_owner()
         if owner:
-            return Response(
-                {"role": "owner", "user_id": owner.id}
-            )
+            return Response({"role": "owner", "user_id": owner.id})
 
-        return Response(
-            {"role": "viewer", "user_id": None}
-        )
+        return Response({"role": "viewer", "user_id": None})

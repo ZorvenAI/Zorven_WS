@@ -1734,19 +1734,23 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
         if tenant_id:
             from django.db.models import Q
             from tenants.models import Membership
+
             member_user_ids = list(
                 Membership.objects.filter(
-                    tenant_id=tenant_id, is_active=True,
+                    tenant_id=tenant_id,
+                    is_active=True,
                 ).values_list("user_id", flat=True)
             )
             for platform in platforms:
-                profile = (
-                    SocialProfile.objects.filter(
-                        Q(user=user, platform=platform, status="connected")
-                        | Q(tenant__isnull=True, user_id__in=member_user_ids,
-                            platform=platform, status="connected")
-                    ).first()
-                )
+                profile = SocialProfile.objects.filter(
+                    Q(user=user, platform=platform, status="connected")
+                    | Q(
+                        tenant__isnull=True,
+                        user_id__in=member_user_ids,
+                        platform=platform,
+                        status="connected",
+                    )
+                ).first()
                 if profile:
                     content.social_profiles.add(profile)
         else:

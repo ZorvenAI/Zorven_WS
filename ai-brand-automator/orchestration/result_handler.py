@@ -244,24 +244,17 @@ def _build_content_social_summary(blog_output, social_output):
 
     if adapted_posts:
         parts.append(
-            f"**Social content adapted** for "
-            f"{len(adapted_posts)} platform(s)."
+            f"**Social content adapted** for " f"{len(adapted_posts)} platform(s)."
         )
 
     if platforms_posted:
-        parts.append(
-            f"**Published to:** {', '.join(platforms_posted)}"
-        )
+        parts.append(f"**Published to:** {', '.join(platforms_posted)}")
         for pr in publish_results:
             if pr.get("status") == "published" and pr.get("post_url"):
-                parts.append(
-                    f"- {pr['platform']}: {pr['post_url']}"
-                )
+                parts.append(f"- {pr['platform']}: {pr['post_url']}")
 
     # Scheduled posts
-    scheduled = [
-        pr for pr in publish_results if pr.get("status") == "scheduled"
-    ]
+    scheduled = [pr for pr in publish_results if pr.get("status") == "scheduled"]
     if scheduled:
         names = ", ".join(pr.get("platform", "?") for pr in scheduled)
         sched_msg = f"**Scheduled on:** {names}"
@@ -271,14 +264,10 @@ def _build_content_social_summary(blog_output, social_output):
         parts.append(sched_msg)
 
     if draft_stored and not platforms_posted and not scheduled:
-        parts.append(
-            "**Drafts saved** for admin approval."
-        )
+        parts.append("**Drafts saved** for admin approval.")
 
     # Failed platforms
-    failed = [
-        pr for pr in publish_results if pr.get("status") == "failed"
-    ]
+    failed = [pr for pr in publish_results if pr.get("status") == "failed"]
     if failed:
         names = ", ".join(pr.get("platform", "?") for pr in failed)
         parts.append(f"Failed on: {names}")

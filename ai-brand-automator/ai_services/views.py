@@ -427,8 +427,15 @@ def _process_chat_message(
         # Detect social intent for a friendlier response message
         _msg_lower = message.lower()
         _social_cues = (
-            "linkedin", "twitter", "tweet", "facebook",
-            "instagram", "social", "post to", "share on", "promote",
+            "linkedin",
+            "twitter",
+            "tweet",
+            "facebook",
+            "instagram",
+            "social",
+            "post to",
+            "share on",
+            "promote",
         )
         if any(cue in _msg_lower for cue in _social_cues):
             ai_response = (
