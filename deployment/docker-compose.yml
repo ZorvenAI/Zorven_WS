@@ -97,6 +97,9 @@ services:
       - BACKEND_URL=${BACKEND_URL:-http://backend:8001}
       # Orchestration Kafka integration
       - ORCHESTRATION_KAFKA_ENABLED=${ORCHESTRATION_KAFKA_ENABLED:-false}
+      # Chat titling worker integration
+      - WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}
+      - TITLING_KAFKA_ENABLED=${TITLING_KAFKA_ENABLED:-false}
       # Vertex AI Search / RAG Index settings
       - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol-project}
       - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
@@ -198,6 +201,9 @@ services:
       # Orchestration Kafka integration
       - ORCHESTRATION_KAFKA_ENABLED=${ORCHESTRATION_KAFKA_ENABLED:-false}
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-}
+      # Chat titling worker integration
+      - WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}
+      - TITLING_KAFKA_ENABLED=${TITLING_KAFKA_ENABLED:-false}
       # Vertex AI Search / RAG Index settings
       - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol-project}
       - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
@@ -642,6 +648,38 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8030/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Chat Titling Worker — Auto-titles new chat sessions via Gemini Flash
+  # Consumes from chat-titling-topic, PATCHes titles back to backend
+  # ==========================================================================
+  chat-titling-worker:
+    build:
+      context: ../chat-titling-worker
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-titling-worker
+    environment:
+      - TITLING_REDIS_URL=redis://redis:6379/4
+      - TITLING_KAFKA_BOOTSTRAP_SERVERS=${TITLING_KAFKA_BOOTSTRAP_SERVERS:-}
+      - TITLING_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - TITLING_CORE_API_URL=http://backend:8001
+      - TITLING_WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}
+      - TITLING_LOG_LEVEL=INFO
+    expose:
+      - "8040"
+    ports:
+      - "8040:8040"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8040/health"]
       interval: 10s
       timeout: 5s
       retries: 3
