@@ -33,6 +33,41 @@ from app.services.gcs_client import GCSClient
 
 logger = logging.getLogger(__name__)
 
+# Ordered preference for research input sources.
+# The first one with meaningful content wins.
+_RESEARCH_KEYS = ["web_research", "default_agent"]
+
+
+def _extract_research_data(previous_outputs: dict) -> dict:
+    """Extract research data from any upstream node's output.
+
+    Checks known research node keys in priority order. Normalizes
+    different output schemas to a common format:
+        {raw_context: str, findings: list, sources: list}
+    """
+    for key in _RESEARCH_KEYS:
+        data = previous_outputs.get(key, {})
+        if not data:
+            continue
+
+        # web_research already uses the expected schema
+        if key == "web_research" and data.get("raw_context"):
+            return data
+
+        # default_agent (RAG): prefer raw_context (actual document chunks)
+        # over summary (Gemini-synthesized answer) for richer blog content
+        if key == "default_agent":
+            raw = data.get("raw_context") or data.get("summary", "")
+            if raw:
+                return {
+                    "raw_context": raw,
+                    "findings": data.get("findings", []),
+                    "sources": data.get("sources", []),
+                }
+
+    # No upstream research found — return empty (blog will use prompt only)
+    return {}
+
 
 class ContentExecutor:
     """Orchestrates the full content authoring flow."""
@@ -99,8 +134,15 @@ class ContentExecutor:
                     f"Max {settings.RATE_LIMIT_PER_MINUTE} requests per minute.",
                 )
 
-        # 2. Cache check
-        cache_key = self._build_cache_key(tenant_id, topic, request.config)
+        # 2. Extract research data early (needed for cache key)
+        research_data = _extract_research_data(request.previous_outputs)
+        raw_context = research_data.get("raw_context", "")
+        research_findings = research_data.get("findings", [])
+
+        # 3. Cache check (includes research context hash)
+        cache_key = self._build_cache_key(
+            tenant_id, topic, request.config, raw_context
+        )
         if self.redis_manager:
             cached = await self.redis_manager.get_cached_result(cache_key)
             if cached:
@@ -109,15 +151,10 @@ class ContentExecutor:
 
         await self._trace(job_id, "Fetching brand persona...")
 
-        # 3. Fetch brand persona
+        # 4. Fetch brand persona
         brand_persona = await self.core_api_client.fetch_brand_persona(
             tenant_id, str(company_id) if company_id else None
         )
-
-        # 4. Extract research data from previous outputs
-        research_data = request.previous_outputs.get("web_research", {})
-        raw_context = research_data.get("raw_context", "")
-        research_findings = research_data.get("findings", [])
 
         await self._trace(job_id, "Optimizing for SEO...")
 
@@ -251,8 +288,16 @@ class ContentExecutor:
 
     @staticmethod
     def _build_cache_key(
-        tenant_id: str, topic: str, config: dict[str, Any]
+        tenant_id: str,
+        topic: str,
+        config: dict[str, Any],
+        research_context: str = "",
     ) -> str:
-        """Build a cache key from tenant, topic, and config."""
-        raw = f"{tenant_id}:{topic}:{sorted(config.items())}"
+        """Build a cache key from tenant, topic, config, and research context.
+
+        Includes a hash of the research context so different research inputs
+        (e.g., RAG vs web search, or updated documents) produce different blogs.
+        """
+        ctx_hash = hashlib.md5(research_context.encode()).hexdigest()[:8]
+        raw = f"{tenant_id}:{topic}:{sorted(config.items())}:{ctx_hash}"
         return hashlib.md5(raw.encode()).hexdigest()

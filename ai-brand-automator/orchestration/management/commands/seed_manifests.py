@@ -316,6 +316,92 @@ class Command(BaseCommand):
             },
         },
         {
+            "pipeline_id": "rag-blog-social",
+            "name": "RAG Blog + Social Promotion",
+            "description": (
+                "Retrieve and review documents from the Vertex AI "
+                "data store, author a blog post from the findings, "
+                "and promote it across social media platforms"
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "default_agent",
+                        "type": "internal",
+                        "handler": "DefaultAgentNode",
+                    },
+                    {
+                        "id": "blog_author",
+                        "type": "external",
+                        "url": "http://content-agent-svc:8050/v1/execute",
+                        "config": {
+                            "output_format": "markdown",
+                        },
+                    },
+                    {
+                        "id": "social_promoter",
+                        "type": "external",
+                        "url": "http://social-agent-svc:8060/v1/execute",
+                        "config": {
+                            "platforms": ["linkedin", "twitter"],
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["default_agent", "blog_author"],
+                    ["blog_author", "social_promoter"],
+                    ["social_promoter", "manager"],
+                ],
+                "global_config": {
+                    "model": "gemini-2.0-flash",
+                    "temperature": 0.7,
+                },
+            },
+        },
+        {
+            "pipeline_id": "rag-blog-authoring",
+            "name": "RAG Blog Authoring",
+            "description": (
+                "Retrieve and review documents from the Vertex AI "
+                "data store and author a blog post from the findings"
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "default_agent",
+                        "type": "internal",
+                        "handler": "DefaultAgentNode",
+                    },
+                    {
+                        "id": "blog_author",
+                        "type": "external",
+                        "url": "http://content-agent-svc:8050/v1/execute",
+                        "config": {
+                            "output_format": "markdown",
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["default_agent", "blog_author"],
+                    ["blog_author", "manager"],
+                ],
+                "global_config": {
+                    "model": "gemini-2.0-flash",
+                    "temperature": 0.7,
+                },
+            },
+        },
+        {
             "pipeline_id": "content-strategy",
             "name": "Content Strategy",
             "description": (

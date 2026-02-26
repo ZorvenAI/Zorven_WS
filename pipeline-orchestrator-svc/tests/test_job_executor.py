@@ -204,3 +204,103 @@ class TestJobExecutor:
 
         # Should still complete (Redis failure is non-fatal for cancel check)
         executor.callback.send_completed.assert_called_once()
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_composed_manifest_used_directly(self, mock_get_redis):
+        """PipelineComposer returns composed manifest → used directly."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        composed_manifest = {
+            "nodes": [
+                {
+                    "id": "strategy",
+                    "type": "internal",
+                    "handler": "StrategyNode",
+                },
+                {
+                    "id": "report",
+                    "type": "internal",
+                    "handler": "ReportNode",
+                },
+            ],
+            "edges": [["strategy", "report"]],
+            "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+        }
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
+        executor.callback.send_completed.return_value = True
+        executor.callback.send_resolved_manifest.return_value = True
+
+        with patch(
+            "app.nodes.internal.pipeline_composer.PipelineComposer.compose",
+            new_callable=AsyncMock,
+            return_value={"_composed_manifest": composed_manifest},
+        ):
+            request = _make_request(manifest=None)
+            await executor.execute(request)
+
+        # Completed should be called (not the "cannot execute" path)
+        executor.callback.send_completed.assert_called_once()
+        call_kwargs = executor.callback.send_completed.call_args.kwargs
+        progress = call_kwargs.get("progress", {})
+        # The composed manifest's nodes should be in progress
+        assert "strategy" in progress
+        assert "report" in progress
+
+        # send_resolved_manifest should NOT be called for composed manifests
+        # (no DB manifest to resolve — avoids the "_composed not found" warning)
+        executor.callback.send_resolved_manifest.assert_not_called()
+        # Instead, send_progress should be called for the composer update
+        executor.callback.send_progress.assert_called()
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_composer_fallback_resolves_manifest_id(self, mock_get_redis):
+        """PipelineComposer keyword fallback → resolves manifest_id."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
+        executor.callback.send_completed.return_value = True
+        executor.callback.send_resolved_manifest.return_value = True
+
+        # Provide available_manifests so the resolved ID can be looked up
+        available = [
+            AvailableManifest(
+                pipeline_id="blog-authoring",
+                name="Blog Authoring",
+                description="Write a blog",
+                manifest_data={
+                    "nodes": [
+                        {
+                            "id": "strategy",
+                            "type": "internal",
+                            "handler": "StrategyNode",
+                        },
+                    ],
+                    "edges": [],
+                    "global_config": {},
+                },
+            )
+        ]
+
+        with patch(
+            "app.nodes.internal.pipeline_composer.PipelineComposer.compose",
+            new_callable=AsyncMock,
+            return_value={"resolved_manifest_id": "blog-authoring"},
+        ):
+            request = _make_request(
+                manifest=None, available_manifests=available
+            )
+            await executor.execute(request)
+
+        executor.callback.send_completed.assert_called_once()
+        executor.callback.send_resolved_manifest.assert_called_once()

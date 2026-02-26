@@ -528,7 +528,7 @@ class GeminiAIService:
         """
         msg = message.lower()
 
-        # --- RAG / document query detection (checked first) ---
+        # --- RAG / document query detection ---
         rag_keywords = [
             "document",
             "file",
@@ -544,6 +544,9 @@ class GeminiAIService:
             "from my documents",
             "from the rag",
             "onboarded",
+            "vertex store",
+            "vertedx store",
+            "from the store",
         ]
         rag_phrases = [
             "tell me about",
@@ -563,9 +566,6 @@ class GeminiAIService:
         for phrase in rag_phrases:
             if phrase in msg:
                 rag_score += 2
-
-        if rag_score >= 2:
-            return {"intent": "rag", "confidence": min(rag_score / 6, 1.0)}
 
         # --- Pipeline / brand analysis detection ---
         pipeline_keywords = [
@@ -632,6 +632,20 @@ class GeminiAIService:
         for phrase in pipeline_phrases:
             if phrase in msg:
                 score += 2
+
+        # When both RAG and pipeline signals are significant, prefer
+        # "pipeline" — the orchestrator's PipelineComposer will include
+        # RAG nodes in the dynamically composed pipeline.
+        if rag_score >= 2 and score >= 2:
+            return {
+                "intent": "pipeline",
+                "confidence": min((rag_score + score) / 8, 1.0),
+                "needs_rag": True,
+            }
+
+        # Pure RAG query
+        if rag_score >= 2:
+            return {"intent": "rag", "confidence": min(rag_score / 6, 1.0)}
 
         # Threshold: 2+ points → pipeline intent
         if score >= 2:

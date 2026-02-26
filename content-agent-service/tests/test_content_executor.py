@@ -197,6 +197,90 @@ class TestCaching:
         mocks["blog"].author.assert_not_called()
 
 
+class TestResearchDataExtraction:
+    """Test generic research input from any upstream node."""
+
+    async def test_default_agent_used_when_web_research_empty(self) -> None:
+        """When web_research is missing, default_agent data is used."""
+        mocks = _make_executor()
+        request = _make_request(
+            previous_outputs={
+                "default_agent": {
+                    "summary": "Brand management analysis from RAG store.",
+                    "findings": ["Key insight from document."],
+                    "sources": [{"title": "Doc A", "url": "gs://bucket/doc-a"}],
+                }
+            }
+        )
+        response = await mocks["executor"].execute(request, "tenant-1")
+        assert isinstance(response, ExecuteResponse)
+        assert response.blog_content
+
+        # SEO optimizer should receive the RAG summary as raw_context
+        seo_call = mocks["seo"].optimize.call_args
+        assert "Brand management analysis from RAG store." in seo_call.args
+
+    async def test_web_research_takes_precedence(self) -> None:
+        """When both web_research and default_agent are present, web_research wins."""
+        mocks = _make_executor()
+        request = _make_request(
+            previous_outputs={
+                "web_research": {
+                    "raw_context": "Web research context.",
+                    "findings": ["Web finding."],
+                    "sources": [],
+                },
+                "default_agent": {
+                    "summary": "RAG summary that should NOT be used.",
+                    "findings": ["RAG finding."],
+                    "sources": [],
+                },
+            }
+        )
+        response = await mocks["executor"].execute(request, "tenant-1")
+        assert isinstance(response, ExecuteResponse)
+
+        # SEO optimizer should receive web_research data, not RAG
+        seo_call = mocks["seo"].optimize.call_args
+        assert "Web research context." in seo_call.args
+
+    async def test_rag_summary_maps_to_raw_context(self) -> None:
+        """default_agent 'summary' field is normalized to 'raw_context'."""
+        from app.services.content_executor import _extract_research_data
+
+        data = _extract_research_data({
+            "default_agent": {
+                "summary": "RAG document analysis results.",
+                "findings": ["Finding 1"],
+                "sources": [{"title": "Source 1"}],
+            }
+        })
+        assert data["raw_context"] == "RAG document analysis results."
+        assert data["findings"] == ["Finding 1"]
+        assert len(data["sources"]) == 1
+
+    async def test_empty_outputs_returns_empty(self) -> None:
+        """No research data → returns empty dict."""
+        from app.services.content_executor import _extract_research_data
+
+        data = _extract_research_data({})
+        assert data == {}
+
+    async def test_empty_data_skips_to_next_key(self) -> None:
+        """Empty web_research → falls through to default_agent."""
+        from app.services.content_executor import _extract_research_data
+
+        data = _extract_research_data({
+            "web_research": {},
+            "default_agent": {
+                "summary": "RAG data.",
+                "findings": [],
+                "sources": [],
+            },
+        })
+        assert data["raw_context"] == "RAG data."
+
+
 class TestCleanup:
     """Resource cleanup tests."""
 

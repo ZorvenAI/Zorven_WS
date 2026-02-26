@@ -61,29 +61,38 @@ class JobExecutor:
             manifest_data = self._extract_manifest_data(request)
             if manifest_data is None:
                 state = await self._handle_intent_routing(state, request)
-                resolved_id = state.get("resolved_manifest_id")
 
-                # Look up the full manifest_data from available_manifests
-                manifest_data = self._find_resolved_manifest(request, resolved_id)
-                if manifest_data is None:
-                    # No manifest_data available — cannot execute
-                    await self.callback.send_completed(
-                        callback_url,
-                        result_data={
-                            "summary": (
-                                "Intent routing completed. "
-                                f"Resolved manifest: {resolved_id}"
-                            ),
-                            "resolved_manifest_id": resolved_id,
-                            "findings": ["Auto-detect routing completed."],
-                            "recommendations": [
-                                "Re-run with the resolved manifest "
-                                "for full analysis."
-                            ],
-                        },
-                        progress=state["progress"],
+                # Check for dynamically composed manifest first
+                composed = state.get("_composed_manifest")
+                if composed:
+                    manifest_data = composed
+                else:
+                    resolved_id = state.get("resolved_manifest_id")
+                    # Look up the full manifest_data from available_manifests
+                    manifest_data = self._find_resolved_manifest(
+                        request, resolved_id
                     )
-                    return
+                    if manifest_data is None:
+                        # No manifest_data available — cannot execute
+                        await self.callback.send_completed(
+                            callback_url,
+                            result_data={
+                                "summary": (
+                                    "Intent routing completed. "
+                                    f"Resolved manifest: {resolved_id}"
+                                ),
+                                "resolved_manifest_id": resolved_id,
+                                "findings": [
+                                    "Auto-detect routing completed."
+                                ],
+                                "recommendations": [
+                                    "Re-run with the resolved manifest "
+                                    "for full analysis."
+                                ],
+                            },
+                            progress=state["progress"],
+                        )
+                        return
 
                 # Initialize progress for the resolved manifest's nodes
                 for node in manifest_data.get("nodes", []):
@@ -246,38 +255,64 @@ class JobExecutor:
         state: AgentState,
         request: DispatchRequest,
     ) -> AgentState:
-        """Run the RouterNode to resolve the best manifest."""
-        from app.nodes.internal.router_node import RouterNode
+        """Run PipelineComposer to dynamically compose or resolve a manifest."""
+        from app.nodes.internal.pipeline_composer import PipelineComposer
 
         logger.info(
-            "Auto-detect mode for job %s — running intent routing",
+            "Auto-detect mode for job %s — running pipeline composer",
             request.job_id,
         )
 
-        # Add router to progress
-        state["progress"]["intent_router"] = {
+        # Add composer to progress
+        state["progress"]["pipeline_composer"] = {
             "status": "running",
             "started_at": self._now_iso(),
         }
         await self.callback.send_progress(request.callback_url, state["progress"])
 
-        router = RouterNode()
-        updates = await router(state)
-        state["resolved_manifest_id"] = updates.get("resolved_manifest_id")
+        composer = PipelineComposer()
+        result = await composer.compose(state)
 
-        state["progress"]["intent_router"] = {
-            "status": "done",
-            "output": {"resolved_manifest_id": state["resolved_manifest_id"]},
-            "started_at": state["progress"]["intent_router"].get("started_at"),
-            "completed_at": self._now_iso(),
-        }
-
-        # Notify the callback about the resolved manifest
-        await self.callback.send_resolved_manifest(
-            request.callback_url,
-            manifest_id=state["resolved_manifest_id"] or "brand-analysis",
-            progress=state["progress"],
-        )
+        # Check if composer returned a dynamically built manifest
+        composed = "_composed_manifest" in result
+        if composed:
+            state["_composed_manifest"] = result["_composed_manifest"]
+            node_ids = [
+                n["id"] for n in result["_composed_manifest"].get("nodes", [])
+            ]
+            state["progress"]["pipeline_composer"] = {
+                "status": "done",
+                "output": {
+                    "composed": True,
+                    "pipeline": " → ".join(node_ids),
+                },
+                "started_at": state["progress"]["pipeline_composer"].get(
+                    "started_at"
+                ),
+                "completed_at": self._now_iso(),
+            }
+            # Send progress update (no manifest_id to resolve in DB)
+            await self.callback.send_progress(
+                request.callback_url, state["progress"]
+            )
+        else:
+            state["resolved_manifest_id"] = result.get("resolved_manifest_id")
+            state["progress"]["pipeline_composer"] = {
+                "status": "done",
+                "output": {
+                    "resolved_manifest_id": state["resolved_manifest_id"]
+                },
+                "started_at": state["progress"]["pipeline_composer"].get(
+                    "started_at"
+                ),
+                "completed_at": self._now_iso(),
+            }
+            # Notify the callback about the resolved manifest
+            await self.callback.send_resolved_manifest(
+                request.callback_url,
+                manifest_id=state["resolved_manifest_id"] or "brand-analysis",
+                progress=state["progress"],
+            )
 
         return state
 

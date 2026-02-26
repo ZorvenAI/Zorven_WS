@@ -99,7 +99,7 @@ services:
       - ORCHESTRATION_KAFKA_ENABLED=${ORCHESTRATION_KAFKA_ENABLED:-false}
       # Chat titling worker integration
       - WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}
-      - TITLING_KAFKA_ENABLED=${TITLING_KAFKA_ENABLED:-false}
+      - TITLING_KAFKA_ENABLED=${TITLING_KAFKA_ENABLED:-true}
       # Vertex AI Search / RAG Index settings
       - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol-project}
       - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
@@ -203,7 +203,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-}
       # Chat titling worker integration
       - WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}
-      - TITLING_KAFKA_ENABLED=${TITLING_KAFKA_ENABLED:-false}
+      - TITLING_KAFKA_ENABLED=${TITLING_KAFKA_ENABLED:-true}
       # Vertex AI Search / RAG Index settings
       - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol-project}
       - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
@@ -666,7 +666,7 @@ services:
     container_name: ai-brand-automator-titling-worker
     environment:
       - TITLING_REDIS_URL=redis://redis:6379/4
-      - TITLING_KAFKA_BOOTSTRAP_SERVERS=${TITLING_KAFKA_BOOTSTRAP_SERVERS:-}
+      - TITLING_KAFKA_BOOTSTRAP_SERVERS=${TITLING_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
       - TITLING_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - TITLING_CORE_API_URL=http://backend:8001
       - TITLING_WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}
