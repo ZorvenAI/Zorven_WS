@@ -99,6 +99,42 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("search", 1),
         ("look up", 1),
     ],
+    "rag-blog-social": [
+        # RAG signals — high weight so this only wins when RAG is present
+        ("vertex store", 5),
+        ("vertedx store", 5),
+        ("rag store", 5),
+        ("knowledge base", 4),
+        ("from my documents", 4),
+        ("from the document", 4),
+        ("reviewing the", 3),
+        ("review the", 3),
+        ("uploaded document", 3),
+        # Social signals — break tie vs rag-blog-authoring when social present
+        ("linkedin", 2),
+        ("twitter", 2),
+        ("facebook", 2),
+        ("instagram", 2),
+        ("schedule", 1),
+        ("post", 1),
+    ],
+    "rag-blog-authoring": [
+        # RAG signals — high weight so this only wins when RAG is present
+        ("vertex store", 5),
+        ("vertedx store", 5),
+        ("rag store", 5),
+        ("knowledge base", 4),
+        ("from my documents", 4),
+        ("from the document", 4),
+        ("reviewing the", 3),
+        ("review the", 3),
+        ("uploaded document", 3),
+        # Blog signals — break tie vs rag-blog-social when blog but no social
+        ("blog", 1),
+        ("write", 1),
+        ("article", 1),
+        ("author", 1),
+    ],
 }
 
 

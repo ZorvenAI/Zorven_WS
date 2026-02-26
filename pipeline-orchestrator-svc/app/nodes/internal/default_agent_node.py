@@ -11,6 +11,7 @@ direct analysis (e.g., "Summarize this document").
 """
 
 import logging
+import re
 import tempfile
 from typing import Any
 
@@ -31,7 +32,14 @@ SYSTEM_PROMPT = (
     "your own training data. Always cite your sources by referencing the "
     "file names. If the search results don't contain relevant information, "
     "be transparent and say so, then provide your best general knowledge "
-    "answer. Maintain a professional, helpful tone."
+    "answer. Maintain a professional, helpful tone.\n\n"
+    "IMPORTANT: If the user's question includes tasks beyond document "
+    "research (such as writing a blog, publishing, scheduling, or posting "
+    "to social media), focus ONLY on providing the relevant document "
+    "information and research findings. Do NOT comment on whether you can "
+    "or cannot perform those other tasks — other specialized agents in the "
+    "pipeline handle them. Never say things like 'I cannot schedule posts' "
+    "or 'you will need to manually do X'. Just provide the research data."
 )
 
 
@@ -68,6 +76,15 @@ class DefaultAgentNode(BaseNode):
             "Interpreting your question in the context of our chat...",
         )
 
+        # Extract the core search query (strip operational noise)
+        search_query = self._extract_search_query(input_prompt)
+        if search_query != input_prompt:
+            logger.info(
+                "Extracted search query: %s (from prompt: %s)",
+                search_query[:80],
+                input_prompt[:80],
+            )
+
         # Search Vertex AI
         await self._emit_trace(
             job_id,
@@ -75,7 +92,7 @@ class DefaultAgentNode(BaseNode):
             "Searching through your onboarded documents for answers...",
         )
         chunks = await self._search_tool.search(
-            query=input_prompt,
+            query=search_query,
             tenant_id=tenant_id,
             data_store_id=data_store_override,
         )
@@ -121,8 +138,15 @@ class DefaultAgentNode(BaseNode):
                 {"name": c.source_name, "uri": c.source_uri} for c in chunks
             ]
 
+        # Include raw document chunks for downstream nodes (e.g., blog_author)
+        # that need the original document text, not just the synthesized summary.
+        raw_context = "\n\n".join(
+            f"[{c.source_name}]\n{c.text}" for c in chunks if c.text
+        )
+
         result: dict[str, Any] = {
             "summary": answer,
+            "raw_context": raw_context,
             "sources": sources,
             "findings": [answer],
             "recommendations": [],
@@ -309,6 +333,32 @@ class DefaultAgentNode(BaseNode):
             tmp.write(file_bytes)
             tmp.flush()
             return genai.upload_file(tmp.name, display_name=filename)
+
+    @staticmethod
+    def _extract_search_query(prompt: str) -> str:
+        """Extract the document name or search topic from a composite prompt.
+
+        When the DefaultAgentNode runs in a multi-agent pipeline, the full
+        user prompt includes operational instructions (write, post, schedule)
+        that pollute the Vertex AI search query. This extracts just the
+        document reference or core topic.
+        """
+        # 1. Look for explicit document identifiers (UPPER_CASE_SNAKE_CASE)
+        # e.g., AN_EXPLORATORY_STUDY_ON_BRAND_MANAGEMENT
+        doc_refs = re.findall(r"\b[A-Z][A-Z0-9]*(?:_[A-Z][A-Z0-9]*)+\b", prompt)
+        if doc_refs:
+            return max(doc_refs, key=len)
+
+        # 2. Look for quoted document names
+        quoted = re.findall(r'"([^"]{3,})"', prompt)
+        if not quoted:
+            quoted = re.findall(r"'([^']{3,})'", prompt)
+        if quoted:
+            return max(quoted, key=len)
+
+        # 3. No explicit document name — return the full prompt
+        # (works fine for standalone RAG queries like "tell me about X")
+        return prompt
 
     @staticmethod
     async def _emit_trace(

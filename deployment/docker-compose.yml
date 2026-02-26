@@ -666,7 +666,7 @@ services:
     container_name: ai-brand-automator-titling-worker
     environment:
       - TITLING_REDIS_URL=redis://redis:6379/4
-      - TITLING_KAFKA_BOOTSTRAP_SERVERS=${TITLING_KAFKA_BOOTSTRAP_SERVERS:-}
+      - TITLING_KAFKA_BOOTSTRAP_SERVERS=${TITLING_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
       - TITLING_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - TITLING_CORE_API_URL=http://backend:8001
       - TITLING_WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}

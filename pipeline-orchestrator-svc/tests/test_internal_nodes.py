@@ -2,6 +2,7 @@
 
 from app.nodes.internal.audience_node import AudienceNode
 from app.nodes.internal.calendar_node import CalendarNode
+from app.nodes.internal.default_agent_node import DefaultAgentNode
 from app.nodes.internal.manager_node import ManagerNode
 from app.nodes.internal.planner_node import PlannerNode
 from app.nodes.internal.report_node import ReportNode
@@ -105,6 +106,89 @@ class TestRouterNode:
         )
         assert result["resolved_manifest_id"] == "blog-authoring"
 
+    async def test_rag_blog_social_route(self):
+        """RAG+blog+social prompt → rag-blog-social."""
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt=(
+                    "Write a blog by reviewing the document from the "
+                    "vertedx store and post on LinkedIn as a scheduled task"
+                )
+            )
+        )
+        assert result["resolved_manifest_id"] == "rag-blog-social"
+
+    async def test_rag_blog_social_beats_social_promotion(self):
+        """RAG+social prompt scores higher for rag-blog-social than social-promotion."""
+        prompt = (
+            "Can you write a blog post by reviewing the "
+            "AN_EXPLORATORY_STUDY_ON_BRAND_MANAGEMENT document from "
+            "the vertedx store and post that blog in LinkedIn as a "
+            "scheduled task?"
+        )
+        node = RouterNode()
+        result = await node(_base_state(input_prompt=prompt))
+        assert result["resolved_manifest_id"] == "rag-blog-social"
+
+    async def test_rag_blog_authoring_route(self):
+        """RAG+blog without social → rag-blog-authoring."""
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt=(
+                    "Write a blog based on the brand management "
+                    "document from my knowledge base"
+                )
+            )
+        )
+        assert result["resolved_manifest_id"] == "rag-blog-authoring"
+
+
+class TestSearchQueryExtraction:
+    """Tests for DefaultAgentNode._extract_search_query."""
+
+    def test_extracts_uppercase_document_name(self):
+        prompt = (
+            "Can you write a blog post by reviewing the "
+            "AN_EXPLORATORY_STUDY_ON_BRAND_MANAGEMENT document from "
+            "the vertedx store and post that blog in LinkedIn as a "
+            "scheduled task?"
+        )
+        result = DefaultAgentNode._extract_search_query(prompt)
+        assert result == "AN_EXPLORATORY_STUDY_ON_BRAND_MANAGEMENT"
+
+    def test_extracts_shorter_uppercase_name(self):
+        prompt = "Summarize the BRAND_GUIDELINES document from the store"
+        result = DefaultAgentNode._extract_search_query(prompt)
+        assert result == "BRAND_GUIDELINES"
+
+    def test_picks_longest_match(self):
+        prompt = "Compare ISO_10668 with AN_EXPLORATORY_STUDY_ON_BRAND_MANAGEMENT"
+        result = DefaultAgentNode._extract_search_query(prompt)
+        assert result == "AN_EXPLORATORY_STUDY_ON_BRAND_MANAGEMENT"
+
+    def test_extracts_double_quoted_name(self):
+        prompt = 'Review the "Brand Management Study" document'
+        result = DefaultAgentNode._extract_search_query(prompt)
+        assert result == "Brand Management Study"
+
+    def test_extracts_single_quoted_name(self):
+        prompt = "Summarize the 'quarterly report' from my files"
+        result = DefaultAgentNode._extract_search_query(prompt)
+        assert result == "quarterly report"
+
+    def test_returns_full_prompt_when_no_doc_ref(self):
+        prompt = "Tell me about brand management strategies"
+        result = DefaultAgentNode._extract_search_query(prompt)
+        assert result == prompt
+
+    def test_ignores_short_uppercase_words(self):
+        """Single uppercase words (AI, ISO) should not match — needs 2+ segments."""
+        prompt = "Explain ISO brand equity valuation"
+        result = DefaultAgentNode._extract_search_query(prompt)
+        assert result == prompt
+
 
 class TestStrategyNode:
     async def test_returns_strategy_data(self):
@@ -197,6 +281,90 @@ class TestManagerNode:
         assert len(rd["findings"]) >= 1
         assert len(rd["recommendations"]) >= 1
         assert rd["score"] == 0
+
+    async def test_skips_research_findings_when_processing_nodes_exist(self):
+        """In multi-agent pipelines, research node findings are replaced
+        with a brief source summary to avoid contradictory messages."""
+        node = ManagerNode()
+        state = _base_state(
+            node_outputs={
+                "default_agent": {
+                    "findings": [
+                        "I can help draft a blog post. However, I am unable "
+                        "to directly schedule posts on LinkedIn."
+                    ],
+                    "recommendations": [],
+                    "sources": [
+                        {"name": "brand_study.pdf", "uri": "gs://bucket/doc.pdf"},
+                    ],
+                },
+                "blog_author": {
+                    "findings": ["Blog authored: Brand Management Trends"],
+                    "recommendations": ["Review for accuracy"],
+                },
+                "social_promoter": {
+                    "findings": ["Scheduled on: linkedin, twitter for 2026-02-27"],
+                    "recommendations": [],
+                },
+            }
+        )
+        result = await node(state)
+        rd = result["result_data"]
+        # The contradictory DefaultAgentNode finding should NOT appear
+        assert not any("unable" in f.lower() for f in rd["findings"])
+        # A brief source summary should appear instead
+        assert any("brand_study.pdf" in f for f in rd["findings"])
+        # Downstream findings should be preserved
+        assert any("Blog authored" in f for f in rd["findings"])
+        assert any("Scheduled on" in f for f in rd["findings"])
+
+    async def test_preserves_research_findings_in_standalone_chat(self):
+        """In standalone chat (only research + manager), full findings
+        are preserved since there are no downstream processing nodes."""
+        node = ManagerNode()
+        state = _base_state(
+            node_outputs={
+                "default_agent": {
+                    "findings": [
+                        "The brand management study covers key topics..."
+                    ],
+                    "recommendations": ["Consider expanding the analysis"],
+                    "sources": [
+                        {"name": "brand_study.pdf", "uri": "gs://bucket/doc.pdf"},
+                    ],
+                },
+            }
+        )
+        result = await node(state)
+        rd = result["result_data"]
+        # Full research findings should be preserved (no processing nodes)
+        assert any("brand management study" in f for f in rd["findings"])
+        assert any("expanding the analysis" in r for r in rd["recommendations"])
+
+    async def test_web_research_also_summarised_in_pipeline(self):
+        """web_research findings are also summarised when processing nodes exist."""
+        node = ManagerNode()
+        state = _base_state(
+            node_outputs={
+                "web_research": {
+                    "findings": ["Found 10 articles about Tesla"],
+                    "recommendations": [],
+                    "sources": [
+                        {"name": "Reuters", "uri": "https://reuters.com"},
+                        {"name": "Bloomberg", "uri": "https://bloomberg.com"},
+                    ],
+                },
+                "blog_author": {
+                    "findings": ["Blog authored: Tesla Analysis"],
+                    "recommendations": [],
+                },
+            }
+        )
+        result = await node(state)
+        rd = result["result_data"]
+        assert not any("Found 10 articles" in f for f in rd["findings"])
+        assert any("Reuters" in f for f in rd["findings"])
+        assert any("Blog authored" in f for f in rd["findings"])
 
     async def test_extracts_bsi_score(self):
         """ManagerNode extracts BSI score from intelligence agent output."""

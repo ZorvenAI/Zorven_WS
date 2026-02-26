@@ -384,6 +384,7 @@ def _process_chat_message(
             "user_id": request.user.id,
             "user_email": request.user.email,
             "chat_history": chat_history,
+            "needs_rag": intent_result.get("needs_rag", False),
         }
         if target_brand:
             job_context["company_name"] = target_brand.get("company_name", "")

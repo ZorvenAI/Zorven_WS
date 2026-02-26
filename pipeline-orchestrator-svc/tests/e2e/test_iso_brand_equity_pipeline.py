@@ -67,7 +67,12 @@ class TestIsoBrandEquityPipeline:
     async def test_manager_aggregates_from_all_nodes(
         self, mock_get_redis, iso_brand_equity_manifest, mock_discovery_service
     ):
-        """ManagerNode aggregates findings from discovery + intelligence stub."""
+        """ManagerNode aggregates findings from discovery + intelligence stub.
+
+        In a multi-agent pipeline, the ManagerNode replaces verbose research
+        findings with a brief source summary and preserves processing-node
+        findings.
+        """
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None
         mock_get_redis.return_value = mock_redis
@@ -89,13 +94,14 @@ class TestIsoBrandEquityPipeline:
         assert isinstance(result_data["findings"], list)
         assert len(result_data["findings"]) > 0
 
-        # Should include findings from discovery response
+        # web_research findings are summarised (not included verbatim)
+        # because valuation_logic is a processing node
         assert any(
-            "brand equity" in f.lower() or "market" in f.lower()
+            "research data retrieved" in f.lower() or "market analysis" in f.lower()
             for f in result_data["findings"]
         )
 
-        # Should include findings from intelligence stub
+        # Should include findings from intelligence stub (processing node)
         assert any("stub" in f.lower() for f in result_data["findings"])
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)

@@ -12,6 +12,19 @@ from app.nodes.base import BaseNode
 from app.state.schema import AgentState
 
 
+_RESEARCH_NODES = {"default_agent", "web_research"}
+
+
+def _source_label(source: dict) -> str:
+    """Extract a human-readable label from a source dict.
+
+    Different upstream nodes use different field names for the source label:
+    - DefaultAgentNode (RAG):   {"name": "...", "uri": "..."}
+    - discovery-agent-svc:      {"title": "...", "url": "..."}
+    """
+    return source.get("name") or source.get("title") or ""
+
+
 class ManagerNode(BaseNode):
     """Aggregates all node outputs into a structured result."""
 
@@ -21,8 +34,35 @@ class ManagerNode(BaseNode):
         findings: list[str] = []
         recommendations: list[str] = []
 
+        # When downstream processing nodes (blog_author, social_promoter, etc.)
+        # have their own findings, replace the research node's verbose
+        # conversational answer with a brief source summary.  This prevents
+        # contradictory messages like "I cannot schedule posts" from the RAG
+        # node appearing alongside "Scheduled on: linkedin, twitter" from the
+        # social promoter.  In standalone chat (research + manager only) the
+        # full answer is preserved.
+        processing_nodes = {
+            nid for nid in outputs if nid not in _RESEARCH_NODES
+        }
+        has_processing = bool(processing_nodes)
+
         for node_id, output in outputs.items():
             if isinstance(output, dict):
+                if has_processing and node_id in _RESEARCH_NODES:
+                    # Summarise research sources instead of full findings
+                    sources = output.get("sources", [])
+                    source_names = [
+                        _source_label(s)
+                        for s in sources
+                        if isinstance(s, dict)
+                    ]
+                    source_names = [n for n in source_names if n]
+                    if source_names:
+                        findings.append(
+                            f"Research data retrieved from: "
+                            f"{', '.join(source_names[:5])}"
+                        )
+                    continue
                 findings.extend(output.get("findings", []))
                 recommendations.extend(output.get("recommendations", []))
 
