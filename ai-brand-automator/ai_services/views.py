@@ -22,6 +22,7 @@ from .serializers import (
     BrandIdentityRequestSerializer,
     MarketAnalysisRequestSerializer,
 )
+from brand_automator.validators import sanitize_text_input
 from .services import ai_service, GeminiAIService
 from onboarding.models import Company
 from tenants.permissions import (
@@ -213,6 +214,37 @@ def chat_with_ai(request):
         cache.delete(lock_key)
 
 
+def _collect_attachment_data(attachment_ids, session):
+    """Build attachment metadata dicts for pipeline job context.
+
+    Sanitizes file_name to prevent prompt-injection via crafted filenames.
+    """
+    if not attachment_ids:
+        return []
+
+    attachments = SessionAttachment.objects.filter(
+        id__in=attachment_ids,
+        session=session,
+    ).select_related("asset")
+
+    data = []
+    for att in attachments:
+        if att.asset and att.asset.gcs_path:
+            data.append(
+                {
+                    "id": att.id,
+                    "asset_id": att.asset.id,
+                    "file_name": sanitize_text_input(
+                        att.file_name or "", max_length=255
+                    ),
+                    "file_type": att.file_type,
+                    "gcs_bucket": att.asset.gcs_bucket,
+                    "gcs_path": att.asset.gcs_path,
+                }
+            )
+    return data
+
+
 def _process_chat_message(
     request, session, message, tenant, is_new_session, serializer
 ):
@@ -262,25 +294,7 @@ def _process_chat_message(
             {"role": m.role, "content": m.content} for m in reversed(history_msgs)
         ]
 
-        # Look up chat attachments if provided
-        attachments_data = []
-        if attachment_ids:
-            attachments = SessionAttachment.objects.filter(
-                id__in=attachment_ids,
-                session=session,
-            ).select_related("asset")
-            for att in attachments:
-                if att.asset and att.asset.gcs_path:
-                    attachments_data.append(
-                        {
-                            "id": att.id,
-                            "asset_id": att.asset.id,
-                            "file_name": att.file_name,
-                            "file_type": att.file_type,
-                            "gcs_bucket": att.asset.gcs_bucket,
-                            "gcs_path": att.asset.gcs_path,
-                        }
-                    )
+        attachments_data = _collect_attachment_data(attachment_ids, session)
 
         job_context = {
             "source": "chat",
@@ -385,25 +399,7 @@ def _process_chat_message(
             {"role": m.role, "content": m.content} for m in reversed(history_msgs)
         ]
 
-        # Collect attachment data when files are attached to the message
-        attachments_data = []
-        if attachment_ids:
-            attachments = SessionAttachment.objects.filter(
-                id__in=attachment_ids,
-                session=session,
-            ).select_related("asset")
-            for att in attachments:
-                if att.asset and att.asset.gcs_path:
-                    attachments_data.append(
-                        {
-                            "id": att.id,
-                            "asset_id": att.asset.id,
-                            "file_name": att.file_name,
-                            "file_type": att.file_type,
-                            "gcs_bucket": att.asset.gcs_bucket,
-                            "gcs_path": att.asset.gcs_path,
-                        }
-                    )
+        attachments_data = _collect_attachment_data(attachment_ids, session)
 
         job_context = {
             "source": "chat",

@@ -9,6 +9,7 @@ import pytest
 
 from app.logic.platform_adapter import (
     FACEBOOK_MAX_CHARS,
+    INSTAGRAM_MAX_CHARS,
     LINKEDIN_MAX_CHARS,
     TWITTER_MAX_CHARS,
     PlatformAdapter,
@@ -84,6 +85,27 @@ class TestStubMode:
         assert len(posts[0].hashtags) > 0
         assert posts[0].hashtags[0].startswith("#")
 
+    async def test_stub_instagram_adaptation(
+        self,
+        sample_blog_content: str,
+        sample_brand_persona: dict[str, Any],
+    ):
+        adapter = self._make_adapter()
+        seo_meta = {
+            "title": "Tesla Sustainability",
+            "keywords": ["Tesla", "sustainability", "EV", "green", "energy"],
+        }
+        posts = await adapter.adapt(
+            sample_blog_content, seo_meta, sample_brand_persona, ["instagram"]
+        )
+        assert len(posts) == 1
+        post = posts[0]
+        assert post.platform == "instagram"
+        assert post.post_type == "caption"
+        assert len(post.content) > 0
+        assert post.char_count == len(post.content)
+        assert len(post.hashtags) <= 15
+
     async def test_multiple_platforms(
         self,
         sample_blog_content: str,
@@ -95,11 +117,11 @@ class TestStubMode:
             sample_blog_content,
             seo_meta,
             sample_brand_persona,
-            ["linkedin", "twitter", "facebook"],
+            ["linkedin", "twitter", "facebook", "instagram"],
         )
-        assert len(posts) == 3
+        assert len(posts) == 4
         platforms = {p.platform for p in posts}
-        assert platforms == {"linkedin", "twitter", "facebook"}
+        assert platforms == {"linkedin", "twitter", "facebook", "instagram"}
 
 
 class TestAIMode:
@@ -142,6 +164,36 @@ class TestAIMode:
         )
         assert len(posts) == 1
         assert posts[0].platform == "twitter"
+
+    async def test_ai_instagram_generates_caption(
+        self,
+        sample_blog_content: str,
+        sample_brand_persona: dict[str, Any],
+    ):
+        mock_model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = (
+            "Driving the future, one charge at a time.\n\n"
+            "Tesla is redefining what sustainability looks like.\n\n"
+            "#Tesla #Sustainability #EV #GreenEnergy"
+        )
+        mock_model.generate_content = MagicMock(return_value=mock_response)
+        adapter = PlatformAdapter(gemini_model=mock_model)
+
+        seo_meta = {"title": "Tesla", "keywords": ["Tesla", "sustainability"]}
+        posts = await adapter.adapt(
+            sample_blog_content, seo_meta, sample_brand_persona, ["instagram"]
+        )
+        assert len(posts) == 1
+        assert posts[0].platform == "instagram"
+        assert posts[0].post_type == "caption"
+        assert len(posts[0].content) > 0
+
+        # Verify Instagram-specific prompt was used
+        call_args = mock_model.generate_content.call_args
+        prompt = call_args[0][0]
+        assert "Instagram caption" in prompt
+        assert "hashtags" in prompt.lower()
 
     async def test_includes_brand_voice_in_prompt(
         self,

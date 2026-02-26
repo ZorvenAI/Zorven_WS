@@ -136,12 +136,10 @@ class DefaultAgentNode(BaseNode):
 
         # Include raw document content for downstream nodes (e.g., blog_author)
         # that need the original document text, not just the synthesized summary.
-        # When attachments are present, they are the primary source — use the
-        # Gemini synthesis (which analyzed the full file contents) as raw_context
-        # so the blog author has substantive material to work with.
+        # When attachments are present, Gemini processes all files together and
+        # returns a single synthesized answer — use it directly as raw_context.
         if attachment_files:
-            att_names = [name for name, _ in attachment_files]
-            raw_context = "\n\n".join(f"[{name}]\n{answer}" for name in att_names)
+            raw_context = answer
         else:
             raw_context = "\n\n".join(
                 f"[{c.source_name}]\n{c.text}" for c in chunks if c.text

@@ -136,7 +136,7 @@ class PlatformAdapter:
             ),
         }
 
-        return prompts.get(platform, prompts.get("linkedin", ""))
+        return prompts.get(platform, prompts["linkedin"])
 
     def _stub_adapt(
         self,
