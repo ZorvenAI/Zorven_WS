@@ -910,7 +910,7 @@ def main():
         "--kong-url", default="http://localhost:8000", help="Kong proxy URL"
     )
     parser.add_argument(
-        "--kong-admin", default="http://localhost:8002", help="Kong admin URL"
+        "--kong-admin", default="http://localhost:8001", help="Kong admin URL"
     )
     parser.add_argument(
         "--mcp-url", default="http://localhost:8003", help="MCP server URL"

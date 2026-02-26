@@ -4,7 +4,7 @@
 
 ## System Overview
 
-AI Brand Automator is a multi-tenant SaaS platform where users onboard companies, upload brand assets, and the AI generates brand strategies, manages social media, schedules content, and integrates Google Business Profiles.
+AI Brand Automator is a multi-tenant SaaS platform where users onboard companies, upload brand assets, and the AI generates brand strategies, manages social media, schedules content, runs multi-agent analysis pipelines, and integrates Google Business Profiles. The platform consists of a Django backend, Next.js frontend, and 6 FastAPI agent microservices orchestrated via LangGraph.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -13,7 +13,7 @@ AI Brand Automator is a multi-tenant SaaS platform where users onboard companies
 │   Next.js 15 (React 19 + TypeScript + Tailwind v4)  — Port 3000             │
 │   ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │
 │   │  Auth    │ │ Onboard  │ │Dashboard │ │ AI Chat  │ │ Social/Automation│  │
-│   │  Pages   │ │ Wizard   │ │ + Files  │ │  Page    │ │  Pages           │  │
+│   │  Pages   │ │ Wizard   │ │+Pipelines│ │+Assistant│ │  Pages           │  │
 │   └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬────────────┘  │
 │        └─────────────┴─────────────┴─────────────┴───────────┘               │
 │                                    │                                         │
@@ -32,23 +32,24 @@ AI Brand Automator is a multi-tenant SaaS platform where users onboard companies
 │                                                                            │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │  /api/v1/                                                           │   │
-│  │  ├── auth/         → Register, Login, JWT Refresh, Password Reset   │   │
-│  │  ├── (root)        → Companies, BrandAssets, Onboarding Progress    │   │
-│  │  ├── ai/           → Chat, Content Generation (Gemini 2.0 Flash)    │   │
-│  │  ├── subscriptions/→ Stripe Plans, Checkout, Webhooks               │   │
-│  │  ├── automation/   → Social Profiles, Content Calendar, Posting     │   │
-│  │  ├── ingestion/    → File Processing Pipeline API                   │   │
-│  │  ├── curation/     → Media Curation Pipeline API                    │   │
-│  │  └── rag-index/    → Document Sync to Vertex AI                     │   │
+│  │  ├── auth/           → Register, Login, JWT Refresh                 │   │
+│  │  ├── (root)          → Companies, BrandAssets, Onboarding           │   │
+│  │  ├── ai/             → Chat, Content Generation (Gemini 2.0 Flash)  │   │
+│  │  ├── subscriptions/  → Stripe Plans, Checkout, Webhooks             │   │
+│  │  ├── automation/     → Social Profiles, Content Calendar, Posting   │   │
+│  │  ├── orchestration/  → Pipeline Jobs, Manifests, Callbacks (NEW)    │   │
+│  │  ├── ingestion/      → File Processing Pipeline API                 │   │
+│  │  ├── curation/       → Media Curation Pipeline API                  │   │
+│  │  └── rag-index/      → Document Sync to Vertex AI                   │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                            │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
-│  │  onboarding  │  │  ai_services │  │  automation  │  │ subscriptions│   │
-│  │  Company +   │  │  Gemini AI   │  │  Social +    │  │  Stripe      │   │
-│  │  Assets      │  │  Singleton   │  │  GBP + MCP   │  │  Billing     │   │
-│  └──────┬───────┘  └──────────────┘  └──────────────┘  └──────────────┘   │
-│         │                                                                  │
-│         ▼                                                                  │
+│  │  onboarding  │  │  ai_services │  │  automation  │  │orchestration │   │
+│  │  Company +   │  │  Gemini AI   │  │  Social +    │  │  Manifests + │   │
+│  │  Assets      │  │  Singleton   │  │  GBP + MCP   │  │  Jobs        │   │
+│  └──────┬───────┘  └──────────────┘  └──────────────┘  └──────┬───────┘   │
+│         │                                                      │           │
+│         ▼                                                      ▼           │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │              DATA PIPELINE (Hexagonal Architecture)                 │   │
 │  │                                                                     │   │
@@ -58,15 +59,46 @@ AI Brand Automator is a multi-tenant SaaS platform where users onboard companies
 │  │                             │                         │                 │
 │  │         domain/ ports/ adapters/ (Pydantic, not ORM)                │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────────────────────────┘
-         │              │              │               │
-         ▼              ▼              ▼               ▼
+└──────────────────────────┬─────────────────────────────────────────────────┘
+         │              │  │            │               │
+         ▼              ▼  │            ▼               ▼
 ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
 │ PostgreSQL   │ │    Redis     │ │ Google Cloud  │ │   Kafka      │
-│ (Neon)       │ │  (Celery +   │ │  Storage     │ │ (Event       │
-│ Multi-tenant │ │   Caching)   │ │  2 Buckets   │ │  Streaming)  │
+│ (Neon)       │ │ (7 DBs for   │ │  Storage     │ │ (Event       │
+│ Multi-tenant │ │  all services)│ │  2 Buckets   │ │  Streaming)  │
 │ schemas      │ │              │ │ raw + curated │ │              │
 └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+                       │
+         ┌─────────────┼──────────────────────────────────────────┐
+         │             ▼                                          │
+         │  ┌────────────────────────────────────────────────┐    │
+         │  │         AGENT MICROSERVICES (FastAPI)           │    │
+         │  │                                                │    │
+         │  │  ┌──────────────┐  ┌──────────────┐            │    │
+         │  │  │  Pipeline    │  │  Discovery   │            │    │
+         │  │  │  Orchestrator│  │  Agent       │            │    │
+         │  │  │  :8010       │  │  :8020       │            │    │
+         │  │  │  LangGraph   │  │  Tavily +    │            │    │
+         │  │  │  Redis DB 1  │  │  Redis DB 2  │            │    │
+         │  │  └──────────────┘  └──────────────┘            │    │
+         │  │                                                │    │
+         │  │  ┌──────────────┐  ┌──────────────┐            │    │
+         │  │  │ Intelligence │  │ Chat Titling │            │    │
+         │  │  │  Agent       │  │  Worker      │            │    │
+         │  │  │  :8030       │  │  :8040       │            │    │
+         │  │  │  ISO 10668   │  │  Gemini Flash│            │    │
+         │  │  │  Redis DB 3  │  │  Redis DB 4  │            │    │
+         │  │  └──────────────┘  └──────────────┘            │    │
+         │  │                                                │    │
+         │  │  ┌──────────────┐  ┌──────────────┐            │    │
+         │  │  │  Content     │  │  Social      │            │    │
+         │  │  │  Agent       │  │  Agent       │            │    │
+         │  │  │  :8050       │  │  :8060       │            │    │
+         │  │  │  SEO/AEO/GEO │  │  MCP Client  │            │    │
+         │  │  │  Redis DB 5  │  │  Redis DB 6  │            │    │
+         │  │  └──────────────┘  └──────────────┘            │    │
+         │  └────────────────────────────────────────────────┘    │
+         └────────────────────────────────────────────────────────┘
 ```
 
 ## Core Data Flows
@@ -157,6 +189,65 @@ Frontend → GET /api/v1/subscriptions/plans/          → List available plans
          → Update Subscription model (active/canceled/past_due)
 ```
 
+### 7. Pipeline Orchestration (Dispatch → Agents → Callback)
+
+```
+User submits analysis request (AI Assistant or Pipelines page)
+    │
+    ▼
+POST /api/v1/orchestration/jobs/
+    │
+    ▼
+AnalysisJob created (status: QUEUED)
+    │
+    ▼
+Celery dispatch_job_task (orchestration queue)
+    │
+    ├──[HTTP]──► POST pipeline-orchestrator-svc:8010/v1/jobs/dispatch
+    │     OR
+    ├──[Kafka]─► pipeline-trigger-topic (when ORCHESTRATION_KAFKA_ENABLED=True)
+    │
+    ▼
+Pipeline Orchestrator (LangGraph DAG)
+    │
+    ├──► External agent nodes (HTTP calls):
+    │       discovery-agent-svc:8020   (web research)
+    │       intelligence-agent-svc:8030 (brand valuation)
+    │       content-agent-service:8050  (blog authoring)
+    │       social-agent-service:8060   (social publishing)
+    │
+    ├──► Internal nodes (in-process):
+    │       RouterNode, PlannerNode, StrategyNode, ReportNode
+    │
+    ├──► Progress callbacks per-node:
+    │       PATCH /api/v1/orchestration/jobs/{job_id}/callback/
+    │       (X-Callback-Token auth, atomic row locking)
+    │
+    ▼
+AnalysisJob updated (status: COMPLETED, result_data populated)
+    │
+    ▼
+Frontend polls quick-status → renders ResultDashboard / ThoughtTrace
+```
+
+### 8. Chat Auto-Titling
+
+```
+User sends first message → POST /api/v1/ai/chat/
+    │
+    ▼
+Django publishes to chat-titling-topic (Kafka)
+    │
+    ▼
+chat-titling-worker:8040 consumes topic
+    │  (dedup via Redis: titling:processed:{session_id})
+    ▼
+Gemini Flash generates concise title
+    │
+    ▼
+PATCH /api/v1/ai/chat-sessions/{id}/ (X-Worker-Token auth)
+```
+
 ## App Responsibilities
 
 | App | Responsibility | Architecture |
@@ -171,6 +262,7 @@ Frontend → GET /api/v1/subscriptions/plans/          → List available plans
 | `data_ingestion/` | File validation, text extraction, Kafka producer | **Hexagonal** |
 | `media_curation/` | OCR, PII redaction, AI enrichment, content routing | **Hexagonal** |
 | `rag_index/` | Vertex AI vector store sync, document indexing | **Hexagonal** |
+| `orchestration/` | Pipeline manifests, analysis jobs, dispatch, callbacks | Standard Django |
 | `kafka_service/` | Shared Kafka consumer utilities | Standard Django |
 
 ## Multi-Tenancy Model
@@ -183,6 +275,7 @@ Frontend → GET /api/v1/subscriptions/plans/          → List available plans
 │  User ──► Company ──► BrandAsset                 │
 │  SocialProfile, ContentCalendar, AutomationTask  │
 │  Subscription, Plan, ChatHistory                 │
+│  PipelineManifest, AnalysisJob                   │
 │  IngestionRecord, CurationRecord                 │
 │                                                  │
 │  All models have nullable tenant FK:             │
@@ -257,18 +350,96 @@ else:
 
 This pattern was applied across all automation views (PR #153) to fix content calendar entries and automation tasks not appearing after the multi-tenancy migration.
 
+## Microservices Architecture
+
+All 6 agent microservices are standalone FastAPI applications following a consistent layout:
+
+```
+{service}/
+├── app/
+│   ├── api/          → FastAPI routes + Pydantic request/response schemas
+│   ├── core/         → Config (Pydantic BaseSettings with env prefix), logging
+│   ├── cache/        → RedisManager (service-specific key patterns)
+│   ├── logic/        → Business logic (domain-specific algorithms)
+│   ├── messaging/    → Kafka producer/consumer + event schemas
+│   ├── services/     → Executor (main entry point), API clients
+│   └── main.py       → FastAPI application with lifespan management
+├── tests/            → pytest suite (unit + integration markers)
+├── Dockerfile        → Uvicorn-based container (python:3.12-slim)
+└── requirements.txt
+```
+
+### Service-to-Service Authentication
+
+| Header | Direction | Purpose |
+|--------|-----------|---------|
+| `X-Service-Token` | Django → Orchestrator | Dispatch and cancel authentication |
+| `X-Callback-Token` | Orchestrator → Django | Callback authentication |
+| `X-Worker-Token` | Chat Titling Worker → Django | Title update authentication |
+| `X-Service-Token` | Content/Social Agent → Django | Blog/post creation |
+| `X-Tenant-ID` | Content/Social Agent → Django | Tenant routing for blog/post creation |
+
+### Redis Database Allocation
+
+| DB | Service | Key Prefix Examples |
+|----|---------|---------------------|
+| 0 | Django Backend (Celery) | `celery-task-meta-*`, `job:status:{id}` |
+| 1 | Pipeline Orchestrator | `orchestrator:job:*`, `orchestrator:graph:*` |
+| 2 | Discovery Agent | `discovery:cache:*`, `discovery:page:*` |
+| 3 | Intelligence Agent | `intel:benchmarks:*`, `intel:result:*` |
+| 4 | Chat Titling Worker | `titling:processed:{session_id}` |
+| 5 | Content Agent | `content:seo:*`, `content:result:*` |
+| 6 | Social Agent | `social:result:*`, `social:rate:*` |
+
+## Kafka Topics
+
+### Data Pipeline Topics
+| Topic | Producer | Consumer | Purpose |
+|-------|----------|----------|---------|
+| `raw-ingestion-topic` | Django onboarding | ingestion-consumer | File upload triggers |
+| `curation-needed-topic` | data_ingestion | curation-consumer | Files ready for curation |
+| `rag-sync-ready-topic` | media_curation | rag-index-consumer | Documents ready for indexing |
+| `ingestion-dlq` | ingestion | manual review | Ingestion failures |
+
+### Orchestration Topics
+| Topic | Producer | Consumer | Purpose |
+|-------|----------|----------|---------|
+| `pipeline-trigger-topic` | Django orchestration | pipeline-orchestrator-svc | Job dispatch via Kafka |
+| `agent-trace-topic` | orchestrator | Django TraceConsumer | Real-time agent progress |
+| `pipeline-result-topic` | orchestrator | Django ResultConsumer | Final pipeline results |
+| `orchestration-dlq` | consumers | manual review | Orchestration failures |
+
+### Chat & Infrastructure Topics
+| Topic | Producer | Consumer | Purpose |
+|-------|----------|----------|---------|
+| `chat-titling-topic` | Django ai_services | chat-titling-worker | Session title generation |
+| `gateway-logs` | Kong | optional consumer | API gateway audit logs |
+| `dlq-events` | pipeline consumers | manual review | General dead letter queue |
+
 ## Process Architecture (Procfile)
 
+### Django Backend Processes
 | Process | Role | Command |
 |---------|------|---------|
 | `web` | HTTP API server | Gunicorn (4 workers, 2 threads) |
 | `worker` | General Celery worker | Default queue |
+| `orchestration-worker` | Orchestration Celery worker | `orchestration` queue |
 | `beat` | Celery scheduler | Every 60s: publish_scheduled_posts |
 | `ingestion-worker` | Ingestion Celery worker | `ingestion` queue |
 | `ingestion-consumer` | Kafka → Ingestion | `run_ingestion` command |
 | `curation-worker` | Curation Celery worker | `curation` queue |
 | `curation-consumer` | Kafka → Curation | `run_curation_consumer` command |
 | `rag-index-consumer` | Kafka → RAG sync | `consume_sync_events` command |
+
+### Agent Microservices (FastAPI + Uvicorn)
+| Service | Port | Redis DB | Command |
+|---------|------|----------|---------|
+| `pipeline-orchestrator-svc` | 8010 | DB 1 | `uvicorn app.main:app --port 8010` |
+| `discovery-agent-svc` | 8020 | DB 2 | `uvicorn app.main:app --port 8020` |
+| `intelligence-agent-svc` | 8030 | DB 3 | `uvicorn app.main:app --port 8030` |
+| `chat-titling-worker` | 8040 | DB 4 | `uvicorn app.main:app --port 8040` |
+| `content-agent-service` | 8050 | DB 5 | `uvicorn app.main:app --port 8050` |
+| `social-agent-service` | 8060 | DB 6 | `uvicorn app.main:app --port 8060` |
 
 ## External Service Integration
 
@@ -283,17 +454,33 @@ This pattern was applied across all automation views (PR #153) to fix content ca
 | Instagram Graph API | OAuth + posting + analytics | Via Facebook page tokens |
 | Google Business Profile | OAuth + posts + reviews | OAuth 2.0 |
 | Apache Kafka | Event streaming (pipeline) | SASL/SSL or plaintext |
+| Tavily API | Web search (Discovery Agent) | API key |
 | Neon PostgreSQL | Primary database | Connection string + SSL |
-| Redis | Celery broker + caching | Connection URL |
+| Redis | Celery broker + caching (7 DBs) | Connection URL |
 
 ## Testing Architecture
 
 ```
-pytest (1890+ tests)
+Django Backend (pytest ~2090 tests)
 ├── Unit tests (70%)        → Models, serializers, utils, encryption
 ├── Integration tests (25%) → Views with DB, API endpoints, Celery tasks
 ├── Property tests (5%)     → Hypothesis-based edge case discovery
-└── Mocks                   → Kafka, GCS, Gemini AI, Email, Stripe
+└── Mocks                   → Kafka, GCS, Gemini AI, Email, Stripe, Orchestrator
+
+Microservices (pytest ~628 tests)
+├── pipeline-orchestrator-svc   (171 tests)
+├── discovery-agent-svc         (179 tests)
+├── intelligence-agent-svc      (100 tests)
+├── social-agent-service        (89 tests)
+├── content-agent-service       (55 tests)
+└── chat-titling-worker         (34 tests)
+
+Cross-Service Integration (tests/integration/, ~60 tests)
+├── Phase 1: Contract tests     → API schema validation
+├── Phase 2: Domain tests       → End-to-end pipeline scenarios
+└── Phase 3: Stress tests       → Concurrent load, timeout behavior
+
+Total: ~2770 tests
 ```
 
 Key testing boundaries:
@@ -301,20 +488,26 @@ Key testing boundaries:
 - **Gemini AI**: Falls back to mock data when `GOOGLE_API_KEY` is absent
 - **GCS**: Mocked via `unittest.mock.patch` on `GCSService`
 - **Email**: Redirected to `locmem.EmailBackend` (autouse fixture)
+- **Orchestrator**: Mocked via `unittest.mock.patch` on `OrchestratorDispatcher`
+- **Microservice integration tests**: Marked `@pytest.mark.integration` (require Redis)
 
 ## Deployment Topology (Railway)
 
 ```
 Railway Project
-├── Backend Service     → ai-brand-automator/ (Gunicorn)
-├── Celery Worker       → ai-brand-automator/ (celery worker)
-├── Celery Beat         → ai-brand-automator/ (celery beat)
-├── Frontend Service    → ai-brand-automator-frontend/ (Next.js)
-├── Redis               → Managed Redis instance
-└── PostgreSQL          → Neon (external, SSL required)
+├── Backend Service          → ai-brand-automator/ (Gunicorn)
+├── Celery Worker            → ai-brand-automator/ (celery worker)
+├── Celery Beat              → ai-brand-automator/ (celery beat)
+├── Frontend Service         → ai-brand-automator-frontend/ (Next.js)
+├── MCP Server               → ai-brand-automator/ (SSE transport, port 8085)
+├── Pipeline Orchestrator    → pipeline-orchestrator-svc/ (Uvicorn)
+├── Discovery Agent          → discovery-agent-svc/ (Uvicorn)
+├── Intelligence Agent       → intelligence-agent-svc/ (Uvicorn)
+├── Redis                    → Managed Redis instance (7 DBs)
+└── PostgreSQL               → Neon (external, SSL required)
 ```
 
-CI/CD: GitHub Actions → 4 jobs (backend-tests, media-curation, frontend, build-images) → Auto-deploy on `main` merge via Railway.
+CI/CD: GitHub Actions → 8 test jobs (backend-tests, media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, frontend-tests, integration-tests, build-images) → Auto-deploy on `main` merge via Railway with change detection (only redeploys changed services).
 
 ## Frontend Hydration Safety
 
