@@ -7,7 +7,7 @@ from celery import shared_task
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, max_retries=2, default_retry_delay=5)
+@shared_task(bind=True, max_retries=3, default_retry_delay=15)
 def auto_title_session(self, session_id):
     """Generate a concise title from the first user message using Gemini."""
     from .models import ChatSession, ChatMessage
@@ -31,7 +31,18 @@ def auto_title_session(self, session_id):
     if not first_msg:
         return
 
-    title = ai_service.generate_title(first_msg.content)
+    try:
+        title = ai_service.generate_title(first_msg.content)
+    except Exception as exc:
+        # Retry on rate-limit (429) errors with exponential backoff
+        logger.warning(
+            "Title generation failed for session %s (attempt %d): %s",
+            session.session_id,
+            self.request.retries + 1,
+            exc,
+        )
+        raise self.retry(exc=exc, countdown=15 * (self.request.retries + 1))
+
     session.title = title[:255]
     session.save(update_fields=["title"])
     logger.info("Auto-titled session %s: '%s'", session.session_id, session.title)

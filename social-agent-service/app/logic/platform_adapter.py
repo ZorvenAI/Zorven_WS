@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 LINKEDIN_MAX_CHARS = 3000
 TWITTER_MAX_CHARS = 280
 FACEBOOK_MAX_CHARS = 500
+INSTAGRAM_MAX_CHARS = 2200
 
 
 class PlatformAdapter:
@@ -124,6 +125,15 @@ class PlatformAdapter:
                 f"Max {FACEBOOK_MAX_CHARS} characters for optimal reach.\n\n"
                 f"Blog content:\n{content}"
             ),
+            "instagram": (
+                f"Adapt this blog into an Instagram caption for {brand_name}. "
+                f"Use a {brand_voice} tone that is visual and engaging. "
+                "Start with a strong hook line. Use short paragraphs and "
+                "line breaks for readability. End with a clear CTA. "
+                f"Include 10-15 relevant hashtags related to: {keyword_str}. "
+                f"Max {INSTAGRAM_MAX_CHARS} characters.\n\n"
+                f"Blog content:\n{content}"
+            ),
         }
 
         return prompts.get(platform, prompts["linkedin"])
@@ -155,6 +165,13 @@ class PlatformAdapter:
                 content = content[: TWITTER_MAX_CHARS - 3] + "..."
             return self._build_post(platform, content, hashtags[:3], "thread")
 
+        if platform == "instagram":
+            prefix = f"{title}\n\n" if title else ""
+            content = prefix + blog_content[:800]
+            if len(blog_content) > 800:
+                content += "\n\n..."
+            return self._build_post(platform, content, hashtags[:15], "caption")
+
         # facebook or default
         prefix = f"{title}\n\n" if title else ""
         content = prefix + blog_content[:400]
@@ -173,6 +190,7 @@ class PlatformAdapter:
                 "linkedin": "article_share",
                 "twitter": "thread",
                 "facebook": "status",
+                "instagram": "caption",
             }.get(platform, "status")
 
         return SocialPost(

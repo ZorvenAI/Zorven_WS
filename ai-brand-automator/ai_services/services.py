@@ -734,6 +734,10 @@ class GeminiAIService:
             title = response.text.strip().strip("\"'")
             return title[:255] if title else first_message[:50]
         except Exception as e:
+            # Re-raise rate limit errors so callers (e.g. Celery tasks)
+            # can retry after a delay instead of accepting a bad title.
+            if "429" in str(e) or "Resource exhausted" in str(e):
+                raise
             logger.warning("Title generation failed: %s", e)
             words = first_message.split()[:6]
             return " ".join(words)

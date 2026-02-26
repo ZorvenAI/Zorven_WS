@@ -22,6 +22,7 @@ from .serializers import (
     BrandIdentityRequestSerializer,
     MarketAnalysisRequestSerializer,
 )
+from brand_automator.validators import sanitize_text_input
 from .services import ai_service, GeminiAIService
 from onboarding.models import Company
 from tenants.permissions import (
@@ -213,6 +214,37 @@ def chat_with_ai(request):
         cache.delete(lock_key)
 
 
+def _collect_attachment_data(attachment_ids, session):
+    """Build attachment metadata dicts for pipeline job context.
+
+    Sanitizes file_name to prevent prompt-injection via crafted filenames.
+    """
+    if not attachment_ids:
+        return []
+
+    attachments = SessionAttachment.objects.filter(
+        id__in=attachment_ids,
+        session=session,
+    ).select_related("asset")
+
+    data = []
+    for att in attachments:
+        if att.asset and att.asset.gcs_path:
+            data.append(
+                {
+                    "id": att.id,
+                    "asset_id": att.asset.id,
+                    "file_name": sanitize_text_input(
+                        att.file_name or "", max_length=255
+                    ),
+                    "file_type": att.file_type,
+                    "gcs_bucket": att.asset.gcs_bucket,
+                    "gcs_path": att.asset.gcs_path,
+                }
+            )
+    return data
+
+
 def _process_chat_message(
     request, session, message, tenant, is_new_session, serializer
 ):
@@ -236,11 +268,18 @@ def _process_chat_message(
     # Classify intent: pipeline analysis vs. conversation
     intent_result = GeminiAIService.classify_intent(message)
 
-    # Force RAG intent when attachments are provided — the user attached
-    # a file and expects it to be analyzed, regardless of keyword score.
+    # Force RAG intent when attachments are provided and no pipeline
+    # keywords detected — the user attached a file and expects it to be
+    # analyzed, regardless of keyword score.
     attachment_ids = serializer.validated_data.get("attachment_ids", [])
     if attachment_ids and intent_result["intent"] != "pipeline":
         intent_result = {"intent": "rag", "confidence": 1.0}
+
+    # When attachments accompany a pipeline intent (e.g. "write a blog
+    # about this document and schedule it"), flag needs_rag so the
+    # orchestrator selects a RAG-enabled manifest (e.g. rag-blog-social).
+    if attachment_ids and intent_result["intent"] == "pipeline":
+        intent_result["needs_rag"] = True
 
     if intent_result["intent"] == "rag":
         # RAG / document query — dispatch to orchestrator general-chat pipeline
@@ -255,25 +294,7 @@ def _process_chat_message(
             {"role": m.role, "content": m.content} for m in reversed(history_msgs)
         ]
 
-        # Look up chat attachments if provided
-        attachments_data = []
-        if attachment_ids:
-            attachments = SessionAttachment.objects.filter(
-                id__in=attachment_ids,
-                session=session,
-            ).select_related("asset")
-            for att in attachments:
-                if att.asset and att.asset.gcs_path:
-                    attachments_data.append(
-                        {
-                            "id": att.id,
-                            "asset_id": att.asset.id,
-                            "file_name": att.file_name,
-                            "file_type": att.file_type,
-                            "gcs_bucket": att.asset.gcs_bucket,
-                            "gcs_path": att.asset.gcs_path,
-                        }
-                    )
+        attachments_data = _collect_attachment_data(attachment_ids, session)
 
         job_context = {
             "source": "chat",
@@ -378,6 +399,8 @@ def _process_chat_message(
             {"role": m.role, "content": m.content} for m in reversed(history_msgs)
         ]
 
+        attachments_data = _collect_attachment_data(attachment_ids, session)
+
         job_context = {
             "source": "chat",
             "session_id": session.session_id,
@@ -386,6 +409,8 @@ def _process_chat_message(
             "chat_history": chat_history,
             "needs_rag": intent_result.get("needs_rag", False),
         }
+        if attachments_data:
+            job_context["attachments"] = attachments_data
         if target_brand:
             job_context["company_name"] = target_brand.get("company_name", "")
             job_context["sector"] = target_brand.get("sector", "default")
@@ -458,6 +483,11 @@ def _process_chat_message(
         user_msg = ChatMessage.objects.create(
             session=session, role="user", content=message
         )
+        # Link pending attachments to the user message
+        if attachment_ids:
+            SessionAttachment.objects.filter(
+                id__in=attachment_ids, session=session
+            ).update(message=user_msg)
         ChatMessage.objects.create(
             session=session,
             role="assistant",

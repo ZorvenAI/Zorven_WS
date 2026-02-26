@@ -104,8 +104,7 @@ class DefaultAgentNode(BaseNode):
         elif chunks:
             source_names = [c.source_name for c in chunks[:3]]
             thought = (
-                f"Extracting relevant information from "
-                f"{', '.join(source_names)}..."
+                f"Extracting relevant information from " f"{', '.join(source_names)}..."
             )
         else:
             thought = (
@@ -130,19 +129,21 @@ class DefaultAgentNode(BaseNode):
         # primary sources; otherwise fall back to Vertex AI Search chunks.
         if attachment_files:
             sources = [
-                {"name": att.get("file_name", ""), "uri": ""}
-                for att in attachments
+                {"name": att.get("file_name", ""), "uri": ""} for att in attachments
             ]
         else:
-            sources = [
-                {"name": c.source_name, "uri": c.source_uri} for c in chunks
-            ]
+            sources = [{"name": c.source_name, "uri": c.source_uri} for c in chunks]
 
-        # Include raw document chunks for downstream nodes (e.g., blog_author)
+        # Include raw document content for downstream nodes (e.g., blog_author)
         # that need the original document text, not just the synthesized summary.
-        raw_context = "\n\n".join(
-            f"[{c.source_name}]\n{c.text}" for c in chunks if c.text
-        )
+        # When attachments are present, Gemini processes all files together and
+        # returns a single synthesized answer — use it directly as raw_context.
+        if attachment_files:
+            raw_context = answer
+        else:
+            raw_context = "\n\n".join(
+                f"[{c.source_name}]\n{c.text}" for c in chunks if c.text
+            )
 
         result: dict[str, Any] = {
             "summary": answer,
@@ -288,9 +289,7 @@ class DefaultAgentNode(BaseNode):
             # Append source citations footer if grounded
             source_names = []
             if chunks:
-                source_names.extend(
-                    c.source_name for c in chunks if c.source_name
-                )
+                source_names.extend(c.source_name for c in chunks if c.source_name)
             if attachment_files:
                 source_names.extend(name for name, _ in attachment_files)
             if source_names:
@@ -303,9 +302,7 @@ class DefaultAgentNode(BaseNode):
             logger.warning("Gemini synthesis failed", exc_info=True)
             # Graceful degradation: return raw search chunk text
             if chunks:
-                parts = [
-                    f"**{c.source_name}**: {c.text}" for c in chunks[:3]
-                ]
+                parts = [f"**{c.source_name}**: {c.text}" for c in chunks[:3]]
                 return (
                     "I found some relevant information in your documents "
                     "but couldn't generate a synthesized answer:\n\n"
@@ -323,13 +320,9 @@ class DefaultAgentNode(BaseNode):
             )
 
     @staticmethod
-    def _upload_to_gemini(
-        filename: str, file_bytes: bytes
-    ) -> Any:
+    def _upload_to_gemini(filename: str, file_bytes: bytes) -> Any:
         """Upload a file to the Gemini File API for multimodal processing."""
-        with tempfile.NamedTemporaryFile(
-            suffix=f"_{filename}", delete=True
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=f"_{filename}", delete=True) as tmp:
             tmp.write(file_bytes)
             tmp.flush()
             return genai.upload_file(tmp.name, display_name=filename)
@@ -361,9 +354,7 @@ class DefaultAgentNode(BaseNode):
         return prompt
 
     @staticmethod
-    async def _emit_trace(
-        job_id: str, status: str, last_thought: str
-    ) -> None:
+    async def _emit_trace(job_id: str, status: str, last_thought: str) -> None:
         """Emit a Kafka trace event (non-fatal if unavailable)."""
         try:
             from app.main import trace_producer
