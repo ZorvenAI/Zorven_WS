@@ -7,6 +7,7 @@ from .views import (
     pipeline_status_webhook,
     pipeline_batch_status_webhook,
 )
+from .internal_views import InternalAssetRegisterView
 
 router = DefaultRouter()
 router.register(r"companies", CompanyViewSet)
@@ -24,5 +25,11 @@ urlpatterns = [
         "webhooks/pipeline-batch-status/",
         pipeline_batch_status_webhook,
         name="pipeline-batch-status-webhook",
+    ),
+    # Internal service-to-service endpoints (X-Service-Token auth)
+    path(
+        "internal/assets/register/",
+        InternalAssetRegisterView.as_view(),
+        name="internal-asset-register",
     ),
 ] + router.urls

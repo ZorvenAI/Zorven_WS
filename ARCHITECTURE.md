@@ -215,6 +215,7 @@ Pipeline Orchestrator (LangGraph DAG)
     │       intelligence-agent-svc:8030 (brand valuation)
     │       content-agent-service:8050  (blog authoring)
     │       social-agent-service:8060   (social publishing)
+    │       rag-uploader-agent-svc:8070 (RAG document archival)
     │
     ├──► Internal nodes (in-process):
     │       RouterNode, PlannerNode, StrategyNode, ReportNode
@@ -390,6 +391,7 @@ All 6 agent microservices are standalone FastAPI applications following a consis
 | 4 | Chat Titling Worker | `titling:processed:{session_id}` |
 | 5 | Content Agent | `content:seo:*`, `content:result:*` |
 | 6 | Social Agent | `social:result:*`, `social:rate:*` |
+| 7 | RAG Uploader Agent | `uploader:dedupe:*`, `uploader:rate:*` |
 
 ## Kafka Topics
 
@@ -440,6 +442,7 @@ All 6 agent microservices are standalone FastAPI applications following a consis
 | `chat-titling-worker` | 8040 | DB 4 | `uvicorn app.main:app --port 8040` |
 | `content-agent-service` | 8050 | DB 5 | `uvicorn app.main:app --port 8050` |
 | `social-agent-service` | 8060 | DB 6 | `uvicorn app.main:app --port 8060` |
+| `rag-uploader-agent-service` | 8070 | DB 7 | `uvicorn app.main:app --port 8070` |
 
 ## External Service Integration
 

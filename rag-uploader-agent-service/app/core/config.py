@@ -1,0 +1,55 @@
+"""
+Application configuration loaded from environment variables.
+
+All settings use the UPLOADER_ prefix. For example:
+    UPLOADER_GOOGLE_API_KEY=AIza...
+"""
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """RAG uploader agent service configuration."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="UPLOADER_",
+        case_sensitive=False,
+    )
+
+    # Redis connection
+    REDIS_URL: str = "redis://localhost:6379/7"
+
+    # Kafka connection
+    KAFKA_BOOTSTRAP_SERVERS: str = ""
+
+    # Gemini AI (empty = stub mode, used for SmartTitler)
+    GOOGLE_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+
+    # GCS (empty = stub mode)
+    GCS_PROJECT_ID: str = ""
+    GCS_BUCKET_NAME: str = ""
+    GCS_CREDENTIALS_PATH: str = ""
+
+    # Core API (Django backend) for BrandAsset registration
+    CORE_API_URL: str = "http://localhost:8001"
+    CORE_API_TOKEN: str = "dev-service-token"
+
+    # Deduplication TTL
+    DEDUP_TTL_HOURS: int = 48
+
+    # Rate limiting
+    RATE_LIMIT_PER_MINUTE: int = 10
+
+    # CORS origins (comma-separated)
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
+
+    # Server
+    HOST: str = "0.0.0.0"
+    PORT: int = 8070
+
+    # Logging
+    LOG_LEVEL: str = "INFO"
+
+
+settings = Settings()
