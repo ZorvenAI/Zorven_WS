@@ -1,12 +1,12 @@
 # AI Brand Automator
 
-> **Version**: 2.3.0 (Multi-Tenancy + Automation Tenant Fixes)  
-> **Status**: ✅ Production Ready  
-> **Last Updated**: February 17, 2026
+> **Version**: 3.0.0 (AI Pipeline Orchestration + Agent Microservices)
+> **Status**: ✅ Production Ready
+> **Last Updated**: February 26, 2026
 
 **Multi-tenant SaaS platform for AI-powered brand building**
 
-A Django REST Framework backend with Next.js frontend that helps businesses create and manage their brand strategy using Google Gemini AI.
+A Django REST Framework backend with Next.js frontend and 6 FastAPI agent microservices that helps businesses create and manage their brand strategy, run AI-powered analysis pipelines, and automate social media — all powered by Google Gemini AI and LangGraph orchestration.
 
 ## Features
 
@@ -38,12 +38,32 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 - 📊 **Social Analytics** - Engagement metrics and insights for all platforms
 - 🤖 **MCP Server** - 23 tools for AI agent integration (Claude, GPT)
 
-### Google Business Profile (NEW ✅)
+### Google Business Profile ✅
 - 📍 GBP listing CRUD operations
 - 📝 GBP post management
 - ⭐ Review management with AI-assisted replies
 - 📈 GBP insights and analytics
 - 🔧 10 dedicated MCP tools
+
+### AI Pipeline Orchestration (NEW ✅)
+- 🔗 **Pipeline-as-Code** - LangGraph-compatible manifest system for multi-agent pipelines
+- 📊 **Real-time Progress** - ThoughtTrace UI with per-agent status tracking
+- 🏦 **ISO 10668 Brand Valuation** - Royalty Relief NPV and Brand Strength Index scoring
+- 🔍 **Web Discovery** - Tavily-powered research with URL scraping and content cleaning
+- ✍️ **Content Authoring** - SEO/AEO/GEO-compliant blog generation from research data
+- 📱 **Social Publishing** - Platform-specific content adaptation and automated posting
+- 💬 **Chat Auto-Titling** - Gemini Flash-powered session title generation via Kafka
+- 🤖 **AI Assistant** - Conversational pipeline launcher with manifest auto-detection
+
+### Agent Microservices (NEW ✅)
+| Service | Port | Purpose |
+|---------|------|---------|
+| Pipeline Orchestrator | 8010 | LangGraph DAG execution, callback reporting |
+| Discovery Agent | 8020 | Web research via Tavily, URL scraping, HTML cleaning |
+| Intelligence Agent | 8030 | ISO 10668 valuation, BSI scoring, competitive gap analysis |
+| Chat Titling Worker | 8040 | Auto-titles chat sessions via Gemini Flash + Kafka |
+| Content Agent | 8050 | SEO/AEO/GEO-compliant blog authoring |
+| Social Agent | 8060 | Platform-specific post adaptation, publishing via MCP |
 
 ### Media Curation Service ✅
 - 🎬 **Multi-format Processing** - Documents, images, video, and audio
@@ -69,6 +89,8 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 
 ### Backend
 - **Django 4.2.16** + Django REST Framework
+- **6 FastAPI Microservices** for agent pipeline execution
+- **LangGraph** for multi-agent pipeline orchestration
 - **Kong Gateway** (DB-less mode) for API gateway, JWT offloading, rate limiting
 - **PostgreSQL** (Neon hosted) with multi-tenancy
 - **Google Gemini 2.0 Flash** for AI content generation
@@ -85,71 +107,71 @@ A Django REST Framework backend with Next.js frontend that helps businesses crea
 - **Automatic API client** with token management
 
 ### Deployment
-- **Railway** for production hosting
+- **Railway** for production hosting (with change detection deploys)
 - **Docker** for containerization
-- **GitHub Actions** for CI/CD
-- **1890+ tests** (pytest + Hypothesis)
+- **GitHub Actions** for CI/CD (8 test jobs)
+- **2770+ tests** (pytest + Hypothesis + microservice suites)
 
 ## Project Structure
 
 ```
 .
-├── ai-brand-automator/          # Django backend
-│   ├── ai_services/             # AI integration & chat (Gemini 2.0 Flash)
-│   ├── automation/              # Social media automation & MCP server
-│   │   ├── docs/                # Platform integration documentation
-│   │   ├── mcp_server.py        # MCP Server with 23 tools
-│   │   ├── models.py            # SocialProfile, ContentCalendar, GBP models
-│   │   ├── services.py          # Platform API services
-│   │   ├── tasks.py             # Celery background tasks
-│   │   └── views.py             # OAuth & posting endpoints (8300+ lines)
-│   ├── media_curation/          # Media processing pipeline (NEW)
-│   │   ├── adapters/            # Redis, GCS, Kafka, DLP adapters
-│   │   ├── domain/              # Core models and business logic
-│   │   ├── ports/               # Abstract interfaces (Hexagonal Architecture)
-│   │   ├── processors/          # Document, Image, Video, Audio processors
-│   │   ├── management/          # Kafka consumer management command
-│   │   ├── tasks.py             # Celery tasks for curation
-│   │   └── views.py             # REST API endpoints
-│   ├── rag_index/               # RAG Index Service (NEW)
-│   │   ├── adapters/            # GCS, Vertex AI, Redis, Kafka adapters
-│   │   ├── domain/              # Models, schemas, exceptions
-│   │   ├── ports/               # Abstract interfaces
-│   │   ├── services/            # SyncOrchestrator service
-│   │   ├── tasks/               # Celery sync tasks
-│   │   ├── api/                 # REST API views and serializers
-│   │   ├── management/          # Kafka consumer command
-│   │   └── tests/               # 322 tests
-│   ├── files/                   # File upload service
-│   ├── onboarding/              # Company onboarding
-│   ├── subscriptions/           # Stripe subscription management
-│   ├── tenants/                 # Multi-tenancy models
-│   └── brand_automator/         # Django settings & Celery config
+├── ai-brand-automator/              # Django backend
+│   ├── ai_services/                 # AI integration & chat (Gemini 2.0 Flash)
+│   ├── automation/                  # Social media automation & MCP server
+│   ├── orchestration/               # Pipeline orchestration (NEW)
+│   │   ├── models.py                # PipelineManifest, AnalysisJob
+│   │   ├── views.py                 # Job CRUD, callback, cancel
+│   │   ├── services.py              # OrchestratorDispatcher
+│   │   ├── result_handler.py        # Pipeline result processing
+│   │   ├── kafka_consumers.py       # Result + Trace consumers
+│   │   └── tasks.py                 # Celery dispatch task
+│   ├── media_curation/              # Media processing pipeline (Hexagonal)
+│   ├── rag_index/                   # RAG Index Service (Hexagonal)
+│   ├── data_ingestion/              # Data ingestion pipeline (Hexagonal)
+│   ├── files/                       # File upload service
+│   ├── onboarding/                  # Company onboarding
+│   ├── subscriptions/               # Stripe subscription management
+│   ├── tenants/                     # Multi-tenancy models
+│   └── brand_automator/             # Django settings & Celery config
 │
-├── ai-brand-automator-frontend/ # Next.js frontend
+├── pipeline-orchestrator-svc/       # LangGraph pipeline engine (FastAPI :8010)
+├── discovery-agent-svc/             # Web research agent (FastAPI :8020)
+├── intelligence-agent-svc/          # Brand valuation agent (FastAPI :8030)
+├── chat-titling-worker/             # Chat title generator (FastAPI :8040)
+├── content-agent-service/           # Blog authoring agent (FastAPI :8050)
+├── social-agent-service/            # Social publishing agent (FastAPI :8060)
+│
+├── ai-brand-automator-frontend/     # Next.js frontend
 │   └── src/
-│       ├── app/                 # Next.js pages
-│       │   ├── automation/      # Social media automation page
-│       │   ├── dashboard/       # Main dashboard
-│       │   └── subscription/    # Billing management
-│       ├── components/          # React components
-│       ├── hooks/               # Custom hooks (useAuth, useTenantRole)
-│       └── lib/                 # API client & utilities
+│       ├── app/                     # Next.js pages
+│       │   ├── automation/          # Social media automation
+│       │   ├── dashboard/           # Main dashboard
+│       │   │   ├── pipelines/       # Pipeline management (NEW)
+│       │   │   ├── analysis/        # Brand equity reports (NEW)
+│       │   │   ├── ai-assistant/    # Conversational pipeline launcher (NEW)
+│       │   │   └── team/            # Team management
+│       │   └── subscription/        # Billing management
+│       ├── components/              # React components
+│       │   └── pipelines/           # Pipeline visualization (NEW)
+│       ├── hooks/                   # Custom hooks (useAuth, usePollingJob)
+│       └── lib/                     # API client & utilities
 │
-├── deployment/                  # Railway deployment configs
-│   ├── docker/                  # Dockerfiles for all services
-│   │   ├── kong/                # Kong Gateway (DB-less mode)
-│   │   │   ├── kong.yaml        # Declarative configuration
-│   │   │   └── Dockerfile       # Kong container
-│   │   └── ...                  # Other service Dockerfiles
-│   └── railway/                 # Railway configuration
+├── tests/integration/               # Cross-service integration tests (NEW)
+│   ├── phase1_contracts/            # API contract tests
+│   ├── phase2_domain/               # Domain logic tests
+│   └── phase3_stress/               # Load/stress tests
 │
-├── .github/workflows/           # CI/CD pipelines
-│   └── deploy-railway.yml       # Full deployment pipeline
+├── deployment/                      # Master Docker Compose + Railway configs
+│   ├── docker/                      # Dockerfiles for core services
+│   ├── scripts/                     # Startup scripts
+│   └── docker-compose.yml           # All services orchestration
 │
-└── docs/                        # Architecture documentation
-    ├── ai_brand_automator_mvp_architecture.md
-    └── CODEBASE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md
+├── .github/workflows/               # CI/CD pipelines
+│   ├── ci-cd.yml                    # 8-job test pipeline
+│   └── deploy-railway.yml           # Change-detection deployment
+│
+└── docs/                            # Architecture documentation
 ```
 
 ## Kong Gateway Architecture
@@ -179,8 +201,15 @@ Kong Gateway runs in **DB-less (declarative) mode** as the API entry point, prov
 | Kong Gateway | 8000 | External API entry point |
 | Django Backend | 8001 | Internal only (via Kong) |
 | Kong Admin API | 8002 | Configuration/debugging |
-| MCP Server | 8003 | AI agent tools (SSE/stdio) |
 | Frontend | 3000 | Next.js development server |
+| Pipeline Orchestrator | 8010 | LangGraph pipeline engine |
+| Discovery Agent | 8020 | Web research service |
+| Intelligence Agent | 8030 | Brand valuation service |
+| Chat Titling Worker | 8040 | Chat auto-titling |
+| Content Agent | 8050 | Blog authoring service |
+| Social Agent | 8060 | Social content adaptation |
+| Kafka UI | 8080 | Kafka monitoring (optional) |
+| MCP Server | 8085 | AI agent tools (SSE) |
 
 ### Key Features
 
@@ -308,32 +337,32 @@ BACKEND_HOST=your-backend.railway.app
    python manage.py runserver 0.0.0.0:8000
    ```
 
-### Docker Quick Start (with Kong Gateway)
+### Docker Quick Start (Full Stack)
 
-For full-stack development with Kong Gateway, Kafka, and all services:
+For full-stack development with Kong Gateway, all microservices, and optional Kafka:
 
 ```bash
-cd ai-brand-automator
+# From the project root
+cd deployment
 
-# Start core services (Kong, Django, Redis, PostgreSQL)
-docker-compose up -d
+# Start all core services (Kong, Django, Frontend, 6 Microservices, Redis, Celery)
+docker compose up --build
 
-# Or include Kafka for event streaming
-docker-compose --profile with-kafka up -d
+# Include Kafka for event streaming (chat titling, pipeline triggers)
+docker compose --profile with-kafka up --build
+
+# Include local PostgreSQL (instead of Neon)
+docker compose --profile with-db up --build
+
+# All profiles combined
+docker compose --profile with-kafka --profile with-db --profile with-nginx up --build
 
 # Verify services are running
-curl http://localhost:8000/health/   # Via Kong
-curl http://localhost:8002/status    # Kong Admin API
+curl http://localhost:8000/health/    # Via Kong
+curl http://localhost:8010/health     # Pipeline Orchestrator
+curl http://localhost:8020/health     # Discovery Agent
+curl http://localhost:8030/health     # Intelligence Agent
 ```
-
-**Port mapping with Kong:**
-| Service | Port | Description |
-|---------|------|-------------|
-| Kong Gateway | 8000 | Main API entry point |
-| Django Backend | 8001 | Internal (via Kong only) |
-| Kong Admin | 8002 | Gateway config/debug |
-| MCP Server | 8003 | AI agent tools |
-| Frontend | 3000 | Next.js |
 
 7. **Start Celery for background tasks** (optional, for scheduled posting):
    ```bash
@@ -477,6 +506,17 @@ curl http://localhost:8002/status    # Kong Admin API
 - `PUT /api/v1/media-curation/tenant-config/{tenant_id}/` - Update tenant config
 - `DELETE /api/v1/media-curation/tenant-config/{tenant_id}/` - Delete tenant config
 
+### Pipeline Orchestration
+- `POST /api/v1/orchestration/jobs/` - Create and dispatch a new analysis job
+- `GET /api/v1/orchestration/jobs/` - List analysis jobs (tenant-filtered)
+- `GET /api/v1/orchestration/jobs/{job_id}/` - Get job details with progress
+- `GET /api/v1/orchestration/jobs/{job_id}/quick-status/` - Fast status (Redis-cached, for polling)
+- `PATCH /api/v1/orchestration/jobs/{job_id}/callback/` - Orchestrator callback (service-to-service auth)
+- `POST /api/v1/orchestration/jobs/{job_id}/cancel/` - Cancel running job
+- `GET /api/v1/orchestration/manifests/` - List pipeline manifests
+- `POST /api/v1/orchestration/manifests/` - Create pipeline manifest (admin only)
+- `GET /api/v1/orchestration/manifests/{id}/` - Manifest details
+
 ## User Flow
 
 1. **Registration** → Create account + tenant
@@ -486,23 +526,45 @@ curl http://localhost:8002/status    # Kong Admin API
 5. **Onboarding Step 4** → Upload assets (optional)
 6. **Onboarding Step 5** → Review & generate brand strategy with AI
 7. **Dashboard** → View metrics and recent activity
-8. **Chat** → Interact with AI for brand guidance
-9. **Automation** → Connect LinkedIn, create and schedule posts
+8. **Chat** → Interact with AI for brand guidance (auto-titled via Gemini Flash)
+9. **Automation** → Connect social profiles, create and schedule posts
+10. **AI Assistant** → Launch analysis pipelines with conversational interface
+11. **Pipelines** → Monitor pipeline execution with real-time progress
+12. **Analysis** → View ISO 10668 brand equity reports and valuations
 
 ## Development
 
 ### Running Tests
 
-**Backend**:
+**Backend (2090+ tests)**:
 ```bash
 cd ai-brand-automator
 source ../.venv/bin/activate
-pytest -v                      # All tests (1890+)
-pytest -m unit                 # Unit tests only
-pytest -m property             # Property-based tests (Hypothesis)
-pytest automation/tests/ -v    # Automation tests (180+)
-pytest media_curation/ -v      # Media curation tests (443)
-pytest --cov=. --cov-report=html  # With coverage
+pytest -v                          # All backend tests
+pytest -m unit                     # Unit tests only
+pytest -m property                 # Property-based tests (Hypothesis)
+pytest automation/tests/ -v        # Automation tests
+pytest orchestration/tests/ -v     # Orchestration tests (123)
+pytest media_curation/ -v          # Media curation tests (469)
+pytest --cov=. --cov-report=html   # With coverage
+```
+
+**Microservices (628 tests)**:
+```bash
+cd pipeline-orchestrator-svc && pytest tests/ -v    # Orchestrator (171)
+cd discovery-agent-svc && pytest tests/ -v          # Discovery (179)
+cd intelligence-agent-svc && pytest tests/ -v       # Intelligence (100)
+cd chat-titling-worker && pytest tests/ -v          # Chat Titling (34)
+cd content-agent-service && pytest tests/ -v        # Content Agent (55)
+cd social-agent-service && pytest tests/ -v         # Social Agent (89)
+```
+
+**Integration Tests (60 tests)**:
+```bash
+cd tests/integration
+pytest phase1_contracts/ -v   # API contract tests
+pytest phase2_domain/ -v      # Domain logic tests
+pytest phase3_stress/ -v      # Stress tests
 ```
 
 **Frontend**:
@@ -611,6 +673,13 @@ tenant = Tenant.objects.create(
 | `KAFKA_BOOTSTRAP_SERVERS` | ⚠️ Optional | Kafka brokers | `localhost:9092` |
 | `MEDIA_CURATION_REDIS_URL` | ⚠️ Optional | Redis for curation cache | `redis://localhost:6379/1` |
 | `GCS_BUCKET_NAME` | ⚠️ Optional | GCS bucket for curated output | `media-curation-output` |
+| `ORCHESTRATOR_URL` | ⚠️ Optional | Pipeline orchestrator URL | `http://localhost:8010` |
+| `ORCHESTRATOR_SERVICE_TOKEN` | ⚠️ Optional | Service-to-service auth for dispatch | (secret) |
+| `ORCHESTRATOR_CALLBACK_TOKEN` | ⚠️ Optional | Callback auth from orchestrator | (secret) |
+| `ORCHESTRATOR_TIMEOUT` | ⚠️ Optional | HTTP timeout for dispatch (seconds) | `30` |
+| `BACKEND_URL` | ⚠️ Optional | Backend URL for callbacks | `http://localhost:8001` |
+| `ORCHESTRATION_KAFKA_ENABLED` | ⚠️ Optional | Use Kafka dispatch vs HTTP | `false` |
+| `WORKER_TOKEN` | ⚠️ Optional | Auth for chat-titling-worker | (secret) |
 
 ### Frontend (.env.local)
 
@@ -683,6 +752,13 @@ tenant = Tenant.objects.create(
 - [Instagram Integration](ai-brand-automator/automation/docs/INSTAGRAM_INTEGRATION_REPORT.md)
 - [GBP Implementation](ai-brand-automator/automation/docs/GOOGLE_BUSINESS_PROFILE_IMPLEMENTATION_PLAN.md)
 - [Media Curation Service](ai-brand-automator/media_curation/README.md)
+- [Pipeline Orchestrator](pipeline-orchestrator-svc/CLAUDE.md)
+- [Discovery Agent](discovery-agent-svc/CLAUDE.md)
+- [Intelligence Agent](intelligence-agent-svc/CLAUDE.md)
+- [Content Agent](content-agent-service/CLAUDE.md)
+- [Social Agent](social-agent-service/CLAUDE.md)
+- [Chat Titling Worker](chat-titling-worker/CLAUDE.md)
+- [Deployment Guide](deployment/README.md)
 
 ## License
 
@@ -690,25 +766,36 @@ See [LICENSE.md](docs/LICENSE.md)
 
 ## Status
 
-**Current Version**: 2.3.0 (Multi-Tenancy + Automation Tenant Fixes)  
-**Status**: ✅ Production Ready  
-**Deployment**: Railway  
-**Last Updated**: February 17, 2026
+**Current Version**: 3.0.0 (AI Pipeline Orchestration + Agent Microservices)
+**Status**: ✅ Production Ready
+**Deployment**: Railway (with change detection)
+**Last Updated**: February 26, 2026
 
 ### Test Coverage
 | Component | Tests | Status |
 |-----------|-------|--------|
-| Media Curation | 443 | ✅ |
-| RAG Index | 322 | ✅ |
-| Automation | 180+ | ✅ |
-| GBP | 77 | ✅ |
-| Onboarding | 30+ | ✅ |
-| AI Services | 15+ | ✅ |
-| Files | 10+ | ✅ |
-| Multi-Tenancy | 20+ | ✅ |
-| **Total** | **1890+** | ✅ |
+| **Django Backend** | | |
+| Media Curation | 469 | ✅ |
+| RAG Index | 348 | ✅ |
+| Onboarding | 258 | ✅ |
+| Automation | 252 | ✅ |
+| Data Ingestion | 226 | ✅ |
+| Tenants | 172 | ✅ |
+| AI Services | 143 | ✅ |
+| Orchestration | 123 | ✅ |
+| Files | 18 | ✅ |
+| Other (conftest, etc.) | 80+ | ✅ |
+| **Microservices** | | |
+| Discovery Agent | 179 | ✅ |
+| Pipeline Orchestrator | 171 | ✅ |
+| Intelligence Agent | 100 | ✅ |
+| Social Agent | 89 | ✅ |
+| Content Agent | 55 | ✅ |
+| Chat Titling Worker | 34 | ✅ |
+| **Integration Tests** | 60 | ✅ |
+| **Total** | **~2770** | ✅ |
 
-### Completed Features (MVP)
+### Completed Features
 - ✅ Multi-tenant authentication
 - ✅ User registration with tenant creation
 - ✅ 5-step onboarding flow
@@ -717,7 +804,7 @@ See [LICENSE.md](docs/LICENSE.md)
 - ✅ Dynamic dashboard
 - ✅ Token refresh
 - ✅ File upload UI
-- ✅ Chat interface
+- ✅ Chat interface with auto-titling
 - ✅ Stripe subscription management
 - ✅ Checkout flow with plan sync
 - ✅ Mobile/network testing support
@@ -730,13 +817,22 @@ See [LICENSE.md](docs/LICENSE.md)
 - ✅ Celery-based automatic publishing (every 60 seconds)
 - ✅ MCP Server with 23 tools for AI agents
 - ✅ Railway production deployment
-- ✅ CI/CD with GitHub Actions
-- ✅ 1890+ automated tests
+- ✅ CI/CD with GitHub Actions (8 test jobs)
+- ✅ 2770+ automated tests
 - ✅ **Media Curation Service** - AI-powered content processing pipeline
 - ✅ **RAG Index Service** - Vertex AI document indexing pipeline
 - ✅ **Multi-Tenancy** - Schema-based tenant isolation with django-tenants
 - ✅ **Workspace Switcher** - Create/switch workspaces in the frontend
 - ✅ **Tenant-Scoped Automation** - All social posting and calendar entries scoped by tenant
+- ✅ **Pipeline Orchestration** - LangGraph-based multi-agent pipeline execution
+- ✅ **6 Agent Microservices** - Orchestrator, Discovery, Intelligence, Content, Social, Chat Titling
+- ✅ **ISO 10668 Brand Valuation** - Royalty Relief NPV and Brand Strength Index scoring
+- ✅ **AI Assistant** - Conversational pipeline launcher with ThoughtTrace progress
+- ✅ **Pipeline Dashboard** - Real-time pipeline monitoring and management
+- ✅ **Analysis Dashboard** - Brand equity reports and valuation history
+- ✅ **Chat Auto-Titling** - Gemini Flash-powered session titles via Kafka
+- ✅ **Service-to-Service Auth** - X-Service-Token, X-Callback-Token patterns
+- ✅ **Cross-Service Integration Tests** - 3-phase contract, domain, and stress tests
 
 ### Media Curation Supported Formats
 

@@ -15,6 +15,7 @@ AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand buil
 | AI | Google Gemini 2.0 Flash (`GeminiAIService` singleton) |
 | Database | PostgreSQL (Neon) with `django-tenants` (schema-based multi-tenancy) |
 | Gateway | Kong (DB-less): JWT auth, CORS, rate limiting |
+| Microservices | FastAPI, LangGraph, Pydantic v2, Uvicorn (6 agent services) |
 | Queue | Celery + Redis (beat scheduler, `orchestration` queue), Apache Kafka (event streaming) |
 | Storage | Google Cloud Storage (2 buckets: raw + curated) |
 | Payments | Stripe (Basic $29 / Pro $79 / Enterprise $199) |
@@ -132,6 +133,21 @@ with transaction.atomic():
     job.save(update_fields=update_fields)
 ```
 
+### Microservice Service-to-Service Authentication
+```python
+# Microservices validate incoming requests via header token
+# In pipeline-orchestrator-svc:
+token = request.headers.get("X-Service-Token", "")
+if token != settings.SERVICE_TOKEN:
+    raise HTTPException(status_code=403, detail="Invalid service token")
+
+# In Django callback view (orchestration/views.py):
+token = request.META.get("HTTP_X_CALLBACK_TOKEN", "")
+expected = getattr(settings, "ORCHESTRATOR_CALLBACK_TOKEN", "")
+if not expected or token != expected:
+    return Response({"error": "Invalid callback token"}, status=403)
+```
+
 ### Frontend Polling (setTimeout, not setInterval)
 ```tsx
 // usePollingJob.ts — prevents overlapping fetches
@@ -172,6 +188,15 @@ const poll = async () => {
 | Orchestration types (FE) | `ai-brand-automator-frontend/src/types/orchestration.ts` |
 | Orchestration API (FE) | `ai-brand-automator-frontend/src/lib/orchestration.ts` |
 | Polling hook (FE) | `ai-brand-automator-frontend/src/hooks/usePollingJob.ts` |
+| Orchestrator main | `pipeline-orchestrator-svc/app/main.py` |
+| Orchestrator graph builder | `pipeline-orchestrator-svc/app/factory/graph_builder.py` |
+| Orchestrator node registry | `pipeline-orchestrator-svc/app/factory/node_registry.py` |
+| Discovery executor | `discovery-agent-svc/app/services/discovery_executor.py` |
+| Intelligence executor | `intelligence-agent-svc/app/services/intelligence_executor.py` |
+| Chat titling handler | `chat-titling-worker/app/logic/handler.py` |
+| Content executor | `content-agent-service/app/services/content_executor.py` |
+| Social executor | `social-agent-service/app/services/social_executor.py` |
+| Integration tests | `tests/integration/conftest.py` |
 
 ## Build & Run
 
@@ -187,8 +212,16 @@ cd ai-brand-automator-frontend && npm run dev
 cd deployment && docker compose up
 
 # Tests
-cd ai-brand-automator && pytest -v          # 1970+ backend tests (87 orchestration)
-cd ai-brand-automator-frontend && npm test  # Jest (60% coverage threshold)
+cd ai-brand-automator && pytest -v              # 2090+ backend tests (123 orchestration)
+cd ai-brand-automator-frontend && npm test      # Jest (60% coverage threshold)
+
+# Microservice tests (628 total, run from each service dir)
+cd pipeline-orchestrator-svc && pytest tests/ -v    # 171 tests
+cd discovery-agent-svc && pytest tests/ -v          # 179 tests
+cd intelligence-agent-svc && pytest tests/ -v       # 100 tests
+
+# Cross-service integration tests
+cd tests/integration && pytest -v                   # 60 tests
 
 # Format & lint
 cd ai-brand-automator && black . && flake8 .
@@ -210,6 +243,16 @@ ORCHESTRATOR_SERVICE_TOKEN=<service-token>   # Auth for dispatch (core-api → o
 ORCHESTRATOR_CALLBACK_TOKEN=<callback-token> # Auth for callbacks (orchestrator → core-api)
 ORCHESTRATOR_TIMEOUT=30                      # HTTP timeout for dispatch calls
 BACKEND_URL=http://localhost:8001            # Used to build callback URL
+
+WORKER_TOKEN=<worker-token>                  # Auth for chat-titling-worker callbacks
+ORCHESTRATION_KAFKA_ENABLED=false            # true for Kafka-based dispatch (vs HTTP)
+
+# Microservice env vars (each service has its own prefix)
+# DISCOVERY_REDIS_URL, DISCOVERY_TAVILY_API_KEY
+# INTELLIGENCE_REDIS_URL, INTELLIGENCE_GEMINI_API_KEY
+# CONTENT_REDIS_URL, CONTENT_GOOGLE_API_KEY, CONTENT_CORE_API_TOKEN
+# SOCIAL_REDIS_URL, SOCIAL_GOOGLE_API_KEY, SOCIAL_CORE_API_TOKEN
+# TITLING_REDIS_URL, TITLING_GOOGLE_API_KEY, TITLING_WORKER_TOKEN
 
 # Frontend (.env.local)
 NEXT_PUBLIC_API_URL=http://localhost:8000     # Auto-detected via env.ts in browser

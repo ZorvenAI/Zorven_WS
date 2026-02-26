@@ -26,6 +26,7 @@ pytest files/tests/ -v
 pytest media_curation/tests/ -v
 pytest onboarding/tests/ -v
 pytest orchestration/tests/ -v
+pytest ai_services/tests/ -v
 
 # Run with coverage
 pytest --cov=. --cov-report=term-missing
@@ -47,6 +48,36 @@ celery -A brand_automator worker -Q orchestration -l info --concurrency=4
 
 # Seed default pipeline manifests (idempotent, run on every deploy)
 python manage.py seed_manifests
+```
+
+### Microservices (FastAPI)
+
+```bash
+# Each microservice follows the same pattern
+cd pipeline-orchestrator-svc && pytest tests/ -v    # 171 tests
+cd discovery-agent-svc && pytest tests/ -v          # 179 tests
+cd intelligence-agent-svc && pytest tests/ -v       # 100 tests
+cd chat-titling-worker && pytest tests/ -v          # 34 tests
+cd content-agent-service && pytest tests/ -v        # 55 tests
+cd social-agent-service && pytest tests/ -v         # 89 tests
+
+# Run a single microservice locally
+cd <service-dir>
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port <PORT> --reload
+
+# Format
+black app/ tests/
+```
+
+### Integration Tests
+
+```bash
+# Cross-service integration tests
+cd tests/integration
+pytest phase1_contracts/ -v   # API contract tests
+pytest phase2_domain/ -v      # Domain logic tests
+pytest phase3_stress/ -v      # Stress tests
 ```
 
 ### Frontend
@@ -96,6 +127,12 @@ cd deployment && docker compose down -v   # Tear down with volumes
 - `ai-brand-automator/automation/encryption.py` — Token encryption, changes break existing encrypted data
 - `ai-brand-automator/orchestration/management/commands/seed_manifests.py` — Default manifest data, test after changes
 - Any migration file — Never edit existing migrations, always create new ones
+- `pipeline-orchestrator-svc/` — Separate service, read its CLAUDE.md before modifying
+- `discovery-agent-svc/` — Separate service, read its CLAUDE.md before modifying
+- `intelligence-agent-svc/` — Separate service, read its CLAUDE.md before modifying
+- `chat-titling-worker/` — Separate service, read its CLAUDE.md before modifying
+- `content-agent-service/` — Separate service, read its CLAUDE.md before modifying
+- `social-agent-service/` — Separate service, read its CLAUDE.md before modifying
 
 ### Safe to Modify
 
@@ -120,7 +157,9 @@ A task is **done** when ALL of the following are true:
 5. **Multi-tenancy safe**: New queries use `Q(tenant=tenant) | Q(tenant__isnull=True)` pattern; new `.objects.create()` calls include `tenant=getattr(request, 'tenant', None)`
 6. **Migrations created**: If models changed, `makemigrations` was run
 7. **Manifests seeded**: If orchestration manifests changed, `seed_manifests` was run
-8. **Branch is clean**: Changes committed to a feature/bug branch (never directly to `main`)
+8. **Orchestration safe**: If modifying callback endpoints, `transaction.atomic()` + `select_for_update()` pattern is used
+9. **Microservice contracts**: If changing agent API schemas, verify contract tests pass in `tests/integration/phase1_contracts/`
+10. **Branch is clean**: Changes committed to a feature/bug branch (never directly to `main`)
 
 ## Git Workflow
 
@@ -164,9 +203,26 @@ git push -u origin feature/my-feature
 5. Test: Write tests alongside implementation
 6. Format: `black .` + `flake8 .` + `npx tsc --noEmit`
 
+### When Asked to Work on Orchestration
+
+1. Read `orchestration/models.py` for PipelineManifest and AnalysisJob schemas
+2. Check `orchestration/views.py` for callback and dispatch patterns
+3. Use `transaction.atomic()` + `select_for_update()` for any job state changes
+4. Verify X-Callback-Token / X-Service-Token headers in tests
+5. Run: `pytest orchestration/tests/ -v`
+6. If modifying manifests: `python manage.py seed_manifests`
+
+### When Asked to Work on a Microservice
+
+1. Navigate to the service directory (e.g., `cd pipeline-orchestrator-svc`)
+2. Read the service's `CLAUDE.md` for service-specific instructions
+3. Run tests: `pytest tests/ -v`
+4. Do NOT import Django ORM in microservices — they use Pydantic + FastAPI
+5. Follow the shared pattern: `app/api/`, `app/core/`, `app/services/`, `app/messaging/`
+6. Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `CONTENT_`)
+
 ### When Asked About the Codebase
 
-1. Use `semantic_search` to find relevant code
-2. Read the `ARCHITECTURE.md` for data flow understanding
-3. Check `.github/copilot-instructions.md` for conventions
-4. Cite specific file paths and line numbers in responses
+1. Read the `ARCHITECTURE.md` for data flow understanding
+2. Check `.github/copilot-instructions.md` for conventions
+3. Cite specific file paths and line numbers in responses
