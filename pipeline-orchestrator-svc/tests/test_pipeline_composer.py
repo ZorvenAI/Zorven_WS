@@ -46,6 +46,7 @@ class TestNodeCatalog:
             "social_promoter",
             "valuation_logic",
             "gap_analyzer",
+            "rag_uploader",
         }
         assert expected == ids
 

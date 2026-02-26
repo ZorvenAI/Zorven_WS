@@ -98,21 +98,23 @@ NODE_CATALOG: list[dict[str, Any]] = [
         "output_key": "gap_analyzer",
         "config": {"analysis_type": "competitive_gap"},
     },
+    {
+        "id": "rag_uploader",
+        "type": "external",
+        "url": "http://rag-uploader-agent-svc:8070/v1/execute",
+        "description": (
+            "RAG archivist: persists documents and files to the tenant's "
+            "long-term Vertex AI knowledge base. Use when the user wants "
+            "to save, archive, upload, store, or persist files to their "
+            "knowledge base, RAG store, or document library. Also use "
+            "when the user says 'remember this' or 'keep this for later'."
+        ),
+        "output_key": "rag_uploader",
+        "config": {},
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.
-    # Example:
-    #
-    # {
-    #     "id": "email_campaign",
-    #     "type": "external",
-    #     "url": "http://email-agent-svc:8070/v1/execute",
-    #     "description": "Email campaign creator: drafts email sequences. "
-    #                    "Use when the prompt mentions email, newsletter, "
-    #                    "drip campaign, or email sequence.",
-    #     "output_key": "email_campaign",
-    #     "config": {"template": "nurture"},
-    # },
     # ──────────────────────────────────────────────────────────
 ]
 
@@ -270,11 +272,13 @@ class PipelineComposer:
         nodes: list[dict[str, Any]] = []
         for nid in node_ids:
             if nid == "manager":
-                nodes.append({
-                    "id": "manager",
-                    "type": "internal",
-                    "handler": "ManagerNode",
-                })
+                nodes.append(
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    }
+                )
                 continue
 
             entry = self._catalog_map[nid]
@@ -288,9 +292,7 @@ class PipelineComposer:
             nodes.append(node_def)
 
         # Auto-wire: sequential edges n1→n2→n3→...
-        edges = [
-            [node_ids[i], node_ids[i + 1]] for i in range(len(node_ids) - 1)
-        ]
+        edges = [[node_ids[i], node_ids[i + 1]] for i in range(len(node_ids) - 1)]
 
         return {
             "nodes": nodes,
@@ -303,9 +305,7 @@ class PipelineComposer:
         """Fall back to keyword matching (reuses RouterNode's KEYWORD_MAP)."""
         prompt = state.get("input_prompt", "").lower()
         available = state.get("available_manifests") or []
-        available_ids = (
-            {m["pipeline_id"] for m in available} if available else set()
-        )
+        available_ids = {m["pipeline_id"] for m in available} if available else set()
 
         resolved_id = "brand-analysis"
         best_score = 0

@@ -64,6 +64,7 @@ A Django REST Framework backend with Next.js frontend and 6 FastAPI agent micros
 | Chat Titling Worker | 8040 | Auto-titles chat sessions via Gemini Flash + Kafka |
 | Content Agent | 8050 | SEO/AEO/GEO-compliant blog authoring |
 | Social Agent | 8060 | Platform-specific post adaptation, publishing via MCP |
+| RAG Uploader Agent | 8070 | Persists documents to Vertex AI RAG Store via ingestion pipeline |
 
 ### Media Curation Service ✅
 - 🎬 **Multi-format Processing** - Documents, images, video, and audio
@@ -141,6 +142,7 @@ A Django REST Framework backend with Next.js frontend and 6 FastAPI agent micros
 ├── chat-titling-worker/             # Chat title generator (FastAPI :8040)
 ├── content-agent-service/           # Blog authoring agent (FastAPI :8050)
 ├── social-agent-service/            # Social publishing agent (FastAPI :8060)
+├── rag-uploader-agent-service/      # RAG document archival agent (FastAPI :8070)
 │
 ├── ai-brand-automator-frontend/     # Next.js frontend
 │   └── src/
@@ -208,6 +210,7 @@ Kong Gateway runs in **DB-less (declarative) mode** as the API entry point, prov
 | Chat Titling Worker | 8040 | Chat auto-titling |
 | Content Agent | 8050 | Blog authoring service |
 | Social Agent | 8060 | Social content adaptation |
+| RAG Uploader Agent | 8070 | RAG document archival |
 | Kafka UI | 8080 | Kafka monitoring (optional) |
 | MCP Server | 8085 | AI agent tools (SSE) |
 

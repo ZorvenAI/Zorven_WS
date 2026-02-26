@@ -17,6 +17,7 @@ intelligence-agent-svc/          # FastAPI — ISO 10668 brand valuation (port 8
 chat-titling-worker/             # FastAPI — Auto-titles chat sessions (port 8040)
 content-agent-service/           # FastAPI — SEO/AEO/GEO blog authoring (port 8050)
 social-agent-service/            # FastAPI — Social media promotion (port 8060)
+rag-uploader-agent-service/      # FastAPI — RAG document archival (port 8070)
 deployment/                      # Master docker-compose, Kong config, scripts
 docs/                            # Architecture docs
 ```
@@ -101,7 +102,7 @@ docker compose --profile with-kafka --profile with-db up      # + Local PostgreS
 docker compose down -v                                        # Tear down
 ```
 
-**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, Orchestrator 8010, Discovery 8020, Intelligence 8030, Titling 8040, Content 8050, Social 8060, MCP 8085, Kafka UI 8080
+**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, Orchestrator 8010, Discovery 8020, Intelligence 8030, Titling 8040, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080
 
 ## Architecture
 
@@ -120,6 +121,7 @@ Django dispatches job → pipeline-orchestrator-svc (:8010) → LangGraph DAG
   → intelligence-agent-svc (:8030) → brand valuation
   → content-agent-service (:8050) → blog authoring
   → social-agent-service (:8060) → social posting
+  → rag-uploader-agent-service (:8070) → RAG document archival
   → Callback → Django AnalysisJob (atomic update)
 ```
 
@@ -149,7 +151,7 @@ Schema-based via `django-tenants`. All models have a nullable `tenant` FK. Most 
 
 ### Redis Database Allocation
 
-DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social
+DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader
 
 ### Microservice Layout Convention
 

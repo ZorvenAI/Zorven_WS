@@ -706,11 +706,14 @@ services:
       # or uncomment the line below:
       #   - CONTENT_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - CONTENT_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-      - CONTENT_GCS_PROJECT_ID=${GCP_PROJECT_ID:-}
-      - CONTENT_GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}
+      - CONTENT_GCS_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      - CONTENT_GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
       - CONTENT_CORE_API_URL=http://backend:8001
       - CONTENT_CORE_API_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - CONTENT_LOG_LEVEL=INFO
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
+    volumes:
+      - ../ai-brand-automator/credentials:/app/credentials:ro
     expose:
       - "8050"
     ports:
@@ -795,6 +798,43 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8060/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # RAG Uploader Agent — Persists documents to Vertex AI RAG Store
+  # Extracts file references from pipeline context, emits ingestion events
+  # ==========================================================================
+  rag-uploader-agent-svc:
+    build:
+      context: ../rag-uploader-agent-service
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-rag-uploader
+    environment:
+      - UPLOADER_REDIS_URL=redis://redis:6379/7
+      - UPLOADER_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - UPLOADER_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - UPLOADER_GCS_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
+      - UPLOADER_GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-onboarding-brandsol-customer-bucket-1}
+      - UPLOADER_CORE_API_URL=http://backend:8001
+      - UPLOADER_CORE_API_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - UPLOADER_LOG_LEVEL=INFO
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
+    volumes:
+      - ../ai-brand-automator/credentials:/app/credentials:ro
+    expose:
+      - "8070"
+    ports:
+      - "8070:8070"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8070/health"]
       interval: 10s
       timeout: 5s
       retries: 3
