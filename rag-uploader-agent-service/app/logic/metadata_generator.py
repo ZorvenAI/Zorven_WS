@@ -25,15 +25,21 @@ def generate(
     Returns:
         Metadata dict suitable for IngestionEvent.metadata field.
     """
-    meta: dict[str, Any] = {
-        "original_name": file_name,
-        "custom_title": custom_title,
-        "source_agent": "rag-uploader-agent-service",
-        "source_node": source,
-        "job_id": job_id,
-        "tenant_id": tenant_id,
-        "archived_at": datetime.now(timezone.utc).isoformat(),
-    }
+    # Apply additional fields first so required fields cannot be overwritten
+    meta: dict[str, Any] = {}
     if additional:
         meta.update(additional)
+
+    # Required fields always take precedence
+    meta.update(
+        {
+            "original_name": file_name,
+            "custom_title": custom_title,
+            "source_agent": "rag-uploader-agent-service",
+            "source_node": source,
+            "job_id": job_id,
+            "tenant_id": tenant_id,
+            "archived_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
     return meta

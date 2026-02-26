@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from app.logic.smart_titler import SmartTitler
 
@@ -78,6 +78,20 @@ class TestAIMode:
 
         assert result == "Tesla_Q4_Sustainability_Report.pdf"
         mock_model.generate_content.assert_called_once()
+
+    async def test_prompt_is_sanitized_before_gemini_call(self):
+        """Verify sanitize_ai_prompt is applied to the LLM prompt."""
+        mock_model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = "Quarterly Report"
+        mock_model.generate_content = MagicMock(return_value=mock_response)
+
+        t = SmartTitler(gemini_model=mock_model)
+
+        with patch("app.logic.smart_titler.sanitize_ai_prompt") as mock_sanitize:
+            mock_sanitize.side_effect = lambda x: x  # pass-through
+            await t.title("upload.pdf")
+            mock_sanitize.assert_called_once()
 
     async def test_gemini_failure_falls_back(self):
         mock_model = MagicMock()

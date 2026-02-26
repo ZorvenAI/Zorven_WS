@@ -79,7 +79,11 @@ class GCSClient:
             return ""
 
         try:
-            object_path = f"_landing/{tenant_id}/{filename}"
+            # Sanitize filename to prevent path traversal
+            safe_filename = (
+                filename.replace("/", "_").replace("..", "_").replace("\\", "_")
+            )
+            object_path = f"_landing/{tenant_id}/{safe_filename}"
 
             client = self._get_client()
             if client is None:

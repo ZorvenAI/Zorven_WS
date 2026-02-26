@@ -107,8 +107,22 @@ class InternalAssetRegisterView(APIView):
             )
 
         mime_type = request.data.get("file_type", "application/octet-stream")
-        file_size = request.data.get("file_size", 0)
         gcs_uri = request.data.get("gcs_uri", "")
+
+        # Validate file_size is a non-negative integer
+        raw_file_size = request.data.get("file_size", 0)
+        try:
+            file_size = int(raw_file_size)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "file_size must be a non-negative integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if file_size < 0:
+            return Response(
+                {"error": "file_size must be a non-negative integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Parse GCS URI to extract bucket and path
         gcs_bucket = ""
@@ -129,50 +143,26 @@ class InternalAssetRegisterView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Upsert: update existing asset or create new one
-        existing = BrandAsset.objects.filter(
-            tenant=tenant, company=company, file_name=file_name
-        ).first()
-
-        if existing:
-            existing.file_type = asset_file_type
-            existing.file_size = file_size
-            existing.gcs_path = gcs_path
-            existing.gcs_bucket = gcs_bucket
-            existing.pipeline_status = "pending"
-            existing.pipeline_error = ""
-            existing.save(
-                update_fields=[
-                    "file_type",
-                    "file_size",
-                    "gcs_path",
-                    "gcs_bucket",
-                    "pipeline_status",
-                    "pipeline_error",
-                ]
-            )
-            asset = existing
-            logger.info(
-                "Updated existing asset %s for pipeline registration: '%s'",
-                asset.id,
-                file_name,
-            )
-        else:
-            asset = BrandAsset.objects.create(
-                tenant=tenant,
-                company=company,
-                file_name=file_name,
-                file_type=asset_file_type,
-                file_size=file_size,
-                gcs_path=gcs_path,
-                gcs_bucket=gcs_bucket,
-                pipeline_status="pending",
-            )
-            logger.info(
-                "Created asset %s for pipeline registration: '%s'",
-                asset.id,
-                file_name,
-            )
+        # Atomic upsert to avoid race conditions
+        asset, created = BrandAsset.objects.update_or_create(
+            tenant=tenant,
+            company=company,
+            file_name=file_name,
+            defaults={
+                "file_type": asset_file_type,
+                "file_size": file_size,
+                "gcs_path": gcs_path,
+                "gcs_bucket": gcs_bucket,
+                "pipeline_status": "pending",
+                "pipeline_error": "",
+            },
+        )
+        logger.info(
+            "%s asset %s for pipeline registration: '%s'",
+            "Created" if created else "Updated",
+            asset.id,
+            file_name,
+        )
 
         return Response(
             {

@@ -22,6 +22,7 @@ from app.logic.smart_titler import SmartTitler
 from app.messaging.kafka_producer import TraceProducer
 from app.services.core_api_client import CoreApiClient
 from app.services.gcs_client import GCSClient
+from app.utils.prompt_sanitizer import sanitize_ai_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,9 @@ class UploaderExecutor:
         5. Return results
         """
         job_id = request.input_context.get("job_id", "")
+
+        # Sanitize user input to mitigate prompt injection
+        request.input_prompt = sanitize_ai_prompt(request.input_prompt)
 
         logger.info(
             "Execute called — tenant=%s, input_context keys=%s, "
