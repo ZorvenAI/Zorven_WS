@@ -376,7 +376,8 @@ All 6 agent microservices are standalone FastAPI applications following a consis
 | `X-Service-Token` | Django → Orchestrator | Dispatch and cancel authentication |
 | `X-Callback-Token` | Orchestrator → Django | Callback authentication |
 | `X-Worker-Token` | Chat Titling Worker → Django | Title update authentication |
-| `X-Core-Api-Token` | Content/Social Agent → Django | Blog/post creation |
+| `X-Service-Token` | Content/Social Agent → Django | Blog/post creation |
+| `X-Tenant-ID` | Content/Social Agent → Django | Tenant routing for blog/post creation |
 
 ### Redis Database Allocation
 

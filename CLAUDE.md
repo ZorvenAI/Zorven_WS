@@ -101,7 +101,7 @@ docker compose --profile with-kafka --profile with-db up      # + Local PostgreS
 docker compose down -v                                        # Tear down
 ```
 
-**Service ports**: Kong 8000, Backend 8001, Kong Admin 8002, Frontend 3000, Orchestrator 8010, Discovery 8020, Intelligence 8030, Titling 8040, Content 8050, Social 8060, MCP 8085, Kafka UI 8080
+**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, Orchestrator 8010, Discovery 8020, Intelligence 8030, Titling 8040, Content 8050, Social 8060, MCP 8085, Kafka UI 8080
 
 ## Architecture
 
@@ -144,7 +144,8 @@ Schema-based via `django-tenants`. All models have a nullable `tenant` FK. Most 
 | `X-Service-Token` | Django → Orchestrator | Dispatch and cancel |
 | `X-Callback-Token` | Orchestrator → Django | Callback authentication |
 | `X-Worker-Token` | Chat Titling Worker → Django | Title update |
-| `X-Core-Api-Token` | Content/Social Agent → Django | Blog/post creation |
+| `X-Service-Token` | Content/Social Agent → Django | Blog/post creation |
+| `X-Tenant-ID` | Content/Social Agent → Django | Tenant routing for blog/post creation |
 
 ### Redis Database Allocation
 

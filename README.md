@@ -200,7 +200,7 @@ Kong Gateway runs in **DB-less (declarative) mode** as the API entry point, prov
 |---------|------|-------------|
 | Kong Gateway | 8000 | External API entry point |
 | Django Backend | 8001 | Internal only (via Kong) |
-| Kong Admin API | 8002 | Configuration/debugging |
+| Kong Admin API | 8001 | Configuration/debugging (Docker only; backend is not host-exposed) |
 | Frontend | 3000 | Next.js development server |
 | Pipeline Orchestrator | 8010 | LangGraph pipeline engine |
 | Discovery Agent | 8020 | Web research service |
