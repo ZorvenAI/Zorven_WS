@@ -9,13 +9,13 @@ unavailable.
 Adding a new agent requires only one dict entry in NODE_CATALOG.
 """
 
-import json
 import logging
 from typing import Any
 
 from app.core.config import settings
 from app.nodes.internal.router_node import KEYWORD_MAP
 from app.state.schema import AgentState
+from app.utils.prompt_sanitizer import sanitize_ai_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +198,7 @@ class PipelineComposer:
             {"_composed_manifest": {...}} — dynamic composition succeeded
             {"resolved_manifest_id": "..."} — keyword fallback
         """
-        prompt = state.get("input_prompt", "")
+        prompt = sanitize_ai_prompt(state.get("input_prompt", ""))
 
         # PRIMARY: Try Gemini function-calling
         if settings.GOOGLE_API_KEY:
