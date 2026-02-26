@@ -77,7 +77,8 @@ def dispatch_job_task(self, job_id, _attachment_refresh_pending=False):
     ctx = job.input_context or {}
     if ctx.get("attachments") and not _attachment_refresh_pending:
         raise self.retry(
-            kwargs={"job_id": job_id, "_attachment_refresh_pending": True},
+            args=[job_id],
+            kwargs={"_attachment_refresh_pending": True},
             countdown=3,
         )
 
