@@ -1,10 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Enable standalone output for Docker deployment
-  // This creates a minimal production bundle with all dependencies
-  output: "standalone",
-
   // Optimize images
   images: {
     remotePatterns: [

@@ -12,11 +12,12 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY package*.json ./
 RUN npm ci
 
-# Copy project files
+# Copy project files (invalidates cache when source changes)
 COPY . .
 
 # Build the application with env vars available
-RUN echo "Building with NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL" && npm run build
+ARG CACHEBUST=1
+RUN echo "Building with NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL (cachebust=$CACHEBUST)" && npm run build
 
 # Expose port
 EXPOSE 3000
