@@ -62,7 +62,7 @@ class SocialExecutor:
 
         await self._emit_trace(job_id, "Starting social promotion")
 
-        # 2. Extract blog content from previous outputs
+        # 2. Extract content from previous outputs
         blog_output = request.previous_outputs.get("blog_author", {})
         blog_content = blog_output.get("blog_content", "")
         seo_meta = blog_output.get("seo_meta", {})
@@ -70,8 +70,16 @@ class SocialExecutor:
             seo_meta = {}
 
         if not blog_content:
-            blog_content = request.input_prompt
-            logger.info("No blog_author output — using input_prompt as content")
+            # Try to build content from brand equity / intelligence results
+            blog_content = _build_content_from_previous_outputs(
+                request.previous_outputs, request.input_prompt
+            )
+            if blog_content != request.input_prompt:
+                logger.info("Built social content from upstream analysis results")
+            else:
+                logger.info(
+                    "No blog_author output — using input_prompt as content"
+                )
 
         # 3. Determine target platforms (intersect with connected profiles)
         user_id = request.input_context.get("user_id")
@@ -147,6 +155,9 @@ class SocialExecutor:
             f"Adapted content for {len(adapted_posts)} platform(s)",
         )
 
+        # Derive a meaningful title from SEO meta or blog content
+        content_title = _derive_content_title(seo_meta, blog_content)
+
         # 7.5. Resolve action intent (publish now vs schedule)
         action = ResolvedAction(action="publish_now")
         if self._action_resolver is not None:
@@ -221,6 +232,7 @@ class SocialExecutor:
                         user_email=user_email,
                         tenant_id=tenant_id,
                         job_id=job_id,
+                        title=content_title,
                     )
                     publish_results.append(pr)
                     if pr.status == "published":
@@ -231,8 +243,8 @@ class SocialExecutor:
                     result = await self._core_api.publish_to_platforms(
                         tenant_id=tenant_id,
                         platforms=[post.platform],
-                        content=post.content,
-                        title=f"Social post - {post.platform}",
+                        content=_build_publishable_content(post),
+                        title=content_title or _derive_title(post),
                         user_role=user_role,
                         job_id=job_id,
                         user_id=user_id,
@@ -370,9 +382,12 @@ class SocialExecutor:
         user_email: str,
         tenant_id: str,
         job_id: str,
+        title: str = "",
     ) -> PublishResult:
         """Publish or schedule a single post via MCP server."""
         assert self._mcp is not None
+        publish_content = _build_publishable_content(post)
+        publish_title = title or _derive_title(post)
 
         if action.action == "schedule":
             scheduled_date = action.scheduled_date
@@ -384,8 +399,8 @@ class SocialExecutor:
 
             result = await self._mcp.create_scheduled_content(
                 user_email=user_email,
-                title=f"Social post - {post.platform}",
-                content=post.content,
+                title=publish_title,
+                content=publish_content,
                 platforms=[post.platform],
                 scheduled_date=scheduled_date,
                 tenant_id=tenant_id,
@@ -408,8 +423,8 @@ class SocialExecutor:
         now_iso = datetime.now(timezone.utc).isoformat()
         result = await self._mcp.create_scheduled_content(
             user_email=user_email,
-            title=f"Social post - {post.platform}",
-            content=post.content,
+            title=publish_title,
+            content=publish_content,
             platforms=[post.platform],
             scheduled_date=now_iso,
             tenant_id=tenant_id,
@@ -455,6 +470,163 @@ class SocialExecutor:
         status: str = "PROCESSING",
     ) -> None:
         await self._trace.send_step(job_id=job_id, message=message, status=status)
+
+
+def _build_content_from_previous_outputs(
+    previous_outputs: dict[str, Any],
+    fallback: str,
+) -> str:
+    """Build rich social-media-ready content from upstream node results.
+
+    Scans ``previous_outputs`` for brand equity / intelligence data
+    (valuation, BSI, findings) and composes a concise summary that
+    Gemini can adapt into a platform-specific post.  Falls back to
+    *fallback* (usually the raw user prompt) when nothing useful is found.
+    """
+    # Look through all upstream outputs for intelligence/valuation data
+    valuation_data: dict[str, Any] = {}
+    bsi_data: dict[str, Any] = {}
+    findings: list[str] = []
+    recommendations: list[str] = []
+
+    for _node_id, output in previous_outputs.items():
+        if not isinstance(output, dict):
+            continue
+        # Intelligence agent returns valuation + bsi at the top level
+        if "valuation" in output and isinstance(output["valuation"], dict):
+            valuation_data = output["valuation"]
+        if "bsi" in output and isinstance(output["bsi"], dict):
+            bsi_data = output["bsi"]
+        if "findings" in output and isinstance(output["findings"], list):
+            findings.extend(output["findings"])
+        if "recommendations" in output and isinstance(output["recommendations"], list):
+            recommendations.extend(output["recommendations"])
+
+    if (
+        not valuation_data
+        and not bsi_data
+        and not findings
+        and not recommendations
+    ):
+        return fallback
+
+    # Compose a structured summary for Gemini to adapt
+    parts: list[str] = []
+
+    if valuation_data:
+        npv = valuation_data.get("brand_value_npv")
+        rate = valuation_data.get("royalty_rate")
+        horizon = valuation_data.get("horizon_years")
+        method = valuation_data.get("methodology", "royalty relief")
+        if npv is not None:
+            formatted_npv = f"${npv:,.0f}" if npv >= 1 else str(npv)
+            parts.append(f"Brand Valuation: {formatted_npv} (ISO 10668 {method})")
+        if rate is not None:
+            parts.append(f"Royalty Rate: {rate * 100:.1f}%")
+        if horizon is not None:
+            parts.append(f"Forecast Horizon: {horizon} years")
+
+    if bsi_data:
+        score = bsi_data.get("score")
+        if score is not None:
+            parts.append(f"Brand Strength Index (BSI): {score}/100")
+        pillars = bsi_data.get("pillars", [])
+        for pillar in pillars:
+            name = pillar.get("name", "")
+            pscore = pillar.get("score")
+            if name and pscore is not None:
+                parts.append(f"  - {name}: {pscore}/100")
+
+    if findings:
+        parts.append("")
+        parts.append("Key Findings:")
+        for f in findings[:5]:
+            parts.append(f"- {f}")
+
+    if recommendations:
+        parts.append("")
+        parts.append("Recommendations:")
+        for r in recommendations[:3]:
+            parts.append(f"- {r}")
+
+    return "\n".join(parts) if parts else fallback
+
+
+def _derive_content_title(
+    seo_meta: dict[str, Any],
+    blog_content: str,
+) -> str:
+    """Derive a meaningful title from SEO metadata or blog content.
+
+    Tries in order: SEO title, first markdown heading, first non-empty line.
+    """
+    # 1. SEO title from upstream content agent
+    title = seo_meta.get("title", "")
+    if isinstance(title, str) and title.strip():
+        return title.strip()[:200]
+
+    # 2. First markdown heading in blog content
+    for line in blog_content.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            return stripped.lstrip("# ").strip()[:200]
+
+    # 3. First non-empty line
+    for line in blog_content.split("\n"):
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return stripped[:120]
+
+    return ""
+
+
+def _derive_title(post: SocialPost) -> str:
+    """Derive a title from the post content itself (last resort)."""
+    first_line = post.content.split("\n", 1)[0].strip()
+    if first_line:
+        clean = first_line.rstrip("!?.…")
+        return clean[:120] if len(clean) > 120 else clean
+    return f"{post.platform.capitalize()} post"
+
+
+def _build_publishable_content(post: SocialPost) -> str:
+    """Build the final text to publish, including hashtags if missing.
+
+    Platform-specific behaviour:
+    - Twitter/X: cap total hashtags to 2 and enforce 280-char limit.
+    - Other platforms: append all missing hashtags.
+    """
+    content = post.content
+    if not post.hashtags:
+        return content
+
+    platform = (post.platform or "").lower()
+
+    # Check if hashtags are already present in the content
+    existing_tags = {
+        tag.lower() for tag in re.findall(r"#\w+", content)
+    }
+    missing = [
+        tag for tag in post.hashtags if tag.lower() not in existing_tags
+    ]
+    if not missing:
+        return content
+
+    # Twitter: stricter hashtag count and character limit
+    if platform in ("twitter", "x"):
+        max_hashtags_total = 2
+        allowed = max(max_hashtags_total - len(existing_tags), 0)
+        if allowed <= 0:
+            return content
+        missing = missing[:allowed]
+        candidate = content.rstrip() + "\n\n" + " ".join(missing)
+        if len(candidate) > 280:
+            return content
+        return candidate
+
+    content = content.rstrip() + "\n\n" + " ".join(missing)
+
+    return content
 
 
 # Platform aliases → canonical platform name

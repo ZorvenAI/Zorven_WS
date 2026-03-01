@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 from app.api.schemas import SocialPost
@@ -80,12 +81,12 @@ class PlatformAdapter:
             self._model.generate_content,
             prompt,
             generation_config={
-                "temperature": 0.7,
+                "temperature": 0.4,
                 "max_output_tokens": 1024,
             },
         )
 
-        content = response.text.strip()
+        content = _clean_ai_output(response.text.strip())
         hashtags = [f"#{kw.replace(' ', '')}" for kw in keywords[:5]]
 
         return self._build_post(platform, content, hashtags)
@@ -101,37 +102,50 @@ class PlatformAdapter:
         """Build a platform-specific prompt for Gemini."""
         keyword_str = ", ".join(keywords[:5]) if keywords else "industry-relevant"
 
+        # Common instruction to prevent multiple options / alternatives
+        no_options = (
+            "IMPORTANT: Output ONLY the final post text — nothing else. "
+            "Do NOT provide multiple options, alternatives, or variations. "
+            "Do NOT include labels like 'Option 1' or 'Here is a post'. "
+            "Just write the post itself, ready to publish."
+        )
+
         prompts = {
             "linkedin": (
-                f"Adapt this blog into a LinkedIn post for {brand_name}. "
-                f"Use a {brand_voice} tone. "
-                "Structure: 3 paragraphs — hook, value proposition, CTA. "
-                f"Max {LINKEDIN_MAX_CHARS} characters. "
-                f"Include 3-5 industry hashtags related to: {keyword_str}.\n\n"
+                f"Write exactly ONE LinkedIn post for {brand_name} based on "
+                f"the blog content below. Use a {brand_voice} tone. "
+                "Structure the post as: a compelling hook line, then the key "
+                "value or insight from the blog, then a call to action. "
+                f"Stay under {LINKEDIN_MAX_CHARS} characters. "
+                f"End with 3-5 hashtags related to: {keyword_str}.\n\n"
+                f"{no_options}\n\n"
                 f"Blog content:\n{content}"
             ),
             "twitter": (
-                f"Adapt this blog into a Twitter thread of 3-5 tweets for {brand_name}. "
-                f"Use a {brand_voice} tone. "
-                f"Each tweet max {TWITTER_MAX_CHARS} characters. "
-                "First tweet is a hook. Last tweet links back. "
-                "Use data points from the blog. Separate tweets with blank lines.\n\n"
+                f"Write exactly ONE tweet for {brand_name} based on "
+                f"the blog content below. Use a {brand_voice} tone. "
+                f"The tweet must be under {TWITTER_MAX_CHARS} characters. "
+                "Summarize the key insight in a concise, engaging way. "
+                f"Include 1-2 hashtags related to: {keyword_str}.\n\n"
+                f"{no_options}\n\n"
                 f"Blog content:\n{content}"
             ),
             "facebook": (
-                f"Adapt this blog into a Facebook post for {brand_name}. "
-                f"Use a conversational, {brand_voice} tone. "
-                "Include a question to drive engagement. "
-                f"Max {FACEBOOK_MAX_CHARS} characters for optimal reach.\n\n"
+                f"Write exactly ONE Facebook post for {brand_name} based on "
+                f"the blog content below. Use a conversational, {brand_voice} "
+                "tone. Include a question to drive engagement. "
+                f"Stay under {FACEBOOK_MAX_CHARS} characters.\n\n"
+                f"{no_options}\n\n"
                 f"Blog content:\n{content}"
             ),
             "instagram": (
-                f"Adapt this blog into an Instagram caption for {brand_name}. "
-                f"Use a {brand_voice} tone that is visual and engaging. "
-                "Start with a strong hook line. Use short paragraphs and "
-                "line breaks for readability. End with a clear CTA. "
-                f"Include 10-15 relevant hashtags related to: {keyword_str}. "
-                f"Max {INSTAGRAM_MAX_CHARS} characters.\n\n"
+                f"Write exactly ONE Instagram caption for {brand_name} based on "
+                f"the blog content below. Use a {brand_voice} tone that is "
+                "visual and engaging. Start with a strong hook line. Use short "
+                "paragraphs and line breaks for readability. End with a clear "
+                "CTA. Include 10-15 relevant hashtags related to: "
+                f"{keyword_str}. Stay under {INSTAGRAM_MAX_CHARS} characters.\n\n"
+                f"{no_options}\n\n"
                 f"Blog content:\n{content}"
             ),
         }
@@ -200,3 +214,46 @@ class PlatformAdapter:
             char_count=len(content),
             post_type=post_type,
         )
+
+
+# ── Post-processing helpers ──────────────────────────────────────────
+
+# Patterns that indicate Gemini returned multiple options instead of one post
+_OPTION_HEADER_RE = re.compile(
+    r"^(?:option\s*\d+|version\s*\d+|alternative\s*\d+|variant\s*\d+)\s*[:\-—]",
+    re.IGNORECASE | re.MULTILINE,
+)
+_INTRO_PREAMBLE_RE = re.compile(
+    r"^("
+    r"(?:here (?:is|are)|below (?:is|are)|sure[,!]|certainly[,!]|"
+    r"i'?d suggest|let me|this is a|the following)"
+    r"[^\n]{0,80}?"
+    r"(?:post|caption|tweet|thread|social(?: media)? (?:post|content))\s*[:\-—]"
+    r"|"
+    r"(?:post|caption|tweet|thread)\s*[:\-—]"
+    r")\s*\n+",
+    re.IGNORECASE,
+)
+
+
+def _clean_ai_output(text: str) -> str:
+    """Strip preamble and pick the first option if Gemini returned multiples."""
+    # Remove conversational preamble ("Here is a post for you:\n...")
+    text = _INTRO_PREAMBLE_RE.sub("", text).strip()
+
+    # If the response contains option headers, keep only the first option body
+    if _OPTION_HEADER_RE.search(text):
+        blocks = _OPTION_HEADER_RE.split(text)
+        # blocks[0] is text before first header (usually empty), blocks[1] is first option
+        if len(blocks) >= 2:
+            first_option = blocks[1].strip()
+            if first_option:
+                text = first_option
+
+    # Remove wrapping quotes if the entire text is quoted
+    if (text.startswith('"') and text.endswith('"')) or (
+        text.startswith("'") and text.endswith("'")
+    ):
+        text = text[1:-1].strip()
+
+    return text
