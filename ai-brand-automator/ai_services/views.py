@@ -1036,8 +1036,11 @@ def save_chat_response_to_rag(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    content = serializer.validated_data["content"]
-    title = serializer.validated_data["title"]
+    # Sanitize user-provided text before processing
+    content = sanitize_text_input(
+        serializer.validated_data["content"], max_length=500_000
+    )
+    title = sanitize_text_input(serializer.validated_data["title"], max_length=200)
 
     # Generate PDF
     try:
@@ -1056,28 +1059,26 @@ def save_chat_response_to_rag(request):
         f"{title_slug}-{content_hash}.pdf" if title_slug else f"rag-{content_hash}.pdf"
     )
 
-    # Upload PDF to GCS
+    # Upload PDF to GCS — deterministic path based on content hash
+    # so re-saves of the same content overwrite the same blob.
     raw_bucket = tenant.get_raw_bucket() if tenant else gcs_service.bucket_name
-    unique_id = uuid.uuid4().hex[:8]
-    landing_path = f"_landing/{tenant.id}/{unique_id}_{safe_name}"
-    gcs_uploaded = False
+    landing_path = f"_landing/{tenant.id}/{safe_name}"
 
     try:
         target_bucket = gcs_service.get_bucket(raw_bucket)
-        if target_bucket:
-            file_obj = io.BytesIO(pdf_bytes)
-            gcs_service.upload_file(
-                file_obj,
-                landing_path,
-                "application/pdf",
-                bucket_name=raw_bucket,
+        if not target_bucket:
+            logger.warning("GCS not configured for save-to-RAG.")
+            return Response(
+                {"error": "Storage is not configured."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-            gcs_uploaded = True
-        else:
-            logger.warning(
-                "GCS not configured, save-to-RAG record created "
-                "without file storage."
-            )
+        file_obj = io.BytesIO(pdf_bytes)
+        gcs_service.upload_file(
+            file_obj,
+            landing_path,
+            "application/pdf",
+            bucket_name=raw_bucket,
+        )
     except Exception:
         logger.exception("GCS upload failed for save-to-RAG.")
         return Response(
@@ -1096,20 +1097,19 @@ def save_chat_response_to_rag(request):
             "gcs_path": landing_path,
             "gcs_bucket": raw_bucket,
             "processed": False,
-            "pipeline_status": "pending" if gcs_uploaded else "failed",
-            "pipeline_error": "" if gcs_uploaded else "GCS not configured",
+            "pipeline_status": "pending",
+            "pipeline_error": "",
         },
     )
 
     # Trigger the standard data pipeline for RAG indexing
-    if gcs_uploaded:
-        try:
-            from onboarding.services import get_pipeline_service
+    try:
+        from onboarding.services import get_pipeline_service
 
-            pipeline_service = get_pipeline_service()
-            pipeline_service.publish_asset_event(asset)
-        except Exception as e:
-            logger.warning(f"Pipeline dispatch failed for save-to-RAG: {e}")
+        pipeline_service = get_pipeline_service()
+        pipeline_service.publish_asset_event(asset)
+    except Exception as e:
+        logger.warning(f"Pipeline dispatch failed for save-to-RAG: {e}")
 
     return Response(
         {

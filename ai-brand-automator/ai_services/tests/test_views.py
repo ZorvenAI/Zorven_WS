@@ -871,6 +871,25 @@ class TestSaveChatResponseToRAG:
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
     @patch("files.services.gcs_service")
+    def test_gcs_not_configured_returns_503(
+        self,
+        mock_gcs,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        mock_gcs.get_bucket.return_value = None
+        CompanyFactory(tenant=public_tenant)
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"content": "Test content", "title": "Test"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert "storage" in response.data["error"].lower()
+
+    @patch("files.services.gcs_service")
     def test_duplicate_content_updates_existing_asset(
         self,
         mock_gcs,
