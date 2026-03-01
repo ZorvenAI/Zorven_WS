@@ -529,9 +529,7 @@ class TestChatWithAIPipelineIntegration:
 
         from orchestration.models import AnalysisJob
 
-        job = AnalysisJob.objects.get(
-            job_id=response.data["pipeline_job"]["job_id"]
-        )
+        job = AnalysisJob.objects.get(job_id=response.data["pipeline_job"]["job_id"])
         # company_name and sector should be present
         assert job.input_context["company_name"] == "Nike"
         assert job.input_context["sector"] == "consumer_goods"
@@ -596,12 +594,10 @@ class TestChatWithAIPipelineIntegration:
 
         from orchestration.models import AnalysisJob
 
-        job = AnalysisJob.objects.get(
-            job_id=response.data["pipeline_job"]["job_id"]
-        )
-        assert job.manifest is not None, (
-            "Brand valuation job should use iso-brand-equity manifest"
-        )
+        job = AnalysisJob.objects.get(job_id=response.data["pipeline_job"]["job_id"])
+        assert (
+            job.manifest is not None
+        ), "Brand valuation job should use iso-brand-equity manifest"
         assert job.manifest.pipeline_id == "iso-brand-equity"
 
 
