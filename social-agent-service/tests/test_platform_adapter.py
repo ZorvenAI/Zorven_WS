@@ -13,6 +13,7 @@ from app.logic.platform_adapter import (
     LINKEDIN_MAX_CHARS,
     TWITTER_MAX_CHARS,
     PlatformAdapter,
+    _clean_ai_output,
 )
 
 
@@ -235,3 +236,75 @@ class TestAIMode:
         assert len(posts) == 1
         assert posts[0].platform == "linkedin"
         assert len(posts[0].content) > 0
+
+
+class TestCleanAIOutput:
+    """Tests for _clean_ai_output post-processing."""
+
+    def test_clean_text_unchanged(self):
+        text = "Great insights on sustainability! #Tesla #EV"
+        assert _clean_ai_output(text) == text
+
+    def test_strips_preamble_here_is(self):
+        text = "Here is a LinkedIn post for you:\nGreat insights on sustainability!"
+        assert _clean_ai_output(text) == "Great insights on sustainability!"
+
+    def test_strips_preamble_sure(self):
+        text = "Sure! Here's the post:\nGreat insights on sustainability!"
+        assert _clean_ai_output(text) == "Great insights on sustainability!"
+
+    def test_strips_preamble_certainly(self):
+        text = "Certainly! Below is the post:\nGreat insights!"
+        assert _clean_ai_output(text) == "Great insights!"
+
+    def test_picks_first_option(self):
+        text = (
+            "Option 1: Great insights on Tesla!\n\n"
+            "Option 2: Tesla is leading the charge!\n\n"
+            "Option 3: The future is electric with Tesla!"
+        )
+        result = _clean_ai_output(text)
+        assert "Option 1" not in result
+        assert "Option 2" not in result
+        assert "Option 3" not in result
+        assert "Great insights on Tesla!" in result
+
+    def test_picks_first_version(self):
+        text = (
+            "Version 1: Great insights on Tesla!\n\n"
+            "Version 2: Tesla is leading the charge!"
+        )
+        result = _clean_ai_output(text)
+        assert "Version" not in result
+        assert "Great insights on Tesla!" in result
+
+    def test_picks_first_alternative(self):
+        text = (
+            "Alternative 1 - Great insights on Tesla!\n\n"
+            "Alternative 2 - Tesla is leading the charge!"
+        )
+        result = _clean_ai_output(text)
+        assert "Alternative" not in result
+        assert "Great insights on Tesla!" in result
+
+    def test_removes_wrapping_double_quotes(self):
+        text = '"Great insights on sustainability! #Tesla #EV"'
+        assert _clean_ai_output(text) == "Great insights on sustainability! #Tesla #EV"
+
+    def test_removes_wrapping_single_quotes(self):
+        text = "'Great insights on sustainability!'"
+        assert _clean_ai_output(text) == "Great insights on sustainability!"
+
+    def test_preserves_internal_quotes(self):
+        text = 'Tesla says "the future is electric" and we agree!'
+        assert _clean_ai_output(text) == text
+
+    def test_combined_preamble_and_options(self):
+        text = (
+            "Here are some options for you:\n"
+            "Option 1: Great insights on Tesla!\n\n"
+            "Option 2: Tesla is leading the charge!"
+        )
+        result = _clean_ai_output(text)
+        assert "Option" not in result
+        assert "Great insights on Tesla!" in result

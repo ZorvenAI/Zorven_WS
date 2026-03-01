@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 6 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash.
+AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 7 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash. ~3,080 tests across all components.
 
 ## Monorepo Layout
 
@@ -22,7 +22,7 @@ deployment/                      # Master docker-compose, Kong config, scripts
 docs/                            # Architecture docs
 ```
 
-Each microservice has its own `CLAUDE.md` — read it before modifying that service.
+Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service. Missing: rag-uploader-agent-service.
 
 ## Build, Run, and Test Commands
 
@@ -35,7 +35,7 @@ cd ai-brand-automator && source ../.venv/bin/activate
 python manage.py runserver 0.0.0.0:8001
 
 # Tests
-pytest -v                                    # All ~2090 tests
+pytest -v                                    # All ~2075 tests
 pytest automation/tests/ -v                  # Single app
 pytest media_curation/tests/test_views.py -v # Single file
 pytest -k "test_my_function" -v              # Single test by name
@@ -104,6 +104,8 @@ docker compose down -v                                        # Tear down
 
 **Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, Orchestrator 8010, Discovery 8020, Intelligence 8030, Titling 8040, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080
 
+**Frontend Docker build** requires `output: "standalone"` in `next.config.ts`. Without it, the Dockerfile `COPY --from=builder /app/.next/standalone` step fails.
+
 ## Architecture
 
 ### Request Flow
@@ -126,6 +128,12 @@ Django dispatches job → pipeline-orchestrator-svc (:8010) → LangGraph DAG
 ```
 
 When `ORCHESTRATION_KAFKA_ENABLED=false` (default), dispatch is HTTP. When `true`, dispatch goes through `pipeline-trigger-topic`. When Kafka is unavailable, system falls back to HTTP dispatch and Celery tasks for the data pipeline.
+
+**Two pipeline modes:**
+- **Chat (auto-detect)**: Dispatched without a manifest. `PipelineComposer` uses Gemini function-calling to dynamically compose a pipeline from the node catalog. Chat ALWAYS uses this mode.
+- **Pipeline UI (manifest-driven)**: Dispatched with a `PipelineManifest` from `seed_manifests.py`. Fixed DAG defined in the manifest JSON.
+
+**Per-node progress tracking**: Each node is wrapped by `TrackedNode` (`pipeline-orchestrator-svc/app/nodes/tracked.py`) which sends HTTP progress callbacks + Kafka trace events before/after execution. Django's `result_handler.py` updates the DB and Redis cache with `current_node` and `progress_percent` on every callback. Frontend polls `/quick-status` every 3s via `usePollingJob`.
 
 ### Data Pipeline (Hexagonal Architecture)
 
@@ -155,7 +163,7 @@ DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB
 
 ### Microservice Layout Convention
 
-All 6 agent microservices follow this structure:
+All 7 agent microservices follow this structure:
 ```
 {service}/app/
 ├── api/          # FastAPI routes + Pydantic request/response schemas
@@ -167,7 +175,17 @@ All 6 agent microservices follow this structure:
 └── main.py       # FastAPI application with lifespan management
 ```
 
-Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `CONTENT_`, `SOCIAL_`, `TITLING_`).
+Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `CONTENT_`, `SOCIAL_`, `TITLING_`, `RAG_UPLOADER_`).
+
+### Kafka Topics
+
+| Topic | Producer | Consumer | Purpose |
+|-------|----------|----------|---------|
+| `pipeline-trigger-topic` | Django (Celery) | Orchestrator | Pipeline dispatch |
+| `pipeline-result-topic` | Orchestrator | Django (Celery) | Job results |
+| `agent-trace-topic` | Orchestrator nodes | Django (Celery) | Real-time node progress/thoughts |
+| `data-ingestion-topic` | `data_ingestion` app | `media_curation` consumer | File processing pipeline |
+| `media-curation-topic` | `media_curation` consumer | `rag_index` consumer | RAG indexing pipeline |
 
 ## Critical Code Patterns
 
@@ -300,6 +318,11 @@ Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `t
 | Orchestration views + callbacks | `ai-brand-automator/orchestration/views.py` |
 | Orchestration dispatch service | `ai-brand-automator/orchestration/services.py` |
 | Pipeline manifest seeder | `ai-brand-automator/orchestration/management/commands/seed_manifests.py` |
+| Pipeline result handler | `ai-brand-automator/orchestration/result_handler.py` |
+| Orchestrator graph builder | `pipeline-orchestrator-svc/app/factory/graph_builder.py` |
+| Orchestrator job executor | `pipeline-orchestrator-svc/app/services/job_executor.py` |
+| Pipeline node tracker | `pipeline-orchestrator-svc/app/nodes/tracked.py` |
+| Pipeline composer (auto-detect) | `pipeline-orchestrator-svc/app/nodes/internal/pipeline_composer.py` |
 | Frontend API client | `ai-brand-automator-frontend/src/lib/api.ts` |
 | Frontend error types | `ai-brand-automator-frontend/src/lib/errors.ts` |
 | Tenant context | `ai-brand-automator-frontend/src/contexts/TenantContext.tsx` |

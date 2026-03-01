@@ -86,12 +86,18 @@ export default function ResultDashboard({
 }: ResultDashboardProps) {
   const [copiedBlog, setCopiedBlog] = useState(false);
 
-  // Route to specialized dashboard for Brand Equity / ISO pipelines
-  const isBrandEquity =
+  // Route to specialized dashboard for Brand Equity / ISO pipelines.
+  // Detect by manifest name OR by result_data shape (chat pipelines
+  // use auto-detect mode and have no manifest, but produce identical data).
+  const isBrandEquityByName =
     manifestName &&
     (/brand.?equity/i.test(manifestName) || /iso/i.test(manifestName));
+  const isBrandEquityByContent =
+    resultData.valuation != null &&
+    typeof resultData.score === 'number' &&
+    resultData.score > 0;
 
-  if (isBrandEquity) {
+  if (isBrandEquityByName || isBrandEquityByContent) {
     return <BrandEquityDashboard resultData={resultData} />;
   }
 
