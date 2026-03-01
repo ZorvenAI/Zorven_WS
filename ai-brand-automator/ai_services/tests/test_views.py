@@ -508,7 +508,7 @@ class TestChatWithAIPipelineIntegration:
         authenticated_client_with_tenant,
         public_tenant,
     ):
-        """Financial data NOT in job_context — intelligence agent does its own lookup."""
+        """Financial data NOT in job_context — intel agent looks up."""
         mock_classify.return_value = {"intent": "pipeline", "confidence": 0.9}
         mock_extract.return_value = {
             "company_name": "Nike",
