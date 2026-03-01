@@ -5,6 +5,7 @@ from .views import (
     AIGenerationViewSet,
     chat_with_ai,
     upload_chat_attachment,
+    save_chat_response_to_rag,
     generate_brand_strategy,
     generate_brand_identity,
     analyze_market,
@@ -18,6 +19,11 @@ router.register(r"generations", AIGenerationViewSet)
 urlpatterns = router.urls + [
     path("chat/", chat_with_ai, name="chat_with_ai"),
     path("chat/upload/", upload_chat_attachment, name="upload_chat_attachment"),
+    path(
+        "chat/save-to-rag/",
+        save_chat_response_to_rag,
+        name="save_chat_response_to_rag",
+    ),
     path(
         "generate/brand-strategy/",
         generate_brand_strategy,

@@ -53,6 +53,8 @@ python manage.py migrate_schemas --shared --noinput
 
 # Seed pipeline manifests (idempotent, run after manifest changes)
 python manage.py seed_manifests
+python manage.py seed_subscription_plans        # Seed Stripe plans
+python manage.py check                          # Django system check
 
 # Celery workers (6 queues: celery, high_priority, low_priority, orchestration, ingestion, curation)
 celery -A brand_automator worker -l info                       # Default queue
@@ -127,7 +129,7 @@ Django dispatches job → pipeline-orchestrator-svc (:8010) → LangGraph DAG
   → Callback → Django AnalysisJob (atomic update)
 ```
 
-When `ORCHESTRATION_KAFKA_ENABLED=false` (default), dispatch is HTTP. When `true`, dispatch goes through `pipeline-trigger-topic`. When Kafka is unavailable, system falls back to HTTP dispatch and Celery tasks for the data pipeline.
+When `ORCHESTRATION_KAFKA_ENABLED=false` (default), dispatch is HTTP. When `true`, dispatch goes through `pipeline-trigger-topic`. When Kafka is unavailable, system falls back to HTTP dispatch and Celery tasks for the data pipeline. Related env vars: `KAFKA_CONSUMERS_ENABLED` (controls Celery Kafka consumers), `ONBOARDING_KAFKA_ENABLED` (controls file upload Kafka publishing).
 
 **Two pipeline modes:**
 - **Chat (auto-detect)**: Dispatched without a manifest. `PipelineComposer` uses Gemini function-calling to dynamically compose a pipeline from the node catalog. Chat ALWAYS uses this mode.
@@ -135,13 +137,24 @@ When `ORCHESTRATION_KAFKA_ENABLED=false` (default), dispatch is HTTP. When `true
 
 **Per-node progress tracking**: Each node is wrapped by `TrackedNode` (`pipeline-orchestrator-svc/app/nodes/tracked.py`) which sends HTTP progress callbacks + Kafka trace events before/after execution. Django's `result_handler.py` updates the DB and Redis cache with `current_node` and `progress_percent` on every callback. Frontend polls `/quick-status` every 3s via `usePollingJob`.
 
+**Cancel mechanism**: Sets `cancel:{job_id}` key in Redis with 1-hour TTL. `TrackedNode` checks this before each node execution.
+
+**Social agent publishing**: Social agent generates content via Gemini, then delegates actual platform publishing to Django's MCP server (via `SOCIAL_MCP_SERVER_URL`), which has per-platform SDK wrappers.
+
 ### Data Pipeline (Hexagonal Architecture)
 
 ```
 Upload → data_ingestion → Kafka → media_curation → Kafka → rag_index (Vertex AI)
 ```
 
-Pipeline apps (`data_ingestion/`, `media_curation/`, `rag_index/`) use **Pydantic domain models (NOT Django ORM)**, ABC ports, and concrete adapters. Never import Django ORM in these apps' domain layers.
+Pipeline apps (`data_ingestion/`, `media_curation/`, `rag_index/`) use **Pydantic domain models (NOT Django ORM)**, ABC ports, and concrete adapters. Never import Django ORM in these apps' domain layers. Each follows:
+```
+{app}/domain/    # Pydantic models
+{app}/ports/     # ABC interfaces (StoragePort, etc.)
+{app}/adapters/  # Concrete implementations (GCSStorageAdapter, KafkaProducerAdapter)
+{app}/services/  # Business logic
+{app}/factory.py # DI wiring
+```
 
 ### Multi-Tenancy
 
@@ -186,6 +199,11 @@ Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `C
 | `agent-trace-topic` | Orchestrator nodes | Django (Celery) | Real-time node progress/thoughts |
 | `data-ingestion-topic` | `data_ingestion` app | `media_curation` consumer | File processing pipeline |
 | `media-curation-topic` | `media_curation` consumer | `rag_index` consumer | RAG indexing pipeline |
+| `discovery-audit-topic` | Discovery agent | — | Discovery audit trail |
+| `valuation-audit-logs` | Intelligence agent | — | Valuation audit trail |
+| `content-published-topic` | Content agent | — | Content publish events |
+| `social-audit-topic` | Social agent | — | Social publish audit trail |
+| `chat-titling-topic` | Django | Titling worker | Chat session titling |
 
 ## Critical Code Patterns
 
@@ -208,10 +226,17 @@ obj = Model.objects.create(tenant=getattr(request, 'tenant', None), ...)
 
 ```python
 tenant = models.ForeignKey("tenants.Tenant", on_delete=models.CASCADE, null=True, blank=True, related_name="%(class)ss")
+created_at = models.DateTimeField(auto_now_add=True)
+updated_at = models.DateTimeField(auto_now=True)
+
+def __str__(self):
+    return self.name  # Always define __str__
 
 class Meta:
     ordering = ["-created_at"]
 ```
+
+Use `UniqueConstraint` (not deprecated `unique_together`).
 
 ### Django ViewSets
 
@@ -297,7 +322,7 @@ Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `t
 
 ### Frontend
 - **API calls**: Always `apiClient` from `@/lib/api` — NEVER raw `fetch()`
-- **TypeScript**: Strict mode, path alias `@/*` → `./src/*`
+- **TypeScript**: Strict mode, path alias `@/*` → `./src/*`, never use `any` — use `unknown` and narrow with type guards
 - **ESLint only** (no Prettier)
 - **Components**: Functional components only, no class-based React
 
@@ -323,6 +348,7 @@ Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `t
 | Orchestrator job executor | `pipeline-orchestrator-svc/app/services/job_executor.py` |
 | Pipeline node tracker | `pipeline-orchestrator-svc/app/nodes/tracked.py` |
 | Pipeline composer (auto-detect) | `pipeline-orchestrator-svc/app/nodes/internal/pipeline_composer.py` |
+| Node registry (all available nodes) | `pipeline-orchestrator-svc/app/factory/node_registry.py` |
 | Frontend API client | `ai-brand-automator-frontend/src/lib/api.ts` |
 | Frontend error types | `ai-brand-automator-frontend/src/lib/errors.ts` |
 | Tenant context | `ai-brand-automator-frontend/src/contexts/TenantContext.tsx` |
@@ -330,8 +356,14 @@ Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `t
 | Polling hook | `ai-brand-automator-frontend/src/hooks/usePollingJob.ts` |
 | Pipeline graph UI | `ai-brand-automator-frontend/src/components/pipelines/PipelineGraph.tsx` |
 | Orchestration types (FE) | `ai-brand-automator-frontend/src/types/orchestration.ts` |
+| Frontend orchestration helpers | `ai-brand-automator-frontend/src/lib/orchestration.ts` |
+| Frontend env config | `ai-brand-automator-frontend/src/lib/env.ts` |
+| Onboarding pipeline service | `ai-brand-automator/onboarding/services.py` |
+| Backend Procfile (9 processes) | `ai-brand-automator/Procfile` |
 | Architecture overview | `ARCHITECTURE.md` |
 | Copilot instructions | `.github/copilot-instructions.md` |
+| Scoped instructions (backend/frontend/pipeline/testing) | `.github/instructions/` |
+| Debug skills (pipeline, tenant, social) | `.github/skills/` |
 | Agent boundaries | `AGENTS.md` |
 
 ## Commit Messages
@@ -346,6 +378,14 @@ Conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`
 - **Email**: Redirected to `locmem.EmailBackend` (autouse fixture)
 - **Orchestrator**: Mocked via `unittest.mock.patch` on `OrchestratorDispatcher`
 - **Microservice integration tests**: Marked with `@pytest.mark.integration` (require Redis)
+- **Test markers**: `unit`, `integration`, `property`, `hypothesis`, `slow`, `skip_ci`, `gcp` (real GCP creds), `asyncio`
+- **Test pyramid**: 70% unit / 25% integration / 5% property
+
+## Do Not Modify
+
+- `docs/LICENSE.md`, `credentials/`, `db.sqlite3` — Protected files
+- `.github/workflows/ci-cd.yml` — CI pipeline (coordinate with team)
+- `deployment/config/kong/` — Kong gateway config
 
 ## Modify With Caution
 

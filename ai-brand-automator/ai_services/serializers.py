@@ -145,3 +145,16 @@ class MarketAnalysisRequestSerializer(serializers.Serializer):
     """Serializer for market analysis requests."""
 
     company_id = serializers.IntegerField(required=True)
+
+
+class SaveResponseToRAGSerializer(serializers.Serializer):
+    """Serializer for saving AI chat responses to the RAG knowledge base."""
+
+    content = serializers.CharField(
+        required=True,
+        max_length=500_000,
+    )
+    title = serializers.CharField(
+        required=True,
+        max_length=200,
+    )

@@ -1,4 +1,7 @@
+import hashlib
+import io
 import logging
+import re
 
 from django.conf import settings
 from django.core.cache import cache
@@ -21,6 +24,7 @@ from .serializers import (
     BrandStrategyRequestSerializer,
     BrandIdentityRequestSerializer,
     MarketAnalysisRequestSerializer,
+    SaveResponseToRAGSerializer,
 )
 from brand_automator.validators import sanitize_text_input
 from .services import ai_service, GeminiAIService
@@ -963,3 +967,156 @@ def upload_chat_attachment(request):
 
     serializer = SessionAttachmentSerializer(attachment)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+def _generate_pdf(title: str, content: str) -> bytes:
+    """Generate a PDF document with the given title and content."""
+    import textwrap
+    from fpdf import FPDF
+
+    # Sanitize to latin-1 (the encoding fpdf2 built-in fonts use)
+    safe_title = title.encode("latin-1", errors="replace").decode("latin-1")
+    safe_content = content.encode("latin-1", errors="replace").decode("latin-1")
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    # Title
+    pdf.set_font("Helvetica", "B", 16)
+    page_w = pdf.w - pdf.l_margin - pdf.r_margin
+    pdf.multi_cell(page_w, 10, safe_title)
+    pdf.ln(5)
+
+    # Body — manually wrap lines then render with cell() to avoid
+    # fpdf2 multi_cell layout errors on long unbreakable strings.
+    pdf.set_font("Helvetica", "", 9)
+    line_h = 5
+    wrap_width = 105  # chars that fit at Helvetica 9pt on A4 portrait
+
+    for raw_line in safe_content.split("\n"):
+        if not raw_line.strip():
+            pdf.ln(line_h)
+            continue
+        for wrapped in textwrap.wrap(
+            raw_line, width=wrap_width, break_long_words=True, break_on_hyphens=False
+        ):
+            pdf.cell(w=page_w, h=line_h, text=wrapped, new_x="LMARGIN", new_y="NEXT")
+
+    return bytes(pdf.output())
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsTenantEditor])
+def save_chat_response_to_rag(request):
+    """Save pipeline result content as a PDF in the RAG knowledge base.
+
+    The content is converted to PDF, uploaded to GCS, and pushed through
+    the standard data pipeline:
+        GCS (_landing/) -> data_ingestion -> media_curation -> rag_index -> Vertex AI
+    """
+    from onboarding.models import BrandAsset
+    from files.services import gcs_service
+
+    serializer = SaveResponseToRAGSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    tenant = getattr(request, "tenant", None)
+    if not tenant:
+        return Response(
+            {"error": "No tenant context."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    company = Company.objects.filter(tenant=tenant).first()
+    if not company:
+        return Response(
+            {"error": "No company found for this workspace."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Sanitize user-provided text before processing
+    content = sanitize_text_input(
+        serializer.validated_data["content"], max_length=500_000
+    )
+    title = sanitize_text_input(serializer.validated_data["title"], max_length=200)
+
+    # Generate PDF
+    try:
+        pdf_bytes = _generate_pdf(title, content)
+    except Exception:
+        logger.exception("PDF generation failed for save-to-RAG.")
+        return Response(
+            {"error": "Failed to generate PDF."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    # Build a deterministic, human-readable file name
+    content_hash = hashlib.sha256(content.encode()).hexdigest()[:12]
+    title_slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60]
+    safe_name = (
+        f"{title_slug}-{content_hash}.pdf" if title_slug else f"rag-{content_hash}.pdf"
+    )
+
+    # Upload PDF to GCS — deterministic path based on content hash
+    # so re-saves of the same content overwrite the same blob.
+    raw_bucket = tenant.get_raw_bucket() if tenant else gcs_service.bucket_name
+    landing_path = f"_landing/{tenant.id}/{safe_name}"
+
+    try:
+        target_bucket = gcs_service.get_bucket(raw_bucket)
+        if not target_bucket:
+            logger.warning("GCS not configured for save-to-RAG.")
+            return Response(
+                {"error": "Storage is not configured."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        file_obj = io.BytesIO(pdf_bytes)
+        gcs_service.upload_file(
+            file_obj,
+            landing_path,
+            "application/pdf",
+            bucket_name=raw_bucket,
+        )
+    except Exception:
+        logger.exception("GCS upload failed for save-to-RAG.")
+        return Response(
+            {"error": "Failed to save content to storage."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    # Create or update BrandAsset (handles re-saves of same content)
+    asset, _created = BrandAsset.objects.update_or_create(
+        tenant=tenant,
+        company=company,
+        file_name=safe_name,
+        defaults={
+            "file_type": "document",
+            "file_size": len(pdf_bytes),
+            "gcs_path": landing_path,
+            "gcs_bucket": raw_bucket,
+            "processed": False,
+            "pipeline_status": "pending",
+            "pipeline_error": "",
+        },
+    )
+
+    # Trigger the standard data pipeline for RAG indexing
+    try:
+        from onboarding.services import get_pipeline_service
+
+        pipeline_service = get_pipeline_service()
+        pipeline_service.publish_asset_event(asset)
+    except Exception as e:
+        logger.warning(f"Pipeline dispatch failed for save-to-RAG: {e}")
+
+    return Response(
+        {
+            "asset_id": asset.id,
+            "file_name": safe_name,
+            "pipeline_status": asset.pipeline_status,
+            "message": "Content saved to knowledge base.",
+        },
+        status=status.HTTP_202_ACCEPTED,
+    )

@@ -5,7 +5,7 @@ Tests ChatSessionViewSet, AIGenerationViewSet, and API endpoints.
 
 import pytest
 import uuid
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from rest_framework import status
 from django.urls import reverse
 
@@ -758,3 +758,162 @@ class TestSessionListCaching:
 
         cached = cache.get(cache_key)
         assert cached is None
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestSaveChatResponseToRAG:
+    """Tests for save_chat_response_to_rag endpoint"""
+
+    def url(self):
+        return reverse("save_chat_response_to_rag")
+
+    def test_unauthenticated_request_rejected(self, api_client):
+        response = api_client.post(self.url(), {"content": "Hello"}, format="json")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_missing_content_field(self, authenticated_client_with_tenant):
+        response = authenticated_client_with_tenant.post(
+            self.url(), {"title": "Test"}, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_missing_title_field(self, authenticated_client_with_tenant):
+        response = authenticated_client_with_tenant.post(
+            self.url(), {"content": "Hello"}, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_no_company_returns_400(self, authenticated_client_with_tenant):
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"content": "Hello", "title": "Test Title"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "company" in response.data["error"].lower()
+
+    @patch("files.services.gcs_service")
+    def test_save_content_success(
+        self,
+        mock_gcs,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        from onboarding.models import BrandAsset
+
+        mock_gcs.get_bucket.return_value = MagicMock()
+
+        CompanyFactory(tenant=public_tenant)
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {
+                "content": "This is important brand knowledge.",
+                "title": "Brand Insight",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert "asset_id" in response.data
+        assert response.data["pipeline_status"] == "pending"
+        assert response.data["file_name"].startswith("brand-insight-")
+        assert response.data["file_name"].endswith(".pdf")
+
+        # Verify BrandAsset was created
+        asset = BrandAsset.objects.get(id=response.data["asset_id"])
+        assert asset.tenant == public_tenant
+        assert asset.file_type == "document"
+        mock_gcs.upload_file.assert_called_once()
+
+        # Verify PDF content type was used
+        call_args = mock_gcs.upload_file.call_args
+        assert call_args[0][2] == "application/pdf"
+
+    @patch("files.services.gcs_service")
+    def test_save_content_with_title(
+        self,
+        mock_gcs,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        mock_gcs.get_bucket.return_value = MagicMock()
+        CompanyFactory(tenant=public_tenant)
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"content": "Some AI response text.", "title": "Blog Post"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert response.data["file_name"].startswith("blog-post-")
+        assert response.data["file_name"].endswith(".pdf")
+
+    @patch("files.services.gcs_service")
+    def test_gcs_failure_returns_500(
+        self,
+        mock_gcs,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        mock_gcs.get_bucket.return_value = MagicMock()
+        mock_gcs.upload_file.side_effect = Exception("GCS down")
+        CompanyFactory(tenant=public_tenant)
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"content": "Test content", "title": "Test"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    @patch("files.services.gcs_service")
+    def test_gcs_not_configured_returns_503(
+        self,
+        mock_gcs,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        mock_gcs.get_bucket.return_value = None
+        CompanyFactory(tenant=public_tenant)
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"content": "Test content", "title": "Test"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert "storage" in response.data["error"].lower()
+
+    @patch("files.services.gcs_service")
+    def test_duplicate_content_updates_existing_asset(
+        self,
+        mock_gcs,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        from onboarding.models import BrandAsset
+
+        mock_gcs.get_bucket.return_value = MagicMock()
+        CompanyFactory(tenant=public_tenant)
+
+        content = "Exact same content for dedup test."
+        payload = {"content": content, "title": "Dedup Test"}
+
+        resp1 = authenticated_client_with_tenant.post(
+            self.url(), payload, format="json"
+        )
+        resp2 = authenticated_client_with_tenant.post(
+            self.url(), payload, format="json"
+        )
+
+        assert resp1.status_code == status.HTTP_202_ACCEPTED
+        assert resp2.status_code == status.HTTP_202_ACCEPTED
+        # Same content hash → same file_name → update_or_create reuses the asset
+        assert resp1.data["file_name"] == resp2.data["file_name"]
+        assert resp1.data["file_name"].endswith(".pdf")
+        assert BrandAsset.objects.filter(file_name=resp1.data["file_name"]).count() == 1
