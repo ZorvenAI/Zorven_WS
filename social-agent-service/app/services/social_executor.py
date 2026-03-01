@@ -82,12 +82,15 @@ class SocialExecutor:
                 request.previous_outputs, request.input_prompt
             )
             if blog_content != request.input_prompt:
+                content_hash = hashlib.sha256(blog_content.encode("utf-8")).hexdigest()[
+                    :8
+                ]
                 logger.info(
                     "Job %s: built social content from analysis results "
-                    "(%d chars): %.200s",
+                    "(len=%d, sha256_prefix=%s)",
                     job_id,
                     len(blog_content),
-                    blog_content,
+                    content_hash,
                 )
             else:
                 logger.info(

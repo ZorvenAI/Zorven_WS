@@ -14,6 +14,7 @@ from app.logic.platform_adapter import (
     TWITTER_MAX_CHARS,
     PlatformAdapter,
     _clean_ai_output,
+    _is_analysis_content,
 )
 
 
@@ -223,9 +224,7 @@ class TestAIMode:
         sample_brand_persona: dict[str, Any],
     ):
         mock_model = MagicMock()
-        mock_model.generate_content = MagicMock(
-            side_effect=RuntimeError("API error")
-        )
+        mock_model.generate_content = MagicMock(side_effect=RuntimeError("API error"))
         adapter = PlatformAdapter(gemini_model=mock_model)
 
         seo_meta = {"title": "Tesla", "keywords": ["Tesla"]}
@@ -317,3 +316,85 @@ class TestCleanAIOutput:
         result = _clean_ai_output(text)
         assert "Option" not in result
         assert "Great insights on Tesla!" in result
+
+
+class TestAnalysisContentDetection:
+    """Tests for _is_analysis_content and analysis-aware prompt routing."""
+
+    def test_brand_equity_content_detected(self):
+        content = (
+            "Brand Valuation: $142,154 (ISO 10668 royalty relief)\n"
+            "Royalty Rate: 4.0%\n"
+            "Brand Strength Index (BSI): 72/100"
+        )
+        assert _is_analysis_content(content) is True
+
+    def test_blog_content_not_detected(self):
+        content = (
+            "# How Tesla Is Changing the EV Landscape\n\n"
+            "Tesla continues to push boundaries in sustainable transport. "
+            "Their latest innovations show a commitment to a greener future."
+        )
+        assert _is_analysis_content(content) is False
+
+    def test_single_marker_not_enough(self):
+        content = "Brand Valuation: $50,000 and nothing else relevant."
+        assert _is_analysis_content(content) is False
+
+    def test_findings_and_bsi_detected(self):
+        content = "BSI: 68/100\n\n" "Key Findings:\n" "- Market share increased by 15%"
+        assert _is_analysis_content(content) is True
+
+    def test_empty_content(self):
+        assert _is_analysis_content("") is False
+
+    async def test_ai_uses_analysis_prompt_for_metrics(
+        self,
+        sample_brand_persona: dict,
+    ):
+        """When content is analysis data, Gemini receives the analysis prompt."""
+        mock_model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = (
+            "Our brand valuation just hit $142K! "
+            "With a BSI of 72/100, we're stronger than ever. "
+            "#BrandEquity #Growth"
+        )
+        mock_model.generate_content = MagicMock(return_value=mock_response)
+        adapter = PlatformAdapter(gemini_model=mock_model)
+
+        analysis_content = (
+            "Brand Valuation: $142,154 (ISO 10668 royalty relief)\n"
+            "Royalty Rate: 4.0%\n"
+            "Brand Strength Index (BSI): 72/100"
+        )
+        seo_meta = {"keywords": ["brand equity"]}
+        await adapter.adapt(
+            analysis_content, seo_meta, sample_brand_persona, ["linkedin"]
+        )
+
+        prompt = mock_model.generate_content.call_args[0][0]
+        assert "Brand analysis results:" in prompt
+        assert "ISO 10668" in prompt
+        assert "Blog content:" not in prompt
+
+    async def test_ai_uses_blog_prompt_for_articles(
+        self,
+        sample_blog_content: str,
+        sample_brand_persona: dict,
+    ):
+        """When content is a blog, Gemini receives the blog prompt."""
+        mock_model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = "Check out our latest blog on sustainability!"
+        mock_model.generate_content = MagicMock(return_value=mock_response)
+        adapter = PlatformAdapter(gemini_model=mock_model)
+
+        seo_meta = {"keywords": ["sustainability"]}
+        await adapter.adapt(
+            sample_blog_content, seo_meta, sample_brand_persona, ["linkedin"]
+        )
+
+        prompt = mock_model.generate_content.call_args[0][0]
+        assert "Blog content:" in prompt
+        assert "Brand analysis results:" not in prompt
