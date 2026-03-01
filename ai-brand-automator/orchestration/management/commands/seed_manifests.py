@@ -93,15 +93,15 @@ class Command(BaseCommand):
                         "handler": "StrategyNode",
                     },
                     {
-                        "id": "report_generator",
+                        "id": "manager",
                         "type": "internal",
-                        "handler": "ReportNode",
+                        "handler": "ManagerNode",
                     },
                 ],
                 "edges": [
                     ["intent_router", "market_research"],
                     ["market_research", "brand_strategist"],
-                    ["brand_strategist", "report_generator"],
+                    ["brand_strategist", "manager"],
                 ],
                 "global_config": {
                     "model": "gemini-2.0-flash",
@@ -140,15 +140,15 @@ class Command(BaseCommand):
                         },
                     },
                     {
-                        "id": "report_generator",
+                        "id": "manager",
                         "type": "internal",
-                        "handler": "ReportNode",
+                        "handler": "ManagerNode",
                     },
                 ],
                 "edges": [
                     ["intent_router", "competitor_research"],
                     ["competitor_research", "gap_analyzer"],
-                    ["gap_analyzer", "report_generator"],
+                    ["gap_analyzer", "manager"],
                 ],
                 "global_config": {
                     "model": "gemini-2.0-flash",

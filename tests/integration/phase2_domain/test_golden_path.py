@@ -66,6 +66,17 @@ class TestGoldenPath:
             manifest=ISO_BRAND_EQUITY_MANIFEST,
             callback_url="http://host.docker.internal:9998/callback",
         )
+        # Provide financial data so valuation works without Gemini
+        payload["input_context"].update(
+            {
+                "company_name": "TestCorp",
+                "sector": "technology",
+                "base_revenue": 1_000_000_000,
+                "growth_rate": 0.08,
+                "profit_margin": 0.15,
+                "brand_awareness": 70,
+            }
+        )
         resp = await http_client.post(
             f"{ORCHESTRATOR_URL}/v1/jobs/dispatch",
             json=payload,

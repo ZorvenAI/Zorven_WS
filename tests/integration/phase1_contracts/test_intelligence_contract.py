@@ -21,7 +21,20 @@ class TestIntelligenceContract:
     ):
         """POST /v1/iso-calc returns valuation and BSI objects."""
         payload = make_agent_payload(
+            input_prompt="Calculate brand equity for TestCorp",
             config={"method": "royalty_relief", "horizon_years": 5},
+        )
+        # Provide financial data so valuation works without Gemini
+        payload["input_context"].update(
+            {
+                "company_name": "TestCorp",
+                "sector": "technology",
+                "base_revenue": 1_000_000_000,
+                "growth_rate": 0.08,
+                "profit_margin": 0.15,
+                "brand_awareness": 70,
+                "market_share": 0.10,
+            }
         )
         resp = await http_client.post(
             f"{INTELLIGENCE_URL}/v1/iso-calc",
@@ -53,7 +66,9 @@ class TestIntelligenceContract:
         assert isinstance(bsi["score"], int)
         assert 0 <= bsi["score"] <= 100
 
-    async def test_analyze_returns_gap_analysis(self, http_client, tenant_headers):
+    async def test_analyze_returns_gap_analysis(
+        self, http_client, tenant_headers
+    ):
         """POST /v1/analyze returns findings and recommendations."""
         payload = make_agent_payload(
             config={"analysis_type": "competitive_gap"},
@@ -84,10 +99,23 @@ class TestIntelligenceContract:
         assert "recommendations" in data
         assert len(data["findings"]) > 0
 
-    async def test_execute_routes_by_config_method(self, http_client, tenant_headers):
-        """config.method='royalty_relief' triggers ISO valuation path."""
+    async def test_execute_routes_by_config_method(
+        self, http_client, tenant_headers
+    ):
+        """royalty_relief config triggers ISO valuation path."""
         payload = make_agent_payload(
+            input_prompt="Calculate brand equity for TestCorp",
             config={"method": "royalty_relief"},
+        )
+        payload["input_context"].update(
+            {
+                "company_name": "TestCorp",
+                "sector": "technology",
+                "base_revenue": 1_000_000_000,
+                "growth_rate": 0.08,
+                "profit_margin": 0.15,
+                "brand_awareness": 70,
+            }
         )
         resp = await http_client.post(
             f"{INTELLIGENCE_URL}/v1/execute",
@@ -102,8 +130,10 @@ class TestIntelligenceContract:
             or data.get("methodology") == "royalty_relief"
         )
 
-    async def test_execute_routes_by_analysis_type(self, http_client, tenant_headers):
-        """config.analysis_type='competitive_gap' triggers gap analysis."""
+    async def test_execute_routes_by_analysis_type(
+        self, http_client, tenant_headers
+    ):
+        """competitive_gap config triggers gap analysis."""
         payload = make_agent_payload(
             config={"analysis_type": "competitive_gap"},
         )
@@ -116,10 +146,23 @@ class TestIntelligenceContract:
         data = resp.json()
         assert "findings" in data
 
-    async def test_bsi_schema_has_pillars(self, http_client, tenant_headers):
-        """BSI pillars are a list of {name, weight, score, rationale}."""
+    async def test_bsi_schema_has_pillars(
+        self, http_client, tenant_headers
+    ):
+        """BSI pillars: list of {name, weight, score, rationale}."""
         payload = make_agent_payload(
+            input_prompt="Calculate brand equity for TestCorp",
             config={"method": "royalty_relief"},
+        )
+        payload["input_context"].update(
+            {
+                "company_name": "TestCorp",
+                "sector": "technology",
+                "base_revenue": 1_000_000_000,
+                "growth_rate": 0.08,
+                "profit_margin": 0.15,
+                "brand_awareness": 70,
+            }
         )
         resp = await http_client.post(
             f"{INTELLIGENCE_URL}/v1/iso-calc",
@@ -147,7 +190,18 @@ class TestIntelligenceContract:
     async def test_valuation_schema_has_npv(self, http_client, tenant_headers):
         """Valuation object has brand_value_npv as positive float."""
         payload = make_agent_payload(
+            input_prompt="Calculate brand equity for TestCorp",
             config={"method": "royalty_relief", "horizon_years": 5},
+        )
+        payload["input_context"].update(
+            {
+                "company_name": "TestCorp",
+                "sector": "technology",
+                "base_revenue": 1_000_000_000,
+                "growth_rate": 0.08,
+                "profit_margin": 0.15,
+                "brand_awareness": 70,
+            }
         )
         resp = await http_client.post(
             f"{INTELLIGENCE_URL}/v1/iso-calc",

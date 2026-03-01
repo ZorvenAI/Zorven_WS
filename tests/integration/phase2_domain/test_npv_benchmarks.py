@@ -34,6 +34,9 @@ class TestNPVBenchmarks:
           PV(TV) = 4,100,000 / 1.10^5 = 2,545,777.45
 
         Total NPV = 1,137,236.01 + 2,545,777.45 = 3,683,013.46
+
+        Note: brand_awareness=50 ensures BSI >= 40, avoiding the
+        10% royalty rate discount applied to weak brands (BSI < 40).
         """
         payload = make_agent_payload(
             input_prompt="NPV benchmark: 5-year flat $10M technology",
@@ -51,6 +54,7 @@ class TestNPVBenchmarks:
                 10_000_000,
             ],
             "sector": "technology",
+            "brand_awareness": 50,
         }
 
         resp = await http_client.post(
@@ -70,8 +74,10 @@ class TestNPVBenchmarks:
         assert val["horizon_years"] == 5
         assert len(val["annual_royalties"]) == 5
 
-    async def test_npv_empty_revenues_uses_stub(self, http_client, tenant_headers):
-        """Empty revenue list -> engine uses stub $10M projection."""
+    async def test_npv_empty_revenues_returns_error(
+        self, http_client, tenant_headers
+    ):
+        """Empty revenue list with no fallback data -> error response."""
         payload = make_agent_payload(
             input_prompt="NPV benchmark: empty revenues fallback",
             config={"method": "royalty_relief"},
@@ -86,10 +92,10 @@ class TestNPVBenchmarks:
         )
         assert resp.status_code == 200
         data = resp.json()
-        val = data["valuation"]
-        # Empty list falls through to stub $10M projection
-        assert val["brand_value_npv"] > 0
-        assert val["horizon_years"] >= 1
+        # No revenue data → executor returns error (no valuation)
+        assert data.get("valuation") is None
+        assert "findings" in data
+        assert len(data["findings"]) > 0
 
     async def test_npv_single_year(self, http_client, tenant_headers):
         """One year explicit + terminal value.
@@ -106,6 +112,7 @@ class TestNPVBenchmarks:
         payload["input_context"] = {
             "projected_revenues": [10_000_000],
             "sector": "technology",
+            "brand_awareness": 50,
         }
         resp = await http_client.post(
             f"{INTELLIGENCE_URL}/v1/iso-calc",
@@ -132,6 +139,7 @@ class TestNPVBenchmarks:
         payload["input_context"] = {
             "projected_revenues": revenues,
             "sector": "technology",
+            "brand_awareness": 50,
         }
         resp = await http_client.post(
             f"{INTELLIGENCE_URL}/v1/iso-calc",
@@ -163,6 +171,7 @@ class TestNPVBenchmarks:
             payload["input_context"] = {
                 "projected_revenues": [10_000_000],
                 "sector": sector,
+                "brand_awareness": 50,
             }
             resp = await http_client.post(
                 f"{INTELLIGENCE_URL}/v1/iso-calc",

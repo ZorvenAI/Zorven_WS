@@ -550,7 +550,7 @@ class TestChatWithAIPipelineIntegration:
     @patch("orchestration.tasks.dispatch_job_task")
     @patch("ai_services.services.GeminiAIService.extract_target_brand")
     @patch("ai_services.services.GeminiAIService.classify_intent")
-    def test_brand_valuation_uses_iso_manifest(
+    def test_chat_pipeline_uses_auto_detect(
         self,
         mock_classify,
         mock_extract,
@@ -558,29 +558,11 @@ class TestChatWithAIPipelineIntegration:
         authenticated_client_with_tenant,
         public_tenant,
     ):
-        """Brand valuation from chat should use the iso-brand-equity manifest."""
-        from orchestration.models import PipelineManifest
-
-        PipelineManifest.objects.create(
-            pipeline_id="iso-brand-equity",
-            name="ISO Brand Equity",
-            manifest_data={
-                "nodes": [
-                    {"id": "web_research", "type": "external"},
-                    {"id": "valuation_logic", "type": "external"},
-                    {"id": "manager", "type": "internal"},
-                ],
-                "edges": [
-                    ["web_research", "valuation_logic"],
-                    ["valuation_logic", "manager"],
-                ],
-            },
-            version=1,
-            is_active=True,
-            tenant=public_tenant,
-        )
-
-        mock_classify.return_value = {"intent": "pipeline", "confidence": 0.9}
+        """Chat pipelines always use auto-detect (no manifest)."""
+        mock_classify.return_value = {
+            "intent": "pipeline",
+            "confidence": 0.9,
+        }
         mock_extract.return_value = {
             "company_name": "Nike",
             "sector": "consumer_goods",
@@ -596,9 +578,8 @@ class TestChatWithAIPipelineIntegration:
 
         job = AnalysisJob.objects.get(job_id=response.data["pipeline_job"]["job_id"])
         assert (
-            job.manifest is not None
-        ), "Brand valuation job should use iso-brand-equity manifest"
-        assert job.manifest.pipeline_id == "iso-brand-equity"
+            job.manifest is None
+        ), "Chat jobs should use auto-detect, not a fixed manifest"
 
 
 @pytest.mark.django_db

@@ -234,6 +234,10 @@ def _build_result_summary(job):
     if social_output or blog_output:
         return _build_content_social_summary(blog_output, social_output)
 
+    gap_output = node_results.get("gap_analyzer", {})
+    if gap_output and gap_output.get("analysis_type") == "competitive_gap":
+        return _build_gap_analysis_summary(gap_output)
+
     if "summary" in result:
         return result["summary"]
 
@@ -307,4 +311,30 @@ def _build_content_social_summary(blog_output, social_output):
     if not parts:
         return "Content pipeline completed successfully."
 
+    return "\n".join(parts)
+
+
+def _build_gap_analysis_summary(gap_output):
+    """Build a summary for competitive gap analysis results."""
+    gap_data = gap_output.get("gap_analysis", {})
+    strengths = len(gap_data.get("strengths", []))
+    gaps = len(gap_data.get("gaps", []))
+    opps = len(gap_data.get("market_opportunities", []))
+
+    parts = ["**Competitor Audit completed.**"]
+    if strengths or gaps:
+        parts.append(
+            f"Identified {strengths} competitive "
+            f"strength(s) and {gaps} market gap(s)."
+        )
+    if opps:
+        parts.append(f"{opps} market opportunity(ies) recommended.")
+
+    findings = gap_output.get("findings", [])
+    if findings:
+        parts.append("")
+        for f in findings[:3]:
+            parts.append(f"- {f}")
+
+    parts.append("\nView the full results in the pipeline card above.")
     return "\n".join(parts)
