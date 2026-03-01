@@ -164,10 +164,19 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         # Fall back to DB
         job = self.get_object()
         progress = job.progress or {}
+        # Derive current_node from progress dict (same logic as cache)
+        current_node = next(
+            (
+                nid
+                for nid, info in progress.items()
+                if isinstance(info, dict) and info.get("status") == "running"
+            ),
+            None,
+        )
         data = {
             "status": job.status,
             "progress": progress,
-            "current_node": None,
+            "current_node": current_node,
             "progress_percent": self._calc_percent(progress),
             "last_thought": None,
         }

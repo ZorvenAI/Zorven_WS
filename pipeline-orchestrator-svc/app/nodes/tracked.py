@@ -48,6 +48,13 @@ class TrackedNode:
         callback_url = state.get("callback_url", "")
         job_id = state.get("job_id", "")
 
+        logger.info(
+            "[TrackedNode] Node %s STARTING (job=%s, callback_url=%s)",
+            self.node_id,
+            job_id,
+            callback_url[:80] if callback_url else "<empty>",
+        )
+
         # Copy progress and mark this node as running
         progress = dict(state.get("progress", {}))
         started_at = _now_iso()
@@ -56,9 +63,16 @@ class TrackedNode:
             "started_at": started_at,
         }
 
-        # Send running callback (non-blocking, non-fatal)
+        # Send running callback (non-fatal; awaited to ensure delivery)
         if callback_url:
-            await self.callback_client.send_progress(callback_url, progress)
+            await self.callback_client.send_progress(
+                callback_url, progress
+            )
+        else:
+            logger.warning(
+                "[TrackedNode] Node %s has NO callback_url — skipping progress",
+                self.node_id,
+            )
 
         # Emit Kafka trace (best-effort)
         await self._emit_trace(job_id, "started")
@@ -67,6 +81,9 @@ class TrackedNode:
         try:
             result = await self.inner(state)
         except Exception:
+            logger.exception(
+                "[TrackedNode] Node %s FAILED", self.node_id
+            )
             # Mark as failed
             progress[self.node_id] = {
                 "status": "failed",
@@ -87,9 +104,15 @@ class TrackedNode:
             "completed_at": _now_iso(),
         }
 
+        logger.info(
+            "[TrackedNode] Node %s DONE (job=%s)", self.node_id, job_id
+        )
+
         # Send done callback
         if callback_url:
-            await self.callback_client.send_progress(callback_url, progress)
+            await self.callback_client.send_progress(
+                callback_url, progress
+            )
 
         # Emit Kafka trace
         await self._emit_trace(job_id, "completed")
