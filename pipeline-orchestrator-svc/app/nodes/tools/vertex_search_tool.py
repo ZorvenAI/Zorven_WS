@@ -39,7 +39,25 @@ class VertexSearchTool:
     def _get_client(self) -> discoveryengine.SearchServiceClient:
         """Lazy-init the Discovery Engine search client."""
         if self._client is None:
-            self._client = discoveryengine.SearchServiceClient()
+            if settings.GCS_CREDENTIALS_JSON:
+                try:
+                    import json as _json
+
+                    from google.oauth2 import service_account as _sa
+
+                    info = _json.loads(settings.GCS_CREDENTIALS_JSON)
+                    creds = _sa.Credentials.from_service_account_info(info)
+                    self._client = discoveryengine.SearchServiceClient(
+                        credentials=creds
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to parse GCS_CREDENTIALS_JSON for Vertex AI, "
+                        "falling back to ADC"
+                    )
+                    self._client = discoveryengine.SearchServiceClient()
+            else:
+                self._client = discoveryengine.SearchServiceClient()
         return self._client
 
     def _get_data_store_path(

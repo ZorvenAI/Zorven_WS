@@ -52,8 +52,8 @@ class InternalAssetRegisterView(APIView):
 
     POST /api/v1/internal/assets/register/
 
-    Unlike confirm-gcs-upload, this endpoint:
-    - Does NOT trigger the data pipeline (the calling service handles that)
+    This endpoint:
+    - Triggers the data pipeline via Celery (Kafka fallback) after registration
     - Does NOT validate GCS path format strictly
     - Uses X-Service-Token authentication (no JWT required)
 
@@ -164,12 +164,35 @@ class InternalAssetRegisterView(APIView):
             file_name,
         )
 
+        # Trigger the data pipeline (ingestion → curation → indexing)
+        # Uses Celery sync pipeline when Kafka is disabled
+        pipeline_status = asset.pipeline_status
+        if gcs_uri.startswith("gs://"):
+            try:
+                from onboarding.services import get_pipeline_service
+
+                pipeline_service = get_pipeline_service()
+                pipeline_service.publish_asset_event(asset)
+                asset.refresh_from_db()
+                pipeline_status = asset.pipeline_status
+                logger.info(
+                    "Pipeline triggered for asset %s (status=%s)",
+                    asset.id,
+                    pipeline_status,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Pipeline dispatch failed for asset %s: %s",
+                    asset.id,
+                    e,
+                )
+
         return Response(
             {
                 "asset_id": asset.id,
                 "company_id": company.id,
                 "file_name": asset.file_name,
-                "pipeline_status": asset.pipeline_status,
+                "pipeline_status": pipeline_status,
             },
             status=status.HTTP_201_CREATED,
         )

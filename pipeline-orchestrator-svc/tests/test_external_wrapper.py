@@ -60,7 +60,7 @@ class TestExternalWrapper:
         assert request.headers["X-Tenant-ID"] == "1"
 
     async def test_fallback_on_connection_error(self, httpx_mock):
-        """On HTTP error, returns stub data instead of raising."""
+        """On HTTP error, returns error data instead of raising."""
         import httpx
 
         httpx_mock.add_exception(
@@ -76,10 +76,11 @@ class TestExternalWrapper:
 
         outputs = result.get("node_outputs", {})
         assert "gap_analyzer" in outputs
-        assert outputs["gap_analyzer"]["status"] == "stub"
+        assert outputs["gap_analyzer"]["status"] == "service_unavailable"
+        assert outputs["gap_analyzer"]["error"] is True
 
     async def test_fallback_on_500_error(self, httpx_mock):
-        """On 5xx response, returns stub data."""
+        """On 5xx response, returns error data."""
         httpx_mock.add_response(
             url="http://discovery-agent-svc:8020/v1/search",
             method="POST",
@@ -94,4 +95,5 @@ class TestExternalWrapper:
 
         outputs = result.get("node_outputs", {})
         assert "web_research" in outputs
-        assert outputs["web_research"]["status"] == "stub"
+        assert outputs["web_research"]["status"] == "service_unavailable"
+        assert outputs["web_research"]["error"] is True

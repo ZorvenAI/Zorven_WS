@@ -10,7 +10,6 @@ When data for a pillar is missing, the ProxyEngine redistributes
 weights across available pillars (normalized to sum to 1.0).
 """
 
-import hashlib
 import logging
 from typing import Any
 
@@ -26,12 +25,6 @@ DEFAULT_WEIGHTS: dict[str, float] = {
     "legal": 0.25,
 }
 
-# Stub scores when real data is unavailable
-STUB_SCORES: dict[str, float] = {
-    "financial": 65.0,
-    "behavioral": 60.0,
-    "legal": 70.0,
-}
 
 
 class BSICalculator:
@@ -88,12 +81,27 @@ class BSICalculator:
                 effective_weights,
             )
         elif len(available_pillars) == 0:
-            # No data at all — use stub scores with default weights
-            effective_weights = base_weights
-            available_pillars = list(DEFAULT_WEIGHTS.keys())
-            pillar_data = {name: {} for name in available_pillars}
-            data_completeness = 0.0
-            logger.warning("BSI: No pillar data available, using stub scores")
+            # No data at all — return zero score with clear error
+            logger.warning(
+                "BSI: No pillar data available. Cannot calculate Brand "
+                "Strength Index without financial, behavioral, or legal data."
+            )
+            return BSIResult(
+                score=0,
+                pillars=[
+                    PillarScore(
+                        name=name,
+                        weight=round(base_weights[name], 4),
+                        score=0.0,
+                        rationale=(
+                            f"{name.title()} data not available. "
+                            f"Provide {name} metrics for an accurate BSI."
+                        ),
+                    )
+                    for name in DEFAULT_WEIGHTS
+                ],
+                data_completeness=0.0,
+            )
         else:
             effective_weights = base_weights
 
@@ -138,9 +146,9 @@ class BSICalculator:
         data: dict[str, Any] | None,
         brand_seed: str = "",
     ) -> float:
-        """Score a single pillar (0–100)."""
+        """Score a single pillar (0–100). Returns 0 when no data."""
         if not data:
-            return self._seeded_stub_score(pillar_name, brand_seed)
+            return 0.0
 
         # Check if data contains a pre-computed score
         if "score" in data:
@@ -158,23 +166,7 @@ class BSICalculator:
         if pillar_name == "legal":
             return self._score_legal(data)
 
-        return self._seeded_stub_score(pillar_name, brand_seed)
-
-    @staticmethod
-    def _seeded_stub_score(pillar_name: str, brand_seed: str) -> float:
-        """Return a deterministic stub score seeded by brand name.
-
-        Different brands get different stub scores (±15 around the base),
-        avoiding identical BSI results when real data is unavailable.
-        """
-        base = STUB_SCORES.get(pillar_name, 50.0)
-        if not brand_seed:
-            return base
-        seed_str = f"{brand_seed}:{pillar_name}"
-        h = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-        # Map hash to offset between -15 and +15
-        offset = (h % 3001) / 100.0 - 15.0
-        return max(10.0, min(95.0, base + offset))
+        return 0.0
 
     @staticmethod
     def _score_financial(data: dict[str, Any]) -> float:
@@ -270,8 +262,8 @@ class BSICalculator:
         """Build rationale string for a pillar score."""
         if not data:
             return (
-                f"{pillar_name.title()} pillar scored"
-                " using stub defaults (no data provided)."
+                f"{pillar_name.title()} data not available. "
+                f"Provide {pillar_name} metrics for an accurate score."
             )
         metrics = ", ".join(f"{k}={v}" for k, v in data.items() if k != "score")
         return (

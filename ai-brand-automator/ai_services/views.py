@@ -238,6 +238,7 @@ def _collect_attachment_data(attachment_ids, session):
                         att.file_name or "", max_length=255
                     ),
                     "file_type": att.file_type,
+                    "file_size_bytes": att.file_size or 0,
                     "gcs_bucket": att.asset.gcs_bucket,
                     "gcs_path": att.asset.gcs_path,
                 }
@@ -414,16 +415,9 @@ def _process_chat_message(
         if target_brand:
             job_context["company_name"] = target_brand.get("company_name", "")
             job_context["sector"] = target_brand.get("sector", "default")
-            for key in (
-                "base_revenue",
-                "growth_rate",
-                "brand_awareness",
-                "profit_margin",
-                "customer_loyalty",
-                "market_share",
-            ):
-                if key in target_brand:
-                    job_context[key] = target_brand[key]
+            # Financial data (base_revenue, growth_rate, etc.) intentionally NOT
+            # passed — intelligence agent does its own Gemini lookup to ensure
+            # consistent results between chat and pipeline UI flows.
         else:
             company_info = context.get("company", {})
             if company_info:

@@ -153,7 +153,6 @@ def get_orchestrator():
     if kafka_bootstrap and not mock_mode:
         kafka = KafkaAdapter(
             bootstrap_servers=kafka_bootstrap,
-            mock_mode=mock_mode,
         )
 
     return SyncOrchestrator(

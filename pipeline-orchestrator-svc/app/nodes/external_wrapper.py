@@ -57,17 +57,25 @@ class ExternalWrapper(BaseNode):
 
         except httpx.HTTPError as exc:
             logger.warning(
-                "External service %s unreachable for node %s: %s. Using stub data.",
+                "External service %s unreachable for node %s: %s",
                 self.url,
                 self.node_id,
                 str(exc),
             )
             result = {
-                "status": "stub",
-                "message": f"External service {self.url} not available",
-                "findings": [f"Stub data: {self.url} was unreachable."],
+                "error": True,
+                "status": "service_unavailable",
+                "message": (
+                    f"The {self.node_id} service is currently unavailable. "
+                    f"Could not connect to {self.url}."
+                ),
+                "findings": [
+                    f"The {self.node_id} service could not be reached. "
+                    f"This pipeline step was skipped."
+                ],
                 "recommendations": [
-                    "Deploy the agent service and re-run the pipeline."
+                    f"The {self.node_id} service may be down or misconfigured. "
+                    f"Please try again later or contact support."
                 ],
             }
 

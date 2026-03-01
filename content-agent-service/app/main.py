@@ -63,6 +63,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         project_id=settings.GCS_PROJECT_ID,
         bucket_name=settings.GCS_BUCKET_NAME,
         credentials_path=settings.GCS_CREDENTIALS_PATH,
+        credentials_json=settings.GCS_CREDENTIALS_JSON,
     )
 
     # Initialize Core API client

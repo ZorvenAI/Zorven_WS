@@ -146,3 +146,93 @@ PYTHONUNBUFFERED=1
 SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO,https
 USE_X_FORWARDED_HOST=true
 USE_X_FORWARDED_PORT=true
+
+# =============================================================================
+# Service-to-Service Authentication (shared secrets)
+# =============================================================================
+# These MUST match across all services that communicate:
+ORCHESTRATOR_SERVICE_TOKEN=<shared-service-token>
+ORCHESTRATOR_CALLBACK_TOKEN=<shared-callback-token>
+WORKER_TOKEN=<shared-worker-token>
+
+# =============================================================================
+# Pipeline Orchestrator (ORCHESTRATOR_ prefix)
+# =============================================================================
+ORCHESTRATOR_SERVICE_TOKEN=<same-as-backend>
+ORCHESTRATOR_CALLBACK_TOKEN=<same-as-backend>
+ORCHESTRATOR_REDIS_URL=<railway-redis-url>/1
+ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=
+ORCHESTRATOR_GOOGLE_API_KEY=<gemini-api-key>
+ORCHESTRATOR_LOG_LEVEL=INFO
+# Agent URLs (Railway internal DNS):
+ORCHESTRATOR_DISCOVERY_AGENT_URL=http://discovery-agent.railway.internal:8020
+ORCHESTRATOR_CONTENT_AGENT_URL=http://content-agent.railway.internal:8050
+ORCHESTRATOR_SOCIAL_AGENT_URL=http://social-agent.railway.internal:8060
+ORCHESTRATOR_INTELLIGENCE_AGENT_URL=http://intelligence-agent.railway.internal:8030
+ORCHESTRATOR_RAG_UPLOADER_AGENT_URL=http://rag-uploader.railway.internal:8070
+
+# =============================================================================
+# Discovery Agent (DISCOVERY_ prefix, Redis DB 2)
+# =============================================================================
+DISCOVERY_REDIS_URL=<railway-redis-url>/2
+DISCOVERY_KAFKA_BOOTSTRAP_SERVERS=
+DISCOVERY_TAVILY_API_KEY=<tavily-api-key>
+DISCOVERY_GOOGLE_API_KEY=<gemini-api-key>
+DISCOVERY_GCS_PROJECT_ID=<gcp-project>
+DISCOVERY_GCS_BUCKET_NAME=<bucket-name>
+DISCOVERY_LOG_LEVEL=INFO
+
+# =============================================================================
+# Intelligence Agent (INTELLIGENCE_ prefix, Redis DB 3)
+# =============================================================================
+INTELLIGENCE_REDIS_URL=<railway-redis-url>/3
+INTELLIGENCE_KAFKA_BOOTSTRAP_SERVERS=
+INTELLIGENCE_GEMINI_API_KEY=<gemini-api-key>
+INTELLIGENCE_GCS_PROJECT_ID=<gcp-project>
+INTELLIGENCE_GCS_BUCKET_NAME=<bucket-name>
+INTELLIGENCE_LOG_LEVEL=INFO
+
+# =============================================================================
+# Chat Titling Worker (TITLING_ prefix, Redis DB 4)
+# =============================================================================
+TITLING_REDIS_URL=<railway-redis-url>/4
+TITLING_KAFKA_BOOTSTRAP_SERVERS=
+TITLING_GOOGLE_API_KEY=<gemini-api-key>
+TITLING_CORE_API_URL=http://backend.railway.internal:8000
+TITLING_WORKER_TOKEN=<same-as-backend-WORKER_TOKEN>
+TITLING_LOG_LEVEL=INFO
+
+# =============================================================================
+# Content Agent (CONTENT_ prefix, Redis DB 5)
+# =============================================================================
+CONTENT_REDIS_URL=<railway-redis-url>/5
+CONTENT_KAFKA_BOOTSTRAP_SERVERS=
+CONTENT_GOOGLE_API_KEY=<gemini-api-key>
+CONTENT_GCS_PROJECT_ID=<gcp-project>
+CONTENT_GCS_BUCKET_NAME=<bucket-name>
+CONTENT_CORE_API_URL=http://backend.railway.internal:8000
+CONTENT_CORE_API_TOKEN=<same-as-ORCHESTRATOR_SERVICE_TOKEN>
+CONTENT_LOG_LEVEL=INFO
+
+# =============================================================================
+# Social Agent (SOCIAL_ prefix, Redis DB 6)
+# =============================================================================
+SOCIAL_REDIS_URL=<railway-redis-url>/6
+SOCIAL_KAFKA_BOOTSTRAP_SERVERS=
+SOCIAL_GOOGLE_API_KEY=<gemini-api-key>
+SOCIAL_CORE_API_URL=http://backend.railway.internal:8000
+SOCIAL_CORE_API_TOKEN=<same-as-ORCHESTRATOR_SERVICE_TOKEN>
+SOCIAL_MCP_SERVER_URL=http://mcp-server.railway.internal:8085/sse
+SOCIAL_LOG_LEVEL=INFO
+
+# =============================================================================
+# RAG Uploader Agent (UPLOADER_ prefix, Redis DB 7)
+# =============================================================================
+UPLOADER_REDIS_URL=<railway-redis-url>/7
+UPLOADER_KAFKA_BOOTSTRAP_SERVERS=
+UPLOADER_GOOGLE_API_KEY=<gemini-api-key>
+UPLOADER_GCS_PROJECT_ID=<gcp-project>
+UPLOADER_GCS_BUCKET_NAME=<bucket-name>
+UPLOADER_CORE_API_URL=http://backend.railway.internal:8000
+UPLOADER_CORE_API_TOKEN=<same-as-ORCHESTRATOR_SERVICE_TOKEN>
+UPLOADER_LOG_LEVEL=INFO

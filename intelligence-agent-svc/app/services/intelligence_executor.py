@@ -175,6 +175,70 @@ class IntelligenceExecutor:
                 ctx_market_share,
             )
 
+        # 1c. Gemini fallback — look up company data if input_context is empty
+        if financial_data is None and not input_context.get("base_revenue"):
+            company_name = input_context.get(
+                "company_name"
+            ) or self._extract_company_name(request.input_prompt)
+            if company_name and self.gemini_client:
+                logger.info(
+                    "No financial data in context — looking up '%s' via Gemini",
+                    company_name,
+                )
+                # Check Redis cache first for consistent results across flows
+                gemini_data = None
+                if self.redis_manager:
+                    gemini_data = await self.redis_manager.get_company_data(
+                        company_name
+                    )
+                    if gemini_data:
+                        logger.info(
+                            "Company data cache HIT for '%s'", company_name
+                        )
+                if gemini_data is None:
+                    gemini_data = self._lookup_company_data(company_name)
+                    # Cache the result for consistent results across flows
+                    if gemini_data and self.redis_manager:
+                        await self.redis_manager.set_company_data(
+                            company_name, gemini_data
+                        )
+                if gemini_data:
+                    for key in (
+                        "company_name",
+                        "sector",
+                        "base_revenue",
+                        "growth_rate",
+                        "brand_awareness",
+                        "profit_margin",
+                        "customer_loyalty",
+                        "market_share",
+                    ):
+                        if key in gemini_data and key not in input_context:
+                            input_context[key] = gemini_data[key]
+                    # Re-derive financial_data from enriched context
+                    if input_context.get("base_revenue"):
+                        growth = float(input_context.get("growth_rate", 0.05))
+                        margin = float(
+                            input_context.get("profit_margin", 0.10)
+                        )
+                        financial_data = {
+                            "revenue_growth": growth,
+                            "profit_margin": margin,
+                        }
+                        ctx_market_share = input_context.get("market_share")
+                        if ctx_market_share is not None:
+                            financial_data["market_share"] = float(
+                                ctx_market_share
+                            )
+                    # Refresh sector from Gemini data
+                    sector = str(input_context.get("sector", sector))
+                    logger.info(
+                        "Enriched context from Gemini: sector=%s, "
+                        "base_revenue=%s",
+                        sector,
+                        input_context.get("base_revenue"),
+                    )
+
         # 2. Determine calculation strategy
         data_manifest = {
             "financial_data": financial_data,
@@ -192,6 +256,35 @@ class IntelligenceExecutor:
         projected_revenues = self.royalty_engine.estimate_revenues_from_context(
             previous_outputs, input_context, horizon_years, sector=sector
         )
+
+        # 4b. Abort if no revenue data — cannot produce a valid valuation
+        if not projected_revenues:
+            company = input_context.get("company_name", "the requested brand")
+            logger.warning(
+                "ISO valuation aborted for tenant %s: no revenue data for '%s'",
+                tenant_id,
+                company,
+            )
+            return ExecuteResponse(
+                findings=[
+                    f"Unable to calculate brand equity for '{company}'.",
+                    "No revenue or financial data could be determined.",
+                    f"Sector: {sector}.",
+                ],
+                recommendations=[
+                    "Provide the company's annual revenue in the request "
+                    "(e.g., 'Calculate brand equity for Nike with $51B revenue').",
+                    "Try a well-known publicly traded company whose financials "
+                    "are available (e.g., Apple, Nike, Tesla).",
+                    "Upload financial statements to enable accurate valuation.",
+                ],
+                analysis_type="iso_valuation",
+                rationale=(
+                    f"Brand equity valuation requires revenue data. "
+                    f"No financial data was found for '{company}' from "
+                    f"AI lookup, user input, or discovery research."
+                ),
+            )
 
         # 5. Calculate BSI
         behavioral_data = self._extract_behavioral_data(previous_outputs)
@@ -405,6 +498,213 @@ class IntelligenceExecutor:
         """Clean up resources."""
         if self.redis_manager:
             await self.redis_manager.close()
+
+    # -----------------------------------------------------------------------
+    # Gemini company data lookup
+    # -----------------------------------------------------------------------
+
+    # Stop words — common words that are NOT company names.
+    _STOP_WORDS = frozenset(
+        {
+            "the",
+            "a",
+            "an",
+            "my",
+            "our",
+            "this",
+            "that",
+            "i",
+            "we",
+            "can",
+            "you",
+            "please",
+            "brand",
+            "equity",
+            "value",
+        }
+    )
+
+    @staticmethod
+    def _extract_company_name(input_prompt: str) -> str | None:
+        """Extract the company/brand name from a user prompt via regex."""
+        import re
+
+        patterns = [
+            r"(?:brand equity|brand valuation|brand value|brand strength)"
+            r"(?:\s+(?:for|of|for the))?\s+(?:the\s+)?"
+            r"([A-Z][A-Za-z0-9\s&'.-]+?)(?:\s+brand)?[?.!,]?\s*$",
+            r"(?:calculate|analyze|analyse|evaluate|assess)"
+            r"(?:\s+(?:the\s+)?brand\s+(?:equity|value|valuation|"
+            r"strength)\s+(?:for|of))?\s+(?:the\s+)?"
+            r"([A-Z][A-Za-z0-9\s&'.-]+?)(?:\s+brand)?[?.!,]?\s*$",
+            r"(?:for|of)\s+(?:the\s+)?"
+            r"([A-Z][A-Za-z0-9\s&'.-]+?)(?:\s+brand)[?.!,]?\s*$",
+            r"([A-Z][A-Za-z0-9&'.-]+?)(?:'s)\s+"
+            r"(?:brand\s+)?(?:equity|value|valuation|strength)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, input_prompt, re.IGNORECASE)
+            if match:
+                name = match.group(1).strip().rstrip(".,!?")
+                if (
+                    len(name) > 1
+                    and name.lower()
+                    not in IntelligenceExecutor._STOP_WORDS
+                ):
+                    return name
+        return None
+
+    def _lookup_company_data(self, company_name: str) -> dict[str, Any] | None:
+        """Look up real financial data for a company via Gemini AI.
+
+        Returns a dict with company_name, sector, base_revenue, growth_rate,
+        brand_awareness, profit_margin, customer_loyalty, market_share — or
+        None if the data cannot be determined.
+        """
+        import json as _json
+
+        try:
+            if self.gemini_client is None:
+                return None
+
+            model = self.gemini_client.GenerativeModel(settings.GEMINI_MODEL)
+
+            prompt = (
+                f'Look up the real, publicly available financial data '
+                f'for "{company_name}". Provide the data as a JSON '
+                f'object with ONLY these keys:\n'
+                f'  "company_name": the official company name (string)\n'
+                f'  "sector": one of: technology, software, '
+                f'consumer_goods, retail, automotive, '
+                f'aerospace, defense, industrial, '
+                f'electric_vehicles, '
+                f'financial_services, media, healthcare, '
+                f'pharmaceuticals, luxury, energy, '
+                f'telecommunications (string)\n'
+                f'  "base_revenue": most recent annual revenue in USD '
+                f'(integer, e.g. 51000000000 for $51B)\n'
+                f'  "growth_rate": year-over-year revenue growth rate '
+                f'as a decimal (e.g. 0.10 for 10%)\n'
+                f'  "brand_awareness": estimated global brand awareness '
+                f'score from 0 to 100 (integer)\n'
+                f'  "profit_margin": net profit margin as a decimal '
+                f'(e.g. 0.15 for 15%)\n'
+                f'  "customer_loyalty": estimated customer loyalty/'
+                f'retention score from 0 to 100 (integer, based on '
+                f'repeat purchase rates, NPS, brand switching costs)\n'
+                f'  "market_share": estimated market share in primary '
+                f'market as a decimal (e.g. 0.25 for 25%)\n\n'
+                f'IMPORTANT: Use real data from public filings and '
+                f'reports. If the company is private or you cannot '
+                f'determine its financials, respond with exactly: '
+                f'NOT_FOUND\n\n'
+                f'Respond with ONLY the JSON object (or NOT_FOUND). '
+                f'No markdown fences, no explanation.'
+            )
+
+            response = model.generate_content(prompt)
+            text = response.text.strip()
+
+            if "NOT_FOUND" in text.upper():
+                logger.info(
+                    "Gemini: company '%s' not found or private",
+                    company_name,
+                )
+                return None
+
+            # Strip markdown fences if present
+            if text.startswith("```"):
+                text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+
+            data = _json.loads(text)
+
+            # Validate required fields
+            required = {
+                "company_name",
+                "sector",
+                "base_revenue",
+                "growth_rate",
+                "brand_awareness",
+                "profit_margin",
+            }
+            if not required.issubset(data.keys()):
+                logger.warning(
+                    "Gemini response missing fields for %s: %s",
+                    company_name,
+                    required - data.keys(),
+                )
+                return None
+
+            # Coerce and validate types
+            data["base_revenue"] = int(float(data["base_revenue"]))
+            data["growth_rate"] = float(data["growth_rate"])
+            data["brand_awareness"] = int(float(data["brand_awareness"]))
+            data["profit_margin"] = float(data["profit_margin"])
+
+            if "customer_loyalty" in data and data["customer_loyalty"] is not None:
+                data["customer_loyalty"] = int(float(data["customer_loyalty"]))
+            if "market_share" in data and data["market_share"] is not None:
+                data["market_share"] = float(data["market_share"])
+
+            if data["base_revenue"] <= 0:
+                logger.warning(
+                    "Gemini returned non-positive revenue for %s",
+                    company_name,
+                )
+                return None
+
+            # Validate the returned company matches the request
+            input_clean = (
+                company_name.lower().replace(".", "").replace(",", "").strip()
+            )
+            result_clean = (
+                data["company_name"]
+                .lower()
+                .replace(".", "")
+                .replace(",", "")
+                .strip()
+            )
+            result_words = result_clean.split()
+            input_words = input_clean.split()
+
+            match_found = (
+                input_clean in result_clean
+                or result_clean in input_clean
+                or any(w in result_clean for w in input_words if len(w) > 2)
+                or any(
+                    rw.startswith(input_clean[:4])
+                    for rw in result_words
+                    if len(input_clean) >= 4
+                )
+                or result_clean.startswith(input_clean[:4])
+            )
+
+            if not match_found:
+                logger.warning(
+                    "Gemini returned mismatched company: asked for "
+                    "'%s', got '%s' — rejecting",
+                    company_name,
+                    data["company_name"],
+                )
+                return None
+
+            logger.info(
+                "Gemini provided data for %s: sector=%s, revenue=$%s, "
+                "awareness=%s",
+                company_name,
+                data.get("sector"),
+                f"{data.get('base_revenue', 0):,}",
+                data.get("brand_awareness"),
+            )
+            return data
+
+        except Exception as e:
+            logger.warning(
+                "Gemini company lookup failed for %s: %s",
+                company_name,
+                e,
+            )
+            return None
 
     # -----------------------------------------------------------------------
     # Helpers

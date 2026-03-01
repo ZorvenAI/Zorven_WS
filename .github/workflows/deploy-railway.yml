@@ -25,6 +25,10 @@ jobs:
       orchestrator-changed: ${{ steps.changes.outputs.orchestrator }}
       discovery-changed: ${{ steps.changes.outputs.discovery }}
       intelligence-changed: ${{ steps.changes.outputs.intelligence }}
+      titling-changed: ${{ steps.changes.outputs.titling }}
+      content-changed: ${{ steps.changes.outputs.content }}
+      social-changed: ${{ steps.changes.outputs.social }}
+      rag-uploader-changed: ${{ steps.changes.outputs.rag-uploader }}
     
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +47,10 @@ jobs:
             echo "orchestrator=true" >> "$GITHUB_OUTPUT"
             echo "discovery=true" >> "$GITHUB_OUTPUT"
             echo "intelligence=true" >> "$GITHUB_OUTPUT"
+            echo "titling=true" >> "$GITHUB_OUTPUT"
+            echo "content=true" >> "$GITHUB_OUTPUT"
+            echo "social=true" >> "$GITHUB_OUTPUT"
+            echo "rag-uploader=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           
@@ -79,6 +87,34 @@ jobs:
             echo "intelligence=true" >> "$GITHUB_OUTPUT"
           else
             echo "intelligence=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if chat-titling-worker changed
+          if git diff --name-only HEAD~1 | grep -qE '^chat-titling-worker/'; then
+            echo "titling=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "titling=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if content-agent-service changed
+          if git diff --name-only HEAD~1 | grep -qE '^content-agent-service/'; then
+            echo "content=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "content=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if social-agent-service changed
+          if git diff --name-only HEAD~1 | grep -qE '^social-agent-service/'; then
+            echo "social=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "social=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if rag-uploader-agent-service changed
+          if git diff --name-only HEAD~1 | grep -qE '^rag-uploader-agent-service/'; then
+            echo "rag-uploader=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "rag-uploader=false" >> "$GITHUB_OUTPUT"
           fi
 
   # ==========================================================================
@@ -361,11 +397,171 @@ jobs:
           fi
 
   # ==========================================================================
+  # Deploy Chat Titling Worker to Railway
+  # ==========================================================================
+  deploy-chat-titling:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.titling-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Chat Titling Worker
+        working-directory: chat-titling-worker
+        run: |
+          if [ -n "${{ secrets.RAILWAY_CHAT_TITLING_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_CHAT_TITLING_SERVICE }} --detach
+          else
+            echo "RAILWAY_CHAT_TITLING_SERVICE not set, skipping chat-titling deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for chat-titling deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          TITLING_URL="${{ secrets.RAILWAY_CHAT_TITLING_URL }}"
+          if [ -n "$TITLING_URL" ]; then
+            curl -f "${TITLING_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_CHAT_TITLING_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
+  # Deploy Content Agent to Railway
+  # ==========================================================================
+  deploy-content-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.content-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Content Agent
+        working-directory: content-agent-service
+        run: |
+          if [ -n "${{ secrets.RAILWAY_CONTENT_AGENT_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_CONTENT_AGENT_SERVICE }} --detach
+          else
+            echo "RAILWAY_CONTENT_AGENT_SERVICE not set, skipping content-agent deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for content-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          CONTENT_URL="${{ secrets.RAILWAY_CONTENT_AGENT_URL }}"
+          if [ -n "$CONTENT_URL" ]; then
+            curl -f "${CONTENT_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_CONTENT_AGENT_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
+  # Deploy Social Agent to Railway
+  # ==========================================================================
+  deploy-social-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.social-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Social Agent
+        working-directory: social-agent-service
+        run: |
+          if [ -n "${{ secrets.RAILWAY_SOCIAL_AGENT_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_SOCIAL_AGENT_SERVICE }} --detach
+          else
+            echo "RAILWAY_SOCIAL_AGENT_SERVICE not set, skipping social-agent deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for social-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          SOCIAL_URL="${{ secrets.RAILWAY_SOCIAL_AGENT_URL }}"
+          if [ -n "$SOCIAL_URL" ]; then
+            curl -f "${SOCIAL_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_SOCIAL_AGENT_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
+  # Deploy RAG Uploader Agent to Railway
+  # ==========================================================================
+  deploy-rag-uploader:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.rag-uploader-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy RAG Uploader
+        working-directory: rag-uploader-agent-service
+        run: |
+          if [ -n "${{ secrets.RAILWAY_RAG_UPLOADER_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_RAG_UPLOADER_SERVICE }} --detach
+          else
+            echo "RAILWAY_RAG_UPLOADER_SERVICE not set, skipping rag-uploader deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for rag-uploader deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          RAG_URL="${{ secrets.RAILWAY_RAG_UPLOADER_URL }}"
+          if [ -n "$RAG_URL" ]; then
+            curl -f "${RAG_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_RAG_UPLOADER_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
   # Post-Deployment Notification
   # ==========================================================================
   notify:
     runs-on: ubuntu-latest
-    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent]
+    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent, deploy-chat-titling, deploy-content-agent, deploy-social-agent, deploy-rag-uploader]
     if: always()
 
     steps:
@@ -383,5 +579,9 @@ jobs:
           echo "| Pipeline Orchestrator | ${{ needs.deploy-orchestrator.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Discovery Agent | ${{ needs.deploy-discovery-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Intelligence Agent | ${{ needs.deploy-intelligence-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Chat Titling Worker | ${{ needs.deploy-chat-titling.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Content Agent | ${{ needs.deploy-content-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Social Agent | ${{ needs.deploy-social-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| RAG Uploader | ${{ needs.deploy-rag-uploader.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
