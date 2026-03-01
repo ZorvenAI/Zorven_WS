@@ -185,9 +185,7 @@ def _update_redis_cache(job):
             job.status,
         )
     except Exception as exc:
-        logger.warning(
-            "Redis cache update failed for job %s: %s", job.job_id, exc
-        )
+        logger.warning("Redis cache update failed for job %s: %s", job.job_id, exc)
 
 
 def _save_final_chat_message(job):
