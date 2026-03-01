@@ -100,9 +100,11 @@ class JobExecutor:
                     if nid not in state["progress"]:
                         state["progress"][nid] = {"status": "pending"}
 
-            # Build the LangGraph
+            # Build the LangGraph (with per-node progress tracking)
             try:
-                compiled_graph = GraphBuilder.build(manifest_data)
+                compiled_graph = GraphBuilder.build(
+                    manifest_data, callback_client=self.callback
+                )
             except (GraphBuildError, ValueError) as exc:
                 logger.error("Graph build failed for job %s: %s", job_id, exc)
                 await self.callback.send_failed(

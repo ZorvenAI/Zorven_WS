@@ -15,6 +15,8 @@ from langgraph.graph import END, StateGraph
 from app.core.config import settings
 from app.factory.node_registry import resolve_handler
 from app.nodes.external_wrapper import ExternalWrapper
+from app.nodes.tracked import TrackedNode
+from app.services.callback_client import CallbackClient
 from app.state.schema import AgentState
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,7 @@ class GraphBuilder:
     def build(
         manifest_data: dict[str, Any],
         checkpointer: Any = None,
+        callback_client: CallbackClient | None = None,
     ) -> Any:
         """
         Build and compile a LangGraph StateGraph from manifest_data.
@@ -48,6 +51,10 @@ class GraphBuilder:
         Args:
             manifest_data: Dict with 'nodes', 'edges', and optional 'global_config'.
             checkpointer: Optional LangGraph checkpointer for state persistence.
+            callback_client: Optional callback client for per-node progress
+                tracking.  When provided, each node is wrapped with
+                ``TrackedNode`` which sends HTTP progress callbacks and
+                Kafka trace events before and after execution.
 
         Returns:
             Compiled LangGraph ready for execution.
@@ -129,7 +136,6 @@ class GraphBuilder:
                     )
                 handler_cls = resolve_handler(handler_name)
                 handler_instance = handler_cls(config=merged_config)
-                graph.add_node(node_id, handler_instance)
             elif node_type == "external":
                 url = node_def.get("url")
                 if not url:
@@ -137,14 +143,21 @@ class GraphBuilder:
                         f"External node '{node_id}' missing 'url' field"
                     )
                 url = GraphBuilder._translate_url(url)
-                wrapper = ExternalWrapper(
+                handler_instance = ExternalWrapper(
                     url=url, node_id=node_id, config=merged_config
                 )
-                graph.add_node(node_id, wrapper)
             else:
                 raise GraphBuildError(
                     f"Unknown node type '{node_type}' for node '{node_id}'"
                 )
+
+            # Wrap with progress tracking if callback_client provided
+            if callback_client:
+                handler_instance = TrackedNode(
+                    node_id, handler_instance, callback_client
+                )
+
+            graph.add_node(node_id, handler_instance)
 
         # Set entry point
         graph.set_entry_point(entry_node)

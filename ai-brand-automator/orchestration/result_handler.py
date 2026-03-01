@@ -138,16 +138,44 @@ def _release_session_lock(job):
 def _update_redis_cache(job):
     """Push lightweight job state into Redis for quick-status polling."""
     try:
+        cache_key = f"job:status:{job.job_id}"
+
+        # Preserve last_thought from existing cache (set by Kafka TraceConsumer)
+        existing = cache.get(cache_key) or {}
+
         cache_data = {
             "status": job.status,
             "progress": job.progress,
         }
+
+        # Derive current_node and progress_percent from progress dict
+        progress = job.progress or {}
+        current_node = next(
+            (
+                nid
+                for nid, info in progress.items()
+                if isinstance(info, dict) and info.get("status") == "running"
+            ),
+            None,
+        )
+        total = len(progress)
+        done = sum(
+            1
+            for v in progress.values()
+            if isinstance(v, dict) and v.get("status") in ("done", "failed")
+        )
+        percent = int((done / total) * 100) if total else 0
+
+        cache_data["current_node"] = current_node
+        cache_data["progress_percent"] = percent
+        cache_data["last_thought"] = existing.get("last_thought")
+
         if job.status == AnalysisJob.Status.COMPLETED:
             cache_data["result_data"] = job.result_data
             cache_data["manifest_name"] = job.manifest.name if job.manifest else None
         elif job.status == AnalysisJob.Status.FAILED:
             cache_data["error_message"] = job.error_message
-        cache.set(f"job:status:{job.job_id}", cache_data, timeout=3600)
+        cache.set(cache_key, cache_data, timeout=3600)
     except Exception:
         pass  # Cache failures must not break result processing
 
