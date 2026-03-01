@@ -130,6 +130,56 @@ class RedisManager:
         except Exception as exc:
             logger.warning("Redis error in set_cached_result: %s", exc)
 
+<<<<<<< Updated upstream
+=======
+    # --- Company Data Cache ---
+
+    @staticmethod
+    def _normalize_company(name: str) -> str:
+        """Normalize a company name for consistent cache keys.
+
+        'NIKE, Inc.', 'Nike Inc', 'Nike' → 'nike'
+        """
+        import re
+
+        n = name.lower().strip()
+        # Strip common corporate suffixes
+        n = re.sub(
+            r",?\s*\b(inc\.?|corp\.?|corporation|llc|ltd\.?|co\.?|plc|group"
+            r"|holdings|limited|incorporated|company)\b\.?\s*$",
+            "",
+            n,
+            flags=re.IGNORECASE,
+        )
+        return n.strip().rstrip(",").strip()
+
+    async def get_company_data(self, company_name: str) -> Optional[dict[str, Any]]:
+        """Get cached Gemini company data lookup result."""
+        try:
+            r = await self._get_redis()
+            key = f"intel:company:{self._normalize_company(company_name)}"
+            data = await r.get(key)
+            if data is not None:
+                logger.debug("Company data cache HIT for: %s", company_name)
+                return json.loads(data)
+            return None
+        except Exception as exc:
+            logger.warning("Redis error in get_company_data: %s", exc)
+            return None
+
+    async def set_company_data(
+        self, company_name: str, data: dict[str, Any]
+    ) -> None:
+        """Cache company data with 4-hour TTL."""
+        try:
+            r = await self._get_redis()
+            key = f"intel:company:{self._normalize_company(company_name)}"
+            await r.set(key, json.dumps(data), ex=RESULT_CACHE_TTL)
+            logger.debug("Company data cache SET for: %s", company_name)
+        except Exception as exc:
+            logger.warning("Redis error in set_company_data: %s", exc)
+
+>>>>>>> Stashed changes
     # --- Rate Limiting ---
 
     async def check_rate_limit(self, tenant_id: str, limit: int = 10) -> bool:
