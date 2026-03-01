@@ -362,7 +362,7 @@ def _process_chat_message(
 
     if intent_result["intent"] == "pipeline":
         # Lazy imports to avoid circular dependency with orchestration app
-        from orchestration.models import AnalysisJob
+        from orchestration.models import AnalysisJob, PipelineManifest
         from orchestration.tasks import dispatch_job_task
 
         target_brand = GeminiAIService.extract_target_brand(message)
@@ -427,8 +427,21 @@ def _process_chat_message(
                 job_context["brand_voice"] = company_info.get("brand_voice", "")
                 job_context["core_problem"] = company_info.get("core_problem", "")
 
+        # Use the same manifest as pipeline UI for brand valuation
+        # so both flows execute the same graph (including web_research).
+        manifest = None
+        if target_brand:
+            manifest = (
+                PipelineManifest.objects.filter(
+                    pipeline_id="iso-brand-equity", is_active=True
+                )
+                .order_by("-version")
+                .first()
+            )
+
         job = AnalysisJob.objects.create(
             tenant=tenant,
+            manifest=manifest,
             input_prompt=message,
             input_context=job_context,
             created_by=request.user,
