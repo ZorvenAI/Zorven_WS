@@ -246,43 +246,6 @@ def _collect_attachment_data(attachment_ids, session):
     return data
 
 
-_COMPETITOR_KEYWORDS = (
-    "competitor",
-    "competitive",
-    "gap analysis",
-    "market comparison",
-    "audit",
-)
-
-
-def _lookup_manifest(pipeline_id, tenant):
-    """Look up an active manifest, preferring tenant-specific over global."""
-    from orchestration.models import PipelineManifest
-
-    qs = PipelineManifest.objects.filter(
-        pipeline_id=pipeline_id, is_active=True
-    ).order_by("-version")
-    return (qs.filter(tenant=tenant).first() if tenant else None) or qs.filter(
-        tenant__isnull=True
-    ).first()
-
-
-def _resolve_chat_manifest(message, target_brand, tenant):
-    """Resolve the pipeline manifest for a chat-triggered job.
-
-    Brand valuation requests use iso-brand-equity; competitor analysis
-    requests use competitor-audit. Returns None for auto-detect.
-    """
-    if target_brand:
-        return _lookup_manifest("iso-brand-equity", tenant)
-
-    msg_lower = message.lower()
-    if any(kw in msg_lower for kw in _COMPETITOR_KEYWORDS):
-        return _lookup_manifest("competitor-audit", tenant)
-
-    return None
-
-
 def _process_chat_message(
     request, session, message, tenant, is_new_session, serializer
 ):
@@ -464,13 +427,11 @@ def _process_chat_message(
                 job_context["brand_voice"] = company_info.get("brand_voice", "")
                 job_context["core_problem"] = company_info.get("core_problem", "")
 
-        # Attach the correct manifest so chat uses the same pipeline
-        # graph as the pipeline UI for known pipeline types.
-        manifest = _resolve_chat_manifest(message, target_brand, tenant)
-
+        # Chat always uses auto-detect (no manifest). The orchestrator's
+        # PipelineComposer dynamically selects and orders agent nodes
+        # based on the prompt via Gemini function-calling.
         job = AnalysisJob.objects.create(
             tenant=tenant,
-            manifest=manifest,
             input_prompt=message,
             input_context=job_context,
             created_by=request.user,
