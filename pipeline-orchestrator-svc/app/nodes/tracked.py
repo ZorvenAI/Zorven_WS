@@ -63,15 +63,10 @@ class TrackedNode:
             "started_at": started_at,
         }
 
-        # Send running callback (non-blocking, non-fatal)
+        # Send running callback (non-fatal; awaited to ensure delivery)
         if callback_url:
-            ok = await self.callback_client.send_progress(
+            await self.callback_client.send_progress(
                 callback_url, progress
-            )
-            logger.info(
-                "[TrackedNode] Node %s → running callback sent (ok=%s)",
-                self.node_id,
-                ok,
             )
         else:
             logger.warning(
@@ -85,9 +80,9 @@ class TrackedNode:
         # Execute the actual node
         try:
             result = await self.inner(state)
-        except Exception as exc:
-            logger.error(
-                "[TrackedNode] Node %s FAILED: %s", self.node_id, exc
+        except Exception:
+            logger.exception(
+                "[TrackedNode] Node %s FAILED", self.node_id
             )
             # Mark as failed
             progress[self.node_id] = {
@@ -115,13 +110,8 @@ class TrackedNode:
 
         # Send done callback
         if callback_url:
-            ok = await self.callback_client.send_progress(
+            await self.callback_client.send_progress(
                 callback_url, progress
-            )
-            logger.info(
-                "[TrackedNode] Node %s → done callback sent (ok=%s)",
-                self.node_id,
-                ok,
             )
 
         # Emit Kafka trace

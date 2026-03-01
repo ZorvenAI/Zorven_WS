@@ -57,10 +57,14 @@ class CallbackClient:
                 headers=self._headers(),
             )
             response.raise_for_status()
+            label = payload.get("status") or next(
+                (k for k in ("resolved_manifest_id", "progress") if k in payload),
+                "unknown",
+            )
             logger.info(
                 "Callback sent to %s: %s (HTTP %d)",
                 callback_url,
-                payload.get("status", "progress"),
+                label,
                 response.status_code,
             )
             return True
