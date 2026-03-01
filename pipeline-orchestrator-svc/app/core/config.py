@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     VERTEX_AI_LOCATION: str = "global"
     VERTEX_AI_DATA_STORE_ID: str = "prevision-rag-dev"
 
+    # GCP credentials (service account JSON, for GCS + Vertex AI)
+    GCS_CREDENTIALS_JSON: str = ""
+
     # Gemini (answer synthesis)
     GOOGLE_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
@@ -49,6 +52,13 @@ class Settings(BaseSettings):
     # RAG query cache
     RAG_QUERY_CACHE_TTL: int = 3600
     RAG_SESSION_FILES_TTL: int = 86400
+
+    # Agent service URLs (override for Railway/cloud deployment)
+    DISCOVERY_AGENT_URL: str = "http://discovery-agent-svc:8020"
+    CONTENT_AGENT_URL: str = "http://content-agent-svc:8050"
+    SOCIAL_AGENT_URL: str = "http://social-agent-svc:8060"
+    INTELLIGENCE_AGENT_URL: str = "http://intelligence-agent-svc:8030"
+    RAG_UPLOADER_AGENT_URL: str = "http://rag-uploader-agent-svc:8070"
 
 
 settings = Settings()

@@ -24,12 +24,15 @@ class TestBSICalculator:
         assert result.data_completeness == 1.0
         assert len(result.pillars) == 3
 
-    def test_no_data_uses_stubs(self):
-        """When no pillar data provided, use stub scores."""
+    def test_no_data_returns_zero(self):
+        """When no pillar data provided, return score 0 with error rationale."""
         result = self.calc.derive_index()
         assert result.data_completeness == 0.0
-        assert result.score > 0
+        assert result.score == 0
         assert len(result.pillars) == 3
+        for pillar in result.pillars:
+            assert pillar.score == 0.0
+            assert "not available" in pillar.rationale.lower()
 
     def test_missing_financial_pillar(self):
         """Missing financial pillar triggers weight redistribution."""
@@ -122,7 +125,7 @@ class TestBSICalculator:
         assert "revenue_growth" in financial_pillar.rationale
 
     def test_pillar_rationale_without_data(self):
-        """Missing data pillar rationale mentions stubs."""
+        """Missing data pillar rationale explains data is unavailable."""
         result = self.calc.derive_index()
         for pillar in result.pillars:
-            assert "stub" in pillar.rationale.lower()
+            assert "not available" in pillar.rationale.lower()

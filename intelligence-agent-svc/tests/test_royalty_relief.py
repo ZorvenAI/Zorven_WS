@@ -154,15 +154,14 @@ class TestRevenueEstimation:
         assert len(revenues) == 3
         assert revenues[0] == 2_000_000.0
 
-    def test_stub_fallback(self):
-        """When no data available, use stub $10M base."""
+    def test_no_data_returns_empty(self):
+        """When no data available, return empty list (error signal)."""
         revenues = self.engine.estimate_revenues_from_context(
             previous_outputs={},
             input_context={},
             horizon_years=5,
         )
-        assert len(revenues) == 5
-        assert revenues[0] == 10_000_000.0
+        assert revenues == []
 
 
 class TestRoyaltyRateSelection:

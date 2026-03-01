@@ -127,6 +127,11 @@ class VertexAIAdapter(VertexAIPort):
 
             from google.cloud import discoveryengine_v1 as discoveryengine
 
+            # Sanitize struct_data: Vertex AI requires all top-level
+            # values in struct_data to be objects, not arrays.
+            if isinstance(document_content, dict):
+                document_content = self._sanitize_for_vertex(document_content)
+
             # Create document with structured data (NO_CONTENT data stores)
             if isinstance(document_content, str):
                 json_str = document_content
@@ -181,6 +186,30 @@ class VertexAIAdapter(VertexAIPort):
                 message=f"Failed to upsert document: {error_message}",
                 document_id=event.file_id,
             )
+
+    @staticmethod
+    def _sanitize_for_vertex(content: dict[str, Any]) -> dict[str, Any]:
+        """Sanitize document content for Vertex AI Discovery Engine.
+
+        Vertex AI auto-infers schema from indexed documents. The Gemini
+        extraction prompt produces variable ``struct_data`` shapes
+        (tables, lists, key_value_pairs) that differ between document
+        types, causing schema-mismatch 400 errors on subsequent upserts.
+
+        Fix: strip the variable-shape fields from ``struct_data``,
+        keeping only ``metadata`` (always a dict) and scalar values.
+        The searchable text lives in ``extracted_text``, so no search
+        quality is lost.
+        """
+        struct_data = content.get("struct_data")
+        if not isinstance(struct_data, dict):
+            return content
+
+        # Remove fields whose shape varies per document
+        for key in ("tables", "lists", "key_value_pairs"):
+            struct_data.pop(key, None)
+
+        return content
 
     async def delete_document(self, event: SyncEvent) -> SyncResult:
         """Delete a document from Vertex AI Search.

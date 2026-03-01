@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     GCS_PROJECT_ID: str = ""
     GCS_BUCKET_NAME: str = ""
     GCS_CREDENTIALS_PATH: str = ""
+    GCS_CREDENTIALS_JSON: str = ""
 
     # Core API (Django backend) for BrandAsset registration
     CORE_API_URL: str = "http://localhost:8001"

@@ -89,6 +89,11 @@ class FileResolver:
                 try:
                     bucket, path = parse_gcs_uri(blog_uri)
                     file_name = path.rsplit("/", 1)[-1] if "/" in path else path
+                    # Compute file size from blog_content if available
+                    blog_content = blog_output.get("blog_content", "")
+                    file_size = (
+                        len(blog_content.encode("utf-8")) if blog_content else 0
+                    )
                     files.append(
                         ResolvedFile(
                             gcs_uri=blog_uri,
@@ -96,7 +101,7 @@ class FileResolver:
                             path=path,
                             file_name=file_name,
                             file_type=infer_mime_type(file_name),
-                            file_size_bytes=0,
+                            file_size_bytes=file_size,
                             source="blog_author",
                         )
                     )

@@ -121,6 +121,7 @@ curl http://localhost:8030/health     # Intelligence Agent
 curl http://localhost:8040/health     # Chat Titling Worker
 curl http://localhost:8050/health     # Content Agent
 curl http://localhost:8060/health     # Social Agent
+curl http://localhost:8070/health     # RAG Uploader Agent
 curl http://localhost:8085/health     # MCP Server
 ```
 
@@ -271,7 +272,7 @@ The workflow at `.github/workflows/deploy-railway.yml` automatically deploys on 
 
 ### Agent Microservices
 
-All 6 agent microservices are standalone FastAPI applications:
+All 7 agent microservices are standalone FastAPI applications:
 
 | Service | Container Name | Port | Redis DB | Dockerfile |
 |---------|---------------|------|----------|------------|
@@ -281,6 +282,7 @@ All 6 agent microservices are standalone FastAPI applications:
 | Chat Titling Worker | titling-worker | 8040 | 4 | `../chat-titling-worker/Dockerfile` |
 | Content Agent | content-agent | 8050 | 5 | `../content-agent-service/Dockerfile` |
 | Social Agent | social-agent | 8060 | 6 | `../social-agent-service/Dockerfile` |
+| RAG Uploader Agent | rag-uploader | 8070 | 7 | `../rag-uploader-agent-service/Dockerfile` |
 | MCP Server | mcp-server | 8085 | 0 | `docker/backend/Dockerfile` |
 
 ### Redis Database Allocation
@@ -296,6 +298,7 @@ A single Redis instance is shared across all services, with each using a differe
 | 4 | Chat Titling Worker | `TITLING_REDIS_URL=redis://redis:6379/4` |
 | 5 | Content Agent | `CONTENT_REDIS_URL=redis://redis:6379/5` |
 | 6 | Social Agent | `SOCIAL_REDIS_URL=redis://redis:6379/6` |
+| 7 | RAG Uploader Agent | `UPLOADER_REDIS_URL=redis://redis:6379/7` |
 
 ### Kafka Setup (Optional)
 

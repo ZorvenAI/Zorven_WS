@@ -52,7 +52,11 @@ class TestISOCalcEndpoint:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["methodology"] == "royalty_relief"
+        # Route defaults to ISO valuation even without explicit method
+        assert data["analysis_type"] == "iso_valuation"
+        # No revenue data → error response with actionable recommendations
+        assert any("unable" in f.lower() for f in data["findings"])
+        assert len(data["recommendations"]) > 0
 
     async def test_iso_calc_no_tenant_header_uses_default(self, client):
         """Missing X-Tenant-ID header should use default."""
