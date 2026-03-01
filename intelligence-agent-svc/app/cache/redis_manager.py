@@ -151,13 +151,11 @@ class RedisManager:
         )
         return n.strip().rstrip(",").strip()
 
-    # --- Company Data Cache ---
-
     async def get_company_data(self, company_name: str) -> Optional[dict[str, Any]]:
         """Get cached Gemini company data lookup result."""
         try:
             r = await self._get_redis()
-            key = f"intel:company:{company_name.lower().strip()}"
+            key = f"intel:company:{self._normalize_company(company_name)}"
             data = await r.get(key)
             if data is not None:
                 logger.debug("Company data cache HIT for: %s", company_name)
@@ -173,7 +171,7 @@ class RedisManager:
         """Cache company data with 4-hour TTL."""
         try:
             r = await self._get_redis()
-            key = f"intel:company:{company_name.lower().strip()}"
+            key = f"intel:company:{self._normalize_company(company_name)}"
             await r.set(key, json.dumps(data), ex=RESULT_CACHE_TTL)
             logger.debug("Company data cache SET for: %s", company_name)
         except Exception as exc:
