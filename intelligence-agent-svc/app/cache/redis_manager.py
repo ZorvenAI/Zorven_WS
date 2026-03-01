@@ -132,6 +132,27 @@ class RedisManager:
 
     # --- Company Data Cache ---
 
+    @staticmethod
+    def _normalize_company(name: str) -> str:
+        """Normalize a company name for consistent cache keys.
+
+        'NIKE, Inc.', 'Nike Inc', 'Nike' → 'nike'
+        """
+        import re
+
+        n = name.lower().strip()
+        # Strip common corporate suffixes
+        n = re.sub(
+            r",?\s*\b(inc\.?|corp\.?|corporation|llc|ltd\.?|co\.?|plc|group"
+            r"|holdings|limited|incorporated|company)\b\.?\s*$",
+            "",
+            n,
+            flags=re.IGNORECASE,
+        )
+        return n.strip().rstrip(",").strip()
+
+    # --- Company Data Cache ---
+
     async def get_company_data(self, company_name: str) -> Optional[dict[str, Any]]:
         """Get cached Gemini company data lookup result."""
         try:

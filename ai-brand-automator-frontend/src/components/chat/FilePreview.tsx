@@ -13,6 +13,7 @@ export interface FileAttachment {
 
 interface FilePreviewProps {
   attachments: FileAttachment[];
+  isUser?: boolean;
 }
 
 function getFileIcon(type: string) {
@@ -56,7 +57,7 @@ function StatusBadge({ status }: { status: string }) {
   }
 }
 
-export function FilePreview({ attachments }: FilePreviewProps) {
+export function FilePreview({ attachments, isUser = false }: FilePreviewProps) {
   if (!attachments || attachments.length === 0) return null;
 
   return (
@@ -64,12 +65,22 @@ export function FilePreview({ attachments }: FilePreviewProps) {
       {attachments.map((att) => (
         <div
           key={att.id}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5"
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+            isUser
+              ? 'bg-brand-midnight/10 border border-brand-midnight/15'
+              : 'bg-white/[0.03] border border-white/5'
+          }`}
         >
-          <span className="text-brand-silver/50">{getFileIcon(att.file_type)}</span>
+          <span className={isUser ? 'text-brand-midnight/60' : 'text-brand-silver/50'}>
+            {getFileIcon(att.file_type)}
+          </span>
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-brand-silver truncate">{att.file_name}</p>
-            <p className="text-[10px] text-brand-silver/30">
+            <p className={`text-xs truncate ${
+              isUser ? 'text-brand-midnight' : 'text-brand-silver'
+            }`}>{att.file_name}</p>
+            <p className={`text-[10px] ${
+              isUser ? 'text-brand-midnight/50' : 'text-brand-silver/30'
+            }`}>
               {formatSize(att.file_size)}
             </p>
           </div>

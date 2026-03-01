@@ -151,7 +151,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
         {/* File attachments */}
         {message.attachments && message.attachments.length > 0 && (
-          <FilePreview attachments={message.attachments} />
+          <FilePreview attachments={message.attachments} isUser={message.isUser} />
         )}
 
         {/* Pipeline inline card */}
