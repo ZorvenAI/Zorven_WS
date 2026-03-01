@@ -429,15 +429,18 @@ def _process_chat_message(
 
         # Use the same manifest as pipeline UI for brand valuation
         # so both flows execute the same graph (including web_research).
+        # extract_target_brand() only returns non-None for brand valuation
+        # patterns (brand equity/valuation/value/strength), so this won't
+        # match broader analysis prompts.
         manifest = None
         if target_brand:
+            _mf_qs = PipelineManifest.objects.filter(
+                pipeline_id="iso-brand-equity", is_active=True
+            ).order_by("-version")
+            # Prefer tenant-specific manifest, fall back to global
             manifest = (
-                PipelineManifest.objects.filter(
-                    pipeline_id="iso-brand-equity", is_active=True
-                )
-                .order_by("-version")
-                .first()
-            )
+                _mf_qs.filter(tenant=tenant).first() if tenant else None
+            ) or _mf_qs.filter(tenant__isnull=True).first()
 
         job = AnalysisJob.objects.create(
             tenant=tenant,
