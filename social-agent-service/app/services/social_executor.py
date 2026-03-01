@@ -69,16 +69,33 @@ class SocialExecutor:
         if isinstance(seo_meta, str):
             seo_meta = {}
 
+        logger.info(
+            "Job %s: previous_outputs keys=%s, blog_content=%d chars",
+            job_id,
+            list(request.previous_outputs.keys()),
+            len(blog_content),
+        )
+
         if not blog_content:
             # Try to build content from brand equity / intelligence results
             blog_content = _build_content_from_previous_outputs(
                 request.previous_outputs, request.input_prompt
             )
             if blog_content != request.input_prompt:
-                logger.info("Built social content from upstream analysis results")
+                content_hash = hashlib.sha256(blog_content.encode("utf-8")).hexdigest()[
+                    :8
+                ]
+                logger.info(
+                    "Job %s: built social content from analysis results "
+                    "(len=%d, sha256_prefix=%s)",
+                    job_id,
+                    len(blog_content),
+                    content_hash,
+                )
             else:
                 logger.info(
-                    "No blog_author output — using input_prompt as content"
+                    "Job %s: no analysis data found — using input_prompt " "as content",
+                    job_id,
                 )
 
         # 3. Determine target platforms (intersect with connected profiles)
@@ -502,12 +519,7 @@ def _build_content_from_previous_outputs(
         if "recommendations" in output and isinstance(output["recommendations"], list):
             recommendations.extend(output["recommendations"])
 
-    if (
-        not valuation_data
-        and not bsi_data
-        and not findings
-        and not recommendations
-    ):
+    if not valuation_data and not bsi_data and not findings and not recommendations:
         return fallback
 
     # Compose a structured summary for Gemini to adapt
@@ -603,12 +615,8 @@ def _build_publishable_content(post: SocialPost) -> str:
     platform = (post.platform or "").lower()
 
     # Check if hashtags are already present in the content
-    existing_tags = {
-        tag.lower() for tag in re.findall(r"#\w+", content)
-    }
-    missing = [
-        tag for tag in post.hashtags if tag.lower() not in existing_tags
-    ]
+    existing_tags = {tag.lower() for tag in re.findall(r"#\w+", content)}
+    missing = [tag for tag in post.hashtags if tag.lower() not in existing_tags]
     if not missing:
         return content
 

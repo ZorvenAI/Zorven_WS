@@ -69,9 +69,7 @@ class JobExecutor:
                 else:
                     resolved_id = state.get("resolved_manifest_id")
                     # Look up the full manifest_data from available_manifests
-                    manifest_data = self._find_resolved_manifest(
-                        request, resolved_id
-                    )
+                    manifest_data = self._find_resolved_manifest(request, resolved_id)
                     if manifest_data is None:
                         # No manifest_data available — cannot execute
                         await self.callback.send_completed(
@@ -82,9 +80,7 @@ class JobExecutor:
                                     f"Resolved manifest: {resolved_id}"
                                 ),
                                 "resolved_manifest_id": resolved_id,
-                                "findings": [
-                                    "Auto-detect routing completed."
-                                ],
+                                "findings": ["Auto-detect routing completed."],
                                 "recommendations": [
                                     "Re-run with the resolved manifest "
                                     "for full analysis."
@@ -99,6 +95,9 @@ class JobExecutor:
                     nid = node["id"]
                     if nid not in state["progress"]:
                         state["progress"][nid] = {"status": "pending"}
+
+                # Send progress with all pending nodes visible to the UI
+                await self.callback.send_progress(callback_url, state["progress"])
 
             # Build the LangGraph (with per-node progress tracking)
             try:
@@ -279,34 +278,24 @@ class JobExecutor:
         composed = "_composed_manifest" in result
         if composed:
             state["_composed_manifest"] = result["_composed_manifest"]
-            node_ids = [
-                n["id"] for n in result["_composed_manifest"].get("nodes", [])
-            ]
+            node_ids = [n["id"] for n in result["_composed_manifest"].get("nodes", [])]
             state["progress"]["pipeline_composer"] = {
                 "status": "done",
                 "output": {
                     "composed": True,
                     "pipeline": " → ".join(node_ids),
                 },
-                "started_at": state["progress"]["pipeline_composer"].get(
-                    "started_at"
-                ),
+                "started_at": state["progress"]["pipeline_composer"].get("started_at"),
                 "completed_at": self._now_iso(),
             }
             # Send progress update (no manifest_id to resolve in DB)
-            await self.callback.send_progress(
-                request.callback_url, state["progress"]
-            )
+            await self.callback.send_progress(request.callback_url, state["progress"])
         else:
             state["resolved_manifest_id"] = result.get("resolved_manifest_id")
             state["progress"]["pipeline_composer"] = {
                 "status": "done",
-                "output": {
-                    "resolved_manifest_id": state["resolved_manifest_id"]
-                },
-                "started_at": state["progress"]["pipeline_composer"].get(
-                    "started_at"
-                ),
+                "output": {"resolved_manifest_id": state["resolved_manifest_id"]},
+                "started_at": state["progress"]["pipeline_composer"].get("started_at"),
                 "completed_at": self._now_iso(),
             }
             # Notify the callback about the resolved manifest

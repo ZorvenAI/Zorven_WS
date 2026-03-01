@@ -45,6 +45,11 @@ GOOGLE_API_KEY = "AIzaSyAyyFMj47QoOUrIU0jIP4WSMC8IWPlc144"
 GCS_PROJECT_ID = "brandsol-project"
 GCS_BUCKET_NAME = "onboarding-brandsol-customer-bucket-1"
 
+# Backend service name (used to derive internal Railway hostname)
+BACKEND_SERVICE_NAME = "Prevision-WS"
+BACKEND_PORT = "8000"
+BACKEND_INTERNAL_URL = f"http://{BACKEND_SERVICE_NAME}.railway.internal:{BACKEND_PORT}"
+
 # Existing service IDs
 BACKEND_SERVICE_ID = "9422b6c8-da15-4f68-ace4-6ab6f3512037"
 
@@ -159,7 +164,7 @@ SERVICES = [
             "TITLING_REDIS_URL": f"{REDIS_BASE}/4",
             "TITLING_KAFKA_BOOTSTRAP_SERVERS": "",
             "TITLING_GOOGLE_API_KEY": GOOGLE_API_KEY,
-            "TITLING_CORE_API_URL": "http://Prevision-WS.railway.internal:8000",
+            "TITLING_CORE_API_URL": BACKEND_INTERNAL_URL,
             "TITLING_WORKER_TOKEN": WORKER_TOKEN,
             "TITLING_LOG_LEVEL": "INFO",
             "PORT": "8040",
@@ -178,7 +183,7 @@ SERVICES = [
             "CONTENT_GOOGLE_API_KEY": GOOGLE_API_KEY,
             "CONTENT_GCS_PROJECT_ID": GCS_PROJECT_ID,
             "CONTENT_GCS_BUCKET_NAME": GCS_BUCKET_NAME,
-            "CONTENT_CORE_API_URL": "http://Prevision-WS.railway.internal:8000",
+            "CONTENT_CORE_API_URL": BACKEND_INTERNAL_URL,
             "CONTENT_CORE_API_TOKEN": SERVICE_TOKEN,
             "CONTENT_LOG_LEVEL": "INFO",
             "PORT": "8050",
@@ -195,7 +200,7 @@ SERVICES = [
             "SOCIAL_REDIS_URL": f"{REDIS_BASE}/6",
             "SOCIAL_KAFKA_BOOTSTRAP_SERVERS": "",
             "SOCIAL_GOOGLE_API_KEY": GOOGLE_API_KEY,
-            "SOCIAL_CORE_API_URL": "http://Prevision-WS.railway.internal:8000",
+            "SOCIAL_CORE_API_URL": BACKEND_INTERNAL_URL,
             "SOCIAL_CORE_API_TOKEN": SERVICE_TOKEN,
             "SOCIAL_MCP_SERVER_URL": "http://mcp-server.railway.internal:8085/sse",
             "SOCIAL_LOG_LEVEL": "INFO",
@@ -215,7 +220,7 @@ SERVICES = [
             "UPLOADER_GOOGLE_API_KEY": GOOGLE_API_KEY,
             "UPLOADER_GCS_PROJECT_ID": GCS_PROJECT_ID,
             "UPLOADER_GCS_BUCKET_NAME": GCS_BUCKET_NAME,
-            "UPLOADER_CORE_API_URL": "http://Prevision-WS.railway.internal:8000",
+            "UPLOADER_CORE_API_URL": BACKEND_INTERNAL_URL,
             "UPLOADER_CORE_API_TOKEN": SERVICE_TOKEN,
             "UPLOADER_LOG_LEVEL": "INFO",
             "PORT": "8070",
@@ -337,6 +342,7 @@ def main():
     # Step 2: Add missing env vars to backend
     print("\n[2/4] Adding missing env vars to backend...")
     backend_new_vars = {
+        "BACKEND_URL": BACKEND_INTERNAL_URL,
         "ORCHESTRATOR_URL": "http://orchestrator.railway.internal:8010",
         "ORCHESTRATOR_SERVICE_TOKEN": SERVICE_TOKEN,
         "ORCHESTRATOR_CALLBACK_TOKEN": CALLBACK_TOKEN,

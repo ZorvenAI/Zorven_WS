@@ -259,6 +259,56 @@ class TestJobExecutor:
         executor.callback.send_progress.assert_called()
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_composed_manifest_sends_pending_nodes_progress(self, mock_get_redis):
+        """After intent routing resolves nodes, send_progress is called
+        with all new nodes as 'pending' before ainvoke() starts."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        composed_manifest = {
+            "nodes": [
+                {"id": "discovery", "type": "internal", "handler": "StrategyNode"},
+                {"id": "intelligence", "type": "internal", "handler": "ReportNode"},
+            ],
+            "edges": [["discovery", "intelligence"]],
+            "global_config": {},
+        }
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
+        executor.callback.send_completed.return_value = True
+
+        with patch(
+            "app.nodes.internal.pipeline_composer.PipelineComposer.compose",
+            new_callable=AsyncMock,
+            return_value={"_composed_manifest": composed_manifest},
+        ):
+            request = _make_request(manifest=None)
+            await executor.execute(request)
+
+        # send_progress should be called multiple times:
+        # 1. composer running, 2. composer done, 3. pending nodes before ainvoke
+        progress_calls = executor.callback.send_progress.call_args_list
+        # Find the call that includes pending nodes (after composer done)
+        found_pending = False
+        for call in progress_calls:
+            progress = (
+                call.args[1] if len(call.args) > 1 else call.kwargs.get("progress", {})
+            )
+            if isinstance(progress, dict):
+                discovery_status = progress.get("discovery", {}).get("status")
+                intelligence_status = progress.get("intelligence", {}).get("status")
+                if discovery_status == "pending" and intelligence_status == "pending":
+                    found_pending = True
+                    break
+        assert (
+            found_pending
+        ), "send_progress must be called with pending nodes before ainvoke"
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_composer_fallback_resolves_manifest_id(self, mock_get_redis):
         """PipelineComposer keyword fallback → resolves manifest_id."""
         mock_redis = AsyncMock()
@@ -297,9 +347,7 @@ class TestJobExecutor:
             new_callable=AsyncMock,
             return_value={"resolved_manifest_id": "blog-authoring"},
         ):
-            request = _make_request(
-                manifest=None, available_manifests=available
-            )
+            request = _make_request(manifest=None, available_manifests=available)
             await executor.execute(request)
 
         executor.callback.send_completed.assert_called_once()
