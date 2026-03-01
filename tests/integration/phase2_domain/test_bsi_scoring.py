@@ -117,8 +117,10 @@ class TestBSIScoring:
         total_weight = sum(p["weight"] for p in bsi["pillars"])
         assert total_weight == pytest.approx(1.0, abs=0.01)
 
-    async def test_no_data_uses_stubs(self, http_client, tenant_headers):
-        """No pillar data -> stub scores, completeness=0.0."""
+    async def test_no_data_returns_zero_score(
+        self, http_client, tenant_headers
+    ):
+        """No pillar data -> score=0, completeness=0.0."""
         payload = make_agent_payload(
             input_prompt="BSI test: no pillar data stubs",
             config={"method": "royalty_relief"},
@@ -136,8 +138,10 @@ class TestBSIScoring:
         bsi = data["bsi"]
 
         assert bsi["data_completeness"] == 0.0
-        assert bsi["score"] > 0  # Stub scores produce non-zero BSI
-        assert bsi["score"] <= 100
+        # No pillar data available → BSI score is 0
+        assert bsi["score"] == 0
+        # All 3 pillars listed with rationale
+        assert len(bsi["pillars"]) == 3
 
     async def test_bsi_score_clamped_0_100(self, http_client, tenant_headers):
         """Extreme inputs never produce score outside 0-100."""
