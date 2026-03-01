@@ -110,6 +110,21 @@ class PlatformAdapter:
             "Just write the post itself, ready to publish."
         )
 
+        # Detect whether content is structured analysis data (brand equity
+        # metrics, BSI scores) versus blog/article content, and tailor the
+        # prompt accordingly so Gemini produces contextually accurate posts.
+        is_analysis = _is_analysis_content(content)
+
+        if is_analysis:
+            return self._build_analysis_prompt(
+                platform,
+                content,
+                brand_name,
+                brand_voice,
+                keyword_str,
+                no_options,
+            )
+
         prompts = {
             "linkedin": (
                 f"Write exactly ONE LinkedIn post for {brand_name} based on "
@@ -151,6 +166,74 @@ class PlatformAdapter:
         }
 
         return prompts.get(platform, prompts["linkedin"])
+
+    def _build_analysis_prompt(
+        self,
+        platform: str,
+        content: str,
+        brand_name: str,
+        brand_voice: str,
+        keyword_str: str,
+        no_options: str,
+    ) -> str:
+        """Build prompts tailored for brand equity / analysis data."""
+        limits = {
+            "linkedin": LINKEDIN_MAX_CHARS,
+            "twitter": TWITTER_MAX_CHARS,
+            "facebook": FACEBOOK_MAX_CHARS,
+            "instagram": INSTAGRAM_MAX_CHARS,
+        }
+        char_limit = limits.get(platform, LINKEDIN_MAX_CHARS)
+
+        base_instruction = (
+            f"You are writing a social media post for {brand_name}. "
+            f"Use a {brand_voice} tone.\n\n"
+            "The data below contains brand valuation and strength metrics "
+            "from an ISO 10668 brand equity analysis. Transform these results "
+            "into an engaging social media post that highlights the key "
+            "achievements and business value.\n\n"
+            "Guidelines:\n"
+            "- Lead with a compelling insight or headline number\n"
+            "- Translate financial metrics into business impact language\n"
+            "- Include specific numbers (valuation, BSI score) naturally\n"
+            "- End with a forward-looking call to action\n"
+        )
+
+        platform_specifics = {
+            "linkedin": (
+                f"Write exactly ONE LinkedIn post. "
+                "Structure as: attention-grabbing headline metric, "
+                "then 2-3 sentences explaining what the numbers mean "
+                "for the business, then a call to action. "
+                f"Stay under {char_limit} characters. "
+                f"End with 3-5 hashtags related to: {keyword_str}."
+            ),
+            "twitter": (
+                f"Write exactly ONE tweet under {char_limit} characters. "
+                "Highlight the single most impressive metric with context. "
+                f"Include 1-2 hashtags related to: {keyword_str}."
+            ),
+            "facebook": (
+                f"Write exactly ONE Facebook post under {char_limit} characters. "
+                "Make it conversational — share the results as an exciting "
+                "milestone. Include a question to drive engagement."
+            ),
+            "instagram": (
+                f"Write exactly ONE Instagram caption under {char_limit} "
+                "characters. Start with a strong hook. Use short paragraphs "
+                "and line breaks. End with a CTA. Include 10-15 hashtags "
+                f"related to: {keyword_str}."
+            ),
+        }
+
+        specifics = platform_specifics.get(platform, platform_specifics["linkedin"])
+
+        return (
+            f"{base_instruction}\n"
+            f"{specifics}\n\n"
+            f"{no_options}\n\n"
+            f"Brand analysis results:\n{content}"
+        )
 
     def _stub_adapt(
         self,
@@ -214,6 +297,26 @@ class PlatformAdapter:
             char_count=len(content),
             post_type=post_type,
         )
+
+
+# ── Content-type detection ───────────────────────────────────────────
+
+# Phrases that signal structured brand-equity / analysis output
+_ANALYSIS_MARKERS = (
+    "brand valuation:",
+    "brand strength index",
+    "royalty rate:",
+    "forecast horizon:",
+    "key findings:",
+    "bsi:",
+    "(iso 10668",
+)
+
+
+def _is_analysis_content(content: str) -> bool:
+    """Return True when *content* looks like structured analysis metrics."""
+    lower = content[:500].lower()
+    return sum(1 for m in _ANALYSIS_MARKERS if m in lower) >= 2
 
 
 # ── Post-processing helpers ──────────────────────────────────────────

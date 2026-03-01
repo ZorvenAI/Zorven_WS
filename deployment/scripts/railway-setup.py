@@ -337,6 +337,7 @@ def main():
     # Step 2: Add missing env vars to backend
     print("\n[2/4] Adding missing env vars to backend...")
     backend_new_vars = {
+        "BACKEND_URL": "http://Prevision-WS.railway.internal:8000",
         "ORCHESTRATOR_URL": "http://orchestrator.railway.internal:8010",
         "ORCHESTRATOR_SERVICE_TOKEN": SERVICE_TOKEN,
         "ORCHESTRATOR_CALLBACK_TOKEN": CALLBACK_TOKEN,
