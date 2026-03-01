@@ -1,6 +1,6 @@
 """Tests for the IntelligenceExecutor orchestration service."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -122,15 +122,17 @@ class TestISOValuationFlow:
         assert response.valuation.horizon_years == 5
         assert response.valuation.brand_value_npv > 0
 
-    async def test_valuation_stub_revenues(self):
-        """No revenue data → stub $10M base used."""
+    async def test_valuation_no_revenue_returns_error(self):
+        """No revenue data → returns error response with recommendations."""
         request = ExecuteRequest(
             input_prompt="Calculate brand value",
             config={"method": "royalty_relief"},
         )
         response = await self.executor.execute(request, "tenant-1")
-        assert response.valuation is not None
-        assert response.valuation.brand_value_npv > 0
+        assert response.valuation is None
+        assert response.analysis_type == "iso_valuation"
+        assert any("unable" in f.lower() for f in response.findings)
+        assert len(response.recommendations) > 0
 
     async def test_valuation_includes_bsi(self):
         """Valuation response includes BSI result."""
@@ -203,6 +205,94 @@ class TestRateLimiting:
         )
         response = await executor.execute(request, "tenant-1")
         assert response.analysis_type == "iso_valuation"
+
+
+class TestGeminiLookup:
+    """Verify Gemini company data lookup enriches empty context."""
+
+    def setup_method(self):
+        # Mock Gemini client — genai.GenerativeModel(model).generate_content(prompt)
+        self.mock_genai = MagicMock()
+        mock_model_instance = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = (
+            '{"company_name": "Nike, Inc.", "sector": "consumer_goods", '
+            '"base_revenue": 51217000000, "growth_rate": 0.10, '
+            '"brand_awareness": 95, "profit_margin": 0.12, '
+            '"customer_loyalty": 82, "market_share": 0.27}'
+        )
+        mock_model_instance.generate_content.return_value = mock_response
+        self.mock_genai.GenerativeModel.return_value = mock_model_instance
+        self.executor = IntelligenceExecutor(
+            royalty_engine=RoyaltyReliefEngine(),
+            bsi_calculator=BSICalculator(proxy_engine=ProxyEngine()),
+            proxy_engine=ProxyEngine(),
+            gap_analyzer=CompetitiveGapAnalyzer(),
+            theme_analyzer=ThemeAnalyzer(),
+            gemini_client=self.mock_genai,
+        )
+
+    async def test_gemini_enriches_empty_context(self):
+        """No revenue in context + Gemini succeeds → real valuation."""
+        request = ExecuteRequest(
+            input_prompt="Calculate brand equity for Nike",
+            config={"method": "royalty_relief"},
+        )
+        response = await self.executor.execute(request, "tenant-1")
+        assert response.analysis_type == "iso_valuation"
+        assert response.valuation is not None
+        assert response.valuation.brand_value_npv > 0
+        assert response.methodology == "royalty_relief"
+
+    async def test_gemini_failure_returns_error(self):
+        """Gemini returns NOT_FOUND → error response."""
+        mock_model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = "NOT_FOUND"
+        mock_model.generate_content.return_value = mock_response
+        self.mock_genai.GenerativeModel.return_value = mock_model
+
+        request = ExecuteRequest(
+            input_prompt="Calculate brand equity for UnknownStartup",
+            config={"method": "royalty_relief"},
+        )
+        response = await self.executor.execute(request, "tenant-1")
+        assert response.analysis_type == "iso_valuation"
+        assert response.valuation is None
+        assert any("unable" in f.lower() for f in response.findings)
+
+    async def test_gemini_called_when_only_company_name_in_context(self):
+        """company_name in context but no base_revenue → Gemini lookup triggered."""
+        request = ExecuteRequest(
+            input_prompt="Calculate brand equity for Nike",
+            input_context={
+                "company_name": "Nike",
+                "sector": "consumer_goods",
+            },
+            config={"method": "royalty_relief"},
+        )
+        response = await self.executor.execute(request, "tenant-1")
+        assert response.analysis_type == "iso_valuation"
+        assert response.valuation is not None
+        assert response.valuation.brand_value_npv > 0
+        # Gemini SHOULD have been called since base_revenue is absent
+        self.mock_genai.GenerativeModel.assert_called_once()
+
+    async def test_gemini_skipped_when_revenue_present(self):
+        """Revenue in context → no Gemini call."""
+        request = ExecuteRequest(
+            input_prompt="Calculate brand equity for Nike",
+            input_context={
+                "sector": "consumer_goods",
+                "base_revenue": 51_000_000_000,
+            },
+            config={"method": "royalty_relief"},
+        )
+        response = await self.executor.execute(request, "tenant-1")
+        assert response.valuation is not None
+        assert response.valuation.brand_value_npv > 0
+        # Gemini should NOT have been called
+        self.mock_genai.GenerativeModel.assert_not_called()
 
 
 class TestCaching:

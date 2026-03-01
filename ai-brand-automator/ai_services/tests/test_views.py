@@ -497,6 +497,58 @@ class TestChatWithAIPipelineIntegration:
         assert job.input_context["source"] == "chat"
         assert job.input_context["session_id"] == response.data["session_id"]
 
+    @patch("orchestration.tasks.dispatch_job_task")
+    @patch("ai_services.services.GeminiAIService.extract_target_brand")
+    @patch("ai_services.services.GeminiAIService.classify_intent")
+    def test_pipeline_job_excludes_financial_data(
+        self,
+        mock_classify,
+        mock_extract,
+        mock_dispatch,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        """Financial data NOT in job_context — intelligence agent does its own lookup."""
+        mock_classify.return_value = {"intent": "pipeline", "confidence": 0.9}
+        mock_extract.return_value = {
+            "company_name": "Nike",
+            "sector": "consumer_goods",
+            "base_revenue": 51_000_000_000,
+            "growth_rate": 0.10,
+            "brand_awareness": 95,
+            "profit_margin": 0.12,
+            "customer_loyalty": 82,
+            "market_share": 0.27,
+        }
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"message": "Calculate brand equity for Nike"},
+            format="json",
+        )
+
+        from orchestration.models import AnalysisJob
+
+        job = AnalysisJob.objects.get(
+            job_id=response.data["pipeline_job"]["job_id"]
+        )
+        # company_name and sector should be present
+        assert job.input_context["company_name"] == "Nike"
+        assert job.input_context["sector"] == "consumer_goods"
+        # Financial data should NOT be in job_context
+        for key in (
+            "base_revenue",
+            "growth_rate",
+            "brand_awareness",
+            "profit_margin",
+            "customer_loyalty",
+            "market_share",
+        ):
+            assert key not in job.input_context, (
+                f"{key} should not be in job_context — "
+                f"intelligence agent does its own lookup"
+            )
+
 
 @pytest.mark.django_db
 @pytest.mark.unit

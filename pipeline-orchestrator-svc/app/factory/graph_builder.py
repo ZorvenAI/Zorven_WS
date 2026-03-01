@@ -12,11 +12,22 @@ from typing import Any
 
 from langgraph.graph import END, StateGraph
 
+from app.core.config import settings
 from app.factory.node_registry import resolve_handler
 from app.nodes.external_wrapper import ExternalWrapper
 from app.state.schema import AgentState
 
 logger = logging.getLogger(__name__)
+
+# Docker Compose service name → settings attribute mapping.
+# Used to translate hardcoded manifest URLs to environment-configured URLs.
+_SERVICE_URL_MAP: dict[str, str] = {
+    "discovery-agent-svc:8020": settings.DISCOVERY_AGENT_URL,
+    "intelligence-agent-svc:8030": settings.INTELLIGENCE_AGENT_URL,
+    "content-agent-svc:8050": settings.CONTENT_AGENT_URL,
+    "social-agent-svc:8060": settings.SOCIAL_AGENT_URL,
+    "rag-uploader-agent-svc:8070": settings.RAG_UPLOADER_AGENT_URL,
+}
 
 
 class GraphBuildError(Exception):
@@ -125,6 +136,7 @@ class GraphBuilder:
                     raise GraphBuildError(
                         f"External node '{node_id}' missing 'url' field"
                     )
+                url = GraphBuilder._translate_url(url)
                 wrapper = ExternalWrapper(
                     url=url, node_id=node_id, config=merged_config
                 )
@@ -160,6 +172,28 @@ class GraphBuilder:
             terminal_nodes,
         )
         return compiled
+
+    @staticmethod
+    def _translate_url(url: str) -> str:
+        """Translate Docker Compose service URLs to environment-configured URLs.
+
+        Manifest nodes may contain hardcoded Docker Compose hostnames
+        (e.g. http://discovery-agent-svc:8020/v1/search). On Railway or
+        other cloud deployments the internal DNS differs. This method
+        replaces the host:port prefix with the value from settings,
+        preserving the URL path.
+        """
+        for compose_host, settings_base in _SERVICE_URL_MAP.items():
+            prefix = f"http://{compose_host}"
+            if url.startswith(prefix):
+                path = url[len(prefix):]  # e.g. "/v1/search"
+                translated = f"{settings_base}{path}"
+                if translated != url:
+                    logger.debug(
+                        "Translated URL: %s → %s", url, translated
+                    )
+                return translated
+        return url
 
     @staticmethod
     def _topological_sort(

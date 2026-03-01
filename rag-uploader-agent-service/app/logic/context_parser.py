@@ -37,7 +37,7 @@ _MIME_MAP: dict[str, str] = {
     ".zip": "application/zip",
 }
 
-_GCS_URI_PATTERN = re.compile(r"gs://[a-zA-Z0-9._\-]+/\S+")
+_GCS_URI_PATTERN = re.compile(r"gs://[a-zA-Z0-9._\-]+/[^\s`'\")\],;]+")
 
 
 def extract_gcs_uris(data: Any) -> list[str]:

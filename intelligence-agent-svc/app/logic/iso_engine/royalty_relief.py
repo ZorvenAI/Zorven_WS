@@ -38,30 +38,8 @@ SECTOR_ROYALTY_RATES: dict[str, float] = {
     "default": 0.04,
 }
 
-# Default growth rate for stub revenue estimation
+# Default growth rate when base revenue exists but growth rate is missing
 DEFAULT_GROWTH_RATE = 0.05
-
-# Sector-specific stub base revenues (used when no real data is available).
-# Avoids returning identical valuations for all brands.
-SECTOR_STUB_REVENUES: dict[str, float] = {
-    "technology": 15_000_000.0,
-    "software": 12_000_000.0,
-    "consumer_goods": 25_000_000.0,
-    "retail": 30_000_000.0,
-    "financial_services": 50_000_000.0,
-    "healthcare": 20_000_000.0,
-    "pharmaceuticals": 35_000_000.0,
-    "automotive": 80_000_000.0,
-    "aerospace": 60_000_000.0,
-    "defense": 70_000_000.0,
-    "industrial": 40_000_000.0,
-    "electric_vehicles": 50_000_000.0,
-    "energy": 100_000_000.0,
-    "telecommunications": 45_000_000.0,
-    "luxury": 18_000_000.0,
-    "media": 8_000_000.0,
-    "default": 10_000_000.0,
-}
 
 
 class RoyaltyReliefEngine:
@@ -229,34 +207,16 @@ class RoyaltyReliefEngine:
             logger.info("Extracted revenue from discovery text: $%.0f", extracted)
             return revenues
 
-        # 5. Stub fallback — use sector-specific base and brand name seed
-        #    for variation so different brands produce different valuations
-        sector_lower = sector.lower().strip()
-        stub_base = SECTOR_STUB_REVENUES.get(
-            sector_lower, SECTOR_STUB_REVENUES["default"]
-        )
-
-        # Use company name hash to add deterministic per-brand variation
-        # (±20% around the sector base), so "Acme" and "Zenith" differ
-        company_name = input_context.get("company_name", "")
-        if company_name:
-            import hashlib
-
-            name_hash = int(hashlib.md5(company_name.encode()).hexdigest()[:8], 16)
-            # Map to a multiplier between 0.80 and 1.20
-            variation = 0.80 + (name_hash % 4001) / 10000.0
-            stub_base *= variation
-
-        growth = float(input_context.get("growth_rate", DEFAULT_GROWTH_RATE))
-        revenues = [stub_base * (1 + growth) ** t for t in range(horizon_years)]
+        # 5. No revenue data available — return empty list so the caller
+        #    can detect this and return a proper error to the user.
+        company_name = input_context.get("company_name", "unknown")
         logger.warning(
-            "No revenue data found — using stub projection "
-            "(sector=%s, base=$%.0fM, company=%s)",
-            sector_lower,
-            stub_base / 1e6,
-            company_name or "unknown",
+            "No revenue data found for '%s' (sector=%s). "
+            "Cannot perform brand valuation without financial data.",
+            company_name,
+            sector,
         )
-        return revenues
+        return []
 
     @staticmethod
     def select_royalty_rate(

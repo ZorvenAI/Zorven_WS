@@ -38,7 +38,7 @@ NODE_CATALOG: list[dict[str, Any]] = [
     {
         "id": "web_research",
         "type": "external",
-        "url": "http://discovery-agent-svc:8020/v1/search",
+        "url": f"{settings.DISCOVERY_AGENT_URL}/v1/search",
         "description": (
             "Web research: searches the internet via Tavily for current "
             "data, statistics, trends, competitor info. Use when the "
@@ -51,7 +51,7 @@ NODE_CATALOG: list[dict[str, Any]] = [
     {
         "id": "blog_author",
         "type": "external",
-        "url": "http://content-agent-svc:8050/v1/execute",
+        "url": f"{settings.CONTENT_AGENT_URL}/v1/execute",
         "description": (
             "Blog author: writes SEO-optimized blog posts in markdown. "
             "Needs research input from either web_research or "
@@ -64,7 +64,7 @@ NODE_CATALOG: list[dict[str, Any]] = [
     {
         "id": "social_promoter",
         "type": "external",
-        "url": "http://social-agent-svc:8060/v1/execute",
+        "url": f"{settings.SOCIAL_AGENT_URL}/v1/execute",
         "description": (
             "Social media promoter: adapts content for social platforms "
             "and publishes or schedules posts. Use when the prompt "
@@ -77,7 +77,7 @@ NODE_CATALOG: list[dict[str, Any]] = [
     {
         "id": "valuation_logic",
         "type": "external",
-        "url": "http://intelligence-agent-svc:8030/v1/iso-calc",
+        "url": f"{settings.INTELLIGENCE_AGENT_URL}/v1/iso-calc",
         "description": (
             "ISO 10668 brand valuation using Royalty Relief NPV. Use "
             "when the prompt asks about brand valuation, brand equity, "
@@ -89,7 +89,7 @@ NODE_CATALOG: list[dict[str, Any]] = [
     {
         "id": "gap_analyzer",
         "type": "external",
-        "url": "http://intelligence-agent-svc:8030/v1/analyze",
+        "url": f"{settings.INTELLIGENCE_AGENT_URL}/v1/analyze",
         "description": (
             "Competitive gap analysis. Use when the prompt mentions "
             "competitor analysis, audit, competitive gaps, or market "
@@ -101,7 +101,7 @@ NODE_CATALOG: list[dict[str, Any]] = [
     {
         "id": "rag_uploader",
         "type": "external",
-        "url": "http://rag-uploader-agent-svc:8070/v1/execute",
+        "url": f"{settings.RAG_UPLOADER_AGENT_URL}/v1/execute",
         "description": (
             "RAG archivist: persists documents and files to the tenant's "
             "long-term Vertex AI knowledge base. Use when the user wants "

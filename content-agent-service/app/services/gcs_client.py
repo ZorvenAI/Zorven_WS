@@ -22,10 +22,12 @@ class GCSClient:
         project_id: str = "",
         bucket_name: str = "",
         credentials_path: str = "",
+        credentials_json: str = "",
     ) -> None:
         self.project_id = project_id
         self.bucket_name = bucket_name
         self.credentials_path = credentials_path
+        self.credentials_json = credentials_json
         self._client: Any = None
         self._stub_mode = not project_id or not bucket_name
 
@@ -40,7 +42,17 @@ class GCSClient:
             try:
                 from google.cloud import storage
 
-                if self.credentials_path:
+                if self.credentials_json:
+                    import json as _json
+
+                    from google.oauth2 import service_account
+
+                    info = _json.loads(self.credentials_json)
+                    creds = service_account.Credentials.from_service_account_info(info)
+                    self._client = storage.Client(
+                        credentials=creds, project=info.get("project_id")
+                    )
+                elif self.credentials_path:
                     self._client = storage.Client.from_service_account_json(
                         self.credentials_path
                     )

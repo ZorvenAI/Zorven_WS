@@ -130,6 +130,34 @@ class RedisManager:
         except Exception as exc:
             logger.warning("Redis error in set_cached_result: %s", exc)
 
+    # --- Company Data Cache ---
+
+    async def get_company_data(self, company_name: str) -> Optional[dict[str, Any]]:
+        """Get cached Gemini company data lookup result."""
+        try:
+            r = await self._get_redis()
+            key = f"intel:company:{company_name.lower().strip()}"
+            data = await r.get(key)
+            if data is not None:
+                logger.debug("Company data cache HIT for: %s", company_name)
+                return json.loads(data)
+            return None
+        except Exception as exc:
+            logger.warning("Redis error in get_company_data: %s", exc)
+            return None
+
+    async def set_company_data(
+        self, company_name: str, data: dict[str, Any]
+    ) -> None:
+        """Cache company data with 4-hour TTL."""
+        try:
+            r = await self._get_redis()
+            key = f"intel:company:{company_name.lower().strip()}"
+            await r.set(key, json.dumps(data), ex=RESULT_CACHE_TTL)
+            logger.debug("Company data cache SET for: %s", company_name)
+        except Exception as exc:
+            logger.warning("Redis error in set_company_data: %s", exc)
+
     # --- Rate Limiting ---
 
     async def check_rate_limit(self, tenant_id: str, limit: int = 10) -> bool:

@@ -47,6 +47,18 @@ def handle_pipeline_result(
             logger.warning("handle_pipeline_result: job %s not found", job_id)
             return False
 
+        # Skip if job already in terminal state (idempotent guard)
+        if job.status in (
+            AnalysisJob.Status.COMPLETED,
+            AnalysisJob.Status.FAILED,
+        ):
+            logger.info(
+                "Job %s already in terminal state %s, skipping update",
+                job_id,
+                job.status,
+            )
+            return True
+
         update_fields = ["updated_at"]
 
         # Update progress
@@ -169,21 +181,41 @@ def _save_final_chat_message(job):
     # Build a human-readable summary from result_data
     summary = _build_result_summary(job)
 
-    ChatMessage.objects.create(
+    result_metadata = {
+        "job_id": str(job.job_id),
+        "source": "pipeline_result",
+        "manifest_name": job.manifest.name if job.manifest else None,
+    }
+
+    # Try to update the existing assistant message (created by the chat view)
+    # rather than creating a duplicate.
+    existing = ChatMessage.objects.filter(
         session=session,
         role=ChatMessage.Role.ASSISTANT,
-        content=summary,
-        metadata={
-            "job_id": str(job.job_id),
-            "source": "pipeline_result",
-            "manifest_name": job.manifest.name if job.manifest else None,
-        },
-    )
-    logger.info(
-        "Job %s: final ChatMessage created in session %s",
-        job.job_id,
-        session_id,
-    )
+        metadata__job_id=str(job.job_id),
+    ).first()
+
+    if existing:
+        existing.content = summary
+        existing.metadata = result_metadata
+        existing.save(update_fields=["content", "metadata"])
+        logger.info(
+            "Job %s: updated existing ChatMessage in session %s",
+            job.job_id,
+            session_id,
+        )
+    else:
+        ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.Role.ASSISTANT,
+            content=summary,
+            metadata=result_metadata,
+        )
+        logger.info(
+            "Job %s: final ChatMessage created in session %s",
+            job.job_id,
+            session_id,
+        )
 
 
 def _build_result_summary(job):
