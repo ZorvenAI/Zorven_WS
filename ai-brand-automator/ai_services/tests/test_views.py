@@ -600,6 +600,59 @@ class TestChatWithAIPipelineIntegration:
         ), "Brand valuation job should use iso-brand-equity manifest"
         assert job.manifest.pipeline_id == "iso-brand-equity"
 
+    @patch("orchestration.tasks.dispatch_job_task")
+    @patch("ai_services.services.GeminiAIService.extract_target_brand")
+    @patch("ai_services.services.GeminiAIService.classify_intent")
+    def test_competitor_analysis_uses_audit_manifest(
+        self,
+        mock_classify,
+        mock_extract,
+        mock_dispatch,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        """Competitor analysis from chat uses competitor-audit manifest."""
+        from orchestration.models import PipelineManifest
+
+        PipelineManifest.objects.create(
+            pipeline_id="competitor-audit",
+            name="Competitor Audit",
+            manifest_data={
+                "nodes": [
+                    {"id": "competitor_research", "type": "external"},
+                    {"id": "gap_analyzer", "type": "external"},
+                    {"id": "manager", "type": "internal"},
+                ],
+                "edges": [
+                    ["competitor_research", "gap_analyzer"],
+                    ["gap_analyzer", "manager"],
+                ],
+            },
+            version=1,
+            is_active=True,
+            tenant=public_tenant,
+        )
+
+        mock_classify.return_value = {
+            "intent": "pipeline",
+            "confidence": 0.9,
+        }
+        mock_extract.return_value = None  # No brand valuation
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"message": "Analyze competitor landscape for Nike"},
+            format="json",
+        )
+
+        from orchestration.models import AnalysisJob
+
+        job = AnalysisJob.objects.get(job_id=response.data["pipeline_job"]["job_id"])
+        assert (
+            job.manifest is not None
+        ), "Competitor analysis should use competitor-audit manifest"
+        assert job.manifest.pipeline_id == "competitor-audit"
+
 
 @pytest.mark.django_db
 @pytest.mark.unit

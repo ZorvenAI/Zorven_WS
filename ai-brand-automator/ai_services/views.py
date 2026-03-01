@@ -246,6 +246,43 @@ def _collect_attachment_data(attachment_ids, session):
     return data
 
 
+_COMPETITOR_KEYWORDS = (
+    "competitor",
+    "competitive",
+    "gap analysis",
+    "market comparison",
+    "audit",
+)
+
+
+def _lookup_manifest(pipeline_id, tenant):
+    """Look up an active manifest, preferring tenant-specific over global."""
+    from orchestration.models import PipelineManifest
+
+    qs = PipelineManifest.objects.filter(
+        pipeline_id=pipeline_id, is_active=True
+    ).order_by("-version")
+    return (qs.filter(tenant=tenant).first() if tenant else None) or qs.filter(
+        tenant__isnull=True
+    ).first()
+
+
+def _resolve_chat_manifest(message, target_brand, tenant):
+    """Resolve the pipeline manifest for a chat-triggered job.
+
+    Brand valuation requests use iso-brand-equity; competitor analysis
+    requests use competitor-audit. Returns None for auto-detect.
+    """
+    if target_brand:
+        return _lookup_manifest("iso-brand-equity", tenant)
+
+    msg_lower = message.lower()
+    if any(kw in msg_lower for kw in _COMPETITOR_KEYWORDS):
+        return _lookup_manifest("competitor-audit", tenant)
+
+    return None
+
+
 def _process_chat_message(
     request, session, message, tenant, is_new_session, serializer
 ):
@@ -362,7 +399,7 @@ def _process_chat_message(
 
     if intent_result["intent"] == "pipeline":
         # Lazy imports to avoid circular dependency with orchestration app
-        from orchestration.models import AnalysisJob, PipelineManifest
+        from orchestration.models import AnalysisJob
         from orchestration.tasks import dispatch_job_task
 
         target_brand = GeminiAIService.extract_target_brand(message)
@@ -427,20 +464,9 @@ def _process_chat_message(
                 job_context["brand_voice"] = company_info.get("brand_voice", "")
                 job_context["core_problem"] = company_info.get("core_problem", "")
 
-        # Use the same manifest as pipeline UI for brand valuation
-        # so both flows execute the same graph (including web_research).
-        # extract_target_brand() only returns non-None for brand valuation
-        # patterns (brand equity/valuation/value/strength), so this won't
-        # match broader analysis prompts.
-        manifest = None
-        if target_brand:
-            _mf_qs = PipelineManifest.objects.filter(
-                pipeline_id="iso-brand-equity", is_active=True
-            ).order_by("-version")
-            # Prefer tenant-specific manifest, fall back to global
-            manifest = (
-                _mf_qs.filter(tenant=tenant).first() if tenant else None
-            ) or _mf_qs.filter(tenant__isnull=True).first()
+        # Attach the correct manifest so chat uses the same pipeline
+        # graph as the pipeline UI for known pipeline types.
+        manifest = _resolve_chat_manifest(message, target_brand, tenant)
 
         job = AnalysisJob.objects.create(
             tenant=tenant,
