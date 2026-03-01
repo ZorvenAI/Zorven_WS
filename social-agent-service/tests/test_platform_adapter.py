@@ -246,7 +246,7 @@ class TestCleanAIOutput:
         assert _clean_ai_output(text) == text
 
     def test_strips_preamble_here_is(self):
-        text = "Here is a LinkedIn post for you:\nGreat insights on sustainability!"
+        text = "Here is a LinkedIn post:\nGreat insights on sustainability!"
         assert _clean_ai_output(text) == "Great insights on sustainability!"
 
     def test_strips_preamble_sure(self):
@@ -254,8 +254,17 @@ class TestCleanAIOutput:
         assert _clean_ai_output(text) == "Great insights on sustainability!"
 
     def test_strips_preamble_certainly(self):
-        text = "Certainly! Below is the post:\nGreat insights!"
+        text = "Certainly! Below is the caption:\nGreat insights!"
         assert _clean_ai_output(text) == "Great insights!"
+
+    def test_preserves_legitimate_first_line(self):
+        """Legitimate content starting with 'this is a' should NOT be stripped."""
+        text = "This is a game changer for the industry!\nMore details inside."
+        assert _clean_ai_output(text) == text
+
+    def test_strips_bare_post_label(self):
+        text = "Post:\nGreat insights on sustainability!"
+        assert _clean_ai_output(text) == "Great insights on sustainability!"
 
     def test_picks_first_option(self):
         text = (
@@ -301,7 +310,7 @@ class TestCleanAIOutput:
 
     def test_combined_preamble_and_options(self):
         text = (
-            "Here are some options for you:\n"
+            "Here are some post options:\n"
             "Option 1: Great insights on Tesla!\n\n"
             "Option 2: Tesla is leading the charge!"
         )

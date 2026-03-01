@@ -502,7 +502,12 @@ def _build_content_from_previous_outputs(
         if "recommendations" in output and isinstance(output["recommendations"], list):
             recommendations.extend(output["recommendations"])
 
-    if not valuation_data and not bsi_data and not findings:
+    if (
+        not valuation_data
+        and not bsi_data
+        and not findings
+        and not recommendations
+    ):
         return fallback
 
     # Compose a structured summary for Gemini to adapt
@@ -585,10 +590,17 @@ def _derive_title(post: SocialPost) -> str:
 
 
 def _build_publishable_content(post: SocialPost) -> str:
-    """Build the final text to publish, including hashtags if missing."""
+    """Build the final text to publish, including hashtags if missing.
+
+    Platform-specific behaviour:
+    - Twitter/X: cap total hashtags to 2 and enforce 280-char limit.
+    - Other platforms: append all missing hashtags.
+    """
     content = post.content
     if not post.hashtags:
         return content
+
+    platform = (post.platform or "").lower()
 
     # Check if hashtags are already present in the content
     existing_tags = {
@@ -597,8 +609,22 @@ def _build_publishable_content(post: SocialPost) -> str:
     missing = [
         tag for tag in post.hashtags if tag.lower() not in existing_tags
     ]
-    if missing:
-        content = content.rstrip() + "\n\n" + " ".join(missing)
+    if not missing:
+        return content
+
+    # Twitter: stricter hashtag count and character limit
+    if platform in ("twitter", "x"):
+        max_hashtags_total = 2
+        allowed = max(max_hashtags_total - len(existing_tags), 0)
+        if allowed <= 0:
+            return content
+        missing = missing[:allowed]
+        candidate = content.rstrip() + "\n\n" + " ".join(missing)
+        if len(candidate) > 280:
+            return content
+        return candidate
+
+    content = content.rstrip() + "\n\n" + " ".join(missing)
 
     return content
 

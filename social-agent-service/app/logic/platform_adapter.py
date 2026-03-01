@@ -224,9 +224,14 @@ _OPTION_HEADER_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 _INTRO_PREAMBLE_RE = re.compile(
-    r"^(?:here (?:is|are)|below (?:is|are)|sure[,!]|certainly[,!]|"
+    r"^("
+    r"(?:here (?:is|are)|below (?:is|are)|sure[,!]|certainly[,!]|"
     r"i'?d suggest|let me|this is a|the following)"
-    r"[^\n]{0,80}\n+",
+    r"[^\n]{0,80}?"
+    r"(?:post|caption|tweet|thread|social(?: media)? (?:post|content))\s*[:\-—]"
+    r"|"
+    r"(?:post|caption|tweet|thread)\s*[:\-—]"
+    r")\s*\n+",
     re.IGNORECASE,
 )
 
