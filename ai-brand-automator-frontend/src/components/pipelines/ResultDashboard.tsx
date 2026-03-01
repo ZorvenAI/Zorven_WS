@@ -12,7 +12,17 @@
 'use client';
 
 import { useState } from 'react';
-import { ClipboardCopy, Download, Check, ExternalLink } from 'lucide-react';
+import {
+  ClipboardCopy,
+  Download,
+  Check,
+  ExternalLink,
+  Loader2,
+  BookmarkPlus,
+  BookmarkCheck,
+  AlertCircle,
+} from 'lucide-react';
+import { apiClient } from '@/lib/api';
 import BrandEquityDashboard from './BrandEquityDashboard';
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage';
 
@@ -85,6 +95,9 @@ export default function ResultDashboard({
   manifestName,
 }: ResultDashboardProps) {
   const [copiedBlog, setCopiedBlog] = useState(false);
+  const [ragSaveState, setRagSaveState] = useState<
+    'idle' | 'saving' | 'saved' | 'error'
+  >('idle');
 
   // Route to specialized dashboard for Brand Equity / ISO pipelines.
   // Detect by manifest name OR by result_data shape (chat pipelines
@@ -173,6 +186,52 @@ export default function ResultDashboard({
     URL.revokeObjectURL(url);
   };
 
+  /** Convert markdown to clean readable text for PDF storage. */
+  const markdownToPlainText = (md: string): string => {
+    return md
+      .replace(/^#{1,6}\s+(.+)$/gm, '$1')       // headings → plain text
+      .replace(/\*\*(.+?)\*\*/g, '$1')            // **bold** → text
+      .replace(/\*(.+?)\*/g, '$1')                // *italic* → text
+      .replace(/__(.+?)__/g, '$1')                // __bold__ → text
+      .replace(/_(.+?)_/g, '$1')                  // _italic_ → text
+      .replace(/`{3}[\s\S]*?`{3}/g, (m) =>        // code blocks → keep content
+        m.replace(/^`{3}\w*\n?/gm, '').replace(/`{3}$/gm, ''))
+      .replace(/`(.+?)`/g, '$1')                  // `inline code` → text
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)') // [text](url) → text (url)
+      .replace(/^>\s?/gm, '')                     // > blockquotes → plain
+      .replace(/^[-*+]\s+/gm, '- ')               // bullet lists → dashes
+      .replace(/^---+$/gm, '')                     // horizontal rules → remove
+      .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')    // images → alt text
+      .replace(/\n{3,}/g, '\n\n')                  // collapse excess blank lines
+      .trim();
+  };
+
+  const handleSaveToRAG = async () => {
+    if (!blogContent || ragSaveState === 'saving') return;
+    setRagSaveState('saving');
+
+    let title = 'Blog Post';
+    for (const line of blogContent.split('\n')) {
+      if (line.startsWith('# ')) {
+        title = line.replace(/^#\s+/, '').trim();
+        break;
+      }
+    }
+
+    const plainText = markdownToPlainText(blogContent);
+
+    try {
+      const resp = await apiClient.post('/ai/chat/save-to-rag/', {
+        content: plainText,
+        title,
+      });
+      setRagSaveState(resp.ok ? 'saved' : 'error');
+    } catch {
+      setRagSaveState('error');
+    }
+    setTimeout(() => setRagSaveState('idle'), 3000);
+  };
+
   return (
     <div className="glass-card p-6 space-y-6">
       {/* Header */}
@@ -255,6 +314,29 @@ export default function ResultDashboard({
               >
                 <Download className="w-3.5 h-3.5" />
                 Export .md
+              </button>
+              <button
+                onClick={handleSaveToRAG}
+                disabled={ragSaveState === 'saving' || ragSaveState === 'saved'}
+                className="btn-outline flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-60"
+              >
+                {ragSaveState === 'saving' && (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                )}
+                {ragSaveState === 'saved' && (
+                  <BookmarkCheck className="w-3.5 h-3.5 text-emerald-400" />
+                )}
+                {ragSaveState === 'error' && (
+                  <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                )}
+                {ragSaveState === 'idle' && (
+                  <BookmarkPlus className="w-3.5 h-3.5" />
+                )}
+                {ragSaveState === 'saved'
+                  ? 'Saved'
+                  : ragSaveState === 'error'
+                    ? 'Failed'
+                    : 'Save to RAG'}
               </button>
             </div>
           </div>

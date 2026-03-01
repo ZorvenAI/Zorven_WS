@@ -23,7 +23,12 @@ import {
   FileText,
   Globe,
   DollarSign,
+  Loader2,
+  BookmarkPlus,
+  BookmarkCheck,
+  AlertCircle,
 } from 'lucide-react';
+import { apiClient } from '@/lib/api';
 import { formatCompact, formatPercent } from '@/lib/utils/iso-formatters';
 import NpvChart from '@/components/dashboard/npv-chart';
 import PillarRadar from '@/components/dashboard/pillar-radar';
@@ -120,6 +125,9 @@ export default function BrandEquityDashboard({
   resultData,
 }: BrandEquityDashboardProps) {
   const [copied, setCopied] = useState(false);
+  const [ragSaveState, setRagSaveState] = useState<
+    'idle' | 'saving' | 'saved' | 'error'
+  >('idle');
 
   // Extract well-known brand equity keys
   const score = (resultData.score as number) ?? null;
@@ -188,6 +196,83 @@ export default function BrandEquityDashboard({
     URL.revokeObjectURL(url);
   };
 
+  /** Build a human-readable report from the brand equity data. */
+  const buildReport = (): string => {
+    const lines: string[] = [];
+
+    if (score !== null) {
+      lines.push(`Brand Equity Score: ${Math.round(score)} / 100`);
+      lines.push('');
+    }
+
+    if (hasPillars) {
+      lines.push('Pillar Scores:');
+      if (awareness !== null) lines.push(`  Awareness: ${Math.round(awareness)} / 100`);
+      if (sentiment !== null) lines.push(`  Sentiment: ${Math.round(sentiment)} / 100`);
+      if (financials !== null) lines.push(`  Financials: ${Math.round(financials)} / 100`);
+      lines.push('');
+    }
+
+    if (hasValuation) {
+      lines.push('Brand Valuation:');
+      lines.push(`  NPV: ${formatCompact(valuation!.brand_value_npv!)}`);
+      if (valuation!.royalty_rate != null)
+        lines.push(`  Royalty Rate: ${formatPercent(valuation!.royalty_rate)}`);
+      if (valuation!.discount_rate != null)
+        lines.push(`  Discount Rate (WACC): ${formatPercent(valuation!.discount_rate)}`);
+      if (valuation!.horizon_years != null)
+        lines.push(`  Horizon: ${valuation!.horizon_years} years`);
+      if (valuation!.methodology)
+        lines.push(`  Methodology: ${valuation!.methodology.replace(/_/g, ' ')}`);
+      lines.push('');
+    }
+
+    if (summary) {
+      lines.push('Summary:');
+      lines.push(summary);
+      lines.push('');
+    }
+
+    if (findings && findings.length > 0) {
+      lines.push('Key Findings:');
+      findings.forEach((f, i) => lines.push(`  ${i + 1}. ${f}`));
+      lines.push('');
+    }
+
+    if (recommendations && recommendations.length > 0) {
+      lines.push('Recommendations:');
+      recommendations.forEach((r, i) => lines.push(`  ${i + 1}. ${r}`));
+      lines.push('');
+    }
+
+    if (sources && sources.length > 0) {
+      lines.push('Sources:');
+      sources.forEach((src) => {
+        const label = src.title ?? src.url ?? 'Unknown source';
+        lines.push(`  - ${label}${src.url ? ` (${src.url})` : ''}`);
+      });
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  };
+
+  const handleSaveToRAG = async () => {
+    if (ragSaveState === 'saving') return;
+    setRagSaveState('saving');
+
+    try {
+      const resp = await apiClient.post('/ai/chat/save-to-rag/', {
+        content: buildReport(),
+        title: 'Brand Equity Analysis',
+      });
+      setRagSaveState(resp.ok ? 'saved' : 'error');
+    } catch {
+      setRagSaveState('error');
+    }
+    setTimeout(() => setRagSaveState('idle'), 3000);
+  };
+
   return (
     <div className="glass-card p-6 space-y-8">
       {/* Header + actions */}
@@ -213,6 +298,29 @@ export default function BrandEquityDashboard({
           >
             <Download className="w-3.5 h-3.5" />
             Export
+          </button>
+          <button
+            onClick={handleSaveToRAG}
+            disabled={ragSaveState === 'saving' || ragSaveState === 'saved'}
+            className="btn-outline flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-60"
+          >
+            {ragSaveState === 'saving' && (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            )}
+            {ragSaveState === 'saved' && (
+              <BookmarkCheck className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            {ragSaveState === 'error' && (
+              <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+            )}
+            {ragSaveState === 'idle' && (
+              <BookmarkPlus className="w-3.5 h-3.5" />
+            )}
+            {ragSaveState === 'saved'
+              ? 'Saved'
+              : ragSaveState === 'error'
+                ? 'Failed'
+                : 'Save to RAG'}
           </button>
         </div>
       </div>
