@@ -48,6 +48,13 @@ class TrackedNode:
         callback_url = state.get("callback_url", "")
         job_id = state.get("job_id", "")
 
+        logger.info(
+            "[TrackedNode] Node %s STARTING (job=%s, callback_url=%s)",
+            self.node_id,
+            job_id,
+            callback_url[:80] if callback_url else "<empty>",
+        )
+
         # Copy progress and mark this node as running
         progress = dict(state.get("progress", {}))
         started_at = _now_iso()
@@ -58,7 +65,19 @@ class TrackedNode:
 
         # Send running callback (non-blocking, non-fatal)
         if callback_url:
-            await self.callback_client.send_progress(callback_url, progress)
+            ok = await self.callback_client.send_progress(
+                callback_url, progress
+            )
+            logger.info(
+                "[TrackedNode] Node %s → running callback sent (ok=%s)",
+                self.node_id,
+                ok,
+            )
+        else:
+            logger.warning(
+                "[TrackedNode] Node %s has NO callback_url — skipping progress",
+                self.node_id,
+            )
 
         # Emit Kafka trace (best-effort)
         await self._emit_trace(job_id, "started")
@@ -66,7 +85,10 @@ class TrackedNode:
         # Execute the actual node
         try:
             result = await self.inner(state)
-        except Exception:
+        except Exception as exc:
+            logger.error(
+                "[TrackedNode] Node %s FAILED: %s", self.node_id, exc
+            )
             # Mark as failed
             progress[self.node_id] = {
                 "status": "failed",
@@ -87,9 +109,20 @@ class TrackedNode:
             "completed_at": _now_iso(),
         }
 
+        logger.info(
+            "[TrackedNode] Node %s DONE (job=%s)", self.node_id, job_id
+        )
+
         # Send done callback
         if callback_url:
-            await self.callback_client.send_progress(callback_url, progress)
+            ok = await self.callback_client.send_progress(
+                callback_url, progress
+            )
+            logger.info(
+                "[TrackedNode] Node %s → done callback sent (ok=%s)",
+                self.node_id,
+                ok,
+            )
 
         # Emit Kafka trace
         await self._emit_trace(job_id, "completed")

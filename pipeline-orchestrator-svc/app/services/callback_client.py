@@ -57,10 +57,11 @@ class CallbackClient:
                 headers=self._headers(),
             )
             response.raise_for_status()
-            logger.debug(
-                "Callback sent to %s: %s",
+            logger.info(
+                "Callback sent to %s: %s (HTTP %d)",
                 callback_url,
                 payload.get("status", "progress"),
+                response.status_code,
             )
             return True
         except httpx.HTTPError as exc:

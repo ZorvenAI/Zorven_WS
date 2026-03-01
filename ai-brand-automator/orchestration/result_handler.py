@@ -176,8 +176,18 @@ def _update_redis_cache(job):
         elif job.status == AnalysisJob.Status.FAILED:
             cache_data["error_message"] = job.error_message
         cache.set(cache_key, cache_data, timeout=3600)
-    except Exception:
-        pass  # Cache failures must not break result processing
+        logger.info(
+            "Redis cache updated for job %s: current_node=%s, "
+            "progress_percent=%d%%, status=%s",
+            job.job_id,
+            current_node,
+            percent,
+            job.status,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Redis cache update failed for job %s: %s", job.job_id, exc
+        )
 
 
 def _save_final_chat_message(job):
