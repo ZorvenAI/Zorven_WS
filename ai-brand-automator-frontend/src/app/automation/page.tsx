@@ -3803,12 +3803,18 @@ function AutomationPageContent() {
     setEditingPost(post);
     setEditTitle(post.title);
     setEditContent(post.content);
-    // Parse the scheduled date/time
     setEditDateTime(new Date(post.scheduled_date));
-    // Load existing media if any
     setEditMediaUrns(post.media_urls || []);
-    // Load platforms
+    // Initialize preview from existing media URL (if it's a displayable URL)
+    if (editMediaPreview) URL.revokeObjectURL(editMediaPreview.url);
+    const firstMedia = (post.media_urls || [])[0];
+    if (firstMedia && (firstMedia.startsWith('http') || firstMedia.startsWith('blob:'))) {
+      setEditMediaPreview({ url: firstMedia, type: 'image' });
+    } else {
+      setEditMediaPreview(null);
+    }
     setEditPlatforms(post.platforms || ['linkedin']);
+    setEditComposeTab('compose');
     setShowEditModal(true);
   };
 
@@ -3878,7 +3884,9 @@ function AutomationPageContent() {
         setShowEditModal(false);
         setEditingPost(null);
         setEditMediaUrns([]);
+        if (editMediaPreview) { URL.revokeObjectURL(editMediaPreview.url); setEditMediaPreview(null); }
         setEditPlatforms([]);
+        setEditComposeTab('compose');
         fetchScheduledPosts();
       } else {
         const error = await response.json();
@@ -8969,7 +8977,7 @@ function AutomationPageContent() {
                       </svg>
                     </div>
                     <span className="text-sm text-white">Facebook</span>
-                    <span className="text-xs text-brand-silver/50 ml-auto">Max 63,206 chars</span>
+                    <span className="text-xs text-brand-silver/50 ml-auto">Max {FACEBOOK_MAX_POST_LENGTH.toLocaleString()} chars</span>
                   </label>
                   
                   {/* Instagram Option */}
@@ -9121,6 +9129,7 @@ function AutomationPageContent() {
                     setScheduleMediaPreview(null);
                   }
                   setSchedulePlatforms(['linkedin']);
+                  setScheduleComposeTab('compose');
                 }}
                 className="px-6 py-2.5 rounded-lg border border-brand-ghost/30 text-brand-silver hover:bg-white/5 transition-colors"
               >
@@ -9481,7 +9490,7 @@ function AutomationPageContent() {
                       </svg>
                     </div>
                     <span className="text-sm text-white">Facebook</span>
-                    <span className="text-xs text-brand-silver/50 ml-auto">Max 63,206 chars</span>
+                    <span className="text-xs text-brand-silver/50 ml-auto">Max {FACEBOOK_MAX_POST_LENGTH.toLocaleString()} chars</span>
                   </label>
 
                   {/* Instagram Option */}
@@ -9568,7 +9577,10 @@ function AutomationPageContent() {
                       </svg>
                       {editMediaUrns.length} file{editMediaUrns.length > 1 ? 's' : ''} attached
                       <button
-                        onClick={() => setEditMediaUrns([])}
+                        onClick={() => {
+                          setEditMediaUrns([]);
+                          if (editMediaPreview) { URL.revokeObjectURL(editMediaPreview.url); setEditMediaPreview(null); }
+                        }}
                         className="text-red-400 hover:text-red-300 ml-2"
                         title="Remove media"
                       >
@@ -9594,7 +9606,9 @@ function AutomationPageContent() {
                   setEditContent('');
                   setEditDateTime(null);
                   setEditMediaUrns([]);
+                  if (editMediaPreview) { URL.revokeObjectURL(editMediaPreview.url); setEditMediaPreview(null); }
                   setEditPlatforms([]);
+                  setEditComposeTab('compose');
                 }}
                 className="px-6 py-2.5 rounded-lg border border-brand-ghost/30 text-brand-silver hover:bg-white/5 transition-colors"
               >
@@ -9602,7 +9616,7 @@ function AutomationPageContent() {
               </button>
               <button
                 onClick={handleEditPost}
-                disabled={editing || uploadingEditMedia || !editTitle.trim() || !editContent.trim() || !editDateTime || editPlatforms.length === 0 || (editPlatforms.includes('twitter') && editContent.length > TWITTER_MAX_LENGTH)}
+                disabled={editing || uploadingEditMedia || !editTitle.trim() || !editContent.trim() || !editDateTime || editPlatforms.length === 0 || (editPlatforms.includes('twitter') && editContent.length > TWITTER_MAX_LENGTH) || (editPlatforms.includes('instagram') && editContent.length > INSTAGRAM_MAX_POST_LENGTH) || (editPlatforms.includes('instagram') && editMediaUrns.length === 0)}
                 className="px-6 py-2.5 rounded-lg bg-brand-electric hover:bg-brand-electric/80 text-brand-midnight font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {editing ? (
