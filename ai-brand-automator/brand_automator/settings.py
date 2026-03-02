@@ -39,6 +39,15 @@ ALLOWED_HOSTS = config(
     cast=lambda v: [s.strip() for s in v.split(",")],
 )
 
+# Railway private networking: allow internal service-to-service hostnames.
+# The pipeline orchestrator sends HTTP callbacks to the backend using the
+# Railway internal URL (e.g. http://Prevision-WS.railway.internal:8000).
+# Without this, Django rejects callbacks with 400 DisallowedHost and
+# pipeline progress never reaches the frontend.
+if config("RAILWAY_ENVIRONMENT_NAME", default=""):
+    if ".railway.internal" not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(".railway.internal")
+
 
 # Application definition
 

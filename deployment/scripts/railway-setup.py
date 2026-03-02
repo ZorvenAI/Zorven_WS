@@ -373,6 +373,10 @@ def main():
         "ONBOARDING_KAFKA_ENABLED": "false",
         "KAFKA_CONSUMERS_ENABLED": "false",
         "ORCHESTRATION_KAFKA_ENABLED": "false",
+        # Note: RAILWAY_ENVIRONMENT_NAME is auto-injected by Railway.
+        # settings.py uses it to append .railway.internal to ALLOWED_HOSTS
+        # so pipeline callbacks from the orchestrator are not rejected
+        # with 400 DisallowedHost.
     }
     set_variables(BACKEND_SERVICE_ID, backend_new_vars)
 
