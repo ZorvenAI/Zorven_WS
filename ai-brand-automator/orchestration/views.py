@@ -127,22 +127,39 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        progress = data.get("progress")
+        progress_nodes = list(progress.keys()) if isinstance(progress, dict) else []
+        logger.info(
+            "Job %s callback received: status=%s, progress_nodes=%s, "
+            "has_result_data=%s, host=%s",
+            job_id,
+            data.get("status"),
+            progress_nodes,
+            "result_data" in data,
+            request.get_host(),
+        )
+
         found = handle_pipeline_result(
             job_id,
             status=data.get("status"),
-            progress=data.get("progress"),
+            progress=progress,
             result_data=data.get("result_data"),
             error_message=data.get("error_message"),
             resolved_manifest_id=data.get("resolved_manifest_id"),
         )
 
         if not found:
+            logger.warning("Job %s callback: job not found in DB", job_id)
             return Response(
                 {"error": "Job not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        logger.info("Job %s callback processed: %s", job_id, data)
+        logger.info(
+            "Job %s callback processed OK: %d node(s) in progress",
+            job_id,
+            len(progress_nodes),
+        )
         return Response({"status": "accepted"})
 
     @action(detail=True, methods=["get"], url_path="quick-status")
@@ -152,6 +169,10 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         Returns a lightweight response optimized for polling.
         Includes trace fields (current_node, progress_percent, last_thought)
         populated by the Kafka TraceConsumer.
+
+        Cache-Control: no-store prevents Railway's edge proxy and the
+        browser from caching the response — the frontend polls every 3s
+        and must always see fresh progress data.
         """
         cached = cache.get(f"job:status:{job_id}")
         if cached:
@@ -159,7 +180,9 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             cached.setdefault("current_node", None)
             cached.setdefault("progress_percent", 0)
             cached.setdefault("last_thought", None)
-            return Response(cached)
+            resp = Response(cached)
+            resp["Cache-Control"] = "no-store"
+            return resp
 
         # Fall back to DB
         job = self.get_object()
@@ -193,7 +216,9 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         except Exception:
             pass
 
-        return Response(data)
+        resp = Response(data)
+        resp["Cache-Control"] = "no-store"
+        return resp
 
     @staticmethod
     def _calc_percent(progress):
