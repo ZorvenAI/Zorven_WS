@@ -39,6 +39,24 @@ ALLOWED_HOSTS = config(
     cast=lambda v: [s.strip() for s in v.split(",")],
 )
 
+# Railway private networking: allow the specific internal hostname used for
+# service-to-service callbacks.  The pipeline orchestrator sends HTTP
+# callbacks to the backend using the CALLBACK_BASE_URL (e.g.
+# http://Prevision-WS.railway.internal:8000).  Without adding that hostname
+# to ALLOWED_HOSTS, Django rejects callbacks with 400 DisallowedHost and
+# pipeline progress never reaches the frontend.
+if config("RAILWAY_ENVIRONMENT_NAME", default=""):
+    from urllib.parse import urlparse as _urlparse
+
+    _cb_host = _urlparse(
+        config(
+            "CALLBACK_BASE_URL",
+            default=config("BACKEND_URL", default=""),
+        )
+    ).hostname
+    if _cb_host and _cb_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_cb_host)
+
 
 # Application definition
 

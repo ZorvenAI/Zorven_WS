@@ -75,12 +75,20 @@ class CallbackClient:
             except httpx.HTTPStatusError as exc:
                 # 4xx → non-retryable (bad request, auth, etc.)
                 if exc.response.status_code < 500:
+                    # Log a capped snippet of the response for diagnosis
+                    # (e.g. DisallowedHost).  Use raw bytes to avoid reading
+                    # an unbounded body via .text.
+                    body = ""
+                    if exc.response is not None:
+                        raw = exc.response.content[:512]
+                        body = raw.decode("utf-8", errors="replace").replace("\n", " ")
                     logger.error(
-                        "Callback rejected (HTTP %d) for %s [%s]: %s",
+                        "Callback rejected (HTTP %d) for %s [%s]: %s " "— response: %s",
                         exc.response.status_code,
                         callback_url,
                         label,
                         exc,
+                        body,
                     )
                     return False
                 # 5xx → retryable
