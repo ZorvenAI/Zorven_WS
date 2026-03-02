@@ -48,6 +48,7 @@ ALLOWED_HOSTS = config(
 # to ALLOWED_HOSTS, Django rejects callbacks with 400 DisallowedHost and
 # pipeline progress never reaches the frontend.
 if config("RAILWAY_ENVIRONMENT_NAME", default=""):
+    # Add the specific callback hostname (from CALLBACK_BASE_URL or BACKEND_URL)
     _cb_host = _urlparse(
         config(
             "CALLBACK_BASE_URL",
@@ -56,6 +57,13 @@ if config("RAILWAY_ENVIRONMENT_NAME", default=""):
     ).hostname
     if _cb_host and _cb_host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(_cb_host)
+    # Optionally allow the .railway.internal wildcard so ALL internal
+    # service callbacks work regardless of env vars.  Gated behind an
+    # explicit opt-in flag to avoid broadening host-header validation
+    # beyond the specific callback hostname parsed above.
+    if config("ALLOW_RAILWAY_INTERNAL_WILDCARD", default=False, cast=bool):
+        if ".railway.internal" not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(".railway.internal")
 
 
 # Application definition

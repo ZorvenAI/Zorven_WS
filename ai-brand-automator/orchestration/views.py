@@ -180,13 +180,21 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         """
         cached = cache.get(f"job:status:{job_id}")
         if cached:
-            # Ensure trace fields are present even if not yet set
-            cached.setdefault("current_node", None)
-            cached.setdefault("progress_percent", 0)
-            cached.setdefault("last_thought", None)
-            resp = Response(cached)
-            resp["Cache-Control"] = "no-store"
-            return resp
+            # If the job is in-flight but progress is still empty, it
+            # likely means callbacks haven't updated the cache yet (e.g.
+            # the DB-fallback path ran before the first callback arrived
+            # and created a stale entry).  Fall through to DB in that
+            # case so the next callback's cache write is authoritative.
+            in_flight = cached.get("status") in ("queued", "running")
+            has_progress = bool(cached.get("progress"))
+            if not (in_flight and not has_progress):
+                # Ensure trace fields are present even if not yet set
+                cached.setdefault("current_node", None)
+                cached.setdefault("progress_percent", 0)
+                cached.setdefault("last_thought", None)
+                resp = Response(cached)
+                resp["Cache-Control"] = "no-store"
+                return resp
 
         # Fall back to DB
         job = self.get_object()
@@ -214,9 +222,17 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         elif job.status == AnalysisJob.Status.FAILED:
             data["error_message"] = job.error_message
 
-        # Populate cache for subsequent polls
+        # Populate cache for subsequent polls.
+        # Use a short TTL for in-flight jobs so stale entries expire
+        # quickly if callbacks don't update the cache.  Terminal jobs
+        # use a longer TTL (1 hour) since they won't change.
+        is_terminal = job.status in (
+            AnalysisJob.Status.COMPLETED,
+            AnalysisJob.Status.FAILED,
+        )
+        cache_ttl = 3600 if is_terminal else 30
         try:
-            cache.set(f"job:status:{job_id}", data, timeout=3600)
+            cache.set(f"job:status:{job_id}", data, timeout=cache_ttl)
         except Exception:
             pass
 
