@@ -357,6 +357,11 @@ def main():
     print("\n[2/4] Adding missing env vars to backend...")
     backend_new_vars = {
         "BACKEND_URL": BACKEND_INTERNAL_URL,
+        # CALLBACK_BASE_URL MUST be set on the backend so that
+        # settings.py adds the .railway.internal hostname to
+        # ALLOWED_HOSTS.  Without it, pipeline progress callbacks
+        # from the orchestrator are rejected with 400 DisallowedHost.
+        "CALLBACK_BASE_URL": BACKEND_INTERNAL_URL,
         "ORCHESTRATOR_URL": "http://orchestrator.railway.internal:8010",
         "ORCHESTRATOR_SERVICE_TOKEN": SERVICE_TOKEN,
         "ORCHESTRATOR_CALLBACK_TOKEN": CALLBACK_TOKEN,

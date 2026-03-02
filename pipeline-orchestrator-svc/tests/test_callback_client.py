@@ -99,9 +99,11 @@ class TestCallbackClient:
         assert "progress" in body
 
     async def test_returns_false_on_5xx(self, httpx_mock):
-        # 5xx is retried, so provide responses for both attempts
-        httpx_mock.add_response(url=CALLBACK_URL, method="PATCH", status_code=500)
-        httpx_mock.add_response(url=CALLBACK_URL, method="PATCH", status_code=500)
+        # 5xx is retried, so provide responses for all 4 attempts
+        for _ in range(4):
+            httpx_mock.add_response(
+                url=CALLBACK_URL, method="PATCH", status_code=500
+            )
 
         client = CallbackClient(callback_token=TOKEN)
         result = await client.send_progress(
@@ -110,20 +112,17 @@ class TestCallbackClient:
         )
 
         assert result is False
-        assert len(httpx_mock.get_requests()) == 2
+        assert len(httpx_mock.get_requests()) == 4
 
     async def test_returns_false_on_connection_error(self, httpx_mock):
         import httpx
 
-        # Transport errors are retried, so provide exceptions for both attempts
-        httpx_mock.add_exception(
-            httpx.ConnectError("Connection refused"),
-            url=CALLBACK_URL,
-        )
-        httpx_mock.add_exception(
-            httpx.ConnectError("Connection refused"),
-            url=CALLBACK_URL,
-        )
+        # Transport errors are retried, so provide exceptions for all 4 attempts
+        for _ in range(4):
+            httpx_mock.add_exception(
+                httpx.ConnectError("Connection refused"),
+                url=CALLBACK_URL,
+            )
 
         client = CallbackClient(callback_token=TOKEN)
         result = await client.send_progress(
@@ -132,7 +131,7 @@ class TestCallbackClient:
         )
 
         assert result is False
-        assert len(httpx_mock.get_requests()) == 2
+        assert len(httpx_mock.get_requests()) == 4
 
     async def test_retries_transport_error_then_succeeds(self, httpx_mock):
         """Transport error on first attempt, success on retry."""

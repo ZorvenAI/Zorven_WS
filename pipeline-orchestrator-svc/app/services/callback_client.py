@@ -16,9 +16,10 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# Max retries for transient connection errors (stale connections, resets)
-_MAX_RETRIES = 2
-_RETRY_DELAY = 0.5  # seconds
+# Max retries for transient connection errors (stale connections, resets,
+# Railway DNS warm-up on .railway.internal hostnames).
+_MAX_RETRIES = 4
+_RETRY_DELAYS = [0.5, 1.0, 2.0]  # exponential back-off between attempts
 
 
 class CallbackClient:
@@ -131,7 +132,12 @@ class CallbackClient:
                     type(exc).__name__,
                 )
 
-            await asyncio.sleep(_RETRY_DELAY)
+            delay = (
+                _RETRY_DELAYS[attempt]
+                if attempt < len(_RETRY_DELAYS)
+                else _RETRY_DELAYS[-1]
+            )
+            await asyncio.sleep(delay)
 
         return False
 
