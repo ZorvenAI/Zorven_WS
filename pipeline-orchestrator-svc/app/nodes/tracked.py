@@ -112,11 +112,22 @@ class TrackedNode:
             )
             return
         try:
+            nodes_summary = {
+                k: v.get("status") for k, v in progress.items() if isinstance(v, dict)
+            }
             ok = await self.callback_client.send_progress(callback_url, progress)
-            if not ok:
-                logger.warning(
-                    "[TrackedNode] Progress callback returned False " "for node %s",
+            if ok:
+                logger.info(
+                    "[TrackedNode] Progress callback OK for node %s: %s",
                     self.node_id,
+                    nodes_summary,
+                )
+            else:
+                logger.warning(
+                    "[TrackedNode] Progress callback returned False "
+                    "for node %s (url=%s)",
+                    self.node_id,
+                    callback_url[:80],
                 )
         except Exception:
             logger.exception(

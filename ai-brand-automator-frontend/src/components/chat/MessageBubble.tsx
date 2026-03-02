@@ -39,29 +39,34 @@ function PipelineInlineCard({ jobId }: { jobId: string }) {
 
   if (!job) return null;
 
+  // Use quickStatus (updated every 3s via polling) for rendering decisions
+  // rather than job.status (only updated on initial fetch and terminal state).
+  // This ensures the UI reacts immediately to status changes from callbacks.
+  const effectiveStatus = quickStatus?.status ?? job.status;
+
   return (
     <div className="mt-3 rounded-lg bg-white/5 border border-white/10 overflow-hidden">
-      {(job.status === 'queued' || job.status === 'running') && (
+      {(effectiveStatus === 'queued' || effectiveStatus === 'running') && (
         <div className="p-3">
           <ThoughtTrace
             progress={quickStatus?.progress ?? job.progress}
-            jobStatus={quickStatus?.status ?? job.status}
+            jobStatus={effectiveStatus}
             lastThought={quickStatus?.last_thought}
             progressPercent={quickStatus?.progress_percent}
           />
         </div>
       )}
-      {job.status === 'completed' && job.result_data && (
+      {effectiveStatus === 'completed' && (job.result_data || quickStatus?.result_data) && (
         <div className="p-3">
           <ResultDashboard
-            resultData={job.result_data}
-            manifestName={job.manifest_name}
+            resultData={job.result_data ?? quickStatus?.result_data ?? {}}
+            manifestName={job.manifest_name ?? quickStatus?.manifest_name}
           />
         </div>
       )}
-      {job.status === 'failed' && (
+      {effectiveStatus === 'failed' && (
         <div className="p-3 text-xs text-red-400">
-          Analysis failed: {job.error_message || 'Unknown error'}
+          Analysis failed: {job.error_message || quickStatus?.error_message || 'Unknown error'}
         </div>
       )}
     </div>
