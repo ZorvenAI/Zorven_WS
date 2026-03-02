@@ -98,7 +98,9 @@ class TestCallbackClient:
         assert body["resolved_manifest_id"] == "brand-analysis"
         assert "progress" in body
 
-    async def test_returns_false_on_http_error(self, httpx_mock):
+    async def test_returns_false_on_5xx(self, httpx_mock):
+        # 5xx is retried, so provide responses for both attempts
+        httpx_mock.add_response(url=CALLBACK_URL, method="PATCH", status_code=500)
         httpx_mock.add_response(url=CALLBACK_URL, method="PATCH", status_code=500)
 
         client = CallbackClient(callback_token=TOKEN)
@@ -108,10 +110,16 @@ class TestCallbackClient:
         )
 
         assert result is False
+        assert len(httpx_mock.get_requests()) == 2
 
     async def test_returns_false_on_connection_error(self, httpx_mock):
         import httpx
 
+        # Transport errors are retried, so provide exceptions for both attempts
+        httpx_mock.add_exception(
+            httpx.ConnectError("Connection refused"),
+            url=CALLBACK_URL,
+        )
         httpx_mock.add_exception(
             httpx.ConnectError("Connection refused"),
             url=CALLBACK_URL,
@@ -124,6 +132,53 @@ class TestCallbackClient:
         )
 
         assert result is False
+        assert len(httpx_mock.get_requests()) == 2
+
+    async def test_retries_transport_error_then_succeeds(self, httpx_mock):
+        """Transport error on first attempt, success on retry."""
+        import httpx
+
+        httpx_mock.add_exception(
+            httpx.ConnectError("Connection reset"),
+            url=CALLBACK_URL,
+        )
+        httpx_mock.add_response(url=CALLBACK_URL, method="PATCH", json={})
+
+        client = CallbackClient(callback_token=TOKEN)
+        result = await client.send_progress(
+            CALLBACK_URL,
+            progress={"n1": {"status": "running"}},
+        )
+
+        assert result is True
+        assert len(httpx_mock.get_requests()) == 2
+
+    async def test_retries_5xx_then_succeeds(self, httpx_mock):
+        """5xx on first attempt, success on retry."""
+        httpx_mock.add_response(url=CALLBACK_URL, method="PATCH", status_code=502)
+        httpx_mock.add_response(url=CALLBACK_URL, method="PATCH", json={})
+
+        client = CallbackClient(callback_token=TOKEN)
+        result = await client.send_progress(
+            CALLBACK_URL,
+            progress={"n1": {"status": "running"}},
+        )
+
+        assert result is True
+        assert len(httpx_mock.get_requests()) == 2
+
+    async def test_no_retry_on_4xx(self, httpx_mock):
+        """4xx errors are deterministic and must NOT be retried."""
+        httpx_mock.add_response(url=CALLBACK_URL, method="PATCH", status_code=403)
+
+        client = CallbackClient(callback_token=TOKEN)
+        result = await client.send_progress(
+            CALLBACK_URL,
+            progress={"n1": {"status": "running"}},
+        )
+
+        assert result is False
+        assert len(httpx_mock.get_requests()) == 1
 
     async def test_error_message_truncated_to_10000(self, httpx_mock):
         httpx_mock.add_response(url=CALLBACK_URL, method="PATCH", json={})

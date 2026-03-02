@@ -88,6 +88,7 @@ SERVICES = [
             "DJANGO_SETTINGS_MODULE": "brand_automator.settings",
             "PYTHONUNBUFFERED": "1",
             "BACKEND_URL": BACKEND_INTERNAL_URL,
+            "CALLBACK_BASE_URL": BACKEND_INTERNAL_URL,
             "ORCHESTRATOR_URL": "http://orchestrator.railway.internal:8010",
             "ORCHESTRATOR_SERVICE_TOKEN": SERVICE_TOKEN,
             "ORCHESTRATOR_CALLBACK_TOKEN": CALLBACK_TOKEN,

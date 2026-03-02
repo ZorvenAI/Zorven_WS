@@ -214,7 +214,7 @@ class OrchestratorDispatcher:
         base_url = config(
             "CALLBACK_BASE_URL",
             default=config("BACKEND_URL", default="http://localhost:8001"),
-        )
+        ).rstrip("/")
         if "localhost" in base_url or "127.0.0.1" in base_url:
             logger.warning(
                 "Callback base URL is '%s' — pipeline callbacks will "

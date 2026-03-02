@@ -45,7 +45,8 @@ class CallbackClient:
         """
         Send a PATCH request to the callback URL.
 
-        Retries once on connection/transport errors using a fresh client.
+        Retries on transport-level errors (connection resets, timeouts) and
+        5xx responses.  Does NOT retry on 4xx (deterministic client errors).
         Returns True on success, False on failure (non-fatal).
         """
         label = payload.get("status") or next(
@@ -71,11 +72,40 @@ class CallbackClient:
                 )
                 return True
 
-            except Exception as exc:
-                is_last = attempt >= _MAX_RETRIES - 1
-                if is_last:
+            except httpx.HTTPStatusError as exc:
+                # 4xx → non-retryable (bad request, auth, etc.)
+                if exc.response.status_code < 500:
                     logger.error(
-                        "Callback failed after %d attempts for %s [%s]: %s (%s)",
+                        "Callback rejected (HTTP %d) for %s [%s]: %s",
+                        exc.response.status_code,
+                        callback_url,
+                        label,
+                        exc,
+                    )
+                    return False
+                # 5xx → retryable
+                if attempt >= _MAX_RETRIES - 1:
+                    logger.error(
+                        "Callback failed after %d attempts for %s " "[%s]: HTTP %d",
+                        _MAX_RETRIES,
+                        callback_url,
+                        label,
+                        exc.response.status_code,
+                    )
+                    return False
+                logger.warning(
+                    "Callback attempt %d got HTTP %d for %s [%s] " "— retrying",
+                    attempt + 1,
+                    exc.response.status_code,
+                    callback_url,
+                    label,
+                )
+
+            except Exception as exc:
+                # Transport errors (connection reset, timeout, DNS, etc.)
+                if attempt >= _MAX_RETRIES - 1:
+                    logger.error(
+                        "Callback failed after %d attempts for %s " "[%s]: %s (%s)",
                         _MAX_RETRIES,
                         callback_url,
                         label,
@@ -83,16 +113,16 @@ class CallbackClient:
                         type(exc).__name__,
                     )
                     return False
-
                 logger.warning(
-                    "Callback attempt %d failed for %s [%s]: %s (%s) — retrying",
+                    "Callback attempt %d failed for %s [%s]: %s (%s) " "— retrying",
                     attempt + 1,
                     callback_url,
                     label,
                     exc,
                     type(exc).__name__,
                 )
-                await asyncio.sleep(_RETRY_DELAY)
+
+            await asyncio.sleep(_RETRY_DELAY)
 
         return False
 
