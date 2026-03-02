@@ -366,8 +366,16 @@ function AutomationPageContent() {
   const [publishedPostsLimit, setPublishedPostsLimit] = useState<number>(6);
   const [scheduleMediaUrns, setScheduleMediaUrns] = useState<string[]>([]);
   const [scheduleMediaPreview, setScheduleMediaPreview] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
+  const [scheduleComposeTab, setScheduleComposeTab] = useState<'compose' | 'preview'>('compose');
   const [uploadingScheduleMedia, setUploadingScheduleMedia] = useState(false);
   const [schedulePlatforms, setSchedulePlatforms] = useState<string[]>(['linkedin']);
+
+  // Auto-switch schedule preview back to compose when platform count != 1
+  useEffect(() => {
+    if (schedulePlatforms.length !== 1 && scheduleComposeTab === 'preview') {
+      setScheduleComposeTab('compose');
+    }
+  }, [schedulePlatforms.length, scheduleComposeTab]);
 
   // Edit post state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -8620,6 +8628,7 @@ function AutomationPageContent() {
                 setScheduleDateTime(null);
                 setScheduleMediaUrns([]);
                 setSchedulePlatforms(['linkedin']);
+                setScheduleComposeTab('compose');
               }}
               className="absolute top-4 right-4 text-brand-silver hover:text-white"
             >
@@ -8643,7 +8652,182 @@ function AutomationPageContent() {
               </div>
             </div>
 
+            {/* Compose / Preview Tab Toggle */}
+            <div className="mb-4 flex gap-2">
+              <button
+                onClick={() => setScheduleComposeTab('compose')}
+                className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                  scheduleComposeTab === 'compose'
+                    ? 'border-brand-electric bg-brand-electric/20 text-brand-electric'
+                    : 'border-brand-ghost/30 text-brand-silver hover:bg-white/5'
+                }`}
+              >
+                ✏️ Compose
+              </button>
+              <button
+                onClick={() => {
+                  if (schedulePlatforms.length === 1) setScheduleComposeTab('preview');
+                }}
+                disabled={schedulePlatforms.length !== 1}
+                className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                  scheduleComposeTab === 'preview'
+                    ? 'border-brand-electric bg-brand-electric/20 text-brand-electric'
+                    : schedulePlatforms.length !== 1
+                      ? 'border-brand-ghost/20 text-brand-silver/30 cursor-not-allowed'
+                      : 'border-brand-ghost/30 text-brand-silver hover:bg-white/5'
+                }`}
+                title={schedulePlatforms.length !== 1 ? 'Select exactly one platform to preview' : 'Preview post'}
+              >
+                👁️ Preview {schedulePlatforms.length !== 1 && <span className="text-xs opacity-60">(select 1 platform)</span>}
+              </button>
+            </div>
+
+            {/* Platform Preview */}
+            {scheduleComposeTab === 'preview' && schedulePlatforms.length === 1 && (
+              <div className="mb-6">
+                {/* LinkedIn Preview */}
+                {schedulePlatforms[0] === 'linkedin' && (
+                  <div className="bg-white rounded-lg overflow-hidden shadow-lg">
+                    <div className="p-3 flex items-center gap-3">
+                      {profiles?.linkedin?.profile_image_url ? (
+                        <img src={profiles.linkedin.profile_image_url} alt="Profile" className="w-12 h-12 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-[#0A66C2] flex items-center justify-center text-white font-bold">
+                          {(profiles?.linkedin?.profile_name || 'U')[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-semibold text-gray-900 text-sm">{profiles?.linkedin?.profile_name || 'Your Name'}</p>
+                        <p className="text-xs text-gray-500">Scheduled • 🌐</p>
+                      </div>
+                    </div>
+                    <div className="px-3 pb-2">
+                      <p className="text-gray-900 text-sm whitespace-pre-wrap">{scheduleContent || 'Your post content will appear here...'}</p>
+                    </div>
+                    {scheduleMediaPreview && (
+                      <div className="px-3 pb-3">
+                        {scheduleMediaPreview.type === 'video' ? (
+                          <video src={scheduleMediaPreview.url} controls className="w-full max-h-96 rounded-lg object-contain bg-black" />
+                        ) : (
+                          <img src={scheduleMediaPreview.url} alt="Post media" className="w-full max-h-96 rounded-lg object-contain" />
+                        )}
+                      </div>
+                    )}
+                    <div className="px-3 py-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
+                      <span>👍 Like</span><span>💬 Comment</span><span>↗️ Repost</span><span>📤 Send</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Twitter Preview */}
+                {schedulePlatforms[0] === 'twitter' && (
+                  <div className="bg-black rounded-xl overflow-hidden border border-gray-800">
+                    <div className="p-4 flex items-start gap-3">
+                      {profiles?.twitter?.profile_image_url ? (
+                        <img src={profiles.twitter.profile_image_url} alt="Profile" className="w-10 h-10 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-bold">
+                          {(profiles?.twitter?.profile_name || 'U')[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-sm">{profiles?.twitter?.profile_name || 'Your Name'}</span>
+                          <span className="text-gray-500 text-sm">@{profiles?.twitter?.profile_name?.toLowerCase().replace(/\s/g, '') || 'username'}</span>
+                          <span className="text-gray-500 text-sm">· Scheduled</span>
+                        </div>
+                        <div className="mt-1">
+                          <p className="text-white text-sm whitespace-pre-wrap">{scheduleContent || 'Your tweet will appear here...'}</p>
+                        </div>
+                        {scheduleMediaPreview && (
+                          <div className="mt-3 rounded-xl overflow-hidden">
+                            {scheduleMediaPreview.type === 'video' ? (
+                              <video src={scheduleMediaPreview.url} className="w-full max-h-80 object-cover rounded-xl" controls />
+                            ) : (
+                              <img src={scheduleMediaPreview.url} alt="Media preview" className="w-full max-h-80 object-cover rounded-xl" />
+                            )}
+                          </div>
+                        )}
+                        <div className="mt-3 flex justify-between text-gray-500 text-sm max-w-xs">
+                          <span>💬 0</span><span>🔄 0</span><span>❤️ 0</span><span>📈 0</span><span>📤</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Facebook Preview */}
+                {schedulePlatforms[0] === 'facebook' && (
+                  <div className="bg-white rounded-lg overflow-hidden shadow-lg">
+                    <div className="p-3 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
+                        {(currentFbPage?.name || profiles?.facebook?.profile_name || 'P')[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 text-sm">{currentFbPage?.name || profiles?.facebook?.profile_name || 'Your Page'}</p>
+                        <p className="text-xs text-gray-500">Scheduled · 🌐</p>
+                      </div>
+                    </div>
+                    <div className="px-3 pb-2">
+                      <p className="text-gray-900 text-sm whitespace-pre-wrap">{scheduleContent || 'Your post content will appear here...'}</p>
+                    </div>
+                    {scheduleMediaPreview && (
+                      <div className="aspect-video bg-gray-100">
+                        {scheduleMediaPreview.type === 'image' ? (
+                          <img src={scheduleMediaPreview.url} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <video src={scheduleMediaPreview.url} className="w-full h-full object-cover" controls />
+                        )}
+                      </div>
+                    )}
+                    <div className="px-3 py-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
+                      <span>👍 Like</span><span>💬 Comment</span><span>↗️ Share</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Instagram Preview */}
+                {schedulePlatforms[0] === 'instagram' && (
+                  <div className="bg-white rounded-lg overflow-hidden shadow-lg">
+                    <div className="p-3 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center text-white font-bold text-sm">
+                        {(currentIgAccount?.username || profiles?.instagram?.profile_name || 'I')[0].toUpperCase()}
+                      </div>
+                      <p className="font-semibold text-gray-900 text-sm">{currentIgAccount?.username || profiles?.instagram?.profile_name || 'your_account'}</p>
+                    </div>
+                    {scheduleMediaPreview ? (
+                      <div className="aspect-square bg-gray-100">
+                        {scheduleMediaPreview.type === 'image' ? (
+                          <img src={scheduleMediaPreview.url} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <video src={scheduleMediaPreview.url} className="w-full h-full object-cover" controls />
+                        )}
+                      </div>
+                    ) : (
+                      <div className="aspect-square bg-gray-100 flex items-center justify-center">
+                        <span className="text-gray-400">No media selected</span>
+                      </div>
+                    )}
+                    <div className="px-3 py-2 flex gap-4">
+                      <span className="text-2xl">♡</span><span className="text-2xl">💬</span><span className="text-2xl">➤</span>
+                    </div>
+                    <div className="px-3 pb-3">
+                      <p className="text-gray-900 text-sm">
+                        <span className="font-semibold">{currentIgAccount?.username || 'your_account'}</span>{' '}
+                        {scheduleContent || 'Your caption will appear here...'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-xs text-brand-silver/50 mt-2 text-center">
+                  This is a preview. Actual appearance may vary slightly.
+                </p>
+              </div>
+            )}
+
             {/* Form Fields */}
+            {scheduleComposeTab === 'compose' && (
             <div className="space-y-4 mb-6">
               <div>
                 <label className="block text-sm font-medium text-brand-silver mb-1">Title</label>
@@ -8906,6 +9090,7 @@ function AutomationPageContent() {
                 <p className="text-xs text-brand-silver/50 mt-1">{getMediaHelperText(schedulePlatforms)}</p>
               </div>
             </div>
+            )}
 
             {/* Action Buttons */}
             <div className="flex gap-3 justify-end">
