@@ -366,18 +366,36 @@ function AutomationPageContent() {
   const [publishedPostsLimit, setPublishedPostsLimit] = useState<number>(6);
   const [scheduleMediaUrns, setScheduleMediaUrns] = useState<string[]>([]);
   const [scheduleMediaPreview, setScheduleMediaPreview] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
+  const [scheduleComposeTab, setScheduleComposeTab] = useState<'compose' | 'preview'>('compose');
   const [uploadingScheduleMedia, setUploadingScheduleMedia] = useState(false);
   const [schedulePlatforms, setSchedulePlatforms] = useState<string[]>(['linkedin']);
+
+  // Auto-switch schedule preview back to compose when platform count != 1
+  useEffect(() => {
+    if (schedulePlatforms.length !== 1 && scheduleComposeTab === 'preview') {
+      setScheduleComposeTab('compose');
+    }
+  }, [schedulePlatforms.length, scheduleComposeTab]);
 
   // Edit post state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingPost, setEditingPost] = useState<ScheduledPost | null>(null);
   const [editPlatforms, setEditPlatforms] = useState<string[]>([]);
+  const [editComposeTab, setEditComposeTab] = useState<'compose' | 'preview'>('compose');
+
+  // Auto-switch edit preview back to compose when platform count != 1
+  useEffect(() => {
+    if (editPlatforms.length !== 1 && editComposeTab === 'preview') {
+      setEditComposeTab('compose');
+    }
+  }, [editPlatforms.length, editComposeTab]);
+
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [editDateTime, setEditDateTime] = useState<Date | null>(null);
   const [editing, setEditing] = useState(false);
   const [editMediaUrns, setEditMediaUrns] = useState<string[]>([]);
+  const [editMediaPreview, setEditMediaPreview] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
   const [uploadingEditMedia, setUploadingEditMedia] = useState(false);
 
   // Automation tasks state
@@ -3590,24 +3608,25 @@ function AutomationPageContent() {
         }
       }
 
-      // If no platform had a post ID, delete directly from ContentCalendar
-      if (!hasAnyPostId) {
-        try {
-          const response = await apiClient.delete(`/automation/content-calendar/${post.id}/`);
-          if (response.ok) {
-            successCount = platformCount;
-          } else {
-            const error = await response.json();
-            errors.push(`Calendar: ${error.error || 'Failed to delete'}`);
-          }
-        } catch (error) {
-          console.error('Failed to delete from calendar:', error);
-          errors.push('Calendar: Network error');
+      // Always delete the ContentCalendar entry from the database.
+      // Platform-specific deletes above remove the post from social
+      // platforms, but the DB record must also be removed so the
+      // post disappears from Recent Activity.
+      try {
+        const calResponse = await apiClient.delete(`/automation/content-calendar/${post.id}/`);
+        if (calResponse.ok) {
+          if (!hasAnyPostId) successCount = platformCount;
+        } else {
+          const calError = await calResponse.json().catch(() => ({}));
+          errors.push(`Calendar: ${(calError as Record<string, string>).error || 'Failed to delete'}`);
         }
+      } catch (error) {
+        console.error('Failed to delete from calendar:', error);
+        errors.push('Calendar: Network error');
       }
 
       // Show result message
-      if (successCount === platformCount || (successCount > 0 && !hasAnyPostId)) {
+      if (successCount === platformCount || successCount > 0 || !errors.length) {
         setMessage({
           type: 'success',
           text: `Post deleted successfully`,
@@ -3784,12 +3803,18 @@ function AutomationPageContent() {
     setEditingPost(post);
     setEditTitle(post.title);
     setEditContent(post.content);
-    // Parse the scheduled date/time
     setEditDateTime(new Date(post.scheduled_date));
-    // Load existing media if any
     setEditMediaUrns(post.media_urls || []);
-    // Load platforms
+    // Initialize preview from existing media URL (if it's a displayable URL)
+    if (editMediaPreview) URL.revokeObjectURL(editMediaPreview.url);
+    const firstMedia = (post.media_urls || [])[0];
+    if (firstMedia && (firstMedia.startsWith('http') || firstMedia.startsWith('blob:'))) {
+      setEditMediaPreview({ url: firstMedia, type: 'image' });
+    } else {
+      setEditMediaPreview(null);
+    }
     setEditPlatforms(post.platforms || ['linkedin']);
+    setEditComposeTab('compose');
     setShowEditModal(true);
   };
 
@@ -3813,7 +3838,25 @@ function AutomationPageContent() {
       });
       return;
     }
-    
+
+    // Check content length for Instagram
+    if (editPlatforms.includes('instagram') && editContent.length > INSTAGRAM_MAX_POST_LENGTH) {
+      setMessage({
+        type: 'error',
+        text: `Content exceeds Instagram's ${INSTAGRAM_MAX_POST_LENGTH} character limit`,
+      });
+      return;
+    }
+
+    // Instagram requires media
+    if (editPlatforms.includes('instagram') && editMediaUrns.length === 0) {
+      setMessage({
+        type: 'error',
+        text: 'Instagram posts require an image or video',
+      });
+      return;
+    }
+
     if (!editDateTime) {
       setMessage({
         type: 'error',
@@ -3841,7 +3884,9 @@ function AutomationPageContent() {
         setShowEditModal(false);
         setEditingPost(null);
         setEditMediaUrns([]);
+        if (editMediaPreview) { URL.revokeObjectURL(editMediaPreview.url); setEditMediaPreview(null); }
         setEditPlatforms([]);
+        setEditComposeTab('compose');
         fetchScheduledPosts();
       } else {
         const error = await response.json();
@@ -5511,11 +5556,11 @@ function AutomationPageContent() {
               {scheduledPosts.map((post) => {
                 const isOverdue = new Date(post.scheduled_date) < new Date();
                 return (
-                <div key={post.id} className={`glass-card p-4 ${isOverdue ? 'border border-yellow-500/30' : ''}`}>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
+                <div key={post.id} className={`glass-card p-4 overflow-hidden ${isOverdue ? 'border border-yellow-500/30' : ''}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-white font-medium">{post.title}</h4>
+                        <h4 className="text-white font-medium truncate">{post.title}</h4>
                         {isOverdue && (
                           <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full">
                             Overdue
@@ -5563,7 +5608,7 @@ function AutomationPageContent() {
                       </div>
                     </div>
                     {canEdit && (
-                      <div className="flex items-center gap-2 ml-4">
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => openEditModal(post)}
                           className="px-3 py-1.5 text-xs rounded border border-brand-ghost/30 text-brand-silver hover:bg-white/5 transition-colors"
@@ -5575,7 +5620,7 @@ function AutomationPageContent() {
                         </button>
                         <button
                           onClick={() => handlePublishNow(post.id)}
-                          className="px-3 py-1.5 text-xs rounded bg-brand-electric hover:bg-brand-electric/80 text-brand-midnight font-bold transition-colors"
+                          className="px-3 py-1.5 text-xs rounded bg-brand-electric hover:bg-brand-electric/80 text-brand-midnight font-bold transition-colors whitespace-nowrap"
                         >
                           Publish Now
                         </button>
@@ -5664,7 +5709,7 @@ function AutomationPageContent() {
             <div className="space-y-4">
               {/* Published Posts */}
               {publishedPosts.map((post) => (
-                <div key={`post-${post.id}`} className="glass-card p-4 border border-green-500/20">
+                <div key={`post-${post.id}`} className="glass-card p-4 overflow-hidden border border-green-500/20">
                   <div className="flex items-start gap-3">
                     {/* Platform Icons */}
                     <div className="flex flex-col gap-1 flex-shrink-0">
@@ -5699,8 +5744,8 @@ function AutomationPageContent() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-white font-medium">{post.title}</h4>
-                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
+                        <h4 className="text-white font-medium truncate">{post.title}</h4>
+                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full shrink-0">
                           Published
                         </span>
                         {post.status_display?.includes('test') && (
@@ -8601,7 +8646,12 @@ function AutomationPageContent() {
                 setScheduleContent('');
                 setScheduleDateTime(null);
                 setScheduleMediaUrns([]);
+                if (scheduleMediaPreview) {
+                  URL.revokeObjectURL(scheduleMediaPreview.url);
+                  setScheduleMediaPreview(null);
+                }
                 setSchedulePlatforms(['linkedin']);
+                setScheduleComposeTab('compose');
               }}
               className="absolute top-4 right-4 text-brand-silver hover:text-white"
             >
@@ -8625,7 +8675,182 @@ function AutomationPageContent() {
               </div>
             </div>
 
+            {/* Compose / Preview Tab Toggle */}
+            <div className="mb-4 flex gap-2">
+              <button
+                onClick={() => setScheduleComposeTab('compose')}
+                className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                  scheduleComposeTab === 'compose'
+                    ? 'border-brand-electric bg-brand-electric/20 text-brand-electric'
+                    : 'border-brand-ghost/30 text-brand-silver hover:bg-white/5'
+                }`}
+              >
+                ✏️ Compose
+              </button>
+              <button
+                onClick={() => {
+                  if (schedulePlatforms.length === 1) setScheduleComposeTab('preview');
+                }}
+                disabled={schedulePlatforms.length !== 1}
+                className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                  scheduleComposeTab === 'preview'
+                    ? 'border-brand-electric bg-brand-electric/20 text-brand-electric'
+                    : schedulePlatforms.length !== 1
+                      ? 'border-brand-ghost/20 text-brand-silver/30 cursor-not-allowed'
+                      : 'border-brand-ghost/30 text-brand-silver hover:bg-white/5'
+                }`}
+                title={schedulePlatforms.length !== 1 ? 'Select exactly one platform to preview' : 'Preview post'}
+              >
+                👁️ Preview {schedulePlatforms.length !== 1 && <span className="text-xs opacity-60">(select 1 platform)</span>}
+              </button>
+            </div>
+
+            {/* Platform Preview */}
+            {scheduleComposeTab === 'preview' && schedulePlatforms.length === 1 && (
+              <div className="mb-6">
+                {/* LinkedIn Preview */}
+                {schedulePlatforms[0] === 'linkedin' && (
+                  <div className="bg-white rounded-lg overflow-hidden shadow-lg">
+                    <div className="p-3 flex items-center gap-3">
+                      {profiles?.linkedin?.profile_image_url ? (
+                        <img src={profiles.linkedin.profile_image_url} alt="Profile" className="w-12 h-12 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-[#0A66C2] flex items-center justify-center text-white font-bold">
+                          {(profiles?.linkedin?.profile_name || 'U')[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-semibold text-gray-900 text-sm">{profiles?.linkedin?.profile_name || 'Your Name'}</p>
+                        <p className="text-xs text-gray-500">Scheduled • 🌐</p>
+                      </div>
+                    </div>
+                    <div className="px-3 pb-2">
+                      <p className="text-gray-900 text-sm whitespace-pre-wrap">{scheduleContent || 'Your post content will appear here...'}</p>
+                    </div>
+                    {scheduleMediaPreview && (
+                      <div className="px-3 pb-3">
+                        {scheduleMediaPreview.type === 'video' ? (
+                          <video src={scheduleMediaPreview.url} controls className="w-full max-h-96 rounded-lg object-contain bg-black" />
+                        ) : (
+                          <img src={scheduleMediaPreview.url} alt="Post media" className="w-full max-h-96 rounded-lg object-contain" />
+                        )}
+                      </div>
+                    )}
+                    <div className="px-3 py-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
+                      <span>👍 Like</span><span>💬 Comment</span><span>↗️ Repost</span><span>📤 Send</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Twitter Preview */}
+                {schedulePlatforms[0] === 'twitter' && (
+                  <div className="bg-black rounded-xl overflow-hidden border border-gray-800">
+                    <div className="p-4 flex items-start gap-3">
+                      {profiles?.twitter?.profile_image_url ? (
+                        <img src={profiles.twitter.profile_image_url} alt="Profile" className="w-10 h-10 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-bold">
+                          {(profiles?.twitter?.profile_name || 'U')[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-sm">{profiles?.twitter?.profile_name || 'Your Name'}</span>
+                          <span className="text-gray-500 text-sm">@{profiles?.twitter?.profile_name?.toLowerCase().replace(/\s/g, '') || 'username'}</span>
+                          <span className="text-gray-500 text-sm">· Scheduled</span>
+                        </div>
+                        <div className="mt-1">
+                          <p className="text-white text-sm whitespace-pre-wrap">{scheduleContent || 'Your tweet will appear here...'}</p>
+                        </div>
+                        {scheduleMediaPreview && (
+                          <div className="mt-3 rounded-xl overflow-hidden">
+                            {scheduleMediaPreview.type === 'video' ? (
+                              <video src={scheduleMediaPreview.url} className="w-full max-h-80 object-cover rounded-xl" controls />
+                            ) : (
+                              <img src={scheduleMediaPreview.url} alt="Media preview" className="w-full max-h-80 object-cover rounded-xl" />
+                            )}
+                          </div>
+                        )}
+                        <div className="mt-3 flex justify-between text-gray-500 text-sm max-w-xs">
+                          <span>💬 0</span><span>🔄 0</span><span>❤️ 0</span><span>📈 0</span><span>📤</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Facebook Preview */}
+                {schedulePlatforms[0] === 'facebook' && (
+                  <div className="bg-white rounded-lg overflow-hidden shadow-lg">
+                    <div className="p-3 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
+                        {(currentFbPage?.name || profiles?.facebook?.profile_name || 'P')[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 text-sm">{currentFbPage?.name || profiles?.facebook?.profile_name || 'Your Page'}</p>
+                        <p className="text-xs text-gray-500">Scheduled · 🌐</p>
+                      </div>
+                    </div>
+                    <div className="px-3 pb-2">
+                      <p className="text-gray-900 text-sm whitespace-pre-wrap">{scheduleContent || 'Your post content will appear here...'}</p>
+                    </div>
+                    {scheduleMediaPreview && (
+                      <div className="aspect-video bg-gray-100">
+                        {scheduleMediaPreview.type === 'image' ? (
+                          <img src={scheduleMediaPreview.url} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <video src={scheduleMediaPreview.url} className="w-full h-full object-cover" controls />
+                        )}
+                      </div>
+                    )}
+                    <div className="px-3 py-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
+                      <span>👍 Like</span><span>💬 Comment</span><span>↗️ Share</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Instagram Preview */}
+                {schedulePlatforms[0] === 'instagram' && (
+                  <div className="bg-white rounded-lg overflow-hidden shadow-lg">
+                    <div className="p-3 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center text-white font-bold text-sm">
+                        {(currentIgAccount?.username || profiles?.instagram?.profile_name || 'I')[0].toUpperCase()}
+                      </div>
+                      <p className="font-semibold text-gray-900 text-sm">{currentIgAccount?.username || profiles?.instagram?.profile_name || 'your_account'}</p>
+                    </div>
+                    {scheduleMediaPreview ? (
+                      <div className="aspect-square bg-gray-100">
+                        {scheduleMediaPreview.type === 'image' ? (
+                          <img src={scheduleMediaPreview.url} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <video src={scheduleMediaPreview.url} className="w-full h-full object-cover" controls />
+                        )}
+                      </div>
+                    ) : (
+                      <div className="aspect-square bg-gray-100 flex items-center justify-center">
+                        <span className="text-gray-400">No media selected</span>
+                      </div>
+                    )}
+                    <div className="px-3 py-2 flex gap-4">
+                      <span className="text-2xl">♡</span><span className="text-2xl">💬</span><span className="text-2xl">➤</span>
+                    </div>
+                    <div className="px-3 pb-3">
+                      <p className="text-gray-900 text-sm">
+                        <span className="font-semibold">{currentIgAccount?.username || 'your_account'}</span>{' '}
+                        {scheduleContent || 'Your caption will appear here...'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-xs text-brand-silver/50 mt-2 text-center">
+                  This is a preview. Actual appearance may vary slightly.
+                </p>
+              </div>
+            )}
+
             {/* Form Fields */}
+            {scheduleComposeTab === 'compose' && (
             <div className="space-y-4 mb-6">
               <div>
                 <label className="block text-sm font-medium text-brand-silver mb-1">Title</label>
@@ -8752,7 +8977,7 @@ function AutomationPageContent() {
                       </svg>
                     </div>
                     <span className="text-sm text-white">Facebook</span>
-                    <span className="text-xs text-brand-silver/50 ml-auto">Max 63,206 chars</span>
+                    <span className="text-xs text-brand-silver/50 ml-auto">Max {FACEBOOK_MAX_POST_LENGTH.toLocaleString()} chars</span>
                   </label>
                   
                   {/* Instagram Option */}
@@ -8888,6 +9113,7 @@ function AutomationPageContent() {
                 <p className="text-xs text-brand-silver/50 mt-1">{getMediaHelperText(schedulePlatforms)}</p>
               </div>
             </div>
+            )}
 
             {/* Action Buttons */}
             <div className="flex gap-3 justify-end">
@@ -8903,6 +9129,7 @@ function AutomationPageContent() {
                     setScheduleMediaPreview(null);
                   }
                   setSchedulePlatforms(['linkedin']);
+                  setScheduleComposeTab('compose');
                 }}
                 className="px-6 py-2.5 rounded-lg border border-brand-ghost/30 text-brand-silver hover:bg-white/5 transition-colors"
               >
@@ -8933,7 +9160,7 @@ function AutomationPageContent() {
       {/* Edit Post Modal */}
       {showEditModal && editingPost && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="glass-card w-full max-w-lg p-6 relative">
+          <div className="glass-card w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 relative">
             {/* Close button */}
             <button
               onClick={() => {
@@ -8943,9 +9170,11 @@ function AutomationPageContent() {
                 setEditContent('');
                 setEditDateTime(null);
                 setEditMediaUrns([]);
+                if (editMediaPreview) { URL.revokeObjectURL(editMediaPreview.url); setEditMediaPreview(null); }
                 setEditPlatforms([]);
+                setEditComposeTab('compose');
               }}
-              className="absolute top-4 right-4 text-brand-silver hover:text-white"
+              className="absolute top-4 right-4 text-brand-silver hover:text-white z-10"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -8967,7 +9196,174 @@ function AutomationPageContent() {
               </div>
             </div>
 
+            {/* Compose / Preview Tab Toggle */}
+            <div className="mb-4 flex gap-2">
+              <button
+                onClick={() => setEditComposeTab('compose')}
+                className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                  editComposeTab === 'compose'
+                    ? 'border-brand-electric bg-brand-electric/20 text-brand-electric'
+                    : 'border-brand-ghost/30 text-brand-silver hover:bg-white/5'
+                }`}
+              >
+                ✏️ Compose
+              </button>
+              <button
+                onClick={() => {
+                  if (editPlatforms.length === 1) setEditComposeTab('preview');
+                }}
+                disabled={editPlatforms.length !== 1}
+                className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                  editComposeTab === 'preview'
+                    ? 'border-brand-electric bg-brand-electric/20 text-brand-electric'
+                    : editPlatforms.length !== 1
+                      ? 'border-brand-ghost/20 text-brand-silver/30 cursor-not-allowed'
+                      : 'border-brand-ghost/30 text-brand-silver hover:bg-white/5'
+                }`}
+                title={editPlatforms.length !== 1 ? 'Select exactly one platform to preview' : 'Preview post'}
+              >
+                👁️ Preview {editPlatforms.length !== 1 && <span className="text-xs opacity-60">(select 1 platform)</span>}
+              </button>
+            </div>
+
+            {/* Platform Preview */}
+            {editComposeTab === 'preview' && editPlatforms.length === 1 && (
+              <div className="mb-6">
+                {editPlatforms[0] === 'linkedin' && (
+                  <div className="bg-white rounded-lg overflow-hidden shadow-lg">
+                    <div className="p-3 flex items-center gap-3">
+                      {profiles?.linkedin?.profile_image_url ? (
+                        <img src={profiles.linkedin.profile_image_url} alt="Profile" className="w-12 h-12 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-[#0A66C2] flex items-center justify-center text-white font-bold">
+                          {(profiles?.linkedin?.profile_name || 'U')[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-semibold text-gray-900 text-sm">{profiles?.linkedin?.profile_name || 'Your Name'}</p>
+                        <p className="text-xs text-gray-500">Scheduled • 🌐</p>
+                      </div>
+                    </div>
+                    <div className="px-3 pb-2">
+                      <p className="text-gray-900 text-sm whitespace-pre-wrap">{editContent || 'Your post content will appear here...'}</p>
+                    </div>
+                    {editMediaPreview && (
+                      <div className="px-3 pb-3">
+                        {editMediaPreview.type === 'video' ? (
+                          <video src={editMediaPreview.url} controls className="w-full max-h-96 rounded-lg object-contain bg-black" />
+                        ) : (
+                          <img src={editMediaPreview.url} alt="Post media" className="w-full max-h-96 rounded-lg object-contain" />
+                        )}
+                      </div>
+                    )}
+                    <div className="px-3 py-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
+                      <span>👍 Like</span><span>💬 Comment</span><span>↗️ Repost</span><span>📤 Send</span>
+                    </div>
+                  </div>
+                )}
+                {editPlatforms[0] === 'twitter' && (
+                  <div className="bg-black rounded-xl overflow-hidden border border-gray-800">
+                    <div className="p-4 flex items-start gap-3">
+                      {profiles?.twitter?.profile_image_url ? (
+                        <img src={profiles.twitter.profile_image_url} alt="Profile" className="w-10 h-10 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-bold">
+                          {(profiles?.twitter?.profile_name || 'U')[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-sm">{profiles?.twitter?.profile_name || 'Your Name'}</span>
+                          <span className="text-gray-500 text-sm">@{profiles?.twitter?.profile_name?.toLowerCase().replace(/\s/g, '') || 'username'}</span>
+                          <span className="text-gray-500 text-sm">· Scheduled</span>
+                        </div>
+                        <div className="mt-1">
+                          <p className="text-white text-sm whitespace-pre-wrap">{editContent || 'Your tweet will appear here...'}</p>
+                        </div>
+                        {editMediaPreview && (
+                          <div className="mt-3 rounded-xl overflow-hidden">
+                            {editMediaPreview.type === 'video' ? (
+                              <video src={editMediaPreview.url} className="w-full max-h-80 object-cover rounded-xl" controls />
+                            ) : (
+                              <img src={editMediaPreview.url} alt="Media preview" className="w-full max-h-80 object-cover rounded-xl" />
+                            )}
+                          </div>
+                        )}
+                        <div className="mt-3 flex justify-between text-gray-500 text-sm max-w-xs">
+                          <span>💬 0</span><span>🔄 0</span><span>❤️ 0</span><span>📈 0</span><span>📤</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {editPlatforms[0] === 'facebook' && (
+                  <div className="bg-white rounded-lg overflow-hidden shadow-lg">
+                    <div className="p-3 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
+                        {(currentFbPage?.name || profiles?.facebook?.profile_name || 'P')[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 text-sm">{currentFbPage?.name || profiles?.facebook?.profile_name || 'Your Page'}</p>
+                        <p className="text-xs text-gray-500">Scheduled · 🌐</p>
+                      </div>
+                    </div>
+                    <div className="px-3 pb-2">
+                      <p className="text-gray-900 text-sm whitespace-pre-wrap">{editContent || 'Your post content will appear here...'}</p>
+                    </div>
+                    {editMediaPreview && (
+                      <div className="aspect-video bg-gray-100">
+                        {editMediaPreview.type === 'image' ? (
+                          <img src={editMediaPreview.url} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <video src={editMediaPreview.url} className="w-full h-full object-cover" controls />
+                        )}
+                      </div>
+                    )}
+                    <div className="px-3 py-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
+                      <span>👍 Like</span><span>💬 Comment</span><span>↗️ Share</span>
+                    </div>
+                  </div>
+                )}
+                {editPlatforms[0] === 'instagram' && (
+                  <div className="bg-white rounded-lg overflow-hidden shadow-lg">
+                    <div className="p-3 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center text-white font-bold text-sm">
+                        {(currentIgAccount?.username || profiles?.instagram?.profile_name || 'I')[0].toUpperCase()}
+                      </div>
+                      <p className="font-semibold text-gray-900 text-sm">{currentIgAccount?.username || profiles?.instagram?.profile_name || 'your_account'}</p>
+                    </div>
+                    {editMediaPreview ? (
+                      <div className="aspect-square bg-gray-100">
+                        {editMediaPreview.type === 'image' ? (
+                          <img src={editMediaPreview.url} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <video src={editMediaPreview.url} className="w-full h-full object-cover" controls />
+                        )}
+                      </div>
+                    ) : (
+                      <div className="aspect-square bg-gray-100 flex items-center justify-center">
+                        <span className="text-gray-400">No media selected</span>
+                      </div>
+                    )}
+                    <div className="px-3 py-2 flex gap-4">
+                      <span className="text-2xl">♡</span><span className="text-2xl">💬</span><span className="text-2xl">➤</span>
+                    </div>
+                    <div className="px-3 pb-3">
+                      <p className="text-gray-900 text-sm">
+                        <span className="font-semibold">{currentIgAccount?.username || 'your_account'}</span>{' '}
+                        {editContent || 'Your caption will appear here...'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-brand-silver/50 mt-2 text-center">
+                  This is a preview. Actual appearance may vary slightly.
+                </p>
+              </div>
+            )}
+
             {/* Form Fields */}
+            {editComposeTab === 'compose' && (
             <div className="space-y-4 mb-6">
               <div>
                 <label className="block text-sm font-medium text-brand-silver mb-1">Title</label>
@@ -9073,15 +9469,73 @@ function AutomationPageContent() {
                     <span className="text-sm text-white">Twitter/X</span>
                     <span className="text-xs text-brand-silver/50 ml-auto">Max {TWITTER_MAX_LENGTH} chars</span>
                   </label>
+
+                  {/* Facebook Option */}
+                  <label className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-white/5 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={editPlatforms.includes('facebook')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setEditPlatforms([...editPlatforms, 'facebook']);
+                        } else {
+                          setEditPlatforms(editPlatforms.filter(p => p !== 'facebook'));
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-brand-ghost/30 text-brand-electric focus:ring-brand-electric/50"
+                    />
+                    <div className="p-1.5 rounded bg-[#1877F2]">
+                      <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                      </svg>
+                    </div>
+                    <span className="text-sm text-white">Facebook</span>
+                    <span className="text-xs text-brand-silver/50 ml-auto">Max {FACEBOOK_MAX_POST_LENGTH.toLocaleString()} chars</span>
+                  </label>
+
+                  {/* Instagram Option */}
+                  <label className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-white/5 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={editPlatforms.includes('instagram')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setEditPlatforms([...editPlatforms, 'instagram']);
+                        } else {
+                          setEditPlatforms(editPlatforms.filter(p => p !== 'instagram'));
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-brand-ghost/30 text-brand-electric focus:ring-brand-electric/50"
+                    />
+                    <div className="p-1.5 rounded bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400">
+                      <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                      </svg>
+                    </div>
+                    <span className="text-sm text-white">Instagram</span>
+                    <span className="text-xs text-brand-silver/50 ml-auto">Max {INSTAGRAM_MAX_POST_LENGTH} chars</span>
+                  </label>
                 </div>
-                
+
                 {/* Character limit warning */}
                 {editPlatforms.includes('twitter') && editContent.length > TWITTER_MAX_LENGTH && (
                   <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
                     ⚠️ Content exceeds Twitter&apos;s {TWITTER_MAX_LENGTH} character limit ({editContent.length} chars)
                   </div>
                 )}
-                
+
+                {editPlatforms.includes('instagram') && editContent.length > INSTAGRAM_MAX_POST_LENGTH && (
+                  <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
+                    ⚠️ Content exceeds Instagram&apos;s {INSTAGRAM_MAX_POST_LENGTH} character limit ({editContent.length} chars)
+                  </div>
+                )}
+
+                {editPlatforms.includes('instagram') && editMediaUrns.length === 0 && (
+                  <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded text-xs text-yellow-400">
+                    ⚠️ Instagram posts require an image or video. Please add media.
+                  </div>
+                )}
+
                 {editPlatforms.length === 0 && (
                   <div className="mt-2 text-xs text-yellow-400">
                     ⚠️ Please select at least one platform
@@ -9106,6 +9560,10 @@ function AutomationPageContent() {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
+                          const previewUrl = URL.createObjectURL(file);
+                          const isVideo = file.type.startsWith('video/');
+                          if (editMediaPreview) URL.revokeObjectURL(editMediaPreview.url);
+                          setEditMediaPreview({ url: previewUrl, type: isVideo ? 'video' : 'image' });
                           handleMediaUpload(file, setEditMediaUrns, setUploadingEditMedia, editPlatforms);
                         }
                         e.target.value = '';
@@ -9119,7 +9577,10 @@ function AutomationPageContent() {
                       </svg>
                       {editMediaUrns.length} file{editMediaUrns.length > 1 ? 's' : ''} attached
                       <button
-                        onClick={() => setEditMediaUrns([])}
+                        onClick={() => {
+                          setEditMediaUrns([]);
+                          if (editMediaPreview) { URL.revokeObjectURL(editMediaPreview.url); setEditMediaPreview(null); }
+                        }}
                         className="text-red-400 hover:text-red-300 ml-2"
                         title="Remove media"
                       >
@@ -9133,6 +9594,7 @@ function AutomationPageContent() {
                 <p className="text-xs text-brand-silver/50 mt-1">{getMediaHelperText(editPlatforms)}</p>
               </div>
             </div>
+            )}
 
             {/* Action Buttons */}
             <div className="flex gap-3 justify-end">
@@ -9144,7 +9606,9 @@ function AutomationPageContent() {
                   setEditContent('');
                   setEditDateTime(null);
                   setEditMediaUrns([]);
+                  if (editMediaPreview) { URL.revokeObjectURL(editMediaPreview.url); setEditMediaPreview(null); }
                   setEditPlatforms([]);
+                  setEditComposeTab('compose');
                 }}
                 className="px-6 py-2.5 rounded-lg border border-brand-ghost/30 text-brand-silver hover:bg-white/5 transition-colors"
               >
@@ -9152,7 +9616,7 @@ function AutomationPageContent() {
               </button>
               <button
                 onClick={handleEditPost}
-                disabled={editing || uploadingEditMedia || !editTitle.trim() || !editContent.trim() || !editDateTime || editPlatforms.length === 0 || (editPlatforms.includes('twitter') && editContent.length > TWITTER_MAX_LENGTH)}
+                disabled={editing || uploadingEditMedia || !editTitle.trim() || !editContent.trim() || !editDateTime || editPlatforms.length === 0 || (editPlatforms.includes('twitter') && editContent.length > TWITTER_MAX_LENGTH) || (editPlatforms.includes('instagram') && editContent.length > INSTAGRAM_MAX_POST_LENGTH) || (editPlatforms.includes('instagram') && editMediaUrns.length === 0)}
                 className="px-6 py-2.5 rounded-lg bg-brand-electric hover:bg-brand-electric/80 text-brand-midnight font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {editing ? (
