@@ -3608,24 +3608,25 @@ function AutomationPageContent() {
         }
       }
 
-      // If no platform had a post ID, delete directly from ContentCalendar
-      if (!hasAnyPostId) {
-        try {
-          const response = await apiClient.delete(`/automation/content-calendar/${post.id}/`);
-          if (response.ok) {
-            successCount = platformCount;
-          } else {
-            const error = await response.json();
-            errors.push(`Calendar: ${error.error || 'Failed to delete'}`);
-          }
-        } catch (error) {
-          console.error('Failed to delete from calendar:', error);
-          errors.push('Calendar: Network error');
+      // Always delete the ContentCalendar entry from the database.
+      // Platform-specific deletes above remove the post from social
+      // platforms, but the DB record must also be removed so the
+      // post disappears from Recent Activity.
+      try {
+        const calResponse = await apiClient.delete(`/automation/content-calendar/${post.id}/`);
+        if (calResponse.ok) {
+          if (!hasAnyPostId) successCount = platformCount;
+        } else {
+          const calError = await calResponse.json().catch(() => ({}));
+          errors.push(`Calendar: ${(calError as Record<string, string>).error || 'Failed to delete'}`);
         }
+      } catch (error) {
+        console.error('Failed to delete from calendar:', error);
+        errors.push('Calendar: Network error');
       }
 
       // Show result message
-      if (successCount === platformCount || (successCount > 0 && !hasAnyPostId)) {
+      if (successCount === platformCount || successCount > 0 || !errors.length) {
         setMessage({
           type: 'success',
           text: `Post deleted successfully`,
