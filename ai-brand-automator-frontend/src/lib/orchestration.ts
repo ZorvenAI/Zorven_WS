@@ -66,9 +66,13 @@ export async function cancelJob(jobId: string): Promise<{ status: string }> {
   return parseOrThrow<{ status: string }>(res);
 }
 
-/** Lightweight quick-status check (Redis-cached, optimized for polling). */
+/** Lightweight quick-status check optimized for polling.
+ *  Uses cache:'no-store' to bypass browser/CDN caching — the backend
+ *  already reads from DB for in-flight jobs and from Redis for terminal. */
 export async function getJobQuickStatus(jobId: string): Promise<QuickStatus> {
-  const res = await apiClient.get(`${BASE}/jobs/${jobId}/quick-status/`);
+  const res = await apiClient.request(`${BASE}/jobs/${jobId}/quick-status/`, {
+    cache: 'no-store',
+  });
   return parseOrThrow<QuickStatus>(res);
 }
 

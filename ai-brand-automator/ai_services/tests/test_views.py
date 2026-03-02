@@ -917,3 +917,79 @@ class TestSaveChatResponseToRAG:
         assert resp1.data["file_name"] == resp2.data["file_name"]
         assert resp1.data["file_name"].endswith(".pdf")
         assert BrandAsset.objects.filter(file_name=resp1.data["file_name"]).count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestSpeechToText:
+    """Tests for the POST /api/v1/ai/speech-to-text/ endpoint."""
+
+    URL = "/api/v1/ai/speech-to-text/"
+
+    def test_unauthenticated_rejected(self, api_client):
+        resp = api_client.post(self.URL)
+        assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_no_audio_file(self, authenticated_client_with_tenant):
+        resp = authenticated_client_with_tenant.post(self.URL)
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert "No audio file" in resp.data["error"]
+
+    def test_unsupported_audio_type(self, authenticated_client_with_tenant):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        audio = SimpleUploadedFile("test.txt", b"data", content_type="text/plain")
+        resp = authenticated_client_with_tenant.post(
+            self.URL, {"audio": audio}, format="multipart"
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_audio_too_large(self, authenticated_client_with_tenant):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        large = SimpleUploadedFile(
+            "big.webm", b"x" * (11 * 1024 * 1024), content_type="audio/webm"
+        )
+        resp = authenticated_client_with_tenant.post(
+            self.URL, {"audio": large}, format="multipart"
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    @patch("ai_services.views.ai_service")
+    def test_ai_service_not_configured(
+        self, mock_svc, authenticated_client_with_tenant
+    ):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        mock_svc.model = None
+        audio = SimpleUploadedFile("r.webm", b"audio", content_type="audio/webm")
+        resp = authenticated_client_with_tenant.post(
+            self.URL, {"audio": audio}, format="multipart"
+        )
+        assert resp.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+    @patch("ai_services.views.ai_service")
+    def test_successful_transcription(self, mock_svc, authenticated_client_with_tenant):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        mock_resp = MagicMock()
+        mock_resp.text = "Hello world"
+        mock_svc.model.generate_content.return_value = mock_resp
+
+        audio = SimpleUploadedFile("r.webm", b"audio", content_type="audio/webm")
+        resp = authenticated_client_with_tenant.post(
+            self.URL, {"audio": audio}, format="multipart"
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["transcript"] == "Hello world"
+
+    @patch("ai_services.views.ai_service")
+    def test_transcription_failure(self, mock_svc, authenticated_client_with_tenant):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        mock_svc.model.generate_content.side_effect = Exception("API error")
+        audio = SimpleUploadedFile("r.webm", b"audio", content_type="audio/webm")
+        resp = authenticated_client_with_tenant.post(
+            self.URL, {"audio": audio}, format="multipart"
+        )
+        assert resp.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR

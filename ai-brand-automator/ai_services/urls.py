@@ -6,6 +6,7 @@ from .views import (
     chat_with_ai,
     upload_chat_attachment,
     save_chat_response_to_rag,
+    speech_to_text,
     generate_brand_strategy,
     generate_brand_identity,
     analyze_market,
@@ -35,6 +36,7 @@ urlpatterns = router.urls + [
         name="generate_brand_identity",
     ),
     path("analyze/market/", analyze_market, name="analyze_market"),
+    path("speech-to-text/", speech_to_text, name="speech_to_text"),
     path(
         "internal/title-session/<str:session_id>/",
         update_session_title_internal,
