@@ -91,15 +91,30 @@ class JobExecutor:
                         return
 
                 # Initialize progress for the resolved manifest's nodes
+                node_ids_added = []
                 for node in manifest_data.get("nodes", []):
                     nid = node["id"]
                     if nid not in state["progress"]:
                         state["progress"][nid] = {"status": "pending"}
+                        node_ids_added.append(nid)
+
+                logger.info(
+                    "Job %s: added %d pending nodes: %s",
+                    job_id,
+                    len(node_ids_added),
+                    ", ".join(node_ids_added),
+                )
 
                 # Send progress with all pending nodes visible to the UI
                 await self.callback.send_progress(callback_url, state["progress"])
 
             # Build the LangGraph (with per-node progress tracking)
+            logger.info(
+                "Job %s: building graph with %d nodes, callback_client=%s",
+                job_id,
+                len(manifest_data.get("nodes", [])),
+                "yes" if self.callback else "no",
+            )
             try:
                 compiled_graph = GraphBuilder.build(
                     manifest_data, callback_client=self.callback
@@ -128,9 +143,13 @@ class JobExecutor:
                 return
 
             # Invoke the compiled graph
-            # LangGraph executes nodes in dependency order.
-            # Per-node progress is reported via the progress dict
-            # updated as the graph transitions state.
+            logger.info(
+                "Job %s: invoking graph with %d nodes: %s " "(callback_url=%s)",
+                job_id,
+                len(node_ids),
+                " → ".join(node_ids),
+                callback_url[:80] if callback_url else "<empty>",
+            )
             try:
                 result_state = await compiled_graph.ainvoke(
                     state,
