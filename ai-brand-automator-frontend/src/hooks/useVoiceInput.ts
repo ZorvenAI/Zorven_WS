@@ -88,13 +88,20 @@ export function useVoiceInput(): UseVoiceInputReturn {
     if (!SpeechRecognitionCtor) return;
 
     const recognition = new SpeechRecognitionCtor();
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = false;
     recognition.lang = 'en-US';
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const result = event.results[0]?.[0]?.transcript ?? '';
-      if (result) setTranscript(result);
+      // Accumulate all final results across the session so long
+      // recordings aren't cut off after the first pause.
+      const parts: string[] = [];
+      for (let i = 0; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          parts.push(event.results[i][0].transcript);
+        }
+      }
+      if (parts.length > 0) setTranscript(parts.join(' '));
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
