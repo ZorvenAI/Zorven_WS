@@ -1120,3 +1120,96 @@ def save_chat_response_to_rag(request):
         },
         status=status.HTTP_202_ACCEPTED,
     )
+
+
+# ── Speech-to-Text (cloud fallback for browsers without Web Speech API) ──
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsTenantEditor])
+def speech_to_text(request):
+    """Transcribe audio to text using Gemini 2.0 Flash.
+
+    Accepts an audio blob (audio/webm, audio/ogg, etc.) recorded by the
+    browser's MediaRecorder API.  Returns ``{"transcript": "..."}``.
+
+    This endpoint is the **cloud fallback** for browsers that lack the
+    Web Speech API (e.g. Firefox).  Chrome/Edge/Safari use the free
+    browser-native SpeechRecognition API instead.
+    """
+    audio_file = request.FILES.get("audio")
+    if not audio_file:
+        return Response(
+            {"error": "No audio file provided."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    allowed_audio_types = [
+        "audio/webm",
+        "audio/ogg",
+        "audio/wav",
+        "audio/mp4",
+        "audio/mpeg",
+    ]
+    if audio_file.content_type not in allowed_audio_types:
+        return Response(
+            {"error": f"Unsupported audio type: {audio_file.content_type}"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    max_audio_size = 10 * 1024 * 1024  # 10 MB
+    if audio_file.size > max_audio_size:
+        return Response(
+            {"error": "Audio file too large. Maximum 10 MB."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not ai_service.model:
+        return Response(
+            {"error": "AI service not configured. GOOGLE_API_KEY is required."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    try:
+        import google.generativeai as genai
+
+        audio_bytes = audio_file.read()
+        response = ai_service.model.generate_content(
+            [
+                "Transcribe the following audio exactly as spoken. "
+                "Return ONLY the transcription text, no formatting, "
+                "no explanation, no quotation marks.",
+                {
+                    "mime_type": audio_file.content_type,
+                    "data": audio_bytes,
+                },
+            ],
+            generation_config=genai.GenerationConfig(
+                temperature=0.0,
+                max_output_tokens=2048,
+            ),
+        )
+        transcript = response.text.strip()
+
+        # Track as an AI generation for billing / usage analytics
+        try:
+            tenant = getattr(request, "tenant", None)
+            AIGeneration.objects.create(
+                tenant=tenant,
+                content_type="speech_to_text",
+                prompt="[audio transcription]",
+                response=transcript,
+                tokens_used=len(transcript.split()),
+                processing_time=0,
+            )
+        except Exception:
+            logger.warning("Failed to log STT generation")
+
+        return Response({"transcript": transcript})
+
+    except Exception as exc:
+        logger.error("Speech-to-text failed: %s", exc, exc_info=True)
+        return Response(
+            {"error": "Transcription failed. Please try again."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

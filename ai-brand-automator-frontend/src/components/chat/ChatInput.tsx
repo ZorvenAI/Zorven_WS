@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
-import { Paperclip, X, Send, FileText, Image, Film } from 'lucide-react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { Paperclip, X, Send, FileText, Image, Film, Mic, MicOff, Loader2 } from 'lucide-react';
+import { useVoiceInput } from '@/hooks/useVoiceInput';
 
 interface PendingFile {
   file: File;
@@ -56,6 +57,27 @@ export function ChatInput({
   const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const voice = useVoiceInput();
+
+  // Append transcribed text to the textarea when voice input produces a result.
+  useEffect(() => {
+    if (!voice.transcript) return;
+    setInput((prev) => {
+      const sep = prev && !prev.endsWith(' ') ? ' ' : '';
+      return prev + sep + voice.transcript;
+    });
+    voice.reset();
+    // Auto-resize textarea after inserting transcribed text
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (ta) {
+        ta.style.height = 'auto';
+        ta.style.height = `${Math.min(ta.scrollHeight, 144)}px`;
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voice.transcript]);
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -187,6 +209,23 @@ export function ChatInput({
         </div>
       )}
 
+      {/* Voice recording / transcribing indicator */}
+      {voice.isListening && (
+        <div className="flex items-center gap-2 mb-2 text-xs text-red-400">
+          <span className="w-2 h-2 bg-red-400 rounded-full animate-pulse" />
+          Recording&hellip; release to stop
+        </div>
+      )}
+      {voice.isTranscribing && (
+        <div className="flex items-center gap-2 mb-2 text-xs text-brand-electric/60">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          Transcribing&hellip;
+        </div>
+      )}
+      {voice.error && (
+        <div className="mb-2 text-xs text-red-400">{voice.error}</div>
+      )}
+
       <div className="flex items-end space-x-3 sm:space-x-4">
         {/* File attach button */}
         <button
@@ -221,6 +260,47 @@ export function ChatInput({
           rows={1}
           disabled={disabled}
         />
+
+        {/* Voice input (hold-to-talk) */}
+        {voice.isSupported && (
+          <button
+            onMouseDown={voice.startListening}
+            onMouseUp={voice.stopListening}
+            onMouseLeave={() => { if (voice.isListening) voice.stopListening(); }}
+            onTouchStart={(e) => { e.preventDefault(); voice.startListening(); }}
+            onTouchEnd={(e) => { e.preventDefault(); voice.stopListening(); }}
+            disabled={disabled || voice.isTranscribing}
+            className={`p-2.5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+              voice.isListening
+                ? 'text-red-400 bg-red-500/20 animate-pulse'
+                : voice.isTranscribing
+                  ? 'text-brand-electric/60'
+                  : 'text-brand-silver/40 hover:text-brand-silver hover:bg-white/5'
+            }`}
+            aria-label={
+              voice.isListening
+                ? 'Recording... release to stop'
+                : voice.isTranscribing
+                  ? 'Transcribing...'
+                  : 'Hold to speak'
+            }
+            title={
+              voice.isListening
+                ? 'Recording...'
+                : voice.isTranscribing
+                  ? 'Transcribing...'
+                  : 'Hold to speak'
+            }
+          >
+            {voice.isTranscribing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : voice.isListening ? (
+              <MicOff className="w-4 h-4" />
+            ) : (
+              <Mic className="w-4 h-4" />
+            )}
+          </button>
+        )}
 
         {/* Send button */}
         <button
