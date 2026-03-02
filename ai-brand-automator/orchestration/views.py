@@ -129,6 +129,10 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
         progress = data.get("progress")
         progress_nodes = list(progress.keys()) if isinstance(progress, dict) else []
+        try:
+            host = request.get_host()
+        except Exception:
+            host = request.META.get("HTTP_HOST", "<unknown>")
         logger.info(
             "Job %s callback received: status=%s, progress_nodes=%s, "
             "has_result_data=%s, host=%s",
@@ -136,7 +140,7 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             data.get("status"),
             progress_nodes,
             "result_data" in data,
-            request.get_host(),
+            host,
         )
 
         found = handle_pipeline_result(

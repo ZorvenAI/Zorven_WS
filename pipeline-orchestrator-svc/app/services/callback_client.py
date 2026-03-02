@@ -76,8 +76,9 @@ class CallbackClient:
                 # 4xx → non-retryable (bad request, auth, etc.)
                 if exc.response.status_code < 500:
                     # Log a capped snippet of the response for diagnosis
-                    # (e.g. DisallowedHost).  Use raw bytes to avoid reading
-                    # an unbounded body via .text.
+                    # (e.g. DisallowedHost).  .content reads the full body
+                    # but 4xx error pages are typically small; we slice to
+                    # 512 bytes and flatten newlines for a single log line.
                     body = ""
                     if exc.response is not None:
                         raw = exc.response.content[:512]

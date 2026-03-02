@@ -14,6 +14,8 @@ import logging as _logging
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse as _urlparse
+
 from decouple import config
 from datetime import timedelta
 import dj_database_url
@@ -46,8 +48,6 @@ ALLOWED_HOSTS = config(
 # to ALLOWED_HOSTS, Django rejects callbacks with 400 DisallowedHost and
 # pipeline progress never reaches the frontend.
 if config("RAILWAY_ENVIRONMENT_NAME", default=""):
-    from urllib.parse import urlparse as _urlparse
-
     _cb_host = _urlparse(
         config(
             "CALLBACK_BASE_URL",
