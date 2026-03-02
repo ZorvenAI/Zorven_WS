@@ -269,6 +269,20 @@ export function ChatInput({
             onMouseLeave={() => { if (voice.isListening) voice.stopListening(); }}
             onTouchStart={(e) => { e.preventDefault(); voice.startListening(); }}
             onTouchEnd={(e) => { e.preventDefault(); voice.stopListening(); }}
+            onKeyDown={(e) => {
+              if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault();
+                if (!voice.isListening && !disabled && !voice.isTranscribing) {
+                  voice.startListening();
+                }
+              }
+            }}
+            onKeyUp={(e) => {
+              if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault();
+                if (voice.isListening) voice.stopListening();
+              }
+            }}
             disabled={disabled || voice.isTranscribing}
             className={`p-2.5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
               voice.isListening

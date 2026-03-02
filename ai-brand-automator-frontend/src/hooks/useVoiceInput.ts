@@ -45,7 +45,16 @@ function detectEngine(): Engine {
   if (window.SpeechRecognition || window.webkitSpeechRecognition) {
     return 'webspeech';
   }
-  if (typeof navigator.mediaDevices?.getUserMedia === 'function') {
+  const hasMediaRecorder =
+    typeof MediaRecorder !== 'undefined' &&
+    typeof MediaRecorder.isTypeSupported === 'function' &&
+    (MediaRecorder.isTypeSupported('audio/webm') ||
+      MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ||
+      MediaRecorder.isTypeSupported('audio/ogg;codecs=opus'));
+  if (
+    hasMediaRecorder &&
+    typeof navigator.mediaDevices?.getUserMedia === 'function'
+  ) {
     return 'cloud';
   }
   return null;
@@ -76,7 +85,14 @@ export function useVoiceInput(): UseVoiceInputReturn {
   useEffect(() => {
     return () => {
       recognitionRef.current?.abort();
-      mediaRecorderRef.current?.stop();
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== 'inactive') {
+        try {
+          recorder.stop();
+        } catch {
+          // Ignore InvalidStateError on unmount.
+        }
+      }
       mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
@@ -141,10 +157,14 @@ export function useVoiceInput(): UseVoiceInputReturn {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
 
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : 'audio/ogg';
-      const recorder = new MediaRecorder(stream, { mimeType });
+      const options: MediaRecorderOptions = {};
+      if (MediaRecorder.isTypeSupported('audio/webm')) {
+        options.mimeType = 'audio/webm';
+      } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+        options.mimeType = 'audio/ogg';
+      }
+      // If neither is supported, omit mimeType and let the browser choose.
+      const recorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
       recordStartRef.current = Date.now();

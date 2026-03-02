@@ -1137,6 +1137,8 @@ def speech_to_text(request):
     Web Speech API (e.g. Firefox).  Chrome/Edge/Safari use the free
     browser-native SpeechRecognition API instead.
     """
+    from brand_automator.validators import validate_file_upload
+
     audio_file = request.FILES.get("audio")
     if not audio_file:
         return Response(
@@ -1151,16 +1153,10 @@ def speech_to_text(request):
         "audio/mp4",
         "audio/mpeg",
     ]
-    if audio_file.content_type not in allowed_audio_types:
+    validation = validate_file_upload(audio_file, allowed_audio_types, max_size_mb=10)
+    if not validation["valid"]:
         return Response(
-            {"error": f"Unsupported audio type: {audio_file.content_type}"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    max_audio_size = 10 * 1024 * 1024  # 10 MB
-    if audio_file.size > max_audio_size:
-        return Response(
-            {"error": "Audio file too large. Maximum 10 MB."},
+            {"error": validation["error"]},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
