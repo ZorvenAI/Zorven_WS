@@ -168,38 +168,32 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="quick-status")
     def quick_status(self, request, job_id=None):
-        """Fast status check from Redis cache, falls back to DB.
+        """Fast status check optimized for polling.
 
-        Returns a lightweight response optimized for polling.
-        Includes trace fields (current_node, progress_percent, last_thought)
-        populated by the Kafka TraceConsumer.
+        For **terminal** jobs (completed / failed) the response is served
+        from Redis cache (1-hour TTL) since it won't change.
 
-        Cache-Control: no-store prevents Railway's edge proxy and the
-        browser from caching the response — the frontend polls every 3s
-        and must always see fresh progress data.
+        For **in-flight** jobs (queued / running) the response is ALWAYS
+        read from the database.  This eliminates a class of stale-cache
+        bugs where the Redis entry written by a quick-status DB-fallback
+        (with empty progress) races against the callback's cache write,
+        leaving the frontend stuck on an empty agent list.  The DB read
+        is a single indexed lookup and takes <10 ms — acceptable at
+        the 3-second polling interval.
         """
+        # ── Try Redis cache for terminal jobs only ──
         cached = cache.get(f"job:status:{job_id}")
-        if cached:
-            # If the job is in-flight but progress is still empty, it
-            # likely means callbacks haven't updated the cache yet (e.g.
-            # the DB-fallback path ran before the first callback arrived
-            # and created a stale entry).  Fall through to DB in that
-            # case so the next callback's cache write is authoritative.
-            in_flight = cached.get("status") in ("queued", "running")
-            has_progress = bool(cached.get("progress"))
-            if not (in_flight and not has_progress):
-                # Ensure trace fields are present even if not yet set
-                cached.setdefault("current_node", None)
-                cached.setdefault("progress_percent", 0)
-                cached.setdefault("last_thought", None)
-                resp = Response(cached)
-                resp["Cache-Control"] = "no-store"
-                return resp
+        if cached and cached.get("status") in ("completed", "failed"):
+            cached.setdefault("current_node", None)
+            cached.setdefault("progress_percent", 0)
+            cached.setdefault("last_thought", None)
+            resp = Response(cached)
+            resp["Cache-Control"] = "no-store"
+            return resp
 
-        # Fall back to DB
+        # ── Read from DB (in-flight or cache miss) ──
         job = self.get_object()
         progress = job.progress or {}
-        # Derive current_node from progress dict (same logic as cache)
         current_node = next(
             (
                 nid
@@ -222,19 +216,17 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         elif job.status == AnalysisJob.Status.FAILED:
             data["error_message"] = job.error_message
 
-        # Populate cache for subsequent polls.
-        # Use a short TTL for in-flight jobs so stale entries expire
-        # quickly if callbacks don't update the cache.  Terminal jobs
-        # use a longer TTL (1 hour) since they won't change.
+        # Cache terminal states for 1 hour; skip caching in-flight
+        # jobs — the DB is the source of truth during execution.
         is_terminal = job.status in (
             AnalysisJob.Status.COMPLETED,
             AnalysisJob.Status.FAILED,
         )
-        cache_ttl = 3600 if is_terminal else 30
-        try:
-            cache.set(f"job:status:{job_id}", data, timeout=cache_ttl)
-        except Exception:
-            pass
+        if is_terminal:
+            try:
+                cache.set(f"job:status:{job_id}", data, timeout=3600)
+            except Exception:
+                pass
 
         resp = Response(data)
         resp["Cache-Control"] = "no-store"
