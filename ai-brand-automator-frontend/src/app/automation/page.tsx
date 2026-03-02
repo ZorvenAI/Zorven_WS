@@ -395,6 +395,7 @@ function AutomationPageContent() {
   const [editDateTime, setEditDateTime] = useState<Date | null>(null);
   const [editing, setEditing] = useState(false);
   const [editMediaUrns, setEditMediaUrns] = useState<string[]>([]);
+  const [editMediaPreview, setEditMediaPreview] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
   const [uploadingEditMedia, setUploadingEditMedia] = useState(false);
 
   // Automation tasks state
@@ -8636,6 +8637,10 @@ function AutomationPageContent() {
                 setScheduleContent('');
                 setScheduleDateTime(null);
                 setScheduleMediaUrns([]);
+                if (scheduleMediaPreview) {
+                  URL.revokeObjectURL(scheduleMediaPreview.url);
+                  setScheduleMediaPreview(null);
+                }
                 setSchedulePlatforms(['linkedin']);
                 setScheduleComposeTab('compose');
               }}
@@ -9155,6 +9160,7 @@ function AutomationPageContent() {
                 setEditContent('');
                 setEditDateTime(null);
                 setEditMediaUrns([]);
+                if (editMediaPreview) { URL.revokeObjectURL(editMediaPreview.url); setEditMediaPreview(null); }
                 setEditPlatforms([]);
                 setEditComposeTab('compose');
               }}
@@ -9231,9 +9237,13 @@ function AutomationPageContent() {
                     <div className="px-3 pb-2">
                       <p className="text-gray-900 text-sm whitespace-pre-wrap">{editContent || 'Your post content will appear here...'}</p>
                     </div>
-                    {editMediaUrns.length > 0 && (
+                    {editMediaPreview && (
                       <div className="px-3 pb-3">
-                        <img src={editMediaUrns[0]} alt="Post media" className="w-full max-h-96 rounded-lg object-contain" />
+                        {editMediaPreview.type === 'video' ? (
+                          <video src={editMediaPreview.url} controls className="w-full max-h-96 rounded-lg object-contain bg-black" />
+                        ) : (
+                          <img src={editMediaPreview.url} alt="Post media" className="w-full max-h-96 rounded-lg object-contain" />
+                        )}
                       </div>
                     )}
                     <div className="px-3 py-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
@@ -9260,9 +9270,13 @@ function AutomationPageContent() {
                         <div className="mt-1">
                           <p className="text-white text-sm whitespace-pre-wrap">{editContent || 'Your tweet will appear here...'}</p>
                         </div>
-                        {editMediaUrns.length > 0 && (
+                        {editMediaPreview && (
                           <div className="mt-3 rounded-xl overflow-hidden">
-                            <img src={editMediaUrns[0]} alt="Media preview" className="w-full max-h-80 object-cover rounded-xl" />
+                            {editMediaPreview.type === 'video' ? (
+                              <video src={editMediaPreview.url} className="w-full max-h-80 object-cover rounded-xl" controls />
+                            ) : (
+                              <img src={editMediaPreview.url} alt="Media preview" className="w-full max-h-80 object-cover rounded-xl" />
+                            )}
                           </div>
                         )}
                         <div className="mt-3 flex justify-between text-gray-500 text-sm max-w-xs">
@@ -9286,9 +9300,13 @@ function AutomationPageContent() {
                     <div className="px-3 pb-2">
                       <p className="text-gray-900 text-sm whitespace-pre-wrap">{editContent || 'Your post content will appear here...'}</p>
                     </div>
-                    {editMediaUrns.length > 0 && (
+                    {editMediaPreview && (
                       <div className="aspect-video bg-gray-100">
-                        <img src={editMediaUrns[0]} alt="Preview" className="w-full h-full object-cover" />
+                        {editMediaPreview.type === 'image' ? (
+                          <img src={editMediaPreview.url} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <video src={editMediaPreview.url} className="w-full h-full object-cover" controls />
+                        )}
                       </div>
                     )}
                     <div className="px-3 py-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
@@ -9304,9 +9322,13 @@ function AutomationPageContent() {
                       </div>
                       <p className="font-semibold text-gray-900 text-sm">{currentIgAccount?.username || profiles?.instagram?.profile_name || 'your_account'}</p>
                     </div>
-                    {editMediaUrns.length > 0 ? (
+                    {editMediaPreview ? (
                       <div className="aspect-square bg-gray-100">
-                        <img src={editMediaUrns[0]} alt="Preview" className="w-full h-full object-cover" />
+                        {editMediaPreview.type === 'image' ? (
+                          <img src={editMediaPreview.url} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <video src={editMediaPreview.url} className="w-full h-full object-cover" controls />
+                        )}
                       </div>
                     ) : (
                       <div className="aspect-square bg-gray-100 flex items-center justify-center">
@@ -9528,6 +9550,10 @@ function AutomationPageContent() {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
+                          const previewUrl = URL.createObjectURL(file);
+                          const isVideo = file.type.startsWith('video/');
+                          if (editMediaPreview) URL.revokeObjectURL(editMediaPreview.url);
+                          setEditMediaPreview({ url: previewUrl, type: isVideo ? 'video' : 'image' });
                           handleMediaUpload(file, setEditMediaUrns, setUploadingEditMedia, editPlatforms);
                         }
                         e.target.value = '';
