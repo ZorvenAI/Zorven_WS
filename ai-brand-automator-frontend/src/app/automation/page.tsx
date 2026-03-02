@@ -9231,6 +9231,11 @@ function AutomationPageContent() {
                     <div className="px-3 pb-2">
                       <p className="text-gray-900 text-sm whitespace-pre-wrap">{editContent || 'Your post content will appear here...'}</p>
                     </div>
+                    {editMediaUrns.length > 0 && (
+                      <div className="px-3 pb-3">
+                        <img src={editMediaUrns[0]} alt="Post media" className="w-full max-h-96 rounded-lg object-contain" />
+                      </div>
+                    )}
                     <div className="px-3 py-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
                       <span>👍 Like</span><span>💬 Comment</span><span>↗️ Repost</span><span>📤 Send</span>
                     </div>
@@ -9255,6 +9260,11 @@ function AutomationPageContent() {
                         <div className="mt-1">
                           <p className="text-white text-sm whitespace-pre-wrap">{editContent || 'Your tweet will appear here...'}</p>
                         </div>
+                        {editMediaUrns.length > 0 && (
+                          <div className="mt-3 rounded-xl overflow-hidden">
+                            <img src={editMediaUrns[0]} alt="Media preview" className="w-full max-h-80 object-cover rounded-xl" />
+                          </div>
+                        )}
                         <div className="mt-3 flex justify-between text-gray-500 text-sm max-w-xs">
                           <span>💬 0</span><span>🔄 0</span><span>❤️ 0</span><span>📈 0</span><span>📤</span>
                         </div>
@@ -9276,6 +9286,11 @@ function AutomationPageContent() {
                     <div className="px-3 pb-2">
                       <p className="text-gray-900 text-sm whitespace-pre-wrap">{editContent || 'Your post content will appear here...'}</p>
                     </div>
+                    {editMediaUrns.length > 0 && (
+                      <div className="aspect-video bg-gray-100">
+                        <img src={editMediaUrns[0]} alt="Preview" className="w-full h-full object-cover" />
+                      </div>
+                    )}
                     <div className="px-3 py-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
                       <span>👍 Like</span><span>💬 Comment</span><span>↗️ Share</span>
                     </div>
@@ -9289,9 +9304,15 @@ function AutomationPageContent() {
                       </div>
                       <p className="font-semibold text-gray-900 text-sm">{currentIgAccount?.username || profiles?.instagram?.profile_name || 'your_account'}</p>
                     </div>
-                    <div className="aspect-square bg-gray-100 flex items-center justify-center">
-                      <span className="text-gray-400">Media preview</span>
-                    </div>
+                    {editMediaUrns.length > 0 ? (
+                      <div className="aspect-square bg-gray-100">
+                        <img src={editMediaUrns[0]} alt="Preview" className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="aspect-square bg-gray-100 flex items-center justify-center">
+                        <span className="text-gray-400">No media selected</span>
+                      </div>
+                    )}
                     <div className="px-3 py-2 flex gap-4">
                       <span className="text-2xl">♡</span><span className="text-2xl">💬</span><span className="text-2xl">➤</span>
                     </div>
