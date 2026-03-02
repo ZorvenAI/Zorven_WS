@@ -4,17 +4,25 @@ Job executor — central orchestration service.
 Ties together graph building, node execution, progress callbacks,
 cancel checking, and result reporting. This is the core runtime
 engine of the pipeline orchestrator.
+
+Uses **direct sequential execution** instead of LangGraph's ainvoke /
+astream.  This ensures per-node progress callbacks fire reliably across
+all deployment targets (local Docker, Railway, etc.) by giving the
+executor full control over the call → callback loop.
 """
 
 import copy
 import logging
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from typing import Any
 
 from app.api.schemas import DispatchRequest
 from app.core.config import settings
 from app.core.redis_client import get_redis
-from app.factory.graph_builder import GraphBuilder, GraphBuildError
+from app.factory.graph_builder import GraphBuilder
+from app.factory.node_registry import resolve_handler
+from app.nodes.external_wrapper import ExternalWrapper
 from app.services.callback_client import CallbackClient
 from app.state.schema import AgentState
 
@@ -40,16 +48,17 @@ class JobExecutor:
         1. Build initial AgentState from the dispatch request
         2. Send "running" callback + initial progress
         3. If no manifest → run intent routing (PipelineComposer)
-        4. Build LangGraph from manifest
-        5. Stream graph execution via ``astream(stream_mode="updates")``
-        6. After each node completes: mark done → mark next running → callback
-        7. Check cancel flag between nodes
-        8. Send completed / failed callback at the end
+        4. Resolve node handlers (internal / external)
+        5. Execute nodes sequentially with per-node progress callbacks
+        6. Check cancel flag between nodes
+        7. Send completed / failed callback at the end
 
-        Uses ``astream`` instead of ``ainvoke`` so that per-node progress
-        callbacks are sent from the executor loop (which works reliably
-        across all deployment targets) rather than depending solely on
-        TrackedNode wrappers inside the graph.
+        Uses **direct sequential execution** — the executor calls each
+        node handler in topological order and sends progress callbacks
+        between every step.  This bypasses LangGraph's ``ainvoke`` /
+        ``astream`` execution engine entirely, ensuring per-node
+        progress is visible on all deployment targets (local Docker,
+        Railway, etc.).
         """
         job_id = request.job_id
         callback_url = request.callback_url
@@ -116,31 +125,53 @@ class JobExecutor:
                     callback_url, copy.deepcopy(state["progress"])
                 )
 
-            # Build the LangGraph without callback_client — the executor's
-            # astream loop handles per-node progress callbacks directly, so
-            # TrackedNode wrappers are not needed (and would cause duplicate
-            # or out-of-order progress events).
-            logger.info(
-                "Job %s: building graph with %d nodes (streaming mode)",
-                job_id,
-                len(manifest_data.get("nodes", [])),
-            )
-            try:
-                compiled_graph = GraphBuilder.build(manifest_data, callback_client=None)
-            except (GraphBuildError, ValueError) as exc:
-                logger.error("Graph build failed for job %s: %s", job_id, exc)
-                await self.callback.send_failed(
-                    callback_url,
-                    error_message=f"Graph build error: {exc}",
-                    progress=state["progress"],
-                )
-                return
-
-            # Execute the graph node by node
+            # ── Resolve node handlers ──
+            # Build handlers directly without using LangGraph's execution
+            # engine.  This gives the executor full control over the
+            # call → callback → cancel loop so per-node progress fires
+            # reliably on every deployment target.
             nodes = manifest_data.get("nodes", [])
-            node_ids = [n["id"] for n in nodes]
+            global_config = manifest_data.get("global_config", {})
 
-            # Check cancel flag before starting execution
+            node_ids: list[str] = []
+            handlers: dict[str, Any] = {}
+
+            # Topological sort to honour edges
+            sorted_ids = self._topological_sort(
+                manifest_data.get("nodes", []),
+                manifest_data.get("edges", []),
+            )
+
+            for node_def in nodes:
+                nid = node_def["id"]
+                node_ids.append(nid)
+                node_type = node_def.get("type", "internal")
+                merged_config = {**global_config, **node_def.get("config", {})}
+
+                if node_type == "internal":
+                    handler_name = node_def.get("handler")
+                    if not handler_name:
+                        raise ValueError(f"Internal node '{nid}' missing 'handler'")
+                    handler_cls = resolve_handler(handler_name)
+                    handlers[nid] = handler_cls(config=merged_config)
+                elif node_type == "external":
+                    url = node_def.get("url", "")
+                    url = GraphBuilder._translate_url(url)
+                    handlers[nid] = ExternalWrapper(
+                        url=url, node_id=nid, config=merged_config
+                    )
+                else:
+                    raise ValueError(f"Unknown node type '{node_type}' for '{nid}'")
+
+            logger.info(
+                "Job %s: executing %d nodes sequentially: %s " "(callback_url=%s)",
+                job_id,
+                len(sorted_ids),
+                " → ".join(sorted_ids),
+                callback_url[:80] if callback_url else "<empty>",
+            )
+
+            # ── Check cancel before starting ──
             if await self._is_cancelled(job_id):
                 logger.info("Job %s cancelled before execution", job_id)
                 await self.callback.send_failed(
@@ -150,134 +181,131 @@ class JobExecutor:
                 )
                 return
 
-            # Mark the first node as running so the UI shows immediate
-            # activity instead of all-pending during the first node's work.
-            if node_ids:
-                state["progress"][node_ids[0]] = {
-                    "status": "running",
-                    "started_at": self._now_iso(),
-                }
-                await self.callback.send_progress(
-                    callback_url, copy.deepcopy(state["progress"])
-                )
+            # ── Sequential execution loop ──
+            result_data = None
 
-            # Stream the compiled graph for per-node progress.
-            # Using astream(stream_mode="updates") yields {node_id: output}
-            # as each node completes, and the executor sends progress
-            # callbacks directly from this loop.  The graph is built
-            # without callback_client so TrackedNode is not used —
-            # this avoids duplicate/out-of-order progress events.
-            logger.info(
-                "Job %s: streaming graph with %d nodes: %s " "(callback_url=%s)",
-                job_id,
-                len(node_ids),
-                " → ".join(node_ids),
-                callback_url[:80] if callback_url else "<empty>",
-            )
             try:
-                result_data = None
-                accumulated_outputs: dict[str, Any] = dict(
-                    state.get("node_outputs", {})
-                )
+                for idx, nid in enumerate(sorted_ids):
+                    handler = handlers.get(nid)
+                    if handler is None:
+                        logger.error("Job %s: no handler for node %s", job_id, nid)
+                        continue
 
-                async for chunk in compiled_graph.astream(
-                    state,
-                    config={
-                        "configurable": {
-                            "thread_id": (
-                                f"{state.get('tenant_id', 'default')}" f":{job_id}"
-                            )
-                        }
-                    },
-                    stream_mode="updates",
-                ):
-                    for completed_node_id, node_output in chunk.items():
-                        # Skip LangGraph internal markers (__start__, etc.)
-                        if completed_node_id.startswith("__"):
-                            continue
+                    # Mark node as running
+                    started_at = self._now_iso()
+                    state["progress"][nid] = {
+                        "status": "running",
+                        "started_at": started_at,
+                    }
+                    await self.callback.send_progress(
+                        callback_url, copy.deepcopy(state["progress"])
+                    )
 
-                        logger.info(
-                            "Job %s: node %s completed (streamed)",
+                    logger.info(
+                        "Job %s: node %s starting (%d/%d)",
+                        job_id,
+                        nid,
+                        idx + 1,
+                        len(sorted_ids),
+                    )
+
+                    # Execute the handler
+                    try:
+                        node_result = await handler(state)
+                    except Exception as exc:
+                        logger.error(
+                            "Job %s: node %s failed: %s",
                             job_id,
-                            completed_node_id,
+                            nid,
+                            exc,
+                            exc_info=True,
                         )
-
-                        # Accumulate result_data and node_outputs
-                        if isinstance(node_output, dict):
-                            if "result_data" in node_output:
-                                result_data = node_output["result_data"]
-                            if "node_outputs" in node_output:
-                                accumulated_outputs.update(node_output["node_outputs"])
-                                # Persist back so state reflects all
-                                # streamed outputs after the loop.
-                                state["node_outputs"] = accumulated_outputs
-
-                        # Mark completed node as done, preserving
-                        # started_at if it was set when running.
-                        existing = state["progress"].get(completed_node_id, {})
-                        done_entry: dict[str, Any] = {
-                            "status": "done",
+                        # Mark this node as failed
+                        state["progress"][nid] = {
+                            "status": "failed",
+                            "started_at": started_at,
                             "completed_at": self._now_iso(),
                         }
-                        if "started_at" in existing:
-                            done_entry["started_at"] = existing["started_at"]
-                        state["progress"][completed_node_id] = done_entry
-
-                        # Check cancel before transitioning the next
-                        # node — avoids briefly showing a node as
-                        # "running" when the job is about to stop.
-                        if await self._is_cancelled(job_id):
-                            logger.info(
-                                "Job %s cancelled after node %s",
-                                job_id,
-                                completed_node_id,
-                            )
-                            await self.callback.send_progress(
-                                callback_url,
-                                copy.deepcopy(state["progress"]),
-                            )
-                            await self.callback.send_failed(
-                                callback_url,
-                                error_message="Job cancelled by user",
-                                progress=state["progress"],
-                            )
-                            return
-
-                        # Mark the next pending node as running
-                        for nid in node_ids:
+                        # Mark remaining pending nodes as failed
+                        for remaining_id in sorted_ids[idx + 1 :]:
                             if (
-                                nid != completed_node_id
-                                and state["progress"].get(nid, {}).get("status")
+                                state["progress"].get(remaining_id, {}).get("status")
                                 == "pending"
                             ):
-                                state["progress"][nid] = {
-                                    "status": "running",
-                                    "started_at": self._now_iso(),
+                                state["progress"][remaining_id] = {
+                                    "status": "failed",
+                                    "completed_at": self._now_iso(),
                                 }
-                                break
+                        await self.callback.send_failed(
+                            callback_url,
+                            error_message=f"Node {nid} failed: {exc}",
+                            progress=state["progress"],
+                        )
+                        return
 
-                        # Send per-node progress callback (deepcopy
-                        # to snapshot the mutable progress dict)
+                    # Merge node result into state
+                    if isinstance(node_result, dict):
+                        if "node_outputs" in node_result:
+                            state["node_outputs"].update(node_result["node_outputs"])
+                        if "result_data" in node_result:
+                            result_data = node_result["result_data"]
+
+                    # Mark node as done
+                    state["progress"][nid] = {
+                        "status": "done",
+                        "started_at": started_at,
+                        "completed_at": self._now_iso(),
+                    }
+
+                    logger.info(
+                        "Job %s: node %s completed (%d/%d)",
+                        job_id,
+                        nid,
+                        idx + 1,
+                        len(sorted_ids),
+                    )
+
+                    # Check cancel before the next node
+                    if await self._is_cancelled(job_id):
+                        logger.info(
+                            "Job %s cancelled after node %s",
+                            job_id,
+                            nid,
+                        )
+                        # Mark remaining pending nodes
+                        for remaining_id in sorted_ids[idx + 1 :]:
+                            if (
+                                state["progress"].get(remaining_id, {}).get("status")
+                                == "pending"
+                            ):
+                                state["progress"][remaining_id] = {
+                                    "status": "failed",
+                                    "completed_at": self._now_iso(),
+                                }
                         await self.callback.send_progress(
                             callback_url,
                             copy.deepcopy(state["progress"]),
                         )
+                        await self.callback.send_failed(
+                            callback_url,
+                            error_message="Job cancelled by user",
+                            progress=state["progress"],
+                        )
+                        return
+
+                    # Send per-node progress callback
+                    await self.callback.send_progress(
+                        callback_url,
+                        copy.deepcopy(state["progress"]),
+                    )
 
             except Exception as exc:
                 logger.error(
-                    "Graph execution failed for job %s: %s",
+                    "Execution loop failed for job %s: %s",
                     job_id,
                     exc,
                     exc_info=True,
                 )
-                # Mark remaining running/pending nodes as failed
-                for nid in node_ids:
-                    status = state["progress"].get(nid, {}).get("status")
-                    if status in ("running", "pending"):
-                        state["progress"][nid] = {
-                            "status": "failed",
-                            "completed_at": self._now_iso(),
-                        }
                 await self.callback.send_failed(
                     callback_url,
                     error_message=str(exc)[:10000],
@@ -287,7 +315,7 @@ class JobExecutor:
 
             # Ensure all nodes are marked done in final progress
             final_progress = state["progress"]
-            for nid in node_ids:
+            for nid in sorted_ids:
                 if final_progress.get(nid, {}).get("status") not in (
                     "done",
                     "failed",
@@ -466,6 +494,51 @@ class JobExecutor:
             }
 
         return None
+
+    @staticmethod
+    def _topological_sort(
+        nodes: list[dict[str, Any]],
+        edges: list[list[str]],
+    ) -> list[str]:
+        """Return node IDs in topological (execution) order.
+
+        Uses Kahn's algorithm.  Falls back to the original node list
+        order if the graph has no edges (single-node or edge-free).
+
+        Raises ValueError if the graph contains a cycle.
+        """
+        node_ids = [n["id"] for n in nodes]
+        if not edges:
+            return node_ids
+
+        in_degree: dict[str, int] = {nid: 0 for nid in node_ids}
+        adjacency: dict[str, list[str]] = defaultdict(list)
+
+        for edge in edges:
+            if len(edge) != 2:
+                continue
+            src, dst = edge[0], edge[1]
+            if src in in_degree and dst in in_degree:
+                adjacency[src].append(dst)
+                in_degree[dst] += 1
+
+        queue: deque[str] = deque(nid for nid in node_ids if in_degree[nid] == 0)
+        sorted_ids: list[str] = []
+
+        while queue:
+            nid = queue.popleft()
+            sorted_ids.append(nid)
+            for neighbour in adjacency.get(nid, []):
+                in_degree[neighbour] -= 1
+                if in_degree[neighbour] == 0:
+                    queue.append(neighbour)
+
+        if len(sorted_ids) != len(node_ids):
+            visited = set(sorted_ids)
+            cyclic = [n for n in node_ids if n not in visited]
+            raise ValueError(f"Manifest contains a cycle involving: {cyclic}")
+
+        return sorted_ids
 
     async def _is_cancelled(self, job_id: str) -> bool:
         """Check if a cancel flag is set in Redis for this job."""
