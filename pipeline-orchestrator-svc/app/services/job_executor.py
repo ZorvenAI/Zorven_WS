@@ -116,17 +116,17 @@ class JobExecutor:
                     callback_url, copy.deepcopy(state["progress"])
                 )
 
-            # Build the LangGraph (with per-node progress tracking)
+            # Build the LangGraph without callback_client — the executor's
+            # astream loop handles per-node progress callbacks directly, so
+            # TrackedNode wrappers are not needed (and would cause duplicate
+            # or out-of-order progress events).
             logger.info(
-                "Job %s: building graph with %d nodes, callback_client=%s",
+                "Job %s: building graph with %d nodes (streaming mode)",
                 job_id,
                 len(manifest_data.get("nodes", [])),
-                "yes" if self.callback else "no",
             )
             try:
-                compiled_graph = GraphBuilder.build(
-                    manifest_data, callback_client=self.callback
-                )
+                compiled_graph = GraphBuilder.build(manifest_data, callback_client=None)
             except (GraphBuildError, ValueError) as exc:
                 logger.error("Graph build failed for job %s: %s", job_id, exc)
                 await self.callback.send_failed(
@@ -163,9 +163,10 @@ class JobExecutor:
 
             # Stream the compiled graph for per-node progress.
             # Using astream(stream_mode="updates") yields {node_id: output}
-            # as each node completes, allowing the executor to send progress
-            # callbacks directly — bypassing TrackedNode which is unreliable
-            # on certain cloud runtimes (Railway).
+            # as each node completes, and the executor sends progress
+            # callbacks directly from this loop.  The graph is built
+            # without callback_client so TrackedNode is not used —
+            # this avoids duplicate/out-of-order progress events.
             logger.info(
                 "Job %s: streaming graph with %d nodes: %s " "(callback_url=%s)",
                 job_id,
@@ -207,12 +208,40 @@ class JobExecutor:
                                 result_data = node_output["result_data"]
                             if "node_outputs" in node_output:
                                 accumulated_outputs.update(node_output["node_outputs"])
+                                # Persist back so state reflects all
+                                # streamed outputs after the loop.
+                                state["node_outputs"] = accumulated_outputs
 
-                        # Mark completed node as done
-                        state["progress"][completed_node_id] = {
+                        # Mark completed node as done, preserving
+                        # started_at if it was set when running.
+                        existing = state["progress"].get(completed_node_id, {})
+                        done_entry: dict[str, Any] = {
                             "status": "done",
                             "completed_at": self._now_iso(),
                         }
+                        if "started_at" in existing:
+                            done_entry["started_at"] = existing["started_at"]
+                        state["progress"][completed_node_id] = done_entry
+
+                        # Check cancel before transitioning the next
+                        # node — avoids briefly showing a node as
+                        # "running" when the job is about to stop.
+                        if await self._is_cancelled(job_id):
+                            logger.info(
+                                "Job %s cancelled after node %s",
+                                job_id,
+                                completed_node_id,
+                            )
+                            await self.callback.send_progress(
+                                callback_url,
+                                copy.deepcopy(state["progress"]),
+                            )
+                            await self.callback.send_failed(
+                                callback_url,
+                                error_message="Job cancelled by user",
+                                progress=state["progress"],
+                            )
+                            return
 
                         # Mark the next pending node as running
                         for nid in node_ids:
@@ -233,20 +262,6 @@ class JobExecutor:
                             callback_url,
                             copy.deepcopy(state["progress"]),
                         )
-
-                        # Check cancel between nodes
-                        if await self._is_cancelled(job_id):
-                            logger.info(
-                                "Job %s cancelled after node %s",
-                                job_id,
-                                completed_node_id,
-                            )
-                            await self.callback.send_failed(
-                                callback_url,
-                                error_message="Job cancelled by user",
-                                progress=state["progress"],
-                            )
-                            return
 
             except Exception as exc:
                 logger.error(
