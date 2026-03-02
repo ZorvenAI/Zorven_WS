@@ -5529,11 +5529,11 @@ function AutomationPageContent() {
               {scheduledPosts.map((post) => {
                 const isOverdue = new Date(post.scheduled_date) < new Date();
                 return (
-                <div key={post.id} className={`glass-card p-4 ${isOverdue ? 'border border-yellow-500/30' : ''}`}>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
+                <div key={post.id} className={`glass-card p-4 overflow-hidden ${isOverdue ? 'border border-yellow-500/30' : ''}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-white font-medium">{post.title}</h4>
+                        <h4 className="text-white font-medium truncate">{post.title}</h4>
                         {isOverdue && (
                           <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full">
                             Overdue
@@ -5581,7 +5581,7 @@ function AutomationPageContent() {
                       </div>
                     </div>
                     {canEdit && (
-                      <div className="flex items-center gap-2 ml-4">
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => openEditModal(post)}
                           className="px-3 py-1.5 text-xs rounded border border-brand-ghost/30 text-brand-silver hover:bg-white/5 transition-colors"
@@ -5593,7 +5593,7 @@ function AutomationPageContent() {
                         </button>
                         <button
                           onClick={() => handlePublishNow(post.id)}
-                          className="px-3 py-1.5 text-xs rounded bg-brand-electric hover:bg-brand-electric/80 text-brand-midnight font-bold transition-colors"
+                          className="px-3 py-1.5 text-xs rounded bg-brand-electric hover:bg-brand-electric/80 text-brand-midnight font-bold transition-colors whitespace-nowrap"
                         >
                           Publish Now
                         </button>
@@ -5682,7 +5682,7 @@ function AutomationPageContent() {
             <div className="space-y-4">
               {/* Published Posts */}
               {publishedPosts.map((post) => (
-                <div key={`post-${post.id}`} className="glass-card p-4 border border-green-500/20">
+                <div key={`post-${post.id}`} className="glass-card p-4 overflow-hidden border border-green-500/20">
                   <div className="flex items-start gap-3">
                     {/* Platform Icons */}
                     <div className="flex flex-col gap-1 flex-shrink-0">
@@ -5717,8 +5717,8 @@ function AutomationPageContent() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-white font-medium">{post.title}</h4>
-                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
+                        <h4 className="text-white font-medium truncate">{post.title}</h4>
+                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full shrink-0">
                           Published
                         </span>
                         {post.status_display?.includes('test') && (
@@ -8951,7 +8951,7 @@ function AutomationPageContent() {
       {/* Edit Post Modal */}
       {showEditModal && editingPost && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="glass-card w-full max-w-lg p-6 relative">
+          <div className="glass-card w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 relative">
             {/* Close button */}
             <button
               onClick={() => {
@@ -8963,7 +8963,7 @@ function AutomationPageContent() {
                 setEditMediaUrns([]);
                 setEditPlatforms([]);
               }}
-              className="absolute top-4 right-4 text-brand-silver hover:text-white"
+              className="absolute top-4 right-4 text-brand-silver hover:text-white z-10"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
