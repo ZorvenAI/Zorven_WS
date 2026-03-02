@@ -261,7 +261,7 @@ class TestJobExecutor:
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_composed_manifest_sends_pending_nodes_progress(self, mock_get_redis):
         """After intent routing resolves nodes, send_progress is called
-        with all new nodes as 'pending' before ainvoke() starts."""
+        with all new nodes as 'pending' before streaming starts."""
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None
         mock_get_redis.return_value = mock_redis
@@ -290,7 +290,8 @@ class TestJobExecutor:
             await executor.execute(request)
 
         # send_progress should be called multiple times:
-        # 1. composer running, 2. composer done, 3. pending nodes before ainvoke
+        # 1. composer running, 2. composer done, 3. pending nodes before stream,
+        # 4. first node running, 5+ per-node done callbacks
         progress_calls = executor.callback.send_progress.call_args_list
         # Find the call that includes pending nodes (after composer done)
         found_pending = False
@@ -306,7 +307,7 @@ class TestJobExecutor:
                     break
         assert (
             found_pending
-        ), "send_progress must be called with pending nodes before ainvoke"
+        ), "send_progress must be called with pending nodes before streaming"
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_composer_fallback_resolves_manifest_id(self, mock_get_redis):
@@ -352,3 +353,74 @@ class TestJobExecutor:
 
         executor.callback.send_completed.assert_called_once()
         executor.callback.send_resolved_manifest.assert_called_once()
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_streaming_sends_per_node_progress(self, mock_get_redis):
+        """astream sends a progress callback after each node completes,
+        with the completed node marked 'done' and next pending node
+        marked 'running'."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None  # not cancelled
+        mock_get_redis.return_value = mock_redis
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
+        executor.callback.send_completed.return_value = True
+
+        request = _make_request()
+        await executor.execute(request)
+
+        # Verify progress callbacks include per-node done statuses.
+        # The manifest has nodes: strategy → report. We expect progress
+        # calls that show strategy=done → report=running, then
+        # report=done.
+        progress_calls = executor.callback.send_progress.call_args_list
+        found_strategy_done = False
+        found_report_done = False
+        for call in progress_calls:
+            progress = (
+                call.args[1] if len(call.args) > 1 else call.kwargs.get("progress", {})
+            )
+            if isinstance(progress, dict):
+                if progress.get("strategy", {}).get("status") == "done":
+                    found_strategy_done = True
+                if progress.get("report", {}).get("status") == "done":
+                    found_report_done = True
+        assert found_strategy_done, "strategy node should be marked done via stream"
+        assert found_report_done, "report node should be marked done via stream"
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_streaming_marks_first_node_running(self, mock_get_redis):
+        """Before streaming starts, the first node is marked 'running'
+        so the UI shows immediate activity."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
+        executor.callback.send_completed.return_value = True
+
+        request = _make_request()
+        await executor.execute(request)
+
+        # Find a progress call where strategy=running before it's done
+        progress_calls = executor.callback.send_progress.call_args_list
+        found_first_running = False
+        for call in progress_calls:
+            progress = (
+                call.args[1] if len(call.args) > 1 else call.kwargs.get("progress", {})
+            )
+            if isinstance(progress, dict):
+                strategy_status = progress.get("strategy", {}).get("status")
+                report_status = progress.get("report", {}).get("status")
+                if strategy_status == "running" and report_status == "pending":
+                    found_first_running = True
+                    break
+        assert (
+            found_first_running
+        ), "First node should be marked running before streaming"
