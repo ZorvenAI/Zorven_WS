@@ -57,11 +57,13 @@ if config("RAILWAY_ENVIRONMENT_NAME", default=""):
     ).hostname
     if _cb_host and _cb_host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(_cb_host)
-    # Also allow the .railway.internal wildcard so ALL internal service
-    # callbacks work regardless of which env var is set.  Django's
-    # ALLOWED_HOSTS treats leading-dot entries as suffix matches.
-    if ".railway.internal" not in ALLOWED_HOSTS:
-        ALLOWED_HOSTS.append(".railway.internal")
+    # Optionally allow the .railway.internal wildcard so ALL internal
+    # service callbacks work regardless of env vars.  Gated behind an
+    # explicit opt-in flag to avoid broadening host-header validation
+    # beyond the specific callback hostname parsed above.
+    if config("ALLOW_RAILWAY_INTERNAL_WILDCARD", default=False, cast=bool):
+        if ".railway.internal" not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(".railway.internal")
 
 
 # Application definition

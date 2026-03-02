@@ -1,5 +1,7 @@
 """Tests for the callback client — HTTP PATCH to core-api-service."""
 
+from unittest.mock import AsyncMock
+
 from app.services.callback_client import CallbackClient
 
 CALLBACK_URL = "http://backend:8001/api/v1/orchestration/jobs/test-123/callback/"
@@ -98,7 +100,10 @@ class TestCallbackClient:
         assert body["resolved_manifest_id"] == "brand-analysis"
         assert "progress" in body
 
-    async def test_returns_false_on_5xx(self, httpx_mock):
+    async def test_returns_false_on_5xx(self, httpx_mock, monkeypatch):
+        # Patch asyncio.sleep to avoid real delays in CI
+        monkeypatch.setattr("asyncio.sleep", AsyncMock())
+
         # 5xx is retried, so provide responses for all 4 attempts
         for _ in range(4):
             httpx_mock.add_response(
@@ -114,8 +119,11 @@ class TestCallbackClient:
         assert result is False
         assert len(httpx_mock.get_requests()) == 4
 
-    async def test_returns_false_on_connection_error(self, httpx_mock):
+    async def test_returns_false_on_connection_error(self, httpx_mock, monkeypatch):
         import httpx
+
+        # Patch asyncio.sleep to avoid real delays in CI
+        monkeypatch.setattr("asyncio.sleep", AsyncMock())
 
         # Transport errors are retried, so provide exceptions for all 4 attempts
         for _ in range(4):
@@ -133,9 +141,12 @@ class TestCallbackClient:
         assert result is False
         assert len(httpx_mock.get_requests()) == 4
 
-    async def test_retries_transport_error_then_succeeds(self, httpx_mock):
+    async def test_retries_transport_error_then_succeeds(self, httpx_mock, monkeypatch):
         """Transport error on first attempt, success on retry."""
         import httpx
+
+        # Patch asyncio.sleep to avoid real delays in CI
+        monkeypatch.setattr("asyncio.sleep", AsyncMock())
 
         httpx_mock.add_exception(
             httpx.ConnectError("Connection reset"),
@@ -152,8 +163,11 @@ class TestCallbackClient:
         assert result is True
         assert len(httpx_mock.get_requests()) == 2
 
-    async def test_retries_5xx_then_succeeds(self, httpx_mock):
+    async def test_retries_5xx_then_succeeds(self, httpx_mock, monkeypatch):
         """5xx on first attempt, success on retry."""
+        # Patch asyncio.sleep to avoid real delays in CI
+        monkeypatch.setattr("asyncio.sleep", AsyncMock())
+
         httpx_mock.add_response(url=CALLBACK_URL, method="PATCH", status_code=502)
         httpx_mock.add_response(url=CALLBACK_URL, method="PATCH", json={})
 

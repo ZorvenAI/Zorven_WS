@@ -552,3 +552,36 @@ class TestJobStatusCaching:
         response = client.get(f"/api/v1/orchestration/jobs/{job_id}/quick-status/")
         assert response.status_code == 200
         assert response.data["status"] == "queued"
+
+    @patch("orchestration.tasks.dispatch_job_task.delay")
+    def test_quick_status_bypasses_stale_inflight_cache(
+        self,
+        mock_delay,
+        tenant,
+        membership_editor,
+        pipeline_manifest,
+    ):
+        """quick-status falls through to DB when cache has in-flight status
+        but empty progress (stale entry created before callbacks arrived)."""
+        from django.core.cache import cache
+
+        client = _make_client(membership_editor.user, tenant)
+        response = client.post(
+            "/api/v1/orchestration/jobs/",
+            {"manifest": pipeline_manifest.id, "input_prompt": "Stale test"},
+            format="json",
+        )
+        job_id = response.data["job_id"]
+
+        # Seed cache with in-flight status but empty progress (stale entry)
+        cache.set(
+            f"job:status:{job_id}",
+            {"status": "running", "progress": {}},
+            timeout=3600,
+        )
+
+        response = client.get(f"/api/v1/orchestration/jobs/{job_id}/quick-status/")
+        assert response.status_code == 200
+        # Should bypass cache and fall through to the DB, which still
+        # has the job as "queued" since no real callback arrived.
+        assert response.data["status"] == "queued"

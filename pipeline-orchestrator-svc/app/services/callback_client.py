@@ -4,8 +4,9 @@ Callback client — sends progress and result callbacks to core-api-service.
 Uses HTTP PATCH to the callback_url with X-Callback-Token authentication.
 Matches the contract in ai-brand-automator/orchestration/views.py callback endpoint.
 
-Retries once on connection errors (stale connections from cloud load balancers)
-using a fresh httpx client on the retry attempt.
+Retries up to 4 times with exponential back-off (0.5 s, 1 s, 2 s) on
+transient errors (5xx, connection resets, Railway DNS warm-up).  4xx errors
+are considered deterministic and are never retried.
 """
 
 import asyncio
