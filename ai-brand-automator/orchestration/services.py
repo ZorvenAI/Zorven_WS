@@ -204,6 +204,26 @@ class OrchestratorDispatcher:
         }
 
     def _build_callback_url(self, job):
-        """Build the callback URL for this job."""
-        base_url = config("BACKEND_URL", default="http://localhost:8001")
-        return f"{base_url}/api/v1/orchestration/jobs/{job.job_id}/callback/"
+        """Build the callback URL for this job.
+
+        Prefers ``CALLBACK_BASE_URL`` (should be a private/internal URL
+        reachable by the orchestrator, e.g.
+        ``http://Prevision-WS.railway.internal:8000``).
+        Falls back to ``BACKEND_URL`` if ``CALLBACK_BASE_URL`` is not set.
+        """
+        base_url = config(
+            "CALLBACK_BASE_URL",
+            default=config("BACKEND_URL", default="http://localhost:8001"),
+        )
+        if "localhost" in base_url or "127.0.0.1" in base_url:
+            logger.warning(
+                "Callback base URL is '%s' — pipeline callbacks will "
+                "fail if the orchestrator runs on a different host. "
+                "Set CALLBACK_BASE_URL to the internal service URL "
+                "(e.g. http://backend:8001 or "
+                "http://<service>.railway.internal:<port>).",
+                base_url,
+            )
+        callback_url = f"{base_url}/api/v1/orchestration/jobs/{job.job_id}/callback/"
+        logger.info("Callback URL for job %s: %s", job.job_id, callback_url)
+        return callback_url

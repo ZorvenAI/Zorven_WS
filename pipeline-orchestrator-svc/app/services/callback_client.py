@@ -3,8 +3,12 @@ Callback client — sends progress and result callbacks to core-api-service.
 
 Uses HTTP PATCH to the callback_url with X-Callback-Token authentication.
 Matches the contract in ai-brand-automator/orchestration/views.py callback endpoint.
+
+Retries once on connection errors (stale connections from cloud load balancers)
+using a fresh httpx client on the retry attempt.
 """
 
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -12,30 +16,24 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+# Max retries for transient connection errors (stale connections, resets)
+_MAX_RETRIES = 2
+_RETRY_DELAY = 0.5  # seconds
+
 
 class CallbackClient:
     """HTTP client for sending job progress/results to core-api-service.
 
-    Uses a reusable httpx.AsyncClient to avoid connection pool overhead
-    from creating a new client per request.
+    Creates a fresh httpx.AsyncClient per request to avoid stale connection
+    issues when callbacks route through cloud load balancers (Railway, etc.).
     """
 
     def __init__(self, callback_token: str, timeout: float = 30.0):
         self.callback_token = callback_token
         self.timeout = timeout
-        self._client: httpx.AsyncClient | None = None
-
-    async def _get_client(self) -> httpx.AsyncClient:
-        """Return a reusable AsyncClient, creating one if needed."""
-        if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=self.timeout)
-        return self._client
 
     async def close(self) -> None:
-        """Close the underlying HTTP client. Call on shutdown."""
-        if self._client is not None and not self._client.is_closed:
-            await self._client.aclose()
-            self._client = None
+        """No-op — clients are created per-request now."""
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -47,34 +45,56 @@ class CallbackClient:
         """
         Send a PATCH request to the callback URL.
 
+        Retries once on connection/transport errors using a fresh client.
         Returns True on success, False on failure (non-fatal).
         """
-        try:
-            client = await self._get_client()
-            response = await client.patch(
-                callback_url,
-                json=payload,
-                headers=self._headers(),
-            )
-            response.raise_for_status()
-            label = payload.get("status") or next(
-                (k for k in ("resolved_manifest_id", "progress") if k in payload),
-                "unknown",
-            )
-            logger.info(
-                "Callback sent to %s: %s (HTTP %d)",
-                callback_url,
-                label,
-                response.status_code,
-            )
-            return True
-        except httpx.HTTPError as exc:
-            logger.error(
-                "Callback failed for %s: %s",
-                callback_url,
-                str(exc),
-            )
-            return False
+        label = payload.get("status") or next(
+            (k for k in ("resolved_manifest_id", "progress") if k in payload),
+            "unknown",
+        )
+
+        for attempt in range(_MAX_RETRIES):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.patch(
+                        callback_url,
+                        json=payload,
+                        headers=self._headers(),
+                    )
+                    response.raise_for_status()
+
+                logger.info(
+                    "Callback sent: %s (HTTP %d, attempt %d)",
+                    label,
+                    response.status_code,
+                    attempt + 1,
+                )
+                return True
+
+            except Exception as exc:
+                is_last = attempt >= _MAX_RETRIES - 1
+                if is_last:
+                    logger.error(
+                        "Callback failed after %d attempts for %s [%s]: %s (%s)",
+                        _MAX_RETRIES,
+                        callback_url,
+                        label,
+                        exc,
+                        type(exc).__name__,
+                    )
+                    return False
+
+                logger.warning(
+                    "Callback attempt %d failed for %s [%s]: %s (%s) — retrying",
+                    attempt + 1,
+                    callback_url,
+                    label,
+                    exc,
+                    type(exc).__name__,
+                )
+                await asyncio.sleep(_RETRY_DELAY)
+
+        return False
 
     async def send_progress(
         self,

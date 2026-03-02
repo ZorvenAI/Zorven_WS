@@ -45,7 +45,7 @@ function PipelineInlineCard({ jobId }: { jobId: string }) {
         <div className="p-3">
           <ThoughtTrace
             progress={quickStatus?.progress ?? job.progress}
-            jobStatus={job.status}
+            jobStatus={quickStatus?.status ?? job.status}
             lastThought={quickStatus?.last_thought}
             progressPercent={quickStatus?.progress_percent}
           />

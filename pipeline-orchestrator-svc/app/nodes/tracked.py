@@ -63,16 +63,8 @@ class TrackedNode:
             "started_at": started_at,
         }
 
-        # Send running callback (non-fatal; awaited to ensure delivery)
-        if callback_url:
-            await self.callback_client.send_progress(
-                callback_url, progress
-            )
-        else:
-            logger.warning(
-                "[TrackedNode] Node %s has NO callback_url — skipping progress",
-                self.node_id,
-            )
+        # Send running callback (non-fatal — must never break execution)
+        await self._safe_send_progress(callback_url, progress)
 
         # Emit Kafka trace (best-effort)
         await self._emit_trace(job_id, "started")
@@ -81,19 +73,14 @@ class TrackedNode:
         try:
             result = await self.inner(state)
         except Exception:
-            logger.exception(
-                "[TrackedNode] Node %s FAILED", self.node_id
-            )
+            logger.exception("[TrackedNode] Node %s FAILED", self.node_id)
             # Mark as failed
             progress[self.node_id] = {
                 "status": "failed",
                 "started_at": started_at,
                 "completed_at": _now_iso(),
             }
-            if callback_url:
-                await self.callback_client.send_progress(
-                    callback_url, progress
-                )
+            await self._safe_send_progress(callback_url, progress)
             await self._emit_trace(job_id, "failed")
             raise
 
@@ -104,15 +91,10 @@ class TrackedNode:
             "completed_at": _now_iso(),
         }
 
-        logger.info(
-            "[TrackedNode] Node %s DONE (job=%s)", self.node_id, job_id
-        )
+        logger.info("[TrackedNode] Node %s DONE (job=%s)", self.node_id, job_id)
 
         # Send done callback
-        if callback_url:
-            await self.callback_client.send_progress(
-                callback_url, progress
-            )
+        await self._safe_send_progress(callback_url, progress)
 
         # Emit Kafka trace
         await self._emit_trace(job_id, "completed")
@@ -120,6 +102,27 @@ class TrackedNode:
         # Merge progress into the node result
         result["progress"] = progress
         return result
+
+    async def _safe_send_progress(self, callback_url: str, progress: dict) -> None:
+        """Send a progress callback without ever raising."""
+        if not callback_url:
+            logger.warning(
+                "[TrackedNode] Node %s has NO callback_url — skipping",
+                self.node_id,
+            )
+            return
+        try:
+            ok = await self.callback_client.send_progress(callback_url, progress)
+            if not ok:
+                logger.warning(
+                    "[TrackedNode] Progress callback returned False " "for node %s",
+                    self.node_id,
+                )
+        except Exception:
+            logger.exception(
+                "[TrackedNode] Unexpected error sending progress " "for node %s",
+                self.node_id,
+            )
 
     async def _emit_trace(self, job_id: str, status: str) -> None:
         """Emit a Kafka trace event (best-effort, no-op if unavailable)."""

@@ -66,6 +66,15 @@ SERVICES = [
         "env_vars": {
             "DJANGO_SETTINGS_MODULE": "brand_automator.settings",
             "PYTHONUNBUFFERED": "1",
+            "BACKEND_URL": BACKEND_INTERNAL_URL,
+            # CALLBACK_BASE_URL: internal URL the orchestrator uses to call
+            # back with per-node progress.  Must NOT be a public/HTTPS URL
+            # because cloud load balancers drop idle connections and cause
+            # silent callback failures.
+            "CALLBACK_BASE_URL": BACKEND_INTERNAL_URL,
+            "ORCHESTRATOR_URL": "http://orchestrator.railway.internal:8010",
+            "ORCHESTRATOR_SERVICE_TOKEN": SERVICE_TOKEN,
+            "ORCHESTRATOR_CALLBACK_TOKEN": CALLBACK_TOKEN,
         },
         "needs_backend_vars": True,
     },
@@ -78,6 +87,10 @@ SERVICES = [
         "env_vars": {
             "DJANGO_SETTINGS_MODULE": "brand_automator.settings",
             "PYTHONUNBUFFERED": "1",
+            "BACKEND_URL": BACKEND_INTERNAL_URL,
+            "ORCHESTRATOR_URL": "http://orchestrator.railway.internal:8010",
+            "ORCHESTRATOR_SERVICE_TOKEN": SERVICE_TOKEN,
+            "ORCHESTRATOR_CALLBACK_TOKEN": CALLBACK_TOKEN,
         },
         "needs_backend_vars": True,
     },
