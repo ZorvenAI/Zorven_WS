@@ -6,6 +6,7 @@ cancel checking, and result reporting. This is the core runtime
 engine of the pipeline orchestrator.
 """
 
+import copy
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -38,12 +39,17 @@ class JobExecutor:
 
         1. Build initial AgentState from the dispatch request
         2. Send "running" callback + initial progress
-        3. If no manifest → run intent routing
+        3. If no manifest → run intent routing (PipelineComposer)
         4. Build LangGraph from manifest
-        5. Execute nodes sequentially via graph
-        6. Check cancel flag between nodes
-        7. Send progress callbacks after each node
+        5. Stream graph execution via ``astream(stream_mode="updates")``
+        6. After each node completes: mark done → mark next running → callback
+        7. Check cancel flag between nodes
         8. Send completed / failed callback at the end
+
+        Uses ``astream`` instead of ``ainvoke`` so that per-node progress
+        callbacks are sent from the executor loop (which works reliably
+        across all deployment targets) rather than depending solely on
+        TrackedNode wrappers inside the graph.
         """
         job_id = request.job_id
         callback_url = request.callback_url
@@ -106,19 +112,21 @@ class JobExecutor:
                 )
 
                 # Send progress with all pending nodes visible to the UI
-                await self.callback.send_progress(callback_url, state["progress"])
+                await self.callback.send_progress(
+                    callback_url, copy.deepcopy(state["progress"])
+                )
 
-            # Build the LangGraph (with per-node progress tracking)
+            # Build the LangGraph without callback_client — the executor's
+            # astream loop handles per-node progress callbacks directly, so
+            # TrackedNode wrappers are not needed (and would cause duplicate
+            # or out-of-order progress events).
             logger.info(
-                "Job %s: building graph with %d nodes, callback_client=%s",
+                "Job %s: building graph with %d nodes (streaming mode)",
                 job_id,
                 len(manifest_data.get("nodes", [])),
-                "yes" if self.callback else "no",
             )
             try:
-                compiled_graph = GraphBuilder.build(
-                    manifest_data, callback_client=self.callback
-                )
+                compiled_graph = GraphBuilder.build(manifest_data, callback_client=None)
             except (GraphBuildError, ValueError) as exc:
                 logger.error("Graph build failed for job %s: %s", job_id, exc)
                 await self.callback.send_failed(
@@ -142,23 +150,119 @@ class JobExecutor:
                 )
                 return
 
-            # Invoke the compiled graph
+            # Mark the first node as running so the UI shows immediate
+            # activity instead of all-pending during the first node's work.
+            if node_ids:
+                state["progress"][node_ids[0]] = {
+                    "status": "running",
+                    "started_at": self._now_iso(),
+                }
+                await self.callback.send_progress(
+                    callback_url, copy.deepcopy(state["progress"])
+                )
+
+            # Stream the compiled graph for per-node progress.
+            # Using astream(stream_mode="updates") yields {node_id: output}
+            # as each node completes, and the executor sends progress
+            # callbacks directly from this loop.  The graph is built
+            # without callback_client so TrackedNode is not used —
+            # this avoids duplicate/out-of-order progress events.
             logger.info(
-                "Job %s: invoking graph with %d nodes: %s " "(callback_url=%s)",
+                "Job %s: streaming graph with %d nodes: %s " "(callback_url=%s)",
                 job_id,
                 len(node_ids),
                 " → ".join(node_ids),
                 callback_url[:80] if callback_url else "<empty>",
             )
             try:
-                result_state = await compiled_graph.ainvoke(
+                result_data = None
+                accumulated_outputs: dict[str, Any] = dict(
+                    state.get("node_outputs", {})
+                )
+
+                async for chunk in compiled_graph.astream(
                     state,
                     config={
                         "configurable": {
-                            "thread_id": f"{state.get('tenant_id', 'default')}:{job_id}"
+                            "thread_id": (
+                                f"{state.get('tenant_id', 'default')}" f":{job_id}"
+                            )
                         }
                     },
-                )
+                    stream_mode="updates",
+                ):
+                    for completed_node_id, node_output in chunk.items():
+                        # Skip LangGraph internal markers (__start__, etc.)
+                        if completed_node_id.startswith("__"):
+                            continue
+
+                        logger.info(
+                            "Job %s: node %s completed (streamed)",
+                            job_id,
+                            completed_node_id,
+                        )
+
+                        # Accumulate result_data and node_outputs
+                        if isinstance(node_output, dict):
+                            if "result_data" in node_output:
+                                result_data = node_output["result_data"]
+                            if "node_outputs" in node_output:
+                                accumulated_outputs.update(node_output["node_outputs"])
+                                # Persist back so state reflects all
+                                # streamed outputs after the loop.
+                                state["node_outputs"] = accumulated_outputs
+
+                        # Mark completed node as done, preserving
+                        # started_at if it was set when running.
+                        existing = state["progress"].get(completed_node_id, {})
+                        done_entry: dict[str, Any] = {
+                            "status": "done",
+                            "completed_at": self._now_iso(),
+                        }
+                        if "started_at" in existing:
+                            done_entry["started_at"] = existing["started_at"]
+                        state["progress"][completed_node_id] = done_entry
+
+                        # Check cancel before transitioning the next
+                        # node — avoids briefly showing a node as
+                        # "running" when the job is about to stop.
+                        if await self._is_cancelled(job_id):
+                            logger.info(
+                                "Job %s cancelled after node %s",
+                                job_id,
+                                completed_node_id,
+                            )
+                            await self.callback.send_progress(
+                                callback_url,
+                                copy.deepcopy(state["progress"]),
+                            )
+                            await self.callback.send_failed(
+                                callback_url,
+                                error_message="Job cancelled by user",
+                                progress=state["progress"],
+                            )
+                            return
+
+                        # Mark the next pending node as running
+                        for nid in node_ids:
+                            if (
+                                nid != completed_node_id
+                                and state["progress"].get(nid, {}).get("status")
+                                == "pending"
+                            ):
+                                state["progress"][nid] = {
+                                    "status": "running",
+                                    "started_at": self._now_iso(),
+                                }
+                                break
+
+                        # Send per-node progress callback (deepcopy
+                        # to snapshot the mutable progress dict)
+                        await self.callback.send_progress(
+                            callback_url,
+                            copy.deepcopy(state["progress"]),
+                        )
+
             except Exception as exc:
                 logger.error(
                     "Graph execution failed for job %s: %s",
@@ -166,9 +270,10 @@ class JobExecutor:
                     exc,
                     exc_info=True,
                 )
-                # Mark remaining running nodes as failed
+                # Mark remaining running/pending nodes as failed
                 for nid in node_ids:
-                    if state["progress"].get(nid, {}).get("status") == "running":
+                    status = state["progress"].get(nid, {}).get("status")
+                    if status in ("running", "pending"):
                         state["progress"][nid] = {
                             "status": "failed",
                             "completed_at": self._now_iso(),
@@ -180,21 +285,25 @@ class JobExecutor:
                 )
                 return
 
-            # Update progress with completed status for all nodes
-            final_progress = result_state.get("progress", state["progress"])
+            # Ensure all nodes are marked done in final progress
+            final_progress = state["progress"]
             for nid in node_ids:
-                if final_progress.get(nid, {}).get("status") not in ("done", "failed"):
+                if final_progress.get(nid, {}).get("status") not in (
+                    "done",
+                    "failed",
+                ):
                     final_progress[nid] = {
                         "status": "done",
                         "completed_at": self._now_iso(),
                     }
 
-            # Extract result_data from the final state
-            result_data = result_state.get("result_data") or {
-                "summary": "Pipeline completed successfully.",
-                "findings": ["Analysis completed."],
-                "recommendations": [],
-            }
+            # Use accumulated result_data or fall back to default
+            if result_data is None:
+                result_data = {
+                    "summary": "Pipeline completed successfully.",
+                    "findings": ["Analysis completed."],
+                    "recommendations": [],
+                }
 
             # Check for cancel one last time
             if await self._is_cancelled(job_id):
@@ -288,7 +397,9 @@ class JobExecutor:
             "status": "running",
             "started_at": self._now_iso(),
         }
-        await self.callback.send_progress(request.callback_url, state["progress"])
+        await self.callback.send_progress(
+            request.callback_url, copy.deepcopy(state["progress"])
+        )
 
         composer = PipelineComposer()
         result = await composer.compose(state)
@@ -308,7 +419,9 @@ class JobExecutor:
                 "completed_at": self._now_iso(),
             }
             # Send progress update (no manifest_id to resolve in DB)
-            await self.callback.send_progress(request.callback_url, state["progress"])
+            await self.callback.send_progress(
+                request.callback_url, copy.deepcopy(state["progress"])
+            )
         else:
             state["resolved_manifest_id"] = result.get("resolved_manifest_id")
             state["progress"]["pipeline_composer"] = {

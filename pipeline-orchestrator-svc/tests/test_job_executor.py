@@ -1,6 +1,6 @@
 """Tests for the job executor — end-to-end pipeline execution."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from app.api.schemas import (
     AvailableManifest,
@@ -261,7 +261,7 @@ class TestJobExecutor:
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_composed_manifest_sends_pending_nodes_progress(self, mock_get_redis):
         """After intent routing resolves nodes, send_progress is called
-        with all new nodes as 'pending' before ainvoke() starts."""
+        with all new nodes as 'pending' before streaming starts."""
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None
         mock_get_redis.return_value = mock_redis
@@ -290,7 +290,8 @@ class TestJobExecutor:
             await executor.execute(request)
 
         # send_progress should be called multiple times:
-        # 1. composer running, 2. composer done, 3. pending nodes before ainvoke
+        # 1. composer running, 2. composer done, 3. pending nodes before stream,
+        # 4. first node running, 5+ per-node done callbacks
         progress_calls = executor.callback.send_progress.call_args_list
         # Find the call that includes pending nodes (after composer done)
         found_pending = False
@@ -306,7 +307,7 @@ class TestJobExecutor:
                     break
         assert (
             found_pending
-        ), "send_progress must be called with pending nodes before ainvoke"
+        ), "send_progress must be called with pending nodes before streaming"
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_composer_fallback_resolves_manifest_id(self, mock_get_redis):
@@ -352,3 +353,211 @@ class TestJobExecutor:
 
         executor.callback.send_completed.assert_called_once()
         executor.callback.send_resolved_manifest.assert_called_once()
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_streaming_sends_per_node_progress(self, mock_get_redis):
+        """astream sends a progress callback after each node completes,
+        with the completed node marked 'done' and next pending node
+        marked 'running'.  Uses a stub compiled_graph to prove the
+        executor calls astream(stream_mode='updates') and processes
+        the yielded chunks."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None  # not cancelled
+        mock_get_redis.return_value = mock_redis
+
+        # Build a fake compiled graph whose astream yields per-node chunks
+        async def _fake_astream(state, *, config=None, stream_mode=None):
+            yield {"strategy": {"node_outputs": {"brand_strategist": {"ok": True}}}}
+            yield {"report": {"node_outputs": {"report_generator": {"ok": True}}}}
+
+        mock_compiled = MagicMock()
+        mock_compiled.astream = _fake_astream
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
+        executor.callback.send_completed.return_value = True
+
+        with patch(
+            "app.services.job_executor.GraphBuilder.build",
+            return_value=mock_compiled,
+        ):
+            request = _make_request()
+            await executor.execute(request)
+
+        # Verify progress callbacks include per-node done statuses.
+        progress_calls = executor.callback.send_progress.call_args_list
+        found_strategy_done = False
+        found_report_done = False
+        for c in progress_calls:
+            progress = c.args[1] if len(c.args) > 1 else c.kwargs.get("progress", {})
+            if isinstance(progress, dict):
+                if progress.get("strategy", {}).get("status") == "done":
+                    found_strategy_done = True
+                if progress.get("report", {}).get("status") == "done":
+                    found_report_done = True
+        assert found_strategy_done, "strategy node should be marked done via stream"
+        assert found_report_done, "report node should be marked done via stream"
+
+        # Verify completed was sent
+        executor.callback.send_completed.assert_called_once()
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_streaming_marks_first_node_running(self, mock_get_redis):
+        """Before streaming starts, the first node is marked 'running'
+        so the UI shows immediate activity.  Uses a stub compiled_graph
+        to prove the executor calls astream(stream_mode='updates')."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        async def _fake_astream(state, *, config=None, stream_mode=None):
+            yield {"strategy": {"node_outputs": {"brand_strategist": {"ok": True}}}}
+            yield {"report": {"node_outputs": {"report_generator": {"ok": True}}}}
+
+        mock_compiled = MagicMock()
+        mock_compiled.astream = _fake_astream
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
+        executor.callback.send_completed.return_value = True
+
+        with patch(
+            "app.services.job_executor.GraphBuilder.build",
+            return_value=mock_compiled,
+        ):
+            request = _make_request()
+            await executor.execute(request)
+
+        # Find a progress call where strategy=running before it's done
+        progress_calls = executor.callback.send_progress.call_args_list
+        found_first_running = False
+        for c in progress_calls:
+            progress = c.args[1] if len(c.args) > 1 else c.kwargs.get("progress", {})
+            if isinstance(progress, dict):
+                strategy_status = progress.get("strategy", {}).get("status")
+                report_status = progress.get("report", {}).get("status")
+                if strategy_status == "running" and report_status == "pending":
+                    found_first_running = True
+                    break
+        assert (
+            found_first_running
+        ), "First node should be marked running before streaming"
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_graph_built_without_callback_client(self, mock_get_redis):
+        """GraphBuilder.build is called with callback_client=None
+        so that TrackedNode wrappers are not applied (the executor
+        handles progress via the astream loop)."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        async def _fake_astream(state, *, config=None, stream_mode=None):
+            yield {"strategy": {"node_outputs": {}}}
+            yield {"report": {"node_outputs": {}}}
+
+        mock_compiled = MagicMock()
+        mock_compiled.astream = _fake_astream
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
+        executor.callback.send_completed.return_value = True
+
+        with patch(
+            "app.services.job_executor.GraphBuilder.build",
+            return_value=mock_compiled,
+        ) as mock_build:
+            request = _make_request()
+            await executor.execute(request)
+
+        # Verify GraphBuilder.build was called with callback_client=None
+        mock_build.assert_called_once()
+        _, build_kwargs = mock_build.call_args
+        assert build_kwargs.get("callback_client") is None
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_done_preserves_started_at(self, mock_get_redis):
+        """When a node transitions from running → done, the started_at
+        timestamp set during the running phase is preserved."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        async def _fake_astream(state, *, config=None, stream_mode=None):
+            yield {"strategy": {"node_outputs": {}}}
+            yield {"report": {"node_outputs": {}}}
+
+        mock_compiled = MagicMock()
+        mock_compiled.astream = _fake_astream
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
+        executor.callback.send_completed.return_value = True
+
+        with patch(
+            "app.services.job_executor.GraphBuilder.build",
+            return_value=mock_compiled,
+        ):
+            request = _make_request()
+            await executor.execute(request)
+
+        # Completed callback's progress should have started_at for strategy
+        call_kwargs = executor.callback.send_completed.call_args.kwargs
+        progress = call_kwargs.get("progress", {})
+        assert (
+            "started_at" in progress["strategy"]
+        ), "strategy should preserve started_at from running phase"
+        assert progress["strategy"]["status"] == "done"
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_cancel_before_marking_next_running(self, mock_get_redis):
+        """Cancel flag between nodes should NOT mark the next node as
+        running — the job should stop immediately after the done callback."""
+        mock_redis = AsyncMock()
+        # 1st call: pre-execution cancel check → not cancelled
+        # 2nd call: after strategy node completes → cancelled
+        mock_redis.get.side_effect = [None, "1"]
+        mock_get_redis.return_value = mock_redis
+
+        async def _fake_astream(state, *, config=None, stream_mode=None):
+            yield {"strategy": {"node_outputs": {}}}
+            yield {"report": {"node_outputs": {}}}
+
+        mock_compiled = MagicMock()
+        mock_compiled.astream = _fake_astream
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
+        executor.callback.send_failed.return_value = True
+
+        with patch(
+            "app.services.job_executor.GraphBuilder.build",
+            return_value=mock_compiled,
+        ):
+            request = _make_request()
+            await executor.execute(request)
+
+        # Should have ended with a failed/cancelled callback
+        executor.callback.send_failed.assert_called()
+        cancel_call = executor.callback.send_failed.call_args
+        error_msg = cancel_call.kwargs.get("error_message", "")
+        assert "cancel" in error_msg.lower()
+
+        # report should NOT have been marked as running in any progress call
+        for c in executor.callback.send_progress.call_args_list:
+            progress = c.args[1] if len(c.args) > 1 else c.kwargs.get("progress", {})
+            if isinstance(progress, dict):
+                report_status = progress.get("report", {}).get("status")
+                assert (
+                    report_status != "running"
+                ), "report should not be marked running after cancel"
