@@ -133,35 +133,63 @@ class JobExecutor:
             nodes = manifest_data.get("nodes", [])
             global_config = manifest_data.get("global_config", {})
 
-            node_ids: list[str] = []
+            if not nodes:
+                logger.error("Job %s: manifest contains no nodes", job_id)
+                await self.callback.send_failed(
+                    callback_url,
+                    error_message="Manifest contains no nodes",
+                    progress=state["progress"],
+                )
+                return
+
             handlers: dict[str, Any] = {}
 
-            # Topological sort to honour edges
-            sorted_ids = self._topological_sort(
-                manifest_data.get("nodes", []),
-                manifest_data.get("edges", []),
-            )
+            # Topological sort + handler resolution.  If this fails
+            # (e.g. unknown handler, invalid node type, cycle in edges)
+            # we fail fast but still return the already-initialised
+            # per-node progress so the UI can show pending nodes.
+            try:
+                sorted_ids = self._topological_sort(
+                    manifest_data.get("nodes", []),
+                    manifest_data.get("edges", []),
+                )
 
-            for node_def in nodes:
-                nid = node_def["id"]
-                node_ids.append(nid)
-                node_type = node_def.get("type", "internal")
-                merged_config = {**global_config, **node_def.get("config", {})}
+                for node_def in nodes:
+                    nid = node_def["id"]
+                    node_type = node_def.get("type", "internal")
+                    merged_config = {
+                        **global_config,
+                        **node_def.get("config", {}),
+                    }
 
-                if node_type == "internal":
-                    handler_name = node_def.get("handler")
-                    if not handler_name:
-                        raise ValueError(f"Internal node '{nid}' missing 'handler'")
-                    handler_cls = resolve_handler(handler_name)
-                    handlers[nid] = handler_cls(config=merged_config)
-                elif node_type == "external":
-                    url = node_def.get("url", "")
-                    url = GraphBuilder._translate_url(url)
-                    handlers[nid] = ExternalWrapper(
-                        url=url, node_id=nid, config=merged_config
-                    )
-                else:
-                    raise ValueError(f"Unknown node type '{node_type}' for '{nid}'")
+                    if node_type == "internal":
+                        handler_name = node_def.get("handler")
+                        if not handler_name:
+                            raise ValueError(f"Internal node '{nid}' missing 'handler'")
+                        handler_cls = resolve_handler(handler_name)
+                        handlers[nid] = handler_cls(config=merged_config)
+                    elif node_type == "external":
+                        url = node_def.get("url", "")
+                        if not url:
+                            raise ValueError(f"External node '{nid}' missing 'url'")
+                        url = GraphBuilder._translate_url(url)
+                        handlers[nid] = ExternalWrapper(
+                            url=url, node_id=nid, config=merged_config
+                        )
+                    else:
+                        raise ValueError(f"Unknown node type '{node_type}' for '{nid}'")
+            except Exception as exc:
+                logger.exception(
+                    "Job %s: manifest/handler resolution failed: %s",
+                    job_id,
+                    exc,
+                )
+                await self.callback.send_failed(
+                    callback_url,
+                    error_message=(f"Manifest or handler resolution error: {exc}"),
+                    progress=state["progress"],
+                )
+                return
 
             logger.info(
                 "Job %s: executing %d nodes sequentially: %s " "(callback_url=%s)",
@@ -181,15 +209,36 @@ class JobExecutor:
                 )
                 return
 
+            # ── Validate handler coverage ──
+            missing_handlers = [nid for nid in sorted_ids if handlers.get(nid) is None]
+            if missing_handlers:
+                logger.error(
+                    "Job %s: missing handlers for node(s): %s",
+                    job_id,
+                    ", ".join(missing_handlers),
+                )
+                now_iso = self._now_iso()
+                for missing_id in missing_handlers:
+                    state["progress"][missing_id] = {
+                        "status": "failed",
+                        "completed_at": now_iso,
+                    }
+                await self.callback.send_failed(
+                    callback_url,
+                    error_message=(
+                        "Execution aborted due to missing handlers "
+                        "for node(s): " + ", ".join(missing_handlers)
+                    ),
+                    progress=state["progress"],
+                )
+                return
+
             # ── Sequential execution loop ──
             result_data = None
 
             try:
                 for idx, nid in enumerate(sorted_ids):
-                    handler = handlers.get(nid)
-                    if handler is None:
-                        logger.error("Job %s: no handler for node %s", job_id, nid)
-                        continue
+                    handler = handlers[nid]
 
                     # Mark node as running
                     started_at = self._now_iso()
@@ -514,13 +563,21 @@ class JobExecutor:
         in_degree: dict[str, int] = {nid: 0 for nid in node_ids}
         adjacency: dict[str, list[str]] = defaultdict(list)
 
-        for edge in edges:
+        node_id_set = set(node_ids)
+        for i, edge in enumerate(edges):
             if len(edge) != 2:
-                continue
+                raise ValueError(
+                    f"Edge at index {i} is malformed (expected 2 "
+                    f"elements, got {len(edge)}): {edge}"
+                )
             src, dst = edge[0], edge[1]
-            if src in in_degree and dst in in_degree:
-                adjacency[src].append(dst)
-                in_degree[dst] += 1
+            unknown = [n for n in (src, dst) if n not in node_id_set]
+            if unknown:
+                raise ValueError(
+                    f"Edge [{src}, {dst}] references unknown " f"node(s): {unknown}"
+                )
+            adjacency[src].append(dst)
+            in_degree[dst] += 1
 
         queue: deque[str] = deque(nid for nid in node_ids if in_degree[nid] == 0)
         sorted_ids: list[str] = []

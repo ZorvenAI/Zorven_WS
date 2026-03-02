@@ -136,7 +136,8 @@ class TestJobExecutor:
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_invalid_manifest_sends_failed(self, mock_get_redis):
-        """Invalid manifest (unknown handler) → graph build error → failed callback."""
+        """Invalid manifest (unknown handler) → resolution error → failed callback
+        with per-node progress preserved."""
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None
         mock_get_redis.return_value = mock_redis
@@ -151,13 +152,116 @@ class TestJobExecutor:
         executor = JobExecutor()
         executor.callback = AsyncMock()
         executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
         executor.callback.send_failed.return_value = True
 
         request = _make_request(manifest=bad_manifest)
         await executor.execute(request)
 
-        # Verify "failed" was sent
+        # Verify "failed" was sent with progress (not empty dict)
         executor.callback.send_failed.assert_called()
+        call_kwargs = executor.callback.send_failed.call_args.kwargs
+        progress = call_kwargs.get("progress", {})
+        assert "bad" in progress, "progress should contain the node from the manifest"
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_empty_manifest_nodes_sends_failed(self, mock_get_redis):
+        """Manifest with zero nodes → send_failed (not false-success)."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        empty_manifest = ManifestData(nodes=[], edges=[])
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_failed.return_value = True
+
+        request = _make_request(manifest=empty_manifest)
+        await executor.execute(request)
+
+        executor.callback.send_failed.assert_called()
+        call_kwargs = executor.callback.send_failed.call_args.kwargs
+        assert "no nodes" in call_kwargs.get("error_message", "").lower()
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_external_node_missing_url_sends_failed(self, mock_get_redis):
+        """External node without a url → resolution error → failed with progress."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        bad_manifest = ManifestData(
+            nodes=[
+                ManifestNode(id="ext", type="external", url=""),
+            ],
+            edges=[],
+        )
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_failed.return_value = True
+
+        request = _make_request(manifest=bad_manifest)
+        await executor.execute(request)
+
+        executor.callback.send_failed.assert_called()
+        call_kwargs = executor.callback.send_failed.call_args.kwargs
+        assert "url" in call_kwargs.get("error_message", "").lower()
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_malformed_edge_raises_error(self, mock_get_redis):
+        """Manifest with a malformed edge (not 2-element) → failed."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        bad_manifest = ManifestData(
+            nodes=[
+                ManifestNode(id="a", type="internal", handler="StrategyNode"),
+            ],
+            edges=[["a"]],  # malformed
+        )
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_failed.return_value = True
+
+        request = _make_request(manifest=bad_manifest)
+        await executor.execute(request)
+
+        executor.callback.send_failed.assert_called()
+        call_kwargs = executor.callback.send_failed.call_args.kwargs
+        assert "malformed" in call_kwargs.get("error_message", "").lower()
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_edge_unknown_node_raises_error(self, mock_get_redis):
+        """Manifest with an edge referencing an unknown node → failed."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        bad_manifest = ManifestData(
+            nodes=[
+                ManifestNode(id="a", type="internal", handler="StrategyNode"),
+            ],
+            edges=[["a", "nonexistent"]],
+        )
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_failed.return_value = True
+
+        request = _make_request(manifest=bad_manifest)
+        await executor.execute(request)
+
+        executor.callback.send_failed.assert_called()
+        call_kwargs = executor.callback.send_failed.call_args.kwargs
+        assert "unknown" in call_kwargs.get("error_message", "").lower()
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_completed_includes_progress_for_all_nodes(self, mock_get_redis):
@@ -190,7 +294,8 @@ class TestJobExecutor:
             assert progress[node_id]["status"] == "done"
 
     def test_general_chat_inline_manifest(self):
-        """Inline fallback manifest for general-chat when no Django manifest available."""
+        """Inline fallback manifest for general-chat
+        when no Django manifest available."""
         request = _make_request(manifest=None, available_manifests=[])
         result = JobExecutor._find_resolved_manifest(request, "general-chat")
         assert result is not None
@@ -614,3 +719,42 @@ class TestJobExecutor:
                 assert (
                     report_status != "running"
                 ), "report should not be marked running after cancel"
+
+
+class TestTopologicalSort:
+    """Unit tests for JobExecutor._topological_sort validation."""
+
+    def test_valid_linear_graph(self):
+        nodes = [{"id": "a"}, {"id": "b"}, {"id": "c"}]
+        edges = [["a", "b"], ["b", "c"]]
+        result = JobExecutor._topological_sort(nodes, edges)
+        assert result == ["a", "b", "c"]
+
+    def test_no_edges_preserves_order(self):
+        nodes = [{"id": "x"}, {"id": "y"}]
+        result = JobExecutor._topological_sort(nodes, [])
+        assert result == ["x", "y"]
+
+    def test_cycle_raises_value_error(self):
+        import pytest
+
+        nodes = [{"id": "a"}, {"id": "b"}]
+        edges = [["a", "b"], ["b", "a"]]
+        with pytest.raises(ValueError, match="cycle"):
+            JobExecutor._topological_sort(nodes, edges)
+
+    def test_malformed_edge_raises_value_error(self):
+        import pytest
+
+        nodes = [{"id": "a"}, {"id": "b"}]
+        edges = [["a"]]  # only 1 element
+        with pytest.raises(ValueError, match="malformed"):
+            JobExecutor._topological_sort(nodes, edges)
+
+    def test_unknown_node_in_edge_raises_value_error(self):
+        import pytest
+
+        nodes = [{"id": "a"}]
+        edges = [["a", "ghost"]]
+        with pytest.raises(ValueError, match="unknown"):
+            JobExecutor._topological_sort(nodes, edges)
