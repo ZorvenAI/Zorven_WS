@@ -1,6 +1,6 @@
 """Tests for the job executor — end-to-end pipeline execution."""
 
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, patch
 
 from app.api.schemas import (
     AvailableManifest,
@@ -13,6 +13,12 @@ from app.services.job_executor import JobExecutor
 
 # Use a sentinel to distinguish "no manifest" from "explicit None"
 _UNSET = object()
+
+
+def _stub_handler_factory(return_value=None):
+    """Return a mock resolve_handler that returns async stub handlers."""
+    async_handler = AsyncMock(return_value=return_value or {"node_outputs": {}})
+    return lambda name: (lambda config=None: async_handler)
 
 
 def _make_request(manifest=_UNSET, available_manifests=None, job_id="test-job-123"):
@@ -62,8 +68,12 @@ class TestJobExecutor:
         executor.callback.send_progress.return_value = True
         executor.callback.send_completed.return_value = True
 
-        request = _make_request()
-        await executor.execute(request)
+        with patch(
+            "app.services.job_executor.resolve_handler",
+            side_effect=_stub_handler_factory(),
+        ):
+            request = _make_request()
+            await executor.execute(request)
 
         # Verify "running" was sent
         executor.callback.send_running.assert_called_once()
@@ -109,8 +119,12 @@ class TestJobExecutor:
         executor.callback.send_progress.return_value = True
         executor.callback.send_failed.return_value = True
 
-        request = _make_request()
-        await executor.execute(request)
+        with patch(
+            "app.services.job_executor.resolve_handler",
+            side_effect=_stub_handler_factory(),
+        ):
+            request = _make_request()
+            await executor.execute(request)
 
         # Verify "failed" was sent with cancel message
         executor.callback.send_failed.assert_called()
@@ -122,7 +136,8 @@ class TestJobExecutor:
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_invalid_manifest_sends_failed(self, mock_get_redis):
-        """Invalid manifest (unknown handler) → graph build error → failed callback."""
+        """Invalid manifest (unknown handler) → resolution error → failed callback
+        with per-node progress preserved."""
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None
         mock_get_redis.return_value = mock_redis
@@ -137,13 +152,116 @@ class TestJobExecutor:
         executor = JobExecutor()
         executor.callback = AsyncMock()
         executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
         executor.callback.send_failed.return_value = True
 
         request = _make_request(manifest=bad_manifest)
         await executor.execute(request)
 
-        # Verify "failed" was sent
+        # Verify "failed" was sent with progress (not empty dict)
         executor.callback.send_failed.assert_called()
+        call_kwargs = executor.callback.send_failed.call_args.kwargs
+        progress = call_kwargs.get("progress", {})
+        assert "bad" in progress, "progress should contain the node from the manifest"
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_empty_manifest_nodes_sends_failed(self, mock_get_redis):
+        """Manifest with zero nodes → send_failed (not false-success)."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        empty_manifest = ManifestData(nodes=[], edges=[])
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_failed.return_value = True
+
+        request = _make_request(manifest=empty_manifest)
+        await executor.execute(request)
+
+        executor.callback.send_failed.assert_called()
+        call_kwargs = executor.callback.send_failed.call_args.kwargs
+        assert "no nodes" in call_kwargs.get("error_message", "").lower()
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_external_node_missing_url_sends_failed(self, mock_get_redis):
+        """External node without a url → resolution error → failed with progress."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        bad_manifest = ManifestData(
+            nodes=[
+                ManifestNode(id="ext", type="external", url=""),
+            ],
+            edges=[],
+        )
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_failed.return_value = True
+
+        request = _make_request(manifest=bad_manifest)
+        await executor.execute(request)
+
+        executor.callback.send_failed.assert_called()
+        call_kwargs = executor.callback.send_failed.call_args.kwargs
+        assert "url" in call_kwargs.get("error_message", "").lower()
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_malformed_edge_raises_error(self, mock_get_redis):
+        """Manifest with a malformed edge (not 2-element) → failed."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        bad_manifest = ManifestData(
+            nodes=[
+                ManifestNode(id="a", type="internal", handler="StrategyNode"),
+            ],
+            edges=[["a"]],  # malformed
+        )
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_failed.return_value = True
+
+        request = _make_request(manifest=bad_manifest)
+        await executor.execute(request)
+
+        executor.callback.send_failed.assert_called()
+        call_kwargs = executor.callback.send_failed.call_args.kwargs
+        assert "malformed" in call_kwargs.get("error_message", "").lower()
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_edge_unknown_node_raises_error(self, mock_get_redis):
+        """Manifest with an edge referencing an unknown node → failed."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        bad_manifest = ManifestData(
+            nodes=[
+                ManifestNode(id="a", type="internal", handler="StrategyNode"),
+            ],
+            edges=[["a", "nonexistent"]],
+        )
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_failed.return_value = True
+
+        request = _make_request(manifest=bad_manifest)
+        await executor.execute(request)
+
+        executor.callback.send_failed.assert_called()
+        call_kwargs = executor.callback.send_failed.call_args.kwargs
+        assert "unknown" in call_kwargs.get("error_message", "").lower()
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_completed_includes_progress_for_all_nodes(self, mock_get_redis):
@@ -158,8 +276,12 @@ class TestJobExecutor:
         executor.callback.send_progress.return_value = True
         executor.callback.send_completed.return_value = True
 
-        request = _make_request()
-        await executor.execute(request)
+        with patch(
+            "app.services.job_executor.resolve_handler",
+            side_effect=_stub_handler_factory(),
+        ):
+            request = _make_request()
+            await executor.execute(request)
 
         # Completed callback must include progress for all nodes
         executor.callback.send_completed.assert_called_once()
@@ -172,7 +294,8 @@ class TestJobExecutor:
             assert progress[node_id]["status"] == "done"
 
     def test_general_chat_inline_manifest(self):
-        """Inline fallback manifest for general-chat when no Django manifest available."""
+        """Inline fallback manifest for general-chat
+        when no Django manifest available."""
         request = _make_request(manifest=None, available_manifests=[])
         result = JobExecutor._find_resolved_manifest(request, "general-chat")
         assert result is not None
@@ -199,8 +322,12 @@ class TestJobExecutor:
         executor.callback.send_progress.return_value = True
         executor.callback.send_completed.return_value = True
 
-        request = _make_request()
-        await executor.execute(request)
+        with patch(
+            "app.services.job_executor.resolve_handler",
+            side_effect=_stub_handler_factory(),
+        ):
+            request = _make_request()
+            await executor.execute(request)
 
         # Should still complete (Redis failure is non-fatal for cancel check)
         executor.callback.send_completed.assert_called_once()
@@ -236,10 +363,16 @@ class TestJobExecutor:
         executor.callback.send_completed.return_value = True
         executor.callback.send_resolved_manifest.return_value = True
 
-        with patch(
-            "app.nodes.internal.pipeline_composer.PipelineComposer.compose",
-            new_callable=AsyncMock,
-            return_value={"_composed_manifest": composed_manifest},
+        with (
+            patch(
+                "app.nodes.internal.pipeline_composer.PipelineComposer.compose",
+                new_callable=AsyncMock,
+                return_value={"_composed_manifest": composed_manifest},
+            ),
+            patch(
+                "app.services.job_executor.resolve_handler",
+                side_effect=_stub_handler_factory(),
+            ),
         ):
             request = _make_request(manifest=None)
             await executor.execute(request)
@@ -281,23 +414,31 @@ class TestJobExecutor:
         executor.callback.send_progress.return_value = True
         executor.callback.send_completed.return_value = True
 
-        with patch(
-            "app.nodes.internal.pipeline_composer.PipelineComposer.compose",
-            new_callable=AsyncMock,
-            return_value={"_composed_manifest": composed_manifest},
+        with (
+            patch(
+                "app.nodes.internal.pipeline_composer.PipelineComposer.compose",
+                new_callable=AsyncMock,
+                return_value={"_composed_manifest": composed_manifest},
+            ),
+            patch(
+                "app.services.job_executor.resolve_handler",
+                side_effect=_stub_handler_factory(),
+            ),
         ):
             request = _make_request(manifest=None)
             await executor.execute(request)
 
         # send_progress should be called multiple times:
-        # 1. composer running, 2. composer done, 3. pending nodes before stream,
+        # 1. composer running, 2. composer done, 3. pending nodes,
         # 4. first node running, 5+ per-node done callbacks
         progress_calls = executor.callback.send_progress.call_args_list
         # Find the call that includes pending nodes (after composer done)
         found_pending = False
-        for call in progress_calls:
+        for progress_call in progress_calls:
             progress = (
-                call.args[1] if len(call.args) > 1 else call.kwargs.get("progress", {})
+                progress_call.args[1]
+                if len(progress_call.args) > 1
+                else progress_call.kwargs.get("progress", {})
             )
             if isinstance(progress, dict):
                 discovery_status = progress.get("discovery", {}).get("status")
@@ -343,10 +484,16 @@ class TestJobExecutor:
             )
         ]
 
-        with patch(
-            "app.nodes.internal.pipeline_composer.PipelineComposer.compose",
-            new_callable=AsyncMock,
-            return_value={"resolved_manifest_id": "blog-authoring"},
+        with (
+            patch(
+                "app.nodes.internal.pipeline_composer.PipelineComposer.compose",
+                new_callable=AsyncMock,
+                return_value={"resolved_manifest_id": "blog-authoring"},
+            ),
+            patch(
+                "app.services.job_executor.resolve_handler",
+                side_effect=_stub_handler_factory(),
+            ),
         ):
             request = _make_request(manifest=None, available_manifests=available)
             await executor.execute(request)
@@ -355,23 +502,29 @@ class TestJobExecutor:
         executor.callback.send_resolved_manifest.assert_called_once()
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
-    async def test_streaming_sends_per_node_progress(self, mock_get_redis):
-        """astream sends a progress callback after each node completes,
-        with the completed node marked 'done' and next pending node
-        marked 'running'.  Uses a stub compiled_graph to prove the
-        executor calls astream(stream_mode='updates') and processes
-        the yielded chunks."""
+    async def test_sequential_sends_per_node_progress(self, mock_get_redis):
+        """Direct sequential execution sends a progress callback after
+        each node completes, with the completed node marked 'done'
+        and the next node marked 'running'."""
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None  # not cancelled
         mock_get_redis.return_value = mock_redis
 
-        # Build a fake compiled graph whose astream yields per-node chunks
-        async def _fake_astream(state, *, config=None, stream_mode=None):
-            yield {"strategy": {"node_outputs": {"brand_strategist": {"ok": True}}}}
-            yield {"report": {"node_outputs": {"report_generator": {"ok": True}}}}
+        # Stub handlers that return quickly
+        mock_strategy = AsyncMock(
+            return_value={"node_outputs": {"strategy": {"ok": True}}}
+        )
+        mock_report = AsyncMock(return_value={"node_outputs": {"report": {"ok": True}}})
 
-        mock_compiled = MagicMock()
-        mock_compiled.astream = _fake_astream
+        def _mock_resolve(name):
+            handler_map = {
+                "StrategyNode": lambda config=None: mock_strategy,
+                "ReportNode": lambda config=None: mock_report,
+            }
+            factory = handler_map.get(name)
+            if factory:
+                return factory
+            raise ValueError(f"Unknown handler: {name}")
 
         executor = JobExecutor()
         executor.callback = AsyncMock()
@@ -380,8 +533,8 @@ class TestJobExecutor:
         executor.callback.send_completed.return_value = True
 
         with patch(
-            "app.services.job_executor.GraphBuilder.build",
-            return_value=mock_compiled,
+            "app.services.job_executor.resolve_handler",
+            side_effect=_mock_resolve,
         ):
             request = _make_request()
             await executor.execute(request)
@@ -397,27 +550,30 @@ class TestJobExecutor:
                     found_strategy_done = True
                 if progress.get("report", {}).get("status") == "done":
                     found_report_done = True
-        assert found_strategy_done, "strategy node should be marked done via stream"
-        assert found_report_done, "report node should be marked done via stream"
+        assert found_strategy_done, "strategy node should be marked done"
+        assert found_report_done, "report node should be marked done"
 
         # Verify completed was sent
         executor.callback.send_completed.assert_called_once()
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
-    async def test_streaming_marks_first_node_running(self, mock_get_redis):
-        """Before streaming starts, the first node is marked 'running'
-        so the UI shows immediate activity.  Uses a stub compiled_graph
-        to prove the executor calls astream(stream_mode='updates')."""
+    async def test_sequential_marks_first_node_running(self, mock_get_redis):
+        """Before executing each node, the executor marks it 'running'
+        so the UI shows immediate activity."""
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None
         mock_get_redis.return_value = mock_redis
 
-        async def _fake_astream(state, *, config=None, stream_mode=None):
-            yield {"strategy": {"node_outputs": {"brand_strategist": {"ok": True}}}}
-            yield {"report": {"node_outputs": {"report_generator": {"ok": True}}}}
+        mock_strategy = AsyncMock(
+            return_value={"node_outputs": {"strategy": {"ok": True}}}
+        )
+        mock_report = AsyncMock(return_value={"node_outputs": {"report": {"ok": True}}})
 
-        mock_compiled = MagicMock()
-        mock_compiled.astream = _fake_astream
+        def _mock_resolve(name):
+            return {
+                "StrategyNode": lambda config=None: mock_strategy,
+                "ReportNode": lambda config=None: mock_report,
+            }[name]
 
         executor = JobExecutor()
         executor.callback = AsyncMock()
@@ -426,8 +582,8 @@ class TestJobExecutor:
         executor.callback.send_completed.return_value = True
 
         with patch(
-            "app.services.job_executor.GraphBuilder.build",
-            return_value=mock_compiled,
+            "app.services.job_executor.resolve_handler",
+            side_effect=_mock_resolve,
         ):
             request = _make_request()
             await executor.execute(request)
@@ -445,23 +601,20 @@ class TestJobExecutor:
                     break
         assert (
             found_first_running
-        ), "First node should be marked running before streaming"
+        ), "First node should be marked running before execution"
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
-    async def test_graph_built_without_callback_client(self, mock_get_redis):
-        """GraphBuilder.build is called with callback_client=None
-        so that TrackedNode wrappers are not applied (the executor
-        handles progress via the astream loop)."""
+    async def test_no_langgraph_build_used(self, mock_get_redis):
+        """The executor resolves handlers directly and does NOT call
+        GraphBuilder.build — execution is fully sequential."""
         mock_redis = AsyncMock()
         mock_redis.get.return_value = None
         mock_get_redis.return_value = mock_redis
 
-        async def _fake_astream(state, *, config=None, stream_mode=None):
-            yield {"strategy": {"node_outputs": {}}}
-            yield {"report": {"node_outputs": {}}}
+        mock_handler = AsyncMock(return_value={"node_outputs": {}})
 
-        mock_compiled = MagicMock()
-        mock_compiled.astream = _fake_astream
+        def _mock_resolve(name):
+            return lambda config=None: mock_handler
 
         executor = JobExecutor()
         executor.callback = AsyncMock()
@@ -469,17 +622,20 @@ class TestJobExecutor:
         executor.callback.send_progress.return_value = True
         executor.callback.send_completed.return_value = True
 
-        with patch(
-            "app.services.job_executor.GraphBuilder.build",
-            return_value=mock_compiled,
-        ) as mock_build:
+        with (
+            patch(
+                "app.services.job_executor.resolve_handler",
+                side_effect=_mock_resolve,
+            ),
+            patch(
+                "app.services.job_executor.GraphBuilder.build",
+            ) as mock_build,
+        ):
             request = _make_request()
             await executor.execute(request)
 
-        # Verify GraphBuilder.build was called with callback_client=None
-        mock_build.assert_called_once()
-        _, build_kwargs = mock_build.call_args
-        assert build_kwargs.get("callback_client") is None
+        # GraphBuilder.build should NOT be called
+        mock_build.assert_not_called()
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
     async def test_done_preserves_started_at(self, mock_get_redis):
@@ -489,12 +645,10 @@ class TestJobExecutor:
         mock_redis.get.return_value = None
         mock_get_redis.return_value = mock_redis
 
-        async def _fake_astream(state, *, config=None, stream_mode=None):
-            yield {"strategy": {"node_outputs": {}}}
-            yield {"report": {"node_outputs": {}}}
+        mock_handler = AsyncMock(return_value={"node_outputs": {}})
 
-        mock_compiled = MagicMock()
-        mock_compiled.astream = _fake_astream
+        def _mock_resolve(name):
+            return lambda config=None: mock_handler
 
         executor = JobExecutor()
         executor.callback = AsyncMock()
@@ -503,8 +657,8 @@ class TestJobExecutor:
         executor.callback.send_completed.return_value = True
 
         with patch(
-            "app.services.job_executor.GraphBuilder.build",
-            return_value=mock_compiled,
+            "app.services.job_executor.resolve_handler",
+            side_effect=_mock_resolve,
         ):
             request = _make_request()
             await executor.execute(request)
@@ -527,12 +681,16 @@ class TestJobExecutor:
         mock_redis.get.side_effect = [None, "1"]
         mock_get_redis.return_value = mock_redis
 
-        async def _fake_astream(state, *, config=None, stream_mode=None):
-            yield {"strategy": {"node_outputs": {}}}
-            yield {"report": {"node_outputs": {}}}
+        mock_strategy = AsyncMock(
+            return_value={"node_outputs": {"strategy": {"ok": True}}}
+        )
+        mock_report = AsyncMock(return_value={"node_outputs": {"report": {"ok": True}}})
 
-        mock_compiled = MagicMock()
-        mock_compiled.astream = _fake_astream
+        def _mock_resolve(name):
+            return {
+                "StrategyNode": lambda config=None: mock_strategy,
+                "ReportNode": lambda config=None: mock_report,
+            }[name]
 
         executor = JobExecutor()
         executor.callback = AsyncMock()
@@ -541,8 +699,8 @@ class TestJobExecutor:
         executor.callback.send_failed.return_value = True
 
         with patch(
-            "app.services.job_executor.GraphBuilder.build",
-            return_value=mock_compiled,
+            "app.services.job_executor.resolve_handler",
+            side_effect=_mock_resolve,
         ):
             request = _make_request()
             await executor.execute(request)
@@ -561,3 +719,42 @@ class TestJobExecutor:
                 assert (
                     report_status != "running"
                 ), "report should not be marked running after cancel"
+
+
+class TestTopologicalSort:
+    """Unit tests for JobExecutor._topological_sort validation."""
+
+    def test_valid_linear_graph(self):
+        nodes = [{"id": "a"}, {"id": "b"}, {"id": "c"}]
+        edges = [["a", "b"], ["b", "c"]]
+        result = JobExecutor._topological_sort(nodes, edges)
+        assert result == ["a", "b", "c"]
+
+    def test_no_edges_preserves_order(self):
+        nodes = [{"id": "x"}, {"id": "y"}]
+        result = JobExecutor._topological_sort(nodes, [])
+        assert result == ["x", "y"]
+
+    def test_cycle_raises_value_error(self):
+        import pytest
+
+        nodes = [{"id": "a"}, {"id": "b"}]
+        edges = [["a", "b"], ["b", "a"]]
+        with pytest.raises(ValueError, match="cycle"):
+            JobExecutor._topological_sort(nodes, edges)
+
+    def test_malformed_edge_raises_value_error(self):
+        import pytest
+
+        nodes = [{"id": "a"}, {"id": "b"}]
+        edges = [["a"]]  # only 1 element
+        with pytest.raises(ValueError, match="malformed"):
+            JobExecutor._topological_sort(nodes, edges)
+
+    def test_unknown_node_in_edge_raises_value_error(self):
+        import pytest
+
+        nodes = [{"id": "a"}]
+        edges = [["a", "ghost"]]
+        with pytest.raises(ValueError, match="unknown"):
+            JobExecutor._topological_sort(nodes, edges)
