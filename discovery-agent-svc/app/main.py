@@ -18,6 +18,7 @@ from app.api.routes import router
 from app.cache.redis_manager import RedisManager
 from app.core.config import settings
 from app.core.logging_config import setup_logging
+from app.messaging.kafka_producer import TraceProducer
 from app.scrapers.factory import ScraperFactory
 from app.services.discovery_executor import DiscoveryExecutor
 
@@ -42,12 +43,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         redis_manager=redis_manager,
     )
 
+    # Initialize trace producer for real-time browsing events
+    trace_producer = TraceProducer(settings.KAFKA_BOOTSTRAP_SERVERS)
+    await trace_producer.start()
+
     # Initialize executor
     executor = DiscoveryExecutor(
         search_engine=search_engine,
         browser_engine=browser_engine,
         data_cleaner=data_cleaner,
         redis_manager=redis_manager,
+        trace_producer=trace_producer,
     )
     routes.executor = executor
 
