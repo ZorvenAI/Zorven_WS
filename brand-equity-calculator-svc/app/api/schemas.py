@@ -36,6 +36,7 @@ class Competitor(BaseModel):
     """A competitor identified during analysis."""
 
     name: str = Field(..., description="Competitor company name")
+    headquarters: str = Field(default="", description="Headquarters location / address")
     estimated_score: int = Field(
         ..., ge=0, le=100, description="Estimated brand equity score"
     )

@@ -15,6 +15,7 @@ interface DimensionScore {
 
 interface Competitor {
   name: string;
+  headquarters: string;
   estimated_score: number;
   strengths: string[];
   weaknesses: string[];
@@ -368,8 +369,13 @@ export default function BrandEquityPage() {
                 <div className="space-y-4">
                   {result.competitors.map((comp, i) => (
                     <div key={i} className="glass-card p-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-white font-heading font-semibold">{comp.name}</h4>
+                      <div className="flex items-center justify-between mb-1">
+                        <div>
+                          <h4 className="text-white font-heading font-semibold">{comp.name}</h4>
+                          {comp.headquarters && (
+                            <p className="text-xs text-brand-silver/40 mt-0.5">{comp.headquarters}</p>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-brand-silver/50">Estimated Score</span>
                           <span className={`text-lg font-bold ${scoreColor(comp.estimated_score)}`}>
