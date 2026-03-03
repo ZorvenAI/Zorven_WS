@@ -128,6 +128,7 @@ class PlatformAdapter:
                 brand_voice,
                 keyword_str,
                 no_options,
+                skill_context=skill_context,
             )
 
         prompts = {
@@ -183,6 +184,7 @@ class PlatformAdapter:
         brand_voice: str,
         keyword_str: str,
         no_options: str,
+        skill_context: str = "",
     ) -> str:
         """Build prompts tailored for brand equity / analysis data."""
         limits = {
@@ -236,12 +238,15 @@ class PlatformAdapter:
 
         specifics = platform_specifics.get(platform, platform_specifics["linkedin"])
 
-        return (
+        prompt = (
             f"{base_instruction}\n"
             f"{specifics}\n\n"
             f"{no_options}\n\n"
             f"Brand analysis results:\n{content}"
         )
+        if skill_context:
+            prompt += f"\n\n{skill_context}"
+        return prompt
 
     def _stub_adapt(
         self,

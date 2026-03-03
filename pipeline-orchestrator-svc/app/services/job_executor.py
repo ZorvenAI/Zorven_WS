@@ -154,6 +154,11 @@ class JobExecutor:
                     manifest_data.get("edges", []),
                 )
 
+                # Resolve skill router once (avoids per-node import)
+                from app.api import routes as api_routes
+
+                _skill_router = api_routes.skill_router
+
                 for node_def in nodes:
                     nid = node_def["id"]
                     node_type = node_def.get("type", "internal")
@@ -163,11 +168,9 @@ class JobExecutor:
                     }
 
                     # Inject matched skills into node configs (internal + external)
-                    from app.api import routes as api_routes
-
-                    if api_routes.skill_router:
+                    if _skill_router:
                         skill_additions = (
-                            api_routes.skill_router.resolve_skills_for_node(
+                            _skill_router.resolve_skills_for_node(
                                 nid, state.get("input_prompt", "")
                             )
                         )

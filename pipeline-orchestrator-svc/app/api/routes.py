@@ -9,11 +9,14 @@ Endpoints:
 """
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
 from app.api.auth import verify_service_token
+
+if TYPE_CHECKING:
+    from app.skills.router import SkillRouter
 from app.api.schemas import (
     CancelResponse,
     DispatchRequest,
@@ -29,7 +32,7 @@ router = APIRouter()
 executor = JobExecutor()
 
 # Set by the lifespan hook in main.py.
-skill_router: Optional["SkillRouter"] = None  # noqa: F821
+skill_router: Optional["SkillRouter"] = None
 
 
 @router.get("/health", response_model=HealthResponse)
