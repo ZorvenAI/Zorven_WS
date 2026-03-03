@@ -43,12 +43,18 @@ class SmartTitler:
     def __init__(self, gemini_model: Any = None) -> None:
         self._model = gemini_model
 
-    async def title(self, filename: str, content_preview: bytes = b"") -> str:
+    async def title(
+        self,
+        filename: str,
+        content_preview: bytes = b"",
+        skill_context: str = "",
+    ) -> str:
         """Generate a descriptive filename if the current name is generic.
 
         Args:
             filename: Current filename (e.g., "upload.pdf").
             content_preview: First 500 bytes of file content for LLM context.
+            skill_context: Optional skill instructions from orchestrator.
 
         Returns:
             A slugified, GCS-compatible filename with the original extension.
@@ -72,7 +78,9 @@ class SmartTitler:
         # Try LLM-based rename
         if self._model is not None:
             try:
-                new_name = await self._llm_rename(filename, content_preview)
+                new_name = await self._llm_rename(
+                    filename, content_preview, skill_context=skill_context
+                )
                 if new_name:
                     return self._slugify(new_name, ext)
             except Exception as exc:
@@ -86,7 +94,12 @@ class SmartTitler:
         """Check if a filename matches a generic pattern."""
         return any(p.match(filename) for p in _GENERIC_PATTERNS)
 
-    async def _llm_rename(self, filename: str, content_preview: bytes) -> str:
+    async def _llm_rename(
+        self,
+        filename: str,
+        content_preview: bytes,
+        skill_context: str = "",
+    ) -> str:
         """Ask Gemini for a descriptive filename based on content."""
         # Try to decode content preview for context
         preview_text = ""
@@ -101,6 +114,8 @@ class SmartTitler:
             "for this document. Return ONLY the filename, nothing else.\n\n"
             f"Current filename: {filename}\n"
         )
+        if skill_context:
+            prompt += f"\n{skill_context}\n\n"
         if preview_text:
             prompt += f"Content preview:\n{preview_text[:500]}\n"
 
