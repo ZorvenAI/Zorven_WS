@@ -43,6 +43,10 @@ reputation management, crisis preparedness, domain authority.
 For each dimension, score 0-100 based on PUBLICLY AVAILABLE information \
 about the company and its industry.  Use your training data knowledge.
 
+Additionally, identify 3-5 key competitors in the same industry and scope. \
+For each competitor, provide an estimated brand equity score and list their \
+main strengths and weaknesses relative to the company being evaluated.
+
 IMPORTANT RULES:
 - Be transparent about what you can and cannot assess.
 - Flag all assumptions explicitly.
@@ -87,6 +91,14 @@ Return this exact JSON structure:
       "weight": 0.15,
       "rationale": "<2-3 sentence explanation>",
       "key_factors": ["<factor1>", "<factor2>", "<factor3>"]
+    }
+  ],
+  "competitors": [
+    {
+      "name": "<competitor company name>",
+      "estimated_score": <int 0-100>,
+      "strengths": ["<strength1>", "<strength2>"],
+      "weaknesses": ["<weakness1>", "<weakness2>"]
     }
   ],
   "formula_explanation": "<explain: Overall = sum(score_i * weight_i) with the actual numbers>",

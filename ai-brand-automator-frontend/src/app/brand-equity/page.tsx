@@ -13,10 +13,18 @@ interface DimensionScore {
   key_factors: string[];
 }
 
+interface Competitor {
+  name: string;
+  estimated_score: number;
+  strengths: string[];
+  weaknesses: string[];
+}
+
 interface BrandEquityResult {
   company_name: string;
   overall_score: number;
   dimensions: DimensionScore[];
+  competitors: Competitor[];
   formula_explanation: string;
   derivation: string;
   limitations: string[];
@@ -343,6 +351,62 @@ export default function BrandEquityPage() {
                 ))}
               </div>
             </div>
+
+            {/* Competitor Analysis */}
+            {result.competitors && result.competitors.length > 0 && (
+              <div>
+                <h3 className="text-lg font-heading font-semibold text-white mb-4">Competitor Analysis</h3>
+                <div className="space-y-4">
+                  {result.competitors.map((comp, i) => (
+                    <div key={i} className="glass-card p-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-white font-heading font-semibold">{comp.name}</h4>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-brand-silver/50">Estimated Score</span>
+                          <span className={`text-lg font-bold ${scoreColor(comp.estimated_score)}`}>
+                            {comp.estimated_score}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden mb-4">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${scoreBg(comp.estimated_score)}`}
+                          style={{ width: `${comp.estimated_score}%` }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {comp.strengths.length > 0 && (
+                          <div>
+                            <p className="text-xs text-emerald-400 font-medium mb-1.5">Strengths</p>
+                            <ul className="space-y-1">
+                              {comp.strengths.map((s, j) => (
+                                <li key={j} className="text-sm text-brand-silver/70 flex items-start gap-1.5">
+                                  <span className="text-emerald-400 mt-0.5 shrink-0">+</span>
+                                  {s}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {comp.weaknesses.length > 0 && (
+                          <div>
+                            <p className="text-xs text-red-400 font-medium mb-1.5">Weaknesses</p>
+                            <ul className="space-y-1">
+                              {comp.weaknesses.map((w, j) => (
+                                <li key={j} className="text-sm text-brand-silver/70 flex items-start gap-1.5">
+                                  <span className="text-red-400 mt-0.5 shrink-0">-</span>
+                                  {w}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Formula Explanation */}
             {result.formula_explanation && (

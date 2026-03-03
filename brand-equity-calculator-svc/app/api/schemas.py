@@ -32,6 +32,17 @@ class DimensionScore(BaseModel):
     )
 
 
+class Competitor(BaseModel):
+    """A competitor identified during analysis."""
+
+    name: str = Field(..., description="Competitor company name")
+    estimated_score: int = Field(
+        ..., ge=0, le=100, description="Estimated brand equity score"
+    )
+    strengths: list[str] = Field(default_factory=list, description="Key strengths")
+    weaknesses: list[str] = Field(default_factory=list, description="Key weaknesses")
+
+
 class BrandEquityResponse(BaseModel):
     """Full brand equity evaluation result."""
 
@@ -40,6 +51,10 @@ class BrandEquityResponse(BaseModel):
         ..., ge=0, le=100, description="Weighted overall brand equity score"
     )
     dimensions: list[DimensionScore] = Field(default_factory=list)
+    competitors: list[Competitor] = Field(
+        default_factory=list,
+        description="Top competitors with estimated scores, strengths, and weaknesses",
+    )
     formula_explanation: str = Field(
         default="", description="How the score was calculated"
     )

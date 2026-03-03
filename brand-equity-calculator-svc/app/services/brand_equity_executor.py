@@ -17,6 +17,7 @@ from fastapi import HTTPException
 from app.api.schemas import (
     BrandEquityRequest,
     BrandEquityResponse,
+    Competitor,
     DimensionScore,
 )
 from app.cache.redis_manager import RedisManager
@@ -91,10 +92,18 @@ class BrandEquityExecutor:
                 exc,
                 exc_info=True,
             )
-            raise HTTPException(
-                status_code=502,
-                detail="Brand equity analysis failed. Please try again.",
-            ) from exc
+            # Surface billing/auth errors clearly instead of generic message
+            exc_str = str(exc)
+            if "credit balance" in exc_str or "billing" in exc_str.lower():
+                detail = (
+                    "The AI service is currently unavailable due to a billing issue. "
+                    "Please try again later."
+                )
+            elif "authentication" in exc_str.lower() or "api key" in exc_str.lower():
+                detail = "The AI service is misconfigured. " "Please contact support."
+            else:
+                detail = "Brand equity analysis failed. Please try again."
+            raise HTTPException(status_code=502, detail=detail) from exc
 
         # Parse into response model
         response = self._parse_response(request.company_name, raw)
@@ -124,10 +133,21 @@ class BrandEquityExecutor:
             overall = round(sum(d.score * d.weight for d in dimensions))
         overall = max(0, min(100, int(overall or 0)))
 
+        competitors = [
+            Competitor(
+                name=c.get("name", "Unknown"),
+                estimated_score=max(0, min(100, int(c.get("estimated_score", 0)))),
+                strengths=c.get("strengths", []),
+                weaknesses=c.get("weaknesses", []),
+            )
+            for c in raw.get("competitors", [])
+        ]
+
         return BrandEquityResponse(
             company_name=company_name,
             overall_score=overall,
             dimensions=dimensions,
+            competitors=competitors,
             formula_explanation=raw.get("formula_explanation", ""),
             derivation=raw.get("derivation", ""),
             limitations=raw.get("limitations", []),
