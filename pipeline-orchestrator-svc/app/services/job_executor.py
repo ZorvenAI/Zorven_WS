@@ -162,18 +162,17 @@ class JobExecutor:
                         **node_def.get("config", {}),
                     }
 
-                    # Inject matched skills into external node configs
-                    if node_type == "external":
-                        from app.api import routes as api_routes
+                    # Inject matched skills into node configs (internal + external)
+                    from app.api import routes as api_routes
 
-                        if api_routes.skill_router:
-                            skill_additions = (
-                                api_routes.skill_router.resolve_skills_for_node(
-                                    nid, state.get("input_prompt", "")
-                                )
+                    if api_routes.skill_router:
+                        skill_additions = (
+                            api_routes.skill_router.resolve_skills_for_node(
+                                nid, state.get("input_prompt", "")
                             )
-                            if skill_additions:
-                                merged_config.update(skill_additions)
+                        )
+                        if skill_additions:
+                            merged_config.update(skill_additions)
 
                     if node_type == "internal":
                         handler_name = node_def.get("handler")

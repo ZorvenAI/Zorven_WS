@@ -113,9 +113,11 @@ class DefaultAgentNode(BaseNode):
             )
         await self._emit_trace(job_id, "started", thought)
 
-        # Synthesize answer with Gemini
+        # Synthesize answer with Gemini (inject skill context if available)
+        skill_context = self.config.get("skill_context", "") if self.config else ""
         answer = await self._synthesize(
-            input_prompt, chunks, chat_history, attachment_files
+            input_prompt, chunks, chat_history, attachment_files,
+            skill_context=skill_context,
         )
 
         # Emit completion trace
@@ -187,6 +189,7 @@ class DefaultAgentNode(BaseNode):
         chunks: list[SearchChunk],
         chat_history: list[dict[str, str]],
         attachment_files: list[tuple[str, bytes]] | None = None,
+        skill_context: str = "",
     ) -> str:
         """Synthesize an answer using Gemini, grounded in search chunks.
 
@@ -198,6 +201,10 @@ class DefaultAgentNode(BaseNode):
             model = genai.GenerativeModel(settings.GEMINI_MODEL)
 
             prompt_parts = [SYSTEM_PROMPT, ""]
+
+            if skill_context:
+                prompt_parts.append(skill_context)
+                prompt_parts.append("")
 
             # Add chat history context
             if chat_history:
