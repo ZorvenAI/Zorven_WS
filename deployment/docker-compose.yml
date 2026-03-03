@@ -141,12 +141,14 @@ services:
       args:
         # Frontend now talks to Kong on port 8000
         - NEXT_PUBLIC_API_URL=http://localhost:8000
+        - NEXT_PUBLIC_BRAND_EQUITY_API_URL=http://localhost:8090
     container_name: ai-brand-automator-frontend
     command: ["sh", "-c", "npm install && npm run dev"]
     environment:
       - NODE_ENV=development
       # API URL points to Kong Gateway
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_BRAND_EQUITY_API_URL=http://localhost:8090
     ports:
       - "3000:3000"
     volumes:
