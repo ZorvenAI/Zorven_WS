@@ -206,12 +206,15 @@ class InternalPublishView(APIView):
         # Strip markdown — social platforms render plain text, not markdown
         from automation.utils import strip_markdown
 
+        clean_title = strip_markdown(title)
+        clean_content = strip_markdown(content_text)
+
         # Create ContentCalendar entry
         calendar_entry = ContentCalendar.objects.create(
             tenant_id=tenant_id,
             user=profiles[0].user,
-            title=strip_markdown(title),
-            content=strip_markdown(content_text),
+            title=clean_title,
+            content=clean_content,
             media_urls=media_urls or [],
             platforms=[p.platform for p in profiles],
             scheduled_date=timezone.now(),
@@ -236,8 +239,8 @@ class InternalPublishView(APIView):
         for profile in profiles:
             result, error = publish_to_platform(
                 profile=profile,
-                content_text=content_text,
-                content_title=title,
+                content_text=clean_content,
+                content_title=clean_title,
                 media_urls=media_urls,
                 log_prefix=f"[social-agent][job:{job_id}]",
             )
