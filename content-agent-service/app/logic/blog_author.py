@@ -30,6 +30,7 @@ class BlogAuthor:
         brand_persona: dict[str, Any],
         seo_data: dict[str, Any],
         citations: list[Citation],
+        skill_context: str = "",
     ) -> str:
         """
         Generate a full Markdown blog post.
@@ -38,7 +39,8 @@ class BlogAuthor:
         """
         if self._model is not None:
             return await self._ai_author(
-                topic, research_context, brand_persona, seo_data, citations
+                topic, research_context, brand_persona, seo_data, citations,
+                skill_context=skill_context,
             )
         return self._stub_author(topic, brand_persona, seo_data, citations)
 
@@ -49,6 +51,7 @@ class BlogAuthor:
         brand_persona: dict[str, Any],
         seo_data: dict[str, Any],
         citations: list[Citation],
+        skill_context: str = "",
     ) -> str:
         """Use Gemini to generate a blog post."""
         keywords = seo_data.get("keywords", [])
@@ -82,6 +85,12 @@ class BlogAuthor:
             f"Available citations:\n{citation_text or 'No citations available.'}\n\n"
             f"## Research Context\n"
             f"{safe_context}\n\n"
+        )
+
+        if skill_context:
+            prompt += f"{skill_context}\n\n"
+
+        prompt += (
             f"## Task\n"
             f"Write a 800-1200 word blog post about \"{safe_topic}\" in Markdown format.\n"
             f"Include:\n"

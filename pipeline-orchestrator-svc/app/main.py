@@ -13,12 +13,16 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import routes as api_routes
 from app.api.routes import router
 from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.core.redis_client import close_redis
 from app.messaging.kafka_consumer import TriggerConsumer
 from app.messaging.kafka_producer import TraceProducer
+from app.skills.loader import load_all_skills
+from app.skills.registry import SkillRegistry
+from app.skills.router import SkillRouter
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +40,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.HOST,
         settings.PORT,
     )
+
+    # Load runtime skills (fail-open — service works without skills)
+    skills = load_all_skills()
+    skill_registry = SkillRegistry(skills)
+    api_routes.skill_router = SkillRouter(skill_registry)
+    logger.info("Skill system initialized: %d skill(s) loaded", len(skills))
 
     # Start Kafka producer + consumer (optional — non-fatal if unavailable)
     await trace_producer.start()
@@ -67,6 +77,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await trigger_consumer.stop()
     await trace_producer.stop()
     await close_redis()
+    api_routes.skill_router = None
     logger.info("Pipeline Orchestrator shut down")
 
 

@@ -10,3 +10,4 @@ aiokafka>=0.11.0
 google-cloud-discoveryengine>=0.13.0
 google-cloud-storage>=2.14.0
 google-generativeai>=0.8.0
+pyyaml>=6.0

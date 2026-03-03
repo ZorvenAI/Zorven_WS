@@ -410,11 +410,13 @@ class IntelligenceExecutor:
         """
         logger.info("Gap analysis for tenant %s", tenant_id)
 
-        # 1. Run gap analysis
+        # 1. Run gap analysis (with optional skill context from orchestrator)
+        skill_context = request.config.get("skill_context", "")
         gap_result = await self.gap_analyzer.analyze(
             previous_outputs=request.previous_outputs,
             config=request.config,
             gemini_client=self.gemini_client,
+            skill_context=skill_context,
         )
 
         # 2. Extract themes from discovery findings

@@ -31,6 +31,7 @@ class PlatformAdapter:
         seo_meta: dict[str, Any],
         brand_persona: dict[str, Any],
         platforms: list[str],
+        skill_context: str = "",
     ) -> list[SocialPost]:
         """Adapt blog content for each target platform."""
         posts: list[SocialPost] = []
@@ -39,7 +40,8 @@ class PlatformAdapter:
             try:
                 if self._model is not None:
                     post = await self._ai_adapt(
-                        blog_content, seo_meta, brand_persona, platform
+                        blog_content, seo_meta, brand_persona, platform,
+                        skill_context=skill_context,
                     )
                 else:
                     post = self._stub_adapt(
@@ -63,6 +65,7 @@ class PlatformAdapter:
         seo_meta: dict[str, Any],
         brand_persona: dict[str, Any],
         platform: str,
+        skill_context: str = "",
     ) -> SocialPost:
         """Use Gemini to generate a platform-specific post."""
         brand_name = sanitize_ai_prompt(str(brand_persona.get("name", "the brand")))
@@ -74,7 +77,8 @@ class PlatformAdapter:
         sanitized_content = sanitize_ai_prompt(blog_content[:3000])
 
         prompt = self._build_prompt(
-            platform, sanitized_content, brand_name, brand_voice, keywords
+            platform, sanitized_content, brand_name, brand_voice, keywords,
+            skill_context=skill_context,
         )
 
         response = await asyncio.to_thread(
@@ -98,6 +102,7 @@ class PlatformAdapter:
         brand_name: str,
         brand_voice: str,
         keywords: list[str],
+        skill_context: str = "",
     ) -> str:
         """Build a platform-specific prompt for Gemini."""
         keyword_str = ", ".join(keywords[:5]) if keywords else "industry-relevant"
@@ -165,7 +170,10 @@ class PlatformAdapter:
             ),
         }
 
-        return prompts.get(platform, prompts["linkedin"])
+        base_prompt = prompts.get(platform, prompts["linkedin"])
+        if skill_context:
+            base_prompt += f"\n\n{skill_context}"
+        return base_prompt
 
     def _build_analysis_prompt(
         self,
