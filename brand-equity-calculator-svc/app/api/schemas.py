@@ -36,6 +36,7 @@ class Competitor(BaseModel):
     """A competitor identified during analysis."""
 
     name: str = Field(..., description="Competitor company name")
+    headquarters: str = Field(default="", description="Headquarters location / address")
     estimated_score: int = Field(
         ..., ge=0, le=100, description="Estimated brand equity score"
     )
@@ -66,6 +67,22 @@ class BrandEquityResponse(BaseModel):
         default_factory=list, description="Actionable recommendations"
     )
     methodology: str = Field(default="ISO 20671:2019", description="Standard used")
+
+
+class ExportRequest(BaseModel):
+    """Request to export brand equity results as PDF and email them."""
+
+    email: str = Field(..., min_length=5, max_length=254, description="Recipient email")
+    result: BrandEquityResponse = Field(
+        ..., description="The brand equity result to export"
+    )
+
+
+class ExportResponse(BaseModel):
+    """Response after exporting/emailing the report."""
+
+    success: bool
+    message: str
 
 
 class HealthResponse(BaseModel):

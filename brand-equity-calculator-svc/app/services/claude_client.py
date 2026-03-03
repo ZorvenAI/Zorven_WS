@@ -96,6 +96,7 @@ Return this exact JSON structure:
   "competitors": [
     {
       "name": "<competitor company name>",
+      "headquarters": "<city, state/country — e.g. Beaverton, Oregon, USA>",
       "estimated_score": <int 0-100>,
       "strengths": ["<strength1>", "<strength2>"],
       "weaknesses": ["<weakness1>", "<weakness2>"]

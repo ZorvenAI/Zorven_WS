@@ -138,6 +138,7 @@ class BrandEquityExecutor:
         competitors = [
             Competitor(
                 name=c.get("name", "Unknown"),
+                headquarters=c.get("headquarters", ""),
                 estimated_score=max(0, min(100, int(c.get("estimated_score", 0)))),
                 strengths=c.get("strengths", []),
                 weaknesses=c.get("weaknesses", []),

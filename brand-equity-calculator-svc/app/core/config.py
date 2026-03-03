@@ -32,5 +32,10 @@ class Settings(BaseSettings):
     # Cache TTL (24 hours)
     RESULT_CACHE_TTL: int = 86400
 
+    # Mailgun for sending PDF reports (empty = email disabled)
+    MAILGUN_API_KEY: str = ""
+    MAILGUN_DOMAIN: str = ""
+    MAILGUN_FROM_EMAIL: str = "AI Brand Automator <brand-equity@aibrandautomator.com>"
+
 
 settings = Settings()

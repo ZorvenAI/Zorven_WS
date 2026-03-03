@@ -56,11 +56,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         claude_client=claude_client,
     )
     routes.executor = executor
+    routes.redis_manager = redis_manager
 
     yield
 
     await redis_manager.close()
     routes.executor = None
+    routes.redis_manager = None
     logger.info("Brand Equity Calculator shut down")
 
 
