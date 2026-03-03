@@ -1,6 +1,7 @@
-"""Send brand equity PDF report via Mailgun HTTP API."""
+"""Send brand equity PDF report via Mailgun HTTP API (async)."""
 
 import logging
+from enum import Enum
 
 import httpx
 
@@ -11,21 +12,30 @@ logger = logging.getLogger(__name__)
 MAILGUN_API_URL = "https://api.mailgun.net/v3/{domain}/messages"
 
 
-def send_report_email(
+class EmailResult(Enum):
+    """Outcome of an email send attempt."""
+
+    SUCCESS = "success"
+    NOT_CONFIGURED = "not_configured"
+    SEND_FAILED = "send_failed"
+
+
+async def send_report_email(
     to_email: str,
     company_name: str,
     overall_score: int,
     pdf_bytes: bytes,
-) -> bool:
+) -> EmailResult:
     """Send the brand equity PDF report via Mailgun.
 
-    Returns True on success, False on failure (non-fatal).
+    Returns an EmailResult enum so callers can differentiate between
+    misconfiguration and transient send failures.
     """
     if not settings.MAILGUN_API_KEY or not settings.MAILGUN_DOMAIN:
         logger.warning(
             "Mailgun not configured — cannot send email to %s", to_email
         )
-        return False
+        return EmailResult.NOT_CONFIGURED
 
     url = MAILGUN_API_URL.format(domain=settings.MAILGUN_DOMAIN)
     filename = f"brand-equity-{company_name.lower().replace(' ', '-')}.pdf"
@@ -47,25 +57,25 @@ def send_report_email(
     )
 
     try:
-        response = httpx.post(
-            url,
-            auth=("api", settings.MAILGUN_API_KEY),
-            data={
-                "from": settings.MAILGUN_FROM_EMAIL,
-                "to": [to_email],
-                "subject": (
-                    f"Brand Equity Report: {company_name} "
-                    f"(Score: {overall_score}/100)"
-                ),
-                "text": body_text,
-            },
-            files={"attachment": (filename, pdf_bytes, "application/pdf")},
-            timeout=30.0,
-        )
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                url,
+                auth=("api", settings.MAILGUN_API_KEY),
+                data={
+                    "from": settings.MAILGUN_FROM_EMAIL,
+                    "to": [to_email],
+                    "subject": (
+                        f"Brand Equity Report: {company_name} "
+                        f"(Score: {overall_score}/100)"
+                    ),
+                    "text": body_text,
+                },
+                files={"attachment": (filename, pdf_bytes, "application/pdf")},
+            )
 
         if response.status_code == 200:
             logger.info("Report emailed to %s for %s via Mailgun", to_email, company_name)
-            return True
+            return EmailResult.SUCCESS
 
         logger.error(
             "Mailgun API error %d for %s: %s",
@@ -73,7 +83,7 @@ def send_report_email(
             to_email,
             response.text[:300],
         )
-        return False
+        return EmailResult.SEND_FAILED
 
     except Exception as exc:
         logger.error(
@@ -82,4 +92,4 @@ def send_report_email(
             exc,
             exc_info=True,
         )
-        return False
+        return EmailResult.SEND_FAILED

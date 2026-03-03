@@ -50,6 +50,19 @@ class RedisManager:
             logger.warning("Redis rate-limit check failed — allowing request")
             return True  # Fail open
 
+    async def check_export_rate_limit(self, client_ip: str) -> bool:
+        """Return True if the IP is within the export rate limit (3/min)."""
+        try:
+            r = await self._get_redis()
+            key = f"equity:export-rate:{client_ip}"
+            count = await r.incr(key)
+            if count == 1:
+                await r.expire(key, 60)
+            return count <= 3
+        except Exception:
+            logger.warning("Redis export rate-limit check failed — allowing request")
+            return True  # Fail open
+
     # ── Result caching ──
 
     @staticmethod

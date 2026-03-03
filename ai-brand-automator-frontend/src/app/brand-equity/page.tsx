@@ -511,6 +511,7 @@ export default function BrandEquityPage() {
                 }}
                 className="flex flex-col sm:flex-row gap-3"
               >
+                <label htmlFor="be-export-email" className="sr-only">Email address for PDF report</label>
                 <input
                   type="email"
                   required

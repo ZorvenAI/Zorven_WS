@@ -49,3 +49,6 @@ db.sqlite3-journal
 .DS_Store
 Thumbs.db
 .test_token
+
+# Claude Code worktrees
+.claude/worktrees/

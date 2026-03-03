@@ -9,8 +9,13 @@ logger = logging.getLogger(__name__)
 
 
 def _safe(text: str) -> str:
-    """Replace Unicode characters unsupported by Helvetica with ASCII equivalents."""
-    return (
+    """Replace Unicode characters unsupported by Helvetica with ASCII equivalents.
+
+    First replaces common Unicode punctuation with readable ASCII, then
+    encodes to latin-1 with replacement to catch any remaining non-Latin-1
+    characters (e.g. accented letters beyond latin-1, CJK, emoji).
+    """
+    cleaned = (
         text.replace("\u2014", "-")  # em dash
         .replace("\u2013", "-")  # en dash
         .replace("\u2018", "'")  # left single quote
@@ -21,6 +26,7 @@ def _safe(text: str) -> str:
         .replace("\u2022", "-")  # bullet
         .replace("\u00b7", "-")  # middle dot
     )
+    return cleaned.encode("latin-1", errors="replace").decode("latin-1")
 
 
 def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
@@ -174,4 +180,7 @@ def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
     )
     pdf.cell(0, 5, "https://aibrandautomator.com", new_x="LMARGIN", new_y="NEXT")
 
-    return bytes(pdf.output())
+    pdf_bytes = pdf.output()
+    if isinstance(pdf_bytes, str):
+        pdf_bytes = pdf_bytes.encode("latin-1")
+    return bytes(pdf_bytes)
