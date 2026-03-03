@@ -8,6 +8,21 @@ from fpdf import FPDF
 logger = logging.getLogger(__name__)
 
 
+def _safe(text: str) -> str:
+    """Replace Unicode characters unsupported by Helvetica with ASCII equivalents."""
+    return (
+        text.replace("\u2014", "-")  # em dash
+        .replace("\u2013", "-")  # en dash
+        .replace("\u2018", "'")  # left single quote
+        .replace("\u2019", "'")  # right single quote
+        .replace("\u201c", '"')  # left double quote
+        .replace("\u201d", '"')  # right double quote
+        .replace("\u2026", "...")  # ellipsis
+        .replace("\u2022", "-")  # bullet
+        .replace("\u00b7", "-")  # middle dot
+    )
+
+
 def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
     """Generate a professional PDF report from brand equity results.
 
@@ -34,7 +49,9 @@ def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
     # ── Company + Overall Score ──
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, result.get("company_name", ""), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(
+        0, 10, _safe(result.get("company_name", "")), new_x="LMARGIN", new_y="NEXT"
+    )
     pdf.set_font("Helvetica", "B", 28)
     score = result.get("overall_score", 0)
     pdf.cell(0, 14, f"Overall Score: {score}/100", new_x="LMARGIN", new_y="NEXT")
@@ -50,18 +67,20 @@ def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
         pdf.cell(
             0,
             7,
-            f"{dim.get('name', '')} — {dim.get('score', 0)}/100 (Weight: {int(dim.get('weight', 0) * 100)}%)",
+            _safe(
+                f"{dim.get('name', '')} - {dim.get('score', 0)}/100 (Weight: {int(dim.get('weight', 0) * 100)}%)"
+            ),
             new_x="LMARGIN",
             new_y="NEXT",
         )
         pdf.set_font("Helvetica", "", 10)
         rationale = dim.get("rationale", "")
         if rationale:
-            pdf.multi_cell(0, 5, rationale)
+            pdf.multi_cell(0, 5, _safe(rationale))
         factors = dim.get("key_factors", [])
         if factors:
             pdf.set_font("Helvetica", "I", 9)
-            pdf.multi_cell(0, 5, "Key factors: " + ", ".join(factors))
+            pdf.multi_cell(0, 5, _safe("Key factors: " + ", ".join(factors)))
         pdf.ln(3)
 
     # ── Competitor Analysis ──
@@ -81,15 +100,15 @@ def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
             pdf.cell(
                 0,
                 7,
-                f"{label} — Score: {comp.get('estimated_score', 0)}/100",
+                _safe(f"{label} - Score: {comp.get('estimated_score', 0)}/100"),
                 new_x="LMARGIN",
                 new_y="NEXT",
             )
             pdf.set_font("Helvetica", "", 10)
             for s in comp.get("strengths", []):
-                pdf.cell(0, 5, f"  + {s}", new_x="LMARGIN", new_y="NEXT")
+                pdf.cell(0, 5, _safe(f"  + {s}"), new_x="LMARGIN", new_y="NEXT")
             for w in comp.get("weaknesses", []):
-                pdf.cell(0, 5, f"  - {w}", new_x="LMARGIN", new_y="NEXT")
+                pdf.cell(0, 5, _safe(f"  - {w}"), new_x="LMARGIN", new_y="NEXT")
             pdf.ln(3)
 
     # ── Formula ──
@@ -100,7 +119,7 @@ def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
         pdf.cell(0, 8, "How We Calculated This", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
         pdf.set_font("Courier", "", 9)
-        pdf.multi_cell(0, 5, formula)
+        pdf.multi_cell(0, 5, _safe(formula))
         pdf.ln(4)
 
     # ── Derivation ──
@@ -110,7 +129,7 @@ def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
         pdf.cell(0, 8, "Step-by-Step Derivation", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
         pdf.set_font("Helvetica", "", 10)
-        pdf.multi_cell(0, 5, derivation)
+        pdf.multi_cell(0, 5, _safe(derivation))
         pdf.ln(4)
 
     # ── Limitations ──
@@ -121,7 +140,7 @@ def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
         pdf.ln(2)
         pdf.set_font("Helvetica", "", 10)
         for lim in limitations:
-            pdf.multi_cell(0, 5, f"• {lim}")
+            pdf.multi_cell(0, 5, _safe(f"- {lim}"))
             pdf.ln(1)
         pdf.ln(3)
 
@@ -133,7 +152,7 @@ def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
         pdf.ln(2)
         pdf.set_font("Helvetica", "", 10)
         for i, rec in enumerate(recs, 1):
-            pdf.multi_cell(0, 5, f"{i}. {rec}")
+            pdf.multi_cell(0, 5, _safe(f"{i}. {rec}"))
             pdf.ln(1)
 
     # ── Footer ──
