@@ -163,9 +163,11 @@ class SocialExecutor:
                 detail="Viewers cannot publish social content",
             )
 
-        # 7. Adapt blog to social posts
+        # 7. Adapt blog to social posts (with optional skill context from orchestrator)
+        skill_context = request.config.get("skill_context", "")
         adapted_posts = await self._adapter.adapt(
-            blog_content, seo_meta, persona, platforms
+            blog_content, seo_meta, persona, platforms,
+            skill_context=skill_context,
         )
         await self._emit_trace(
             job_id,

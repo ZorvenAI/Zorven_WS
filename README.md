@@ -66,6 +66,30 @@ A Django REST Framework backend with Next.js frontend and 6 FastAPI agent micros
 | Social Agent | 8060 | Platform-specific post adaptation, publishing via MCP |
 | RAG Uploader Agent | 8070 | Persists documents to Vertex AI RAG Store via ingestion pipeline |
 
+### Dynamic Skill Loading (NEW ✅)
+
+Runtime skill system that dynamically injects contextual instructions into agent LLM prompts based on user intent. Skills are `.md` files loaded at orchestrator startup — adding a new skill requires no code changes.
+
+| Skill | Target Agent | Priority | Purpose | Example Trigger |
+|-------|-------------|----------|---------|-----------------|
+| persona-enforcer | blog_author | 15 | Tenant brand tone enforcement (Corporate/Playful/Technical) | *"Write a blog post about..."* |
+| geo-citation-manager | blog_author | 12 | Prioritize tenant KB citations over public web sources | *"Write a research-backed article..."* |
+| seo-content-guidelines | blog_author | 10 | SEO optimization, keyword placement, E-E-A-T signals | *"Write an SEO-optimized blog..."* |
+| brand-voice-consistency | blog_author, social_promoter | 8 | Consistent brand voice across content | *"Create brand-aligned content..."* |
+| citation-quality | blog_author | 5 | Source quality standards, inline citation format | *"Write a data-driven article..."* |
+| social-tenant-orchestrator | social_promoter | 12 | Role-based publishing (ADMIN→publish, EDITOR→draft) | *"Publish this to LinkedIn..."* |
+| social-platform-best-practices | social_promoter | 10 | Platform-specific engagement tactics | *"Promote on social media..."* |
+| knowledge-retrieval-tool | default_agent | 10 | Vertex AI Search integration, chunk quality | *"Search my documents for..."* |
+| context-synthesizer | default_agent | 8 | RAG + chat history blending, answer relevancy | *"What does our brand guide say..."* |
+| competitive-analysis-methodology | valuation_logic, gap_analyzer | 10 | ISO 10668 framework, competitive gap analysis | *"Analyze our competitive position..."* |
+| manifest-ui-mapper | manager | 10 | Generate UI schema for frontend chart rendering | *"Run a brand analysis report..."* |
+| discovery-event-tracer | web_research | 10 | Real-time browsing trace events for ThoughtTrace UI | *"Research Tesla's market..."* |
+| smart-titler | rag_uploader | 10 | Descriptive filenames for generic uploads | *"Archive uploaded documents..."* |
+| ingestion-bridge | rag_uploader | 8 | Tenant-scoped ingestion pipeline payload formatting | *"Store this file in RAG index..."* |
+| session-titler | chat_titler | 10 | 3-5 word session titles from user intent | *(Auto-triggered after first response)* |
+
+> **15 skills** across all 8 agents. See [docs/SKILLS_REFERENCE.md](docs/SKILLS_REFERENCE.md) for full details.
+
 ### Media Curation Service ✅
 - 🎬 **Multi-format Processing** - Documents, images, video, and audio
 - 🔍 **AI Enrichment** - Entity extraction, summarization, keyword generation via Gemini

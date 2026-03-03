@@ -49,6 +49,7 @@ class CompetitiveGapAnalyzer:
         previous_outputs: dict[str, Any],
         config: dict[str, Any],
         gemini_client: Any | None = None,
+        skill_context: str = "",
     ) -> dict[str, Any]:
         """
         Extract competitor strengths/weaknesses from discovery findings.
@@ -57,6 +58,7 @@ class CompetitiveGapAnalyzer:
             previous_outputs: Outputs from upstream nodes (discovery findings).
             config: Analysis configuration.
             gemini_client: Optional Gemini client for AI analysis.
+            skill_context: Optional skill instructions from orchestrator.
 
         Returns:
             Dict with strengths, weaknesses, gaps, and market_opportunities.
@@ -73,7 +75,10 @@ class CompetitiveGapAnalyzer:
             }
 
         if gemini_client:
-            return await self._ai_analysis(discovery_data, config, gemini_client)
+            return await self._ai_analysis(
+                discovery_data, config, gemini_client,
+                skill_context=skill_context,
+            )
         return self._rule_based_analysis(discovery_data)
 
     def _extract_discovery_data(self, previous_outputs: dict[str, Any]) -> list[str]:
@@ -146,6 +151,7 @@ class CompetitiveGapAnalyzer:
         findings: list[str],
         config: dict[str, Any],
         gemini_client: Any,
+        skill_context: str = "",
     ) -> dict[str, Any]:
         """AI-powered competitive gap analysis using Gemini."""
         try:
@@ -156,6 +162,10 @@ class CompetitiveGapAnalyzer:
                 "2. Competitor weaknesses (list)\n"
                 "3. Competitive gaps and opportunities (list)\n"
                 "4. Market opportunities for differentiation (list)\n\n"
+            )
+            if skill_context:
+                prompt += f"{skill_context}\n\n"
+            prompt += (
                 f"Findings:\n{findings_text}\n\n"
                 "Return a structured analysis with clear, actionable items."
             )

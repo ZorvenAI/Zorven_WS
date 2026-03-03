@@ -79,6 +79,9 @@ class UploaderExecutor:
                 findings=["Rate limit exceeded. Please try again later."],
             )
 
+        # Extract skill context from orchestrator config (if present)
+        skill_context = request.config.get("skill_context", "")
+
         # Resolve tenant context
         tc = request.tenant_context
         if isinstance(tc, dict):
@@ -158,7 +161,9 @@ class UploaderExecutor:
                 job_id,
                 f"Analyzing '{resolved.file_name}' to generate a descriptive title...",
             )
-            custom_title = await self._smart_titler.title(resolved.file_name)
+            custom_title = await self._smart_titler.title(
+                resolved.file_name, skill_context=skill_context
+            )
             was_renamed = custom_title != resolved.file_name
 
             if was_renamed:

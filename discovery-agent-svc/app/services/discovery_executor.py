@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from app.api.schemas import ExecuteRequest, ExecuteResponse, SourceItem
 from app.cache.redis_manager import RedisManager
 from app.core.config import settings
+from app.messaging.kafka_producer import TraceProducer
 from app.scrapers.browser_engine import BrowserEngine
 from app.scrapers.data_cleaner import DataCleaner
 from app.scrapers.search_engine import SearchEngine
@@ -35,11 +36,13 @@ class DiscoveryExecutor:
         browser_engine: BrowserEngine,
         data_cleaner: DataCleaner,
         redis_manager: Optional[RedisManager] = None,
+        trace_producer: Optional[TraceProducer] = None,
     ) -> None:
         self.search_engine = search_engine
         self.browser_engine = browser_engine
         self.data_cleaner = data_cleaner
         self.redis_manager = redis_manager
+        self.trace_producer = trace_producer
 
     async def execute(
         self,
@@ -55,6 +58,10 @@ class DiscoveryExecutor:
         4. Scrape and clean each result URL
         5. Return structured response
         """
+        # Extract skill context and job_id for trace events
+        skill_context = request.config.get("skill_context", "")
+        job_id = request.input_context.get("job_id", "")
+
         # Build the search query
         query = self._build_query(request)
         logger.info("Discovery query for tenant %s: %s", tenant_id, query[:100])
@@ -73,6 +80,7 @@ class DiscoveryExecutor:
                 )
 
         # Search
+        await self._emit_trace(job_id, f"Searching for: {query[:80]}")
         search_results = await self.search_engine.search(
             query, max_results=settings.MAX_SCRAPE_URLS
         )
@@ -81,6 +89,7 @@ class DiscoveryExecutor:
         sources: list[SourceItem] = []
         findings: list[str] = []
         raw_parts: list[str] = []
+        total_urls = len(search_results)
 
         for i, result in enumerate(search_results):
             url = result.get("url", "")
@@ -90,7 +99,12 @@ class DiscoveryExecutor:
             if not url:
                 continue
 
-            logger.debug("Scraping %d/%d: %s", i + 1, len(search_results), url)
+            logger.debug("Scraping %d/%d: %s", i + 1, total_urls, url)
+            await self._emit_trace(
+                job_id,
+                f"Browsing ({i + 1}/{total_urls}): {title or url}",
+                metadata={"action": "navigate", "url": url},
+            )
 
             # Scrape the URL
             scrape_result = await self.browser_engine.scrape(url, tenant_id)
@@ -133,9 +147,21 @@ class DiscoveryExecutor:
                     findings.append(snippet)
                     sources.append(SourceItem(type="web", title=title or url, url=url))
                 logger.debug("Scraping failed for %s, using snippet", url)
+                await self._emit_trace(
+                    job_id,
+                    f"Could not access: {title or url}",
+                    metadata={"action": "scrape_failed", "url": url},
+                )
 
         # Build recommendations based on findings
         recommendations = self._build_recommendations(query, findings)
+
+        await self._emit_trace(
+            job_id,
+            f"Discovery complete. Found {len(sources)} source(s) "
+            f"with {len(findings)} finding(s).",
+            status="COMPLETED",
+        )
 
         return ExecuteResponse(
             query=query,
@@ -149,6 +175,22 @@ class DiscoveryExecutor:
         """Clean up resources."""
         if self.redis_manager:
             await self.redis_manager.close()
+        if self.trace_producer:
+            await self.trace_producer.stop()
+
+    async def _emit_trace(
+        self,
+        job_id: str,
+        message: str,
+        status: str = "PROCESSING",
+        metadata: Optional[dict] = None,
+    ) -> None:
+        """Emit a trace event for ThoughtTrace UI (non-fatal)."""
+        if not self.trace_producer or not job_id:
+            return
+        await self.trace_producer.send_step(
+            job_id=job_id, message=message, status=status, metadata=metadata,
+        )
 
     @staticmethod
     def _build_query(request: ExecuteRequest) -> str:

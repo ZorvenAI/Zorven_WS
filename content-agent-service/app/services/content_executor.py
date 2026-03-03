@@ -170,9 +170,11 @@ class ContentExecutor:
 
         await self._trace(job_id, "Writing blog post...")
 
-        # 7. Blog authoring
+        # 7. Blog authoring (with optional skill context from orchestrator)
+        skill_context = request.config.get("skill_context", "")
         blog_content = await self.blog_author.author(
-            topic, raw_context, brand_persona, seo_data, citations
+            topic, raw_context, brand_persona, seo_data, citations,
+            skill_context=skill_context,
         )
 
         await self._trace(job_id, "Generating FAQ schema...")

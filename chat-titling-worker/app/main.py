@@ -9,6 +9,7 @@ and PATCHes them back to the Django backend.
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
@@ -26,6 +27,40 @@ from app.services.api_client import CoreApiClient
 
 logger = logging.getLogger(__name__)
 
+_SKILLS_DIR = Path(__file__).parent.parent / "skills"
+
+
+def _load_skill_context() -> str:
+    """Load skill Markdown from the skills directory (fail-open).
+
+    Reads all .md files, strips YAML frontmatter, and concatenates
+    the Markdown body.  Returns empty string if no skills found.
+    """
+    if not _SKILLS_DIR.is_dir():
+        logger.info("No skills directory found at %s", _SKILLS_DIR)
+        return ""
+
+    parts: list[str] = []
+    for path in sorted(_SKILLS_DIR.glob("*.md")):
+        try:
+            content = path.read_text(encoding="utf-8")
+            if content.startswith("---"):
+                # Strip YAML frontmatter
+                split = content.split("---", 2)
+                if len(split) >= 3:
+                    body = split[2].strip()
+                    if body:
+                        parts.append(body)
+                        logger.info("Loaded skill: %s", path.name)
+            else:
+                parts.append(content.strip())
+        except Exception:
+            logger.warning("Failed to read skill file: %s", path, exc_info=True)
+
+    if parts:
+        logger.info("Loaded %d skill(s) for title generation", len(parts))
+    return "\n\n".join(parts)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -40,10 +75,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize Redis manager
     redis_manager = RedisManager(settings.REDIS_URL)
 
+    # Load skill context from skills directory (fail-open)
+    skill_context = _load_skill_context()
+
     # Initialize title generator
     title_generator = TitleGenerator(
         api_key=settings.GOOGLE_API_KEY,
         model_name=settings.GEMINI_MODEL,
+        skill_context=skill_context,
     )
 
     if settings.GOOGLE_API_KEY:

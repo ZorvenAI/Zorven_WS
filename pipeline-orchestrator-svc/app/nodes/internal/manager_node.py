@@ -107,7 +107,90 @@ class ManagerNode(BaseNode):
         if valuation_data:
             result_data["valuation"] = valuation_data
 
+        # Generate UI schema hints when manifest-ui-mapper skill is active
+        skill_context = self.config.get("skill_context", "") if self.config else ""
+        if skill_context:
+            result_data["ui_schema"] = self._build_ui_schema(
+                outputs, bsi_data, valuation_data
+            )
+
         return {"result_data": result_data}
+
+    @staticmethod
+    def _build_ui_schema(
+        outputs: dict[str, Any],
+        bsi_data: dict[str, Any] | None,
+        valuation_data: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Build a UI schema object based on available pipeline results.
+
+        Tells the frontend which charts and visualizations to render.
+        """
+        charts: list[dict[str, str]] = []
+
+        # Brand equity / valuation pipeline
+        if bsi_data:
+            charts.append(
+                {"type": "radar_chart", "data_key": "bsi.pillars",
+                 "label": "Brand Strength Pillars"}
+            )
+            charts.append(
+                {"type": "score_gauge", "data_key": "score",
+                 "max": "100", "label": "Overall BSI Score"}
+            )
+        if valuation_data:
+            charts.append(
+                {"type": "valuation_card", "data_key": "valuation.brand_value_npv",
+                 "label": "Brand Value"}
+            )
+
+        # Content pipeline
+        has_blog = any(
+            isinstance(o, dict) and "blog_content" in o
+            for o in outputs.values()
+        )
+        has_social = any(
+            isinstance(o, dict) and "adapted_posts" in o
+            for o in outputs.values()
+        )
+        if has_blog:
+            charts.append(
+                {"type": "word_count_badge", "data_key": "word_count"}
+            )
+            charts.append(
+                {"type": "seo_score_card", "data_key": "seo_meta"}
+            )
+        if has_social:
+            charts.append(
+                {"type": "platform_cards", "data_key": "adapted_posts"}
+            )
+
+        # Determine dashboard type
+        if bsi_data or valuation_data:
+            schema_type = "brand_equity_dashboard"
+        elif has_blog or has_social:
+            schema_type = "content_dashboard"
+        elif any(
+            isinstance(o, dict) and o.get("sources")
+            for o in outputs.values()
+        ):
+            schema_type = "research_dashboard"
+            charts.append(
+                {"type": "findings_list", "data_key": "findings"}
+            )
+            charts.append(
+                {"type": "sources_table", "data_key": "sources"}
+            )
+        else:
+            schema_type = "generic_result"
+            charts.append(
+                {"type": "findings_list", "data_key": "findings"}
+            )
+            charts.append(
+                {"type": "recommendations_list", "data_key": "recommendations"}
+            )
+
+        return {"type": schema_type, "charts": charts}
 
     @staticmethod
     def _extract_bsi(outputs: dict[str, Any]) -> dict[str, Any] | None:
