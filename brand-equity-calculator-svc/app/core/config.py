@@ -32,5 +32,13 @@ class Settings(BaseSettings):
     # Cache TTL (24 hours)
     RESULT_CACHE_TTL: int = 86400
 
+    # SMTP for sending PDF reports (empty = email disabled)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "brand-equity@aibrandautomator.com"
+    SMTP_FROM_NAME: str = "AI Brand Automator"
+
 
 settings = Settings()

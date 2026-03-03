@@ -128,6 +128,11 @@ export default function BrandEquityPage() {
   const [result, setResult] = useState<BrandEquityResult | null>(null);
   const [error, setError] = useState('');
 
+  // Email export
+  const [exportEmail, setExportEmail] = useState('');
+  const [exportState, setExportState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [exportMessage, setExportMessage] = useState('');
+
   // Form fields
   const [companyName, setCompanyName] = useState('');
   const [address, setAddress] = useState('');
@@ -470,6 +475,71 @@ export default function BrandEquityPage() {
                 </ul>
               </div>
             )}
+
+            {/* Email Export */}
+            <div className="glass-card p-6 sm:p-8">
+              <h3 className="text-lg font-heading font-semibold text-white mb-2">Export Report</h3>
+              <p className="text-sm text-brand-silver/60 mb-4">
+                Enter your email to receive the full brand equity report as a PDF.
+              </p>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!exportEmail || !result) return;
+                  setExportState('sending');
+                  setExportMessage('');
+                  try {
+                    const apiUrl = process.env.NEXT_PUBLIC_BRAND_EQUITY_API_URL;
+                    if (!apiUrl) throw new Error('API not configured');
+                    const res = await fetch(`${apiUrl}/v1/export`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ email: exportEmail, result }),
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                      setExportState('sent');
+                      setExportMessage(data.message || 'Report sent!');
+                    } else {
+                      setExportState('error');
+                      setExportMessage(data.detail || 'Failed to send report.');
+                    }
+                  } catch {
+                    setExportState('error');
+                    setExportMessage('Failed to send report. Please try again.');
+                  }
+                }}
+                className="flex flex-col sm:flex-row gap-3"
+              >
+                <input
+                  type="email"
+                  required
+                  value={exportEmail}
+                  onChange={(e) => { setExportEmail(e.target.value); if (exportState !== 'idle') setExportState('idle'); }}
+                  placeholder="your@email.com"
+                  className="input-dark flex-1"
+                  id="be-export-email"
+                />
+                <button
+                  type="submit"
+                  disabled={exportState === 'sending' || exportState === 'sent' || !exportEmail}
+                  className="btn-primary px-6 py-2.5 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {exportState === 'sending' && (
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  )}
+                  {exportState === 'sent' ? 'Sent!' : exportState === 'sending' ? 'Sending...' : 'Send PDF Report'}
+                </button>
+              </form>
+              {exportMessage && (
+                <p className={`text-sm mt-3 ${exportState === 'sent' ? 'text-brand-mint' : 'text-red-400'}`}>
+                  {exportMessage}
+                </p>
+              )}
+            </div>
 
             {/* Registration CTA */}
             <div className="glass-card p-8 sm:p-10 text-center border-brand-electric/20">

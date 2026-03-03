@@ -69,6 +69,22 @@ class BrandEquityResponse(BaseModel):
     methodology: str = Field(default="ISO 20671:2019", description="Standard used")
 
 
+class ExportRequest(BaseModel):
+    """Request to export brand equity results as PDF and email them."""
+
+    email: str = Field(..., min_length=5, max_length=254, description="Recipient email")
+    result: BrandEquityResponse = Field(
+        ..., description="The brand equity result to export"
+    )
+
+
+class ExportResponse(BaseModel):
+    """Response after exporting/emailing the report."""
+
+    success: bool
+    message: str
+
+
 class HealthResponse(BaseModel):
     status: str = "healthy"
     version: str = "0.1.0"
