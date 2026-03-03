@@ -133,7 +133,7 @@ class BrandEquityExecutor:
         overall = raw.get("overall_score")
         if overall is None and dimensions:
             overall = round(sum(d.score * d.weight for d in dimensions))
-        overall = max(0, min(100, round(overall or 0)))
+        overall = max(0, min(100, int(overall or 0)))
 
         competitors = [
             Competitor(

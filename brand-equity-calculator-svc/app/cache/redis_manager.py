@@ -42,12 +42,10 @@ class RedisManager:
         try:
             r = await self._get_redis()
             key = f"equity:rate:{client_ip}"
-            # Atomic incr + expire to avoid race where TTL is never set
-            pipe = r.pipeline()
-            pipe.incr(key)
-            pipe.expire(key, 60)
-            count, _ = await pipe.execute()
-            return int(count) <= settings.RATE_LIMIT_PER_MINUTE
+            count = await r.incr(key)
+            if count == 1:
+                await r.expire(key, 60)
+            return count <= settings.RATE_LIMIT_PER_MINUTE
         except Exception:
             logger.warning("Redis rate-limit check failed — allowing request")
             return True  # Fail open

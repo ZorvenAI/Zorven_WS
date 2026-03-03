@@ -39,17 +39,11 @@ async def calculate(
             detail="Brand equity analysis is temporarily unavailable. Please try again later.",
         )
 
-    # Determine client IP for rate limiting.
-    # Only trust X-Forwarded-For from a known trusted proxy (Kong sets
-    # X-Kong-Proxy: true). Otherwise use the direct client address to
-    # prevent spoofing by malicious callers.
-    client_ip = http_request.client.host if http_request.client else "unknown"
-    trusted_proxy = http_request.headers.get("x-kong-proxy", "").lower() == "true"
-    if trusted_proxy:
-        forwarded = http_request.headers.get("x-forwarded-for")
-        if forwarded:
-            forwarded_ips = [ip.strip() for ip in forwarded.split(",") if ip.strip()]
-            if forwarded_ips:
-                client_ip = forwarded_ips[0]
-
+    # Prefer X-Forwarded-For (set by reverse proxies like Kong/Railway)
+    # over request.client.host which is typically the proxy's IP.
+    forwarded = http_request.headers.get("x-forwarded-for")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+    else:
+        client_ip = http_request.client.host if http_request.client else "unknown"
     return await executor.calculate(request, client_ip)
