@@ -2,6 +2,7 @@
 Title generator — generates concise session titles using Gemini Flash.
 
 Falls back to word truncation when the API key is empty or on error.
+Supports optional skill_context for dynamic prompt augmentation.
 """
 
 import asyncio
@@ -14,9 +15,15 @@ logger = logging.getLogger(__name__)
 class TitleGenerator:
     """Generates concise 3-5 word titles for chat sessions."""
 
-    def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash") -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model_name: str = "gemini-2.0-flash",
+        skill_context: str = "",
+    ) -> None:
         self.api_key = api_key
         self.model_name = model_name
+        self.skill_context = skill_context
         self._model = None
 
         if api_key:
@@ -46,8 +53,10 @@ class TitleGenerator:
                 "generate a 3 to 5-word title for the chat session. "
                 "Do not use punctuation. Do not use quotes. "
                 "Example: 'Tesla Q4 Revenue Review'\n\n"
-                f"Input: {sanitized_message}"
             )
+            if self.skill_context:
+                prompt += f"{self.skill_context}\n\n"
+            prompt += f"Input: {sanitized_message}"
             if sanitized_response:
                 prompt += f"\n\nAssistant response context: {sanitized_response}"
 
