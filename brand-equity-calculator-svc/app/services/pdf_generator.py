@@ -76,10 +76,12 @@ def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
         pdf.set_font("Helvetica", "", 10)
         rationale = dim.get("rationale", "")
         if rationale:
+            pdf.set_x(pdf.l_margin)
             pdf.multi_cell(0, 5, _safe(rationale))
         factors = dim.get("key_factors", [])
         if factors:
             pdf.set_font("Helvetica", "I", 9)
+            pdf.set_x(pdf.l_margin)
             pdf.multi_cell(0, 5, _safe("Key factors: " + ", ".join(factors)))
         pdf.ln(3)
 
@@ -119,6 +121,7 @@ def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
         pdf.cell(0, 8, "How We Calculated This", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
         pdf.set_font("Courier", "", 9)
+        pdf.set_x(pdf.l_margin)
         pdf.multi_cell(0, 5, _safe(formula))
         pdf.ln(4)
 
@@ -129,6 +132,7 @@ def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
         pdf.cell(0, 8, "Step-by-Step Derivation", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
         pdf.set_font("Helvetica", "", 10)
+        pdf.set_x(pdf.l_margin)
         pdf.multi_cell(0, 5, _safe(derivation))
         pdf.ln(4)
 
@@ -140,6 +144,7 @@ def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
         pdf.ln(2)
         pdf.set_font("Helvetica", "", 10)
         for lim in limitations:
+            pdf.set_x(pdf.l_margin)
             pdf.multi_cell(0, 5, _safe(f"- {lim}"))
             pdf.ln(1)
         pdf.ln(3)
@@ -152,6 +157,7 @@ def generate_brand_equity_pdf(result: dict[str, Any]) -> bytes:
         pdf.ln(2)
         pdf.set_font("Helvetica", "", 10)
         for i, rec in enumerate(recs, 1):
+            pdf.set_x(pdf.l_margin)
             pdf.multi_cell(0, 5, _safe(f"{i}. {rec}"))
             pdf.ln(1)
 
