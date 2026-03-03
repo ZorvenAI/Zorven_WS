@@ -27,3 +27,5 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
+// rebuild trigger
