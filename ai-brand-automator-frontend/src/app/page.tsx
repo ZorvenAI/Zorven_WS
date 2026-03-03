@@ -143,7 +143,7 @@ export default function Home() {
 
           {/* Brand Equity Calculator CTA — inside hero for maximum visibility */}
           <div className={`mt-12 sm:mt-16 max-w-3xl mx-auto transition-all duration-1000 delay-400 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-            <a href="/brand-equity" className="group block glass-card p-6 sm:p-8 text-center border-brand-electric/30 hover:border-brand-electric/60 transition-all hover:shadow-[0_0_40px_rgba(0,245,255,0.15)]">
+            <Link href="/brand-equity" className="group block glass-card p-6 sm:p-8 text-center border-brand-electric/30 hover:border-brand-electric/60 transition-all hover:shadow-[0_0_40px_rgba(0,245,255,0.15)]">
               <div className="flex items-center justify-center gap-3 mb-3">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-mint/10 border border-brand-mint/20 text-xs text-brand-mint font-medium">
                   <span className="w-1.5 h-1.5 bg-brand-mint rounded-full animate-pulse" />
@@ -162,7 +162,7 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
               </span>
-            </a>
+            </Link>
           </div>
 
           {/* Hero Image/Dashboard Preview */}

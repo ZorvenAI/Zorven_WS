@@ -55,11 +55,13 @@ class RedisManager:
     @staticmethod
     def build_cache_key(
         company_name: str,
+        address: str,
+        website: str,
         industry_type: str,
         business_size: str,
         scope: str,
     ) -> str:
-        """Deterministic cache key from normalized inputs."""
+        """Deterministic cache key from ALL normalized inputs."""
         normalized = re.sub(
             r"\s+",
             " ",
@@ -70,7 +72,10 @@ class RedisManager:
                 flags=re.IGNORECASE,
             ),
         ).strip()
-        raw = f"{normalized}|{industry_type.lower()}|{business_size.lower()}|{scope.lower()}"
+        raw = (
+            f"{normalized}|{address.lower().strip()}|{website.lower().strip()}"
+            f"|{industry_type.lower()}|{business_size.lower()}|{scope.lower()}"
+        )
         digest = hashlib.md5(raw.encode()).hexdigest()
         return f"equity:result:{digest}"
 

@@ -39,5 +39,11 @@ async def calculate(
             detail="Brand equity analysis is temporarily unavailable. Please try again later.",
         )
 
-    client_ip = http_request.client.host if http_request.client else "unknown"
+    # Prefer X-Forwarded-For (set by reverse proxies like Kong/Railway)
+    # over request.client.host which is typically the proxy's IP.
+    forwarded = http_request.headers.get("x-forwarded-for")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+    else:
+        client_ip = http_request.client.host if http_request.client else "unknown"
     return await executor.calculate(request, client_ip)

@@ -61,6 +61,8 @@ class BrandEquityExecutor:
         if self.redis_manager:
             cache_key = RedisManager.build_cache_key(
                 request.company_name,
+                request.address,
+                request.website,
                 request.industry_type,
                 request.business_size,
                 request.scope,

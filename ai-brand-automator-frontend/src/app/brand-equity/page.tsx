@@ -144,7 +144,10 @@ export default function BrandEquityPage() {
     setState('loading');
     setError('');
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_BRAND_EQUITY_API_URL || 'http://localhost:8090';
+      const apiUrl = process.env.NEXT_PUBLIC_BRAND_EQUITY_API_URL;
+      if (!apiUrl) {
+        throw new Error('Brand equity API is not configured. Please contact support.');
+      }
       const res = await fetch(`${apiUrl}/v1/calculate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -218,8 +221,9 @@ export default function BrandEquityPage() {
           <form onSubmit={handleSubmit} className="glass-card p-6 sm:p-8 max-w-2xl mx-auto">
             <div className="space-y-5">
               <div>
-                <label className="label-dark">Company Name *</label>
+                <label htmlFor="be-company" className="label-dark">Company Name *</label>
                 <input
+                  id="be-company"
                   type="text" required value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
                   placeholder="e.g. Nike, Apple, your company"
@@ -228,8 +232,9 @@ export default function BrandEquityPage() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className="label-dark">Industry Type *</label>
+                  <label htmlFor="be-industry" className="label-dark">Industry Type *</label>
                   <input
+                    id="be-industry"
                     type="text" required value={industryType}
                     onChange={(e) => setIndustryType(e.target.value)}
                     placeholder="e.g. Technology, Retail, Healthcare"
@@ -237,8 +242,9 @@ export default function BrandEquityPage() {
                   />
                 </div>
                 <div>
-                  <label className="label-dark">Website</label>
+                  <label htmlFor="be-website" className="label-dark">Website</label>
                   <input
+                    id="be-website"
                     type="text" value={website}
                     onChange={(e) => setWebsite(e.target.value)}
                     placeholder="https://example.com"
@@ -247,8 +253,9 @@ export default function BrandEquityPage() {
                 </div>
               </div>
               <div>
-                <label className="label-dark">Address</label>
+                <label htmlFor="be-address" className="label-dark">Address</label>
                 <input
+                  id="be-address"
                   type="text" value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="City, State, Country"
@@ -257,8 +264,9 @@ export default function BrandEquityPage() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className="label-dark">Business Size *</label>
+                  <label htmlFor="be-size" className="label-dark">Business Size *</label>
                   <select
+                    id="be-size"
                     required value={businessSize}
                     onChange={(e) => setBusinessSize(e.target.value)}
                     className="select-dark"
@@ -270,8 +278,9 @@ export default function BrandEquityPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="label-dark">Scope *</label>
+                  <label htmlFor="be-scope" className="label-dark">Scope *</label>
                   <select
+                    id="be-scope"
                     required value={scope}
                     onChange={(e) => setScope(e.target.value)}
                     className="select-dark"
