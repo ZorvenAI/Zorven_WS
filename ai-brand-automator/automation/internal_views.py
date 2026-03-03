@@ -203,12 +203,15 @@ class InternalPublishView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # Strip markdown — social platforms render plain text, not markdown
+        from automation.utils import strip_markdown
+
         # Create ContentCalendar entry
         calendar_entry = ContentCalendar.objects.create(
             tenant_id=tenant_id,
             user=profiles[0].user,
-            title=title,
-            content=content_text,
+            title=strip_markdown(title),
+            content=strip_markdown(content_text),
             media_urls=media_urls or [],
             platforms=[p.platform for p in profiles],
             scheduled_date=timezone.now(),
