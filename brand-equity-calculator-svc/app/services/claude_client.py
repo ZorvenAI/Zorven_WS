@@ -1,6 +1,6 @@
 """Anthropic Claude API wrapper — ISO 20671:2019 brand equity evaluation.
 
-Constructs the system + user prompts, calls Claude Opus 4.6, and
+Constructs the system + user prompts, calls the configured Anthropic Claude model, and
 parses the structured JSON response into a validated dict.
 """
 

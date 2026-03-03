@@ -1,5 +1,7 @@
 """Pydantic request/response models for the brand equity calculator."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -14,10 +16,12 @@ class BrandEquityRequest(BaseModel):
     industry_type: str = Field(
         ..., min_length=1, max_length=100, description="Industry classification"
     )
-    business_size: str = Field(
-        ..., description="micro | small | medium | large | enterprise"
+    business_size: Literal["micro", "small", "medium", "large", "enterprise"] = Field(
+        ..., description="Business size category"
     )
-    scope: str = Field(..., description="local | regional | national | global")
+    scope: Literal["local", "regional", "national", "global"] = Field(
+        ..., description="Geographic scope"
+    )
 
 
 class DimensionScore(BaseModel):
