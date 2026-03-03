@@ -1716,11 +1716,14 @@ def _execute_tool_sync(name: str, arguments: dict) -> dict[str, Any]:
         # Optional tenant context for multi-tenant pipeline usage
         tenant_id = arguments.get("tenant_id")
 
+        # Strip markdown from content — social platforms render plain text
+        from automation.utils import strip_markdown
+
         # Create content
         create_kwargs = {
             "user": user,
-            "title": arguments["title"],
-            "content": arguments["content"],
+            "title": strip_markdown(arguments["title"]),
+            "content": strip_markdown(arguments["content"]),
             "platforms": platforms,
             "scheduled_date": scheduled_date,
             "media_urls": arguments.get("media_urls", []),
