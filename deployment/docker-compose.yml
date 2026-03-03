@@ -844,6 +844,36 @@ services:
     networks:
       - app-network
 
+  # ==========================================================================
+  # Brand Equity Calculator — ISO 20671:2019 brand evaluation (public)
+  # Powered by Claude AI (Anthropic). No auth required.
+  # ==========================================================================
+  brand-equity-calculator:
+    build:
+      context: ../brand-equity-calculator-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-brand-equity
+    environment:
+      - BRAND_EQUITY_REDIS_URL=redis://redis:6379/8
+      - BRAND_EQUITY_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - BRAND_EQUITY_LOG_LEVEL=INFO
+      - BRAND_EQUITY_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+    expose:
+      - "8090"
+    ports:
+      - "8090:8090"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
 # ==========================================================================
 # Volumes
 # ==========================================================================

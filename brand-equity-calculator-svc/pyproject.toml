@@ -1,0 +1,23 @@
+[project]
+name = "brand-equity-calculator-svc"
+version = "0.1.0"
+description = "ISO 20671:2019 brand equity evaluation powered by Claude AI"
+requires-python = ">=3.12"
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+markers = [
+    "integration: integration tests requiring Redis",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true

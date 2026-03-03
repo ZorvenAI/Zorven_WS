@@ -342,6 +342,32 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Brand Equity Calculator CTA */}
+        <section className="py-20 sm:py-28 border-y border-white/5">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-mint/10 border border-brand-mint/20 mb-6">
+              <span className="text-sm text-brand-mint font-medium">Free Tool</span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-heading font-bold text-white mb-4">
+              Know Your Brand&apos;s True Value
+            </h2>
+            <p className="text-lg text-brand-silver/60 mb-8 max-w-2xl mx-auto">
+              Get an instant ISO 20671-compliant brand equity score powered by Claude AI.
+              Understand your brand&apos;s strengths, weaknesses, and opportunities — completely free.
+            </p>
+            <a
+              href="/brand-equity"
+              className="group relative inline-flex items-center gap-2 bg-gradient-to-r from-brand-electric to-brand-ghost text-brand-midnight font-bold px-8 py-4 rounded-xl text-lg transition-all hover:shadow-[0_0_40px_rgba(0,245,255,0.4)] hover:-translate-y-1"
+            >
+              Calculate Brand Equity
+              <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </a>
+            <p className="mt-4 text-sm text-brand-silver/40">No registration required</p>
+          </div>
+        </section>
+
         {/* Testimonials */}
         <section id="testimonials" className="py-20 sm:py-32 bg-gradient-to-b from-transparent via-brand-ghost/5 to-transparent">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
