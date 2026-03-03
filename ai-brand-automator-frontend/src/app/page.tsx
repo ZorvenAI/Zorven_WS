@@ -141,6 +141,30 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Brand Equity Calculator CTA — inside hero for maximum visibility */}
+          <div className={`mt-12 sm:mt-16 max-w-3xl mx-auto transition-all duration-1000 delay-400 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+            <a href="/brand-equity" className="group block glass-card p-6 sm:p-8 text-center border-brand-electric/30 hover:border-brand-electric/60 transition-all hover:shadow-[0_0_40px_rgba(0,245,255,0.15)]">
+              <div className="flex items-center justify-center gap-3 mb-3">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-mint/10 border border-brand-mint/20 text-xs text-brand-mint font-medium">
+                  <span className="w-1.5 h-1.5 bg-brand-mint rounded-full animate-pulse" />
+                  Free Tool
+                </span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-heading font-bold text-white mb-2">
+                Know Your Brand&apos;s True Value
+              </h3>
+              <p className="text-sm text-brand-silver/60 mb-5 max-w-lg mx-auto">
+                Get an instant ISO 20671 brand equity score with competitor analysis — powered by Claude AI. No sign up required.
+              </p>
+              <span className="inline-flex items-center gap-2 bg-gradient-to-r from-brand-electric to-brand-ghost text-brand-midnight font-bold px-8 py-3.5 rounded-xl transition-all group-hover:shadow-[0_0_30px_rgba(0,245,255,0.4)] group-hover:-translate-y-0.5">
+                Calculate Brand Equity — Free
+                <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </span>
+            </a>
+          </div>
+
           {/* Hero Image/Dashboard Preview */}
           <div className={`mt-16 sm:mt-24 relative transition-all duration-1000 delay-500 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}>
             <div className="absolute inset-0 bg-gradient-to-t from-brand-midnight via-transparent to-transparent z-10 pointer-events-none" />
@@ -216,50 +240,6 @@ export default function Home() {
               <div>
                 <div className="text-sm font-medium text-white">156 posts</div>
                 <div className="text-xs text-brand-silver/60">Scheduled</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Brand Equity Calculator CTA — First thing users see after hero */}
-        <section className="relative py-16 sm:py-20 overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-brand-electric/10 via-brand-ghost/10 to-brand-electric/10 animate-pulse" style={{ animationDuration: '4s' }} />
-          <div className="absolute inset-0 border-y border-brand-electric/20" />
-          <div className="relative max-w-4xl mx-auto px-4 sm:px-6">
-            <div className="glass-card p-8 sm:p-12 text-center border-brand-electric/30">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-mint/10 border border-brand-mint/20 mb-6">
-                <span className="w-2 h-2 bg-brand-mint rounded-full animate-pulse" />
-                <span className="text-sm text-brand-mint font-medium">Free Tool — No Sign Up Required</span>
-              </div>
-              <h2 className="text-3xl sm:text-5xl font-heading font-bold text-white mb-4">
-                Know Your Brand&apos;s True Value
-              </h2>
-              <p className="text-lg text-brand-silver/70 mb-8 max-w-2xl mx-auto">
-                Get an instant ISO 20671-compliant brand equity score powered by Claude AI.
-                Understand your strengths, benchmark against competitors, and get actionable recommendations.
-              </p>
-              <a
-                href="/brand-equity"
-                className="group relative inline-flex items-center gap-3 bg-gradient-to-r from-brand-electric to-brand-ghost text-brand-midnight font-bold px-10 py-5 rounded-xl text-lg transition-all hover:shadow-[0_0_50px_rgba(0,245,255,0.5)] hover:-translate-y-1"
-              >
-                Calculate Your Brand Equity — Free
-                <svg className="w-6 h-6 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </a>
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-sm text-brand-silver/50">
-                <span className="flex items-center gap-1.5">
-                  <svg className="w-4 h-4 text-brand-electric" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                  ISO 20671 Standard
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <svg className="w-4 h-4 text-brand-electric" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                  Competitor Analysis
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <svg className="w-4 h-4 text-brand-electric" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                  Powered by Claude AI
-                </span>
               </div>
             </div>
           </div>
