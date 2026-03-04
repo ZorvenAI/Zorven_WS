@@ -235,6 +235,66 @@ class TestCompanyViewSet:
         assert company.vision_statement is not None
         assert company.mission_statement is not None
 
+    def test_generate_onboarding_pdf_creates_asset(
+        self, authenticated_client_with_tenant, company
+    ):
+        """Test generate_onboarding_pdf creates a PDF and BrandAsset record."""
+        company.name = "PDF Test Co"
+        company.industry = "Technology"
+        company.description = "A tech company"
+        company.target_audience = "Developers"
+        company.core_problem = "Slow deployments"
+        company.brand_voice = "professional"
+        company.demographics = "25-45 engineers"
+        company.pain_points = "Manual processes"
+        company.desired_outcomes = "Faster shipping"
+        company.save()
+
+        url = f"/api/v1/companies/{company.id}/generate_onboarding_pdf/"
+        response = authenticated_client_with_tenant.post(url)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["message"] is not None
+        assert response.data["asset"]["file_name"] == "onboarding_data.pdf"
+        assert response.data["asset"]["file_type"] == "document"
+
+        # BrandAsset record should exist in DB
+        assert BrandAsset.objects.filter(
+            company=company, file_name="onboarding_data.pdf"
+        ).exists()
+
+    def test_generate_onboarding_pdf_replaces_existing(
+        self, authenticated_client_with_tenant, company
+    ):
+        """Test that calling generate_onboarding_pdf twice replaces the asset."""
+        company.name = "Replace Test Co"
+        company.industry = "Finance"
+        company.save()
+
+        url = f"/api/v1/companies/{company.id}/generate_onboarding_pdf/"
+
+        # First call
+        response1 = authenticated_client_with_tenant.post(url)
+        assert response1.status_code == status.HTTP_201_CREATED
+
+        # Second call should still succeed (upsert)
+        response2 = authenticated_client_with_tenant.post(url)
+        assert response2.status_code == status.HTTP_201_CREATED
+
+        # Only one onboarding_data.pdf should exist
+        assert (
+            BrandAsset.objects.filter(
+                company=company, file_name="onboarding_data.pdf"
+            ).count()
+            == 1
+        )
+
+    def test_generate_onboarding_pdf_unauthenticated(self, api_client, company):
+        """Test that unauthenticated users cannot generate onboarding PDF."""
+        url = f"/api/v1/companies/{company.id}/generate_onboarding_pdf/"
+        response = api_client.post(url)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
 
 @pytest.mark.django_db
 @pytest.mark.unit

@@ -1,4 +1,5 @@
 import logging
+import io
 import uuid
 import math
 from urllib.parse import urlencode
@@ -56,6 +57,7 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         "destroy": [IsAuthenticated, IsTenantAdmin],
         "generate_brand_strategy": [IsAuthenticated, IsTenantEditor],
         "generate_brand_identity": [IsAuthenticated, IsTenantEditor],
+        "generate_onboarding_pdf": [IsAuthenticated, IsTenantEditor],
     }
 
     def get_queryset(self):
@@ -162,6 +164,210 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
         serializer = self.get_serializer(company)
         return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    def generate_onboarding_pdf(self, request, pk=None):
+        """Generate a PDF summary of all onboarding data and store it
+        in the RAG knowledge base via the data processing pipeline.
+
+        Creates an ``onboarding_data.pdf`` file containing every field
+        collected during the onboarding steps, uploads it to GCS, creates
+        a BrandAsset record, and triggers the ingestion pipeline so the
+        document is indexed alongside other uploaded brand assets.
+        """
+        company = self.get_object()
+        tenant = getattr(request, "tenant", None)
+
+        if not tenant:
+            return Response(
+                {"error": "No tenant context. Please log in again."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # --- Build the PDF with fpdf2 ---
+        from fpdf import FPDF
+
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+
+        # Title
+        pdf.set_font("Helvetica", "B", 20)
+        pdf.cell(0, 12, "Brand Onboarding Summary", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(4)
+
+        def _sanitize(text):
+            """Replace Unicode characters unsupported by Helvetica."""
+            replacements = {
+                "\u2018": "'", "\u2019": "'",   # curly single quotes
+                "\u201c": '"', "\u201d": '"',   # curly double quotes
+                "\u2013": "-", "\u2014": "--",  # en-dash, em-dash
+                "\u2026": "...",                # ellipsis
+                "\u00a0": " ",                  # non-breaking space
+                "\u2022": "-",                  # bullet
+            }
+            for orig, repl in replacements.items():
+                text = text.replace(orig, repl)
+            # Strip any remaining non-latin1 characters as a safety net
+            return text.encode("latin-1", errors="replace").decode("latin-1")
+
+        def _section(title):
+            pdf.set_font("Helvetica", "B", 14)
+            pdf.set_text_color(60, 60, 180)
+            pdf.cell(0, 10, title, new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(0, 0, 0)
+            pdf.ln(1)
+
+        def _field(label, value):
+            if not value:
+                return
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(0, 6, f"{label}:", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", "", 10)
+            # multi_cell handles long text with word-wrapping
+            pdf.multi_cell(0, 5, _sanitize(str(value)))
+            pdf.ln(2)
+
+        # Company Information
+        _section("Company Information")
+        _field("Company Name", company.name)
+        _field("Industry", company.industry)
+        _field("Description", company.description)
+        _field("Core Problem", company.core_problem)
+        _field("Website", company.website)
+
+        # Target Audience
+        _section("Target Audience")
+        _field("Primary Audience", company.target_audience)
+        _field("Demographics", company.demographics)
+        _field("Psychographics", company.psychographics)
+        _field("Pain Points", company.pain_points)
+        _field("Desired Outcomes", company.desired_outcomes)
+
+        # Brand Details
+        _section("Brand Details")
+        _field("Brand Voice", company.brand_voice)
+        _field("Vision Statement", company.vision_statement)
+        _field("Mission Statement", company.mission_statement)
+        _field("Core Values", company.values)
+        _field("Positioning Statement", company.positioning_statement)
+        _field("Tagline", company.tagline)
+        _field("Value Proposition", company.value_proposition)
+        _field("Elevator Pitch", company.elevator_pitch)
+
+        # Brand Identity
+        if (
+            company.color_palette_desc
+            or company.font_recommendations
+            or company.messaging_guide
+        ):
+            _section("Brand Identity")
+            _field("Color Palette", company.color_palette_desc)
+            _field("Font Recommendations", company.font_recommendations)
+            _field("Messaging Guide", company.messaging_guide)
+
+        pdf_bytes = pdf.output()
+
+        # --- Upload to GCS and create BrandAsset ---
+        safe_filename = "onboarding_data.pdf"
+        unique_id = uuid.uuid4().hex[:8]
+        landing_path = f"_landing/{tenant.id}/{unique_id}_{safe_filename}"
+
+        raw_bucket = (
+            tenant.get_raw_bucket() if tenant else gcs_service.bucket_name
+        )
+
+        gcs_uploaded = False
+        try:
+            target_bucket = gcs_service.get_bucket(raw_bucket)
+            if target_bucket:
+                from django.core.files.uploadedfile import SimpleUploadedFile
+
+                pdf_file = SimpleUploadedFile(
+                    safe_filename, pdf_bytes, content_type="application/pdf"
+                )
+                gcs_service.upload_file(
+                    pdf_file,
+                    landing_path,
+                    "application/pdf",
+                    bucket_name=raw_bucket,
+                )
+                gcs_uploaded = True
+            else:
+                require_gcs = getattr(settings, "REQUIRE_GCS_UPLOAD", False)
+                if require_gcs:
+                    logger.error("GCS is required but not configured")
+                    return Response(
+                        {"error": "File storage is not configured"},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    )
+                logger.warning(
+                    "GCS not configured — onboarding PDF not stored. "
+                    "Set REQUIRE_GCS_UPLOAD=True in production."
+                )
+        except Exception as e:
+            logger.error(f"GCS upload failed for onboarding PDF: {e}")
+            return Response(
+                {"error": f"Failed to upload PDF: {e}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        # Upsert: replace existing onboarding_data.pdf asset if present
+        existing_asset = BrandAsset.objects.filter(
+            tenant=tenant, company=company, file_name=safe_filename
+        ).first()
+
+        if existing_asset:
+            existing_asset.file_size = len(pdf_bytes)
+            existing_asset.gcs_path = landing_path
+            existing_asset.gcs_bucket = raw_bucket
+            existing_asset.processed = False
+            existing_asset.pipeline_status = (
+                "pending" if gcs_uploaded else "failed"
+            )
+            existing_asset.pipeline_error = (
+                ""
+                if gcs_uploaded
+                else "GCS not configured - file not stored"
+            )
+            existing_asset.pipeline_trace_id = None
+            existing_asset.uploaded_at = timezone.now()
+            existing_asset.save()
+            asset = existing_asset
+        else:
+            asset = BrandAsset.objects.create(
+                tenant=tenant,
+                company=company,
+                file_name=safe_filename,
+                file_type="document",
+                file_size=len(pdf_bytes),
+                gcs_path=landing_path,
+                gcs_bucket=raw_bucket,
+                processed=False,
+                pipeline_status=(
+                    "pending" if gcs_uploaded else "failed"
+                ),
+                pipeline_error=(
+                    ""
+                    if gcs_uploaded
+                    else "GCS not configured - file not stored"
+                ),
+            )
+
+        # Trigger the data-ingestion pipeline
+        if gcs_uploaded:
+            pipeline_service = get_pipeline_service()
+            pipeline_service.publish_asset_event(asset)
+
+        from .serializers import BrandAssetSerializer
+
+        return Response(
+            {
+                "message": "Onboarding PDF generated and queued for RAG indexing.",
+                "asset": BrandAssetSerializer(asset).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
