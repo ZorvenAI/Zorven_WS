@@ -1,6 +1,6 @@
 # Project Guidelines
 
-- Monorepo: Django core API (`ai-brand-automator/`), Next.js frontend (`ai-brand-automator-frontend/`), and 7 FastAPI services.
+- Monorepo: Django core API (`ai-brand-automator/`), Next.js frontend (`ai-brand-automator-frontend/`), and 8 FastAPI services.
 - Read first: `ARCHITECTURE.md`, `.github/copilot-instructions.md`, `CLAUDE.md`, and service-local `CLAUDE.md` before edits.
 - Prefer the closest instruction file to your target code (service-local guidance wins).
 - Do not modify without explicit request: `docs/LICENSE.md`, `credentials/`, `deployment/config/kong/`, `.github/workflows/ci-cd.yml`, `ai-brand-automator/db.sqlite3`.
@@ -16,9 +16,12 @@
 ## Architecture
 
 - Request flow: Next.js -> Kong -> Django API.
-- Orchestration flow: Django dispatch -> `pipeline-orchestrator-svc` -> agent services -> Django callback.
+- Orchestration flow: Django dispatch -> `pipeline-orchestrator-svc` (direct sequential execution) -> agent services -> Django callback.
+- The orchestrator executes nodes sequentially via topological sort — **not** through LangGraph's `ainvoke`/`astream`. LangGraph is a dependency but not used at runtime.
+- Dynamic skill loading: `pipeline-orchestrator-svc/skills/` contains `.md` skill files resolved per-node at execution time.
 - Callback updates in `orchestration/views.py` must use `transaction.atomic()` + `select_for_update()`.
 - Chat supports auto-detect pipelines; Pipeline UI supports manifest-driven pipelines.
+- `brand-equity-calculator-svc` (port 8090) is **public/unauthenticated** and uses Anthropic Claude (not Gemini).
 
 ## Build and Test
 
@@ -42,7 +45,7 @@
 - `X-Service-Token`: Django -> Orchestrator dispatch/cancel.
 - `X-Callback-Token`: Orchestrator -> Django callbacks.
 - `X-Worker-Token`: chat-titling worker -> Django.
-- Key files: `ai-brand-automator/orchestration/views.py`, `ai-brand-automator/orchestration/services.py`, `pipeline-orchestrator-svc/app/factory/node_registry.py`, `ai-brand-automator-frontend/src/hooks/usePollingJob.ts`, `ai-brand-automator-frontend/src/lib/api.ts`.
+- Key files: `ai-brand-automator/orchestration/views.py`, `ai-brand-automator/orchestration/services.py`, `pipeline-orchestrator-svc/app/services/job_executor.py`, `pipeline-orchestrator-svc/app/factory/node_registry.py`, `pipeline-orchestrator-svc/app/skills/`, `ai-brand-automator-frontend/src/hooks/usePollingJob.ts`, `ai-brand-automator-frontend/src/lib/api.ts`.
 
 ## Security
 

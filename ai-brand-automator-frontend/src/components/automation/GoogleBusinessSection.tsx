@@ -70,7 +70,18 @@ export default function GoogleBusinessSection({ onMessage, canEdit = true, canMa
   useEffect(() => {
     const googleBusinessConnected = searchParams.get('google_business');
     const error = searchParams.get('error');
-    
+
+    // If this page was opened as an OAuth popup, send result to opener and close
+    if (window.opener && (googleBusinessConnected || error)) {
+      const message = searchParams.get('message') || '';
+      window.opener.postMessage(
+        { type: 'oauth_callback', success: googleBusinessConnected === 'connected' ? 'google_business' : null, error, errorMessage: message },
+        window.location.origin
+      );
+      window.close();
+      return;
+    }
+
     if (googleBusinessConnected === 'connected') {
       // Real OAuth callback success
       onMessage({ type: 'success', text: 'Connected to Google Business Profile!' });
@@ -173,9 +184,46 @@ export default function GoogleBusinessSection({ onMessage, canEdit = true, canMa
         return;
       }
       
-      // Real mode - redirect to Google OAuth
+      // Real mode - open Google OAuth in a new popup window
       if (data.authorization_url) {
-        window.location.href = data.authorization_url;
+        const popup = window.open(
+          data.authorization_url,
+          'oauth_popup',
+          'width=600,height=700,scrollbars=yes,resizable=yes'
+        );
+
+        // If popup was blocked, fall back to same-window redirect
+        if (!popup || popup.closed) {
+          window.location.href = data.authorization_url;
+          return;
+        }
+
+        // Listen for OAuth result from popup
+        const handleOAuthMessage = (event: MessageEvent) => {
+          if (event.origin !== window.location.origin) return;
+          if (event.data?.type !== 'oauth_callback') return;
+
+          window.removeEventListener('message', handleOAuthMessage);
+          setConnecting(false);
+
+          if (event.data.success) {
+            onMessage({ type: 'success', text: 'Connected to Google Business Profile!' });
+            fetchStatus();
+          } else if (event.data.error) {
+            onMessage({ type: 'error', text: event.data.errorMessage || 'Failed to connect' });
+          }
+        };
+        window.addEventListener('message', handleOAuthMessage);
+
+        // Poll for popup close (user may close it manually)
+        const pollTimer = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(pollTimer);
+            window.removeEventListener('message', handleOAuthMessage);
+            setConnecting(false);
+            fetchStatus();
+          }
+        }, 500);
       }
     } catch (error) {
       console.error('Failed to connect:', error);

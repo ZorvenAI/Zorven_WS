@@ -1776,6 +1776,16 @@ function AutomationPageContent() {
     const name = searchParams.get('name');
     const errorMessage = searchParams.get('message');
 
+    // If this page was opened as an OAuth popup, send result to opener and close
+    if (window.opener && (success || error)) {
+      window.opener.postMessage(
+        { type: 'oauth_callback', success, error, name, errorMessage },
+        window.location.origin
+      );
+      window.close();
+      return;
+    }
+
     if (success) {
       setMessage({
         type: 'success',
@@ -1935,14 +1945,60 @@ function AutomationPageContent() {
       const response = await apiClient.get(`/automation/${platform}/connect/`);
       if (response.ok) {
         const data = await response.json();
-        // Redirect to platform authorization
-        window.location.href = data.authorization_url;
+        // Open platform authorization in a new popup window
+        const popup = window.open(
+          data.authorization_url,
+          'oauth_popup',
+          'width=600,height=700,scrollbars=yes,resizable=yes'
+        );
+
+        // If popup was blocked, fall back to same-window redirect
+        if (!popup || popup.closed) {
+          window.location.href = data.authorization_url;
+          return;
+        }
+
+        // Listen for OAuth result from popup
+        const handleOAuthMessage = (event: MessageEvent) => {
+          if (event.origin !== window.location.origin) return;
+          if (event.data?.type !== 'oauth_callback') return;
+
+          window.removeEventListener('message', handleOAuthMessage);
+          setConnecting(null);
+
+          if (event.data.success) {
+            setMessage({
+              type: 'success',
+              text: `Successfully connected ${event.data.success}${event.data.name ? ` as ${event.data.name}` : ''}!`,
+            });
+          } else if (event.data.error) {
+            setMessage({
+              type: 'error',
+              text: `Failed to connect: ${event.data.errorMessage || event.data.error}`,
+            });
+          }
+          // Refresh profiles after OAuth completes
+          fetchProfiles();
+        };
+        window.addEventListener('message', handleOAuthMessage);
+
+        // Also poll for popup close (user may close it manually)
+        const pollTimer = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(pollTimer);
+            window.removeEventListener('message', handleOAuthMessage);
+            setConnecting(null);
+            // Refresh profiles in case OAuth completed before close
+            fetchProfiles();
+          }
+        }, 500);
       } else {
         const error = await response.json();
         setMessage({
           type: 'error',
           text: error.error || 'Failed to initiate connection',
         });
+        setConnecting(null);
       }
     } catch (error) {
       console.error('Failed to connect:', error);
@@ -1950,7 +2006,6 @@ function AutomationPageContent() {
         type: 'error',
         text: 'Failed to initiate connection',
       });
-    } finally {
       setConnecting(null);
     }
   };

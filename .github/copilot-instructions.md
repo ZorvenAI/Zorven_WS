@@ -12,10 +12,10 @@ AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand buil
 |-------|-----------|
 | Frontend | Next.js 15, React 19, TypeScript (strict), Tailwind CSS v4 |
 | Backend | Django 4.2, Django REST Framework, SimpleJWT |
-| AI | Google Gemini 2.0 Flash (`GeminiAIService` singleton) |
+| AI | Google Gemini 2.0 Flash (`GeminiAIService` singleton), Anthropic Claude (brand equity) |
 | Database | PostgreSQL (Neon) with `django-tenants` (schema-based multi-tenancy) |
 | Gateway | Kong (DB-less): JWT auth, CORS, rate limiting |
-| Microservices | FastAPI, LangGraph, Pydantic v2, Uvicorn (6 agent services) |
+| Microservices | FastAPI, Pydantic v2, Uvicorn (8 services, direct sequential execution) |
 | Queue | Celery + Redis (beat scheduler, `orchestration` queue), Apache Kafka (event streaming) |
 | Storage | Google Cloud Storage (2 buckets: raw + curated) |
 | Payments | Stripe (Basic $29 / Pro $79 / Enterprise $199) |
@@ -26,6 +26,14 @@ AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand buil
 ```
 ai-brand-automator/           → Django backend (DRF, JWT, django-tenants)
 ai-brand-automator-frontend/  → Next.js 15 + React 19 + TypeScript + Tailwind v4
+pipeline-orchestrator-svc/    → FastAPI — sequential pipeline execution (port 8010)
+discovery-agent-svc/          → FastAPI — web research via Tavily (port 8020)
+intelligence-agent-svc/       → FastAPI — ISO 10668 brand valuation (port 8030)
+chat-titling-worker/          → FastAPI — auto-titles chat sessions (port 8040)
+content-agent-service/        → FastAPI — SEO/AEO/GEO blog authoring (port 8050)
+social-agent-service/         → FastAPI — social media promotion (port 8060)
+rag-uploader-agent-service/   → FastAPI — RAG document archival (port 8070)
+brand-equity-calculator-svc/  → FastAPI — public brand equity calc, Anthropic Claude (port 8090)
 deployment/                   → Docker Compose, Kong config, Railway/k8s manifests
 docs/                         → Architecture docs, plans, guides
 ```
@@ -189,8 +197,10 @@ const poll = async () => {
 | Orchestration API (FE) | `ai-brand-automator-frontend/src/lib/orchestration.ts` |
 | Polling hook (FE) | `ai-brand-automator-frontend/src/hooks/usePollingJob.ts` |
 | Orchestrator main | `pipeline-orchestrator-svc/app/main.py` |
-| Orchestrator graph builder | `pipeline-orchestrator-svc/app/factory/graph_builder.py` |
-| Orchestrator node registry | `pipeline-orchestrator-svc/app/factory/node_registry.py` |
+| Orchestrator job executor | `pipeline-orchestrator-svc/app/services/job_executor.py` |
+| Skill loader + router | `pipeline-orchestrator-svc/app/skills/` |
+| Skill definitions (15 .md files) | `pipeline-orchestrator-svc/skills/` |
+| Pipeline composer (auto-detect) | `pipeline-orchestrator-svc/app/nodes/internal/pipeline_composer.py` |
 | Discovery executor | `discovery-agent-svc/app/services/discovery_executor.py` |
 | Intelligence executor | `intelligence-agent-svc/app/services/intelligence_executor.py` |
 | Chat titling handler | `chat-titling-worker/app/logic/handler.py` |
@@ -212,13 +222,14 @@ cd ai-brand-automator-frontend && npm run dev
 cd deployment && docker compose up
 
 # Tests
-cd ai-brand-automator && pytest -v              # 2090+ backend tests (123 orchestration)
+cd ai-brand-automator && pytest -v              # ~2090+ backend tests
 cd ai-brand-automator-frontend && npm test      # Jest (60% coverage threshold)
 
-# Microservice tests (628 total, run from each service dir)
-cd pipeline-orchestrator-svc && pytest tests/ -v    # 171 tests
-cd discovery-agent-svc && pytest tests/ -v          # 179 tests
-cd intelligence-agent-svc && pytest tests/ -v       # 100 tests
+# Microservice tests (run from each service dir)
+cd pipeline-orchestrator-svc && pytest tests/ -v    # ~196 tests
+cd discovery-agent-svc && pytest tests/ -v          # ~179 tests
+cd intelligence-agent-svc && pytest tests/ -v       # ~100 tests
+cd brand-equity-calculator-svc && pytest tests/ -v  # brand equity tests
 
 # Cross-service integration tests
 cd tests/integration && pytest -v                   # 60 tests
@@ -253,7 +264,9 @@ ORCHESTRATION_KAFKA_ENABLED=false            # true for Kafka-based dispatch (vs
 # CONTENT_REDIS_URL, CONTENT_GOOGLE_API_KEY, CONTENT_CORE_API_TOKEN
 # SOCIAL_REDIS_URL, SOCIAL_GOOGLE_API_KEY, SOCIAL_CORE_API_TOKEN
 # TITLING_REDIS_URL, TITLING_GOOGLE_API_KEY, TITLING_WORKER_TOKEN
+# BRAND_EQUITY_ANTHROPIC_API_KEY, BRAND_EQUITY_REDIS_URL
 
 # Frontend (.env.local)
 NEXT_PUBLIC_API_URL=http://localhost:8000     # Auto-detected via env.ts in browser
+NEXT_PUBLIC_BRAND_EQUITY_API_URL=http://localhost:8090  # Brand equity calculator
 ```
