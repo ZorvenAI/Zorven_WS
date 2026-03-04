@@ -252,6 +252,36 @@ jobs:
           files: ./intelligence-agent-svc/coverage.xml
           flags: intelligence-agent
 
+  # Odoo MCP Server Tests
+  odoo-mcp-server-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd odoo-mcp-server-svc
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: |
+          cd odoo-mcp-server-svc
+          pytest tests/ -v -m "not integration" --cov=app --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./odoo-mcp-server-svc/coverage.xml
+          flags: odoo-mcp-server
+
   # Frontend Tests
   frontend-tests:
     runs-on: ubuntu-latest
@@ -338,7 +368,7 @@ jobs:
   # Build Docker Images
   build-images:
     runs-on: ubuntu-latest
-    needs: [backend-tests, test-media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, frontend-tests, integration-tests]
+    needs: [backend-tests, test-media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, odoo-mcp-server-tests, frontend-tests, integration-tests]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     
     steps:
@@ -381,3 +411,8 @@ jobs:
         run: |
           cd intelligence-agent-svc
           docker build -t ai-brand-automator-intelligence:${{ github.sha }} .
+
+      - name: Build odoo MCP server image
+        run: |
+          cd odoo-mcp-server-svc
+          docker build -t ai-brand-automator-odoo-mcp:${{ github.sha }} .

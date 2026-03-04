@@ -1,0 +1,24 @@
+name: project_user
+description: "Project user — read and create on tasks and timesheets."
+inherits: []
+permissions:
+  - tool: "*"
+    models:
+      - "project.project"
+      - "project.task"
+      - "project.task.type"
+    operations:
+      - read
+      - create
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "account.analytic.line"
+    operations:
+      - read
+      - create
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []

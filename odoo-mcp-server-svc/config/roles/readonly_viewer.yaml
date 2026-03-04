@@ -1,0 +1,15 @@
+name: readonly_viewer
+description: "Read-only viewer — read access on all models, no create/write/unlink."
+inherits: []
+permissions:
+  - tool: "*"
+    models:
+      - "*"
+    operations:
+      - read
+    fields_allowed: []
+    fields_denied:
+      - password
+      - password_crypt
+      - oauth_access_token
+    domain_filter: []

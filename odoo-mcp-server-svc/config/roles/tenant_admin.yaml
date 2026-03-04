@@ -1,0 +1,18 @@
+name: tenant_admin
+description: "Tenant admin — inherits tenant_owner minus user management models."
+inherits:
+  - tenant_owner
+permissions:
+  - tool: "*"
+    models:
+      - "res.users"
+      - "res.groups"
+      - "ir.rule"
+    operations:
+      - read
+    fields_allowed: []
+    fields_denied:
+      - password
+      - password_crypt
+    domain_filter:
+      - ["company_id", "=", "__tenant_company_id__"]

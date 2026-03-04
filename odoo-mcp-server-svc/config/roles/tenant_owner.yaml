@@ -1,0 +1,17 @@
+name: tenant_owner
+description: "Tenant owner — inherits super_admin, scoped to own tenant via domain filter."
+inherits:
+  - super_admin
+permissions:
+  - tool: "*"
+    models:
+      - "*"
+    operations:
+      - read
+      - create
+      - write
+      - unlink
+    fields_allowed: []
+    fields_denied: []
+    domain_filter:
+      - ["company_id", "=", "__tenant_company_id__"]

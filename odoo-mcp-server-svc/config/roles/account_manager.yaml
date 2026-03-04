@@ -1,0 +1,31 @@
+name: account_manager
+description: "Accounting manager — inherits account_user, adds write/unlink and posting."
+inherits:
+  - account_user
+permissions:
+  - tool: "*"
+    models:
+      - "account.move"
+      - "account.move.line"
+      - "account.payment"
+      - "account.journal"
+    operations:
+      - read
+      - create
+      - write
+      - unlink
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "account.fiscal.year"
+      - "account.tax"
+      - "account.analytic.account"
+      - "account.report"
+    operations:
+      - read
+      - write
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []

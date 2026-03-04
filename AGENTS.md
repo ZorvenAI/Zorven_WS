@@ -1,6 +1,6 @@
 # Project Guidelines
 
-- Monorepo: Django core API (`ai-brand-automator/`), Next.js frontend (`ai-brand-automator-frontend/`), and 8 FastAPI services.
+- Monorepo: Django core API (`ai-brand-automator/`), Next.js frontend (`ai-brand-automator-frontend/`), and 9 FastAPI services.
 - Read first: `ARCHITECTURE.md`, `.github/copilot-instructions.md`, `CLAUDE.md`, and service-local `CLAUDE.md` before edits.
 - Prefer the closest instruction file to your target code (service-local guidance wins).
 - Do not modify without explicit request: `docs/LICENSE.md`, `credentials/`, `deployment/config/kong/`, `.github/workflows/ci-cd.yml`, `ai-brand-automator/db.sqlite3`.

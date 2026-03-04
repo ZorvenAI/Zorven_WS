@@ -1,0 +1,15 @@
+name: super_admin
+description: "Full unrestricted access to all models and operations."
+inherits: []
+permissions:
+  - tool: "*"
+    models:
+      - "*"
+    operations:
+      - read
+      - create
+      - write
+      - unlink
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []

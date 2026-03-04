@@ -27,6 +27,18 @@ INTERNAL_HANDLERS: dict[str, type[BaseNode]] = {
     "DefaultAgentNode": DefaultAgentNode,
 }
 
+# Well-known external agent service endpoints.
+# Used by PipelineComposer (auto-detect mode) to resolve agent names
+# to HTTP URLs for ExternalWrapper.
+EXTERNAL_ENDPOINTS: dict[str, str] = {
+    "discovery": "http://discovery-agent-svc:8020/v1/execute",
+    "intelligence": "http://intelligence-agent-svc:8030/v1/execute",
+    "content": "http://content-agent-svc:8050/v1/execute",
+    "social": "http://social-agent-svc:8060/v1/execute",
+    "rag_uploader": "http://rag-uploader-agent-svc:8070/v1/execute",
+    "odoo_mcp": "http://odoo-mcp-server:8095/execute",
+}
+
 
 def resolve_handler(handler_name: str) -> type[BaseNode]:
     """

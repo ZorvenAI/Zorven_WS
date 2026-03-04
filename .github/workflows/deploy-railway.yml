@@ -29,7 +29,8 @@ jobs:
       content-changed: ${{ steps.changes.outputs.content }}
       social-changed: ${{ steps.changes.outputs.social }}
       rag-uploader-changed: ${{ steps.changes.outputs.rag-uploader }}
-    
+      odoo-mcp-changed: ${{ steps.changes.outputs.odoo-mcp }}
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,6 +52,7 @@ jobs:
             echo "content=true" >> "$GITHUB_OUTPUT"
             echo "social=true" >> "$GITHUB_OUTPUT"
             echo "rag-uploader=true" >> "$GITHUB_OUTPUT"
+            echo "odoo-mcp=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           
@@ -115,6 +117,13 @@ jobs:
             echo "rag-uploader=true" >> "$GITHUB_OUTPUT"
           else
             echo "rag-uploader=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if odoo-mcp-server-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^odoo-mcp-server-svc/'; then
+            echo "odoo-mcp=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "odoo-mcp=false" >> "$GITHUB_OUTPUT"
           fi
 
   # ==========================================================================
@@ -557,11 +566,51 @@ jobs:
           fi
 
   # ==========================================================================
+  # Deploy Odoo MCP Server to Railway
+  # ==========================================================================
+  deploy-odoo-mcp-server:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.odoo-mcp-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Odoo MCP Server
+        working-directory: odoo-mcp-server-svc
+        run: |
+          if [ -n "${{ secrets.RAILWAY_ODOO_MCP_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_ODOO_MCP_SERVICE }} --detach
+          else
+            echo "RAILWAY_ODOO_MCP_SERVICE not set, skipping odoo-mcp-server deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for odoo-mcp-server deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          ODOO_MCP_URL="${{ secrets.RAILWAY_ODOO_MCP_URL }}"
+          if [ -n "$ODOO_MCP_URL" ]; then
+            curl -f "${ODOO_MCP_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_ODOO_MCP_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
   # Post-Deployment Notification
   # ==========================================================================
   notify:
     runs-on: ubuntu-latest
-    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent, deploy-chat-titling, deploy-content-agent, deploy-social-agent, deploy-rag-uploader]
+    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent, deploy-chat-titling, deploy-content-agent, deploy-social-agent, deploy-rag-uploader, deploy-odoo-mcp-server]
     if: always()
 
     steps:
@@ -583,5 +632,6 @@ jobs:
           echo "| Content Agent | ${{ needs.deploy-content-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Social Agent | ${{ needs.deploy-social-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| RAG Uploader | ${{ needs.deploy-rag-uploader.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Odoo MCP Server | ${{ needs.deploy-odoo-mcp-server.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

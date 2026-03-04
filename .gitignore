@@ -50,5 +50,9 @@ db.sqlite3-journal
 Thumbs.db
 .test_token
 
+# Odoo submodule artifacts
+vendor/odoo/community/**/*.pyc
+vendor/odoo/community/**/__pycache__/
+
 # Claude Code worktrees
 .claude/worktrees/

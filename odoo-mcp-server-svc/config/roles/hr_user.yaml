@@ -1,0 +1,29 @@
+name: hr_user
+description: "HR user — read on employees, create leave requests."
+inherits: []
+permissions:
+  - tool: "*"
+    models:
+      - "hr.employee"
+      - "hr.department"
+      - "hr.job"
+    operations:
+      - read
+    fields_allowed: []
+    fields_denied:
+      - salary
+      - wage
+      - bank_account_id
+      - private_phone
+      - private_email
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "hr.leave"
+      - "hr.leave.type"
+    operations:
+      - read
+      - create
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []

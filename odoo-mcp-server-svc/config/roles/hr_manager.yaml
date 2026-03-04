@@ -1,0 +1,44 @@
+name: hr_manager
+description: "HR manager — inherits hr_user, adds full CRUD plus payroll access."
+inherits:
+  - hr_user
+permissions:
+  - tool: "*"
+    models:
+      - "hr.employee"
+      - "hr.department"
+      - "hr.job"
+      - "hr.contract"
+    operations:
+      - read
+      - create
+      - write
+      - unlink
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "hr.leave"
+      - "hr.leave.type"
+      - "hr.leave.allocation"
+    operations:
+      - read
+      - create
+      - write
+      - unlink
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "hr.payslip"
+      - "hr.payslip.run"
+      - "hr.salary.rule"
+    operations:
+      - read
+      - create
+      - write
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
