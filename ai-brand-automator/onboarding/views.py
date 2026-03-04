@@ -220,14 +220,38 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             pdf.set_text_color(0, 0, 0)
             pdf.ln(1)
 
+        def _wrap_text(text, max_token_length=60):
+            """Sanitize text and break very long tokens to avoid layout errors.
+
+            Args:
+                text: Original text value.
+                max_token_length: Maximum length for any single token.
+
+            Returns:
+                A sanitized text string where long tokens are split into
+                smaller chunks separated by spaces, so fpdf2.multi_cell
+                can wrap them safely.
+            """
+            sanitized = _sanitize(text or "")
+            tokens = sanitized.split(" ")
+            wrapped_tokens = []
+            for token in tokens:
+                if len(token) > max_token_length:
+                    for i in range(0, len(token), max_token_length):
+                        wrapped_tokens.append(token[i : i + max_token_length])
+                else:
+                    wrapped_tokens.append(token)
+            return " ".join(wrapped_tokens)
+
         def _field(label, value):
             if not value:
                 return
             pdf.set_font("Helvetica", "B", 10)
             pdf.cell(0, 6, f"{label}:", new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("Helvetica", "", 10)
-            # multi_cell handles long text with word-wrapping
-            pdf.multi_cell(0, 5, _sanitize(str(value)))
+            # Wrap and sanitize text so multi_cell doesn't see long
+            # unbreakable tokens (e.g., very long URLs).
+            pdf.multi_cell(0, 5, _wrap_text(str(value)))
             pdf.ln(2)
 
         # Company Information
@@ -268,7 +292,14 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             _field("Font Recommendations", company.font_recommendations)
             _field("Messaging Guide", company.messaging_guide)
 
-        pdf_bytes = pdf.output()
+        raw_pdf = pdf.output()
+        if isinstance(raw_pdf, bytearray):
+            pdf_bytes = bytes(raw_pdf)
+        elif isinstance(raw_pdf, str):
+            # fpdf2 historically uses Latin-1-compatible output
+            pdf_bytes = raw_pdf.encode("latin1")
+        else:
+            pdf_bytes = raw_pdf
 
         # --- Upload to GCS and create BrandAsset ---
         safe_filename = "onboarding_data.pdf"
@@ -305,10 +336,10 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                     "GCS not configured — onboarding PDF not stored. "
                     "Set REQUIRE_GCS_UPLOAD=True in production."
                 )
-        except Exception as e:
-            logger.error(f"GCS upload failed for onboarding PDF: {e}")
+        except Exception:
+            logger.exception("GCS upload failed for onboarding PDF")
             return Response(
-                {"error": f"Failed to upload PDF: {e}"},
+                {"error": "Failed to upload PDF. Please try again later."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -351,14 +382,22 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             pipeline_service = get_pipeline_service()
             pipeline_service.publish_asset_event(asset)
 
-        from .serializers import BrandAssetSerializer
+        if gcs_uploaded:
+            message = "Onboarding PDF generated and queued for RAG indexing."
+            response_status = status.HTTP_201_CREATED
+        else:
+            message = (
+                "Onboarding PDF generated but not uploaded or queued for RAG "
+                "indexing: GCS not configured - file not stored."
+            )
+            response_status = status.HTTP_503_SERVICE_UNAVAILABLE
 
         return Response(
             {
-                "message": "Onboarding PDF generated and queued for RAG indexing.",
+                "message": message,
                 "asset": BrandAssetSerializer(asset).data,
             },
-            status=status.HTTP_201_CREATED,
+            status=response_status,
         )
 
 
