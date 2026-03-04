@@ -19,6 +19,7 @@ class CompanySerializer(serializers.ModelSerializer):
             "pain_points",
             "desired_outcomes",
             "core_problem",
+            "website",
             "brand_voice",
             "vision_statement",
             "mission_statement",
@@ -95,13 +96,16 @@ class CompanyCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
         fields = [
+            "id",
             "name",
             "description",
             "industry",
             "target_audience",
             "core_problem",
+            "website",
             "brand_voice",
         ]
+        read_only_fields = ["id"]
         # Tenant is set in the viewset's perform_create method
 
 
@@ -111,6 +115,7 @@ class CompanyUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
         fields = [
+            "id",
             "name",
             "description",
             "industry",
@@ -120,6 +125,7 @@ class CompanyUpdateSerializer(serializers.ModelSerializer):
             "pain_points",
             "desired_outcomes",
             "core_problem",
+            "website",
             "brand_voice",
             "vision_statement",
             "mission_statement",
@@ -132,6 +138,7 @@ class CompanyUpdateSerializer(serializers.ModelSerializer):
             "font_recommendations",
             "messaging_guide",
         ]
+        read_only_fields = ["id"]
 
 
 class BrandAssetUploadSerializer(serializers.Serializer):

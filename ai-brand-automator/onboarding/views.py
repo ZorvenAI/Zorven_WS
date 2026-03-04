@@ -691,9 +691,9 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                     gcs_bucket=actual_bucket,
                     processed=False,
                     pipeline_status="pending" if gcs_uploaded else "failed",
-                    pipeline_error=""
-                    if gcs_uploaded
-                    else "GCS not configured - file not stored",
+                    pipeline_error=(
+                        "" if gcs_uploaded else "GCS not configured - file not stored"
+                    ),
                 )
             except IntegrityError:
                 # Race condition: another request created the same asset

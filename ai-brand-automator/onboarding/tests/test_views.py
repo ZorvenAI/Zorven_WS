@@ -105,6 +105,7 @@ class TestCompanyViewSet:
             "description": "An innovative tech company",
             "target_audience": "Tech professionals",
             "core_problem": "Inefficient workflows",
+            "website": "https://newtechstartup.com",
             "brand_voice": "professional",
         }
 
@@ -112,6 +113,7 @@ class TestCompanyViewSet:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["name"] == "New Tech Startup"
         assert response.data["industry"] == "Technology"
+        assert response.data["website"] == "https://newtechstartup.com"
 
         # Verify company was created in database
         assert Company.objects.filter(name="New Tech Startup").exists()
@@ -155,6 +157,7 @@ class TestCompanyViewSet:
             "description": "Updated description about the company",
             "industry": "Healthcare",
             "target_audience": "Healthcare professionals",
+            "website": "https://updated-company.com",
         }
 
         response = authenticated_client_with_tenant.put(
@@ -167,6 +170,7 @@ class TestCompanyViewSet:
         assert company.description == "Updated description about the company"
         assert company.industry == "Healthcare"
         assert company.target_audience == "Healthcare professionals"
+        assert company.website == "https://updated-company.com"
 
     def test_partial_update_company(self, authenticated_client_with_tenant, company):
         """Test partial update (PATCH) of a company"""

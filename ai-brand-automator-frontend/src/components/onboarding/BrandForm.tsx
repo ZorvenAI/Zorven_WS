@@ -89,7 +89,7 @@ export function BrandForm() {
         positioning_statement: formData.positioningStatement,
       };
 
-      const response = await apiClient.put(`/companies/${companyId}/`, apiData);
+      const response = await apiClient.patch(`/companies/${companyId}/`, apiData);
 
       if (response.ok) {
         const data = await response.json();

@@ -1,6 +1,7 @@
 """
 Unit tests for onboarding models
 """
+
 import pytest
 from django.db import IntegrityError
 from django.core.exceptions import ValidationError
@@ -116,6 +117,7 @@ class TestCompanyModel:
         assert company.industry == ""
         assert company.target_audience == ""
         assert company.core_problem == ""
+        assert company.website == ""
 
     @freeze_time("2026-01-11 12:00:00")
     def test_created_at_timestamp(self, tenant):

@@ -1,6 +1,7 @@
 """
 Serializer tests for onboarding app
 """
+
 import pytest
 from onboarding.serializers import (
     CompanySerializer,
@@ -41,6 +42,7 @@ class TestCompanySerializer:
             "description": "A healthcare company",
             "target_audience": "Healthcare professionals",
             "core_problem": "Inefficient patient management",
+            "website": "https://example.com",
             "brand_voice": "authoritative",
         }
         serializer = CompanySerializer(data=data)

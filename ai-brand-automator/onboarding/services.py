@@ -15,7 +15,6 @@ from django.conf import settings
 
 from onboarding.models import BrandAsset
 
-
 logger = logging.getLogger(__name__)
 
 # Explicit extension-to-MIME mapping — the system /etc/mime.types

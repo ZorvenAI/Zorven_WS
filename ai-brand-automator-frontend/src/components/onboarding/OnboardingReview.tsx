@@ -10,6 +10,7 @@ interface CompanyData {
   industry: string;
   description: string;
   target_audience: string;
+  website?: string;
   brand_voice: string;
   vision_statement: string;
   mission_statement: string;
@@ -171,6 +172,21 @@ export function OnboardingReview() {
             <dt className="text-sm font-medium text-brand-silver/70">Description</dt>
             <dd className="mt-1 text-sm text-white">{company.description}</dd>
           </div>
+          {company.website && (
+            <div>
+              <dt className="text-sm font-medium text-brand-silver/70">Website</dt>
+              <dd className="mt-1 text-sm text-white">
+                <a
+                  href={company.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-electric hover:underline"
+                >
+                  {company.website}
+                </a>
+              </dd>
+            </div>
+          )}
         </dl>
       </div>
 

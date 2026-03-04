@@ -81,7 +81,7 @@ export function TargetAudienceForm() {
         desired_outcomes: formData.desiredOutcomes,
       };
 
-      const response = await apiClient.put(
+      const response = await apiClient.patch(
         `/companies/${companyId}/`,
         apiData
       );

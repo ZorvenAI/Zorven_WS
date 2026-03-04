@@ -23,7 +23,6 @@ from rest_framework.test import APIClient
 from onboarding.models import BrandAsset, Company
 from onboarding.services import OnboardingPipelineService
 
-
 # Suppress health check for function-scoped fixtures
 # PERFORMANCE: Using only 3 examples per test since tenant creation is slow
 property_settings = settings(

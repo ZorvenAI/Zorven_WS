@@ -12,6 +12,7 @@ export function CompanyForm() {
     industry: '',
     targetAudience: '',
     coreProblem: '',
+    website: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [existingCompanyId, setExistingCompanyId] = useState<number | null>(null);
@@ -34,6 +35,7 @@ export function CompanyForm() {
               industry: company.industry || '',
               targetAudience: company.target_audience || '',
               coreProblem: company.core_problem || '',
+              website: company.website || '',
             });
             // Store company ID for next steps
             localStorage.setItem('company_id', company.id.toString());
@@ -64,12 +66,13 @@ export function CompanyForm() {
         industry: formData.industry,
         target_audience: formData.targetAudience,
         core_problem: formData.coreProblem,
+        website: formData.website,
       };
       
       let response;
       if (existingCompanyId) {
-        // Update existing company
-        response = await apiClient.put(`/companies/${existingCompanyId}/`, apiData);
+        // Partial update existing company (PATCH preserves fields not sent)
+        response = await apiClient.patch(`/companies/${existingCompanyId}/`, apiData);
       } else {
         // Create new company
         response = await apiClient.post('/companies/', apiData);
@@ -78,7 +81,11 @@ export function CompanyForm() {
       if (response.ok) {
         const data = await response.json();
         console.log('Company saved:', data);
-        localStorage.setItem('company_id', data.id);
+        // Use known ID for updates; for new creates, get from response or refetch
+        const companyId = existingCompanyId || data.id;
+        if (companyId) {
+          localStorage.setItem('company_id', companyId.toString());
+        }
         router.push('/onboarding/step-2');
       } else {
         const error = await response.json();
@@ -173,6 +180,21 @@ export function CompanyForm() {
           onChange={handleChange}
           className="input-dark mt-1"
           placeholder="What problem does your company solve for customers?"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="website" className="label-dark">
+          Website
+        </label>
+        <input
+          type="url"
+          id="website"
+          name="website"
+          value={formData.website}
+          onChange={handleChange}
+          className="input-dark mt-1"
+          placeholder="https://www.example.com"
         />
       </div>
 

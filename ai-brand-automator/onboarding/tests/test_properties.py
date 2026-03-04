@@ -6,6 +6,7 @@ PERFORMANCE NOTE: Each test method creates a fresh tenant via create_test_tenant
 for EACH Hypothesis example (50 by default). This avoids OneToOneField violations
 since Company has OneToOneField(Tenant).
 """
+
 import pytest
 import uuid
 from hypothesis import given, assume, strategies as st, settings, HealthCheck

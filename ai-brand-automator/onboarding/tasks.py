@@ -549,12 +549,16 @@ def _build_company_document(company) -> dict[str, Any]:
         "metadata": {
             "name": company.name,
             "industry": company.industry,
-            "created_at": company.created_at.isoformat()
-            if hasattr(company, "created_at")
-            else None,
-            "updated_at": company.updated_at.isoformat()
-            if hasattr(company, "updated_at")
-            else None,
+            "created_at": (
+                company.created_at.isoformat()
+                if hasattr(company, "created_at")
+                else None
+            ),
+            "updated_at": (
+                company.updated_at.isoformat()
+                if hasattr(company, "updated_at")
+                else None
+            ),
         },
         "content": "\n\n".join(text_parts),
         "source": "onboarding_service",

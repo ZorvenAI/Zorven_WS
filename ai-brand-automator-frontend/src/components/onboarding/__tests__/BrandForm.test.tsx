@@ -73,7 +73,7 @@ describe('BrandForm', () => {
       }),
     }
     
-    ;(apiClient.put as jest.Mock).mockResolvedValue(mockResponse)
+    ;(apiClient.patch as jest.Mock).mockResolvedValue(mockResponse)
     
     render(<BrandForm />)
     
@@ -93,7 +93,7 @@ describe('BrandForm', () => {
     fireEvent.click(screen.getByRole('button', { name: /next step/i }))
     
     await waitFor(() => {
-      expect(apiClient.put).toHaveBeenCalledWith(
+      expect(apiClient.patch).toHaveBeenCalledWith(
         '/companies/123/',
         expect.objectContaining({
           brand_voice: 'professional',
@@ -111,7 +111,7 @@ describe('BrandForm', () => {
       json: async () => ({ id: 123 }),
     }
     
-    ;(apiClient.put as jest.Mock).mockResolvedValue(mockResponse)
+    ;(apiClient.patch as jest.Mock).mockResolvedValue(mockResponse)
     
     render(<BrandForm />)
     
@@ -140,7 +140,7 @@ describe('BrandForm', () => {
       }),
     }
     
-    ;(apiClient.put as jest.Mock).mockResolvedValue(mockResponse)
+    ;(apiClient.patch as jest.Mock).mockResolvedValue(mockResponse)
     const alertMock = jest.fn()
     window.alert = alertMock
     
@@ -171,7 +171,7 @@ describe('BrandForm', () => {
       json: async () => ({ id: 123 }),
     }
     
-    ;(apiClient.put as jest.Mock).mockImplementation(() =>
+    ;(apiClient.patch as jest.Mock).mockImplementation(() =>
       new Promise(resolve => setTimeout(() => resolve(mockResponse), 100))
     )
     

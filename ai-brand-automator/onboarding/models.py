@@ -25,6 +25,12 @@ class Company(models.Model):
     core_problem = models.TextField(
         blank=True, help_text="Main problem the company solves"
     )
+    website = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="Company website URL (optional)",
+    )
 
     # Target audience details (added in 0004 migration)
     demographics = models.TextField(
