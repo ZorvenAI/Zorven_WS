@@ -1064,7 +1064,7 @@ export default function SocialAnalytics() {
                   {/* Recent Posts */}
                   {facebookAnalyticsData.recent_posts && facebookAnalyticsData.recent_posts.length > 0 && (
                     <div>
-                      <h3 className="text-sm font-medium text-white mb-3">Recent Posts</h3>
+                      <h3 className="font-heading text-sm font-medium text-white mb-3">Recent Posts</h3>
                       <div className="space-y-3 max-h-64 overflow-y-auto">
                         {facebookAnalyticsData.recent_posts.slice(0, 5).map((post) => (
                           <div key={post.id} className="bg-brand-ghost/10 rounded-lg p-3">
@@ -1270,7 +1270,7 @@ export default function SocialAnalytics() {
                   {/* Recent Media */}
                   {instagramAnalyticsData.recent_media && instagramAnalyticsData.recent_media.length > 0 && (
                     <div>
-                      <h3 className="text-sm font-medium text-white mb-3">Recent Posts</h3>
+                      <h3 className="font-heading text-sm font-medium text-white mb-3">Recent Posts</h3>
                       <div className="space-y-3 max-h-64 overflow-y-auto">
                         {instagramAnalyticsData.recent_media.slice(0, 5).map((media) => (
                           <div key={media.id} className="bg-brand-ghost/10 rounded-lg p-3">

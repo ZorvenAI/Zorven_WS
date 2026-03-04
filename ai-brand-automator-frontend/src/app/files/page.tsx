@@ -48,7 +48,7 @@ export default function FilesPage() {
 
           {/* Pipeline Info Banner */}
           <div className="mb-6 p-4 bg-brand-electric/10 border border-brand-electric/30 rounded-lg">
-            <h3 className="text-sm font-medium text-brand-electric mb-2">
+            <h3 className="font-heading text-sm font-medium text-brand-electric mb-2">
               🚀 Automatic Processing Pipeline
             </h3>
             <div className="flex flex-wrap gap-4 text-xs text-brand-silver/70">

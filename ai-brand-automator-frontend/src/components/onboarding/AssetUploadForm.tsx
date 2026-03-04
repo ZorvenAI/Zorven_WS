@@ -309,7 +309,7 @@ export function AssetUploadForm() {
         <div className="space-y-2">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-3">
-              <h3 className="font-medium text-white">
+              <h3 className="font-heading font-medium text-white">
                 Uploaded Files
                 <span className="ml-2 text-sm text-brand-silver/70">
                   ({uploadedFiles.length}{hasMore ? `/${totalCount}` : ''})
@@ -464,7 +464,7 @@ export function AssetUploadForm() {
           onKeyDown={(e) => { if (e.key === 'Escape') handleDuplicateSkip(); }}
         >
           <div className="bg-brand-dark border border-white/20 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-            <h3 id="duplicate-dialog-title" className="text-lg font-semibold text-white mb-2">
+            <h3 id="duplicate-dialog-title" className="font-heading text-lg font-semibold text-white mb-2">
               File Already Exists
             </h3>
             <p className="text-brand-silver/80 text-sm mb-4">

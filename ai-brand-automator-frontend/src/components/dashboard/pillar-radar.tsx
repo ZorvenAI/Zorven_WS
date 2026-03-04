@@ -109,7 +109,7 @@ export default function PillarRadar({
             cx={p.x}
             cy={p.y}
             r="4"
-            fill="#0A0B10"
+            fill="var(--brand-midnight)"
             stroke={COLORS[i % COLORS.length]}
             strokeWidth="2"
           />

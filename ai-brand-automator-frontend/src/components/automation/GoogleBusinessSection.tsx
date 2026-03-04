@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   googleBusinessApi,
@@ -54,6 +54,25 @@ export default function GoogleBusinessSection({ onMessage, canEdit = true, canMa
     website_url: '',
   });
 
+  // Refs for OAuth popup cleanup
+  const oauthPopupRef = useRef<Window | null>(null);
+  const oauthPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const oauthMessageHandlerRef = useRef<((event: MessageEvent) => void) | null>(null);
+
+  // Cleanup OAuth popup resources on unmount
+  useEffect(() => {
+    return () => {
+      if (oauthPollTimerRef.current) {
+        clearInterval(oauthPollTimerRef.current);
+        oauthPollTimerRef.current = null;
+      }
+      if (oauthMessageHandlerRef.current) {
+        window.removeEventListener('message', oauthMessageHandlerRef.current);
+        oauthMessageHandlerRef.current = null;
+      }
+    };
+  }, []);
+
   // Fetch profile status
   const fetchStatus = useCallback(async () => {
     try {
@@ -70,7 +89,18 @@ export default function GoogleBusinessSection({ onMessage, canEdit = true, canMa
   useEffect(() => {
     const googleBusinessConnected = searchParams.get('google_business');
     const error = searchParams.get('error');
-    
+
+    // If this page was opened as an OAuth popup, send result to opener and close
+    if (window.opener && (googleBusinessConnected || error)) {
+      const message = searchParams.get('message') || '';
+      window.opener.postMessage(
+        { type: 'oauth_callback', success: googleBusinessConnected === 'connected' ? 'google_business' : null, error, errorMessage: message },
+        window.location.origin
+      );
+      window.close();
+      return;
+    }
+
     if (googleBusinessConnected === 'connected') {
       // Real OAuth callback success
       onMessage({ type: 'success', text: 'Connected to Google Business Profile!' });
@@ -173,9 +203,58 @@ export default function GoogleBusinessSection({ onMessage, canEdit = true, canMa
         return;
       }
       
-      // Real mode - redirect to Google OAuth
+      // Real mode - open Google OAuth in a new popup window
       if (data.authorization_url) {
-        window.location.href = data.authorization_url;
+        const popup = window.open(
+          data.authorization_url,
+          'oauth_popup',
+          'width=600,height=700,scrollbars=yes,resizable=yes'
+        );
+
+        // If popup was blocked, fall back to same-window redirect
+        if (!popup || popup.closed) {
+          window.location.href = data.authorization_url;
+          return;
+        }
+
+        oauthPopupRef.current = popup;
+
+        // Listen for OAuth result from popup
+        const handleOAuthMessage = (event: MessageEvent) => {
+          if (event.origin !== window.location.origin) return;
+          if (event.data?.type !== 'oauth_callback') return;
+
+          // Clean up both listener and poll timer
+          window.removeEventListener('message', handleOAuthMessage);
+          oauthMessageHandlerRef.current = null;
+          if (oauthPollTimerRef.current) {
+            clearInterval(oauthPollTimerRef.current);
+            oauthPollTimerRef.current = null;
+          }
+          setConnecting(false);
+
+          if (event.data.success) {
+            onMessage({ type: 'success', text: 'Connected to Google Business Profile!' });
+            fetchStatus();
+          } else if (event.data.error) {
+            onMessage({ type: 'error', text: event.data.errorMessage || 'Failed to connect' });
+          }
+        };
+        window.addEventListener('message', handleOAuthMessage);
+        oauthMessageHandlerRef.current = handleOAuthMessage;
+
+        // Poll for popup close (user may close it manually)
+        const pollTimer = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(pollTimer);
+            oauthPollTimerRef.current = null;
+            window.removeEventListener('message', handleOAuthMessage);
+            oauthMessageHandlerRef.current = null;
+            setConnecting(false);
+            fetchStatus();
+          }
+        }, 500);
+        oauthPollTimerRef.current = pollTimer;
       }
     } catch (error) {
       console.error('Failed to connect:', error);
@@ -363,7 +442,7 @@ export default function GoogleBusinessSection({ onMessage, canEdit = true, canMa
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <div className="flex-1">
-                  <h4 className="text-yellow-400 font-semibold text-sm">Google Business Profile API Not Configured</h4>
+                  <h4 className="font-heading text-yellow-400 font-semibold text-sm">Google Business Profile API Not Configured</h4>
                   <p className="text-brand-silver/80 text-sm mt-1">
                     The Google Business Profile API requires a verification and approval process from Google. 
                     This is a standard requirement for accessing business profile data.
@@ -621,7 +700,7 @@ export default function GoogleBusinessSection({ onMessage, canEdit = true, canMa
               {/* Create Location Form */}
               {showCreateLocation && (
                 <div className="bg-white/5 rounded-lg p-4 space-y-4">
-                  <h4 className="text-white font-medium">Add New Business Location</h4>
+                  <h4 className="font-heading text-white font-medium">Add New Business Location</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Business Name */}
                     <div className="md:col-span-2">

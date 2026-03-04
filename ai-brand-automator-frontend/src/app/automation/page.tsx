@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenantRole } from '@/hooks/useTenantRole';
@@ -1776,6 +1776,16 @@ function AutomationPageContent() {
     const name = searchParams.get('name');
     const errorMessage = searchParams.get('message');
 
+    // If this page was opened as an OAuth popup, send result to opener and close
+    if (window.opener && (success || error)) {
+      window.opener.postMessage(
+        { type: 'oauth_callback', success, error, name, errorMessage },
+        window.location.origin
+      );
+      window.close();
+      return;
+    }
+
     if (success) {
       setMessage({
         type: 'success',
@@ -1921,6 +1931,25 @@ function AutomationPageContent() {
     }
   }, [profiles?.linkedin?.connected, fetchLinkedInOrganizations]);
 
+  // Refs for OAuth popup cleanup
+  const oauthPopupRef = useRef<Window | null>(null);
+  const oauthPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const oauthMessageHandlerRef = useRef<((event: MessageEvent) => void) | null>(null);
+
+  // Cleanup OAuth popup resources on unmount
+  useEffect(() => {
+    return () => {
+      if (oauthPollTimerRef.current) {
+        clearInterval(oauthPollTimerRef.current);
+        oauthPollTimerRef.current = null;
+      }
+      if (oauthMessageHandlerRef.current) {
+        window.removeEventListener('message', oauthMessageHandlerRef.current);
+        oauthMessageHandlerRef.current = null;
+      }
+    };
+  }, []);
+
   const handleConnect = async (platform: string) => {
     if (platform !== 'linkedin' && platform !== 'twitter' && platform !== 'facebook' && platform !== 'instagram') {
       setMessage({
@@ -1935,14 +1964,72 @@ function AutomationPageContent() {
       const response = await apiClient.get(`/automation/${platform}/connect/`);
       if (response.ok) {
         const data = await response.json();
-        // Redirect to platform authorization
-        window.location.href = data.authorization_url;
+        // Open platform authorization in a new popup window
+        const popup = window.open(
+          data.authorization_url,
+          'oauth_popup',
+          'width=600,height=700,scrollbars=yes,resizable=yes'
+        );
+
+        // If popup was blocked, fall back to same-window redirect
+        if (!popup || popup.closed) {
+          window.location.href = data.authorization_url;
+          return;
+        }
+
+        oauthPopupRef.current = popup;
+
+        // Listen for OAuth result from popup
+        const handleOAuthMessage = (event: MessageEvent) => {
+          if (event.origin !== window.location.origin) return;
+          if (event.data?.type !== 'oauth_callback') return;
+
+          // Clean up both listener and poll timer
+          window.removeEventListener('message', handleOAuthMessage);
+          oauthMessageHandlerRef.current = null;
+          if (oauthPollTimerRef.current) {
+            clearInterval(oauthPollTimerRef.current);
+            oauthPollTimerRef.current = null;
+          }
+          setConnecting(null);
+
+          if (event.data.success) {
+            setMessage({
+              type: 'success',
+              text: `Successfully connected ${event.data.success}${event.data.name ? ` as ${event.data.name}` : ''}!`,
+            });
+          } else if (event.data.error) {
+            setMessage({
+              type: 'error',
+              text: `Failed to connect: ${event.data.errorMessage || event.data.error}`,
+            });
+          }
+          // Refresh profiles after OAuth completes
+          fetchProfiles();
+        };
+        window.addEventListener('message', handleOAuthMessage);
+        oauthMessageHandlerRef.current = handleOAuthMessage;
+
+        // Also poll for popup close (user may close it manually)
+        const pollTimer = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(pollTimer);
+            oauthPollTimerRef.current = null;
+            window.removeEventListener('message', handleOAuthMessage);
+            oauthMessageHandlerRef.current = null;
+            setConnecting(null);
+            // Refresh profiles in case OAuth completed before close
+            fetchProfiles();
+          }
+        }, 500);
+        oauthPollTimerRef.current = pollTimer;
       } else {
         const error = await response.json();
         setMessage({
           type: 'error',
           text: error.error || 'Failed to initiate connection',
         });
+        setConnecting(null);
       }
     } catch (error) {
       console.error('Failed to connect:', error);
@@ -1950,7 +2037,6 @@ function AutomationPageContent() {
         type: 'error',
         text: 'Failed to initiate connection',
       });
-    } finally {
       setConnecting(null);
     }
   };
@@ -5560,7 +5646,7 @@ function AutomationPageContent() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-white font-medium truncate">{post.title}</h4>
+                        <h4 className="font-heading text-white font-medium truncate">{post.title}</h4>
                         {isOverdue && (
                           <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full">
                             Overdue
@@ -5643,7 +5729,7 @@ function AutomationPageContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">No Scheduled Posts</h3>
+              <h3 className="font-heading text-lg font-medium text-white mb-2">No Scheduled Posts</h3>
               <p className="text-brand-silver/70 mb-6 max-w-md mx-auto">
                 {profiles?.linkedin?.connected 
                   ? "You don't have any posts scheduled. Click 'Schedule Post' to create one."
@@ -5744,7 +5830,7 @@ function AutomationPageContent() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-white font-medium truncate">{post.title}</h4>
+                        <h4 className="font-heading text-white font-medium truncate">{post.title}</h4>
                         <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full shrink-0">
                           Published
                         </span>
@@ -5802,7 +5888,7 @@ function AutomationPageContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">No Recent Activity</h3>
+              <h3 className="font-heading text-lg font-medium text-white mb-2">No Recent Activity</h3>
               <p className="text-brand-silver/70 max-w-md mx-auto">
                 Once you post or schedule content, it will appear here.
               </p>
@@ -5854,7 +5940,7 @@ function AutomationPageContent() {
                       </div>
                       
                       <div>
-                        <h4 className="text-white font-medium">{task.task_type_display}</h4>
+                        <h4 className="font-heading text-white font-medium">{task.task_type_display}</h4>
                         <p className="text-xs text-brand-silver/70">
                           {new Date(task.created_at).toLocaleString(undefined, {
                             month: 'short',
@@ -5901,7 +5987,7 @@ function AutomationPageContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">No Automation Tasks Yet</h3>
+              <h3 className="font-heading text-lg font-medium text-white mb-2">No Automation Tasks Yet</h3>
               <p className="text-brand-silver/70 max-w-md mx-auto">
                 {profiles?.linkedin?.connected 
                   ? "Your automation tasks will appear here as you post and schedule content."
@@ -7172,7 +7258,7 @@ function AutomationPageContent() {
                             <p className="text-xs text-brand-silver/50 uppercase truncate">
                               {fbLinkPreview.site_name || new URL(fbLinkPreview.url).hostname}
                             </p>
-                            <h4 className="text-sm font-medium text-white truncate mt-0.5">
+                            <h4 className="font-heading text-sm font-medium text-white truncate mt-0.5">
                               {fbLinkPreview.title || 'No title'}
                             </h4>
                             <p className="text-xs text-brand-silver/70 line-clamp-2 mt-0.5">
@@ -7920,7 +8006,7 @@ function AutomationPageContent() {
 
             {/* Active Stories */}
             <div className="mb-6">
-              <h3 className="text-sm font-medium text-brand-silver mb-3">Active Stories</h3>
+              <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">Active Stories</h3>
               {loadingFbStories ? (
                 <div className="flex justify-center py-4">
                   <svg className="animate-spin w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24">
@@ -7959,7 +8045,7 @@ function AutomationPageContent() {
 
             {/* Create Story Section */}
             <div className="border-t border-brand-ghost/30 pt-6">
-              <h3 className="text-sm font-medium text-brand-silver mb-3">Create New Stories</h3>
+              <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">Create New Stories</h3>
               
               {/* Info Banner */}
               <div className="mb-4 p-3 rounded-lg bg-[#1877F2]/10 border border-[#1877F2]/30">
@@ -8001,7 +8087,7 @@ function AutomationPageContent() {
               {fbStoryQueue.length > 0 && (
                 <div className="mb-4">
                   <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm text-brand-silver">Story Queue ({fbStoryQueue.length} items)</h4>
+                    <h4 className="font-heading text-sm text-brand-silver">Story Queue ({fbStoryQueue.length} items)</h4>
                     <button
                       onClick={resetFacebookStoryForm}
                       disabled={postingFbStory}
@@ -8143,7 +8229,7 @@ function AutomationPageContent() {
 
             {/* Active Stories */}
             <div className="mb-6">
-              <h3 className="text-sm font-medium text-brand-silver mb-3">Active Stories</h3>
+              <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">Active Stories</h3>
               {loadingIgStories ? (
                 <div className="flex justify-center py-4">
                   <svg className="animate-spin w-6 h-6 text-pink-500" fill="none" viewBox="0 0 24 24">
@@ -8173,7 +8259,7 @@ function AutomationPageContent() {
 
             {/* Create Story Section */}
             <div className="border-t border-brand-ghost/30 pt-6">
-              <h3 className="text-sm font-medium text-brand-silver mb-3">Create New Stories</h3>
+              <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">Create New Stories</h3>
               
               {/* Info Banner */}
               <div className="mb-4 p-3 rounded-lg bg-pink-500/10 border border-pink-500/30">
@@ -8215,7 +8301,7 @@ function AutomationPageContent() {
               {igStoryQueue.length > 0 && (
                 <div className="mb-4">
                   <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm text-brand-silver">Story Queue ({igStoryQueue.length} items)</h4>
+                    <h4 className="font-heading text-sm text-brand-silver">Story Queue ({igStoryQueue.length} items)</h4>
                     <button
                       onClick={resetInstagramStoryForm}
                       disabled={postingIgStory}
@@ -8367,7 +8453,7 @@ function AutomationPageContent() {
             {/* Active Uploads */}
             {fbResumableUploads.length > 0 && (
               <div className="mb-6">
-                <h3 className="text-sm font-medium text-brand-silver mb-3">In-Progress Uploads</h3>
+                <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">In-Progress Uploads</h3>
                 <div className="space-y-2">
                   {fbResumableUploads.map((upload) => (
                     <div key={upload.upload_session_id} className="p-3 rounded-lg bg-brand-obsidian/50 border border-brand-ghost/30">
@@ -8410,7 +8496,7 @@ function AutomationPageContent() {
 
             {/* New Upload Section */}
             <div className="border-t border-brand-ghost/30 pt-6">
-              <h3 className="text-sm font-medium text-brand-silver mb-3">Upload New Video</h3>
+              <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">Upload New Video</h3>
               
               {/* Title Input */}
               <div className="mb-4">
@@ -8598,7 +8684,7 @@ function AutomationPageContent() {
             <div className="mb-6 p-4 rounded-lg bg-gradient-to-br from-purple-600/20 via-pink-500/20 to-orange-400/20 border border-pink-500/30">
               <div className="flex items-center gap-3 mb-2">
                 <span className="text-2xl">🚀</span>
-                <h3 className="text-lg font-semibold text-white">Coming Soon</h3>
+                <h3 className="font-heading text-lg font-semibold text-white">Coming Soon</h3>
               </div>
               <p className="text-brand-silver text-sm">
                 Instagram large video upload with resumable chunked uploads is being developed. 
@@ -8608,7 +8694,7 @@ function AutomationPageContent() {
 
             {/* Current Option */}
             <div className="border-t border-brand-ghost/30 pt-6">
-              <h3 className="text-sm font-medium text-brand-silver mb-3">Current Option</h3>
+              <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">Current Option</h3>
               <p className="text-brand-silver/70 text-sm mb-4">
                 For now, you can upload videos up to 100MB directly through the Compose Post feature.
               </p>

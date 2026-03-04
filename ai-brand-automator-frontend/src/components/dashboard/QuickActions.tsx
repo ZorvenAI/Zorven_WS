@@ -77,7 +77,7 @@ export function QuickActions() {
             <div className="flex items-center">
               <span className="text-2xl mr-3">{action.icon}</span>
               <div>
-                <h4 className="text-sm font-medium text-white">{action.title}</h4>
+                <h4 className="font-heading text-sm font-medium text-white">{action.title}</h4>
                 <p className="text-sm text-brand-silver/70">{action.description}</p>
               </div>
             </div>

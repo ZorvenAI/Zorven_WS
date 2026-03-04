@@ -4,25 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 7 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash. ~3,080 tests across all components.
+AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 8 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash and Anthropic Claude. ~3,200 tests across all components.
 
 ## Monorepo Layout
 
 ```
 ai-brand-automator/              # Django 4.2 backend (DRF, JWT, django-tenants)
 ai-brand-automator-frontend/     # Next.js 15 + React 19 + TypeScript + Tailwind v4
-pipeline-orchestrator-svc/       # FastAPI — LangGraph pipeline execution (port 8010)
+pipeline-orchestrator-svc/       # FastAPI — sequential pipeline execution (port 8010)
 discovery-agent-svc/             # FastAPI — Web research via Tavily (port 8020)
 intelligence-agent-svc/          # FastAPI — ISO 10668 brand valuation (port 8030)
 chat-titling-worker/             # FastAPI — Auto-titles chat sessions (port 8040)
 content-agent-service/           # FastAPI — SEO/AEO/GEO blog authoring (port 8050)
 social-agent-service/            # FastAPI — Social media promotion (port 8060)
 rag-uploader-agent-service/      # FastAPI — RAG document archival (port 8070)
+brand-equity-calculator-svc/     # FastAPI — Public brand equity calc, Anthropic Claude (port 8090)
 deployment/                      # Master docker-compose, Kong config, scripts
 docs/                            # Architecture docs
 ```
 
-Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service. Missing: rag-uploader-agent-service.
+Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service, brand-equity-calculator-svc. Missing: rag-uploader-agent-service.
 
 ## Build, Run, and Test Commands
 
@@ -104,7 +105,7 @@ docker compose --profile with-kafka --profile with-db up      # + Local PostgreS
 docker compose down -v                                        # Tear down
 ```
 
-**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, Orchestrator 8010, Discovery 8020, Intelligence 8030, Titling 8040, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080
+**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, Orchestrator 8010, Discovery 8020, Intelligence 8030, Titling 8040, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090
 
 **Frontend Docker build** requires `output: "standalone"` in `next.config.ts`. Without it, the Dockerfile `COPY --from=builder /app/.next/standalone` step fails.
 
@@ -120,7 +121,7 @@ Browser → Next.js (:3000) → apiClient (JWT auto-refresh) → Kong Gateway (:
 ### Pipeline Flow
 
 ```
-Django dispatches job → pipeline-orchestrator-svc (:8010) → LangGraph DAG
+Django dispatches job → pipeline-orchestrator-svc (:8010) → direct sequential execution
   → discovery-agent-svc (:8020) → research
   → intelligence-agent-svc (:8030) → brand valuation
   → content-agent-service (:8050) → blog authoring
@@ -135,9 +136,11 @@ When `ORCHESTRATION_KAFKA_ENABLED=false` (default), dispatch is HTTP. When `true
 - **Chat (auto-detect)**: Dispatched without a manifest. `PipelineComposer` uses Gemini function-calling to dynamically compose a pipeline from the node catalog. Chat ALWAYS uses this mode.
 - **Pipeline UI (manifest-driven)**: Dispatched with a `PipelineManifest` from `seed_manifests.py`. Fixed DAG defined in the manifest JSON.
 
-**Per-node progress tracking**: Each node is wrapped by `TrackedNode` (`pipeline-orchestrator-svc/app/nodes/tracked.py`) which sends HTTP progress callbacks + Kafka trace events before/after execution. Django's `result_handler.py` updates the DB and Redis cache with `current_node` and `progress_percent` on every callback. Frontend polls `/quick-status` every 3s via `usePollingJob`.
+**Per-node progress tracking**: The `JobExecutor` (`pipeline-orchestrator-svc/app/services/job_executor.py`) executes nodes **sequentially** in topological order (Kahn’s algorithm) via a simple for-loop. Before each node it sends a `running` progress callback; after each node it sends a `done` callback. This replaces the previous LangGraph `ainvoke`/`astream` approach which failed to fire per-node callbacks reliably on Railway. LangGraph remains a dependency but is **not used for execution**. Django's `result_handler.py` updates the DB and Redis cache with `current_node` and `progress_percent` on every callback. Frontend polls `/quick-status` every 3s via `usePollingJob`.
 
-**Cancel mechanism**: Sets `cancel:{job_id}` key in Redis with 1-hour TTL. `TrackedNode` checks this before each node execution.
+**Cancel mechanism**: Sets `cancel:{job_id}` key in Redis with 1-hour TTL. The executor checks this flag before each node in the sequential loop.
+
+**Dynamic skill loading**: `pipeline-orchestrator-svc/skills/` contains 15 `.md` skill files. The skill router (`pipeline-orchestrator-svc/app/skills/`) resolves and injects relevant skills per-node at execution time based on user intent. Skills provide contextual LLM instructions to agent services.
 
 **Social agent publishing**: Social agent generates content via Gemini, then delegates actual platform publishing to Django's MCP server (via `SOCIAL_MCP_SERVER_URL`), which has per-platform SDK wrappers.
 
@@ -172,11 +175,11 @@ Schema-based via `django-tenants`. All models have a nullable `tenant` FK. Most 
 
 ### Redis Database Allocation
 
-DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader
+DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity
 
 ### Microservice Layout Convention
 
-All 7 agent microservices follow this structure:
+All 8 agent microservices follow this structure:
 ```
 {service}/app/
 ├── api/          # FastAPI routes + Pydantic request/response schemas
@@ -188,7 +191,7 @@ All 7 agent microservices follow this structure:
 └── main.py       # FastAPI application with lifespan management
 ```
 
-Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `CONTENT_`, `SOCIAL_`, `TITLING_`, `RAG_UPLOADER_`).
+Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `CONTENT_`, `SOCIAL_`, `TITLING_`, `RAG_UPLOADER_`, `BRAND_EQUITY_`).
 
 ### Kafka Topics
 
@@ -349,6 +352,8 @@ Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `t
 | Pipeline node tracker | `pipeline-orchestrator-svc/app/nodes/tracked.py` |
 | Pipeline composer (auto-detect) | `pipeline-orchestrator-svc/app/nodes/internal/pipeline_composer.py` |
 | Node registry (all available nodes) | `pipeline-orchestrator-svc/app/factory/node_registry.py` |
+| Skill loader + router | `pipeline-orchestrator-svc/app/skills/` |
+| Skill definitions (15 .md files) | `pipeline-orchestrator-svc/skills/` |
 | Frontend API client | `ai-brand-automator-frontend/src/lib/api.ts` |
 | Frontend error types | `ai-brand-automator-frontend/src/lib/errors.ts` |
 | Tenant context | `ai-brand-automator-frontend/src/contexts/TenantContext.tsx` |

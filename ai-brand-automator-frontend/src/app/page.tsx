@@ -470,7 +470,7 @@ export default function Home() {
               <p className="text-sm text-brand-silver/60">Automate your brand with the power of AI.</p>
             </div>
             <div>
-              <h4 className="font-semibold text-white mb-4">Product</h4>
+              <h4 className="font-heading font-semibold text-white mb-4">Product</h4>
               <ul className="space-y-2 text-sm text-brand-silver/60">
                 <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
                 <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
@@ -479,7 +479,7 @@ export default function Home() {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold text-white mb-4">Company</h4>
+              <h4 className="font-heading font-semibold text-white mb-4">Company</h4>
               <ul className="space-y-2 text-sm text-brand-silver/60">
                 <li><a href="#" className="hover:text-white transition-colors">About</a></li>
                 <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
@@ -488,7 +488,7 @@ export default function Home() {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold text-white mb-4">Legal</h4>
+              <h4 className="font-heading font-semibold text-white mb-4">Legal</h4>
               <ul className="space-y-2 text-sm text-brand-silver/60">
                 <li><a href="#" className="hover:text-white transition-colors">Privacy</a></li>
                 <li><a href="#" className="hover:text-white transition-colors">Terms</a></li>
