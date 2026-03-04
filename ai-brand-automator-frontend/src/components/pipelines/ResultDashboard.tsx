@@ -235,7 +235,7 @@ export default function ResultDashboard({
   return (
     <div className="glass-card p-6 space-y-6">
       {/* Header */}
-      <h3 className="text-sm font-heading font-semibold text-white">
+      <h3 className="font-heading text-sm font-heading font-semibold text-white">
         Analysis Results
       </h3>
 
@@ -254,7 +254,7 @@ export default function ResultDashboard({
       {/* Summary */}
       {summary && (
         <section>
-          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Summary
           </h4>
           <MarkdownMessage content={summary} />
@@ -264,7 +264,7 @@ export default function ResultDashboard({
       {/* Key findings */}
       {findings && findings.length > 0 && (
         <section>
-          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Key Findings
           </h4>
           {findings.map((f, i) => (
@@ -278,7 +278,7 @@ export default function ResultDashboard({
       {/* Recommendations */}
       {recommendations && recommendations.length > 0 && (
         <section>
-          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations
           </h4>
           {recommendations.map((r, i) => (
@@ -293,7 +293,7 @@ export default function ResultDashboard({
       {blogContent && (
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider">
+            <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider">
               Blog Post
             </h4>
             <div className="flex gap-2">
@@ -349,7 +349,7 @@ export default function ResultDashboard({
       {/* ── Social Promotion status ──────────────────────────────── */}
       {publishResults.length > 0 && (
         <section>
-          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
             Social Promotion
           </h4>
           <div className="space-y-2">
@@ -411,7 +411,7 @@ export default function ResultDashboard({
       {/* Other sections (anything not already handled above) */}
       {otherEntries.map(([key, value]) => (
         <section key={key}>
-          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             {sectionTitle(key)}
           </h4>
           {renderValue(value)}

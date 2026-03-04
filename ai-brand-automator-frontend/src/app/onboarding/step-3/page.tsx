@@ -26,7 +26,7 @@ export default function OnboardingStep3() {
         </Link>
         
         <div className="glass-card p-8">
-          <h1 className="text-3xl font-heading font-bold text-white mb-2">
+          <h1 className="font-heading text-3xl font-heading font-bold text-white mb-2">
             Define Your Target Audience
           </h1>
           <p className="text-brand-silver/70 font-body mb-8">

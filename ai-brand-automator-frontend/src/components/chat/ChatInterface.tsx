@@ -379,7 +379,7 @@ export function ChatInterface() {
               )}
             </button>
             <div>
-              <h1 className="text-lg sm:text-xl font-heading font-semibold text-white truncate">
+              <h1 className="font-heading text-lg sm:text-xl font-heading font-semibold text-white truncate">
                 AI Brand Assistant
               </h1>
               <p className="text-xs sm:text-sm text-brand-silver/70 hidden sm:block">

@@ -144,7 +144,7 @@ function SubscriptionContent() {
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center">
-          <h1 className="text-4xl font-heading font-bold tracking-tight text-white sm:text-5xl">
+          <h1 className="font-heading text-4xl font-heading font-bold tracking-tight text-white sm:text-5xl">
             Choose Your Plan
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-brand-silver/80 font-body">
@@ -244,7 +244,7 @@ function SubscriptionContent() {
 
         {/* FAQ or additional info */}
         <div className="mx-auto mt-16 max-w-3xl glass-card p-8">
-          <h2 className="text-center text-2xl font-heading font-bold text-white">
+          <h2 className="font-heading text-center text-2xl font-heading font-bold text-white">
             Frequently Asked Questions
           </h2>
           <dl className="mt-8 space-y-6">

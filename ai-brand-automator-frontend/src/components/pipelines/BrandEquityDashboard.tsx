@@ -277,7 +277,7 @@ export default function BrandEquityDashboard({
     <div className="glass-card p-6 space-y-8">
       {/* Header + actions */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-heading font-semibold text-white">
+        <h3 className="font-heading text-sm font-heading font-semibold text-white">
           Brand Equity Analysis
         </h3>
         <div className="flex gap-2">
@@ -460,7 +460,7 @@ export default function BrandEquityDashboard({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-2">
           {hasAnnualRoyalties && (
             <div className="flex flex-col items-center">
-              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+              <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
                 5-Year Royalty Relief Forecast
               </h4>
               <NpvChart
@@ -471,7 +471,7 @@ export default function BrandEquityDashboard({
           )}
           {hasRadarData && (
             <div className="flex flex-col items-center">
-              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+              <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
                 BSI Pillar Comparison
               </h4>
               <PillarRadar pillars={bsiPillars} />
@@ -483,7 +483,7 @@ export default function BrandEquityDashboard({
       {/* Summary */}
       {summary && (
         <section>
-          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Summary
           </h4>
           <p className="text-sm text-brand-silver leading-relaxed">{summary}</p>
@@ -493,7 +493,7 @@ export default function BrandEquityDashboard({
       {/* Key findings */}
       {findings && findings.length > 0 && (
         <section>
-          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Key Findings
           </h4>
           <ul className="list-disc list-inside space-y-1">
@@ -509,7 +509,7 @@ export default function BrandEquityDashboard({
       {/* Recommendations */}
       {recommendations && recommendations.length > 0 && (
         <section>
-          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations
           </h4>
           <ol className="list-decimal list-inside space-y-1">
@@ -525,7 +525,7 @@ export default function BrandEquityDashboard({
       {/* Grounding citations */}
       {sources && sources.length > 0 && (
         <section>
-          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Sources
           </h4>
           <div className="space-y-1.5">

@@ -127,7 +127,7 @@ export default function RecentActivity() {
     return (
       <div className="dashboard-card">
         <div className="mb-4">
-          <h3 className="text-lg font-heading font-medium text-white">Recent Activity</h3>
+          <h3 className="font-heading text-lg font-heading font-medium text-white">Recent Activity</h3>
         </div>
         <div className="space-y-4">
           {[1, 2, 3, 4].map((i) => (
@@ -145,7 +145,7 @@ export default function RecentActivity() {
     return (
       <div className="dashboard-card">
         <div className="mb-4">
-          <h3 className="text-lg font-heading font-medium text-white">Recent Activity</h3>
+          <h3 className="font-heading text-lg font-heading font-medium text-white">Recent Activity</h3>
         </div>
         <div className="py-8 text-center">
           <p className="text-brand-silver/70">No recent activity yet. Start by creating a company or uploading assets!</p>
@@ -157,7 +157,7 @@ export default function RecentActivity() {
   return (
     <div className="dashboard-card">
       <div className="mb-4">
-        <h3 className="text-lg font-heading font-medium text-white">Recent Activity</h3>
+        <h3 className="font-heading text-lg font-heading font-medium text-white">Recent Activity</h3>
       </div>
       <div className="space-y-3">
         {activities.map((activity) => (

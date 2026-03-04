@@ -3987,7 +3987,7 @@ function AutomationPageContent() {
             <span>Back to Dashboard</span>
           </Link>
           
-          <h1 className="text-3xl font-heading font-bold text-white">Social Media Automation</h1>
+          <h1 className="font-heading text-3xl font-heading font-bold text-white">Social Media Automation</h1>
           <p className="mt-2 text-brand-silver/70">
             Connect your social media accounts to automate posting and manage your brand presence.
           </p>
@@ -4034,7 +4034,7 @@ function AutomationPageContent() {
                       {config.icon}
                     </div>
                     <div>
-                      <h3 className="text-lg font-heading font-semibold text-white">
+                      <h3 className="font-heading text-lg font-heading font-semibold text-white">
                         {config.name}
                       </h3>
                       {isConnected && platformStatus?.profile_name ? (
@@ -5581,7 +5581,7 @@ function AutomationPageContent() {
 
         {/* Google Business Profile Section */}
         <div className="mt-8">
-          <h2 className="text-2xl font-heading font-bold text-white mb-4">Google Business Profile</h2>
+          <h2 className="font-heading text-2xl font-heading font-bold text-white mb-4">Google Business Profile</h2>
           <GoogleBusinessSection 
             onMessage={(msg) => setMessage(msg)}
             canEdit={canEdit}
@@ -5592,7 +5592,7 @@ function AutomationPageContent() {
         {/* Content Calendar Section */}
         <div className="mt-12">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-heading font-bold text-white">Content Calendar</h2>
+            <h2 className="font-heading text-2xl font-heading font-bold text-white">Content Calendar</h2>
             {canEdit && profiles?.linkedin?.connected && (
               <button
                 onClick={() => setShowScheduleModal(true)}
@@ -5615,7 +5615,7 @@ function AutomationPageContent() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-white font-medium truncate">{post.title}</h4>
+                        <h4 className="font-heading text-white font-medium truncate">{post.title}</h4>
                         {isOverdue && (
                           <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full">
                             Overdue
@@ -5698,7 +5698,7 @@ function AutomationPageContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">No Scheduled Posts</h3>
+              <h3 className="font-heading text-lg font-medium text-white mb-2">No Scheduled Posts</h3>
               <p className="text-brand-silver/70 mb-6 max-w-md mx-auto">
                 {profiles?.linkedin?.connected 
                   ? "You don't have any posts scheduled. Click 'Schedule Post' to create one."
@@ -5720,7 +5720,7 @@ function AutomationPageContent() {
         {/* Recent Activity Section - Combined LinkedIn posts and Tweets */}
         <div className="mt-12">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-heading font-bold text-white">Recent Activity</h2>
+            <h2 className="font-heading text-2xl font-heading font-bold text-white">Recent Activity</h2>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <label className="text-sm text-brand-silver">Show:</label>
@@ -5799,7 +5799,7 @@ function AutomationPageContent() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-white font-medium truncate">{post.title}</h4>
+                        <h4 className="font-heading text-white font-medium truncate">{post.title}</h4>
                         <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full shrink-0">
                           Published
                         </span>
@@ -5857,7 +5857,7 @@ function AutomationPageContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">No Recent Activity</h3>
+              <h3 className="font-heading text-lg font-medium text-white mb-2">No Recent Activity</h3>
               <p className="text-brand-silver/70 max-w-md mx-auto">
                 Once you post or schedule content, it will appear here.
               </p>
@@ -5868,7 +5868,7 @@ function AutomationPageContent() {
         {/* Automation Tasks Section */}
         <div className="mt-12">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-heading font-bold text-white">Automation Tasks</h2>
+            <h2 className="font-heading text-2xl font-heading font-bold text-white">Automation Tasks</h2>
             <button
               onClick={fetchAutomationTasks}
               className="text-sm text-brand-electric hover:text-brand-electric/80 flex items-center gap-1"
@@ -5909,7 +5909,7 @@ function AutomationPageContent() {
                       </div>
                       
                       <div>
-                        <h4 className="text-white font-medium">{task.task_type_display}</h4>
+                        <h4 className="font-heading text-white font-medium">{task.task_type_display}</h4>
                         <p className="text-xs text-brand-silver/70">
                           {new Date(task.created_at).toLocaleString(undefined, {
                             month: 'short',
@@ -5956,7 +5956,7 @@ function AutomationPageContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">No Automation Tasks Yet</h3>
+              <h3 className="font-heading text-lg font-medium text-white mb-2">No Automation Tasks Yet</h3>
               <p className="text-brand-silver/70 max-w-md mx-auto">
                 {profiles?.linkedin?.connected 
                   ? "Your automation tasks will appear here as you post and schedule content."
@@ -5994,7 +5994,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-heading font-bold text-white">
+                <h2 className="font-heading text-xl font-heading font-bold text-white">
                   {linkedinCarouselMode ? 'Create Carousel Post' : 'Create LinkedIn Post'}
                 </h2>
                 <p className="text-sm text-brand-silver/70">
@@ -6418,7 +6418,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-heading font-bold text-white">
+                <h2 className="font-heading text-xl font-heading font-bold text-white">
                   {isThreadMode ? 'Create Thread' : 'Create Tweet'}
                 </h2>
                 <p className="text-sm text-brand-silver/70">
@@ -6974,7 +6974,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-heading font-bold text-white">Create Facebook Post</h2>
+                <h2 className="font-heading text-xl font-heading font-bold text-white">Create Facebook Post</h2>
                 <p className="text-sm text-brand-silver/70">Share content to your Facebook Page</p>
               </div>
             </div>
@@ -7227,7 +7227,7 @@ function AutomationPageContent() {
                             <p className="text-xs text-brand-silver/50 uppercase truncate">
                               {fbLinkPreview.site_name || new URL(fbLinkPreview.url).hostname}
                             </p>
-                            <h4 className="text-sm font-medium text-white truncate mt-0.5">
+                            <h4 className="font-heading text-sm font-medium text-white truncate mt-0.5">
                               {fbLinkPreview.title || 'No title'}
                             </h4>
                             <p className="text-xs text-brand-silver/70 line-clamp-2 mt-0.5">
@@ -7509,7 +7509,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-heading font-bold text-white">Create Instagram Post</h2>
+                <h2 className="font-heading text-xl font-heading font-bold text-white">Create Instagram Post</h2>
                 <p className="text-sm text-brand-silver/70">Share content to your Instagram Business account</p>
               </div>
             </div>
@@ -7968,14 +7968,14 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-heading font-bold text-white">Facebook Stories</h2>
+                <h2 className="font-heading text-xl font-heading font-bold text-white">Facebook Stories</h2>
                 <p className="text-sm text-brand-silver/70">Create 24-hour ephemeral content</p>
               </div>
             </div>
 
             {/* Active Stories */}
             <div className="mb-6">
-              <h3 className="text-sm font-medium text-brand-silver mb-3">Active Stories</h3>
+              <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">Active Stories</h3>
               {loadingFbStories ? (
                 <div className="flex justify-center py-4">
                   <svg className="animate-spin w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24">
@@ -8014,7 +8014,7 @@ function AutomationPageContent() {
 
             {/* Create Story Section */}
             <div className="border-t border-brand-ghost/30 pt-6">
-              <h3 className="text-sm font-medium text-brand-silver mb-3">Create New Stories</h3>
+              <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">Create New Stories</h3>
               
               {/* Info Banner */}
               <div className="mb-4 p-3 rounded-lg bg-[#1877F2]/10 border border-[#1877F2]/30">
@@ -8056,7 +8056,7 @@ function AutomationPageContent() {
               {fbStoryQueue.length > 0 && (
                 <div className="mb-4">
                   <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm text-brand-silver">Story Queue ({fbStoryQueue.length} items)</h4>
+                    <h4 className="font-heading text-sm text-brand-silver">Story Queue ({fbStoryQueue.length} items)</h4>
                     <button
                       onClick={resetFacebookStoryForm}
                       disabled={postingFbStory}
@@ -8191,14 +8191,14 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-heading font-bold text-white">Instagram Stories</h2>
+                <h2 className="font-heading text-xl font-heading font-bold text-white">Instagram Stories</h2>
                 <p className="text-sm text-brand-silver/70">Create 24-hour ephemeral content</p>
               </div>
             </div>
 
             {/* Active Stories */}
             <div className="mb-6">
-              <h3 className="text-sm font-medium text-brand-silver mb-3">Active Stories</h3>
+              <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">Active Stories</h3>
               {loadingIgStories ? (
                 <div className="flex justify-center py-4">
                   <svg className="animate-spin w-6 h-6 text-pink-500" fill="none" viewBox="0 0 24 24">
@@ -8228,7 +8228,7 @@ function AutomationPageContent() {
 
             {/* Create Story Section */}
             <div className="border-t border-brand-ghost/30 pt-6">
-              <h3 className="text-sm font-medium text-brand-silver mb-3">Create New Stories</h3>
+              <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">Create New Stories</h3>
               
               {/* Info Banner */}
               <div className="mb-4 p-3 rounded-lg bg-pink-500/10 border border-pink-500/30">
@@ -8270,7 +8270,7 @@ function AutomationPageContent() {
               {igStoryQueue.length > 0 && (
                 <div className="mb-4">
                   <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm text-brand-silver">Story Queue ({igStoryQueue.length} items)</h4>
+                    <h4 className="font-heading text-sm text-brand-silver">Story Queue ({igStoryQueue.length} items)</h4>
                     <button
                       onClick={resetInstagramStoryForm}
                       disabled={postingIgStory}
@@ -8402,7 +8402,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-heading font-bold text-white">Large Video Upload</h2>
+                <h2 className="font-heading text-xl font-heading font-bold text-white">Large Video Upload</h2>
                 <p className="text-sm text-brand-silver/70">Resumable upload for videos &gt; 1GB</p>
               </div>
             </div>
@@ -8422,7 +8422,7 @@ function AutomationPageContent() {
             {/* Active Uploads */}
             {fbResumableUploads.length > 0 && (
               <div className="mb-6">
-                <h3 className="text-sm font-medium text-brand-silver mb-3">In-Progress Uploads</h3>
+                <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">In-Progress Uploads</h3>
                 <div className="space-y-2">
                   {fbResumableUploads.map((upload) => (
                     <div key={upload.upload_session_id} className="p-3 rounded-lg bg-brand-obsidian/50 border border-brand-ghost/30">
@@ -8465,7 +8465,7 @@ function AutomationPageContent() {
 
             {/* New Upload Section */}
             <div className="border-t border-brand-ghost/30 pt-6">
-              <h3 className="text-sm font-medium text-brand-silver mb-3">Upload New Video</h3>
+              <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">Upload New Video</h3>
               
               {/* Title Input */}
               <div className="mb-4">
@@ -8632,7 +8632,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-heading font-bold text-white">Instagram Large Video Upload</h2>
+                <h2 className="font-heading text-xl font-heading font-bold text-white">Instagram Large Video Upload</h2>
                 <p className="text-sm text-brand-silver/70">Upload videos larger than 1GB</p>
               </div>
             </div>
@@ -8653,7 +8653,7 @@ function AutomationPageContent() {
             <div className="mb-6 p-4 rounded-lg bg-gradient-to-br from-purple-600/20 via-pink-500/20 to-orange-400/20 border border-pink-500/30">
               <div className="flex items-center gap-3 mb-2">
                 <span className="text-2xl">🚀</span>
-                <h3 className="text-lg font-semibold text-white">Coming Soon</h3>
+                <h3 className="font-heading text-lg font-semibold text-white">Coming Soon</h3>
               </div>
               <p className="text-brand-silver text-sm">
                 Instagram large video upload with resumable chunked uploads is being developed. 
@@ -8663,7 +8663,7 @@ function AutomationPageContent() {
 
             {/* Current Option */}
             <div className="border-t border-brand-ghost/30 pt-6">
-              <h3 className="text-sm font-medium text-brand-silver mb-3">Current Option</h3>
+              <h3 className="font-heading text-sm font-medium text-brand-silver mb-3">Current Option</h3>
               <p className="text-brand-silver/70 text-sm mb-4">
                 For now, you can upload videos up to 100MB directly through the Compose Post feature.
               </p>
@@ -8723,7 +8723,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-heading font-bold text-white">Schedule Post</h2>
+                <h2 className="font-heading text-xl font-heading font-bold text-white">Schedule Post</h2>
                 <p className="text-sm text-brand-silver/70">
                   Schedule content to be posted later
                 </p>
@@ -9244,7 +9244,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-heading font-bold text-white">Edit Scheduled Post</h2>
+                <h2 className="font-heading text-xl font-heading font-bold text-white">Edit Scheduled Post</h2>
                 <p className="text-sm text-brand-silver/70">
                   Update your scheduled post details
                 </p>

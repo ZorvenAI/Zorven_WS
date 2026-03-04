@@ -65,7 +65,7 @@ export function QuickActions() {
   return (
     <div className="dashboard-card">
       <div className="mb-4">
-        <h3 className="text-lg font-heading font-medium text-white">Quick Actions</h3>
+        <h3 className="font-heading text-lg font-heading font-medium text-white">Quick Actions</h3>
       </div>
       <div className="space-y-3">
         {actions.map((action, index) => (
@@ -77,7 +77,7 @@ export function QuickActions() {
             <div className="flex items-center">
               <span className="text-2xl mr-3">{action.icon}</span>
               <div>
-                <h4 className="text-sm font-medium text-white">{action.title}</h4>
+                <h4 className="font-heading text-sm font-medium text-white">{action.title}</h4>
                 <p className="text-sm text-brand-silver/70">{action.description}</p>
               </div>
             </div>

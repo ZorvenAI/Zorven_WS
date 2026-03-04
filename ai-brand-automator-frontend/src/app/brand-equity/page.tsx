@@ -99,7 +99,7 @@ function DimensionCard({ dim }: { dim: DimensionScore }) {
   return (
     <div className="glass-card p-5">
       <div className="flex items-center justify-between mb-3">
-        <h4 className="text-white font-heading font-semibold text-sm">{dim.name}</h4>
+        <h4 className="font-heading text-white font-heading font-semibold text-sm">{dim.name}</h4>
         <span className={`text-lg font-bold ${scoreColor(dim.score)}`}>{dim.score}</span>
       </div>
       <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden mb-3">
@@ -213,7 +213,7 @@ export default function BrandEquityPage() {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-electric/10 border border-brand-electric/20 mb-4">
             <span className="text-xs text-brand-electric font-medium">ISO 20671:2019</span>
           </div>
-          <h1 className="text-3xl sm:text-5xl font-heading font-bold text-white mb-4">
+          <h1 className="font-heading text-3xl sm:text-5xl font-heading font-bold text-white mb-4">
             Brand Equity Calculator
           </h1>
           <p className="text-lg text-brand-silver/60 max-w-2xl mx-auto">
@@ -319,7 +319,7 @@ export default function BrandEquityPage() {
               <div className="absolute inset-0 rounded-full border-4 border-white/10" />
               <div className="absolute inset-0 rounded-full border-4 border-brand-electric border-t-transparent animate-spin" />
             </div>
-            <h3 className="text-xl font-heading font-bold text-white mb-2">
+            <h3 className="font-heading text-xl font-heading font-bold text-white mb-2">
               Analyzing Brand Equity
             </h3>
             <p className="text-brand-silver/60">
@@ -337,7 +337,7 @@ export default function BrandEquityPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
               </svg>
             </div>
-            <h3 className="text-xl font-heading font-bold text-white mb-2">Analysis Failed</h3>
+            <h3 className="font-heading text-xl font-heading font-bold text-white mb-2">Analysis Failed</h3>
             <p className="text-brand-silver/60 mb-6">{error}</p>
             <button onClick={() => setState('form')} className="btn-primary px-6 py-2.5">
               Try Again
@@ -351,7 +351,7 @@ export default function BrandEquityPage() {
             {/* Overall Score */}
             <div className="glass-card p-8 text-center">
               <p className="text-sm text-brand-silver/50 mb-2">{result.methodology}</p>
-              <h2 className="text-2xl font-heading font-bold text-white mb-6">
+              <h2 className="font-heading text-2xl font-heading font-bold text-white mb-6">
                 {result.company_name} — Brand Equity Score
               </h2>
               <ScoreGauge score={result.overall_score} />
@@ -359,7 +359,7 @@ export default function BrandEquityPage() {
 
             {/* Dimension Breakdown */}
             <div>
-              <h3 className="text-lg font-heading font-semibold text-white mb-4">Dimension Breakdown</h3>
+              <h3 className="font-heading text-lg font-heading font-semibold text-white mb-4">Dimension Breakdown</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {result.dimensions.map((dim, i) => (
                   <DimensionCard key={i} dim={dim} />
@@ -370,13 +370,13 @@ export default function BrandEquityPage() {
             {/* Competitor Analysis */}
             {result.competitors && result.competitors.length > 0 && (
               <div>
-                <h3 className="text-lg font-heading font-semibold text-white mb-4">Competitor Analysis</h3>
+                <h3 className="font-heading text-lg font-heading font-semibold text-white mb-4">Competitor Analysis</h3>
                 <div className="space-y-4">
                   {result.competitors.map((comp, i) => (
                     <div key={i} className="glass-card p-5">
                       <div className="flex items-center justify-between mb-1">
                         <div>
-                          <h4 className="text-white font-heading font-semibold">{comp.name}</h4>
+                          <h4 className="font-heading text-white font-heading font-semibold">{comp.name}</h4>
                           {comp.headquarters && (
                             <p className="text-xs text-brand-silver/40 mt-0.5">{comp.headquarters}</p>
                           )}
@@ -431,7 +431,7 @@ export default function BrandEquityPage() {
             {/* Formula Explanation */}
             {result.formula_explanation && (
               <div className="glass-card p-6">
-                <h3 className="text-lg font-heading font-semibold text-white mb-3">How We Calculated This</h3>
+                <h3 className="font-heading text-lg font-heading font-semibold text-white mb-3">How We Calculated This</h3>
                 <p className="text-sm text-brand-silver/70 font-mono leading-relaxed">{result.formula_explanation}</p>
               </div>
             )}
@@ -439,7 +439,7 @@ export default function BrandEquityPage() {
             {/* Derivation */}
             {result.derivation && (
               <div className="glass-card p-6">
-                <h3 className="text-lg font-heading font-semibold text-white mb-3">Step-by-Step Derivation</h3>
+                <h3 className="font-heading text-lg font-heading font-semibold text-white mb-3">Step-by-Step Derivation</h3>
                 <p className="text-sm text-brand-silver/70 whitespace-pre-line leading-relaxed">{result.derivation}</p>
               </div>
             )}
@@ -447,7 +447,7 @@ export default function BrandEquityPage() {
             {/* Limitations */}
             {result.limitations.length > 0 && (
               <div className="glass-card p-6 border-yellow-500/20">
-                <h3 className="text-lg font-heading font-semibold text-yellow-400 mb-3">Limitations</h3>
+                <h3 className="font-heading text-lg font-heading font-semibold text-yellow-400 mb-3">Limitations</h3>
                 <ul className="space-y-2">
                   {result.limitations.map((lim, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-brand-silver/70">
@@ -462,7 +462,7 @@ export default function BrandEquityPage() {
             {/* Recommendations */}
             {result.recommendations.length > 0 && (
               <div className="glass-card p-6">
-                <h3 className="text-lg font-heading font-semibold text-brand-mint mb-3">Recommendations</h3>
+                <h3 className="font-heading text-lg font-heading font-semibold text-brand-mint mb-3">Recommendations</h3>
                 <ul className="space-y-3">
                   {result.recommendations.map((rec, i) => (
                     <li key={i} className="flex items-start gap-3 text-sm text-brand-silver/80">
@@ -478,7 +478,7 @@ export default function BrandEquityPage() {
 
             {/* Email Export */}
             <div className="glass-card p-6 sm:p-8">
-              <h3 className="text-lg font-heading font-semibold text-white mb-2">Export Report</h3>
+              <h3 className="font-heading text-lg font-heading font-semibold text-white mb-2">Export Report</h3>
               <p className="text-sm text-brand-silver/60 mb-4">
                 Enter your email to receive the full brand equity report as a PDF.
               </p>
@@ -544,7 +544,7 @@ export default function BrandEquityPage() {
 
             {/* Registration CTA */}
             <div className="glass-card p-8 sm:p-10 text-center border-brand-electric/20">
-              <h3 className="text-2xl sm:text-3xl font-heading font-bold text-white mb-4">
+              <h3 className="font-heading text-2xl sm:text-3xl font-heading font-bold text-white mb-4">
                 Ready to Implement These Recommendations?
               </h3>
               <p className="text-brand-silver/60 mb-8 max-w-xl mx-auto">

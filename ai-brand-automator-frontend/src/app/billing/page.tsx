@@ -110,7 +110,7 @@ export default function BillingPage() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-heading font-bold text-white">
+            <h1 className="font-heading text-3xl font-heading font-bold text-white">
               Billing & Subscription
             </h1>
             <p className="mt-1 text-sm text-brand-silver/70 font-body">
@@ -147,7 +147,7 @@ export default function BillingPage() {
 
         {/* Current Subscription */}
         <div className="mb-8">
-          <h2 className="mb-4 text-lg font-heading font-semibold text-white">
+          <h2 className="font-heading mb-4 text-lg font-heading font-semibold text-white">
             Current Subscription
           </h2>
           <SubscriptionStatus
@@ -179,7 +179,7 @@ export default function BillingPage() {
 
         {/* Payment History */}
         <div>
-          <h2 className="mb-4 text-lg font-heading font-semibold text-white">
+          <h2 className="font-heading mb-4 text-lg font-heading font-semibold text-white">
             Payment History
           </h2>
           <PaymentHistoryTable payments={payments} />
@@ -187,7 +187,7 @@ export default function BillingPage() {
 
         {/* Billing FAQ */}
         <div className="mt-12 glass-card p-6">
-          <h3 className="text-lg font-heading font-semibold text-white">
+          <h3 className="font-heading text-lg font-heading font-semibold text-white">
             Need Help with Billing?
           </h3>
           <p className="mt-2 text-sm text-brand-silver/70 font-body">

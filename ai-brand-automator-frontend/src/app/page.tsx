@@ -46,7 +46,7 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <h1 className="text-xl sm:text-2xl font-heading font-bold text-white">AI Brand Automator</h1>
+            <h1 className="font-heading text-xl sm:text-2xl font-heading font-bold text-white">AI Brand Automator</h1>
           </div>
           <nav className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-brand-silver/70 hover:text-white transition-colors text-sm">Features</a>
@@ -85,7 +85,7 @@ export default function Home() {
             </div>
 
             {/* Main headline */}
-            <h1 className="text-4xl sm:text-5xl md:text-7xl font-heading font-bold text-white mb-6 leading-tight">
+            <h1 className="font-heading text-4xl sm:text-5xl md:text-7xl font-heading font-bold text-white mb-6 leading-tight">
               Build Your Brand
               <span className="block mt-2 bg-gradient-to-r from-brand-electric via-brand-ghost to-brand-mint bg-clip-text text-transparent animate-gradient">
                 on Autopilot
@@ -150,7 +150,7 @@ export default function Home() {
                   Free Tool
                 </span>
               </div>
-              <h3 className="text-xl sm:text-2xl font-heading font-bold text-white mb-2">
+              <h3 className="font-heading text-xl sm:text-2xl font-heading font-bold text-white mb-2">
                 Know Your Brand&apos;s True Value
               </h3>
               <p className="text-sm text-brand-silver/60 mb-5 max-w-lg mx-auto">
@@ -272,7 +272,7 @@ export default function Home() {
         <section id="features" className="py-20 sm:py-32">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl md:text-5xl font-heading font-bold text-white mb-4">
+              <h2 className="font-heading text-3xl sm:text-4xl md:text-5xl font-heading font-bold text-white mb-4">
                 Everything You Need to
                 <span className="block text-brand-electric">Dominate Social Media</span>
               </h2>
@@ -291,7 +291,7 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
                   </div>
-                  <h3 className="text-2xl font-heading font-bold text-white mb-3">AI Content Generation</h3>
+                  <h3 className="font-heading text-2xl font-heading font-bold text-white mb-3">AI Content Generation</h3>
                   <p className="text-brand-silver/70 mb-6 max-w-md">
                     Generate engaging posts, captions, and hashtags with our advanced AI. Tailored to your brand voice and audience.
                   </p>
@@ -358,7 +358,7 @@ export default function Home() {
                   <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4 text-white`}>
                     {feature.icon}
                   </div>
-                  <h3 className="text-lg font-heading font-semibold text-white mb-2">{feature.title}</h3>
+                  <h3 className="font-heading text-lg font-heading font-semibold text-white mb-2">{feature.title}</h3>
                   <p className="text-sm text-brand-silver/70">{feature.description}</p>
                 </div>
               ))}
@@ -370,7 +370,7 @@ export default function Home() {
         <section id="testimonials" className="py-20 sm:py-32 bg-gradient-to-b from-transparent via-brand-ghost/5 to-transparent">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-heading font-bold text-white mb-4">
+              <h2 className="font-heading text-3xl sm:text-4xl font-heading font-bold text-white mb-4">
                 Loved by Marketers Worldwide
               </h2>
               <p className="text-lg text-brand-silver/70">See what our users have to say</p>
@@ -430,7 +430,7 @@ export default function Home() {
             <div className="glass-card p-8 sm:p-12 relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-r from-brand-electric/10 via-brand-ghost/10 to-brand-mint/10" />
               <div className="relative">
-                <h2 className="text-3xl sm:text-4xl font-heading font-bold text-white mb-4">
+                <h2 className="font-heading text-3xl sm:text-4xl font-heading font-bold text-white mb-4">
                   Ready to Transform Your Brand?
                 </h2>
                 <p className="text-lg text-brand-silver/70 mb-8 max-w-xl mx-auto">
@@ -470,7 +470,7 @@ export default function Home() {
               <p className="text-sm text-brand-silver/60">Automate your brand with the power of AI.</p>
             </div>
             <div>
-              <h4 className="font-semibold text-white mb-4">Product</h4>
+              <h4 className="font-heading font-semibold text-white mb-4">Product</h4>
               <ul className="space-y-2 text-sm text-brand-silver/60">
                 <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
                 <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
@@ -479,7 +479,7 @@ export default function Home() {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold text-white mb-4">Company</h4>
+              <h4 className="font-heading font-semibold text-white mb-4">Company</h4>
               <ul className="space-y-2 text-sm text-brand-silver/60">
                 <li><a href="#" className="hover:text-white transition-colors">About</a></li>
                 <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
@@ -488,7 +488,7 @@ export default function Home() {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold text-white mb-4">Legal</h4>
+              <h4 className="font-heading font-semibold text-white mb-4">Legal</h4>
               <ul className="space-y-2 text-sm text-brand-silver/60">
                 <li><a href="#" className="hover:text-white transition-colors">Privacy</a></li>
                 <li><a href="#" className="hover:text-white transition-colors">Terms</a></li>

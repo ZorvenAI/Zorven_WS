@@ -157,7 +157,7 @@ export function OnboardingReview() {
 
       {/* Company Information */}
       <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-        <h2 className="text-xl font-semibold text-white mb-4">Company Information</h2>
+        <h2 className="font-heading text-xl font-semibold text-white mb-4">Company Information</h2>
         <dl className="grid grid-cols-1 gap-4">
           <div>
             <dt className="text-sm font-medium text-brand-silver/70">Company Name</dt>
@@ -177,7 +177,7 @@ export function OnboardingReview() {
       {/* Brand Details */}
       {company.brand_voice && (
         <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-white mb-4">Brand Details</h2>
+          <h2 className="font-heading text-xl font-semibold text-white mb-4">Brand Details</h2>
           <dl className="grid grid-cols-1 gap-4">
             <div>
               <dt className="text-sm font-medium text-brand-silver/70">Brand Voice</dt>
@@ -190,7 +190,7 @@ export function OnboardingReview() {
       {/* Target Audience */}
       {company.target_audience && (
         <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-white mb-4">Target Audience</h2>
+          <h2 className="font-heading text-xl font-semibold text-white mb-4">Target Audience</h2>
           <p className="text-sm text-white">{company.target_audience}</p>
         </div>
       )}
@@ -198,7 +198,7 @@ export function OnboardingReview() {
       {/* AI-Generated Brand Strategy */}
       {company.vision_statement && (
         <div className="bg-brand-electric/10 border border-brand-electric/30 rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-white mb-4">
+          <h2 className="font-heading text-xl font-semibold text-white mb-4">
             🎯 AI-Generated Brand Strategy
           </h2>
           <dl className="grid grid-cols-1 gap-4">
@@ -237,7 +237,7 @@ export function OnboardingReview() {
       {/* Brand Identity Visualization */}
       {(company.color_palette_desc || company.font_recommendations || company.messaging_guide) && (
         <div className="bg-brand-ghost/10 border border-brand-ghost/30 rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-white mb-4">🎨 Brand Identity</h2>
+          <h2 className="font-heading text-xl font-semibold text-white mb-4">🎨 Brand Identity</h2>
           <dl className="grid grid-cols-1 gap-4">
             {company.color_palette_desc && (
               <div>

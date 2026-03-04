@@ -185,7 +185,7 @@ export function AllFilesModal({ isOpen, onClose, onDelete }: AllFilesModalProps)
       <div className="bg-brand-dark border border-white/10 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-white/10">
-          <h2 className="text-xl font-semibold text-white">All Files</h2>
+          <h2 className="font-heading text-xl font-semibold text-white">All Files</h2>
           <button
             onClick={onClose}
             className="text-brand-silver/70 hover:text-white text-2xl leading-none"
@@ -314,7 +314,7 @@ export function AllFilesModal({ isOpen, onClose, onDelete }: AllFilesModalProps)
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white truncate flex-1">
+              <h3 className="font-heading text-lg font-semibold text-white truncate flex-1">
                 {viewingFile.file_name}
               </h3>
               <button onClick={closePreview} className="text-brand-silver/70 hover:text-white ml-4">

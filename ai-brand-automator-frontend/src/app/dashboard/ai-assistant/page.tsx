@@ -135,7 +135,7 @@ export default function AiAssistantPage() {
 
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-2xl font-heading font-bold text-white">
+          <h1 className="font-heading text-2xl font-heading font-bold text-white">
             AI Assistant
           </h1>
           <p className="mt-1 text-sm text-brand-silver/60">
@@ -292,7 +292,7 @@ export default function AiAssistantPage() {
         {phase === 'failed' && job && (
           <div className="space-y-6">
             <div className="glass-card p-6 border-red-500/30">
-              <h3 className="text-sm font-heading font-semibold text-red-400 mb-2">
+              <h3 className="font-heading text-sm font-heading font-semibold text-red-400 mb-2">
                 Analysis Failed
               </h3>
               <p className="text-sm text-brand-silver">
