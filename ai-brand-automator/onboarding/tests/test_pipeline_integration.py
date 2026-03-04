@@ -20,7 +20,6 @@ from rest_framework.test import APIClient
 from onboarding.models import BrandAsset, Company
 from onboarding.services import OnboardingPipelineService, get_pipeline_service
 
-
 pytestmark = pytest.mark.integration
 
 

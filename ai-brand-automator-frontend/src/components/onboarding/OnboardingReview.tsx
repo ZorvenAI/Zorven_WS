@@ -10,11 +10,20 @@ interface CompanyData {
   industry: string;
   description: string;
   target_audience: string;
+  core_problem?: string;
+  website?: string;
+  demographics?: string;
+  psychographics?: string;
+  pain_points?: string;
+  desired_outcomes?: string;
   brand_voice: string;
   vision_statement: string;
   mission_statement: string;
   values: string; // Backend stores this as a text field, not array
   positioning_statement: string;
+  tagline?: string;
+  value_proposition?: string;
+  elevator_pitch?: string;
   color_palette_desc?: string;
   font_recommendations?: string;
   messaging_guide?: string;
@@ -25,6 +34,7 @@ export function OnboardingReview() {
   const [company, setCompany] = useState<CompanyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -90,37 +100,32 @@ export function OnboardingReview() {
     }
   };
 
-  const handleGenerateBrandIdentity = async () => {
-    setGenerating(true);
+  const handleComplete = async () => {
+    setCompleting(true);
     setError('');
 
     try {
       const companyId = localStorage.getItem('company_id');
       if (!companyId) {
         setError('Company ID not found');
-        setGenerating(false);
+        setCompleting(false);
         return;
       }
 
-      const response = await apiClient.post(
-        `/companies/${companyId}/generate_brand_identity/`,
+      // Generate the onboarding PDF and push it into the RAG pipeline
+      await apiClient.post(
+        `/companies/${companyId}/generate_onboarding_pdf/`,
         {}
       );
 
-      if (response.ok) {
-        await response.json();
-        alert('Brand identity generated successfully!');
-        // Optionally fetch updated company data
-        fetchCompanyData();
-      } else {
-        const errorData = await response.json();
-        setError(errorData.message || 'Failed to generate brand identity');
-      }
-    } catch (error) {
-      console.error('Error generating brand identity:', error);
-      setError('An unexpected error occurred');
+      // Navigate to chat regardless of PDF outcome
+      router.push('/chat');
+    } catch (err) {
+      console.error('Error generating onboarding PDF:', err);
+      // Still navigate — the PDF is a best-effort enhancement
+      router.push('/chat');
     } finally {
-      setGenerating(false);
+      setCompleting(false);
     }
   };
 
@@ -171,6 +176,27 @@ export function OnboardingReview() {
             <dt className="text-sm font-medium text-brand-silver/70">Description</dt>
             <dd className="mt-1 text-sm text-white">{company.description}</dd>
           </div>
+          {company.core_problem && (
+            <div>
+              <dt className="text-sm font-medium text-brand-silver/70">Core Problem You Solve</dt>
+              <dd className="mt-1 text-sm text-white">{company.core_problem}</dd>
+            </div>
+          )}
+          {company.website && (
+            <div>
+              <dt className="text-sm font-medium text-brand-silver/70">Website</dt>
+              <dd className="mt-1 text-sm text-white">
+                <a
+                  href={company.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-electric hover:underline"
+                >
+                  {company.website}
+                </a>
+              </dd>
+            </div>
+          )}
         </dl>
       </div>
 
@@ -188,33 +214,64 @@ export function OnboardingReview() {
       )}
 
       {/* Target Audience */}
-      {company.target_audience && (
+      {(company.target_audience || company.demographics || company.psychographics || company.pain_points || company.desired_outcomes) && (
         <div className="bg-white/5 border border-white/10 rounded-lg p-6">
           <h2 className="font-heading text-xl font-semibold text-white mb-4">Target Audience</h2>
-          <p className="text-sm text-white">{company.target_audience}</p>
+          <dl className="grid grid-cols-1 gap-4">
+            {company.target_audience && (
+              <div>
+                <dt className="text-sm font-medium text-brand-silver/70">Primary Audience</dt>
+                <dd className="mt-1 text-sm text-white">{company.target_audience}</dd>
+              </div>
+            )}
+            {company.demographics && (
+              <div>
+                <dt className="text-sm font-medium text-brand-silver/70">Demographics</dt>
+                <dd className="mt-1 text-sm text-white">{company.demographics}</dd>
+              </div>
+            )}
+            {company.psychographics && (
+              <div>
+                <dt className="text-sm font-medium text-brand-silver/70">Psychographics</dt>
+                <dd className="mt-1 text-sm text-white">{company.psychographics}</dd>
+              </div>
+            )}
+            {company.pain_points && (
+              <div>
+                <dt className="text-sm font-medium text-brand-silver/70">Key Pain Points</dt>
+                <dd className="mt-1 text-sm text-white">{company.pain_points}</dd>
+              </div>
+            )}
+            {company.desired_outcomes && (
+              <div>
+                <dt className="text-sm font-medium text-brand-silver/70">Desired Outcomes</dt>
+                <dd className="mt-1 text-sm text-white">{company.desired_outcomes}</dd>
+              </div>
+            )}
+          </dl>
         </div>
       )}
 
-      {/* AI-Generated Brand Strategy */}
-      {company.vision_statement && (
-        <div className="bg-brand-electric/10 border border-brand-electric/30 rounded-lg p-6">
-          <h2 className="font-heading text-xl font-semibold text-white mb-4">
-            🎯 AI-Generated Brand Strategy
-          </h2>
+      {/* Brand Strategy */}
+      {(company.vision_statement || company.mission_statement || company.values || company.positioning_statement || company.tagline || company.value_proposition || company.elevator_pitch) && (
+        <div className="bg-white/5 border border-white/10 rounded-lg p-6">
+          <h2 className="font-heading text-xl font-semibold text-white mb-4">Brand Strategy</h2>
           <dl className="grid grid-cols-1 gap-4">
-            <div>
-              <dt className="text-sm font-medium text-brand-electric">Vision Statement</dt>
-              <dd className="mt-1 text-sm text-white">{company.vision_statement}</dd>
-            </div>
+            {company.vision_statement && (
+              <div>
+                <dt className="text-sm font-medium text-brand-silver/70">Vision Statement</dt>
+                <dd className="mt-1 text-sm text-white">{company.vision_statement}</dd>
+              </div>
+            )}
             {company.mission_statement && (
               <div>
-                <dt className="text-sm font-medium text-brand-electric">Mission Statement</dt>
+                <dt className="text-sm font-medium text-brand-silver/70">Mission Statement</dt>
                 <dd className="mt-1 text-sm text-white">{company.mission_statement}</dd>
               </div>
             )}
             {company.values && company.values.length > 0 && (
               <div>
-                <dt className="text-sm font-medium text-brand-electric">Core Values</dt>
+                <dt className="text-sm font-medium text-brand-silver/70">Core Values</dt>
                 <dd className="mt-1">
                   <ul className="list-disc list-inside text-sm text-white">
                     {company.values.split(',').map((value, idx) => (
@@ -226,8 +283,26 @@ export function OnboardingReview() {
             )}
             {company.positioning_statement && (
               <div>
-                <dt className="text-sm font-medium text-brand-electric">Positioning Statement</dt>
+                <dt className="text-sm font-medium text-brand-silver/70">Positioning Statement</dt>
                 <dd className="mt-1 text-sm text-white">{company.positioning_statement}</dd>
+              </div>
+            )}
+            {company.tagline && (
+              <div>
+                <dt className="text-sm font-medium text-brand-silver/70">Tagline</dt>
+                <dd className="mt-1 text-sm text-white">{company.tagline}</dd>
+              </div>
+            )}
+            {company.value_proposition && (
+              <div>
+                <dt className="text-sm font-medium text-brand-silver/70">Value Proposition</dt>
+                <dd className="mt-1 text-sm text-white">{company.value_proposition}</dd>
+              </div>
+            )}
+            {company.elevator_pitch && (
+              <div>
+                <dt className="text-sm font-medium text-brand-silver/70">Elevator Pitch</dt>
+                <dd className="mt-1 text-sm text-white">{company.elevator_pitch}</dd>
               </div>
             )}
           </dl>
@@ -277,16 +352,6 @@ export function OnboardingReview() {
           </button>
         )}
 
-        {company.vision_statement && (
-          <button
-            onClick={handleGenerateBrandIdentity}
-            disabled={generating}
-            className="w-full px-6 py-3 bg-brand-ghost text-white rounded-lg hover:bg-brand-ghost/80 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
-          >
-            {generating ? 'Generating Brand Identity...' : '🎨 Generate Brand Identity (Colors, Fonts)'}
-          </button>
-        )}
-
         <div className="flex justify-between">
           <button
             type="button"
@@ -297,10 +362,11 @@ export function OnboardingReview() {
           </button>
           <button
             type="button"
-            onClick={() => router.push('/chat')}
-            className="btn-primary"
+            onClick={handleComplete}
+            disabled={completing}
+            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Complete & Start Chatting
+            {completing ? 'Saving & Indexing...' : 'Complete & Start Chatting'}
           </button>
         </div>
       </div>

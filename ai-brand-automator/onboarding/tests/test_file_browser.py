@@ -15,7 +15,6 @@ from rest_framework.test import APIClient  # noqa: F401
 
 from files.services import GCSService
 
-
 # ==========================================
 # Signed URL Generation Tests (GCSService)
 # ==========================================
@@ -271,18 +270,14 @@ class TestAssetsListFiltering:
                 company=company,
                 tenant=tenant,
                 file_name=f"test-file-{i:02d}.{ext}",
-                file_type="document"
-                if i % 3 == 0
-                else "image"
-                if i % 3 == 1
-                else "video",
+                file_type=(
+                    "document" if i % 3 == 0 else "image" if i % 3 == 1 else "video"
+                ),
                 file_size=1024 * (i + 1),
                 gcs_path=f"tenant/file-{i}.test",
-                pipeline_status="indexed"
-                if i < 10
-                else "pending"
-                if i < 12
-                else "failed",
+                pipeline_status=(
+                    "indexed" if i < 10 else "pending" if i < 12 else "failed"
+                ),
             )
             assets.append(asset)
 

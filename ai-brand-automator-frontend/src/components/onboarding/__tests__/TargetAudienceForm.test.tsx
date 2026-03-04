@@ -65,7 +65,7 @@ describe('TargetAudienceForm', () => {
       }),
     }
     
-    ;(apiClient.put as jest.Mock).mockResolvedValue(mockResponse)
+    ;(apiClient.patch as jest.Mock).mockResolvedValue(mockResponse)
     
     render(<TargetAudienceForm />)
     
@@ -88,7 +88,7 @@ describe('TargetAudienceForm', () => {
     fireEvent.click(screen.getByRole('button', { name: /next step/i }))
     
     await waitFor(() => {
-      expect(apiClient.put).toHaveBeenCalledWith(
+      expect(apiClient.patch).toHaveBeenCalledWith(
         '/companies/123/',
         expect.objectContaining({
           target_audience: 'Small business owners',
@@ -107,7 +107,7 @@ describe('TargetAudienceForm', () => {
       json: async () => ({ id: 123 }),
     }
     
-    ;(apiClient.put as jest.Mock).mockResolvedValue(mockResponse)
+    ;(apiClient.patch as jest.Mock).mockResolvedValue(mockResponse)
     
     render(<TargetAudienceForm />)
     
@@ -136,7 +136,7 @@ describe('TargetAudienceForm', () => {
       }),
     }
     
-    ;(apiClient.put as jest.Mock).mockResolvedValue(mockResponse)
+    ;(apiClient.patch as jest.Mock).mockResolvedValue(mockResponse)
     
     render(<TargetAudienceForm />)
     
@@ -165,7 +165,7 @@ describe('TargetAudienceForm', () => {
       json: async () => ({ id: 123 }),
     }
     
-    ;(apiClient.put as jest.Mock).mockImplementation(() =>
+    ;(apiClient.patch as jest.Mock).mockImplementation(() =>
       new Promise(resolve => setTimeout(() => resolve(mockResponse), 100))
     )
     

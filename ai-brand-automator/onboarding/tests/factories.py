@@ -1,6 +1,7 @@
 """
 Factory Boy factories for onboarding models
 """
+
 import factory
 from factory.django import DjangoModelFactory
 from onboarding.models import Company, BrandAsset, OnboardingProgress
@@ -29,6 +30,7 @@ class CompanyFactory(DjangoModelFactory):
     )
     target_audience = factory.Faker("paragraph", nb_sentences=2)
     core_problem = factory.Faker("sentence", nb_words=10)
+    website = factory.Faker("url")
     brand_voice = factory.Faker(
         "random_element",
         elements=[

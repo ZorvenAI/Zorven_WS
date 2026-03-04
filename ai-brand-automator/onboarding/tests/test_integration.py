@@ -2,6 +2,7 @@
 Integration tests for onboarding app.
 Tests complete workflows and component interactions.
 """
+
 import pytest
 from rest_framework import status
 from django.urls import reverse
@@ -357,9 +358,9 @@ class TestOnboardingProgressTracking:
         for completed_steps, expected_percentage in test_cases:
             update_data = {
                 "completed_steps": completed_steps,
-                "current_step": completed_steps[-1]
-                if completed_steps
-                else "company_info",
+                "current_step": (
+                    completed_steps[-1] if completed_steps else "company_info"
+                ),
             }
 
             response = authenticated_client_with_tenant.patch(

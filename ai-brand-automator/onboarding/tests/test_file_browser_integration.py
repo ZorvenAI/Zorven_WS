@@ -227,9 +227,9 @@ class TestFileBrowserIntegration:
             BrandAsset.objects.create(
                 company=company,
                 tenant=tenant,
-                file_name=f"searchable-item-{i:02d}.pdf"
-                if i < 12
-                else f"other-item-{i}.pdf",
+                file_name=(
+                    f"searchable-item-{i:02d}.pdf" if i < 12 else f"other-item-{i}.pdf"
+                ),
                 file_type="document",
                 file_size=1024,
                 gcs_path=f"test-tenant/search-{i}.pdf",
