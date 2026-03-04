@@ -1,5 +1,4 @@
 import logging
-import io
 import uuid
 import math
 from urllib.parse import urlencode
@@ -199,12 +198,15 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         def _sanitize(text):
             """Replace Unicode characters unsupported by Helvetica."""
             replacements = {
-                "\u2018": "'", "\u2019": "'",   # curly single quotes
-                "\u201c": '"', "\u201d": '"',   # curly double quotes
-                "\u2013": "-", "\u2014": "--",  # en-dash, em-dash
-                "\u2026": "...",                # ellipsis
-                "\u00a0": " ",                  # non-breaking space
-                "\u2022": "-",                  # bullet
+                "\u2018": "'",
+                "\u2019": "'",  # curly single quotes
+                "\u201c": '"',
+                "\u201d": '"',  # curly double quotes
+                "\u2013": "-",
+                "\u2014": "--",  # en-dash, em-dash
+                "\u2026": "...",  # ellipsis
+                "\u00a0": " ",  # non-breaking space
+                "\u2022": "-",  # bullet
             }
             for orig, repl in replacements.items():
                 text = text.replace(orig, repl)
@@ -273,9 +275,7 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         unique_id = uuid.uuid4().hex[:8]
         landing_path = f"_landing/{tenant.id}/{unique_id}_{safe_filename}"
 
-        raw_bucket = (
-            tenant.get_raw_bucket() if tenant else gcs_service.bucket_name
-        )
+        raw_bucket = tenant.get_raw_bucket() if tenant else gcs_service.bucket_name
 
         gcs_uploaded = False
         try:
@@ -322,13 +322,9 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             existing_asset.gcs_path = landing_path
             existing_asset.gcs_bucket = raw_bucket
             existing_asset.processed = False
-            existing_asset.pipeline_status = (
-                "pending" if gcs_uploaded else "failed"
-            )
+            existing_asset.pipeline_status = "pending" if gcs_uploaded else "failed"
             existing_asset.pipeline_error = (
-                ""
-                if gcs_uploaded
-                else "GCS not configured - file not stored"
+                "" if gcs_uploaded else "GCS not configured - file not stored"
             )
             existing_asset.pipeline_trace_id = None
             existing_asset.uploaded_at = timezone.now()
@@ -344,13 +340,9 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 gcs_path=landing_path,
                 gcs_bucket=raw_bucket,
                 processed=False,
-                pipeline_status=(
-                    "pending" if gcs_uploaded else "failed"
-                ),
+                pipeline_status=("pending" if gcs_uploaded else "failed"),
                 pipeline_error=(
-                    ""
-                    if gcs_uploaded
-                    else "GCS not configured - file not stored"
+                    "" if gcs_uploaded else "GCS not configured - file not stored"
                 ),
             )
 
