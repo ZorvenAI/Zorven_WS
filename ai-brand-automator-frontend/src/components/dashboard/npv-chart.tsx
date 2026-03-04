@@ -122,7 +122,7 @@ export default function NpvChart({
               cx={p.x}
               cy={p.y}
               r="4"
-              fill="#0A0B10"
+              fill="#1E1E2E"
               stroke="#00F5FF"
               strokeWidth="2"
             />

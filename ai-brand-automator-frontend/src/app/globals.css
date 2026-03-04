@@ -3,11 +3,13 @@
 /* ===== "Digital Twilight" Design System ===== */
 
 :root {
-  /* Brand Colors */
-  --brand-midnight: #0A0B10;
+  /* Brand Colors — Deep Gray Palette */
+  --brand-midnight: #1E1E2E;
+  --brand-surface: #2A2A3C;
+  --brand-elevated: #353548;
   --brand-electric: #00F5FF;
   --brand-ghost: #8A2BE2;
-  --brand-silver: #E1E1E6;
+  --brand-silver: #D1D1D8;
   --brand-mint: #39FF14;
   
   /* Legacy variables for compatibility */
@@ -22,6 +24,8 @@
   
   /* Brand Colors */
   --color-brand-midnight: var(--brand-midnight);
+  --color-brand-surface: var(--brand-surface);
+  --color-brand-elevated: var(--brand-elevated);
   --color-brand-electric: var(--brand-electric);
   --color-brand-ghost: var(--brand-ghost);
   --color-brand-silver: var(--brand-silver);
@@ -87,12 +91,12 @@
 @layer components {
   /* Glass morphism card */
   .glass-card {
-    background: linear-gradient(110deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%);
+    background: var(--brand-surface);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 1rem;
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
   }
 
   /* Primary button with electric glow */
@@ -168,7 +172,7 @@
     appearance: none;
     width: 100%;
     padding: 0.75rem 1rem;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--brand-elevated);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 0.5rem;
     color: white;
@@ -191,7 +195,7 @@
     appearance: none;
     width: 100%;
     padding: 0.75rem 2.5rem 0.75rem 1rem;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--brand-elevated);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 0.5rem;
     color: white;
@@ -210,7 +214,7 @@
   }
 
   .select-dark option {
-    background: var(--brand-midnight);
+    background: var(--brand-surface);
     color: white;
   }
 
@@ -225,26 +229,26 @@
 
   /* Navigation bar (top) */
   .nav-dark {
-    background: rgba(10, 11, 16, 0.95);
+    background: rgba(30, 30, 46, 0.97);
     backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   /* Sidebar navigation (left) */
   .sidebar-nav {
-    background: rgba(10, 11, 16, 0.98);
+    background: rgba(30, 30, 46, 0.98);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   /* Dashboard card */
   .dashboard-card {
-    background: linear-gradient(110deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--brand-surface);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 0.75rem;
     padding: 1.5rem;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
   }
 
   /* Responsive tables wrapper */
@@ -281,6 +285,14 @@
     background-color: var(--brand-midnight);
   }
 
+  .bg-brand-surface {
+    background-color: var(--brand-surface);
+  }
+
+  .bg-brand-elevated {
+    background-color: var(--brand-elevated);
+  }
+
   .bg-brand-electric {
     background-color: var(--brand-electric);
   }
@@ -312,7 +324,7 @@
 
 /* ===== Code Highlighting (highlight.js dark theme) ===== */
 .hljs {
-  background: rgba(0, 0, 0, 0.3) !important;
+  background: var(--brand-elevated) !important;
   color: #E1E1E6 !important;
 }
 .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section, .hljs-link { color: #c792ea; }
@@ -359,7 +371,7 @@
 }
 
 .react-datepicker {
-  background-color: #0A0B10 !important;
+  background-color: var(--brand-surface) !important;
   border: 1px solid rgba(138, 43, 226, 0.3) !important;
   border-radius: 0.75rem !important;
   font-family: inherit !important;
@@ -415,7 +427,7 @@
 .react-datepicker__day--selected,
 .react-datepicker__day--keyboard-selected {
   background-color: var(--brand-electric) !important;
-  color: #0A0B10 !important;
+  color: var(--brand-midnight) !important;
   font-weight: 600 !important;
 }
 
@@ -460,7 +472,7 @@
 }
 
 .react-datepicker__time {
-  background-color: #0A0B10 !important;
+  background-color: var(--brand-surface) !important;
   border-radius: 0 0 0.75rem 0 !important;
 }
 
@@ -494,14 +506,14 @@
 
 .react-datepicker__time-list-item--selected {
   background-color: var(--brand-electric) !important;
-  color: #0A0B10 !important;
+  color: var(--brand-midnight) !important;
   font-weight: 600 !important;
 }
 
 /* Input field styling for datepicker */
 .datepicker-input {
   width: 100%;
-  background-color: #0A0B10;
+  background-color: var(--brand-elevated);
   border: 1px solid rgba(138, 43, 226, 0.3);
   border-radius: 0.5rem;
   padding: 0.75rem;
