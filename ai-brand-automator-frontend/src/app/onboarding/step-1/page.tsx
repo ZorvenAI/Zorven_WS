@@ -26,7 +26,7 @@ export default function OnboardingStep1() {
         
         <StepWizard currentStep={1} totalSteps={5} />
         <div className="mt-8 glass-card p-8">
-          <h1 className="font-heading text-2xl font-heading font-bold text-white mb-4">Company Information</h1>
+          <h1 className="text-2xl font-heading font-bold text-white mb-4">Company Information</h1>
           <p className="text-brand-silver/70 font-body mb-8">Tell us about your company to get started with your brand automation.</p>
           <CompanyForm />
         </div>

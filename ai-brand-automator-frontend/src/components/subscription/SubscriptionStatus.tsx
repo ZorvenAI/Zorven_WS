@@ -32,7 +32,7 @@ export function SubscriptionStatus({
               d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"
             />
           </svg>
-          <h3 className="font-heading mt-4 text-lg font-heading font-medium text-white">
+          <h3 className="mt-4 text-lg font-heading font-medium text-white">
             No Active Subscription
           </h3>
           <p className="mt-2 text-sm text-brand-silver/70 font-body">
@@ -63,7 +63,7 @@ export function SubscriptionStatus({
     <div className="glass-card p-6">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="font-heading text-lg font-heading font-semibold text-white">
+          <h3 className="text-lg font-heading font-semibold text-white">
             {subscription.plan?.display_name || subscription.plan?.name || 'Unknown'} Plan
           </h3>
           <span

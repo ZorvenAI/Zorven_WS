@@ -13,7 +13,7 @@ function RegisterContent() {
   return (
     <div className="relative z-10 max-w-md w-full space-y-8 px-4">
       <div className="glass-card p-8">
-        <h2 className="font-heading text-center text-3xl font-heading font-bold text-white mb-2">
+        <h2 className="text-center text-3xl font-heading font-bold text-white mb-2">
           Create your account
         </h2>
         <p className="text-center text-brand-silver/70 font-body mb-6">

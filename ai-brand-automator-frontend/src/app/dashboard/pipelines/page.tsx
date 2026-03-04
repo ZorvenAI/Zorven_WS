@@ -92,7 +92,7 @@ export default function PipelinesPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="font-heading text-2xl font-heading font-bold text-white">
+            <h1 className="text-2xl font-heading font-bold text-white">
               Analysis Pipelines
             </h1>
             <p className="mt-1 text-sm text-brand-silver/60">

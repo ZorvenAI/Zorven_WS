@@ -68,7 +68,7 @@ export default function AnalysisDetailPage({ params }: PageProps) {
             {/* Header */}
             <div className="mb-8">
               <div className="flex items-center gap-3">
-                <h1 className="font-heading text-xl font-heading font-bold text-white">
+                <h1 className="text-xl font-heading font-bold text-white">
                   {job.manifest_name ?? 'Brand Analysis'}
                 </h1>
                 <StatusBadge status={job.status} />
@@ -110,7 +110,7 @@ export default function AnalysisDetailPage({ params }: PageProps) {
             {/* Failed */}
             {job.status === 'failed' && (
               <div className="glass-card p-6 border-red-500/30">
-                <h3 className="font-heading text-sm font-heading font-semibold text-red-400 mb-2">
+                <h3 className="text-sm font-heading font-semibold text-red-400 mb-2">
                   Analysis Failed
                 </h3>
                 <p className="text-sm text-brand-silver">

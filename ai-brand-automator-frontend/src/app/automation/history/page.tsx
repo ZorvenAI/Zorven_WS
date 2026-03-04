@@ -162,7 +162,7 @@ export default function HistoryPage() {
           </Link>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="font-heading text-3xl font-heading font-bold text-white">Post History</h1>
+              <h1 className="text-3xl font-heading font-bold text-white">Post History</h1>
               <p className="text-brand-silver/70 mt-2">
                 View and filter all your social media posts
               </p>

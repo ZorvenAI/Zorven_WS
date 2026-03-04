@@ -54,7 +54,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 />
               </svg>
             </div>
-            <h2 className="font-heading mt-4 text-xl font-heading font-semibold text-white text-center">
+            <h2 className="mt-4 text-xl font-heading font-semibold text-white text-center">
               Something went wrong
             </h2>
             <p className="mt-2 text-sm text-brand-silver/70 font-body text-center">

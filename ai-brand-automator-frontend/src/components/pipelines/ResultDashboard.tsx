@@ -235,7 +235,7 @@ export default function ResultDashboard({
   return (
     <div className="glass-card p-6 space-y-6">
       {/* Header */}
-      <h3 className="font-heading text-sm font-heading font-semibold text-white">
+      <h3 className="text-sm font-heading font-semibold text-white">
         Analysis Results
       </h3>
 

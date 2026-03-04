@@ -124,7 +124,7 @@ function AcceptInviteContent() {
         <div className="relative z-10 max-w-md w-full px-4">
           <div className="glass-card p-8 text-center">
             <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-            <h2 className="font-heading text-xl font-heading font-bold text-white mb-2">
+            <h2 className="text-xl font-heading font-bold text-white mb-2">
               Invalid Invitation
             </h2>
             <p className="text-brand-silver/70 mb-6">{error}</p>
@@ -148,7 +148,7 @@ function AcceptInviteContent() {
         <div className="relative z-10 max-w-md w-full px-4">
           <div className="glass-card p-8 text-center">
             <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
-            <h2 className="font-heading text-xl font-heading font-bold text-white mb-2">
+            <h2 className="text-xl font-heading font-bold text-white mb-2">
               Invitation Accepted!
             </h2>
             <p className="text-brand-silver/70">
@@ -195,7 +195,7 @@ function AcceptInviteContent() {
             <div className="w-14 h-14 rounded-full bg-brand-electric/20 flex items-center justify-center mx-auto mb-4">
               <Mail className="w-7 h-7 text-brand-electric" />
             </div>
-            <h2 className="font-heading text-2xl font-heading font-bold text-white mb-1">
+            <h2 className="text-2xl font-heading font-bold text-white mb-1">
               You&apos;re Invited
             </h2>
             <p className="text-brand-silver/70 text-sm">

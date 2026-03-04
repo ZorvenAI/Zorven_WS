@@ -65,17 +65,17 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
         rehypePlugins={[rehypeHighlight]}
         components={{
           h1: ({ children }) => (
-            <h1 className="font-heading text-lg font-heading font-bold text-white mt-4 mb-2">
+            <h1 className="text-lg font-heading font-bold text-white mt-4 mb-2">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="font-heading text-base font-heading font-bold text-white mt-3 mb-1.5">
+            <h2 className="text-base font-heading font-bold text-white mt-3 mb-1.5">
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="font-heading text-sm font-heading font-semibold text-white mt-2 mb-1">
+            <h3 className="text-sm font-heading font-semibold text-white mt-2 mb-1">
               {children}
             </h3>
           ),

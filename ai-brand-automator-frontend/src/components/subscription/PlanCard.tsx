@@ -48,7 +48,7 @@ export function PlanCard({ plan, isCurrentPlan, onSelect, isLoading }: PlanCardP
       )}
 
       <div className="text-center">
-        <h3 className="font-heading text-xl font-heading font-semibold text-white">{plan.display_name}</h3>
+        <h3 className="text-xl font-heading font-semibold text-white">{plan.display_name}</h3>
         <div className="mt-4 flex items-baseline justify-center gap-x-2">
           <span className="text-5xl font-heading font-bold tracking-tight text-white">
             ${parseFloat(plan.price).toFixed(0)}

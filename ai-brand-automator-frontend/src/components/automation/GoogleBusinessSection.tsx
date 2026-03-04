@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   googleBusinessApi,
@@ -53,6 +53,25 @@ export default function GoogleBusinessSection({ onMessage, canEdit = true, canMa
     phone_number: '',
     website_url: '',
   });
+
+  // Refs for OAuth popup cleanup
+  const oauthPopupRef = useRef<Window | null>(null);
+  const oauthPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const oauthMessageHandlerRef = useRef<((event: MessageEvent) => void) | null>(null);
+
+  // Cleanup OAuth popup resources on unmount
+  useEffect(() => {
+    return () => {
+      if (oauthPollTimerRef.current) {
+        clearInterval(oauthPollTimerRef.current);
+        oauthPollTimerRef.current = null;
+      }
+      if (oauthMessageHandlerRef.current) {
+        window.removeEventListener('message', oauthMessageHandlerRef.current);
+        oauthMessageHandlerRef.current = null;
+      }
+    };
+  }, []);
 
   // Fetch profile status
   const fetchStatus = useCallback(async () => {
@@ -198,12 +217,20 @@ export default function GoogleBusinessSection({ onMessage, canEdit = true, canMa
           return;
         }
 
+        oauthPopupRef.current = popup;
+
         // Listen for OAuth result from popup
         const handleOAuthMessage = (event: MessageEvent) => {
           if (event.origin !== window.location.origin) return;
           if (event.data?.type !== 'oauth_callback') return;
 
+          // Clean up both listener and poll timer
           window.removeEventListener('message', handleOAuthMessage);
+          oauthMessageHandlerRef.current = null;
+          if (oauthPollTimerRef.current) {
+            clearInterval(oauthPollTimerRef.current);
+            oauthPollTimerRef.current = null;
+          }
           setConnecting(false);
 
           if (event.data.success) {
@@ -214,16 +241,20 @@ export default function GoogleBusinessSection({ onMessage, canEdit = true, canMa
           }
         };
         window.addEventListener('message', handleOAuthMessage);
+        oauthMessageHandlerRef.current = handleOAuthMessage;
 
         // Poll for popup close (user may close it manually)
         const pollTimer = setInterval(() => {
           if (popup.closed) {
             clearInterval(pollTimer);
+            oauthPollTimerRef.current = null;
             window.removeEventListener('message', handleOAuthMessage);
+            oauthMessageHandlerRef.current = null;
             setConnecting(false);
             fetchStatus();
           }
         }, 500);
+        oauthPollTimerRef.current = pollTimer;
       }
     } catch (error) {
       console.error('Failed to connect:', error);
@@ -374,7 +405,7 @@ export default function GoogleBusinessSection({ onMessage, canEdit = true, canMa
             </svg>
           </div>
           <div>
-            <h3 className="font-heading text-lg font-heading font-semibold text-white">
+            <h3 className="text-lg font-heading font-semibold text-white">
               Google Business Profile
             </h3>
             {isConnected ? (

@@ -217,7 +217,7 @@ export default function PipelineGraph({
 
   return (
     <div className="glass-card p-4">
-      <h3 className="font-heading text-sm font-heading font-semibold text-white mb-3">
+      <h3 className="text-sm font-heading font-semibold text-white mb-3">
         Pipeline Topology
       </h3>
       <div

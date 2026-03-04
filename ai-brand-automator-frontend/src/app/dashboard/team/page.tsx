@@ -98,7 +98,7 @@ function InviteModal({
           <X className="w-5 h-5" />
         </button>
 
-        <h2 className="font-heading text-lg font-heading font-bold text-white mb-4 flex items-center gap-2">
+        <h2 className="text-lg font-heading font-bold text-white mb-4 flex items-center gap-2">
           <UserPlus className="w-5 h-5 text-brand-electric" />
           Invite Team Member
         </h2>
@@ -322,7 +322,7 @@ export default function TeamPage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h1 className="font-heading text-2xl font-heading font-bold text-white flex items-center gap-3">
+              <h1 className="text-2xl font-heading font-bold text-white flex items-center gap-3">
                 <Users className="w-7 h-7 text-brand-electric" />
                 Team Members
               </h1>
@@ -344,7 +344,7 @@ export default function TeamPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="font-heading text-2xl font-heading font-bold text-white flex items-center gap-3">
+            <h1 className="text-2xl font-heading font-bold text-white flex items-center gap-3">
               <Users className="w-7 h-7 text-brand-electric" />
               Team Members
             </h1>

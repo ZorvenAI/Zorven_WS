@@ -66,7 +66,7 @@ export default function ThoughtTrace({
   if (entries.length === 0 && jobStatus === 'queued') {
     return (
       <div className="glass-card p-6">
-        <h3 className="font-heading text-sm font-heading font-semibold text-white mb-4">
+        <h3 className="text-sm font-heading font-semibold text-white mb-4">
           Pipeline Progress
         </h3>
         <p className="text-sm text-brand-silver/60">
@@ -78,7 +78,7 @@ export default function ThoughtTrace({
 
   return (
     <div className="glass-card p-6">
-      <h3 className="font-heading text-sm font-heading font-semibold text-white mb-4">
+      <h3 className="text-sm font-heading font-semibold text-white mb-4">
         Pipeline Progress
       </h3>
 

@@ -277,7 +277,7 @@ export default function BrandEquityDashboard({
     <div className="glass-card p-6 space-y-8">
       {/* Header + actions */}
       <div className="flex items-center justify-between">
-        <h3 className="font-heading text-sm font-heading font-semibold text-white">
+        <h3 className="text-sm font-heading font-semibold text-white">
           Brand Equity Analysis
         </h3>
         <div className="flex gap-2">

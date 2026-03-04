@@ -179,7 +179,7 @@ export default function JobDetailPage({ params }: PageProps) {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
               <div>
                 <div className="flex items-center gap-3">
-                  <h1 className="font-heading text-xl font-heading font-bold text-white">
+                  <h1 className="text-xl font-heading font-bold text-white">
                     {job.manifest_name ?? 'Auto-detect Pipeline'}
                   </h1>
                   <StatusBadge status={job.status} />
@@ -281,7 +281,7 @@ export default function JobDetailPage({ params }: PageProps) {
                 )}
                 {logEntries.length > 0 && <LogConsole entries={logEntries} />}
                 <div className="glass-card p-6 border-red-500/30">
-                  <h3 className="font-heading text-sm font-heading font-semibold text-red-400 mb-2">
+                  <h3 className="text-sm font-heading font-semibold text-red-400 mb-2">
                     Pipeline Failed
                   </h3>
                   <p className="text-sm text-brand-silver">

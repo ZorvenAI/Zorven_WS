@@ -92,7 +92,7 @@ export default function NewAnalysisModal({
       <div className="relative w-full max-w-lg mx-4 glass-card p-6 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
-          <h2 className="font-heading text-lg font-heading font-bold text-white">
+          <h2 className="text-lg font-heading font-bold text-white">
             New Analysis
           </h2>
           <button

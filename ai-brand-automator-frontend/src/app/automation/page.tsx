@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenantRole } from '@/hooks/useTenantRole';
@@ -1931,6 +1931,25 @@ function AutomationPageContent() {
     }
   }, [profiles?.linkedin?.connected, fetchLinkedInOrganizations]);
 
+  // Refs for OAuth popup cleanup
+  const oauthPopupRef = useRef<Window | null>(null);
+  const oauthPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const oauthMessageHandlerRef = useRef<((event: MessageEvent) => void) | null>(null);
+
+  // Cleanup OAuth popup resources on unmount
+  useEffect(() => {
+    return () => {
+      if (oauthPollTimerRef.current) {
+        clearInterval(oauthPollTimerRef.current);
+        oauthPollTimerRef.current = null;
+      }
+      if (oauthMessageHandlerRef.current) {
+        window.removeEventListener('message', oauthMessageHandlerRef.current);
+        oauthMessageHandlerRef.current = null;
+      }
+    };
+  }, []);
+
   const handleConnect = async (platform: string) => {
     if (platform !== 'linkedin' && platform !== 'twitter' && platform !== 'facebook' && platform !== 'instagram') {
       setMessage({
@@ -1958,12 +1977,20 @@ function AutomationPageContent() {
           return;
         }
 
+        oauthPopupRef.current = popup;
+
         // Listen for OAuth result from popup
         const handleOAuthMessage = (event: MessageEvent) => {
           if (event.origin !== window.location.origin) return;
           if (event.data?.type !== 'oauth_callback') return;
 
+          // Clean up both listener and poll timer
           window.removeEventListener('message', handleOAuthMessage);
+          oauthMessageHandlerRef.current = null;
+          if (oauthPollTimerRef.current) {
+            clearInterval(oauthPollTimerRef.current);
+            oauthPollTimerRef.current = null;
+          }
           setConnecting(null);
 
           if (event.data.success) {
@@ -1981,17 +2008,21 @@ function AutomationPageContent() {
           fetchProfiles();
         };
         window.addEventListener('message', handleOAuthMessage);
+        oauthMessageHandlerRef.current = handleOAuthMessage;
 
         // Also poll for popup close (user may close it manually)
         const pollTimer = setInterval(() => {
           if (popup.closed) {
             clearInterval(pollTimer);
+            oauthPollTimerRef.current = null;
             window.removeEventListener('message', handleOAuthMessage);
+            oauthMessageHandlerRef.current = null;
             setConnecting(null);
             // Refresh profiles in case OAuth completed before close
             fetchProfiles();
           }
         }, 500);
+        oauthPollTimerRef.current = pollTimer;
       } else {
         const error = await response.json();
         setMessage({
@@ -3987,7 +4018,7 @@ function AutomationPageContent() {
             <span>Back to Dashboard</span>
           </Link>
           
-          <h1 className="font-heading text-3xl font-heading font-bold text-white">Social Media Automation</h1>
+          <h1 className="text-3xl font-heading font-bold text-white">Social Media Automation</h1>
           <p className="mt-2 text-brand-silver/70">
             Connect your social media accounts to automate posting and manage your brand presence.
           </p>
@@ -4034,7 +4065,7 @@ function AutomationPageContent() {
                       {config.icon}
                     </div>
                     <div>
-                      <h3 className="font-heading text-lg font-heading font-semibold text-white">
+                      <h3 className="text-lg font-heading font-semibold text-white">
                         {config.name}
                       </h3>
                       {isConnected && platformStatus?.profile_name ? (
@@ -5581,7 +5612,7 @@ function AutomationPageContent() {
 
         {/* Google Business Profile Section */}
         <div className="mt-8">
-          <h2 className="font-heading text-2xl font-heading font-bold text-white mb-4">Google Business Profile</h2>
+          <h2 className="text-2xl font-heading font-bold text-white mb-4">Google Business Profile</h2>
           <GoogleBusinessSection 
             onMessage={(msg) => setMessage(msg)}
             canEdit={canEdit}
@@ -5592,7 +5623,7 @@ function AutomationPageContent() {
         {/* Content Calendar Section */}
         <div className="mt-12">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-heading text-2xl font-heading font-bold text-white">Content Calendar</h2>
+            <h2 className="text-2xl font-heading font-bold text-white">Content Calendar</h2>
             {canEdit && profiles?.linkedin?.connected && (
               <button
                 onClick={() => setShowScheduleModal(true)}
@@ -5720,7 +5751,7 @@ function AutomationPageContent() {
         {/* Recent Activity Section - Combined LinkedIn posts and Tweets */}
         <div className="mt-12">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-heading text-2xl font-heading font-bold text-white">Recent Activity</h2>
+            <h2 className="text-2xl font-heading font-bold text-white">Recent Activity</h2>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <label className="text-sm text-brand-silver">Show:</label>
@@ -5868,7 +5899,7 @@ function AutomationPageContent() {
         {/* Automation Tasks Section */}
         <div className="mt-12">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-heading text-2xl font-heading font-bold text-white">Automation Tasks</h2>
+            <h2 className="text-2xl font-heading font-bold text-white">Automation Tasks</h2>
             <button
               onClick={fetchAutomationTasks}
               className="text-sm text-brand-electric hover:text-brand-electric/80 flex items-center gap-1"
@@ -5994,7 +6025,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="font-heading text-xl font-heading font-bold text-white">
+                <h2 className="text-xl font-heading font-bold text-white">
                   {linkedinCarouselMode ? 'Create Carousel Post' : 'Create LinkedIn Post'}
                 </h2>
                 <p className="text-sm text-brand-silver/70">
@@ -6418,7 +6449,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="font-heading text-xl font-heading font-bold text-white">
+                <h2 className="text-xl font-heading font-bold text-white">
                   {isThreadMode ? 'Create Thread' : 'Create Tweet'}
                 </h2>
                 <p className="text-sm text-brand-silver/70">
@@ -6974,7 +7005,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="font-heading text-xl font-heading font-bold text-white">Create Facebook Post</h2>
+                <h2 className="text-xl font-heading font-bold text-white">Create Facebook Post</h2>
                 <p className="text-sm text-brand-silver/70">Share content to your Facebook Page</p>
               </div>
             </div>
@@ -7509,7 +7540,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="font-heading text-xl font-heading font-bold text-white">Create Instagram Post</h2>
+                <h2 className="text-xl font-heading font-bold text-white">Create Instagram Post</h2>
                 <p className="text-sm text-brand-silver/70">Share content to your Instagram Business account</p>
               </div>
             </div>
@@ -7968,7 +7999,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="font-heading text-xl font-heading font-bold text-white">Facebook Stories</h2>
+                <h2 className="text-xl font-heading font-bold text-white">Facebook Stories</h2>
                 <p className="text-sm text-brand-silver/70">Create 24-hour ephemeral content</p>
               </div>
             </div>
@@ -8191,7 +8222,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="font-heading text-xl font-heading font-bold text-white">Instagram Stories</h2>
+                <h2 className="text-xl font-heading font-bold text-white">Instagram Stories</h2>
                 <p className="text-sm text-brand-silver/70">Create 24-hour ephemeral content</p>
               </div>
             </div>
@@ -8402,7 +8433,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="font-heading text-xl font-heading font-bold text-white">Large Video Upload</h2>
+                <h2 className="text-xl font-heading font-bold text-white">Large Video Upload</h2>
                 <p className="text-sm text-brand-silver/70">Resumable upload for videos &gt; 1GB</p>
               </div>
             </div>
@@ -8632,7 +8663,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="font-heading text-xl font-heading font-bold text-white">Instagram Large Video Upload</h2>
+                <h2 className="text-xl font-heading font-bold text-white">Instagram Large Video Upload</h2>
                 <p className="text-sm text-brand-silver/70">Upload videos larger than 1GB</p>
               </div>
             </div>
@@ -8723,7 +8754,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="font-heading text-xl font-heading font-bold text-white">Schedule Post</h2>
+                <h2 className="text-xl font-heading font-bold text-white">Schedule Post</h2>
                 <p className="text-sm text-brand-silver/70">
                   Schedule content to be posted later
                 </p>
@@ -9244,7 +9275,7 @@ function AutomationPageContent() {
                 </svg>
               </div>
               <div>
-                <h2 className="font-heading text-xl font-heading font-bold text-white">Edit Scheduled Post</h2>
+                <h2 className="text-xl font-heading font-bold text-white">Edit Scheduled Post</h2>
                 <p className="text-sm text-brand-silver/70">
                   Update your scheduled post details
                 </p>
