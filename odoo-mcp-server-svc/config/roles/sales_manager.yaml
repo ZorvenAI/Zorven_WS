@@ -1,0 +1,29 @@
+name: sales_manager
+description: "Sales manager — inherits sales_user, adds write/unlink and reporting."
+inherits:
+  - sales_user
+permissions:
+  - tool: "*"
+    models:
+      - "crm.lead"
+      - "sale.order"
+      - "sale.order.line"
+      - "res.partner"
+    operations:
+      - read
+      - create
+      - write
+      - unlink
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "sale.report"
+      - "crm.lead.report"
+      - "crm.team"
+    operations:
+      - read
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []

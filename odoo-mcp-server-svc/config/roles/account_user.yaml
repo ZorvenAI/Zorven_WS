@@ -1,0 +1,26 @@
+name: account_user
+description: "Accounting user — read and create on invoices, payments, and journals."
+inherits: []
+permissions:
+  - tool: "*"
+    models:
+      - "account.move"
+      - "account.move.line"
+      - "account.payment"
+      - "account.journal"
+    operations:
+      - read
+      - create
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "res.partner"
+      - "res.currency"
+      - "account.account"
+    operations:
+      - read
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []

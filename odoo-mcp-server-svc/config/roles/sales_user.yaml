@@ -1,0 +1,26 @@
+name: sales_user
+description: "Sales user — read and create on CRM leads, sale orders, and contacts."
+inherits: []
+permissions:
+  - tool: "*"
+    models:
+      - "crm.lead"
+      - "sale.order"
+      - "sale.order.line"
+      - "res.partner"
+    operations:
+      - read
+      - create
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "product.product"
+      - "product.template"
+      - "product.pricelist"
+    operations:
+      - read
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []

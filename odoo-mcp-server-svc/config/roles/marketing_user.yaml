@@ -1,0 +1,37 @@
+name: marketing_user
+description: "Marketing user — read and create on mailings and social posts."
+inherits: []
+permissions:
+  - tool: "*"
+    models:
+      - "mailing.mailing"
+      - "mailing.list"
+      - "mailing.contact"
+    operations:
+      - read
+      - create
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "social.post"
+      - "social.account"
+      - "social.media"
+    operations:
+      - read
+      - create
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "utm.campaign"
+      - "utm.source"
+      - "utm.medium"
+    operations:
+      - read
+      - create
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []

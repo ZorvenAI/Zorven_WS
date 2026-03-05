@@ -1,0 +1,32 @@
+name: stock_manager
+description: "Inventory manager — inherits stock_user, adds write/unlink and adjustments."
+inherits:
+  - stock_user
+permissions:
+  - tool: "*"
+    models:
+      - "stock.picking"
+      - "stock.move"
+      - "stock.move.line"
+      - "stock.lot"
+    operations:
+      - read
+      - create
+      - write
+      - unlink
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "stock.inventory"
+      - "stock.scrap"
+      - "stock.warehouse"
+      - "stock.location"
+    operations:
+      - read
+      - create
+      - write
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []

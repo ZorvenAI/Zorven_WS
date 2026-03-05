@@ -34,6 +34,8 @@ content-agent-service/        → FastAPI — SEO/AEO/GEO blog authoring (port 8
 social-agent-service/         → FastAPI — social media promotion (port 8060)
 rag-uploader-agent-service/   → FastAPI — RAG document archival (port 8070)
 brand-equity-calculator-svc/  → FastAPI — public brand equity calc, Anthropic Claude (port 8090)
+odoo-mcp-server-svc/          → FastAPI — Odoo ERP MCP bridge, RBAC + 101 tools (port 8095)
+vendor/odoo/community/        → Git submodule — Odoo Community Edition 19.0
 deployment/                   → Docker Compose, Kong config, Railway/k8s manifests
 docs/                         → Architecture docs, plans, guides
 ```
@@ -199,13 +201,20 @@ const poll = async () => {
 | Orchestrator main | `pipeline-orchestrator-svc/app/main.py` |
 | Orchestrator job executor | `pipeline-orchestrator-svc/app/services/job_executor.py` |
 | Skill loader + router | `pipeline-orchestrator-svc/app/skills/` |
-| Skill definitions (15 .md files) | `pipeline-orchestrator-svc/skills/` |
+| Skill definitions (41 .md files) | `pipeline-orchestrator-svc/skills/` |
 | Pipeline composer (auto-detect) | `pipeline-orchestrator-svc/app/nodes/internal/pipeline_composer.py` |
 | Discovery executor | `discovery-agent-svc/app/services/discovery_executor.py` |
 | Intelligence executor | `intelligence-agent-svc/app/services/intelligence_executor.py` |
 | Chat titling handler | `chat-titling-worker/app/logic/handler.py` |
 | Content executor | `content-agent-service/app/services/content_executor.py` |
 | Social executor | `social-agent-service/app/services/social_executor.py` |
+| Odoo MCP tool registry | `odoo-mcp-server-svc/app/tools/registry.py` |
+| Odoo MCP RBAC engine | `odoo-mcp-server-svc/app/rbac/engine.py` |
+| Odoo MCP role definitions (16 YAML) | `odoo-mcp-server-svc/config/roles/` |
+| Celery config + task routes | `ai-brand-automator/brand_automator/celery.py` |
+| Pipeline result handler | `ai-brand-automator/orchestration/result_handler.py` |
+| Pipeline manifest seeder | `ai-brand-automator/orchestration/management/commands/seed_manifests.py` |
+| Node registry | `pipeline-orchestrator-svc/app/factory/node_registry.py` |
 | Integration tests | `tests/integration/conftest.py` |
 
 ## Build & Run
@@ -237,6 +246,14 @@ cd tests/integration && pytest -v                   # 60 tests
 # Format & lint
 cd ai-brand-automator && black . && flake8 .
 cd ai-brand-automator-frontend && npm run lint
+
+# Migrations (NEVER plain migrate)
+cd ai-brand-automator && python manage.py makemigrations
+python manage.py migrate_schemas --shared --noinput
+
+# Seed data (idempotent)
+python manage.py seed_manifests              # Pipeline manifests
+python manage.py seed_subscription_plans      # Stripe plans
 ```
 
 ## Environment Variables
@@ -265,6 +282,7 @@ ORCHESTRATION_KAFKA_ENABLED=false            # true for Kafka-based dispatch (vs
 # SOCIAL_REDIS_URL, SOCIAL_GOOGLE_API_KEY, SOCIAL_CORE_API_TOKEN
 # TITLING_REDIS_URL, TITLING_GOOGLE_API_KEY, TITLING_WORKER_TOKEN
 # BRAND_EQUITY_ANTHROPIC_API_KEY, BRAND_EQUITY_REDIS_URL
+# ODOO_MCP_REDIS_URL, ODOO_MCP_ODOO_URL, ODOO_MCP_ODOO_DB
 
 # Frontend (.env.local)
 NEXT_PUBLIC_API_URL=http://localhost:8000     # Auto-detected via env.ts in browser

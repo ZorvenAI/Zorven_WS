@@ -1,0 +1,34 @@
+name: website_editor
+description: "Website editor — read and write on website pages and product templates."
+inherits: []
+permissions:
+  - tool: "*"
+    models:
+      - "website.page"
+      - "website.menu"
+      - "website"
+    operations:
+      - read
+      - write
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "product.template"
+      - "product.public.category"
+    operations:
+      - read
+      - write
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "ir.attachment"
+    operations:
+      - read
+      - create
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []

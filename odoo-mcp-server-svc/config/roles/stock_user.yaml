@@ -1,0 +1,26 @@
+name: stock_user
+description: "Inventory user — read and create on pickings and stock moves."
+inherits: []
+permissions:
+  - tool: "*"
+    models:
+      - "stock.picking"
+      - "stock.move"
+      - "stock.move.line"
+      - "stock.lot"
+    operations:
+      - read
+      - create
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "stock.warehouse"
+      - "stock.location"
+      - "product.product"
+    operations:
+      - read
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []

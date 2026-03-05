@@ -1,0 +1,30 @@
+name: project_manager
+description: "Project manager — inherits project_user, adds write and unlink."
+inherits:
+  - project_user
+permissions:
+  - tool: "*"
+    models:
+      - "project.project"
+      - "project.task"
+      - "project.task.type"
+    operations:
+      - read
+      - create
+      - write
+      - unlink
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []
+  - tool: "*"
+    models:
+      - "account.analytic.line"
+      - "account.analytic.account"
+    operations:
+      - read
+      - create
+      - write
+      - unlink
+    fields_allowed: []
+    fields_denied: []
+    domain_filter: []

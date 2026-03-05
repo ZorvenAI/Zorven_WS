@@ -1,0 +1,5 @@
+[submodule "vendor/odoo/community"]
+	path = vendor/odoo/community
+	url = https://github.com/odoo/odoo.git
+	branch = 19.0
+	shallow = true
