@@ -769,6 +769,16 @@ RAG_INDEX_MOCK_MODE = config("VERTEX_AI_MOCK_MODE", default=False, cast=bool)
 GCP_PROJECT_ID = config("GCP_PROJECT_ID", default="brandsol")
 GCP_LOCATION = config("GCP_LOCATION", default="global")
 
+# --- DB-to-RAG Sync ---
+RAG_DB_SYNC_ENABLED = config("RAG_DB_SYNC_ENABLED", default=False, cast=bool)
+RAG_DB_SYNC_PERIODIC_INTERVAL = config(
+    "RAG_DB_SYNC_PERIODIC_INTERVAL", default=1800, cast=int
+)  # 30 min
+RAG_DB_SYNC_MODELS = config(
+    "RAG_DB_SYNC_MODELS",
+    default="Company,AnalysisJob,ChatMessage,AIGeneration,ContentCalendar",
+)
+
 # =============================================================================
 # Onboarding Pipeline Integration
 # =============================================================================
@@ -945,6 +955,13 @@ if ORCHESTRATION_KAFKA_ENABLED:
             },
         }
     )
+
+# DB-to-RAG periodic sync — only register when enabled
+if RAG_DB_SYNC_ENABLED:
+    CELERY_BEAT_SCHEDULE["periodic-db-rag-sync"] = {
+        "task": "rag_index.tasks.periodic_db_rag_sync",
+        "schedule": float(RAG_DB_SYNC_PERIODIC_INTERVAL),
+    }
 
 # --- Pipeline Orchestration Settings ---
 # URL of the external pipeline-orchestrator-svc (LangGraph)

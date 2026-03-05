@@ -31,7 +31,6 @@ from rag_index.ports.kafka_port import KafkaPort
 from rag_index.ports.redis_port import RedisPort
 from rag_index.ports.vertex_ai_port import VertexAIPort
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -239,6 +238,120 @@ class SyncOrchestrator:
                 tenant_id=event.tenant_id,
             ) from e
 
+    async def process_inline_document(
+        self,
+        event: SyncEvent,
+        document_content: dict[str, Any],
+    ) -> SyncResult:
+        """Process an inline document (no GCS fetch needed).
+
+        Used for DB-to-RAG sync where content is already structured
+        in memory. Skips GCS fetch while reusing status tracking,
+        rate limiting, and DLQ infrastructure.
+
+        Args:
+            event: The sync event (processed_gcs_uri not required)
+            document_content: The document dict to upsert
+
+        Returns:
+            SyncResult with processing outcome
+
+        Raises:
+            SyncValidationError: If event validation fails
+            SyncError: If processing fails
+        """
+        start_time = time.time()
+
+        logger.info(
+            "Processing inline document sync",
+            extra={
+                "event_id": str(event.event_id),
+                "trace_id": event.trace_id,
+                "file_id": event.file_id,
+                "tenant_id": event.tenant_id,
+            },
+        )
+
+        self._validate_inline_event(event)
+        await self._update_status(event, SyncStatus.IN_PROGRESS)
+
+        try:
+            result = await self._vertex_ai.upsert_document(event, document_content)
+
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            result = SyncResult(
+                event_id=result.event_id,
+                trace_id=result.trace_id,
+                status=result.status,
+                operation_id=result.operation_id,
+                processing_time_ms=processing_time_ms,
+            )
+
+            await self._update_status(event, SyncStatus.COMPLETED, result)
+            await self._publish_completed(event, result)
+
+            logger.info(
+                "Inline document synced successfully",
+                extra={
+                    "event_id": str(event.event_id),
+                    "trace_id": event.trace_id,
+                    "processing_time_ms": processing_time_ms,
+                },
+            )
+
+            return result
+
+        except RateLimitExceededError as e:
+            logger.warning(
+                "Rate limit exceeded for inline sync",
+                extra={
+                    "event_id": str(event.event_id),
+                    "trace_id": event.trace_id,
+                    "limit": e.limit,
+                    "current_count": e.current_count,
+                },
+            )
+
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            result = SyncResult(
+                event_id=event.event_id,
+                trace_id=event.trace_id,
+                status="FAILED",
+                error_message=str(e),
+                processing_time_ms=processing_time_ms,
+            )
+
+            await self._update_status(event, SyncStatus.FAILED, result)
+            raise
+
+        except Exception as e:
+            logger.exception(
+                "Inline document sync failed",
+                extra={
+                    "event_id": str(event.event_id),
+                    "trace_id": event.trace_id,
+                    "error": str(e),
+                },
+            )
+
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            result = SyncResult(
+                event_id=event.event_id,
+                trace_id=event.trace_id,
+                status="FAILED",
+                error_message=str(e),
+                processing_time_ms=processing_time_ms,
+            )
+
+            await self._update_status(event, SyncStatus.FAILED, result)
+            await self._publish_dlq(event, result, e)
+
+            raise SyncError(
+                message=f"Failed to process inline document: {e}",
+                event_id=str(event.event_id),
+                tenant_id=event.tenant_id,
+            ) from e
+
     async def _handle_upsert(self, event: SyncEvent) -> SyncResult:
         """Handle UPSERT action.
 
@@ -322,6 +435,21 @@ class SyncOrchestrator:
 
         if event.action == SyncAction.UPSERT and not event.processed_gcs_uri:
             raise SyncValidationError("processed_gcs_uri is required for UPSERT")
+
+    def _validate_inline_event(self, event: SyncEvent) -> None:
+        """Validate inline sync event (no GCS URI required).
+
+        Args:
+            event: The event to validate
+
+        Raises:
+            SyncValidationError: If validation fails
+        """
+        if not event.tenant_id:
+            raise SyncValidationError("tenant_id is required")
+
+        if not event.file_id:
+            raise SyncValidationError("file_id is required")
 
     async def _update_status(
         self,

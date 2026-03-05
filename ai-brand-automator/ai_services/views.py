@@ -257,16 +257,36 @@ def _process_chat_message(
     # Get company context if available
     try:
         company = Company.objects.get(tenant=tenant)
-        context = {
-            "tenant": tenant,
-            "company": {
-                "name": company.name,
-                "industry": company.industry,
-                "target_audience": company.target_audience,
-                "core_problem": company.core_problem,
-                "brand_voice": company.brand_voice,
-            },
+        company_data = {
+            "name": company.name,
+            "industry": company.industry,
+            "target_audience": company.target_audience,
+            "core_problem": company.core_problem,
+            "brand_voice": company.brand_voice,
         }
+        # Include all onboarding fields that have data
+        for field in (
+            "description",
+            "website",
+            "demographics",
+            "psychographics",
+            "pain_points",
+            "desired_outcomes",
+            "vision_statement",
+            "mission_statement",
+            "values",
+            "positioning_statement",
+            "tagline",
+            "value_proposition",
+            "elevator_pitch",
+            "color_palette_desc",
+            "font_recommendations",
+            "messaging_guide",
+        ):
+            val = getattr(company, field, None)
+            if val:
+                company_data[field] = val
+        context = {"tenant": tenant, "company": company_data}
     except Company.DoesNotExist:
         context = {"tenant": tenant, "company": {}}
 

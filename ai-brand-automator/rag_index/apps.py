@@ -18,6 +18,9 @@ class RagIndexConfig(AppConfig):
     def ready(self):
         """Initialize app when Django starts.
 
-        Import signal handlers and perform any startup tasks.
+        Register DB-to-RAG signal handlers when enabled.
         """
-        # Import signal handlers if needed
+        from django.conf import settings
+
+        if getattr(settings, "RAG_DB_SYNC_ENABLED", False):
+            import rag_index.signals  # noqa: F401

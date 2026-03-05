@@ -137,19 +137,22 @@ class VertexAIAdapter(VertexAIPort):
                 json_str = document_content
             else:
                 json_str = json.dumps(document_content, default=str)
+
+            branch = f"{parent}/branches/default_branch"
             document = discoveryengine.Document(
+                name=f"{branch}/documents/{document_id}",
                 id=document_id,
                 json_data=json_str,
             )
 
-            # Create or update the document
-            request = discoveryengine.CreateDocumentRequest(
-                parent=f"{parent}/branches/default_branch",
+            # Upsert: UpdateDocument with allow_missing creates if absent,
+            # updates if already exists — true idempotent upsert.
+            request = discoveryengine.UpdateDocumentRequest(
                 document=document,
-                document_id=document_id,
+                allow_missing=True,
             )
 
-            operation = client.create_document(request=request)
+            operation = client.update_document(request=request)
 
             processing_time_ms = int((time.time() - start_time) * 1000)
 
