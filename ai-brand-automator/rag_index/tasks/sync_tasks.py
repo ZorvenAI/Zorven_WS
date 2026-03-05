@@ -36,23 +36,24 @@ def _update_asset_status(
     Returns:
         True if update succeeded, False otherwise
     """
-    from django.db import close_old_connections
     from onboarding.models import BrandAsset
+    from brand_automator.tenant_utils import (
+        parse_tenant_pk,
+        ensure_public_db_connection,
+    )
+
+    tenant_pk = parse_tenant_pk(tenant_id)
 
     for attempt in range(2):
         try:
-            if attempt > 0:
-                close_old_connections()
+            ensure_public_db_connection(close_existing=(attempt > 0))
 
             try:
                 aid = int(asset_id)
-                qs = BrandAsset.objects.filter(id=aid)
-                if tenant_id:
-                    try:
-                        qs = qs.filter(tenant_id=int(tenant_id))
-                    except (ValueError, TypeError):
-                        pass  # Non-integer tenant_id, skip FK filter
-                asset = qs.first()
+                filters = {"id": aid}
+                if tenant_pk is not None:
+                    filters["tenant_id"] = tenant_pk
+                asset = BrandAsset.objects.filter(**filters).first()
             except (ValueError, TypeError):
                 asset = None
 

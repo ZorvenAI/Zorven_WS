@@ -75,6 +75,13 @@ class Tenant(TenantMixin):
         help_text="GCS bucket for curated assets. Leave blank for shared default.",
     )
 
+    # Per-tenant Vertex AI data store (optional — defaults to shared data store)
+    vertex_ai_data_store_id = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Vertex AI data store ID. Leave blank for shared default.",
+    )
+
     def get_raw_bucket(self):
         """Resolve GCS raw bucket: tenant-specific or shared default."""
         if self.gcs_raw_bucket:
@@ -93,6 +100,14 @@ class Tenant(TenantMixin):
         curation_cfg = getattr(settings, "MEDIA_CURATION", {})
         storage_cfg = curation_cfg.get("STORAGE", {})
         return storage_cfg.get("CURATED_BUCKET", "brandsol-curation-bucket")
+
+    def get_data_store_id(self):
+        """Resolve Vertex AI data store: tenant-specific or shared default."""
+        if self.vertex_ai_data_store_id:
+            return self.vertex_ai_data_store_id
+        from django.conf import settings
+
+        return getattr(settings, "VERTEX_AI_DATA_STORE_ID", "prevision-rag-dev")
 
     def save(self, *args, **kwargs):
         # Auto-generate slug from name if not provided

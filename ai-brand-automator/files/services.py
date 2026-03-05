@@ -1,5 +1,5 @@
 """
-File Storage Services for BrandForge AI
+File Storage Services for BranSol AI
 Integration with Google Cloud Storage
 """
 

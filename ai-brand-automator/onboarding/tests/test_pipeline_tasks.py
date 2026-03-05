@@ -2,9 +2,9 @@
 Unit tests for onboarding Celery tasks.
 
 Tests cover:
-- export_company_for_rag task
+- export_company_for_rag task (delegates to sync_model_to_rag)
 - batch_export_companies_for_rag task
-- Company document building
+- Company document building (via DbSyncService)
 - process_asset_pipeline_sync task (3-stage pipeline)
 """
 
@@ -17,10 +17,10 @@ from onboarding.models import Company
 from onboarding.tasks import (
     export_company_for_rag,
     batch_export_companies_for_rag,
-    _build_company_document,
     process_asset_pipeline_sync,
     _run_indexing,
 )
+from rag_index.services.db_sync_service import DbSyncService
 
 
 @pytest.fixture
@@ -41,29 +41,28 @@ def sample_company_for_task(db, public_tenant):
 
 
 class TestBuildCompanyDocument:
-    """Tests for _build_company_document helper."""
+    """Tests for Company document builder (via DbSyncService)."""
 
     def test_builds_document_with_all_fields(self, sample_company_for_task):
         """Should build document with all company fields."""
-        doc = _build_company_document(sample_company_for_task)
+        doc = DbSyncService().build_document("Company", sample_company_for_task)
 
         assert doc["document_type"] == "company_profile"
-        assert doc["company_id"] == sample_company_for_task.id
-        assert doc["source"] == "onboarding_service"
-        assert "Test Export Company" in doc["content"]
-        assert "Technology" in doc["content"]
-        assert "Developers" in doc["content"]
-        assert "Innovation" in doc["content"]
+        assert doc["metadata"]["company_id"] == str(sample_company_for_task.id)
+        assert "Test Export Company" in doc["extracted_text"]
+        assert "Technology" in doc["extracted_text"]
+        assert "Developers" in doc["extracted_text"]
+        assert "Innovation" in doc["extracted_text"]
 
-    def test_builds_document_with_tenant_id(self, sample_company_for_task):
-        """Should include tenant_id in document."""
-        doc = _build_company_document(sample_company_for_task)
+    def test_builds_document_with_metadata(self, sample_company_for_task):
+        """Should include name and industry in metadata."""
+        doc = DbSyncService().build_document("Company", sample_company_for_task)
 
-        assert doc["tenant_id"] == str(sample_company_for_task.tenant.id)
+        assert doc["metadata"]["name"] == "Test Export Company"
+        assert doc["metadata"]["industry"] == "Technology"
 
     def test_handles_empty_optional_fields(self, db, public_tenant):
         """Should handle companies with minimal data."""
-        # Delete any existing company for this tenant first
         Company.objects.filter(tenant=public_tenant).delete()
 
         company = Company.objects.create(
@@ -71,17 +70,15 @@ class TestBuildCompanyDocument:
             name="Minimal Company",
         )
 
-        doc = _build_company_document(company)
+        doc = DbSyncService().build_document("Company", company)
 
         assert doc["document_type"] == "company_profile"
-        assert "Minimal Company" in doc["content"]
-        # Should not crash on empty fields
+        assert "Minimal Company" in doc["extracted_text"]
 
     def test_includes_asset_count(self, sample_company_for_task, public_tenant):
-        """Should include brand asset count in content."""
+        """Should include brand asset count in extracted text."""
         from onboarding.models import BrandAsset
 
-        # Create some assets
         for i in range(3):
             BrandAsset.objects.create(
                 tenant=public_tenant,
@@ -92,28 +89,31 @@ class TestBuildCompanyDocument:
                 gcs_path=f"_landing/1/asset_{i}.jpg",
             )
 
-        doc = _build_company_document(sample_company_for_task)
+        doc = DbSyncService().build_document("Company", sample_company_for_task)
 
-        assert "3 files uploaded" in doc["content"]
+        assert "3 files uploaded" in doc["extracted_text"]
 
 
 class TestExportCompanyForRag:
-    """Tests for export_company_for_rag Celery task."""
+    """Tests for export_company_for_rag Celery task (delegates to sync_model_to_rag)."""
 
     @pytest.mark.django_db
-    def test_export_success(self, sample_company_for_task):
-        """Should export company and return success."""
-        with patch("onboarding.tasks.get_pipeline_service") as mock_get_service:
-            mock_service = MagicMock()
-            mock_service.publish_company_document.return_value = uuid.uuid4()
-            mock_get_service.return_value = mock_service
+    @patch("rag_index.tasks.db_sync_tasks.sync_model_to_rag")
+    def test_export_delegates_to_sync_model(
+        self, mock_sync_task, sample_company_for_task
+    ):
+        """Should delegate to sync_model_to_rag task."""
+        result = export_company_for_rag(sample_company_for_task.id)
 
-            result = export_company_for_rag(sample_company_for_task.id)
-
-            assert result["status"] == "success"
-            assert result["company_id"] == sample_company_for_task.id
-            assert "trace_id" in result
-            mock_service.publish_company_document.assert_called_once()
+        assert result["status"] == "delegated"
+        assert result["company_id"] == sample_company_for_task.id
+        mock_sync_task.apply_async.assert_called_once_with(
+            args=[
+                "Company",
+                sample_company_for_task.id,
+                str(sample_company_for_task.tenant.id),
+            ],
+        )
 
     @pytest.mark.django_db
     def test_export_company_not_found(self):
@@ -123,63 +123,34 @@ class TestExportCompanyForRag:
         assert result["status"] == "error"
         assert "not found" in result["message"]
 
-    @pytest.mark.django_db
-    def test_export_calls_pipeline_service(self, sample_company_for_task):
-        """Should call pipeline service with correct document."""
-        with patch("onboarding.tasks.get_pipeline_service") as mock_get_service:
-            mock_service = MagicMock()
-            mock_service.publish_company_document.return_value = uuid.uuid4()
-            mock_get_service.return_value = mock_service
-
-            export_company_for_rag(sample_company_for_task.id)
-
-            call_args = mock_service.publish_company_document.call_args
-            doc = call_args[0][0]
-
-            assert doc["document_type"] == "company_profile"
-            assert doc["company_id"] == sample_company_for_task.id
-
 
 class TestBatchExportCompaniesForRag:
     """Tests for batch_export_companies_for_rag Celery task."""
 
     @pytest.mark.django_db
-    def test_batch_export_all_companies(self, db, public_tenant):
-        """Should queue export for all companies."""
-        # Clean up first
+    @patch("rag_index.tasks.db_sync_tasks.sync_model_to_rag")
+    def test_batch_export_all_companies(self, mock_sync_task, db, public_tenant):
+        """Should queue sync_model_to_rag for all companies."""
         Company.objects.filter(tenant=public_tenant).delete()
+        Company.objects.create(tenant=public_tenant, name="Batch Company 1")
 
-        # Create a company (only one per tenant due to OneToOne)
-        Company.objects.create(
-            tenant=public_tenant,
-            name="Batch Company 1",
-        )
+        result = batch_export_companies_for_rag()
 
-        with patch("onboarding.tasks.export_company_for_rag") as mock_export:
-            mock_export.delay = MagicMock()
-
-            result = batch_export_companies_for_rag()
-
-            assert result["status"] == "success"
-            assert result["queued_count"] >= 1
-            mock_export.delay.assert_called()
+        assert result["status"] == "success"
+        assert result["queued_count"] >= 1
+        mock_sync_task.apply_async.assert_called()
 
     @pytest.mark.django_db
-    def test_batch_export_filtered_by_tenant(self, db, public_tenant):
+    @patch("rag_index.tasks.db_sync_tasks.sync_model_to_rag")
+    def test_batch_export_filtered_by_tenant(self, mock_sync_task, db, public_tenant):
         """Should only queue companies for specified tenant."""
-        # Clean up first
         Company.objects.filter(tenant=public_tenant).delete()
-
-        # Create a company
         Company.objects.create(tenant=public_tenant, name="Tenant Company")
 
-        with patch("onboarding.tasks.export_company_for_rag") as mock_export:
-            mock_export.delay = MagicMock()
+        result = batch_export_companies_for_rag(tenant_id=public_tenant.id)
 
-            result = batch_export_companies_for_rag(tenant_id=public_tenant.id)
-
-            assert result["status"] == "success"
-            assert result["tenant_id"] == public_tenant.id
+        assert result["status"] == "success"
+        assert result["tenant_id"] == public_tenant.id
 
 
 # ── Fixtures for sync pipeline tests ────────────────────────────────

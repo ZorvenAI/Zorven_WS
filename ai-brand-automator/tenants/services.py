@@ -1,14 +1,12 @@
 """
-GCS bucket provisioning service for tenants.
+Provisioning services for tenants.
 
-Provides ``TenantGCSService`` which creates and deletes per-tenant
-Google Cloud Storage buckets.  Bucket naming convention::
+Provides:
+- ``TenantGCSService``: creates/deletes per-tenant GCS buckets.
+- ``TenantVertexAIService``: creates per-tenant Vertex AI data stores.
 
-    {slug}-raw        – raw / landing-zone assets
-    {slug}-curated    – AI-curated output
-
-The service is **idempotent**: calling ``create_tenant_buckets`` twice
-for the same tenant is safe — existing buckets are simply skipped.
+Both services are **idempotent**: calling create twice for the same
+tenant is safe — existing resources are simply skipped.
 """
 
 import logging
@@ -155,3 +153,120 @@ class TenantGCSService:
                 "Failed to delete bucket %s — it may need manual cleanup",
                 bucket_name,
             )
+
+
+class TenantVertexAIService:
+    """Provision per-tenant Vertex AI Discovery Engine data stores.
+
+    Mirrors ``TenantGCSService``.  Data store naming convention::
+
+        prevision-{tenant.slug}
+
+    The service is **idempotent**: ``ALREADY_EXISTS`` from the API is
+    treated as success.
+    """
+
+    def __init__(self):
+        self.project_id = config("VERTEX_AI_PROJECT_ID", default="brandsol-project")
+        self.location = config("VERTEX_AI_LOCATION", default="global")
+        self._client = None
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def create_tenant_data_store(self, tenant):
+        """Create a Vertex AI data store for *tenant*.
+
+        Idempotent — treats ``ALREADY_EXISTS`` as success.
+        Updates the ``Tenant`` record with the data store ID when
+        confirmed.
+
+        Args:
+            tenant: A ``tenants.models.Tenant`` instance.
+
+        Raises:
+            RuntimeError: If the Discovery Engine client is unavailable.
+        """
+        client = self._get_client()
+        if client is None:
+            logger.warning(
+                "Discovery Engine client unavailable — cannot provision "
+                "data store for tenant '%s'. Tenant will use shared default.",
+                tenant.slug,
+            )
+            raise RuntimeError(
+                "Discovery Engine client unavailable — "
+                "data store provisioning skipped"
+            )
+
+        data_store_id = f"prevision-{tenant.slug}"
+        parent = (
+            f"projects/{self.project_id}/locations/{self.location}"
+            f"/collections/default_collection"
+        )
+
+        self._ensure_data_store(client, parent, data_store_id, tenant.name)
+
+        tenant.vertex_ai_data_store_id = data_store_id
+        tenant.save(update_fields=["vertex_ai_data_store_id"])
+
+        logger.info(
+            "Provisioned Vertex AI data store for tenant '%s': %s",
+            tenant.slug,
+            data_store_id,
+        )
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    def _get_client(self):
+        """Return a ``DataStoreServiceClient``, or ``None`` on failure."""
+        if self._client is not None:
+            return self._client
+        try:
+            from google.cloud import discoveryengine_v1 as discoveryengine
+
+            self._client = discoveryengine.DataStoreServiceClient()
+            return self._client
+        except Exception as exc:
+            logger.warning(
+                "Could not create Discovery Engine client: %s. "
+                "Data store provisioning will be unavailable.",
+                exc,
+            )
+            return None
+
+    @staticmethod
+    def _ensure_data_store(client, parent, data_store_id, display_name):
+        """Create a data store if it does not already exist."""
+        try:
+            from google.cloud import discoveryengine_v1 as discoveryengine
+
+            data_store = discoveryengine.DataStore(
+                display_name=display_name,
+                industry_vertical=discoveryengine.IndustryVertical.GENERIC,
+                solution_types=[
+                    discoveryengine.SolutionType.SOLUTION_TYPE_SEARCH
+                ],
+                content_config=discoveryengine.DataStore.ContentConfig.NO_CONTENT,
+            )
+
+            request = discoveryengine.CreateDataStoreRequest(
+                parent=parent,
+                data_store=data_store,
+                data_store_id=data_store_id,
+            )
+
+            operation = client.create_data_store(request=request)
+            operation.result(timeout=120)  # Wait up to 2 minutes
+            logger.info("Created Vertex AI data store: %s", data_store_id)
+        except Exception as exc:
+            if "ALREADY_EXISTS" in str(exc):
+                logger.debug(
+                    "Data store %s already exists — skipping",
+                    data_store_id,
+                )
+            else:
+                raise

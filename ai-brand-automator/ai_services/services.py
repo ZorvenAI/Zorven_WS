@@ -1,5 +1,5 @@
 """
-AI Services for BrandForge AI
+AI Services for BranSol AI
 Integration with Google Gemini AI
 """
 
@@ -760,21 +760,42 @@ class GeminiAIService:
         """Build a system prompt for conversational chat with brand context."""
         company = context.get("company", {})
         parts = [
-            "You are BrandForge AI, an expert brand strategy assistant.",
+            "You are BranSol AI, an expert brand strategy assistant.",
             "You help users build, evaluate, and improve their brands.",
             "Provide thoughtful, actionable advice using markdown formatting.",
             "Use headings, bullet points, and bold text for clarity.",
         ]
-        if company.get("name"):
-            parts.append(f"\nCompany: {company['name']}")
-        if company.get("industry"):
-            parts.append(f"Industry: {company['industry']}")
-        if company.get("target_audience"):
-            parts.append(f"Target Audience: {company['target_audience']}")
-        if company.get("core_problem"):
-            parts.append(f"Core Problem: {company['core_problem']}")
-        if company.get("brand_voice"):
-            parts.append(f"Brand Voice: {company['brand_voice']}")
+        # Include all available company/brand context
+        field_labels = {
+            "name": "Company",
+            "description": "Description",
+            "industry": "Industry",
+            "website": "Website",
+            "target_audience": "Target Audience",
+            "core_problem": "Core Problem",
+            "demographics": "Demographics",
+            "psychographics": "Psychographics",
+            "pain_points": "Pain Points",
+            "desired_outcomes": "Desired Outcomes",
+            "brand_voice": "Brand Voice",
+            "vision_statement": "Vision Statement",
+            "mission_statement": "Mission Statement",
+            "values": "Values",
+            "positioning_statement": "Positioning Statement",
+            "tagline": "Tagline",
+            "value_proposition": "Value Proposition",
+            "elevator_pitch": "Elevator Pitch",
+            "color_palette_desc": "Color Palette",
+            "font_recommendations": "Font Recommendations",
+            "messaging_guide": "Messaging Guide",
+        }
+        brand_parts = []
+        for field, label in field_labels.items():
+            val = company.get(field)
+            if val:
+                brand_parts.append(f"{label}: {val}")
+        if brand_parts:
+            parts.append("\n" + "\n".join(brand_parts))
         return "\n".join(parts)
 
     def analyze_market(self, company_data: Dict[str, Any]) -> Dict[str, Any]:

@@ -40,6 +40,14 @@ class TenantAdmin(admin.ModelAdmin):  # TenantAdminMixin temporarily disabled
             },
         ),
         (
+            "Vertex AI (RAG)",
+            {
+                "fields": ("vertex_ai_data_store_id",),
+                "classes": ("collapse",),
+                "description": "Leave blank to use shared default data store.",
+            },
+        ),
+        (
             "Metadata",
             {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
         ),

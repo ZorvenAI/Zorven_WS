@@ -2,6 +2,11 @@
 Django signals for onboarding pipeline integration.
 
 These signals trigger pipeline operations when models are saved or updated.
+
+NOTE: The Company post_save RAG sync handler has been moved to
+``rag_index/signals.py`` as part of the unified DB-to-RAG sync system.
+It is registered when ``RAG_DB_SYNC_ENABLED=True``. When that flag is
+off, ``export_company_for_rag`` can still be called manually.
 """
 
 import logging
@@ -9,7 +14,7 @@ import logging
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from .models import BrandAsset, Company
+from .models import BrandAsset
 
 logger = logging.getLogger(__name__)
 
@@ -23,46 +28,6 @@ _ATTACHMENT_STATUS_MAP = {
     "indexed": "indexed",
     "failed": "failed",
 }
-
-
-@receiver(post_save, sender=Company)
-def company_saved_handler(sender, instance, created, **kwargs):
-    """
-    Trigger RAG export when a Company is created or updated.
-
-    This signal handler queues a Celery task to export company data
-    to the RAG pipeline for indexing. We use a task to avoid blocking
-    the save operation and to ensure retries on failure.
-
-    Args:
-        sender: The Company model class.
-        instance: The Company instance that was saved.
-        created: True if this is a new company, False for update.
-        **kwargs: Additional signal arguments.
-    """
-    # Import here to avoid circular imports and ensure Celery is ready
-    from .tasks import export_company_for_rag
-
-    action = "created" if created else "updated"
-    logger.info(
-        f"Company {action}, queuing RAG export",
-        extra={"company_id": instance.id, "is_new": created},
-    )
-
-    # Queue the export task with error handling
-    # Using apply_async with countdown to debounce rapid updates
-    # Wrap in try/except so company save doesn't fail if Celery/Redis is down
-    try:
-        export_company_for_rag.apply_async(
-            args=[instance.id],
-            countdown=5 if not created else 0,  # 5s delay for updates to debounce
-        )
-    except Exception as e:
-        # Log the error but don't fail the company save
-        logger.warning(
-            f"Failed to queue RAG export task for company {instance.id}: {e}. "
-            "Company was saved but RAG export was not triggered."
-        )
 
 
 @receiver(post_save, sender=BrandAsset)

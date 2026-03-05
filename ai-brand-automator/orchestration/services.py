@@ -200,7 +200,7 @@ class OrchestratorDispatcher:
             "tenant_id": str(tenant.id),
             "gcs_raw_bucket": f"{gs_bucket}/{tenant.id}/",
             "gcs_processed_bucket": f"{gs_bucket}-curated/{tenant.id}/",
-            "rag_data_store_id": getattr(tenant, "rag_data_store_id", ""),
+            "rag_data_store_id": tenant.get_data_store_id(),
         }
 
     def _build_callback_url(self, job):

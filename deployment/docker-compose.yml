@@ -106,6 +106,8 @@ services:
       - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
       - VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-prevision-rag-dev}
       - VERTEX_AI_MOCK_MODE=${VERTEX_AI_MOCK_MODE:-false}
+      # DB-to-RAG sync (sync Django models to Vertex AI)
+      - RAG_DB_SYNC_ENABLED=${RAG_DB_SYNC_ENABLED:-false}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
       - MAILGUN_API_KEY=${MAILGUN_API_KEY:-7776e9d86dc564e3e9bd4921c056ae3e-f9517a64-4481b185}
       - MAILGUN_DOMAIN=${MAILGUN_DOMAIN:-sandbox3c490c6302904ddda887a78852e81aea.mailgun.org}
@@ -213,6 +215,8 @@ services:
       - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
       - VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-prevision-rag-dev}
       - VERTEX_AI_MOCK_MODE=${VERTEX_AI_MOCK_MODE:-false}
+      # DB-to-RAG sync (sync Django models to Vertex AI)
+      - RAG_DB_SYNC_ENABLED=${RAG_DB_SYNC_ENABLED:-false}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
     volumes:
       - ../ai-brand-automator:/app
@@ -245,6 +249,8 @@ services:
       # Orchestration Kafka integration
       - ORCHESTRATION_KAFKA_ENABLED=${ORCHESTRATION_KAFKA_ENABLED:-false}
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-}
+      # DB-to-RAG sync (periodic sync schedule)
+      - RAG_DB_SYNC_ENABLED=${RAG_DB_SYNC_ENABLED:-false}
     volumes:
       - ../ai-brand-automator:/app
       - ./scripts/start-celery-beat.sh:/scripts/start.sh:ro

@@ -89,21 +89,26 @@ class TestVertexSearchTool:
         mock_redis.set.assert_called_once()
 
     def test_data_store_path_format(self):
-        """Correct data store path format with tenant suffix."""
+        """Default data store path when no override is provided."""
         tool = VertexSearchTool()
         path = tool._get_data_store_path("42")
         assert "projects/brandsol-project" in path
         assert "locations/global" in path
         assert "collections/default_collection" in path
-        assert "dataStores/prevision-rag-dev-42" in path
+        assert "dataStores/prevision-rag-dev" in path
+
+    def test_data_store_path_with_override(self):
+        """Per-tenant data store ID is used directly when provided."""
+        tool = VertexSearchTool()
+        path = tool._get_data_store_path("42", data_store_id="prevision-creative-minds")
+        assert "dataStores/prevision-creative-minds" in path
 
     def test_base_data_store_path_format(self):
-        """Base data store path without tenant suffix."""
+        """Base data store path uses shared default."""
         tool = VertexSearchTool()
         path = tool._get_base_data_store_path()
         assert "projects/brandsol-project" in path
         assert "dataStores/prevision-rag-dev" in path
-        assert "-42" not in path
 
     @patch("app.nodes.tools.vertex_search_tool.get_redis")
     async def test_empty_query_returns_empty(self, mock_get_redis):
@@ -117,7 +122,7 @@ class TestVertexSearchTool:
     @patch("app.nodes.tools.vertex_search_tool.get_redis")
     @patch("app.nodes.tools.vertex_search_tool.discoveryengine")
     async def test_vertex_api_error_returns_empty(self, mock_de, mock_get_redis):
-        """NotFound on both tenant and base stores returns empty results."""
+        """NotFound on data store returns empty results."""
         from google.api_core.exceptions import NotFound
 
         mock_redis = AsyncMock()
@@ -125,7 +130,6 @@ class TestVertexSearchTool:
         mock_get_redis.return_value = mock_redis
 
         mock_client = MagicMock()
-        # Both tenant-specific and base stores raise NotFound
         mock_client.search.side_effect = NotFound("Data store not found")
         mock_de.SearchServiceClient.return_value = mock_client
         mock_de.SearchRequest = MagicMock()
@@ -133,5 +137,29 @@ class TestVertexSearchTool:
         tool = VertexSearchTool()
         chunks = await tool.search("test", "tenant-999")
         assert chunks == []
-        # Should have tried both stores (tenant-specific + base)
+        # Without a data_store_id override, primary and fallback are
+        # the same path, so only one attempt is made.
+        assert mock_client.search.call_count == 1
+
+    @patch("app.nodes.tools.vertex_search_tool.get_redis")
+    @patch("app.nodes.tools.vertex_search_tool.discoveryengine")
+    async def test_vertex_api_error_tries_fallback(self, mock_de, mock_get_redis):
+        """NotFound on per-tenant store falls back to shared default."""
+        from google.api_core.exceptions import NotFound
+
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        mock_client = MagicMock()
+        mock_client.search.side_effect = NotFound("Data store not found")
+        mock_de.SearchServiceClient.return_value = mock_client
+        mock_de.SearchRequest = MagicMock()
+
+        tool = VertexSearchTool()
+        # With an override different from default, tries both paths
+        chunks = await tool.search(
+            "test", "tenant-999", data_store_id="prevision-creative-minds"
+        )
+        assert chunks == []
         assert mock_client.search.call_count == 2
