@@ -1,5 +1,5 @@
 """
-AI Services for BrandForge AI
+AI Services for BranSol AI
 Integration with Google Gemini AI
 """
 
@@ -760,7 +760,7 @@ class GeminiAIService:
         """Build a system prompt for conversational chat with brand context."""
         company = context.get("company", {})
         parts = [
-            "You are BrandForge AI, an expert brand strategy assistant.",
+            "You are BranSol AI, an expert brand strategy assistant.",
             "You help users build, evaluate, and improve their brands.",
             "Provide thoughtful, actionable advice using markdown formatting.",
             "Use headings, bullet points, and bold text for clarity.",

@@ -40,7 +40,7 @@ describe('ChatInterface', () => {
     render(<ChatInterface />)
 
     expect(screen.getByRole('heading', { name: /AI brand assistant/i })).toBeInTheDocument()
-    expect(screen.getByText(/Hello! I'm your AI brand assistant/i)).toBeInTheDocument()
+    expect(screen.getByText(/Hello! I'm BranSol AI your brand assistant/i)).toBeInTheDocument()
   })
 
   it('renders input field and send button', () => {

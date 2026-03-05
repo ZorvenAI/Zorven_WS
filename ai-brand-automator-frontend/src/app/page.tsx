@@ -154,7 +154,7 @@ export default function Home() {
                 Know Your Brand&apos;s True Value
               </h3>
               <p className="text-sm text-brand-silver/60 mb-5 max-w-lg mx-auto">
-                Get an instant ISO 20671 brand equity score with competitor analysis — powered by Claude AI. No sign up required.
+                Get an instant ISO 20671 brand equity score with competitor analysis — powered by BranSol AI. No sign up required.
               </p>
               <span className="inline-flex items-center gap-2 bg-gradient-to-r from-brand-electric to-brand-ghost text-brand-midnight font-bold px-8 py-3.5 rounded-xl transition-all group-hover:shadow-[0_0_30px_rgba(0,245,255,0.4)] group-hover:-translate-y-0.5">
                 Calculate Brand Equity — Free

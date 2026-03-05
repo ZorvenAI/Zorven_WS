@@ -26,7 +26,7 @@ from app.utils.prompt_sanitizer import sanitize_ai_prompt
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
-    "You are the Prevision AI Assistant. You have access to the user's "
+    "You are the BranSol AI Assistant. You have access to the user's "
     "uploaded documents and files. When answering questions, prioritize "
     "information from the provided search results and attached files over "
     "your own training data. Always cite your sources by referencing the "
