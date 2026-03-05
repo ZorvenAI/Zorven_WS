@@ -764,6 +764,7 @@ DATA_INGESTION = {
 VERTEX_AI_PROJECT_ID = config("VERTEX_AI_PROJECT_ID", default="brandsol-project")
 VERTEX_AI_LOCATION = config("VERTEX_AI_LOCATION", default="global")
 VERTEX_AI_DATA_STORE_ID = config("VERTEX_AI_DATA_STORE_ID", default="prevision-rag-dev")
+VERTEX_AI_AUTO_PROVISION = config("VERTEX_AI_AUTO_PROVISION", default=False, cast=bool)
 RAG_INDEX_MOCK_MODE = config("VERTEX_AI_MOCK_MODE", default=False, cast=bool)
 GCP_PROJECT_ID = config("GCP_PROJECT_ID", default="brandsol")
 GCP_LOCATION = config("GCP_LOCATION", default="global")

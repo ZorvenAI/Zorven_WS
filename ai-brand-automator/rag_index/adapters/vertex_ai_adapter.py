@@ -122,7 +122,7 @@ class VertexAIAdapter(VertexAIPort):
                 )
 
             # Build the document resource
-            parent = self.get_data_store_path(event.tenant_id)
+            parent = await self.get_data_store_path_async(event.tenant_id)
             document_id = event.file_id
 
             from google.cloud import discoveryengine_v1 as discoveryengine
@@ -242,7 +242,7 @@ class VertexAIAdapter(VertexAIPort):
                 )
 
             # Build the document path
-            parent = self.get_data_store_path(event.tenant_id)
+            parent = await self.get_data_store_path_async(event.tenant_id)
             document_name = (
                 f"{parent}/branches/default_branch/documents/{event.file_id}"
             )
@@ -309,7 +309,7 @@ class VertexAIAdapter(VertexAIPort):
                 logger.info(f"[MOCK] Getting document {document_id}")
                 return {"id": document_id, "mock": True}
 
-            parent = self.get_data_store_path(tenant_id)
+            parent = await self.get_data_store_path_async(tenant_id)
             document_name = f"{parent}/branches/default_branch/documents/{document_id}"
 
             from google.cloud import discoveryengine_v1 as discoveryengine
@@ -352,7 +352,10 @@ class VertexAIAdapter(VertexAIPort):
             return False
 
     def get_data_store_path(self, tenant_id: str) -> str:
-        """Get the Vertex AI data store path for a tenant.
+        """Get the Vertex AI data store path for a tenant (sync callers).
+
+        Resolves the tenant's dedicated data store ID via the Tenant model.
+        Falls back to the configured default if not provisioned.
 
         Args:
             tenant_id: The tenant identifier
@@ -360,9 +363,54 @@ class VertexAIAdapter(VertexAIPort):
         Returns:
             The fully qualified data store path
         """
-        # Use tenant-specific data store or default
-        data_store = f"{self.data_store_id}-{tenant_id}"
+        data_store = self._resolve_data_store_id(tenant_id)
+        return self._build_data_store_path(data_store)
+
+    async def get_data_store_path_async(self, tenant_id: str) -> str:
+        """Get the Vertex AI data store path for a tenant (async callers).
+
+        Uses ``sync_to_async`` to safely query the Django ORM from
+        within an event loop.
+        """
+        data_store = await self._resolve_data_store_id_async(tenant_id)
+        return self._build_data_store_path(data_store)
+
+    def _build_data_store_path(self, data_store: str) -> str:
         return (
             f"projects/{self.project_id}/locations/{self.location}/"
             f"collections/default_collection/dataStores/{data_store}"
         )
+
+    def _resolve_data_store_id(self, tenant_id: str) -> str:
+        """Resolve data store ID for a tenant via DB lookup.
+
+        Safe for both sync and async contexts: uses ``sync_to_async``
+        when called from within a running event loop (e.g. inside
+        ``upsert_document``).
+        """
+        try:
+            return self._resolve_data_store_id_sync(tenant_id)
+        except Exception:
+            # Django raises SynchronousOnlyOperation when ORM is called
+            # from an async context.  Fall back to configured default.
+            logger.debug(
+                "Sync DB lookup failed for tenant %s (likely async context), "
+                "using cached or default data store",
+                tenant_id,
+            )
+        return self.data_store_id
+
+    def _resolve_data_store_id_sync(self, tenant_id: str) -> str:
+        """Synchronous DB lookup — only safe outside an event loop."""
+        from tenants.models import Tenant
+
+        tenant = Tenant.objects.filter(pk=int(tenant_id)).first()
+        if tenant and tenant.vertex_ai_data_store_id:
+            return tenant.vertex_ai_data_store_id
+        return self.data_store_id
+
+    async def _resolve_data_store_id_async(self, tenant_id: str) -> str:
+        """Async-safe DB lookup using sync_to_async."""
+        from asgiref.sync import sync_to_async
+
+        return await sync_to_async(self._resolve_data_store_id_sync)(tenant_id)

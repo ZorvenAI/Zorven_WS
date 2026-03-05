@@ -57,6 +57,8 @@ echo "Running membership migration (idempotent)..."
 python scripts/migrate_to_membership.py --apply || echo "Membership migration skipped or already done"
 echo "Provisioning tenant GCS buckets (idempotent)..."
 python scripts/provision_tenant_buckets.py --apply || echo "Bucket provisioning skipped or already done"
+echo "Provisioning tenant Vertex AI data stores (idempotent)..."
+python scripts/provision_tenant_data_stores.py --apply || echo "Data store provisioning skipped or already done"
 
 # Seed default pipeline manifests
 echo "Seeding default pipeline manifests..."

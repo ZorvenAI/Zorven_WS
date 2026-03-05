@@ -28,9 +28,10 @@ class SearchChunk:
 class VertexSearchTool:
     """Queries Vertex AI Discovery Engine for tenant-scoped document chunks.
 
-    Uses the same data store path pattern as the Django rag_index adapter:
-        projects/{project_id}/locations/{location}/collections/
-        default_collection/dataStores/{data_store_id}-{tenant_id}
+    When a per-tenant data store ID is provided (resolved by Django via
+    ``Tenant.get_data_store_id()``), it is used directly.  Otherwise
+    falls back to the shared default configured via
+    ``VERTEX_AI_DATA_STORE_ID``.
     """
 
     def __init__(self) -> None:
@@ -65,27 +66,27 @@ class VertexSearchTool:
     ) -> str:
         """Build the fully qualified data store path for a tenant.
 
-        Tries tenant-scoped store first ({store_id}-{tenant_id}), then
-        falls back to the shared base store ({store_id}) if the
-        tenant-specific one does not exist.
+        When ``data_store_id`` is provided (resolved by Django's
+        ``Tenant.get_data_store_id()``), it is the final data store
+        name and is used directly.  Otherwise falls back to the
+        shared default from settings.
         """
-        store_id = data_store_id or settings.VERTEX_AI_DATA_STORE_ID
-        data_store = f"{store_id}-{tenant_id}"
-        return (
-            f"projects/{settings.VERTEX_AI_PROJECT_ID}"
-            f"/locations/{settings.VERTEX_AI_LOCATION}"
-            f"/collections/default_collection/dataStores/{data_store}"
-        )
-
-    def _get_base_data_store_path(
-        self, data_store_id: Optional[str] = None
-    ) -> str:
-        """Build the data store path without tenant suffix (shared store)."""
         store_id = data_store_id or settings.VERTEX_AI_DATA_STORE_ID
         return (
             f"projects/{settings.VERTEX_AI_PROJECT_ID}"
             f"/locations/{settings.VERTEX_AI_LOCATION}"
             f"/collections/default_collection/dataStores/{store_id}"
+        )
+
+    def _get_base_data_store_path(
+        self, data_store_id: Optional[str] = None
+    ) -> str:
+        """Build the data store path using the shared default store."""
+        return (
+            f"projects/{settings.VERTEX_AI_PROJECT_ID}"
+            f"/locations/{settings.VERTEX_AI_LOCATION}"
+            f"/collections/default_collection/dataStores/"
+            f"{settings.VERTEX_AI_DATA_STORE_ID}"
         )
 
     @staticmethod
@@ -162,14 +163,15 @@ class VertexSearchTool:
     ) -> list[SearchChunk]:
         """Execute a search request against the Vertex AI Discovery Engine.
 
-        Tries tenant-scoped data store first. If not found, falls back
-        to the shared base data store (without tenant suffix).
+        Tries the resolved data store first (per-tenant or override).
+        If not found, falls back to the shared base data store.
         """
-        # Try tenant-specific store first, then base store
-        paths_to_try = [
-            self._get_data_store_path(tenant_id, data_store_id),
-            self._get_base_data_store_path(data_store_id),
-        ]
+        primary = self._get_data_store_path(tenant_id, data_store_id)
+        fallback = self._get_base_data_store_path()
+
+        paths_to_try = [primary]
+        if fallback != primary:
+            paths_to_try.append(fallback)
 
         for data_store_path in paths_to_try:
             chunks = self._search_data_store(

@@ -152,14 +152,40 @@ def process_asset_pipeline_sync(
         tenant_id,
     )
 
-    # ---- resolve tenant (optional, for per-tenant bucket resolution) ----
-    tenant = None
-    try:
-        from tenants.models import Tenant
+    # ---- resolve tenant (required for per-tenant bucket resolution) ----
+    from brand_automator.tenant_utils import (
+        parse_tenant_pk,
+        ensure_public_db_connection,
+    )
 
-        tenant = Tenant.objects.filter(pk=int(tenant_id)).first()
-    except Exception:
-        pass
+    tenant = None
+    tenant_pk = parse_tenant_pk(tenant_id)
+    if tenant_pk is not None:
+        for attempt in range(2):
+            try:
+                ensure_public_db_connection(close_existing=(attempt > 0))
+                from tenants.models import Tenant
+
+                tenant = Tenant.objects.filter(pk=tenant_pk).first()
+                break
+            except Exception:
+                if attempt == 0:
+                    logger.warning(
+                        "DB error resolving tenant %s (will retry)",
+                        tenant_id,
+                        exc_info=True,
+                    )
+                    continue
+                logger.error(
+                    "Failed to resolve tenant %s after retry", tenant_id, exc_info=True
+                )
+
+    if tenant is None and tenant_pk is not None:
+        logger.error(
+            "Tenant %s not found — pipeline will use default buckets, "
+            "which may cause file-not-found errors for tenant-specific uploads",
+            tenant_id,
+        )
 
     # ======================================================================
     # Stage 1 — Ingestion

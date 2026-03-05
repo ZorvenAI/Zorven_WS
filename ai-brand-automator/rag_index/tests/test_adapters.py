@@ -53,7 +53,7 @@ class TestVertexAIAdapter:
         path = adapter.get_data_store_path("tenant-123")
         assert "test-project" in path
         assert "global" in path
-        assert "test-store-tenant-123" in path
+        assert "test-store" in path  # Falls back to default in test (no DB)
 
     async def test_upsert_document_mock_mode(self, adapter, sample_sync_event):
         """Test upsert in mock mode (no SDK installed)."""
