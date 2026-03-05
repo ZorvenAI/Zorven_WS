@@ -13,7 +13,7 @@ class BaseTool(ABC):
     name: str = ""
     description: str = ""
     domain: str = ""  # e.g., "crm", "sales", "accounting"
-    input_schema: dict[str, Any] = {}
+    input_schema: dict[str, Any] = {}  # Subclasses MUST override with their own dict
     required_model: str = ""  # Odoo model, e.g., "crm.lead"
     required_operation: str = "read"  # read, create, write, unlink
 

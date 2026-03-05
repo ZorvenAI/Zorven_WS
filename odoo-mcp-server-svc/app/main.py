@@ -42,6 +42,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("MCP server not initialized: %s", exc)
 
+    if settings.SERVICE_TOKEN == "dev-service-token":
+        logger.warning(
+            "Using default SERVICE_TOKEN — set ODOO_MCP_SERVICE_TOKEN in production"
+        )
+
     logger.info("Odoo MCP Server ready (transport=%s)", settings.MCP_TRANSPORT)
 
     yield

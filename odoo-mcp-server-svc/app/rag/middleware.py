@@ -38,8 +38,11 @@ class RAGContextMiddleware:
         for key in ("model", "name", "query", "input_prompt", "search_term"):
             if key in arguments:
                 query_parts.append(str(arguments[key]))
-        if key in context:
-            query_parts.append(str(context.get("input_prompt", "")))
+
+        # Optionally include input_prompt from context
+        context_input_prompt = context.get("input_prompt")
+        if context_input_prompt:
+            query_parts.append(str(context_input_prompt))
 
         if not query_parts:
             return arguments

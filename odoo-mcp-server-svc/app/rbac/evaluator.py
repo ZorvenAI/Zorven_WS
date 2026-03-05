@@ -224,7 +224,7 @@ class PolicyEvaluator:
         """Build a deterministic cache key."""
         roles_part = ",".join(sorted(user_roles))
         raw = f"{roles_part}|{tool_name}|{model}|{operation}"
-        digest = hashlib.md5(raw.encode()).hexdigest()
+        digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
         return f"odoo_mcp:rbac:eval:{digest}"
 
     async def _get_cached(

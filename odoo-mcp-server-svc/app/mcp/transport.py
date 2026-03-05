@@ -42,6 +42,7 @@ async def mcp_streamable_http(request: Request) -> Response:
             status_code=503,
         )
 
+    request_id = None
     try:
         body = await request.json()
         method = body.get("method", "")
@@ -70,7 +71,7 @@ async def mcp_streamable_http(request: Request) -> Response:
                         "code": -32603,
                         "message": str(exc),
                     },
-                    "id": body.get("id") if "body" in dir() else None,
+                    "id": request_id,
                 }
             ),
             media_type="application/json",

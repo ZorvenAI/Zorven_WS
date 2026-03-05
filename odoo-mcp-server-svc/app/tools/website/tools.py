@@ -10,7 +10,7 @@ class CreatePage(BaseTool):
 
     name = "website_create_page"
     description = (
-        "Create a website page with a URL, optional HTML content, " "and publish state"
+        "Create a website page with a URL, optional HTML content, and publish state"
     )
     domain = "website"
     required_model = "website.page"
@@ -69,7 +69,7 @@ class ListProducts(BaseTool):
 
     name = "website_list_products"
     description = (
-        "Search and read published website products with name, " "price, and image"
+        "Search and read published website products with name, price, and image"
     )
     domain = "website"
     required_model = "product.template"
