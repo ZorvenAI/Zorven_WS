@@ -7,13 +7,14 @@ PipelineManifestViewSet — CRUD for pipeline manifests (admin-only create/updat
 
 import logging
 
+from decouple import config as decouple_config
 from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status, viewsets
-from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from tenants.permissions import (
@@ -339,3 +340,43 @@ class PipelineManifestViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         """Soft-delete: deactivate instead of hard-deleting."""
         instance.is_active = False
         instance.save(update_fields=["is_active"])
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def callback_debug(request):
+    """Diagnostic endpoint for verifying callback configuration.
+
+    Requires ``X-Service-Token`` header for authentication so that
+    internal configuration is not exposed publicly.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "ORCHESTRATOR_SERVICE_TOKEN", "")
+    if not expected or token != expected:
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    cb_token = getattr(settings, "ORCHESTRATOR_CALLBACK_TOKEN", "")
+    return Response(
+        {
+            "allowed_hosts": settings.ALLOWED_HOSTS,
+            "callback_base_url": decouple_config(
+                "CALLBACK_BASE_URL", default="(not set)"
+            ),
+            "backend_url": decouple_config("BACKEND_URL", default="(not set)"),
+            "orchestrator_url": getattr(settings, "ORCHESTRATOR_URL", "(not set)"),
+            "callback_token_configured": bool(cb_token),
+            "railway_env": decouple_config(
+                "RAILWAY_ENVIRONMENT_NAME", default="(not set)"
+            ),
+            "railway_private_domain": decouple_config(
+                "RAILWAY_PRIVATE_DOMAIN", default="(not set)"
+            ),
+            "railway_service_name": decouple_config(
+                "RAILWAY_SERVICE_NAME", default="(not set)"
+            ),
+            "host_header": request.META.get("HTTP_HOST", "(none)"),
+        }
+    )
