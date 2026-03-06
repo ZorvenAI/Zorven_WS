@@ -335,6 +335,10 @@ def _run_curation(
         NoOpProducerAdapter as CurationNoOpProducer,
     )
 
+    # Initialise before try so they're available in the except block.
+    storage_bucket = ""
+    mime_type = "application/octet-stream"
+
     try:
         config = get_media_curation_config()
         kafka_config = config.get("KAFKA", {})
@@ -467,6 +471,9 @@ def _run_indexing(
     """
     from rag_index.domain.models import SyncAction, SyncEvent
     from rag_index.tasks.sync_tasks import get_orchestrator, run_async
+
+    # Initialise before try so it's available in the except block.
+    output_uri = ""
 
     try:
         output_uri = curation_result.get("output_uri", "")

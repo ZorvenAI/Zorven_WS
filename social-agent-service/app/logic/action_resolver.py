@@ -186,14 +186,12 @@ class ActionResolver:
 
         sanitized_prompt = sanitize_ai_prompt(prompt)
 
-        response = await asyncio.wait_for(
-            asyncio.to_thread(
-                self._model.generate_content,
-                [system_prompt, sanitized_prompt],
-                tools=[tools],
-                generation_config={"temperature": 0.0},
-            ),
-            timeout=30,
+        response = await asyncio.to_thread(
+            self._model.generate_content,
+            [system_prompt, sanitized_prompt],
+            tools=[tools],
+            generation_config={"temperature": 0.0},
+            request_options={"timeout": 30},
         )
 
         # Extract function call from response

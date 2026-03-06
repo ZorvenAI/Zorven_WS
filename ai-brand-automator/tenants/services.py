@@ -227,13 +227,12 @@ class TenantVertexAIService:
             return self._client
         try:
             import json
-            import os
 
             from google.cloud import discoveryengine_v1 as discoveryengine
 
             # Use service account from GCS_CREDENTIALS_JSON if available,
             # otherwise fall back to Application Default Credentials.
-            creds_json = os.environ.get("GCS_CREDENTIALS_JSON", "")
+            creds_json = config("GCS_CREDENTIALS_JSON", default="")
             if creds_json:
                 from google.oauth2 import service_account
 

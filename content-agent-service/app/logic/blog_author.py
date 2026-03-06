@@ -39,7 +39,11 @@ class BlogAuthor:
         """
         if self._model is not None:
             return await self._ai_author(
-                topic, research_context, brand_persona, seo_data, citations,
+                topic,
+                research_context,
+                brand_persona,
+                seo_data,
+                citations,
                 skill_context=skill_context,
             )
         return self._stub_author(topic, brand_persona, seo_data, citations)
@@ -92,7 +96,7 @@ class BlogAuthor:
 
         prompt += (
             f"## Task\n"
-            f"Write a 800-1200 word blog post about \"{safe_topic}\" in Markdown format.\n"
+            f'Write a 800-1200 word blog post about "{safe_topic}" in Markdown format.\n'
             f"Include:\n"
             f"- H1 title as the first line\n"
             f"- H2 sections for each major topic\n"
@@ -103,21 +107,19 @@ class BlogAuthor:
         )
 
         try:
-            response = await asyncio.wait_for(
-                asyncio.to_thread(
-                    self._model.generate_content,
-                    prompt,
-                    generation_config={
-                        "temperature": 0.7,
-                        "max_output_tokens": 4096,
-                    },
-                ),
-                timeout=120,
+            response = await asyncio.to_thread(
+                self._model.generate_content,
+                prompt,
+                generation_config={
+                    "temperature": 0.7,
+                    "max_output_tokens": 4096,
+                },
+                request_options={"timeout": 120},
             )
             blog = response.text.strip()
             blog = self._post_process(blog)
             return blog
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Gemini blog authoring timed out (120s). Using stub.")
             return self._stub_author(topic, brand_persona, seo_data, citations)
         except Exception as exc:
@@ -143,14 +145,10 @@ class BlogAuthor:
             citation_lines = []
             for c in citations[:5]:
                 if c.source_url:
-                    citation_lines.append(
-                        f"- [{c.source_title}]({c.source_url})"
-                    )
+                    citation_lines.append(f"- [{c.source_title}]({c.source_url})")
                 else:
                     citation_lines.append(f"- {c.source_title}")
-            citation_section = (
-                "\n## Sources\n\n" + "\n".join(citation_lines) + "\n"
-            )
+            citation_section = "\n## Sources\n\n" + "\n".join(citation_lines) + "\n"
 
         return (
             f"# {topic}\n\n"
@@ -195,7 +193,7 @@ class BlogAuthor:
         """Ensure proper Markdown formatting."""
         # Remove potential markdown code block wrapper
         if blog.startswith("```markdown"):
-            blog = blog[len("```markdown"):].strip()
+            blog = blog[len("```markdown") :].strip()
         if blog.startswith("```"):
             blog = blog[3:].strip()
         if blog.endswith("```"):
@@ -207,4 +205,3 @@ class BlogAuthor:
             blog = f"# {lines[0]}\n{lines[1] if len(lines) > 1 else ''}"
 
         return blog
-
