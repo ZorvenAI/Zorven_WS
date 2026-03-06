@@ -227,7 +227,9 @@ def process_asset_pipeline_sync(
             indexing_result.get("error", "unknown"),
         )
         _update_asset_status(
-            asset_id, "curated", tenant_id=tenant_id,
+            asset_id,
+            "curated",
+            tenant_id=tenant_id,
         )
         final_status = "curated"
 
@@ -344,9 +346,12 @@ def _run_curation(
         if not curated_bucket and tenant and hasattr(tenant, "get_curated_bucket"):
             curated_bucket = tenant.get_curated_bucket()
         raw_bucket = event_data.get("raw_bucket")
-        storage_bucket = curated_bucket or config.get("STORAGE", {}).get(
-            "CURATED_BUCKET", ""
-        ) or raw_bucket or "brandsol-curation-bucket"
+        storage_bucket = (
+            curated_bucket
+            or config.get("STORAGE", {}).get("CURATED_BUCKET", "")
+            or raw_bucket
+            or "brandsol-curation-bucket"
+        )
 
         # Build CurationEvent from ingestion result
         dest_path = ingestion_result.get(
@@ -425,8 +430,7 @@ def _run_curation(
 
     except Exception as e:
         error_msg = (
-            f"Curation failed (bucket={storage_bucket}, "
-            f"mime={mime_type}): {e}"
+            f"Curation failed (bucket={storage_bucket}, " f"mime={mime_type}): {e}"
         )
         logger.error(error_msg, extra={"asset_id": asset_id}, exc_info=True)
         _update_asset_status(
@@ -510,8 +514,7 @@ def _run_indexing(
 
     except Exception as e:
         error_msg = (
-            f"Indexing failed (output_uri={output_uri}, "
-            f"tenant={tenant_id}): {e}"
+            f"Indexing failed (output_uri={output_uri}, " f"tenant={tenant_id}): {e}"
         )
         logger.error(error_msg, extra={"asset_id": asset_id}, exc_info=True)
         # Don't mark as "failed" here — the caller
