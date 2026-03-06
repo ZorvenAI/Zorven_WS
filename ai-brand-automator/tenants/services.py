@@ -247,9 +247,7 @@ class TenantVertexAIService:
             data_store = discoveryengine.DataStore(
                 display_name=display_name,
                 industry_vertical=discoveryengine.IndustryVertical.GENERIC,
-                solution_types=[
-                    discoveryengine.SolutionType.SOLUTION_TYPE_SEARCH
-                ],
+                solution_types=[discoveryengine.SolutionType.SOLUTION_TYPE_SEARCH],
                 content_config=discoveryengine.DataStore.ContentConfig.NO_CONTENT,
             )
 
