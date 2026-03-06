@@ -41,29 +41,13 @@ ALLOWED_HOSTS = config(
     cast=lambda v: [s.strip() for s in v.split(",")],
 )
 
-# Railway private networking: allow the specific internal hostname used for
-# service-to-service callbacks.  The pipeline orchestrator sends HTTP
-# callbacks to the backend using the CALLBACK_BASE_URL (e.g.
-# http://Prevision-WS.railway.internal:8000).  Without adding that hostname
-# to ALLOWED_HOSTS, Django rejects callbacks with 400 DisallowedHost and
-# pipeline progress never reaches the frontend.
+# Railway private networking: allow *.railway.internal hostnames so that
+# service-to-service callbacks (e.g. orchestrator → Django) are not
+# rejected with 400 DisallowedHost.  Private networking is only reachable
+# from within the Railway project, so this is safe.
 if config("RAILWAY_ENVIRONMENT_NAME", default=""):
-    # Add the specific callback hostname (from CALLBACK_BASE_URL or BACKEND_URL)
-    _cb_host = _urlparse(
-        config(
-            "CALLBACK_BASE_URL",
-            default=config("BACKEND_URL", default=""),
-        )
-    ).hostname
-    if _cb_host and _cb_host not in ALLOWED_HOSTS:
-        ALLOWED_HOSTS.append(_cb_host)
-    # Optionally allow the .railway.internal wildcard so ALL internal
-    # service callbacks work regardless of env vars.  Gated behind an
-    # explicit opt-in flag to avoid broadening host-header validation
-    # beyond the specific callback hostname parsed above.
-    if config("ALLOW_RAILWAY_INTERNAL_WILDCARD", default=False, cast=bool):
-        if ".railway.internal" not in ALLOWED_HOSTS:
-            ALLOWED_HOSTS.append(".railway.internal")
+    if ".railway.internal" not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(".railway.internal")
 
 
 # Application definition

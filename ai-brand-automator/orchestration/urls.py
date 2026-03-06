@@ -4,6 +4,7 @@ URL configuration for the orchestration app.
 Routes registered via DRF DefaultRouter:
     /jobs/                  — AnalysisJobViewSet
     /manifests/             — PipelineManifestViewSet
+    /callback-debug/        — Diagnostic endpoint (no auth)
 """
 
 from django.urls import include, path
@@ -20,5 +21,6 @@ router.register(
 )
 
 urlpatterns = [
+    path("callback-debug/", views.callback_debug, name="callback-debug"),
     path("", include(router.urls)),
 ]
