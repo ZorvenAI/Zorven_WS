@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, patch
 
+from app.core.config import settings
 from app.api.schemas import (
     AvailableManifest,
     DispatchRequest,
@@ -719,6 +720,48 @@ class TestJobExecutor:
                 assert (
                     report_status != "running"
                 ), "report should not be marked running after cancel"
+
+
+class TestResolveCallbackUrl:
+    """Tests for the CALLBACK_BASE_URL override mechanism."""
+
+    def test_uses_dispatch_url_when_no_override(self):
+        """Without CALLBACK_BASE_URL, uses the URL from the dispatch."""
+        request = _make_request()
+        original_val = settings.CALLBACK_BASE_URL
+        try:
+            settings.CALLBACK_BASE_URL = ""
+            url = JobExecutor._resolve_callback_url(request)
+            assert url == request.callback_url
+        finally:
+            settings.CALLBACK_BASE_URL = original_val
+
+    def test_overrides_when_callback_base_url_set(self):
+        """With CALLBACK_BASE_URL, constructs URL from base + job_id."""
+        request = _make_request(job_id="job-abc-123")
+        original_val = settings.CALLBACK_BASE_URL
+        try:
+            settings.CALLBACK_BASE_URL = "http://previsionws.railway.internal:8000"
+            url = JobExecutor._resolve_callback_url(request)
+            assert url == (
+                "http://previsionws.railway.internal:8000"
+                "/api/v1/orchestration/jobs/job-abc-123/callback/"
+            )
+            assert request.callback_url not in url
+        finally:
+            settings.CALLBACK_BASE_URL = original_val
+
+    def test_strips_trailing_slash_from_base(self):
+        """Trailing slash on CALLBACK_BASE_URL should not cause double slash."""
+        request = _make_request(job_id="job-456")
+        original_val = settings.CALLBACK_BASE_URL
+        try:
+            settings.CALLBACK_BASE_URL = "http://backend:8000/"
+            url = JobExecutor._resolve_callback_url(request)
+            assert "//api" not in url
+            assert "/api/v1/orchestration/jobs/job-456/callback/" in url
+        finally:
+            settings.CALLBACK_BASE_URL = original_val
 
 
 class TestTopologicalSort:

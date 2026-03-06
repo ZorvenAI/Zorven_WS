@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     # CORS origins (comma-separated list of allowed origins)
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
 
+    # Callback URL override — when set, the orchestrator constructs callback
+    # URLs from this base instead of using the URL from the dispatch payload.
+    # Set to the Django backend's private networking URL on Railway, e.g.
+    # http://previsionws.railway.internal:8000
+    CALLBACK_BASE_URL: str = ""
+
     # Server
     HOST: str = "0.0.0.0"
     PORT: int = 8010

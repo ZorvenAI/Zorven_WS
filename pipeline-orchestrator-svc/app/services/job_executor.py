@@ -61,7 +61,7 @@ class JobExecutor:
         Railway, etc.).
         """
         job_id = request.job_id
-        callback_url = request.callback_url
+        callback_url = self._resolve_callback_url(request)
 
         logger.info("Starting execution for job %s", job_id)
 
@@ -75,7 +75,7 @@ class JobExecutor:
             # If no manifest provided, run intent routing first
             manifest_data = self._extract_manifest_data(request)
             if manifest_data is None:
-                state = await self._handle_intent_routing(state, request)
+                state = await self._handle_intent_routing(state, request, callback_url)
 
                 # Check for dynamically composed manifest first
                 composed = state.get("_composed_manifest")
@@ -169,10 +169,8 @@ class JobExecutor:
 
                     # Inject matched skills into node configs (internal + external)
                     if _skill_router:
-                        skill_additions = (
-                            _skill_router.resolve_skills_for_node(
-                                nid, state.get("input_prompt", "")
-                            )
+                        skill_additions = _skill_router.resolve_skills_for_node(
+                            nid, state.get("input_prompt", "")
                         )
                         if skill_additions:
                             merged_config.update(skill_additions)
@@ -430,6 +428,29 @@ class JobExecutor:
             except Exception:
                 logger.error("Failed to send error callback for job %s", job_id)
 
+    @staticmethod
+    def _resolve_callback_url(request: DispatchRequest) -> str:
+        """Resolve the callback URL for this job.
+
+        If ``ORCHESTRATOR_CALLBACK_BASE_URL`` is configured, build the
+        callback URL from it (overriding whatever Django sent in the
+        dispatch payload).  This makes callbacks resilient to Django
+        having an incorrect ``CALLBACK_BASE_URL`` env var.
+        """
+        if settings.CALLBACK_BASE_URL:
+            base = settings.CALLBACK_BASE_URL.rstrip("/")
+            overridden = (
+                f"{base}/api/v1/orchestration/jobs/" f"{request.job_id}/callback/"
+            )
+            logger.info(
+                "Job %s: callback URL overridden to %s " "(was: %s)",
+                request.job_id,
+                overridden,
+                (request.callback_url or "<empty>")[:80],
+            )
+            return overridden
+        return request.callback_url
+
     def _build_initial_state(self, request: DispatchRequest) -> AgentState:
         """Build the initial AgentState from a DispatchRequest."""
         tenant_ctx = request.tenant_context
@@ -475,6 +496,7 @@ class JobExecutor:
         self,
         state: AgentState,
         request: DispatchRequest,
+        callback_url: str,
     ) -> AgentState:
         """Run PipelineComposer to dynamically compose or resolve a manifest."""
         from app.nodes.internal.pipeline_composer import PipelineComposer
@@ -490,7 +512,7 @@ class JobExecutor:
             "started_at": self._now_iso(),
         }
         await self.callback.send_progress(
-            request.callback_url, copy.deepcopy(state["progress"])
+            callback_url, copy.deepcopy(state["progress"])
         )
 
         composer = PipelineComposer()
@@ -512,7 +534,7 @@ class JobExecutor:
             }
             # Send progress update (no manifest_id to resolve in DB)
             await self.callback.send_progress(
-                request.callback_url, copy.deepcopy(state["progress"])
+                callback_url, copy.deepcopy(state["progress"])
             )
         else:
             state["resolved_manifest_id"] = result.get("resolved_manifest_id")
@@ -524,7 +546,7 @@ class JobExecutor:
             }
             # Notify the callback about the resolved manifest
             await self.callback.send_resolved_manifest(
-                request.callback_url,
+                callback_url,
                 manifest_id=state["resolved_manifest_id"] or "brand-analysis",
                 progress=state["progress"],
             )
