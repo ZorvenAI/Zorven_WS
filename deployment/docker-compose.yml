@@ -863,7 +863,7 @@ services:
     container_name: ai-brand-automator-odoo-mcp
     environment:
       - ODOO_MCP_REDIS_URL=redis://redis:6379/9
-      - ODOO_MCP_ODOO_URL=${ODOO_URL:-http://localhost:8069}
+      - ODOO_MCP_ODOO_URL=${ODOO_URL:-http://odoo:8069}
       - ODOO_MCP_ODOO_MASTER_PASSWORD=${ODOO_MASTER_PASSWORD:-}
       - ODOO_MCP_KAFKA_BOOTSTRAP_SERVERS=${ODOO_MCP_KAFKA_BOOTSTRAP_SERVERS:-}
       - ODOO_MCP_RAG_SERVICE_URL=http://rag-uploader-agent-svc:8070
@@ -871,6 +871,12 @@ services:
       - ODOO_MCP_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - ODOO_MCP_LOG_LEVEL=INFO
       - ODOO_MCP_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+      # Vertex AI RAG (direct integration — bypasses rag-uploader-agent-service)
+      - ODOO_MCP_DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/ai_brand_automator}
+      - ODOO_MCP_VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol-project}
+      - ODOO_MCP_VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
+      - ODOO_MCP_VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-prevision-rag-dev}
+      - ODOO_MCP_VERTEX_AI_MOCK_MODE=${VERTEX_AI_MOCK_MODE:-false}
     expose:
       - "8095"
     ports:
@@ -886,6 +892,64 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+
+  # ==========================================================================
+  # Odoo PostgreSQL — Dedicated database for Odoo ERP
+  # ==========================================================================
+  odoo-db:
+    image: postgres:15-alpine
+    container_name: ai-brand-automator-odoo-db
+    environment:
+      - POSTGRES_DB=odoo
+      - POSTGRES_USER=odoo
+      - POSTGRES_PASSWORD=${ODOO_DB_PASSWORD:-odoo}
+    ports:
+      - "5434:5432"
+    volumes:
+      - odoo_postgres_volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - with-odoo
+
+  # ==========================================================================
+  # Odoo 19 Community — ERP server (official Docker image)
+  # ==========================================================================
+  odoo:
+    image: odoo:19
+    container_name: ai-brand-automator-odoo
+    environment:
+      - HOST=odoo-db
+      - PORT=5432
+      - USER=odoo
+      - PASSWORD=${ODOO_DB_PASSWORD:-odoo}
+    ports:
+      - "8069:8069"
+      - "8072:8072"
+    volumes:
+      - odoo_data_volume:/var/lib/odoo
+      - odoo_addons_volume:/mnt/extra-addons
+    depends_on:
+      odoo-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8069/web/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - with-odoo
 
   # ==========================================================================
   # Brand Equity Calculator — ISO 20671:2019 brand evaluation (public)
@@ -931,6 +995,9 @@ volumes:
   zookeeper_data:
   zookeeper_log:
   kafka_data:
+  odoo_postgres_volume:
+  odoo_data_volume:
+  odoo_addons_volume:
 
 # ==========================================================================
 # Networks

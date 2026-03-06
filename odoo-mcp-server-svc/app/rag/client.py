@@ -1,6 +1,7 @@
-"""RAG client — async HTTP client to rag-uploader-agent-service.
+"""RAG client — facade for Vertex AI (direct) or HTTP fallback.
 
-Tenant-aware with namespace isolation by tenant_id.
+When a VertexAIRAGAdapter is injected, delegates directly to Vertex AI.
+Otherwise falls back to HTTP calls to rag-uploader-agent-service.
 """
 
 import logging
@@ -14,11 +15,20 @@ logger = logging.getLogger(__name__)
 
 
 class RAGClient:
-    """Async HTTP client for the RAG uploader agent service."""
+    """RAG facade: Vertex AI adapter (preferred) → HTTP fallback."""
 
-    def __init__(self, base_url: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        vertex_adapter: Optional[Any] = None,
+    ) -> None:
         self.base_url = (base_url or settings.RAG_SERVICE_URL).rstrip("/")
+        self.vertex_adapter = vertex_adapter
         self._client: Optional[httpx.AsyncClient] = None
+
+    @property
+    def _use_vertex(self) -> bool:
+        return self.vertex_adapter is not None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -37,6 +47,12 @@ class RAGClient:
         top_k: int = 5,
     ) -> dict[str, Any]:
         """Query the RAG knowledge store."""
+        if self._use_vertex:
+            return await self.vertex_adapter.search(
+                query=query, tenant_id=tenant_id, top_k=top_k
+            )
+
+        # HTTP fallback
         client = await self._get_client()
         try:
             response = await client.post(
@@ -56,17 +72,37 @@ class RAGClient:
 
     async def upload_document(
         self,
-        content: str,
+        content: Any,
         metadata: dict[str, Any],
         tenant_id: str = "default",
+        doc_id: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Upload a document to the RAG store."""
+        """Upload/upsert a document to the RAG store."""
+        if self._use_vertex:
+            # Build document content in the expected format
+            if isinstance(content, dict):
+                document_content = content
+            else:
+                document_content = {
+                    "document_type": metadata.get("document_type", "unknown"),
+                    "metadata": metadata,
+                    "extracted_text": str(content),
+                }
+
+            document_id = doc_id or self._generate_doc_id(metadata)
+            return await self.vertex_adapter.upsert_document(
+                document_id=document_id,
+                document_content=document_content,
+                tenant_id=tenant_id,
+            )
+
+        # HTTP fallback
         client = await self._get_client()
         try:
             response = await client.post(
                 "/v1/upload",
                 json={
-                    "content": content,
+                    "content": content if isinstance(content, str) else str(content),
                     "metadata": metadata,
                     "namespace": tenant_id,
                 },
@@ -80,6 +116,10 @@ class RAGClient:
 
     async def list_documents(self, tenant_id: str = "default") -> dict[str, Any]:
         """List documents in the RAG store."""
+        if self._use_vertex:
+            # Vertex AI doesn't have a direct list API for unstructured stores
+            return {"documents": [], "note": "List not supported via Vertex AI direct"}
+
         client = await self._get_client()
         try:
             response = await client.get(
@@ -97,6 +137,11 @@ class RAGClient:
         self, doc_id: str, tenant_id: str = "default"
     ) -> dict[str, Any]:
         """Get a specific document."""
+        if self._use_vertex:
+            return await self.vertex_adapter.get_document(
+                document_id=doc_id, tenant_id=tenant_id
+            )
+
         client = await self._get_client()
         try:
             response = await client.get(
@@ -113,6 +158,11 @@ class RAGClient:
         self, doc_id: str, tenant_id: str = "default"
     ) -> dict[str, Any]:
         """Delete a document from the RAG store."""
+        if self._use_vertex:
+            return await self.vertex_adapter.delete_document(
+                document_id=doc_id, tenant_id=tenant_id
+            )
+
         client = await self._get_client()
         try:
             response = await client.delete(
@@ -136,6 +186,9 @@ class RAGClient:
 
     async def get_stats(self, tenant_id: str = "default") -> dict[str, Any]:
         """Get RAG store statistics."""
+        if self._use_vertex:
+            return {"backend": "vertex_ai", "tenant_id": tenant_id}
+
         client = await self._get_client()
         try:
             response = await client.get(
@@ -147,3 +200,22 @@ class RAGClient:
         except Exception as exc:
             logger.warning("RAG stats failed: %s", exc)
             return {"error": str(exc)}
+
+    @staticmethod
+    def _generate_doc_id(metadata: dict[str, Any]) -> str:
+        """Generate a deterministic document ID from metadata."""
+        source = metadata.get("source", "unknown")
+        model = metadata.get("model", "")
+        record_id = metadata.get("record_id", "")
+
+        if source == "odoo" and model and record_id:
+            model_underscore = model.replace(".", "_")
+            return f"odoo-{model_underscore}-{record_id}"
+
+        # Fallback — use sorted JSON for insertion-order-independent hashing
+        import hashlib
+        import json
+
+        stable = json.dumps(metadata, sort_keys=True, separators=(",", ":"))
+        content_hash = hashlib.md5(stable.encode()).hexdigest()[:12]
+        return f"{source}-{content_hash}"

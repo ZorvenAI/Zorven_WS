@@ -364,6 +364,76 @@ class TestRBACCache:
 
 
 # ---------------------------------------------------------------------------
+# get / set (generic key-value)
+# ---------------------------------------------------------------------------
+
+
+class TestGenericGetSet:
+    @patch("app.cache.redis_manager.aioredis")
+    async def test_get_returns_value(self, mock_aioredis):
+        mock_client = _make_mock_redis()
+        mock_client.get.return_value = "my-value"
+        mock_aioredis.from_url.return_value = mock_client
+
+        mgr = RedisManager("redis://test")
+        result = await mgr.get("odoo_mcp:tenant_ds:1")
+
+        assert result == "my-value"
+        mock_client.get.assert_awaited_once_with("odoo_mcp:tenant_ds:1")
+
+    @patch("app.cache.redis_manager.aioredis")
+    async def test_get_returns_none_on_miss(self, mock_aioredis):
+        mock_client = _make_mock_redis()
+        mock_client.get.return_value = None
+        mock_aioredis.from_url.return_value = mock_client
+
+        mgr = RedisManager("redis://test")
+        result = await mgr.get("nonexistent")
+
+        assert result is None
+
+    @patch("app.cache.redis_manager.aioredis")
+    async def test_get_fail_open(self, mock_aioredis):
+        mock_client = _make_mock_redis()
+        mock_client.get.side_effect = Exception("down")
+        mock_aioredis.from_url.return_value = mock_client
+
+        mgr = RedisManager("redis://test")
+        result = await mgr.get("key")
+
+        assert result is None
+
+    @patch("app.cache.redis_manager.aioredis")
+    async def test_set_stores_value_with_ttl(self, mock_aioredis):
+        mock_client = _make_mock_redis()
+        mock_aioredis.from_url.return_value = mock_client
+
+        mgr = RedisManager("redis://test")
+        await mgr.set("my-key", "my-value", ttl=300)
+
+        mock_client.set.assert_awaited_once_with("my-key", "my-value", ex=300)
+
+    @patch("app.cache.redis_manager.aioredis")
+    async def test_set_default_ttl(self, mock_aioredis):
+        mock_client = _make_mock_redis()
+        mock_aioredis.from_url.return_value = mock_client
+
+        mgr = RedisManager("redis://test")
+        await mgr.set("key", "val")
+
+        mock_client.set.assert_awaited_once_with("key", "val", ex=3600)
+
+    @patch("app.cache.redis_manager.aioredis")
+    async def test_set_fail_silently(self, mock_aioredis):
+        mock_client = _make_mock_redis()
+        mock_client.set.side_effect = Exception("down")
+        mock_aioredis.from_url.return_value = mock_client
+
+        mgr = RedisManager("redis://test")
+        await mgr.set("key", "val")  # Should not raise
+
+
+# ---------------------------------------------------------------------------
 # build_cache_key
 # ---------------------------------------------------------------------------
 

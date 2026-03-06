@@ -4,7 +4,17 @@ This file provides guidance to Claude Code when working with this service.
 
 ## What This Service Does
 
-`odoo-mcp-server-svc` is a FastAPI microservice (port 8095) that bridges AI agents and Odoo ERP by exposing all Odoo module APIs as 100+ MCP tools. Supports multi-tenancy (3 models), hierarchical RBAC (17 roles), and RAG integration via the rag-uploader-agent-service.
+`odoo-mcp-server-svc` is a FastAPI microservice (port 8095) that bridges AI agents and Odoo ERP by exposing all Odoo module APIs as 100+ MCP tools. Supports multi-tenancy (3 models), hierarchical RBAC (17 roles), and direct Vertex AI RAG integration with per-tenant data store resolution.
+
+## Odoo Server Dependency
+
+This service connects to a running Odoo 19 Community server via XML-RPC. For local dev, start the Odoo stack:
+```bash
+cd deployment
+docker compose --profile with-odoo up --build
+bash scripts/init-odoo.sh   # Once, creates DB with demo data
+```
+Access Odoo UI at http://localhost:8069 (admin/admin).
 
 ## Build & Run Commands
 
@@ -30,7 +40,7 @@ black app/ tests/
 - `app/services/` — OdooRPCClient (XML-RPC), TenantConnectionPool, error hierarchy
 - `app/tenancy/` — TenantConfig, TenantResolver, TenantRegistry, middleware
 - `app/rbac/` — PolicyEvaluator, RBACEngine (enforcing/permissive/disabled), YAML role loader
-- `app/rag/` — RAGClient, RAGContextMiddleware, OdooRAGSync
+- `app/rag/` — RAGClient (facade), VertexAIRAGAdapter, TenantDataStoreResolver, RAGContextMiddleware, OdooRAGSync
 - `app/messaging/` — Kafka producer (audit, tenant events), consumer (provisioning)
 - `app/observability/` — Metrics collector, structured audit logger
 
@@ -56,8 +66,13 @@ All prefixed with `ODOO_MCP_`:
 - `TENANT_MODEL` — dedicated_db | shared_instance | shared_db
 - `RBAC_ENFORCEMENT` — enforcing | permissive | disabled
 - `RBAC_ROLES_DIR` — default config/roles
-- `RAG_SERVICE_URL` — default http://localhost:8070
+- `RAG_SERVICE_URL` — default http://localhost:8070 (HTTP fallback)
 - `RAG_ENABLED` — default false
+- `DATABASE_URL` — Neon DB URL for tenant → data store resolution (read-only)
+- `VERTEX_AI_PROJECT_ID` — default brandsol-project
+- `VERTEX_AI_LOCATION` — default global
+- `VERTEX_AI_DATA_STORE_ID` — default prevision-rag-dev (fallback)
+- `VERTEX_AI_MOCK_MODE` — default false
 - `KAFKA_BOOTSTRAP_SERVERS` — empty = Kafka disabled
 - `SERVICE_TOKEN` — default dev-service-token
 - `PORT` — default 8095
@@ -69,6 +84,7 @@ All prefixed with `ODOO_MCP_`:
 - `odoo_mcp:rbac:{tenant_id}:{role}` — 5m TTL
 - `odoo_mcp:rate:{tenant_id}` — 60s TTL
 - `odoo_mcp:result:{md5}` — 4h TTL
+- `odoo_mcp:tenant_ds:{tenant_id}` — 1h TTL (tenant → data store mapping)
 
 ## MCP Tool Domains
 

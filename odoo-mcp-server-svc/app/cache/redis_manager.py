@@ -122,6 +122,25 @@ class RedisManager:
         except Exception:
             logger.warning("Redis RBAC write failed for %s:%s", tenant_id, role)
 
+    # ── Generic key-value ──
+
+    async def get(self, key: str) -> Optional[str]:
+        """Get a raw string value by key."""
+        try:
+            r = await self._get_redis()
+            return await r.get(key)
+        except Exception:
+            logger.warning("Redis get failed for %s", key)
+        return None
+
+    async def set(self, key: str, value: str, ttl: int = 3600) -> None:
+        """Set a raw string value with TTL (seconds)."""
+        try:
+            r = await self._get_redis()
+            await r.set(key, value, ex=ttl)
+        except Exception:
+            logger.warning("Redis set failed for %s", key)
+
     # ── Generic caching ──
 
     @staticmethod

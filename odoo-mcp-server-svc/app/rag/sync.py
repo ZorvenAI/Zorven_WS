@@ -1,13 +1,13 @@
 """Odoo-RAG sync — indexes Odoo records into the RAG knowledge store.
 
 Supports event-driven sync (via Kafka) and periodic nightly sync
-for configured models.
+for configured models. Generates deterministic document IDs for
+idempotent Vertex AI upserts.
 """
 
 import logging
 from typing import Any, Optional
 
-from app.core.config import settings
 from app.rag.client import RAGClient
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,16 @@ INDEXABLE_MODELS = [
     "crm.lead",
     "res.partner",
 ]
+
+
+def make_doc_id(model: str, record_id: int) -> str:
+    """Generate a deterministic document ID for an Odoo record.
+
+    Format: odoo-{model_underscore}-{record_id}
+    Example: odoo-sale_order-42
+    """
+    model_underscore = model.replace(".", "_")
+    return f"odoo-{model_underscore}-{record_id}"
 
 
 class OdooRAGSync:
@@ -59,24 +69,33 @@ class OdooRAGSync:
                 return {"error": f"Record {model}/{record_id} not found"}
 
             record = records[0]
+            doc_id = make_doc_id(model, record_id)
+            record_name = record.get("name", record.get("display_name", ""))
 
-            # Build document content
-            content = self._build_document_content(model, record)
+            # Build structured document content for Vertex AI
+            document_content = self._build_document_content(model, record)
             metadata = {
                 "source": "odoo",
                 "model": model,
                 "record_id": record_id,
                 "tenant_id": tenant_id,
-                "name": record.get("name", record.get("display_name", "")),
+                "name": record_name,
             }
 
-            # Upload to RAG
+            # Upload to RAG (facade handles Vertex AI vs HTTP)
             result = await self.rag_client.upload_document(
-                content=content,
+                content=document_content,
                 metadata=metadata,
                 tenant_id=tenant_id,
+                doc_id=doc_id,
             )
-            return {"synced": True, "model": model, "record_id": record_id, **result}
+            return {
+                **result,
+                "synced": True,
+                "model": model,
+                "record_id": record_id,
+                "doc_id": doc_id,
+            }
 
         except Exception as exc:
             logger.error("Failed to sync %s/%d: %s", model, record_id, exc)
@@ -101,16 +120,20 @@ class OdooRAGSync:
             records = await self.rpc_client.search_read(model, domain, limit=limit)
             for record in records:
                 try:
-                    content = self._build_document_content(model, record)
+                    record_id = record["id"]
+                    doc_id = make_doc_id(model, record_id)
+                    document_content = self._build_document_content(model, record)
+                    metadata = {
+                        "source": "odoo",
+                        "model": model,
+                        "record_id": record_id,
+                        "tenant_id": tenant_id,
+                    }
                     await self.rag_client.upload_document(
-                        content=content,
-                        metadata={
-                            "source": "odoo",
-                            "model": model,
-                            "record_id": record["id"],
-                            "tenant_id": tenant_id,
-                        },
+                        content=document_content,
+                        metadata=metadata,
                         tenant_id=tenant_id,
+                        doc_id=doc_id,
                     )
                     synced += 1
                 except Exception as exc:
@@ -136,24 +159,45 @@ class OdooRAGSync:
         action = event.get("action", "update")
 
         if action == "delete":
-            logger.info("Record deleted: %s/%d — skipping RAG sync", model, record_id)
+            if self.rag_client is not None:
+                doc_id = make_doc_id(model, record_id)
+                await self.rag_client.delete_document(doc_id, tenant_id=tenant_id)
             return
 
         if model in INDEXABLE_MODELS:
             await self.sync_record(model, record_id, tenant_id)
 
     @staticmethod
-    def _build_document_content(model: str, record: dict[str, Any]) -> str:
-        """Build a text representation of an Odoo record for RAG indexing."""
-        parts = [f"Model: {model}"]
+    def _build_document_content(model: str, record: dict[str, Any]) -> dict[str, Any]:
+        """Build structured document content for Vertex AI indexing.
+
+        Returns a dict with document_type, metadata, and extracted_text
+        matching the Django backend's document format.
+        """
+        # Build extracted text from record fields
+        text_parts = []
+        record_name = ""
         for key, value in record.items():
             if key == "id" or value is False or value is None:
                 continue
+            if key in ("name", "display_name"):
+                record_name = str(value)
             if isinstance(value, (list, tuple)) and len(value) == 2:
                 # Many2one field: [id, display_name]
-                parts.append(f"{key}: {value[1]}")
+                text_parts.append(f"{key}: {value[1]}")
             elif isinstance(value, str) and len(value) > 500:
-                parts.append(f"{key}: {value[:500]}...")
+                text_parts.append(f"{key}: {value[:500]}...")
             else:
-                parts.append(f"{key}: {value}")
-        return "\n".join(parts)
+                text_parts.append(f"{key}: {value}")
+
+        model_underscore = model.replace(".", "_")
+        return {
+            "document_type": f"odoo_{model_underscore}",
+            "metadata": {
+                "source": "odoo",
+                "model": model,
+                "record_id": record.get("id", 0),
+                "name": record_name,
+            },
+            "extracted_text": "\n".join(text_parts),
+        }

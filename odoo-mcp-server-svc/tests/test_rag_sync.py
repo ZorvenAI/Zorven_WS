@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.rag.sync import INDEXABLE_MODELS, OdooRAGSync
+from app.rag.sync import INDEXABLE_MODELS, OdooRAGSync, make_doc_id
 
 # ── Fixtures ──
 
@@ -15,6 +15,7 @@ def mock_rag_client() -> AsyncMock:
     """Mock RAG client with standard upload response."""
     client = AsyncMock()
     client.upload_document.return_value = {"doc_id": "doc-123", "status": "indexed"}
+    client.delete_document.return_value = {"status": "completed"}
     return client
 
 
@@ -44,6 +45,22 @@ def sync(mock_rag_client: AsyncMock, mock_rpc_client: AsyncMock) -> OdooRAGSync:
 def sync_no_clients() -> OdooRAGSync:
     """OdooRAGSync without any clients."""
     return OdooRAGSync()
+
+
+# ── make_doc_id ──
+
+
+class TestMakeDocId:
+    """Test deterministic document ID generation."""
+
+    def test_basic_model(self) -> None:
+        assert make_doc_id("sale.order", 42) == "odoo-sale_order-42"
+
+    def test_partner_model(self) -> None:
+        assert make_doc_id("res.partner", 1) == "odoo-res_partner-1"
+
+    def test_product_template(self) -> None:
+        assert make_doc_id("product.template", 99) == "odoo-product_template-99"
 
 
 # ── INDEXABLE_MODELS ──
@@ -111,6 +128,7 @@ class TestSyncRecord:
         assert result["synced"] is True
         assert result["model"] == "res.partner"
         assert result["record_id"] == 42
+        assert result["doc_id"] == "odoo-res_partner-42"
         mock_rpc_client.search_read.assert_awaited_once_with(
             "res.partner", [["id", "=", 42]], limit=1
         )
@@ -131,6 +149,17 @@ class TestSyncRecord:
         assert metadata["record_id"] == 42
         assert metadata["tenant_id"] == "tenant-1"
         assert metadata["name"] == "Acme Corp"
+
+    async def test_upload_receives_deterministic_doc_id(
+        self,
+        sync: OdooRAGSync,
+        mock_rag_client: AsyncMock,
+    ) -> None:
+        """Upload receives deterministic doc_id."""
+        await sync.sync_record("res.partner", 42, "tenant-1")
+
+        call_kwargs = mock_rag_client.upload_document.call_args.kwargs
+        assert call_kwargs["doc_id"] == "odoo-res_partner-42"
 
     async def test_upload_receives_correct_tenant_id(
         self,
@@ -394,12 +423,12 @@ class TestHandleRecordChange:
 
         mock_rag_client.upload_document.assert_awaited_once()
 
-    async def test_delete_event_skips_sync(
+    async def test_delete_event_calls_delete_document(
         self,
         sync: OdooRAGSync,
         mock_rag_client: AsyncMock,
     ) -> None:
-        """A delete event does not trigger RAG sync."""
+        """A delete event triggers RAG document deletion."""
         event = {
             "model": "res.partner",
             "record_id": 42,
@@ -409,6 +438,9 @@ class TestHandleRecordChange:
 
         await sync.handle_record_change(event)
 
+        mock_rag_client.delete_document.assert_awaited_once_with(
+            "odoo-res_partner-42", tenant_id="default"
+        )
         mock_rag_client.upload_document.assert_not_awaited()
 
     async def test_non_indexable_model_skips_sync(
@@ -465,32 +497,64 @@ class TestHandleRecordChange:
 
 
 class TestBuildDocumentContent:
-    """Test the static method that builds text from Odoo records."""
+    """Test the static method that builds structured content from Odoo records."""
 
-    def test_basic_record(self) -> None:
-        """Builds content from a simple record."""
+    def test_returns_dict_with_required_keys(self) -> None:
+        """Returns a dict with document_type, metadata, and extracted_text."""
         record = {"id": 1, "name": "Acme Corp", "email": "info@acme.com"}
         content = OdooRAGSync._build_document_content("res.partner", record)
 
-        assert "Model: res.partner" in content
-        assert "name: Acme Corp" in content
-        assert "email: info@acme.com" in content
-        # id field should be excluded
-        assert "id:" not in content
+        assert isinstance(content, dict)
+        assert "document_type" in content
+        assert "metadata" in content
+        assert "extracted_text" in content
+
+    def test_document_type_format(self) -> None:
+        """document_type uses odoo_{model_underscore} format."""
+        record = {"id": 1, "name": "Order 001"}
+        content = OdooRAGSync._build_document_content("sale.order", record)
+
+        assert content["document_type"] == "odoo_sale_order"
+
+    def test_metadata_contains_source_and_model(self) -> None:
+        """metadata includes source, model, record_id, and name."""
+        record = {"id": 42, "name": "Acme Corp"}
+        content = OdooRAGSync._build_document_content("res.partner", record)
+
+        assert content["metadata"]["source"] == "odoo"
+        assert content["metadata"]["model"] == "res.partner"
+        assert content["metadata"]["record_id"] == 42
+        assert content["metadata"]["name"] == "Acme Corp"
+
+    def test_extracted_text_contains_fields(self) -> None:
+        """extracted_text contains field key-value pairs."""
+        record = {"id": 1, "name": "Acme Corp", "email": "info@acme.com"}
+        content = OdooRAGSync._build_document_content("res.partner", record)
+        text = content["extracted_text"]
+
+        assert "name: Acme Corp" in text
+        assert "email: info@acme.com" in text
+
+    def test_excludes_id_field(self) -> None:
+        """id field is excluded from extracted_text."""
+        record = {"id": 1, "name": "Test"}
+        content = OdooRAGSync._build_document_content("res.partner", record)
+
+        assert "id:" not in content["extracted_text"]
 
     def test_excludes_false_values(self) -> None:
         """Skips fields with False value (Odoo convention for empty)."""
         record = {"id": 1, "name": "Test", "phone": False}
         content = OdooRAGSync._build_document_content("res.partner", record)
 
-        assert "phone" not in content
+        assert "phone" not in content["extracted_text"]
 
     def test_excludes_none_values(self) -> None:
         """Skips fields with None value."""
         record = {"id": 1, "name": "Test", "email": None}
         content = OdooRAGSync._build_document_content("res.partner", record)
 
-        assert "email" not in content
+        assert "email" not in content["extracted_text"]
 
     def test_many2one_field(self) -> None:
         """Formats Many2one fields using the display name (index 1)."""
@@ -501,31 +565,24 @@ class TestBuildDocumentContent:
         }
         content = OdooRAGSync._build_document_content("sale.order", record)
 
-        assert "partner_id: Acme Corp" in content
+        assert "partner_id: Acme Corp" in content["extracted_text"]
 
     def test_truncates_long_strings(self) -> None:
         """Truncates string fields longer than 500 characters."""
         long_text = "A" * 600
         record = {"id": 1, "name": "Test", "notes": long_text}
         content = OdooRAGSync._build_document_content("res.partner", record)
+        text = content["extracted_text"]
 
-        assert "notes:" in content
-        # 500 chars + "..."
-        assert "..." in content
-        assert "A" * 501 not in content
+        assert "notes:" in text
+        assert "..." in text
+        assert "A" * 501 not in text
 
     def test_regular_values(self) -> None:
         """Non-special values are rendered as-is."""
         record = {"id": 1, "amount_total": 1500.50, "state": "sale"}
         content = OdooRAGSync._build_document_content("sale.order", record)
+        text = content["extracted_text"]
 
-        assert "amount_total: 1500.5" in content
-        assert "state: sale" in content
-
-    def test_model_line_is_first(self) -> None:
-        """The first line is always 'Model: <model>'."""
-        record = {"id": 1, "name": "Test"}
-        content = OdooRAGSync._build_document_content("crm.lead", record)
-
-        lines = content.split("\n")
-        assert lines[0] == "Model: crm.lead"
+        assert "amount_total: 1500.5" in text
+        assert "state: sale" in text
