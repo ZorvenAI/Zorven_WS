@@ -347,11 +347,18 @@ class PipelineManifestViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 def callback_debug(request):
     """Diagnostic endpoint for verifying callback configuration.
 
-    No authentication required — returns non-sensitive config info
-    to help debug pipeline callback issues on Railway.
+    Requires ``X-Service-Token`` header for authentication so that
+    internal configuration is not exposed publicly.
     """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "ORCHESTRATOR_SERVICE_TOKEN", "")
+    if not expected or token != expected:
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     cb_token = getattr(settings, "ORCHESTRATOR_CALLBACK_TOKEN", "")
-    token_hint = f"{cb_token[:3]}...{cb_token[-3:]}" if len(cb_token) > 6 else "***"
     return Response(
         {
             "allowed_hosts": settings.ALLOWED_HOSTS,
@@ -360,7 +367,7 @@ def callback_debug(request):
             ),
             "backend_url": decouple_config("BACKEND_URL", default="(not set)"),
             "orchestrator_url": getattr(settings, "ORCHESTRATOR_URL", "(not set)"),
-            "callback_token_hint": token_hint,
+            "callback_token_configured": bool(cb_token),
             "railway_env": decouple_config(
                 "RAILWAY_ENVIRONMENT_NAME", default="(not set)"
             ),

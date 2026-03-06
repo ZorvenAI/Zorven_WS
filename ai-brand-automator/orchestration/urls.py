@@ -4,7 +4,7 @@ URL configuration for the orchestration app.
 Routes registered via DRF DefaultRouter:
     /jobs/                  — AnalysisJobViewSet
     /manifests/             — PipelineManifestViewSet
-    /callback-debug/        — Diagnostic endpoint (no auth)
+    /callback-debug/        — Diagnostic callback endpoint (X-Service-Token auth)
 """
 
 from django.urls import include, path

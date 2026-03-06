@@ -585,3 +585,47 @@ class TestJobStatusCaching:
         # Should bypass cache and fall through to the DB, which still
         # has the job as "queued" since no real callback arrived.
         assert response.data["status"] == "queued"
+
+
+# ── Callback Debug Endpoint ──────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestCallbackDebug:
+    """Tests for the /callback-debug/ diagnostic endpoint."""
+
+    def test_rejects_without_service_token(self, api_client):
+        response = api_client.get("/api/v1/orchestration/callback-debug/")
+        assert response.status_code == 403
+
+    def test_rejects_wrong_service_token(self, api_client):
+        response = api_client.get(
+            "/api/v1/orchestration/callback-debug/",
+            HTTP_X_SERVICE_TOKEN="wrong-token",
+        )
+        assert response.status_code == 403
+
+    def test_returns_config_with_valid_token(self, api_client):
+        from django.conf import settings
+
+        response = api_client.get(
+            "/api/v1/orchestration/callback-debug/",
+            HTTP_X_SERVICE_TOKEN=settings.ORCHESTRATOR_SERVICE_TOKEN,
+        )
+        assert response.status_code == 200
+        data = response.data
+        assert "allowed_hosts" in data
+        assert "callback_token_configured" in data
+        assert "railway_private_domain" in data
+
+    def test_does_not_leak_full_token(self, api_client):
+        from django.conf import settings
+
+        response = api_client.get(
+            "/api/v1/orchestration/callback-debug/",
+            HTTP_X_SERVICE_TOKEN=settings.ORCHESTRATOR_SERVICE_TOKEN,
+        )
+        assert response.status_code == 200
+        # Should return a boolean, not the actual token value
+        assert response.data["callback_token_configured"] is True
+        assert settings.ORCHESTRATOR_CALLBACK_TOKEN not in str(response.data)
