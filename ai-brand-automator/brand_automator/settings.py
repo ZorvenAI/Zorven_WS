@@ -14,8 +14,6 @@ import logging as _logging
 import os
 import sys
 from pathlib import Path
-from urllib.parse import urlparse as _urlparse
-
 from decouple import config
 from datetime import timedelta
 import dj_database_url
