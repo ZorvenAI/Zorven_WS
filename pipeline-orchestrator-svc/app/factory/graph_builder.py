@@ -199,12 +199,10 @@ class GraphBuilder:
         for compose_host, settings_base in _SERVICE_URL_MAP.items():
             prefix = f"http://{compose_host}"
             if url.startswith(prefix):
-                path = url[len(prefix):]  # e.g. "/v1/search"
+                path = url[len(prefix) :]  # e.g. "/v1/search"
                 translated = f"{settings_base}{path}"
                 if translated != url:
-                    logger.debug(
-                        "Translated URL: %s → %s", url, translated
-                    )
+                    logger.debug("Translated URL: %s → %s", url, translated)
                 return translated
         return url
 

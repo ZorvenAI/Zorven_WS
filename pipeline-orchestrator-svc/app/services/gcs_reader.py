@@ -21,7 +21,9 @@ def _build_storage_client() -> storage.Client:
         try:
             info = json.loads(settings.GCS_CREDENTIALS_JSON)
             credentials = service_account.Credentials.from_service_account_info(info)
-            return storage.Client(credentials=credentials, project=info.get("project_id"))
+            return storage.Client(
+                credentials=credentials, project=info.get("project_id")
+            )
         except Exception:
             logger.warning("Failed to parse GCS_CREDENTIALS_JSON, falling back to ADC")
     return storage.Client()
