@@ -32,6 +32,52 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     redis_manager = RedisManager(settings.REDIS_URL)
     routes.redis_manager = redis_manager
 
+    # ── Vertex AI RAG (direct integration) ──
+    tenant_resolver = None
+    vertex_adapter = None
+
+    if settings.DATABASE_URL:
+        try:
+            from app.rag.tenant_resolver import TenantDataStoreResolver
+
+            tenant_resolver = TenantDataStoreResolver(
+                database_url=settings.DATABASE_URL,
+                redis_manager=redis_manager,
+                default_data_store_id=settings.VERTEX_AI_DATA_STORE_ID,
+            )
+            await tenant_resolver.init()
+            logger.info("TenantDataStoreResolver initialized")
+        except Exception as exc:
+            logger.warning("TenantDataStoreResolver init failed: %s", exc)
+            tenant_resolver = None
+
+    if settings.RAG_ENABLED:
+        try:
+            from app.rag.vertex_ai_adapter import VertexAIRAGAdapter
+
+            vertex_adapter = VertexAIRAGAdapter(
+                project_id=settings.VERTEX_AI_PROJECT_ID,
+                location=settings.VERTEX_AI_LOCATION,
+                default_data_store_id=settings.VERTEX_AI_DATA_STORE_ID,
+                mock_mode=settings.VERTEX_AI_MOCK_MODE,
+                tenant_resolver=tenant_resolver,
+            )
+            logger.info(
+                "VertexAIRAGAdapter initialized (mock=%s)", settings.VERTEX_AI_MOCK_MODE
+            )
+        except Exception as exc:
+            logger.warning("VertexAIRAGAdapter init failed: %s", exc)
+            vertex_adapter = None
+
+    # RAGClient facade (Vertex AI direct or HTTP fallback)
+    from app.rag.client import RAGClient
+
+    rag_client = RAGClient(
+        base_url=settings.RAG_SERVICE_URL,
+        vertex_adapter=vertex_adapter,
+    )
+    routes.rag_client = rag_client
+
     # MCP server (optional — only if mcp SDK is available)
     try:
         from app.mcp.server import create_mcp_server
@@ -47,13 +93,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "Using default SERVICE_TOKEN — set ODOO_MCP_SERVICE_TOKEN in production"
         )
 
-    logger.info("Odoo MCP Server ready (transport=%s)", settings.MCP_TRANSPORT)
+    rag_backend = "vertex_ai" if vertex_adapter else "http_fallback"
+    logger.info(
+        "Odoo MCP Server ready (transport=%s, rag=%s)",
+        settings.MCP_TRANSPORT,
+        rag_backend,
+    )
 
     yield
 
     transport.mcp_server = None
+    await rag_client.close()
+    if tenant_resolver:
+        await tenant_resolver.close()
     await redis_manager.close()
     routes.redis_manager = None
+    routes.rag_client = None
     logger.info("Odoo MCP Server shut down")
 
 

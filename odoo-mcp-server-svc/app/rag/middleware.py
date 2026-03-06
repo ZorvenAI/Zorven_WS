@@ -2,6 +2,9 @@
 
 Intercepts tools annotated with rag_context_enabled=True, builds a semantic
 query from tool parameters, and injects retrieved context as background_context.
+
+Handles both Vertex AI search responses (extracted_text in results) and
+HTTP fallback responses (text/content in results).
 """
 
 import logging
@@ -56,9 +59,7 @@ class RAGContextMiddleware:
             )
             results = result.get("results", [])
             if results:
-                context_text = "\n\n".join(
-                    r.get("text", r.get("content", "")) for r in results[:3]
-                )
+                context_text = "\n\n".join(self._extract_text(r) for r in results[:3])
                 # Truncate to max tokens (rough estimate: 4 chars per token)
                 max_chars = settings.RAG_CONTEXT_MAX_TOKENS * 4
                 if len(context_text) > max_chars:
@@ -73,3 +74,21 @@ class RAGContextMiddleware:
             logger.warning("RAG context enrichment failed: %s", exc)
 
         return arguments
+
+    @staticmethod
+    def _extract_text(result: dict[str, Any]) -> str:
+        """Extract text from a search result.
+
+        Handles both Vertex AI format (extracted_text) and
+        HTTP fallback format (text/content).
+        """
+        # Vertex AI direct format
+        if "text" in result and result["text"]:
+            return result["text"]
+        # Vertex AI nested format (from json_data)
+        if "extracted_text" in result and result["extracted_text"]:
+            return result["extracted_text"]
+        # HTTP fallback format
+        if "content" in result and result["content"]:
+            return result["content"]
+        return ""

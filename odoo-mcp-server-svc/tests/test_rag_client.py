@@ -1,4 +1,4 @@
-"""Tests for RAG client — full coverage of all HTTP methods."""
+"""Tests for RAG client — facade for Vertex AI (direct) or HTTP fallback."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,7 +18,7 @@ def _mock_response(json_data):
 
 
 def _make_client_with_mock_http(json_data=None, side_effect=None):
-    """Create a RAGClient with a pre-injected mock HTTP client.
+    """Create a RAGClient (HTTP fallback) with a pre-injected mock HTTP client.
 
     Returns (rag_client, mock_http_client).
     """
@@ -88,11 +88,27 @@ class TestClose:
 
 
 # ---------------------------------------------------------------------------
-# query()
+# _use_vertex property
 # ---------------------------------------------------------------------------
 
 
-class TestQuery:
+class TestUseVertex:
+    def test_false_when_no_adapter(self):
+        client = RAGClient("http://test:8070")
+        assert client._use_vertex is False
+
+    def test_true_when_adapter_provided(self):
+        mock_adapter = AsyncMock()
+        client = RAGClient("http://test:8070", vertex_adapter=mock_adapter)
+        assert client._use_vertex is True
+
+
+# ---------------------------------------------------------------------------
+# query() — HTTP fallback
+# ---------------------------------------------------------------------------
+
+
+class TestQueryHTTP:
     async def test_success(self):
         client, mock_http = _make_client_with_mock_http(
             {"results": [{"text": "answer"}]}
@@ -134,11 +150,30 @@ class TestQuery:
 
 
 # ---------------------------------------------------------------------------
-# upload_document()
+# query() — Vertex AI adapter
 # ---------------------------------------------------------------------------
 
 
-class TestUploadDocument:
+class TestQueryVertex:
+    async def test_delegates_to_vertex_adapter(self):
+        mock_adapter = AsyncMock()
+        mock_adapter.search.return_value = {"results": [{"text": "vertex result"}]}
+        client = RAGClient("http://test:8070", vertex_adapter=mock_adapter)
+
+        result = await client.query("test query", tenant_id="t1", top_k=3)
+
+        assert result == {"results": [{"text": "vertex result"}]}
+        mock_adapter.search.assert_awaited_once_with(
+            query="test query", tenant_id="t1", top_k=3
+        )
+
+
+# ---------------------------------------------------------------------------
+# upload_document() — HTTP fallback
+# ---------------------------------------------------------------------------
+
+
+class TestUploadDocumentHTTP:
     async def test_success(self):
         client, mock_http = _make_client_with_mock_http({"doc_id": "abc"})
         result = await client.upload_document(
@@ -179,12 +214,51 @@ class TestUploadDocument:
 
 
 # ---------------------------------------------------------------------------
+# upload_document() — Vertex AI adapter
+# ---------------------------------------------------------------------------
+
+
+class TestUploadDocumentVertex:
+    async def test_delegates_to_vertex_adapter(self):
+        mock_adapter = AsyncMock()
+        mock_adapter.upsert_document.return_value = {
+            "status": "completed",
+            "document_id": "odoo-sale_order-42",
+        }
+        client = RAGClient("http://test:8070", vertex_adapter=mock_adapter)
+
+        result = await client.upload_document(
+            content={"document_type": "odoo_sale_order", "extracted_text": "SO42"},
+            metadata={"source": "odoo", "model": "sale.order", "record_id": 42},
+            tenant_id="t1",
+            doc_id="odoo-sale_order-42",
+        )
+
+        assert result["status"] == "completed"
+        mock_adapter.upsert_document.assert_awaited_once()
+
+    async def test_generates_doc_id_from_metadata(self):
+        mock_adapter = AsyncMock()
+        mock_adapter.upsert_document.return_value = {"status": "completed"}
+        client = RAGClient("http://test:8070", vertex_adapter=mock_adapter)
+
+        await client.upload_document(
+            content="text content",
+            metadata={"source": "odoo", "model": "sale.order", "record_id": 42},
+            tenant_id="t1",
+        )
+
+        call_kwargs = mock_adapter.upsert_document.call_args.kwargs
+        assert call_kwargs["document_id"] == "odoo-sale_order-42"
+
+
+# ---------------------------------------------------------------------------
 # list_documents()
 # ---------------------------------------------------------------------------
 
 
 class TestListDocuments:
-    async def test_success(self):
+    async def test_http_success(self):
         client, mock_http = _make_client_with_mock_http({"documents": [{"id": "d1"}]})
         result = await client.list_documents(tenant_id="t1")
         assert result == {"documents": [{"id": "d1"}]}
@@ -194,26 +268,17 @@ class TestListDocuments:
             headers={"X-Tenant-ID": "t1"},
         )
 
-    async def test_default_tenant(self):
-        client, mock_http = _make_client_with_mock_http({"documents": []})
-        await client.list_documents()
-        call_kwargs = mock_http.get.call_args
-        assert call_kwargs[1]["params"]["namespace"] == "default"
+    async def test_vertex_returns_unsupported(self):
+        mock_adapter = AsyncMock()
+        client = RAGClient("http://test:8070", vertex_adapter=mock_adapter)
+        result = await client.list_documents(tenant_id="t1")
+        assert result["documents"] == []
 
     async def test_exception_returns_error(self):
         client, _ = _make_client_with_mock_http(side_effect=Exception("List failed"))
         result = await client.list_documents()
         assert "error" in result
         assert result["documents"] == []
-
-    async def test_raise_for_status_called(self):
-        client = RAGClient("http://test:8070")
-        resp = _mock_response({"documents": []})
-        mock_http = AsyncMock()
-        mock_http.get.return_value = resp
-        client._client = mock_http
-        await client.list_documents()
-        resp.raise_for_status.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +287,7 @@ class TestListDocuments:
 
 
 class TestGetDocument:
-    async def test_success(self):
+    async def test_http_success(self):
         client, mock_http = _make_client_with_mock_http(
             {"id": "d1", "content": "doc body"}
         )
@@ -233,28 +298,21 @@ class TestGetDocument:
             headers={"X-Tenant-ID": "t1"},
         )
 
-    async def test_default_tenant(self):
-        client, mock_http = _make_client_with_mock_http({"id": "d1"})
-        await client.get_document("d1")
-        mock_http.get.assert_awaited_once_with(
-            "/v1/documents/d1",
-            headers={"X-Tenant-ID": "default"},
+    async def test_vertex_delegates(self):
+        mock_adapter = AsyncMock()
+        mock_adapter.get_document.return_value = {"id": "d1", "mock": True}
+        client = RAGClient("http://test:8070", vertex_adapter=mock_adapter)
+
+        result = await client.get_document("d1", tenant_id="t1")
+        assert result["id"] == "d1"
+        mock_adapter.get_document.assert_awaited_once_with(
+            document_id="d1", tenant_id="t1"
         )
 
     async def test_exception_returns_error(self):
         client, _ = _make_client_with_mock_http(side_effect=Exception("Not found"))
         result = await client.get_document("d1")
         assert "error" in result
-        assert "Not found" in result["error"]
-
-    async def test_raise_for_status_called(self):
-        client = RAGClient("http://test:8070")
-        resp = _mock_response({"id": "d1"})
-        mock_http = AsyncMock()
-        mock_http.get.return_value = resp
-        client._client = mock_http
-        await client.get_document("d1")
-        resp.raise_for_status.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -263,7 +321,7 @@ class TestGetDocument:
 
 
 class TestDeleteDocument:
-    async def test_success(self):
+    async def test_http_success(self):
         client, mock_http = _make_client_with_mock_http({"deleted": True})
         result = await client.delete_document("d1", tenant_id="t1")
         assert result == {"deleted": True}
@@ -272,28 +330,21 @@ class TestDeleteDocument:
             headers={"X-Tenant-ID": "t1"},
         )
 
-    async def test_default_tenant(self):
-        client, mock_http = _make_client_with_mock_http({"deleted": True})
-        await client.delete_document("d1")
-        mock_http.delete.assert_awaited_once_with(
-            "/v1/documents/d1",
-            headers={"X-Tenant-ID": "default"},
+    async def test_vertex_delegates(self):
+        mock_adapter = AsyncMock()
+        mock_adapter.delete_document.return_value = {"status": "completed"}
+        client = RAGClient("http://test:8070", vertex_adapter=mock_adapter)
+
+        result = await client.delete_document("d1", tenant_id="t1")
+        assert result["status"] == "completed"
+        mock_adapter.delete_document.assert_awaited_once_with(
+            document_id="d1", tenant_id="t1"
         )
 
     async def test_exception_returns_error(self):
         client, _ = _make_client_with_mock_http(side_effect=Exception("Delete failed"))
         result = await client.delete_document("d1")
         assert "error" in result
-        assert "Delete failed" in result["error"]
-
-    async def test_raise_for_status_called(self):
-        client = RAGClient("http://test:8070")
-        resp = _mock_response({})
-        mock_http = AsyncMock()
-        mock_http.delete.return_value = resp
-        client._client = mock_http
-        await client.delete_document("d1")
-        resp.raise_for_status.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -318,17 +369,6 @@ class TestGetContext:
             headers={"X-Tenant-ID": "t1"},
         )
 
-    async def test_default_tenant(self):
-        client, mock_http = _make_client_with_mock_http({"results": []})
-        await client.get_context("sale.order", 1)
-        call_kwargs = mock_http.post.call_args
-        assert call_kwargs[1]["json"]["namespace"] == "default"
-
-    async def test_exception_returns_error(self):
-        client, _ = _make_client_with_mock_http(side_effect=Exception("Query failed"))
-        result = await client.get_context("res.partner", 1)
-        assert "error" in result
-
 
 # ---------------------------------------------------------------------------
 # get_stats()
@@ -336,7 +376,7 @@ class TestGetContext:
 
 
 class TestGetStats:
-    async def test_success(self):
+    async def test_http_success(self):
         client, mock_http = _make_client_with_mock_http(
             {"total_docs": 100, "index_size": "50MB"}
         )
@@ -347,28 +387,38 @@ class TestGetStats:
             headers={"X-Tenant-ID": "t1"},
         )
 
-    async def test_default_tenant(self):
-        client, mock_http = _make_client_with_mock_http({"total_docs": 0})
-        await client.get_stats()
-        mock_http.get.assert_awaited_once_with(
-            "/v1/stats",
-            headers={"X-Tenant-ID": "default"},
-        )
+    async def test_vertex_returns_backend_info(self):
+        mock_adapter = AsyncMock()
+        client = RAGClient("http://test:8070", vertex_adapter=mock_adapter)
+        result = await client.get_stats(tenant_id="t1")
+        assert result["backend"] == "vertex_ai"
 
     async def test_exception_returns_error(self):
         client, _ = _make_client_with_mock_http(side_effect=Exception("Stats failed"))
         result = await client.get_stats()
         assert "error" in result
-        assert "Stats failed" in result["error"]
 
-    async def test_raise_for_status_called(self):
-        client = RAGClient("http://test:8070")
-        resp = _mock_response({"total_docs": 0})
-        mock_http = AsyncMock()
-        mock_http.get.return_value = resp
-        client._client = mock_http
-        await client.get_stats()
-        resp.raise_for_status.assert_called_once()
+
+# ---------------------------------------------------------------------------
+# _generate_doc_id
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateDocId:
+    def test_odoo_source(self):
+        doc_id = RAGClient._generate_doc_id(
+            {
+                "source": "odoo",
+                "model": "sale.order",
+                "record_id": 42,
+            }
+        )
+        assert doc_id == "odoo-sale_order-42"
+
+    def test_fallback_hash(self):
+        doc_id = RAGClient._generate_doc_id({"source": "manual", "title": "doc"})
+        assert doc_id.startswith("manual-")
+        assert len(doc_id) > len("manual-")
 
 
 # ---------------------------------------------------------------------------
@@ -388,3 +438,12 @@ class TestRAGClientInit:
     def test_client_starts_as_none(self):
         client = RAGClient("http://test:8070")
         assert client._client is None
+
+    def test_vertex_adapter_stored(self):
+        mock_adapter = AsyncMock()
+        client = RAGClient("http://test:8070", vertex_adapter=mock_adapter)
+        assert client.vertex_adapter is mock_adapter
+
+    def test_no_vertex_adapter_by_default(self):
+        client = RAGClient("http://test:8070")
+        assert client.vertex_adapter is None

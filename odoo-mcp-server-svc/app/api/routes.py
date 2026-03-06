@@ -20,6 +20,7 @@ router = APIRouter()
 
 # Set by the lifespan hook in main.py.
 redis_manager: Optional["RedisManager"] = None
+rag_client: Optional[object] = None
 odoo_connected: bool = False
 
 
