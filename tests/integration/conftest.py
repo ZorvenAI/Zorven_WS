@@ -223,6 +223,17 @@ CONTENT_STRATEGY_MANIFEST: dict[str, Any] = {
     "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
 }
 
+GENERAL_CHAT_MANIFEST: dict[str, Any] = {
+    "nodes": [
+        {"id": "intent_router", "type": "internal", "handler": "RouterNode"},
+        {"id": "manager", "type": "internal", "handler": "ManagerNode"},
+    ],
+    "edges": [
+        ["intent_router", "manager"],
+    ],
+    "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+}
+
 ALL_AVAILABLE_MANIFESTS: list[dict[str, Any]] = [
     {
         "pipeline_id": "brand-analysis",
@@ -247,5 +258,11 @@ ALL_AVAILABLE_MANIFESTS: list[dict[str, Any]] = [
         "name": "Content Strategy",
         "description": "Content calendar planning",
         "manifest_data": CONTENT_STRATEGY_MANIFEST,
+    },
+    {
+        "pipeline_id": "general-chat",
+        "name": "General Chat",
+        "description": "General-purpose document Q&A and conversation",
+        "manifest_data": GENERAL_CHAT_MANIFEST,
     },
 ]
