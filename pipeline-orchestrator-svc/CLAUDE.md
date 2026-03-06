@@ -297,6 +297,7 @@ All settings use the `ORCHESTRATOR_` prefix (configured via `pydantic-settings`)
 |---|---|---|
 | `ORCHESTRATOR_SERVICE_TOKEN` | `dev-service-token` | Shared secret for incoming dispatch/cancel requests (X-Service-Token header) |
 | `ORCHESTRATOR_CALLBACK_TOKEN` | `dev-callback-token` | Shared secret for outgoing callbacks to Django (X-Callback-Token header) |
+| `ORCHESTRATOR_CALLBACK_BASE_URL` | `""` | When set, overrides the callback URL from dispatch payload. Set to Django's private networking URL on Railway (e.g. `http://previsionws.railway.internal:8000`) |
 | `ORCHESTRATOR_REDIS_URL` | `redis://localhost:6379/1` | Redis connection URL (used for cancel flags and LangGraph checkpointing) |
 | `ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka broker address. Set to empty string to disable Kafka entirely |
 | `ORCHESTRATOR_CORS_ORIGINS` | `http://localhost:3000,http://localhost:8000` | Comma-separated CORS allowed origins |
