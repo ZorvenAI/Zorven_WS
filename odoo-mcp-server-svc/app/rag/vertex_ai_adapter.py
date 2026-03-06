@@ -135,7 +135,7 @@ class VertexAIRAGAdapter:
                 allow_missing=True,
             )
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
                 None, lambda: client.update_document(request=request)
             )
@@ -191,7 +191,7 @@ class VertexAIRAGAdapter:
                 page_size=top_k,
             )
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
                 None, lambda: client.search(request=request)
             )
@@ -245,7 +245,7 @@ class VertexAIRAGAdapter:
 
             request = discoveryengine.DeleteDocumentRequest(name=document_name)
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None, lambda: client.delete_document(request=request)
             )
@@ -282,7 +282,7 @@ class VertexAIRAGAdapter:
 
             request = discoveryengine.GetDocumentRequest(name=document_name)
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             document = await loop.run_in_executor(
                 None, lambda: client.get_document(request=request)
             )

@@ -222,16 +222,19 @@ class TestGetDocClient:
     ) -> None:
         assert adapter_mock._get_doc_client() is None
 
-    def test_returns_none_when_sdk_missing(self) -> None:
+    def test_returns_none_and_sets_mock_when_sdk_missing(self) -> None:
+        """When Discovery Engine SDK import fails, returns None and flips mock_mode."""
         adapter = VertexAIRAGAdapter(mock_mode=False)
-        with patch.dict("sys.modules", {"google.cloud": None}):
-            # When import fails, should set mock_mode=True
-            adapter._doc_client = None
-            try:
-                result = adapter._get_doc_client()
-            except (ImportError, TypeError):
-                # Expected when google.cloud is None
-                pass
+        adapter._doc_client = None
+
+        with patch(
+            "builtins.__import__",
+            side_effect=ImportError("No module named 'google.cloud'"),
+        ):
+            result = adapter._get_doc_client()
+
+        assert result is None
+        assert adapter.mock_mode is True
 
 
 # ── _get_search_client (mock mode) ──

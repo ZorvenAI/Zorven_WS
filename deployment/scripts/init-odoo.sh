@@ -24,8 +24,13 @@ done
 echo "Initializing Odoo database '$ODOO_DB' with demo data..."
 
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$ODOO_URL/web/database/create" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "master_pwd=$ODOO_MASTER_PASSWORD&name=$ODOO_DB&login=admin&password=admin&lang=en_US&country_code=us&demo=on")
+  --data-urlencode "master_pwd=$ODOO_MASTER_PASSWORD" \
+  --data-urlencode "name=$ODOO_DB" \
+  --data-urlencode "login=admin" \
+  --data-urlencode "password=admin" \
+  --data-urlencode "lang=en_US" \
+  --data-urlencode "country_code=us" \
+  --data-urlencode "demo=on")
 
 if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 303 ]; then
     echo "Odoo database '$ODOO_DB' initialized successfully."

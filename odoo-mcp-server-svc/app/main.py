@@ -36,22 +36,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     tenant_resolver = None
     vertex_adapter = None
 
-    if settings.DATABASE_URL:
-        try:
-            from app.rag.tenant_resolver import TenantDataStoreResolver
-
-            tenant_resolver = TenantDataStoreResolver(
-                database_url=settings.DATABASE_URL,
-                redis_manager=redis_manager,
-                default_data_store_id=settings.VERTEX_AI_DATA_STORE_ID,
-            )
-            await tenant_resolver.init()
-            logger.info("TenantDataStoreResolver initialized")
-        except Exception as exc:
-            logger.warning("TenantDataStoreResolver init failed: %s", exc)
-            tenant_resolver = None
-
     if settings.RAG_ENABLED:
+        if settings.DATABASE_URL:
+            try:
+                from app.rag.tenant_resolver import TenantDataStoreResolver
+
+                tenant_resolver = TenantDataStoreResolver(
+                    database_url=settings.DATABASE_URL,
+                    redis_manager=redis_manager,
+                    default_data_store_id=settings.VERTEX_AI_DATA_STORE_ID,
+                )
+                await tenant_resolver.init()
+                logger.info("TenantDataStoreResolver initialized")
+            except Exception as exc:
+                logger.warning("TenantDataStoreResolver init failed: %s", exc)
+                tenant_resolver = None
+
         try:
             from app.rag.vertex_ai_adapter import VertexAIRAGAdapter
 

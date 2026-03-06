@@ -212,8 +212,10 @@ class RAGClient:
             model_underscore = model.replace(".", "_")
             return f"odoo-{model_underscore}-{record_id}"
 
-        # Fallback
+        # Fallback — use sorted JSON for insertion-order-independent hashing
         import hashlib
+        import json
 
-        content_hash = hashlib.md5(str(metadata).encode()).hexdigest()[:12]
+        stable = json.dumps(metadata, sort_keys=True, separators=(",", ":"))
+        content_hash = hashlib.md5(stable.encode()).hexdigest()[:12]
         return f"{source}-{content_hash}"
