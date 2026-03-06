@@ -54,7 +54,8 @@ class Command(BaseCommand):
                 self.stdout.write(f"  [{t.id}] {t.name} (slug={t.slug})")
                 self.stdout.write(f"       -> would assign: prevision-{t.slug}")
             self.stdout.write(
-                f"\nDry run complete. Re-run with --apply to provision {total} tenant(s)."
+                f"\nDry run complete. Re-run with --apply "
+                f"to provision {total} tenant(s)."
             )
             return
 
