@@ -43,7 +43,9 @@ class TestSkillRegistry:
     def test_priority_ordering(self, registry):
         skills = registry.skills_for_agent("blog_author")
         # test-seo-skill (priority 10) should come before test-multi-agent (priority 8)
-        seo_idx = next(i for i, s in enumerate(skills) if s.meta.name == "test-seo-skill")
+        seo_idx = next(
+            i for i, s in enumerate(skills) if s.meta.name == "test-seo-skill"
+        )
         multi_idx = next(
             i for i, s in enumerate(skills) if s.meta.name == "test-multi-agent-skill"
         )
@@ -86,7 +88,9 @@ class TestMatchSkills:
         assert matched[0].meta.name == "test-seo-skill"  # higher priority
 
     def test_multiple_triggers_match_same_skill(self, registry):
-        matched = registry.match_skills("social_promoter", "post on linkedin and social media")
+        matched = registry.match_skills(
+            "social_promoter", "post on linkedin and social media"
+        )
         names = [s.meta.name for s in matched]
         assert "test-social-skill" in names
         # Should not duplicate
@@ -100,7 +104,11 @@ class TestFormatSkillContext:
         assert registry.format_skill_context([]) == ""
 
     def test_formats_single_skill(self, registry):
-        skills = [s for s in registry.skills_for_agent("blog_author") if s.meta.name == "test-seo-skill"]
+        skills = [
+            s
+            for s in registry.skills_for_agent("blog_author")
+            if s.meta.name == "test-seo-skill"
+        ]
         result = registry.format_skill_context(skills)
         assert "## Additional Skill Context" in result
         assert "Test SEO skill" in result

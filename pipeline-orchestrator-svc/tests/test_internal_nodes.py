@@ -6,7 +6,7 @@ from app.nodes.internal.default_agent_node import DefaultAgentNode
 from app.nodes.internal.manager_node import ManagerNode
 from app.nodes.internal.planner_node import PlannerNode
 from app.nodes.internal.report_node import ReportNode
-from app.nodes.internal.router_node import RouterNode
+from app.nodes.internal.router_node import RouterNode, keyword_match, _stem
 from app.nodes.internal.strategy_node import StrategyNode
 from app.state.schema import AgentState
 
@@ -35,10 +35,11 @@ def _base_state(**overrides) -> AgentState:
 class TestRouterNode:
     """Test intent routing via keyword matching."""
 
-    async def test_default_resolves_brand_analysis(self):
+    async def test_default_resolves_general_chat(self):
+        """No-keyword queries now default to general-chat (not brand-analysis)."""
         node = RouterNode()
         result = await node(_base_state(input_prompt="hello world"))
-        assert result["resolved_manifest_id"] == "brand-analysis"
+        assert result["resolved_manifest_id"] == "general-chat"
 
     async def test_keyword_iso_brand_equity(self):
         node = RouterNode()
@@ -62,11 +63,11 @@ class TestRouterNode:
         )
         assert result["resolved_manifest_id"] == "general-chat"
 
-    async def test_no_keyword_defaults_brand_analysis(self):
-        """No-keyword queries default to brand-analysis."""
+    async def test_no_keyword_defaults_general_chat(self):
+        """No-keyword queries now default to general-chat."""
         node = RouterNode()
         result = await node(_base_state(input_prompt="what is the weather"))
-        assert result["resolved_manifest_id"] == "brand-analysis"
+        assert result["resolved_manifest_id"] == "general-chat"
 
     async def test_respects_available_manifests(self):
         node = RouterNode()
@@ -93,17 +94,13 @@ class TestRouterNode:
 
     async def test_social_promotion_with_twitter(self):
         node = RouterNode()
-        result = await node(
-            _base_state(input_prompt="share this on twitter")
-        )
+        result = await node(_base_state(input_prompt="share this on twitter"))
         assert result["resolved_manifest_id"] == "social-promotion"
 
     async def test_blog_without_social_routes_to_blog(self):
         """'write a blog about Tesla' without platform → blog-authoring."""
         node = RouterNode()
-        result = await node(
-            _base_state(input_prompt="write a blog about Tesla")
-        )
+        result = await node(_base_state(input_prompt="write a blog about Tesla"))
         assert result["resolved_manifest_id"] == "blog-authoring"
 
     async def test_rag_blog_social_route(self):
@@ -325,9 +322,7 @@ class TestManagerNode:
         state = _base_state(
             node_outputs={
                 "default_agent": {
-                    "findings": [
-                        "The brand management study covers key topics..."
-                    ],
+                    "findings": ["The brand management study covers key topics..."],
                     "recommendations": ["Consider expanding the analysis"],
                     "sources": [
                         {"name": "brand_study.pdf", "uri": "gs://bucket/doc.pdf"},
@@ -397,3 +392,92 @@ class TestManagerNode:
         assert rd["awareness"] == 78
         assert rd["sentiment"] == 70
         assert rd["valuation"]["brand_value_npv"] == 1245177.38
+
+
+# ── Stemmer tests ──
+
+
+class TestStemmer:
+    """Test the simple suffix-stripping stemmer."""
+
+    def test_stem_competitors(self):
+        assert _stem("competitors") == "competitor"
+
+    def test_stem_analyzing(self):
+        assert _stem("analyzing") == "analyz"
+
+    def test_stem_valuations(self):
+        assert _stem("valuations") == "valuation"
+
+    def test_stem_short_word_unchanged(self):
+        assert _stem("ai") == "ai"
+        assert _stem("the") == "the"
+
+    def test_stem_no_suffix_unchanged(self):
+        assert _stem("brand") == "brand"
+
+
+# ── Stemming-based routing tests ──
+
+
+class TestStemmingRouting:
+    """Test that stemming enables correct routing for inflected words."""
+
+    async def test_competitors_routes_to_competitor_audit(self):
+        node = RouterNode()
+        result = await node(
+            _base_state(input_prompt="analyze our competitors in the market")
+        )
+        assert result["resolved_manifest_id"] == "competitor-audit"
+
+    async def test_valuations_routes_to_iso_brand_equity(self):
+        node = RouterNode()
+        result = await node(
+            _base_state(input_prompt="run brand valuations for our company")
+        )
+        assert result["resolved_manifest_id"] == "iso-brand-equity"
+
+    async def test_analyzing_routes_to_brand_analysis(self):
+        node = RouterNode()
+        result = await node(
+            _base_state(input_prompt="analyzing brand positioning deeply")
+        )
+        assert result["resolved_manifest_id"] == "brand-analysis"
+
+
+# ── RAG boost tests ──
+
+
+class TestNeedsRagBoost:
+    """Test that needs_rag flag boosts RAG pipelines."""
+
+    async def test_needs_rag_boosts_rag_blog_authoring(self):
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt="write a blog about this",
+                input_context={"company_id": 42, "needs_rag": True},
+            )
+        )
+        assert result["resolved_manifest_id"] == "rag-blog-authoring"
+
+    async def test_needs_rag_boosts_general_chat(self):
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt="hello what is this",
+                input_context={"company_id": 42, "needs_rag": True},
+            )
+        )
+        assert result["resolved_manifest_id"] == "general-chat"
+
+    async def test_no_needs_rag_no_boost(self):
+        """Without needs_rag, 'write a blog about this' stays blog-authoring."""
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt="write a blog about this",
+                input_context={"company_id": 42},
+            )
+        )
+        assert result["resolved_manifest_id"] == "blog-authoring"

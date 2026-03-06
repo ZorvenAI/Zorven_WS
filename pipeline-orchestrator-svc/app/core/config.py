@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-2.0-flash"
     GEMINI_TEMPERATURE: float = 0.3
 
+    # Gemini composition retry (Tier 1)
+    GEMINI_COMPOSE_MAX_RETRIES: int = 1
+    GEMINI_COMPOSE_RETRY_DELAY: float = 2.0
+
     # RAG query cache
     RAG_QUERY_CACHE_TTL: int = 3600
     RAG_SESSION_FILES_TTL: int = 86400

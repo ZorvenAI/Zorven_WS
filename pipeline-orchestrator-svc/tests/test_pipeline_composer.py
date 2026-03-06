@@ -1,4 +1,4 @@
-"""Tests for PipelineComposer — dynamic pipeline composition."""
+"""Tests for PipelineComposer — 3-tier dynamic pipeline composition."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -8,6 +8,9 @@ from app.nodes.internal.pipeline_composer import (
     PipelineComposer,
     _build_compose_tool,
     _build_system_prompt,
+    _build_classify_system_prompt,
+    _PIPELINE_DESCRIPTIONS,
+    _FEW_SHOT_EXAMPLES,
 )
 from app.state.schema import AgentState
 
@@ -83,7 +86,21 @@ class TestToolGeneration:
         assert "manager" in prompt
 
 
-# ── Gemini composition tests ──
+# ── Gemini composition tests (Tier 1) ──
+
+
+def _mock_gemini_response(fn_name: str, args: dict) -> MagicMock:
+    """Helper to build a mock Gemini response with a function call."""
+    mock_fn_call = MagicMock()
+    mock_fn_call.name = fn_name
+    mock_fn_call.args = args
+
+    mock_part = MagicMock()
+    mock_part.function_call = mock_fn_call
+
+    mock_response = MagicMock()
+    mock_response.parts = [mock_part]
+    return mock_response
 
 
 class TestGeminiComposition:
@@ -92,34 +109,26 @@ class TestGeminiComposition:
         """Gemini returns compose_pipeline for RAG+blog+social prompt."""
         mock_settings.GOOGLE_API_KEY = "test-key"
         mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 1
+        mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
         composer = PipelineComposer()
 
-        # Mock the Gemini response
-        mock_fn_call = MagicMock()
-        mock_fn_call.name = "compose_pipeline"
-        mock_fn_call.args = {
-            "node_ids": [
-                "default_agent",
-                "blog_author",
-                "social_promoter",
-                "manager",
-            ]
-        }
+        mock_response = _mock_gemini_response(
+            "compose_pipeline",
+            {
+                "node_ids": [
+                    "default_agent",
+                    "blog_author",
+                    "social_promoter",
+                    "manager",
+                ]
+            },
+        )
 
-        mock_part = MagicMock()
-        mock_part.function_call = mock_fn_call
-
-        mock_response = MagicMock()
-        mock_response.parts = [mock_part]
-
-        with patch(
-            "google.generativeai.GenerativeModel"
-        ) as mock_model_class:
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
             mock_model = MagicMock()
-            mock_model.generate_content_async = AsyncMock(
-                return_value=mock_response
-            )
+            mock_model.generate_content_async = AsyncMock(return_value=mock_response)
             mock_model_class.return_value = mock_model
 
             state = _base_state(
@@ -146,28 +155,19 @@ class TestGeminiComposition:
         """Gemini returns compose_pipeline for plain blog prompt."""
         mock_settings.GOOGLE_API_KEY = "test-key"
         mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 1
+        mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
         composer = PipelineComposer()
 
-        mock_fn_call = MagicMock()
-        mock_fn_call.name = "compose_pipeline"
-        mock_fn_call.args = {
-            "node_ids": ["web_research", "blog_author", "manager"]
-        }
+        mock_response = _mock_gemini_response(
+            "compose_pipeline",
+            {"node_ids": ["web_research", "blog_author", "manager"]},
+        )
 
-        mock_part = MagicMock()
-        mock_part.function_call = mock_fn_call
-
-        mock_response = MagicMock()
-        mock_response.parts = [mock_part]
-
-        with patch(
-            "google.generativeai.GenerativeModel"
-        ) as mock_model_class:
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
             mock_model = MagicMock()
-            mock_model.generate_content_async = AsyncMock(
-                return_value=mock_response
-            )
+            mock_model.generate_content_async = AsyncMock(return_value=mock_response)
             mock_model_class.return_value = mock_model
 
             state = _base_state(
@@ -184,33 +184,22 @@ class TestGeminiComposition:
         """Gemini returns compose_pipeline for ISO valuation prompt."""
         mock_settings.GOOGLE_API_KEY = "test-key"
         mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 1
+        mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
         composer = PipelineComposer()
 
-        mock_fn_call = MagicMock()
-        mock_fn_call.name = "compose_pipeline"
-        mock_fn_call.args = {
-            "node_ids": ["web_research", "valuation_logic", "manager"]
-        }
+        mock_response = _mock_gemini_response(
+            "compose_pipeline",
+            {"node_ids": ["web_research", "valuation_logic", "manager"]},
+        )
 
-        mock_part = MagicMock()
-        mock_part.function_call = mock_fn_call
-
-        mock_response = MagicMock()
-        mock_response.parts = [mock_part]
-
-        with patch(
-            "google.generativeai.GenerativeModel"
-        ) as mock_model_class:
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
             mock_model = MagicMock()
-            mock_model.generate_content_async = AsyncMock(
-                return_value=mock_response
-            )
+            mock_model.generate_content_async = AsyncMock(return_value=mock_response)
             mock_model_class.return_value = mock_model
 
-            state = _base_state(
-                input_prompt="Analyze the brand equity of Nike"
-            )
+            state = _base_state(input_prompt="Analyze the brand equity of Nike")
             result = await composer.compose(state)
 
         assert "_composed_manifest" in result
@@ -218,20 +207,33 @@ class TestGeminiComposition:
         assert node_ids == ["web_research", "valuation_logic", "manager"]
 
     @patch("app.nodes.internal.pipeline_composer.settings")
-    async def test_gemini_error_falls_back_to_keywords(self, mock_settings):
-        """Gemini error → falls back to keyword matching."""
+    async def test_gemini_error_falls_to_tier2(self, mock_settings):
+        """Gemini Tier 1 error → falls to Tier 2 LLM classification."""
         mock_settings.GOOGLE_API_KEY = "test-key"
         mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
+        mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
         composer = PipelineComposer()
 
-        with patch(
-            "google.generativeai.GenerativeModel"
-        ) as mock_model_class:
+        # Tier 2 response
+        tier2_response = _mock_gemini_response(
+            "select_pipeline",
+            {"pipeline_id": "social-promotion", "reason": "LinkedIn mentioned"},
+        )
+
+        call_count = 0
+
+        async def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("API error")
+            return tier2_response
+
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
             mock_model = MagicMock()
-            mock_model.generate_content_async = AsyncMock(
-                side_effect=Exception("API error")
-            )
+            mock_model.generate_content_async = AsyncMock(side_effect=side_effect)
             mock_model_class.return_value = mock_model
 
             state = _base_state(
@@ -244,17 +246,173 @@ class TestGeminiComposition:
 
     @patch("app.nodes.internal.pipeline_composer.settings")
     async def test_no_api_key_falls_back_to_keywords(self, mock_settings):
-        """No Gemini API key → keyword fallback."""
+        """No Gemini API key → keyword fallback (Tier 3)."""
         mock_settings.GOOGLE_API_KEY = ""
 
         composer = PipelineComposer()
-        state = _base_state(
-            input_prompt="ISO brand equity valuation"
-        )
+        state = _base_state(input_prompt="ISO brand equity valuation")
         result = await composer.compose(state)
 
         assert "resolved_manifest_id" in result
         assert result["resolved_manifest_id"] == "iso-brand-equity"
+
+
+# ── Enhanced Gemini Composition tests (Tier 1 enrichment) ──
+
+
+class TestEnhancedGeminiComposition:
+    def test_gemini_receives_chat_history(self):
+        """User message includes chat history when available."""
+        composer = PipelineComposer()
+        state = _base_state(
+            input_prompt="now write a blog about it",
+            input_context={
+                "company_id": 42,
+                "chat_history": [
+                    {"role": "user", "content": "Tell me about Tesla"},
+                    {"role": "assistant", "content": "Tesla is an EV company."},
+                    {"role": "user", "content": "What about their brand?"},
+                ],
+            },
+        )
+        msg = composer._build_user_message(state)
+        assert "Recent conversation:" in msg
+        assert "Tell me about Tesla" in msg
+        assert "Tesla is an EV company" in msg
+        assert "Current request:" in msg
+        assert "now write a blog about it" in msg
+
+    def test_enriched_system_prompt_includes_company(self):
+        """System prompt includes company context."""
+        composer = PipelineComposer()
+        state = _base_state(
+            input_context={
+                "company_id": 42,
+                "company_name": "Acme Corp",
+                "sector": "Technology",
+                "brand_voice": "Professional",
+            }
+        )
+        prompt = composer._enrich_system_prompt(state)
+        assert "Acme Corp" in prompt
+        assert "Technology" in prompt
+        assert "Professional" in prompt
+
+    def test_enriched_system_prompt_includes_rag_hint(self):
+        """System prompt includes RAG hint when needs_rag is True."""
+        composer = PipelineComposer()
+        state = _base_state(input_context={"company_id": 42, "needs_rag": True})
+        prompt = composer._enrich_system_prompt(state)
+        assert "default_agent" in prompt
+        assert "uploaded documents" in prompt
+
+    def test_enriched_system_prompt_includes_few_shot_examples(self):
+        """System prompt includes few-shot examples."""
+        composer = PipelineComposer()
+        state = _base_state()
+        prompt = composer._enrich_system_prompt(state)
+        assert "Write a blog about Tesla" in prompt
+        assert "blog_author" in prompt
+
+    def test_no_chat_history_returns_plain_prompt(self):
+        """Without chat history, returns just the sanitized prompt."""
+        composer = PipelineComposer()
+        state = _base_state(input_prompt="Write a blog about Tesla")
+        msg = composer._build_user_message(state)
+        assert msg == "Write a blog about Tesla"
+        assert "Recent conversation:" not in msg
+
+    def test_enriched_system_prompt_includes_manifest_reference(self):
+        """System prompt includes available manifest descriptions."""
+        composer = PipelineComposer()
+        state = _base_state(
+            available_manifests=[
+                {
+                    "pipeline_id": "brand-analysis",
+                    "name": "Brand Analysis",
+                    "description": "Full brand analysis",
+                },
+                {
+                    "pipeline_id": "blog-authoring",
+                    "name": "Blog Authoring",
+                    "description": "Write blog posts",
+                },
+            ]
+        )
+        prompt = composer._enrich_system_prompt(state)
+        assert "brand-analysis" in prompt
+        assert "Full brand analysis" in prompt
+        assert "blog-authoring" in prompt
+
+
+# ── Gemini Retry tests ──
+
+
+class TestGeminiRetry:
+    @patch("app.nodes.internal.pipeline_composer.asyncio.sleep", new_callable=AsyncMock)
+    @patch("app.nodes.internal.pipeline_composer.settings")
+    async def test_retries_once_on_failure(self, mock_settings, mock_sleep):
+        """Verify retry + sleep on first failure, then re-raise."""
+        mock_settings.GOOGLE_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 1
+        mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 2.0
+
+        composer = PipelineComposer()
+
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
+            mock_model = MagicMock()
+            mock_model.generate_content_async = AsyncMock(
+                side_effect=Exception("API error")
+            )
+            mock_model_class.return_value = mock_model
+
+            try:
+                state = _base_state(input_prompt="test prompt")
+                await composer._gemini_compose(state)
+            except Exception:
+                pass
+
+            # 2 calls: initial + 1 retry
+            assert mock_model.generate_content_async.call_count == 2
+            # 1 sleep call between attempts
+            mock_sleep.assert_called_once_with(2.0)
+
+    @patch("app.nodes.internal.pipeline_composer.asyncio.sleep", new_callable=AsyncMock)
+    @patch("app.nodes.internal.pipeline_composer.settings")
+    async def test_succeeds_on_retry(self, mock_settings, mock_sleep):
+        """First call fails, second succeeds."""
+        mock_settings.GOOGLE_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 1
+        mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 1.0
+
+        composer = PipelineComposer()
+
+        success_response = _mock_gemini_response(
+            "compose_pipeline",
+            {"node_ids": ["web_research", "blog_author", "manager"]},
+        )
+
+        call_count = 0
+
+        async def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("API error")
+            return success_response
+
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
+            mock_model = MagicMock()
+            mock_model.generate_content_async = AsyncMock(side_effect=side_effect)
+            mock_model_class.return_value = mock_model
+
+            state = _base_state(input_prompt="Write a blog about Tesla")
+            result = await composer._gemini_compose(state)
+
+        assert result == ["web_research", "blog_author", "manager"]
+        mock_sleep.assert_called_once_with(1.0)
 
 
 # ── Validation tests ──
@@ -275,9 +433,7 @@ class TestNodeIdValidation:
 
     def test_moves_manager_to_end(self):
         composer = PipelineComposer()
-        result = composer._validate_node_ids(
-            ["manager", "web_research", "blog_author"]
-        )
+        result = composer._validate_node_ids(["manager", "web_research", "blog_author"])
         assert result[-1] == "manager"
         assert "web_research" in result
         assert "blog_author" in result
@@ -316,9 +472,7 @@ class TestManifestBuilding:
 
     def test_builds_sequential_edges(self):
         composer = PipelineComposer()
-        manifest = composer._build_manifest(
-            ["web_research", "blog_author", "manager"]
-        )
+        manifest = composer._build_manifest(["web_research", "blog_author", "manager"])
 
         edges = manifest["edges"]
         assert edges == [
@@ -334,14 +488,12 @@ class TestManifestBuilding:
 
     def test_includes_node_config(self):
         composer = PipelineComposer()
-        manifest = composer._build_manifest(
-            ["blog_author", "manager"]
-        )
+        manifest = composer._build_manifest(["blog_author", "manager"])
         blog_node = manifest["nodes"][0]
         assert blog_node["config"]["output_format"] == "markdown"
 
 
-# ── Keyword fallback tests ──
+# ── Keyword fallback tests (Tier 3) ──
 
 
 class TestKeywordFallback:
@@ -370,9 +522,7 @@ class TestKeywordFallback:
         """Blog + social without RAG → social-promotion."""
         composer = PipelineComposer()
         result = composer._keyword_fallback(
-            _base_state(
-                input_prompt="Write a blog about Tesla and post on LinkedIn"
-            )
+            _base_state(input_prompt="Write a blog about Tesla and post on LinkedIn")
         )
         assert result == "social-promotion"
 
@@ -404,3 +554,231 @@ class TestKeywordFallback:
             )
         )
         assert result == "brand-analysis"
+
+    async def test_default_is_general_chat(self):
+        """Unrecognized prompts default to general-chat."""
+        composer = PipelineComposer()
+        result = composer._keyword_fallback(
+            _base_state(input_prompt="xyzzy foobar baz")
+        )
+        assert result == "general-chat"
+
+    async def test_needs_rag_boosts_rag_pipelines(self):
+        """needs_rag flag boosts RAG pipeline scores."""
+        composer = PipelineComposer()
+        result = composer._keyword_fallback(
+            _base_state(
+                input_prompt="write a blog about this",
+                input_context={"company_id": 42, "needs_rag": True},
+            )
+        )
+        assert result == "rag-blog-authoring"
+
+
+# ── LLM Classification Fallback tests (Tier 2) ──
+
+
+class TestLLMClassifyFallback:
+    @patch("app.nodes.internal.pipeline_composer.settings")
+    async def test_selects_social_promotion(self, mock_settings):
+        """Tier 2 correctly selects social-promotion."""
+        mock_settings.GOOGLE_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+
+        composer = PipelineComposer()
+
+        mock_response = _mock_gemini_response(
+            "select_pipeline",
+            {
+                "pipeline_id": "social-promotion",
+                "reason": "User wants to post on LinkedIn",
+            },
+        )
+
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
+            mock_model = MagicMock()
+            mock_model.generate_content_async = AsyncMock(return_value=mock_response)
+            mock_model_class.return_value = mock_model
+
+            state = _base_state(input_prompt="Post our latest update on LinkedIn")
+            result = await composer._llm_classify_fallback(state)
+
+        assert result == "social-promotion"
+
+    @patch("app.nodes.internal.pipeline_composer.settings")
+    async def test_returns_none_on_invalid_response(self, mock_settings):
+        """Returns None when LLM returns invalid pipeline_id."""
+        mock_settings.GOOGLE_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+
+        composer = PipelineComposer()
+
+        mock_response = _mock_gemini_response(
+            "select_pipeline",
+            {
+                "pipeline_id": "nonexistent-pipeline",
+                "reason": "test",
+            },
+        )
+
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
+            mock_model = MagicMock()
+            mock_model.generate_content_async = AsyncMock(return_value=mock_response)
+            mock_model_class.return_value = mock_model
+
+            state = _base_state(input_prompt="test")
+            result = await composer._llm_classify_fallback(state)
+
+        assert result is None
+
+    def test_uses_needs_rag_hint(self):
+        """Classify system prompt includes RAG hint when needs_rag is True."""
+        prompt = _build_classify_system_prompt(needs_rag=True)
+        assert "uploaded documents" in prompt
+        assert "rag-blog-social" in prompt
+
+    def test_no_rag_hint_without_flag(self):
+        """Classify system prompt omits RAG hint when needs_rag is False."""
+        prompt = _build_classify_system_prompt(needs_rag=False)
+        assert "uploaded documents" not in prompt.split("Routing rules:")[1]
+
+    @patch("app.nodes.internal.pipeline_composer.settings")
+    async def test_returns_none_when_no_function_call(self, mock_settings):
+        """Returns None when Gemini doesn't return a function call."""
+        mock_settings.GOOGLE_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+
+        composer = PipelineComposer()
+
+        mock_response = MagicMock()
+        mock_part = MagicMock()
+        mock_part.function_call = None
+        mock_response.parts = [mock_part]
+
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
+            mock_model = MagicMock()
+            mock_model.generate_content_async = AsyncMock(return_value=mock_response)
+            mock_model_class.return_value = mock_model
+
+            state = _base_state(input_prompt="test")
+            result = await composer._llm_classify_fallback(state)
+
+        assert result is None
+
+
+# ── Full fallback chain tests ──
+
+
+class TestFullFallbackChain:
+    @patch("app.nodes.internal.pipeline_composer.settings")
+    async def test_tier1_success_skips_tier2_and_tier3(self, mock_settings):
+        """Tier 1 success → returns _composed_manifest, no Tier 2/3."""
+        mock_settings.GOOGLE_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
+        mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
+
+        composer = PipelineComposer()
+
+        mock_response = _mock_gemini_response(
+            "compose_pipeline",
+            {"node_ids": ["web_research", "blog_author", "manager"]},
+        )
+
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
+            mock_model = MagicMock()
+            mock_model.generate_content_async = AsyncMock(return_value=mock_response)
+            mock_model_class.return_value = mock_model
+
+            state = _base_state(input_prompt="Write a blog about Tesla")
+            result = await composer.compose(state)
+
+        assert "_composed_manifest" in result
+        # Only 1 Gemini call (Tier 1), no Tier 2 call
+        assert mock_model.generate_content_async.call_count == 1
+
+    @patch("app.nodes.internal.pipeline_composer.settings")
+    async def test_tier1_fails_tier2_succeeds(self, mock_settings):
+        """Tier 1 fails → Tier 2 selects a pipeline."""
+        mock_settings.GOOGLE_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
+        mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
+
+        composer = PipelineComposer()
+
+        tier2_response = _mock_gemini_response(
+            "select_pipeline",
+            {"pipeline_id": "blog-authoring", "reason": "Blog request"},
+        )
+
+        call_count = 0
+
+        async def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("Tier 1 API error")
+            return tier2_response
+
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
+            mock_model = MagicMock()
+            mock_model.generate_content_async = AsyncMock(side_effect=side_effect)
+            mock_model_class.return_value = mock_model
+
+            state = _base_state(input_prompt="Write a blog about Tesla")
+            result = await composer.compose(state)
+
+        assert result == {"resolved_manifest_id": "blog-authoring"}
+
+    @patch("app.nodes.internal.pipeline_composer.settings")
+    async def test_tier1_and_tier2_fail_falls_to_tier3(self, mock_settings):
+        """Both Tier 1 and Tier 2 fail → Tier 3 keyword matching."""
+        mock_settings.GOOGLE_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
+        mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
+
+        composer = PipelineComposer()
+
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
+            mock_model = MagicMock()
+            mock_model.generate_content_async = AsyncMock(
+                side_effect=Exception("API error")
+            )
+            mock_model_class.return_value = mock_model
+
+            state = _base_state(
+                input_prompt="Write a blog about Tesla and post on linkedin"
+            )
+            result = await composer.compose(state)
+
+        assert "resolved_manifest_id" in result
+        assert result["resolved_manifest_id"] == "social-promotion"
+
+    @patch("app.nodes.internal.pipeline_composer.settings")
+    async def test_no_api_key_skips_to_tier3(self, mock_settings):
+        """No API key → skip Tier 1 and 2, go straight to Tier 3."""
+        mock_settings.GOOGLE_API_KEY = ""
+
+        composer = PipelineComposer()
+        state = _base_state(input_prompt="competitor audit analysis")
+        result = await composer.compose(state)
+
+        assert result == {"resolved_manifest_id": "competitor-audit"}
+
+
+# ── Classify system prompt tests ──
+
+
+class TestClassifySystemPrompt:
+    def test_includes_all_pipeline_ids(self):
+        prompt = _build_classify_system_prompt()
+        for p in _PIPELINE_DESCRIPTIONS:
+            assert p["id"] in prompt
+
+    def test_includes_routing_rules(self):
+        prompt = _build_classify_system_prompt()
+        assert "social-promotion" in prompt
+        assert "blog-authoring" in prompt
+        assert "iso-brand-equity" in prompt

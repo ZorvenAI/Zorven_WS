@@ -146,6 +146,7 @@ export default function ResultDashboard({
     'sentiment',
     'financials',
     'valuation',
+    'ui_schema',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),

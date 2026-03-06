@@ -78,9 +78,7 @@ class VertexSearchTool:
             f"/collections/default_collection/dataStores/{store_id}"
         )
 
-    def _get_base_data_store_path(
-        self, data_store_id: Optional[str] = None
-    ) -> str:
+    def _get_base_data_store_path(self, data_store_id: Optional[str] = None) -> str:
         """Build the data store path using the shared default store."""
         return (
             f"projects/{settings.VERTEX_AI_PROJECT_ID}"
@@ -150,9 +148,7 @@ class VertexSearchTool:
             data = json.dumps([asdict(c) for c in chunks])
             await redis.set(cache_key, data, ex=settings.RAG_QUERY_CACHE_TTL)
         except Exception:
-            logger.warning(
-                "Redis cache write failed for %s", cache_key, exc_info=True
-            )
+            logger.warning("Redis cache write failed for %s", cache_key, exc_info=True)
 
     async def _query_vertex(
         self,
@@ -213,9 +209,7 @@ class VertexSearchTool:
                     snippets = doc.derived_struct_data.get("snippets", [])
                     if snippets:
                         text = snippets[0].get("snippet", "")
-                    extractive = doc.derived_struct_data.get(
-                        "extractive_answers", []
-                    )
+                    extractive = doc.derived_struct_data.get("extractive_answers", [])
                     if extractive and not text:
                         text = extractive[0].get("content", "")
                     link = doc.derived_struct_data.get("link", "")
@@ -228,9 +222,7 @@ class VertexSearchTool:
                     if not text:
                         text = doc.struct_data.get("extracted_text", "")
                     if not source_uri:
-                        source_uri = doc.struct_data.get(
-                            "source_gcs_uri", ""
-                        )
+                        source_uri = doc.struct_data.get("source_gcs_uri", "")
                     if not source_name:
                         # Extract filename from GCS URI
                         gcs_uri = doc.struct_data.get("source_gcs_uri", "")
@@ -249,9 +241,7 @@ class VertexSearchTool:
                             text=text,
                             source_uri=source_uri,
                             source_name=source_name,
-                            relevance_score=getattr(
-                                result, "relevance_score", 0.0
-                            ),
+                            relevance_score=getattr(result, "relevance_score", 0.0),
                         )
                     )
 

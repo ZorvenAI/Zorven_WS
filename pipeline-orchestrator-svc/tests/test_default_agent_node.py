@@ -83,9 +83,7 @@ class TestDefaultAgentNode:
 
     @patch("app.nodes.internal.default_agent_node.DefaultAgentNode._emit_trace")
     @patch("app.nodes.internal.default_agent_node.genai")
-    async def test_empty_search_results_general_knowledge(
-        self, mock_genai, mock_trace
-    ):
+    async def test_empty_search_results_general_knowledge(self, mock_genai, mock_trace):
         """Fallback response when no documents found."""
         mock_trace.return_value = None
 
@@ -127,9 +125,7 @@ class TestDefaultAgentNode:
             {"role": "user", "content": "What is brand equity?"},
             {"role": "assistant", "content": "Brand equity is..."},
         ]
-        state = _base_state(
-            input_context={"chat_history": chat_history}
-        )
+        state = _base_state(input_context={"chat_history": chat_history})
         result = await node(state)
 
         # Verify Gemini was called and prompt included history
@@ -216,9 +212,7 @@ class TestDefaultAgentNode:
 
     @patch("app.nodes.internal.default_agent_node.DefaultAgentNode._emit_trace")
     @patch("app.nodes.internal.default_agent_node.genai")
-    async def test_gemini_failure_returns_search_only(
-        self, mock_genai, mock_trace
-    ):
+    async def test_gemini_failure_returns_search_only(self, mock_genai, mock_trace):
         """Graceful degradation when Gemini fails."""
         mock_trace.return_value = None
 
@@ -240,7 +234,9 @@ class TestDefaultAgentNode:
 
     @patch("app.nodes.internal.default_agent_node.DefaultAgentNode._emit_trace")
     @patch("app.nodes.internal.default_agent_node.genai")
-    @patch("app.nodes.internal.default_agent_node.DefaultAgentNode._download_attachments")
+    @patch(
+        "app.nodes.internal.default_agent_node.DefaultAgentNode._download_attachments"
+    )
     async def test_attachment_files_passed_to_gemini(
         self, mock_download, mock_genai, mock_trace
     ):
@@ -320,7 +316,9 @@ class TestDefaultAgentNode:
 
     @patch("app.nodes.internal.default_agent_node.DefaultAgentNode._emit_trace")
     @patch("app.nodes.internal.default_agent_node.genai")
-    @patch("app.nodes.internal.default_agent_node.DefaultAgentNode._download_attachments")
+    @patch(
+        "app.nodes.internal.default_agent_node.DefaultAgentNode._download_attachments"
+    )
     async def test_attachment_download_failure_non_fatal(
         self, mock_download, mock_genai, mock_trace
     ):

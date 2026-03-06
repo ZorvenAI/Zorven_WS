@@ -77,17 +77,17 @@ class TestIntentRouting:
         )
         assert result.get("resolved_manifest_id") == "content-strategy"
 
-    async def test_ambiguous_prompt_defaults_brand_analysis(
+    async def test_ambiguous_prompt_defaults_general_chat(
         self, http_client, service_headers, callback_capture
     ):
-        """Ambiguous input -> defaults to brand-analysis."""
+        """Ambiguous input -> defaults to general-chat (neutral default)."""
         result = await self._dispatch_auto_detect(
             http_client,
             service_headers,
             callback_capture,
             "Do something interesting with data",
         )
-        assert result.get("resolved_manifest_id") == "brand-analysis"
+        assert result.get("resolved_manifest_id") == "general-chat"
 
     async def test_routing_plus_execution(
         self, http_client, service_headers, callback_capture

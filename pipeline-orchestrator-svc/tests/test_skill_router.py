@@ -26,18 +26,24 @@ class TestSkillRouter:
         assert router.skill_count == 3
 
     def test_resolves_skills_for_matching_node(self, router):
-        result = router.resolve_skills_for_node("blog_author", "optimize seo for our blog")
+        result = router.resolve_skills_for_node(
+            "blog_author", "optimize seo for our blog"
+        )
         assert "skill_context" in result
         assert "skill_names" in result
         assert "test-seo-skill" in result["skill_names"]
         assert "## Additional Skill Context" in result["skill_context"]
 
     def test_returns_empty_for_no_match(self, router):
-        result = router.resolve_skills_for_node("blog_author", "unrelated weather topic")
+        result = router.resolve_skills_for_node(
+            "blog_author", "unrelated weather topic"
+        )
         assert result == {}
 
     def test_returns_empty_for_unknown_node(self, router):
-        result = router.resolve_skills_for_node("unknown_node", "seo keyword optimization")
+        result = router.resolve_skills_for_node(
+            "unknown_node", "seo keyword optimization"
+        )
         assert result == {}
 
     def test_multiple_skills_can_match(self, router):

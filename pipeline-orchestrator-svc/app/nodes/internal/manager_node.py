@@ -11,7 +11,6 @@ from typing import Any
 from app.nodes.base import BaseNode
 from app.state.schema import AgentState
 
-
 _RESEARCH_NODES = {"default_agent", "web_research"}
 
 
@@ -41,9 +40,7 @@ class ManagerNode(BaseNode):
         # node appearing alongside "Scheduled on: linkedin, twitter" from the
         # social promoter.  In standalone chat (research + manager only) the
         # full answer is preserved.
-        processing_nodes = {
-            nid for nid in outputs if nid not in _RESEARCH_NODES
-        }
+        processing_nodes = {nid for nid in outputs if nid not in _RESEARCH_NODES}
         has_processing = bool(processing_nodes)
 
         for node_id, output in outputs.items():
@@ -52,9 +49,7 @@ class ManagerNode(BaseNode):
                     # Summarise research sources instead of full findings
                     sources = output.get("sources", [])
                     source_names = [
-                        _source_label(s)
-                        for s in sources
-                        if isinstance(s, dict)
+                        _source_label(s) for s in sources if isinstance(s, dict)
                     ]
                     source_names = [n for n in source_names if n]
                     if source_names:
@@ -131,61 +126,54 @@ class ManagerNode(BaseNode):
         # Brand equity / valuation pipeline
         if bsi_data:
             charts.append(
-                {"type": "radar_chart", "data_key": "bsi.pillars",
-                 "label": "Brand Strength Pillars"}
+                {
+                    "type": "radar_chart",
+                    "data_key": "bsi.pillars",
+                    "label": "Brand Strength Pillars",
+                }
             )
             charts.append(
-                {"type": "score_gauge", "data_key": "score",
-                 "max": "100", "label": "Overall BSI Score"}
+                {
+                    "type": "score_gauge",
+                    "data_key": "score",
+                    "max": "100",
+                    "label": "Overall BSI Score",
+                }
             )
         if valuation_data:
             charts.append(
-                {"type": "valuation_card", "data_key": "valuation.brand_value_npv",
-                 "label": "Brand Value"}
+                {
+                    "type": "valuation_card",
+                    "data_key": "valuation.brand_value_npv",
+                    "label": "Brand Value",
+                }
             )
 
         # Content pipeline
         has_blog = any(
-            isinstance(o, dict) and "blog_content" in o
-            for o in outputs.values()
+            isinstance(o, dict) and "blog_content" in o for o in outputs.values()
         )
         has_social = any(
-            isinstance(o, dict) and "adapted_posts" in o
-            for o in outputs.values()
+            isinstance(o, dict) and "adapted_posts" in o for o in outputs.values()
         )
         if has_blog:
-            charts.append(
-                {"type": "word_count_badge", "data_key": "word_count"}
-            )
-            charts.append(
-                {"type": "seo_score_card", "data_key": "seo_meta"}
-            )
+            charts.append({"type": "word_count_badge", "data_key": "word_count"})
+            charts.append({"type": "seo_score_card", "data_key": "seo_meta"})
         if has_social:
-            charts.append(
-                {"type": "platform_cards", "data_key": "adapted_posts"}
-            )
+            charts.append({"type": "platform_cards", "data_key": "adapted_posts"})
 
         # Determine dashboard type
         if bsi_data or valuation_data:
             schema_type = "brand_equity_dashboard"
         elif has_blog or has_social:
             schema_type = "content_dashboard"
-        elif any(
-            isinstance(o, dict) and o.get("sources")
-            for o in outputs.values()
-        ):
+        elif any(isinstance(o, dict) and o.get("sources") for o in outputs.values()):
             schema_type = "research_dashboard"
-            charts.append(
-                {"type": "findings_list", "data_key": "findings"}
-            )
-            charts.append(
-                {"type": "sources_table", "data_key": "sources"}
-            )
+            charts.append({"type": "findings_list", "data_key": "findings"})
+            charts.append({"type": "sources_table", "data_key": "sources"})
         else:
             schema_type = "generic_result"
-            charts.append(
-                {"type": "findings_list", "data_key": "findings"}
-            )
+            charts.append({"type": "findings_list", "data_key": "findings"})
             charts.append(
                 {"type": "recommendations_list", "data_key": "recommendations"}
             )

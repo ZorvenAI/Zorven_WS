@@ -33,9 +33,7 @@ class SkillRouter:
         Returns a dict with skill_context (str) and skill_names (list).
         Returns empty dict if no skills match (fail-open).
         """
-        matched = self._registry.match_skills(
-            node_id, prompt, max_skills=max_skills
-        )
+        matched = self._registry.match_skills(node_id, prompt, max_skills=max_skills)
 
         if not matched:
             return {}

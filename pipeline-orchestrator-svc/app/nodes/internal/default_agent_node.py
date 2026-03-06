@@ -116,7 +116,10 @@ class DefaultAgentNode(BaseNode):
         # Synthesize answer with Gemini (inject skill context if available)
         skill_context = self.config.get("skill_context", "") if self.config else ""
         answer = await self._synthesize(
-            input_prompt, chunks, chat_history, attachment_files,
+            input_prompt,
+            chunks,
+            chat_history,
+            attachment_files,
             skill_context=skill_context,
         )
 

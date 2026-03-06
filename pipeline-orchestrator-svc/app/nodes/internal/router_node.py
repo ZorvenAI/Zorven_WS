@@ -13,6 +13,37 @@ and post it in LinkedIn" routes to social-promotion, not blog-authoring.
 from app.nodes.base import BaseNode
 from app.state.schema import AgentState
 
+# ── Simple suffix-stripping stemmer (no external deps) ──
+
+_SUFFIX_RULES = [
+    ("izing", "iz"),
+    ("ising", "is"),
+    ("ating", "ate"),
+    ("ying", "y"),
+    ("ting", "t"),
+    ("ning", "n"),
+    ("ing", ""),
+    ("ies", "y"),
+    ("ers", "er"),
+    ("ors", "or"),
+    ("ments", "ment"),
+    ("ness", ""),
+    ("ses", "s"),
+    ("ions", "ion"),
+    ("s", ""),
+]
+
+
+def _stem(word: str) -> str:
+    """Reduce a word to its approximate root via suffix stripping."""
+    if len(word) <= 3:
+        return word
+    for suffix, replacement in _SUFFIX_RULES:
+        if word.endswith(suffix) and len(word) - len(suffix) >= 2:
+            return word[: -len(suffix)] + replacement
+    return word
+
+
 # Weighted keyword map: each entry is (keyword, weight).
 # Higher weight = stronger signal for that pipeline.
 KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
@@ -47,6 +78,7 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("social media", 1),
         ("schedule", 1),
         ("scheduled", 1),
+        ("post", 1),
     ],
     "social-post": [
         ("post on", 1),
@@ -54,6 +86,8 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("publish to", 1),
     ],
     "blog-authoring": [
+        ("write a blog", 3),
+        ("write an article", 3),
         ("blog", 1),
         ("write", 1),
         ("author", 1),
@@ -61,19 +95,23 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("publish", 1),
     ],
     "iso-brand-equity": [
-        ("brand equity", 1),
-        ("valuation", 1),
+        ("brand equity", 3),
+        ("brand valuation", 3),
+        ("valuation", 2),
         ("iso", 1),
         ("royalty", 1),
         ("10668", 1),
     ],
     "competitor-audit": [
-        ("competitor", 1),
+        ("competitive analysis", 3),
+        ("competitor", 2),
+        ("competitors", 2),
         ("audit", 1),
         ("gap", 1),
         ("competitive", 1),
     ],
     "content-strategy": [
+        ("content strategy", 3),
         ("content", 1),
         ("strategy", 1),
         ("calendar", 1),
@@ -86,14 +124,14 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("market", 1),
     ],
     "general-chat": [
-        ("document", 1),
+        ("document", 2),
+        ("explain", 2),
+        ("summarize", 2),
         ("file", 1),
         ("upload", 1),
         ("pdf", 1),
         ("summary", 1),
-        ("summarize", 1),
         ("what does", 1),
-        ("explain", 1),
         ("tell me about", 1),
         ("find", 1),
         ("search", 1),
@@ -138,24 +176,61 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
 }
 
 
+def keyword_match(state: AgentState) -> str:
+    """Improved keyword matching with stemming, phrase scoring, and RAG boosting.
+
+    Shared by RouterNode and PipelineComposer._keyword_fallback().
+    """
+    prompt = state.get("input_prompt", "").lower()
+    available = state.get("available_manifests") or []
+    available_ids = {m["pipeline_id"] for m in available} if available else set()
+    ctx = state.get("input_context") or {}
+
+    prompt_words = prompt.split()
+    stemmed_words = {_stem(w.strip(",.!?;:'\"")) for w in prompt_words}
+
+    scores: dict[str, int] = {}
+    for pipeline_id, keywords in KEYWORD_MAP.items():
+        if available_ids and pipeline_id not in available_ids:
+            continue
+        score = 0
+        for kw, weight in keywords:
+            if " " in kw:
+                # Phrase: exact substring match
+                if kw in prompt:
+                    score += weight
+            else:
+                # Single word: token-based match only (avoids substring
+                # false positives like "post" matching "compost")
+                if _stem(kw) in stemmed_words:
+                    score += weight
+        scores[pipeline_id] = score
+
+    # Boost RAG pipelines when user has uploaded documents
+    if ctx.get("needs_rag"):
+        for pid in ("rag-blog-social", "rag-blog-authoring", "general-chat"):
+            if pid in scores:
+                scores[pid] += 4
+
+    # Default: prefer general-chat if available, else first manifest in order
+    if available_ids:
+        if "general-chat" in available_ids:
+            resolved_id = "general-chat"
+        else:
+            resolved_id = available[0]["pipeline_id"]
+    else:
+        resolved_id = "general-chat"
+    best_score = 0
+    for pid, score in scores.items():
+        if score > best_score:
+            best_score = score
+            resolved_id = pid
+    return resolved_id
+
+
 class RouterNode(BaseNode):
     """Routes to the appropriate pipeline via weighted keyword matching."""
 
     async def __call__(self, state: AgentState) -> dict:
-        prompt = state.get("input_prompt", "").lower()
-        available = state.get("available_manifests") or []
-
-        available_ids = {m["pipeline_id"] for m in available} if available else set()
-
-        resolved_id = "brand-analysis"  # default fallback
-        best_score = 0
-
-        for pipeline_id, keywords in KEYWORD_MAP.items():
-            if available_ids and pipeline_id not in available_ids:
-                continue
-            score = sum(weight for kw, weight in keywords if kw in prompt)
-            if score > best_score:
-                best_score = score
-                resolved_id = pipeline_id
-
+        resolved_id = keyword_match(state)
         return {"resolved_manifest_id": resolved_id}

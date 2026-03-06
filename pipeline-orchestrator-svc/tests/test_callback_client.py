@@ -106,9 +106,7 @@ class TestCallbackClient:
 
         # 5xx is retried, so provide responses for all 4 attempts
         for _ in range(4):
-            httpx_mock.add_response(
-                url=CALLBACK_URL, method="PATCH", status_code=500
-            )
+            httpx_mock.add_response(url=CALLBACK_URL, method="PATCH", status_code=500)
 
         client = CallbackClient(callback_token=TOKEN)
         result = await client.send_progress(
