@@ -206,18 +206,25 @@ class OrchestratorDispatcher:
     def _build_callback_url(self, job):
         """Build the callback URL for this job.
 
-        Prefers ``CALLBACK_BASE_URL`` (should be a private/internal URL
-        reachable by the orchestrator, e.g.
-        ``http://previsionws.railway.internal:8000``).
-        Falls back to ``BACKEND_URL`` if ``CALLBACK_BASE_URL`` is not set.
+        On Railway, automatically uses ``RAILWAY_PRIVATE_DOMAIN`` (set by
+        Railway on every service) combined with ``PORT`` to construct a
+        reliable internal callback URL.  This avoids depending on a
+        manually-configured ``CALLBACK_BASE_URL`` which can be wrong.
 
-        Note: Railway private domains are lowercase with no hyphens
-        (check ``RAILWAY_PRIVATE_DOMAIN`` in the service's env vars).
+        Falls back to ``CALLBACK_BASE_URL`` → ``BACKEND_URL`` →
+        ``http://localhost:8001`` for Docker / local dev.
         """
-        base_url = config(
-            "CALLBACK_BASE_URL",
-            default=config("BACKEND_URL", default="http://localhost:8001"),
-        ).rstrip("/")
+        # Railway auto-sets RAILWAY_PRIVATE_DOMAIN on every service —
+        # always correct, no manual configuration needed.
+        railway_domain = config("RAILWAY_PRIVATE_DOMAIN", default="")
+        if railway_domain:
+            port = config("PORT", default="8000")
+            base_url = f"http://{railway_domain}:{port}"
+        else:
+            base_url = config(
+                "CALLBACK_BASE_URL",
+                default=config("BACKEND_URL", default="http://localhost:8001"),
+            ).rstrip("/")
         if "localhost" in base_url or "127.0.0.1" in base_url:
             logger.warning(
                 "Callback base URL is '%s' — pipeline callbacks will "
