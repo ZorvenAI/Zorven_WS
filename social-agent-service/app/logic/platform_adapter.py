@@ -81,13 +81,16 @@ class PlatformAdapter:
             skill_context=skill_context,
         )
 
-        response = await asyncio.to_thread(
-            self._model.generate_content,
-            prompt,
-            generation_config={
-                "temperature": 0.4,
-                "max_output_tokens": 1024,
-            },
+        response = await asyncio.wait_for(
+            asyncio.to_thread(
+                self._model.generate_content,
+                prompt,
+                generation_config={
+                    "temperature": 0.4,
+                    "max_output_tokens": 1024,
+                },
+            ),
+            timeout=60,
         )
 
         content = _clean_ai_output(response.text.strip())

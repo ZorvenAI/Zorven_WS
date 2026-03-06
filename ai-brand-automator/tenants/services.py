@@ -226,9 +226,24 @@ class TenantVertexAIService:
         if self._client is not None:
             return self._client
         try:
+            import json
+            import os
+
             from google.cloud import discoveryengine_v1 as discoveryengine
 
-            self._client = discoveryengine.DataStoreServiceClient()
+            # Use service account from GCS_CREDENTIALS_JSON if available,
+            # otherwise fall back to Application Default Credentials.
+            creds_json = os.environ.get("GCS_CREDENTIALS_JSON", "")
+            if creds_json:
+                from google.oauth2 import service_account
+
+                info = json.loads(creds_json)
+                creds = service_account.Credentials.from_service_account_info(info)
+                self._client = discoveryengine.DataStoreServiceClient(
+                    credentials=creds,
+                )
+            else:
+                self._client = discoveryengine.DataStoreServiceClient()
             return self._client
         except Exception as exc:
             logger.warning(
@@ -261,7 +276,8 @@ class TenantVertexAIService:
             operation.result(timeout=120)  # Wait up to 2 minutes
             logger.info("Created Vertex AI data store: %s", data_store_id)
         except Exception as exc:
-            if "ALREADY_EXISTS" in str(exc):
+            exc_str = str(exc).lower()
+            if "already_exists" in exc_str or "already exists" in exc_str:
                 logger.debug(
                     "Data store %s already exists — skipping",
                     data_store_id,

@@ -274,14 +274,14 @@ class TestRunIndexing:
     @pytest.mark.django_db
     @patch("rag_index.tasks.sync_tasks.get_orchestrator")
     @patch("rag_index.tasks.sync_tasks.run_async")
-    def test_indexing_failure_marks_asset_failed(
+    def test_indexing_failure_returns_failed_without_marking_asset(
         self,
         mock_run_async,
         mock_get_orch,
         sample_brand_asset_for_task,
         sample_event_data,
     ):
-        """Should mark asset as failed when indexing raises."""
+        """Should return failed status but NOT mark asset (caller handles it)."""
         mock_run_async.side_effect = Exception("Vertex AI unavailable")
 
         curation_result = {
@@ -301,8 +301,10 @@ class TestRunIndexing:
         assert result["status"] == "failed"
         assert "Vertex AI unavailable" in result["error"]
 
+        # _run_indexing no longer marks the asset — the parent
+        # process_asset_pipeline_sync handles indexing failures as non-fatal
         sample_brand_asset_for_task.refresh_from_db()
-        assert sample_brand_asset_for_task.pipeline_status == "failed"
+        assert sample_brand_asset_for_task.pipeline_status == "pending"
 
 
 # ── Full sync pipeline tests ────────────────────────────────────────
@@ -415,7 +417,7 @@ class TestProcessAssetPipelineSync:
     @patch("onboarding.tasks._run_indexing")
     @patch("onboarding.tasks._run_curation")
     @patch("onboarding.tasks._run_ingestion")
-    def test_pipeline_returns_failed_on_indexing_failure(
+    def test_pipeline_returns_curated_on_indexing_failure(
         self,
         mock_ingestion,
         mock_curation,
@@ -423,7 +425,7 @@ class TestProcessAssetPipelineSync:
         sample_brand_asset_for_task,
         sample_event_data,
     ):
-        """Should still report ingestion/curation when indexing fails."""
+        """Indexing failure is non-fatal: asset is marked curated, not failed."""
         mock_ingestion.return_value = {
             "status": "success",
             "destination_path": "gs://bucket/raw/doc.pdf",
@@ -445,7 +447,7 @@ class TestProcessAssetPipelineSync:
             event_data=sample_event_data,
         )
 
-        assert result["status"] == "failed"
+        assert result["status"] == "curated"
         assert result["ingestion"]["status"] == "success"
         assert result["curation"]["status"] == "success"
         assert result["indexing"]["status"] == "failed"

@@ -103,17 +103,23 @@ class BlogAuthor:
         )
 
         try:
-            response = await asyncio.to_thread(
-                self._model.generate_content,
-                prompt,
-                generation_config={
-                    "temperature": 0.7,
-                    "max_output_tokens": 4096,
-                },
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self._model.generate_content,
+                    prompt,
+                    generation_config={
+                        "temperature": 0.7,
+                        "max_output_tokens": 4096,
+                    },
+                ),
+                timeout=120,
             )
             blog = response.text.strip()
             blog = self._post_process(blog)
             return blog
+        except asyncio.TimeoutError:
+            logger.warning("Gemini blog authoring timed out (120s). Using stub.")
+            return self._stub_author(topic, brand_persona, seo_data, citations)
         except Exception as exc:
             logger.warning("Gemini blog authoring failed: %s. Using stub.", exc)
             return self._stub_author(topic, brand_persona, seo_data, citations)

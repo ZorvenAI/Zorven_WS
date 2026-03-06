@@ -9,6 +9,7 @@ so pipelines can be tested before agent services are deployed.
 """
 
 import logging
+from typing import Any
 
 import httpx
 
@@ -46,7 +47,7 @@ class ExternalWrapper(BaseNode):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 response = await client.post(
                     self.url,
                     json=payload,
@@ -81,4 +82,12 @@ class ExternalWrapper(BaseNode):
 
         node_outputs = dict(state.get("node_outputs", {}))
         node_outputs[self.node_id] = result
-        return {"node_outputs": node_outputs}
+
+        update: dict[str, Any] = {"node_outputs": node_outputs}
+
+        # Propagate result_data from external service responses so the
+        # job executor can accumulate it for the final callback.
+        if isinstance(result, dict) and "result_data" in result:
+            update["result_data"] = result["result_data"]
+
+        return update
