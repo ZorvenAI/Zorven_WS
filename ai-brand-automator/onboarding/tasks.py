@@ -207,15 +207,34 @@ def process_asset_pipeline_sync(
         }
 
     # ======================================================================
-    # Stage 3 — RAG Indexing
+    # Stage 3 — RAG Indexing (non-fatal: curation already succeeded)
     # ======================================================================
     indexing_result = _run_indexing(
         self, asset_id, tenant_id, event_data, curation_result
     )
 
-    final_status = indexing_result.get("status", "completed")
+    indexing_status = indexing_result.get("status", "completed")
+    if indexing_status in ("success", "skipped"):
+        final_status = "indexed" if indexing_status == "success" else "curated"
+    else:
+        # Indexing failed but curation succeeded — mark as curated,
+        # not failed.  The file is processed and usable; RAG indexing
+        # can be retried via retry_asset_pipeline().
+        logger.warning(
+            "Indexing failed for asset %s but curation succeeded — "
+            "marking as curated.  Error: %s",
+            asset_id,
+            indexing_result.get("error", "unknown"),
+        )
+        _update_asset_status(
+            asset_id,
+            "curated",
+            tenant_id=tenant_id,
+        )
+        final_status = "curated"
+
     return {
-        "status": "indexed" if final_status == "success" else final_status,
+        "status": final_status,
         "asset_id": asset_id,
         "ingestion": ingestion_result,
         "curation": curation_result,
@@ -316,16 +335,26 @@ def _run_curation(
         NoOpProducerAdapter as CurationNoOpProducer,
     )
 
+    # Initialise before try so they're available in the except block.
+    storage_bucket = ""
+    mime_type = "application/octet-stream"
+
     try:
         config = get_media_curation_config()
         kafka_config = config.get("KAFKA", {})
 
-        # Resolve curated bucket
+        # Resolve curated bucket — fall back to raw bucket if curated is
+        # not configured, since we know the raw bucket exists (ingestion
+        # already wrote to it successfully).
         curated_bucket = event_data.get("curated_bucket")
         if not curated_bucket and tenant and hasattr(tenant, "get_curated_bucket"):
             curated_bucket = tenant.get_curated_bucket()
-        storage_bucket = curated_bucket or config.get("STORAGE", {}).get(
-            "CURATED_BUCKET", "brandsol-curation-bucket"
+        raw_bucket = event_data.get("raw_bucket")
+        storage_bucket = (
+            curated_bucket
+            or config.get("STORAGE", {}).get("CURATED_BUCKET", "")
+            or raw_bucket
+            or "brandsol-curation-bucket"
         )
 
         # Build CurationEvent from ingestion result
@@ -333,6 +362,13 @@ def _run_curation(
             "destination_path", event_data.get("file_path", "")
         )
         mime_type = event_data.get("file_type", "application/octet-stream")
+
+        logger.info(
+            "Curation stage: raw_gcs_uri=%s, curated_bucket=%s, mime=%s",
+            dest_path,
+            storage_bucket,
+            mime_type,
+        )
 
         def _detect(mt: str) -> ContentType:
             if mt.startswith("video/"):
@@ -397,16 +433,17 @@ def _run_curation(
         }
 
     except Exception as e:
-        error_msg = f"Curation failed: {e}"
+        error_msg = (
+            f"Curation failed (bucket={storage_bucket}, " f"mime={mime_type}): {e}"
+        )
         logger.error(error_msg, extra={"asset_id": asset_id}, exc_info=True)
-        # Mark as ingested (curation failed but ingestion succeeded)
         _update_asset_status(
             asset_id,
             "failed",
-            error_msg=str(e),
+            error_msg=error_msg,
             tenant_id=event_data.get("tenant_id", ""),
         )
-        return {"status": "failed", "error": str(e)}
+        return {"status": "failed", "error": error_msg}
 
 
 def _run_indexing(
@@ -434,6 +471,9 @@ def _run_indexing(
     """
     from rag_index.domain.models import SyncAction, SyncEvent
     from rag_index.tasks.sync_tasks import get_orchestrator, run_async
+
+    # Initialise before try so it's available in the except block.
+    output_uri = ""
 
     try:
         output_uri = curation_result.get("output_uri", "")
@@ -480,11 +520,14 @@ def _run_indexing(
         }
 
     except Exception as e:
-        error_msg = f"Indexing failed: {e}"
+        error_msg = (
+            f"Indexing failed (output_uri={output_uri}, " f"tenant={tenant_id}): {e}"
+        )
         logger.error(error_msg, extra={"asset_id": asset_id}, exc_info=True)
-        # Curation succeeded; mark as failed with indexing error
-        _update_asset_status(asset_id, "failed", error_msg=str(e), tenant_id=tenant_id)
-        return {"status": "failed", "error": str(e)}
+        # Don't mark as "failed" here — the caller
+        # (process_asset_pipeline_sync) handles indexing failures as
+        # non-fatal when curation has succeeded.
+        return {"status": "failed", "error": error_msg}
 
 
 @shared_task(bind=True, max_retries=3, ignore_result=True)

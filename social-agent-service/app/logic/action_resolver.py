@@ -191,6 +191,7 @@ class ActionResolver:
             [system_prompt, sanitized_prompt],
             tools=[tools],
             generation_config={"temperature": 0.0},
+            request_options={"timeout": 30},
         )
 
         # Extract function call from response

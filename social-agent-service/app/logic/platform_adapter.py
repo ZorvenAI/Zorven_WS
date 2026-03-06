@@ -40,7 +40,10 @@ class PlatformAdapter:
             try:
                 if self._model is not None:
                     post = await self._ai_adapt(
-                        blog_content, seo_meta, brand_persona, platform,
+                        blog_content,
+                        seo_meta,
+                        brand_persona,
+                        platform,
                         skill_context=skill_context,
                     )
                 else:
@@ -77,7 +80,11 @@ class PlatformAdapter:
         sanitized_content = sanitize_ai_prompt(blog_content[:3000])
 
         prompt = self._build_prompt(
-            platform, sanitized_content, brand_name, brand_voice, keywords,
+            platform,
+            sanitized_content,
+            brand_name,
+            brand_voice,
+            keywords,
             skill_context=skill_context,
         )
 
@@ -88,6 +95,7 @@ class PlatformAdapter:
                 "temperature": 0.4,
                 "max_output_tokens": 1024,
             },
+            request_options={"timeout": 60},
         )
 
         content = _clean_ai_output(response.text.strip())

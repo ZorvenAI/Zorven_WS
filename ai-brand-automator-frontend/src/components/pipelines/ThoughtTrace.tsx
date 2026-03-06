@@ -63,14 +63,16 @@ export default function ThoughtTrace({
   const entries = Object.entries(progress);
   const percent = progressPercent ?? calcPercent(progress);
 
-  if (entries.length === 0 && jobStatus === 'queued') {
+  if (entries.length === 0 && (jobStatus === 'queued' || jobStatus === 'running')) {
     return (
       <div className="glass-card p-6">
         <h3 className="text-sm font-heading font-semibold text-white mb-4">
           Pipeline Progress
         </h3>
         <p className="text-sm text-brand-silver/60">
-          Waiting for the pipeline to start…
+          {jobStatus === 'running'
+            ? 'Initializing pipeline agents…'
+            : 'Waiting for the pipeline to start…'}
         </p>
       </div>
     );
