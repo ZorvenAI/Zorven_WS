@@ -200,8 +200,9 @@ def keyword_match(state: AgentState) -> str:
                 if kw in prompt:
                     score += weight
             else:
-                # Single word: use stemming
-                if _stem(kw) in stemmed_words or kw in prompt:
+                # Single word: token-based match only (avoids substring
+                # false positives like "post" matching "compost")
+                if _stem(kw) in stemmed_words:
                     score += weight
         scores[pipeline_id] = score
 
@@ -211,7 +212,14 @@ def keyword_match(state: AgentState) -> str:
             if pid in scores:
                 scores[pid] += 4
 
-    resolved_id = "general-chat"  # Neutral default (was "brand-analysis")
+    # Default: prefer general-chat if available, else first manifest in order
+    if available_ids:
+        if "general-chat" in available_ids:
+            resolved_id = "general-chat"
+        else:
+            resolved_id = available[0]["pipeline_id"]
+    else:
+        resolved_id = "general-chat"
     best_score = 0
     for pid, score in scores.items():
         if score > best_score:

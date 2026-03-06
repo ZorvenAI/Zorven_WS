@@ -369,18 +369,22 @@ class PipelineComposer:
         parts = [self._base_system_prompt]
         ctx = state.get("input_context") or {}
 
-        # Company context
+        # Company context (sanitized to prevent prompt injection)
         company_name = ctx.get("company_name")
         sector = ctx.get("sector")
         brand_voice = ctx.get("brand_voice")
         if company_name or sector or brand_voice:
             context_lines = []
             if company_name:
-                context_lines.append(f"Company: {company_name}")
+                context_lines.append(
+                    f"Company: {sanitize_ai_prompt(str(company_name))[:200]}"
+                )
             if sector:
-                context_lines.append(f"Sector: {sector}")
+                context_lines.append(f"Sector: {sanitize_ai_prompt(str(sector))[:200]}")
             if brand_voice:
-                context_lines.append(f"Brand voice: {brand_voice}")
+                context_lines.append(
+                    f"Brand voice: {sanitize_ai_prompt(str(brand_voice))[:200]}"
+                )
             parts.append("\n\nCompany context:\n" + "\n".join(context_lines))
 
         # RAG hint
@@ -413,26 +417,37 @@ class PipelineComposer:
         ctx = state.get("input_context") or {}
         chat_history = ctx.get("chat_history")
 
-        if chat_history and isinstance(chat_history, list):
+        if isinstance(chat_history, list):
             # Include last 3 messages for context
             recent = chat_history[-3:]
-            history_lines = []
-            for msg in recent:
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-                history_lines.append(f"  {role}: {content}")
-            history_text = "\n".join(history_lines)
-            return (
-                f"Recent conversation:\n{history_text}\n\n" f"Current request: {prompt}"
-            )
+            history_lines: list[str] = []
+            for raw_msg in recent:
+                if not isinstance(raw_msg, dict):
+                    continue
+                role = str(raw_msg.get("role", "user") or "user")
+                raw_content = raw_msg.get("content", "")
+                if raw_content is None:
+                    continue
+                content = sanitize_ai_prompt(str(raw_content))
+                if not content:
+                    continue
+                # Truncate overly long history messages
+                history_lines.append(f"  {role}: {content[:1000]}")
+
+            if history_lines:
+                history_text = "\n".join(history_lines)
+                return (
+                    f"Recent conversation:\n{history_text}\n\n"
+                    f"Current request: {prompt}"
+                )
 
         return prompt
 
     async def _gemini_compose(self, state: AgentState) -> list[str] | None:
         """Use Gemini function-calling to select and order nodes.
 
-        Retries up to GEMINI_COMPOSE_MAX_RETRIES times with exponential
-        backoff on failure.
+        Retries up to GEMINI_COMPOSE_MAX_RETRIES times with linear
+        backoff (delay * attempt) on failure.
         """
         import google.generativeai as genai
 
