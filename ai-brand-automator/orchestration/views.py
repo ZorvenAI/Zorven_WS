@@ -351,9 +351,7 @@ def callback_debug(request):
     to help debug pipeline callback issues on Railway.
     """
     cb_token = getattr(settings, "ORCHESTRATOR_CALLBACK_TOKEN", "")
-    token_hint = (
-        f"{cb_token[:3]}...{cb_token[-3:]}" if len(cb_token) > 6 else "***"
-    )
+    token_hint = f"{cb_token[:3]}...{cb_token[-3:]}" if len(cb_token) > 6 else "***"
     return Response(
         {
             "allowed_hosts": settings.ALLOWED_HOSTS,
@@ -361,9 +359,7 @@ def callback_debug(request):
                 "CALLBACK_BASE_URL", default="(not set)"
             ),
             "backend_url": decouple_config("BACKEND_URL", default="(not set)"),
-            "orchestrator_url": getattr(
-                settings, "ORCHESTRATOR_URL", "(not set)"
-            ),
+            "orchestrator_url": getattr(settings, "ORCHESTRATOR_URL", "(not set)"),
             "callback_token_hint": token_hint,
             "railway_env": decouple_config(
                 "RAILWAY_ENVIRONMENT_NAME", default="(not set)"
