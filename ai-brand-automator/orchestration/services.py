@@ -208,8 +208,11 @@ class OrchestratorDispatcher:
 
         Prefers ``CALLBACK_BASE_URL`` (should be a private/internal URL
         reachable by the orchestrator, e.g.
-        ``http://Prevision-WS.railway.internal:8000``).
+        ``http://previsionws.railway.internal:8000``).
         Falls back to ``BACKEND_URL`` if ``CALLBACK_BASE_URL`` is not set.
+
+        Note: Railway private domains are lowercase with no hyphens
+        (check ``RAILWAY_PRIVATE_DOMAIN`` in the service's env vars).
         """
         base_url = config(
             "CALLBACK_BASE_URL",
