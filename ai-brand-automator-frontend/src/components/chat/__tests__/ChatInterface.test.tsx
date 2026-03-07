@@ -12,6 +12,7 @@ interface MessageBubbleProps {
 jest.mock('@/lib/api', () => ({
   apiClient: {
     post: jest.fn(),
+    postWithSignal: jest.fn(),
     get: jest.fn(),
     delete: jest.fn(),
   },
@@ -30,10 +31,37 @@ jest.mock('@/components/chat/ChatHistorySidebar', () => ({
   ChatHistorySidebar: () => <div data-testid="chat-history-sidebar">Chat History</div>,
 }))
 
+jest.mock('@/hooks/useTenantRole', () => ({
+  useTenantRole: () => ({ role: 'owner', canEdit: true, canView: true }),
+}))
+
+jest.mock('@/hooks/useInputHistory', () => ({
+  useInputHistory: () => ({
+    history: [],
+    pushMessage: jest.fn(),
+    navigateUp: jest.fn().mockReturnValue(null),
+    navigateDown: jest.fn().mockReturnValue(null),
+    exitHistory: jest.fn(),
+    setCurrentDraft: jest.fn(),
+  }),
+}))
+
+// Mock scrollIntoView (not available in jsdom)
+Element.prototype.scrollIntoView = jest.fn()
+
 describe('ChatInterface', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     window.localStorage.clear()
+    // Mock requestAnimationFrame so hasMounted fires synchronously
+    jest.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(0)
+      return 0
+    })
+  })
+
+  afterEach(() => {
+    ;(window.requestAnimationFrame as jest.Mock).mockRestore()
   })
 
   it('renders with initial welcome message', () => {
@@ -59,7 +87,7 @@ describe('ChatInterface', () => {
       }),
     }
 
-    ;(apiClient.post as jest.Mock).mockResolvedValue(mockResponse)
+    ;(apiClient.postWithSignal as jest.Mock).mockResolvedValue(mockResponse)
 
     render(<ChatInterface />)
 
@@ -70,9 +98,11 @@ describe('ChatInterface', () => {
     fireEvent.click(sendButton)
 
     await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith('/ai/chat/', {
-        message: 'What is my brand strategy?',
-      })
+      expect(apiClient.postWithSignal).toHaveBeenCalledWith(
+        '/ai/chat/',
+        { message: 'What is my brand strategy?' },
+        expect.any(AbortSignal)
+      )
     })
 
     await waitFor(() => {
@@ -89,7 +119,7 @@ describe('ChatInterface', () => {
       }),
     }
 
-    ;(apiClient.post as jest.Mock).mockResolvedValue(mockResponse)
+    ;(apiClient.postWithSignal as jest.Mock).mockResolvedValue(mockResponse)
 
     render(<ChatInterface />)
 
@@ -99,7 +129,7 @@ describe('ChatInterface', () => {
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
 
     await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalled()
+      expect(apiClient.postWithSignal).toHaveBeenCalled()
     })
   })
 
@@ -110,7 +140,7 @@ describe('ChatInterface', () => {
 
     fireEvent.click(sendButton)
 
-    expect(apiClient.post).not.toHaveBeenCalled()
+    expect(apiClient.postWithSignal).not.toHaveBeenCalled()
   })
 
   it('clears input after sending message', async () => {
@@ -122,7 +152,7 @@ describe('ChatInterface', () => {
       }),
     }
 
-    ;(apiClient.post as jest.Mock).mockResolvedValue(mockResponse)
+    ;(apiClient.postWithSignal as jest.Mock).mockResolvedValue(mockResponse)
 
     render(<ChatInterface />)
 
@@ -145,7 +175,7 @@ describe('ChatInterface', () => {
       json: async () => ({}),
     }
 
-    ;(apiClient.post as jest.Mock).mockResolvedValue(mockResponse)
+    ;(apiClient.postWithSignal as jest.Mock).mockResolvedValue(mockResponse)
 
     render(<ChatInterface />)
 
@@ -169,7 +199,7 @@ describe('ChatInterface', () => {
       }),
     }
 
-    ;(apiClient.post as jest.Mock).mockResolvedValue(mockResponse)
+    ;(apiClient.postWithSignal as jest.Mock).mockResolvedValue(mockResponse)
 
     render(<ChatInterface />)
 
@@ -188,5 +218,78 @@ describe('ChatInterface', () => {
     render(<ChatInterface />)
 
     expect(screen.getByTestId('chat-history-sidebar')).toBeInTheDocument()
+  })
+
+  it('shows stop button while loading', async () => {
+    // Create a mock that never resolves to keep the loading state
+    ;(apiClient.postWithSignal as jest.Mock).mockReturnValue(new Promise(() => {}))
+
+    render(<ChatInterface />)
+
+    const input = screen.getByPlaceholderText(/Ask me about your brand strategy/i)
+    fireEvent.change(input, { target: { value: 'Test' } })
+    fireEvent.click(screen.getByRole('button', { name: /send/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /stop/i })).toBeInTheDocument()
+    })
+  })
+
+  it('cancel button calls backend cancel endpoint', async () => {
+    // First: send a message that establishes a session
+    const firstResponse = {
+      ok: true,
+      json: async () => ({
+        session_id: 'test-session-123',
+        session_pk: 1,
+        response: 'First reply',
+        thinking: '',
+      }),
+    }
+    ;(apiClient.postWithSignal as jest.Mock).mockResolvedValueOnce(firstResponse)
+
+    render(<ChatInterface />)
+
+    // Send first message to establish session
+    const input = screen.getByPlaceholderText(/Ask me about your brand strategy/i)
+    fireEvent.change(input, { target: { value: 'First message' } })
+    fireEvent.click(screen.getByRole('button', { name: /send/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('First reply')).toBeInTheDocument()
+    })
+
+    // Now: second message that never resolves (keeps loading)
+    ;(apiClient.postWithSignal as jest.Mock).mockImplementation(
+      (_url: string, _data: unknown, signal?: AbortSignal) => {
+        return new Promise((_resolve, reject) => {
+          if (signal) {
+            signal.addEventListener('abort', () => {
+              reject(new DOMException('Aborted', 'AbortError'))
+            })
+          }
+        })
+      }
+    )
+    ;(apiClient.post as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'cancel_requested' }),
+    })
+
+    fireEvent.change(input, { target: { value: 'Cancel this' } })
+    fireEvent.click(screen.getByRole('button', { name: /send/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /stop/i })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /stop/i }))
+
+    await waitFor(() => {
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/ai/chat/cancel/',
+        expect.objectContaining({ session_id: 'test-session-123' })
+      )
+    })
   })
 })

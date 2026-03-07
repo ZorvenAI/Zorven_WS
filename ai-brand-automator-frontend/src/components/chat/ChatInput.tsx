@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { Paperclip, X, Send, FileText, Image, Film, Mic, MicOff, Loader2 } from 'lucide-react';
+import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { Paperclip, X, Send, FileText, Image, Film, Mic, MicOff, Loader2, Square } from 'lucide-react';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 
 interface PendingFile {
@@ -10,12 +10,23 @@ interface PendingFile {
   preview?: string;
 }
 
+export interface ChatInputHandle {
+  addFiles: (files: FileList | File[]) => void;
+}
+
 interface ChatInputProps {
   onSend: (message: string, files: File[]) => void;
+  onCancel?: () => void;
   disabled?: boolean;
   isLoading?: boolean;
+  isCancelling?: boolean;
   placeholder?: string;
   disabledTitle?: string;
+  initialValue?: string;
+  onNavigateUp?: () => string | null;
+  onNavigateDown?: () => string | null;
+  onExitHistory?: () => void;
+  onDraftChange?: (text: string) => void;
 }
 
 const ALLOWED_TYPES = [
@@ -45,20 +56,43 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function ChatInput({
-  onSend,
-  disabled = false,
-  isLoading = false,
-  placeholder = 'Ask me about your brand strategy...',
-  disabledTitle,
-}: ChatInputProps) {
+export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
+  {
+    onSend,
+    onCancel,
+    disabled = false,
+    isLoading = false,
+    isCancelling = false,
+    placeholder = 'Ask me about your brand strategy...',
+    disabledTitle,
+    initialValue,
+    onNavigateUp,
+    onNavigateDown,
+    onExitHistory,
+    onDraftChange,
+  },
+  ref
+) {
   const [input, setInput] = useState('');
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
-  const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const voice = useVoiceInput();
+
+  // Restore input when initialValue changes (e.g., after cancel)
+  useEffect(() => {
+    if (initialValue !== undefined && initialValue !== '') {
+      setInput(initialValue);
+      requestAnimationFrame(() => {
+        const ta = textareaRef.current;
+        if (ta) {
+          ta.style.height = 'auto';
+          ta.style.height = `${Math.min(ta.scrollHeight, 144)}px`;
+        }
+      });
+    }
+  }, [initialValue]);
 
   // Append transcribed text to the textarea when voice input produces a result.
   useEffect(() => {
@@ -81,12 +115,14 @@ export function ChatInput({
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setInput(e.target.value);
+      const val = e.target.value;
+      setInput(val);
+      onDraftChange?.(val);
       const ta = e.target;
       ta.style.height = 'auto';
       ta.style.height = `${Math.min(ta.scrollHeight, 144)}px`;
     },
-    []
+    [onDraftChange]
   );
 
   const addFiles = useCallback((files: FileList | File[]) => {
@@ -111,6 +147,9 @@ export function ChatInput({
       setPendingFiles((prev) => [...prev, ...newPending]);
     }
   }, []);
+
+  // Expose addFiles to parent via ref
+  useImperativeHandle(ref, () => ({ addFiles }), [addFiles]);
 
   const removeFile = useCallback((id: string) => {
     setPendingFiles((prev) => {
@@ -139,42 +178,70 @@ export function ChatInput({
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSend();
+        return;
+      }
+
+      // Up arrow — navigate input history
+      if (e.key === 'ArrowUp' && onNavigateUp) {
+        const ta = textareaRef.current;
+        // Only trigger when cursor is at start or input is empty
+        if (!input || (ta && ta.selectionStart === 0)) {
+          const prev = onNavigateUp();
+          if (prev !== null) {
+            e.preventDefault();
+            setInput(prev);
+            requestAnimationFrame(() => {
+              if (ta) {
+                ta.style.height = 'auto';
+                ta.style.height = `${Math.min(ta.scrollHeight, 144)}px`;
+              }
+            });
+          }
+        }
+      }
+
+      // Down arrow — navigate forward in history
+      if (e.key === 'ArrowDown' && onNavigateDown) {
+        const next = onNavigateDown();
+        if (next !== null) {
+          e.preventDefault();
+          setInput(next);
+        }
+      }
+
+      // Escape — exit history mode
+      if (e.key === 'Escape' && onExitHistory) {
+        onExitHistory();
       }
     },
-    [handleSend]
+    [handleSend, input, onNavigateUp, onNavigateDown, onExitHistory]
   );
 
-  // Drag-and-drop handlers
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(true);
-  }, []);
+  // Clipboard paste handler — intercept pasted images/files
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-  }, []);
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragOver(false);
-      if (e.dataTransfer.files.length > 0) {
-        addFiles(e.dataTransfer.files);
+      const files: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === 'file') {
+          const file = items[i].getAsFile();
+          if (file) files.push(file);
+        }
       }
+
+      if (files.length > 0) {
+        e.preventDefault();
+        addFiles(files);
+      }
+      // If no files, allow normal text paste (don't prevent default)
     },
     [addFiles]
   );
 
   return (
-    <div
-      className={`shrink-0 bg-brand-midnight/80 backdrop-blur border-t border-white/10 px-4 sm:px-6 py-4 ${
-        dragOver ? 'ring-2 ring-brand-electric/40 ring-inset' : ''
-      }`}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
+    <div className="shrink-0 bg-brand-midnight/80 backdrop-blur border-t border-white/10 px-4 sm:px-6 py-4">
       {/* Pending file chips */}
       {pendingFiles.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-3">
@@ -255,6 +322,7 @@ export function ChatInput({
           value={input}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={disabled ? disabledTitle || placeholder : placeholder}
           className="input-dark flex-1 resize-none"
           rows={1}
@@ -316,21 +384,41 @@ export function ChatInput({
           </button>
         )}
 
-        {/* Send button */}
-        <button
-          onClick={handleSend}
-          disabled={
-            disabled ||
-            isLoading ||
-            (!input.trim() && pendingFiles.length === 0)
-          }
-          className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed p-2.5"
-          aria-label="Send message"
-          title={disabledTitle}
-        >
-          <Send className="w-4 h-4" />
-        </button>
+        {/* Send / Stop / Cancelling button */}
+        {isLoading && !isCancelling ? (
+          <button
+            onClick={onCancel}
+            className="btn-primary p-2.5 animate-pulse"
+            aria-label="Stop generation"
+            title="Stop generation"
+          >
+            <Square className="w-4 h-4" />
+          </button>
+        ) : isCancelling ? (
+          <button
+            disabled
+            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed p-2.5"
+            aria-label="Cancelling..."
+            title="Cancelling..."
+          >
+            <Loader2 className="w-4 h-4 animate-spin" />
+          </button>
+        ) : (
+          <button
+            onClick={handleSend}
+            disabled={
+              disabled ||
+              isLoading ||
+              (!input.trim() && pendingFiles.length === 0)
+            }
+            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed p-2.5"
+            aria-label="Send message"
+            title={disabledTitle}
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </div>
   );
-}
+});
