@@ -9,6 +9,7 @@ export interface FileAttachment {
   file_size: number;
   pipeline_status: string;
   asset?: number | null;
+  thumbnail_url?: string | null;
 }
 
 interface FilePreviewProps {
@@ -62,31 +63,55 @@ export function FilePreview({ attachments, isUser = false }: FilePreviewProps) {
 
   return (
     <div className="mt-2 space-y-1.5">
-      {attachments.map((att) => (
-        <div
-          key={att.id}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-            isUser
-              ? 'bg-brand-midnight/10 border border-brand-midnight/15'
-              : 'bg-white/[0.03] border border-white/5'
-          }`}
-        >
-          <span className={isUser ? 'text-brand-midnight/60' : 'text-brand-silver/50'}>
-            {getFileIcon(att.file_type)}
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className={`text-xs truncate ${
-              isUser ? 'text-brand-midnight' : 'text-brand-silver'
-            }`}>{att.file_name}</p>
-            <p className={`text-[10px] ${
-              isUser ? 'text-brand-midnight/50' : 'text-brand-silver/30'
-            }`}>
-              {formatSize(att.file_size)}
-            </p>
+      {attachments.map((att) =>
+        att.file_type === 'image' && att.thumbnail_url ? (
+          <div key={att.id} className="mt-1">
+            <a href={att.thumbnail_url} target="_blank" rel="noopener noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={att.thumbnail_url}
+                alt={att.file_name}
+                className="max-w-[320px] max-h-[192px] object-contain rounded-lg border border-white/10"
+              />
+            </a>
+            <div className="flex items-center gap-2 mt-1">
+              <p className={`text-xs truncate ${
+                isUser ? 'text-brand-midnight/70' : 'text-brand-silver/50'
+              }`}>{att.file_name}</p>
+              <p className={`text-[10px] ${
+                isUser ? 'text-brand-midnight/40' : 'text-brand-silver/30'
+              }`}>
+                {formatSize(att.file_size)}
+              </p>
+              <StatusBadge status={att.pipeline_status} />
+            </div>
           </div>
-          <StatusBadge status={att.pipeline_status} />
-        </div>
-      ))}
+        ) : (
+          <div
+            key={att.id}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+              isUser
+                ? 'bg-brand-midnight/10 border border-brand-midnight/15'
+                : 'bg-white/[0.03] border border-white/5'
+            }`}
+          >
+            <span className={isUser ? 'text-brand-midnight/60' : 'text-brand-silver/50'}>
+              {getFileIcon(att.file_type)}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className={`text-xs truncate ${
+                isUser ? 'text-brand-midnight' : 'text-brand-silver'
+              }`}>{att.file_name}</p>
+              <p className={`text-[10px] ${
+                isUser ? 'text-brand-midnight/50' : 'text-brand-silver/30'
+              }`}>
+                {formatSize(att.file_size)}
+              </p>
+            </div>
+            <StatusBadge status={att.pipeline_status} />
+          </div>
+        )
+      )}
     </div>
   );
 }

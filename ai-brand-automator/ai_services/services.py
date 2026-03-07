@@ -657,6 +657,7 @@ class GeminiAIService:
         message: str,
         context: Dict[str, Any],
         history: Optional[List[Dict[str, str]]] = None,
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, str]:
         """Chat using Gemini with brand context and conversation history.
 
@@ -664,12 +665,15 @@ class GeminiAIService:
             message: User's message text.
             context: Brand/company context dict.
             history: Previous messages as list of {"role", "content"} dicts.
+            system_prompt: Pre-built system prompt (from prompt cache).
+                When provided, skips internal prompt building.
 
         Returns:
             {"content": str, "thinking": str}
         """
         sanitized_message = sanitize_ai_prompt(message)
-        system_prompt = self._build_chat_system_prompt(context)
+        if system_prompt is None:
+            system_prompt = self._build_chat_system_prompt(context)
         start_time = time.time()
 
         if not self.model:

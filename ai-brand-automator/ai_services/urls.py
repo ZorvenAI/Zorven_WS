@@ -11,6 +11,8 @@ from .views import (
     generate_brand_identity,
     analyze_market,
     update_session_title_internal,
+    cache_metrics,
+    cancel_chat,
 )
 
 router = DefaultRouter()
@@ -37,6 +39,8 @@ urlpatterns = router.urls + [
     ),
     path("analyze/market/", analyze_market, name="analyze_market"),
     path("speech-to-text/", speech_to_text, name="speech_to_text"),
+    path("cache-metrics/", cache_metrics, name="cache_metrics"),
+    path("chat/cancel/", cancel_chat, name="cancel_chat"),
     path(
         "internal/title-session/<str:session_id>/",
         update_session_title_internal,

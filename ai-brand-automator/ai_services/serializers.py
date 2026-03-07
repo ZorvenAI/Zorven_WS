@@ -83,6 +83,8 @@ class ChatSessionSerializer(serializers.ModelSerializer):
 class SessionAttachmentSerializer(serializers.ModelSerializer):
     """Serializer for SessionAttachment model."""
 
+    thumbnail_url = serializers.SerializerMethodField()
+
     class Meta:
         model = SessionAttachment
         fields = [
@@ -93,9 +95,28 @@ class SessionAttachmentSerializer(serializers.ModelSerializer):
             "file_type",
             "file_size",
             "pipeline_status",
+            "thumbnail_url",
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]
+
+    def get_thumbnail_url(self, obj):
+        if obj.file_type != "image" or obj.asset_id is None:
+            return None
+        try:
+            asset = obj.asset
+            if not asset or not asset.gcs_path:
+                return None
+            from files.services import gcs_service
+
+            result = gcs_service.generate_signed_url(
+                asset.gcs_path,
+                expiration_minutes=15,
+                bucket_name=asset.gcs_bucket,
+            )
+            return result.get("url")
+        except Exception:
+            return None
 
 
 class ChatInputSerializer(serializers.Serializer):

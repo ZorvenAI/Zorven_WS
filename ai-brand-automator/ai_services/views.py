@@ -8,12 +8,12 @@ from django.core.cache import cache
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 import uuid
 
-from django.db.models import Count, Subquery, OuterRef
+from django.db.models import Count, Prefetch, Subquery, OuterRef
 from .models import ChatSession, ChatMessage, SessionAttachment, AIGeneration
 from .serializers import (
     ChatSessionSerializer,
@@ -124,7 +124,10 @@ class ChatSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         """List messages for a chat session with pagination."""
         session = self.get_object()
         queryset = ChatMessage.objects.filter(session=session).prefetch_related(
-            "attachments"
+            Prefetch(
+                "attachments",
+                queryset=SessionAttachment.objects.select_related("asset"),
+            )
         )
 
         page = self.paginate_queryset(queryset)
@@ -134,6 +137,22 @@ class ChatSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
         serializer = ChatMessageModelSerializer(queryset, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=["get"], url_path="input-history")
+    def input_history(self, request, pk=None):
+        """Return up-arrow input history for a chat session."""
+        session = self.get_object()
+        tenant = getattr(request, "tenant", None)
+        if not tenant:
+            return Response({"history": []})
+
+        history_key = f"ba:input_history:{tenant.id}:{session.session_id}"
+        try:
+            history = cache.get(history_key) or []
+        except Exception:
+            history = []
+
+        return Response({"history": history})
 
 
 class AIGenerationViewSet(RoleBasedPermissionMixin, viewsets.ReadOnlyModelViewSet):
@@ -352,6 +371,7 @@ def _process_chat_message(
         user_msg = ChatMessage.objects.create(
             session=session, role="user", content=message
         )
+        _push_input_history(tenant.id, session.session_id, message)
 
         # Link pending attachments to the user message
         if attachment_ids:
@@ -504,6 +524,7 @@ def _process_chat_message(
         user_msg = ChatMessage.objects.create(
             session=session, role="user", content=message
         )
+        _push_input_history(tenant.id, session.session_id, message)
         # Link pending attachments to the user message
         if attachment_ids:
             SessionAttachment.objects.filter(
@@ -546,7 +567,37 @@ def _process_chat_message(
 
     user_msg = ChatMessage.objects.create(session=session, role="user", content=message)
 
-    ai_result = ai_service.chat_with_brand_context(message, context, history)
+    # Push to input history (all branches)
+    _push_input_history(tenant.id, session.session_id, message)
+
+    # Check cancel flag before calling Gemini
+    cancel_key = f"ba:chat:cancel:{session.session_id}"
+    if cache.get(cancel_key):
+        cache.delete(cancel_key)
+        return Response({"cancelled": True, "session_id": session.session_id})
+
+    # Layered prompt caching: snapshot on first message, reuse on subsequent
+    from .prompt_cache import (
+        get_or_create_prompt_snapshot,
+        build_system_prompt_from_snapshot,
+    )
+
+    company_data = context.get("company", {})
+    snapshot = get_or_create_prompt_snapshot(
+        tenant.id, session.session_id, company_data
+    )
+    cached_prompt = build_system_prompt_from_snapshot(snapshot)
+
+    # Store prefix_hash in session context on first message (DB fallback)
+    if is_new_session:
+        ctx = session.context or {}
+        ctx["prefix_hash"] = snapshot["prefix_hash"]
+        session.context = ctx
+        session.save(update_fields=["context"])
+
+    ai_result = ai_service.chat_with_brand_context(
+        message, context, history, system_prompt=cached_prompt
+    )
 
     ChatMessage.objects.create(
         session=session,
@@ -1229,3 +1280,78 @@ def speech_to_text(request):
             {"error": "Transcription failed. Please try again."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+# ── Cache Metrics (admin endpoint) ──
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def cache_metrics(request):
+    """Return prompt cache hit/miss metrics (admin only)."""
+    from .prompt_cache import get_cache_metrics
+
+    metrics = get_cache_metrics()
+    return Response(metrics)
+
+
+# ── Chat Cancel ──
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsTenantEditor])
+def cancel_chat(request):
+    """Cancel an in-flight chat request.
+
+    Sets a short-lived Redis flag that the conversation handler checks
+    before calling Gemini. Also releases the session write lock so the
+    user can send a new message immediately.
+    """
+    session_id = request.data.get("session_id")
+    if not session_id:
+        return Response(
+            {"error": "session_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    tenant = getattr(request, "tenant", None)
+    if not tenant:
+        return Response(
+            {"error": "No tenant context."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    try:
+        session = ChatSession.objects.get(session_id=session_id, tenant=tenant)
+    except ChatSession.DoesNotExist:
+        return Response(
+            {"error": "Session not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Set cancel flag (30s TTL)
+    cancel_key = f"ba:chat:cancel:{session.session_id}"
+    cache.set(cancel_key, "1", timeout=30)
+
+    # Release write lock so user can send again
+    lock_key = f"chat:lock:{session.session_id}"
+    cache.delete(lock_key)
+
+    return Response({"status": "cancel_requested"})
+
+
+# ── Input History Helper ──
+
+
+def _push_input_history(tenant_id, session_id, message):
+    """Append a user message to the per-session input history in Redis."""
+    history_key = f"ba:input_history:{tenant_id}:{session_id}"
+    try:
+        history = cache.get(history_key) or []
+        history.append(message)
+        # Cap at 50 entries
+        if len(history) > 50:
+            history = history[-50:]
+        cache.set(history_key, history, timeout=604800)  # 7 days
+    except Exception:
+        logger.debug("Failed to push input history for session %s", session_id)

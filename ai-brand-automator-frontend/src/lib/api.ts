@@ -162,6 +162,14 @@ export const apiClient = {
     });
   },
 
+  async postWithSignal(endpoint: string, data: unknown, signal?: AbortSignal) {
+    return this.request(endpoint, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      signal,
+    });
+  },
+
   /**
    * Upload a file using FormData.
    * Does NOT set Content-Type — the browser adds the multipart boundary automatically.

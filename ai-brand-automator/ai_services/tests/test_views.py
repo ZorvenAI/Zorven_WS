@@ -12,9 +12,10 @@ from django.urls import reverse
 from ai_services.tests.factories import (
     ChatSessionFactory,
     ChatMessageFactory,
+    SessionAttachmentFactory,
     AIGenerationFactory,
 )
-from onboarding.tests.factories import CompanyFactory
+from onboarding.tests.factories import CompanyFactory, BrandAssetFactory
 
 
 @pytest.mark.django_db
@@ -993,3 +994,378 @@ class TestSpeechToText:
             self.URL, {"audio": audio}, format="multipart"
         )
         assert resp.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestCancelChatEndpoint:
+    """Tests for POST /api/v1/ai/chat/cancel/"""
+
+    def url(self):
+        return reverse("cancel_chat")
+
+    def test_cancel_requires_auth(self, api_client):
+        response = api_client.post(self.url(), {"session_id": "abc"})
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_cancel_requires_session_id(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        response = authenticated_client_with_tenant.post(self.url(), {}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_cancel_session_not_found(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"session_id": "nonexistent-session-id"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_cancel_sets_redis_flag(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        from django.core.cache import cache
+
+        session = ChatSessionFactory(tenant=public_tenant)
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"session_id": session.session_id},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == "cancel_requested"
+
+        cancel_key = f"ba:chat:cancel:{session.session_id}"
+        assert cache.get(cancel_key) == "1"
+
+    def test_cancel_releases_write_lock(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        from django.core.cache import cache
+
+        session = ChatSessionFactory(tenant=public_tenant)
+
+        lock_key = f"chat:lock:{session.session_id}"
+        cache.set(lock_key, "1", timeout=30)
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"session_id": session.session_id},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert cache.get(lock_key) is None
+
+    @patch("ai_services.views._maybe_auto_title")
+    @patch("ai_services.services.GeminiAIService.classify_intent")
+    @patch("ai_services.views.ai_service")
+    def test_chat_checks_cancel_flag_before_gemini(
+        self,
+        mock_ai_service,
+        mock_classify,
+        mock_auto_title,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        from django.core.cache import cache
+
+        mock_classify.return_value = {
+            "intent": "conversation",
+            "confidence": 1.0,
+        }
+        mock_ai_service.chat_with_brand_context.return_value = {
+            "content": "Should not reach",
+            "thinking": "",
+        }
+
+        session = ChatSessionFactory(tenant=public_tenant)
+        cancel_key = f"ba:chat:cancel:{session.session_id}"
+        cache.set(cancel_key, "1", timeout=30)
+
+        chat_url = reverse("chat_with_ai")
+        response = authenticated_client_with_tenant.post(
+            chat_url,
+            {"message": "Hello", "session_id": session.session_id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data.get("cancelled") is True
+        mock_ai_service.chat_with_brand_context.assert_not_called()
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestInputHistoryEndpoint:
+    """Tests for GET /api/v1/ai/chat-sessions/{pk}/input-history/"""
+
+    def test_input_history_requires_auth(self, api_client, public_tenant):
+        session = ChatSessionFactory(tenant=public_tenant)
+        url = reverse("chatsession-input-history", kwargs={"pk": session.pk})
+        response = api_client.get(url)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_input_history_returns_empty(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        session = ChatSessionFactory(tenant=public_tenant)
+        url = reverse("chatsession-input-history", kwargs={"pk": session.pk})
+        response = authenticated_client_with_tenant.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["history"] == []
+
+    def test_input_history_returns_messages(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        from django.core.cache import cache
+
+        session = ChatSessionFactory(tenant=public_tenant)
+        history_key = f"ba:input_history:{public_tenant.id}:{session.session_id}"
+        cache.set(history_key, ["msg1", "msg2", "msg3"], timeout=604800)
+
+        url = reverse("chatsession-input-history", kwargs={"pk": session.pk})
+        response = authenticated_client_with_tenant.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["history"] == ["msg1", "msg2", "msg3"]
+
+    def test_input_history_max_50_entries(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        from django.core.cache import cache
+
+        session = ChatSessionFactory(tenant=public_tenant)
+        history_key = f"ba:input_history:{public_tenant.id}:{session.session_id}"
+        cache.set(
+            history_key,
+            [f"msg{i}" for i in range(60)],
+            timeout=604800,
+        )
+
+        url = reverse("chatsession-input-history", kwargs={"pk": session.pk})
+        response = authenticated_client_with_tenant.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["history"]) == 60
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestPromptCacheIntegration:
+    """Integration tests for prompt cache in the chat flow."""
+
+    @patch("ai_services.views._maybe_auto_title")
+    @patch("ai_services.services.GeminiAIService.classify_intent")
+    @patch("ai_services.views.ai_service")
+    def test_chat_uses_cached_prompt_on_second_message(
+        self,
+        mock_ai_service,
+        mock_classify,
+        mock_auto_title,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        from django.core.cache import cache
+
+        mock_classify.return_value = {
+            "intent": "conversation",
+            "confidence": 1.0,
+        }
+        mock_ai_service.chat_with_brand_context.return_value = {
+            "content": "Response",
+            "thinking": "",
+        }
+
+        chat_url = reverse("chat_with_ai")
+
+        resp1 = authenticated_client_with_tenant.post(
+            chat_url, {"message": "Hello!"}, format="json"
+        )
+        assert resp1.status_code == status.HTTP_200_OK
+        session_id = resp1.data["session_id"]
+
+        cache_key = f"ba:prompt_cache:{public_tenant.id}:{session_id}:snapshot"
+        assert cache.get(cache_key) is not None
+
+        resp2 = authenticated_client_with_tenant.post(
+            chat_url,
+            {"message": "Tell me more", "session_id": session_id},
+            format="json",
+        )
+        assert resp2.status_code == status.HTTP_200_OK
+
+    @patch("ai_services.views._maybe_auto_title")
+    @patch("ai_services.services.GeminiAIService.classify_intent")
+    @patch("ai_services.views.ai_service")
+    def test_chat_stores_prefix_hash_on_new_session(
+        self,
+        mock_ai_service,
+        mock_classify,
+        mock_auto_title,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        mock_classify.return_value = {
+            "intent": "conversation",
+            "confidence": 1.0,
+        }
+        mock_ai_service.chat_with_brand_context.return_value = {
+            "content": "Response",
+            "thinking": "",
+        }
+
+        chat_url = reverse("chat_with_ai")
+        resp = authenticated_client_with_tenant.post(
+            chat_url, {"message": "First message"}, format="json"
+        )
+        assert resp.status_code == status.HTTP_200_OK
+
+        from ai_services.models import ChatSession
+
+        session = ChatSession.objects.get(session_id=resp.data["session_id"])
+        assert "prefix_hash" in (session.context or {})
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestThumbnailUrl:
+    """Tests for thumbnail_url on SessionAttachmentSerializer."""
+
+    def _messages_url(self, pk):
+        return reverse("chatsession-messages", kwargs={"pk": pk})
+
+    @patch("files.services.gcs_service")
+    def test_thumbnail_url_for_image_with_asset(
+        self,
+        mock_gcs,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        mock_gcs.generate_signed_url.return_value = {
+            "url": "https://storage.example.com/signed",
+            "expires_at": "2026-01-01T00:00:00Z",
+        }
+
+        company = CompanyFactory(tenant=public_tenant)
+        asset = BrandAssetFactory(
+            tenant=public_tenant,
+            company=company,
+            file_type="image",
+            gcs_path="assets/test/photo.png",
+            gcs_bucket="test-bucket",
+        )
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session, role="user")
+        SessionAttachmentFactory(
+            message=msg,
+            session=session,
+            asset=asset,
+            file_name="photo.png",
+            file_type="image",
+            file_size=1024,
+        )
+
+        resp = authenticated_client_with_tenant.get(self._messages_url(session.pk))
+        assert resp.status_code == status.HTTP_200_OK
+
+        data = (
+            resp.data
+            if isinstance(resp.data, list)
+            else resp.data.get("results", resp.data)
+        )
+        att = data[0]["attachments"][0]
+        assert att["thumbnail_url"] == "https://storage.example.com/signed"
+
+    def test_thumbnail_url_none_for_document(
+        self,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session, role="user")
+        SessionAttachmentFactory(
+            message=msg,
+            session=session,
+            file_name="report.pdf",
+            file_type="document",
+            file_size=2048,
+        )
+
+        resp = authenticated_client_with_tenant.get(self._messages_url(session.pk))
+        assert resp.status_code == status.HTTP_200_OK
+
+        data = (
+            resp.data
+            if isinstance(resp.data, list)
+            else resp.data.get("results", resp.data)
+        )
+        att = data[0]["attachments"][0]
+        assert att["thumbnail_url"] is None
+
+    def test_thumbnail_url_none_when_no_asset(
+        self,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session, role="user")
+        SessionAttachmentFactory(
+            message=msg,
+            session=session,
+            asset=None,
+            file_name="photo.png",
+            file_type="image",
+            file_size=1024,
+        )
+
+        resp = authenticated_client_with_tenant.get(self._messages_url(session.pk))
+        assert resp.status_code == status.HTTP_200_OK
+
+        data = (
+            resp.data
+            if isinstance(resp.data, list)
+            else resp.data.get("results", resp.data)
+        )
+        att = data[0]["attachments"][0]
+        assert att["thumbnail_url"] is None
+
+    @patch("files.services.gcs_service")
+    def test_thumbnail_url_none_when_gcs_fails(
+        self,
+        mock_gcs,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        mock_gcs.generate_signed_url.side_effect = Exception("GCS unavailable")
+
+        company = CompanyFactory(tenant=public_tenant)
+        asset = BrandAssetFactory(
+            tenant=public_tenant,
+            company=company,
+            file_type="image",
+            gcs_path="assets/test/photo.png",
+            gcs_bucket="test-bucket",
+        )
+        session = ChatSessionFactory(tenant=public_tenant)
+        msg = ChatMessageFactory(session=session, role="user")
+        SessionAttachmentFactory(
+            message=msg,
+            session=session,
+            asset=asset,
+            file_name="photo.png",
+            file_type="image",
+            file_size=1024,
+        )
+
+        resp = authenticated_client_with_tenant.get(self._messages_url(session.pk))
+        assert resp.status_code == status.HTTP_200_OK
+
+        data = (
+            resp.data
+            if isinstance(resp.data, list)
+            else resp.data.get("results", resp.data)
+        )
+        att = data[0]["attachments"][0]
+        assert att["thumbnail_url"] is None
