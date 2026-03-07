@@ -1042,7 +1042,7 @@ class TestCancelChatEndpoint:
         cancel_key = f"ba:chat:cancel:{session.session_id}"
         assert cache.get(cancel_key) == "1"
 
-    def test_cancel_releases_write_lock(
+    def test_cancel_invalidates_write_lock(
         self, authenticated_client_with_tenant, public_tenant
     ):
         from django.core.cache import cache
@@ -1050,7 +1050,7 @@ class TestCancelChatEndpoint:
         session = ChatSessionFactory(tenant=public_tenant)
 
         lock_key = f"chat:lock:{session.session_id}"
-        cache.set(lock_key, "1", timeout=30)
+        cache.set(lock_key, "original-token", timeout=30)
 
         response = authenticated_client_with_tenant.post(
             self.url(),
@@ -1058,7 +1058,9 @@ class TestCancelChatEndpoint:
             format="json",
         )
         assert response.status_code == status.HTTP_200_OK
-        assert cache.get(lock_key) is None
+        # Lock was overwritten with "cancelled" (short TTL), not held by original token
+        lock_val = cache.get(lock_key)
+        assert lock_val != "original-token"
 
     @patch("ai_services.views._maybe_auto_title")
     @patch("ai_services.services.GeminiAIService.classify_intent")
@@ -1132,9 +1134,11 @@ class TestInputHistoryEndpoint:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["history"] == ["msg1", "msg2", "msg3"]
 
-    def test_input_history_max_50_entries(
+    def test_input_history_returns_all_cached_entries(
         self, authenticated_client_with_tenant, public_tenant
     ):
+        """Endpoint returns whatever is stored in cache (cap is enforced at
+        write time by _push_input_history, not at read time)."""
         from django.core.cache import cache
 
         session = ChatSessionFactory(tenant=public_tenant)

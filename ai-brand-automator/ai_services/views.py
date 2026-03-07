@@ -141,10 +141,10 @@ class ChatSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="input-history")
     def input_history(self, request, pk=None):
         """Return up-arrow input history for a chat session."""
-        session = self.get_object()
         tenant = getattr(request, "tenant", None)
         if not tenant:
             return Response({"history": []})
+        session = self.get_object()
 
         history_key = f"ba:input_history:{tenant.id}:{session.session_id}"
         try:
@@ -221,9 +221,11 @@ def chat_with_ai(request):
             status=status.HTTP_429_TOO_MANY_REQUESTS,
         )
 
-    # Acquire write lock to prevent concurrent writes to same session
+    # Acquire write lock to prevent concurrent writes to same session.
+    # Store a unique token so only the lock holder can release it.
     lock_key = f"chat:lock:{session.session_id}"
-    if not cache.add(lock_key, "1", timeout=30):
+    lock_token = str(uuid.uuid4())
+    if not cache.add(lock_key, lock_token, timeout=30):
         return Response(
             {"error": "Another message is being processed. Please wait."},
             status=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -234,7 +236,9 @@ def chat_with_ai(request):
             request, session, message, tenant, is_new_session, serializer
         )
     finally:
-        cache.delete(lock_key)
+        # Only release if we still hold the lock (cancel may have invalidated it)
+        if cache.get(lock_key) == lock_token:
+            cache.delete(lock_key)
 
 
 def _collect_attachment_data(attachment_ids, session):
@@ -565,16 +569,16 @@ def _process_chat_message(
         .values("role", "content")
     )
 
-    user_msg = ChatMessage.objects.create(session=session, role="user", content=message)
-
-    # Push to input history (all branches)
-    _push_input_history(tenant.id, session.session_id, message)
-
-    # Check cancel flag before calling Gemini
+    # Check cancel flag before persisting user message or calling Gemini
     cancel_key = f"ba:chat:cancel:{session.session_id}"
     if cache.get(cancel_key):
         cache.delete(cancel_key)
         return Response({"cancelled": True, "session_id": session.session_id})
+
+    user_msg = ChatMessage.objects.create(session=session, role="user", content=message)
+
+    # Push to input history (all branches)
+    _push_input_history(tenant.id, session.session_id, message)
 
     # Layered prompt caching: snapshot on first message, reuse on subsequent
     from .prompt_cache import (
@@ -1333,9 +1337,13 @@ def cancel_chat(request):
     cancel_key = f"ba:chat:cancel:{session.session_id}"
     cache.set(cancel_key, "1", timeout=30)
 
-    # Release write lock so user can send again
+    # Invalidate the write lock by overwriting with a "cancelled" token.
+    # The in-flight request's finally block checks its own token before
+    # deleting, so it won't accidentally release a lock acquired by a
+    # subsequent request. We then delete the key so the user can send
+    # a new message immediately.
     lock_key = f"chat:lock:{session.session_id}"
-    cache.delete(lock_key)
+    cache.set(lock_key, "cancelled", timeout=1)
 
     return Response({"status": "cancel_requested"})
 

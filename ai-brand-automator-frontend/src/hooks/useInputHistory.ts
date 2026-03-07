@@ -26,16 +26,15 @@ export function useInputHistory({ sessionId, sessionPk }: UseInputHistoryOptions
   const draftRef = useRef('');
   const [prevSessionId, setPrevSessionId] = useState(sessionId);
 
-  // Reset state when sessionId changes (React-recommended pattern)
+  // Derived-state-from-props pattern (React-recommended replacement for
+  // getDerivedStateFromProps). setState during render is explicitly
+  // supported by React for this use case.
   if (sessionId !== prevSessionId) {
     setPrevSessionId(sessionId);
     setCursor(-1);
 
-    if (!sessionId) {
-      setHistory([]);
-    } else {
-      // Fast load from localStorage
-      let loaded: string[] = [];
+    let loaded: string[] = [];
+    if (sessionId) {
       try {
         const stored = localStorage.getItem(`chat_input_history_${sessionId}`);
         if (stored) {
@@ -47,8 +46,8 @@ export function useInputHistory({ sessionId, sessionPk }: UseInputHistoryOptions
       } catch {
         // Ignore parse errors
       }
-      setHistory(loaded);
     }
+    setHistory(loaded);
   }
 
   // Hydrate from API (async — setState in callback is fine)
