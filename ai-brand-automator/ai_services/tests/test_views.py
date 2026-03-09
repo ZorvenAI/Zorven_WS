@@ -1422,8 +1422,12 @@ class TestChatSessionPinAndRename:
         self, authenticated_client_with_tenant, public_tenant
     ):
         """Pinned sessions appear before unpinned in list."""
+        from django.core.cache import cache
         from django.utils import timezone
         from datetime import timedelta
+
+        # Clear cached session list to avoid stale data from other tests
+        cache.delete(f"chat:sessions:{public_tenant.id}:page=:page_size=:ordering=")
 
         ChatSessionFactory(
             tenant=public_tenant,

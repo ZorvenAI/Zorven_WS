@@ -8,7 +8,7 @@ export default function ChatPage() {
   useAuth(); // Protect this route
   return (
     <div className="h-[calc(100vh-3.5rem)] bg-brand-midnight">
-      <Suspense>
+      <Suspense fallback={null}>
         <ChatInterface />
       </Suspense>
     </div>

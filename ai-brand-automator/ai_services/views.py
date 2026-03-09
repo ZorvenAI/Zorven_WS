@@ -126,10 +126,17 @@ class ChatSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="toggle-pin")
     def toggle_pin(self, request, pk=None):
-        """Toggle the is_pinned flag on a chat session."""
+        """Toggle the is_pinned flag on a chat session (atomic)."""
+        from django.db.models import Case, When, Value
+
         session = self.get_object()
-        session.is_pinned = not session.is_pinned
-        session.save(update_fields=["is_pinned"])
+        ChatSession.objects.filter(pk=session.pk).update(
+            is_pinned=Case(
+                When(is_pinned=True, then=Value(False)),
+                default=Value(True),
+            )
+        )
+        session.refresh_from_db(fields=["is_pinned"])
         _invalidate_session_list_cache(session.tenant)
         return Response({"is_pinned": session.is_pinned}, status=status.HTTP_200_OK)
 

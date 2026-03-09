@@ -192,6 +192,7 @@ export function ChatHistorySidebar({
   const [renameValue, setRenameValue] = useState('');
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const renameCancelledRef = useRef(false);
   const didAutoSelect = useRef(false);
   const propsRef = useRef({ activeSessionId, onSelectSession });
   propsRef.current = { activeSessionId, onSelectSession };
@@ -294,6 +295,10 @@ export function ChatHistorySidebar({
   };
 
   const handleRenameSubmit = async (session: ChatSessionSummary) => {
+    if (renameCancelledRef.current) {
+      renameCancelledRef.current = false;
+      return;
+    }
     const trimmed = renameValue.trim();
     if (!trimmed || trimmed === session.title) {
       setRenamingSessionId(null);
@@ -359,10 +364,15 @@ export function ChatHistorySidebar({
   const handleCopyLink = (session: ChatSessionSummary) => {
     setMenuOpenId(null);
     const url = `${window.location.origin}/chat?session=${session.session_id}`;
-    navigator.clipboard.writeText(url).then(() => {
-      setCopiedSessionId(session.session_id);
-      setTimeout(() => setCopiedSessionId(null), 2000);
-    });
+    navigator.clipboard.writeText(url).then(
+      () => {
+        setCopiedSessionId(session.session_id);
+        setTimeout(() => setCopiedSessionId(null), 2000);
+      },
+      () => {
+        console.error('Failed to copy link to clipboard');
+      }
+    );
   };
 
   const groups = groupByDate(sessions);
@@ -448,6 +458,7 @@ export function ChatHistorySidebar({
                                 if (e.key === 'Enter') {
                                   handleRenameSubmit(session);
                                 } else if (e.key === 'Escape') {
+                                  renameCancelledRef.current = true;
                                   setRenamingSessionId(null);
                                 }
                               }}

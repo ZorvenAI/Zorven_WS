@@ -283,13 +283,19 @@ export function Navigation({ children }: { children: React.ReactNode }) {
       {showLogoutConfirm && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="logout-dialog-title"
           onClick={() => setShowLogoutConfirm(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setShowLogoutConfirm(false);
+          }}
         >
           <div
             className="glass-card p-6 w-full max-w-sm mx-4 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-heading font-semibold text-white">
+            <h3 id="logout-dialog-title" className="text-lg font-heading font-semibold text-white">
               Confirm Logout
             </h3>
             <p className="text-sm text-brand-silver/70">
@@ -299,6 +305,7 @@ export function Navigation({ children }: { children: React.ReactNode }) {
               <button
                 onClick={() => setShowLogoutConfirm(false)}
                 className="px-4 py-2 text-sm text-brand-silver/70 hover:text-white rounded-lg hover:bg-white/5 transition-colors"
+                autoFocus
               >
                 Cancel
               </button>
