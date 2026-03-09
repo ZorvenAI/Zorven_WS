@@ -3,7 +3,7 @@ name: odoo-quality-control
 version: "1.0"
 description: Quality inspection and control point management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "quality"
   - "QC"

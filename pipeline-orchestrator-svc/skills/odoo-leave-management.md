@@ -3,7 +3,7 @@ name: odoo-leave-management
 version: "1.0"
 description: Leave requests and absence tracking
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "leave"
   - "time off"

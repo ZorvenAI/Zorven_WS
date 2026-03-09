@@ -3,7 +3,7 @@ name: odoo-warehouse-ops
 version: "1.0"
 description: Warehouse operations and stock transfer management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "stock"
   - "picking"

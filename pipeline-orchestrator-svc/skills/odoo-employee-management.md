@@ -3,7 +3,7 @@ name: odoo-employee-management
 version: "1.0"
 description: Employee records and organizational structure
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "employee"
   - "department"

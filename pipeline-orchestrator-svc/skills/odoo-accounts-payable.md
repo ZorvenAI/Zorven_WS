@@ -3,7 +3,7 @@ name: odoo-accounts-payable
 version: "1.0"
 description: Bill processing and vendor payment management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "bill"
   - "vendor"

@@ -3,7 +3,7 @@ name: odoo-tenant-admin
 version: "1.0"
 description: Tenant provisioning and database management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "tenant"
   - "provision"

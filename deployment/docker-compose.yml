@@ -575,6 +575,7 @@ services:
       - ORCHESTRATOR_VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
       - ORCHESTRATOR_VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-prevision-rag-dev}
       - ORCHESTRATOR_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - ORCHESTRATOR_ODOO_WORKER_AGENT_URL=http://odoo-worker-agent:8100
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
     volumes:
       - ../ai-brand-automator/credentials:/app/credentials:ro
@@ -887,6 +888,39 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8095/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Odoo Worker Agent — Multi-persona AI agent for Odoo ERP operations
+  # Sits between orchestrator and odoo-mcp-server, provides PAOR reasoning
+  # ==========================================================================
+  odoo-worker-agent:
+    build:
+      context: ../odoo-worker-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-odoo-worker
+    environment:
+      - ODOO_WORKER_REDIS_URL=redis://redis:6379/10
+      - ODOO_WORKER_MCP_SERVER_URL=http://odoo-mcp-server:8095
+      - ODOO_WORKER_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - ODOO_WORKER_KAFKA_BOOTSTRAP_SERVERS=${ODOO_WORKER_KAFKA_BOOTSTRAP_SERVERS:-}
+      - ODOO_WORKER_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - ODOO_WORKER_LOG_LEVEL=INFO
+      - ODOO_WORKER_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+    expose:
+      - "8100"
+    ports:
+      - "8100:8100"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
       interval: 10s
       timeout: 5s
       retries: 3

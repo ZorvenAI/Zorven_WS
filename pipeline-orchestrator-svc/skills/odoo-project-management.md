@@ -3,7 +3,7 @@ name: odoo-project-management
 version: "1.0"
 description: Project task tracking and milestone management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "project"
   - "task"

@@ -3,7 +3,7 @@ name: odoo-quotation-management
 version: "1.0"
 description: Quotation and sales order lifecycle management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "quotation"
   - "quote"

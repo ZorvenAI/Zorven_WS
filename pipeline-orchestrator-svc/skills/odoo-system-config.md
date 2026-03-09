@@ -3,7 +3,7 @@ name: odoo-system-config
 version: "1.0"
 description: System settings and module configuration
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "setting"
   - "config"

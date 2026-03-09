@@ -3,7 +3,7 @@ name: odoo-accounts-receivable
 version: "1.0"
 description: Invoice management and payment collection
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "invoice"
   - "payment"

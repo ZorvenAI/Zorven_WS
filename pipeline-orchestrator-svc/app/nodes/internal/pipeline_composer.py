@@ -115,6 +115,20 @@ NODE_CATALOG: list[dict[str, Any]] = [
         "output_key": "rag_uploader",
         "config": {},
     },
+    {
+        "id": "odoo_worker",
+        "type": "external",
+        "url": f"{settings.ODOO_WORKER_AGENT_URL}/v1/execute",
+        "description": (
+            "Odoo ERP worker agent: assumes a business persona "
+            "(sales, accounting, HR, etc.) and executes multi-step "
+            "Odoo operations via MCP tools. Use for any Odoo ERP "
+            "task: creating orders, checking inventory, managing "
+            "employees, running reports, or any business operation."
+        ),
+        "output_key": "odoo_worker",
+        "config": {},
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.
@@ -163,6 +177,13 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
         "id": "rag-blog-authoring",
         "description": "Blog authoring using RAG documents (not web research)",
     },
+    {
+        "id": "odoo-erp-operations",
+        "description": (
+            "Odoo ERP operations: sales orders, inventory, accounting, "
+            "HR, procurement, and other business processes via Odoo"
+        ),
+    },
 ]
 
 # ── Few-shot examples for Tier 1 ──
@@ -175,6 +196,8 @@ Examples of prompt → pipeline compositions:
 - "Analyze our competitors in the SaaS market" → [web_research, gap_analyzer, manager]
 - "Summarize the document I uploaded" → [default_agent, manager]
 - "Write a blog from the uploaded brand study and share on LinkedIn" → [default_agent, blog_author, social_promoter, manager]
+- "Create a sales order for 100 units of Product X in Odoo" → [odoo_worker, manager]
+- "Check inventory levels and reorder low-stock items in Odoo" → [odoo_worker, manager]
 """.strip()
 
 
@@ -299,6 +322,7 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
         "- RAG + blog + social → rag-blog-social\n"
         "- RAG + blog (no social) → rag-blog-authoring\n"
         "- Brand positioning, market analysis → brand-analysis\n"
+        "- Odoo ERP tasks, sales orders, inventory, HR, accounting → odoo-erp-operations\n"
         f"- Default for ambiguous queries → general-chat{rag_hint}"
     )
 

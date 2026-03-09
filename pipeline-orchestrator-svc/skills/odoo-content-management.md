@@ -3,7 +3,7 @@ name: odoo-content-management
 version: "1.0"
 description: Website content and page management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "website"
   - "page"

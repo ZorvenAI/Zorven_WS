@@ -3,7 +3,7 @@ name: odoo-social-publishing
 version: "1.0"
 description: Social media content scheduling and publishing
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "social"
   - "post"
