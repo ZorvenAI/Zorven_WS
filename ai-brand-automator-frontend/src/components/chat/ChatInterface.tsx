@@ -71,6 +71,7 @@ export function ChatInterface() {
   const activePipelineJobIdRef = useRef<string | null>(null);
   const pipelinePollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPipelineRunning, setIsPipelineRunning] = useState(false);
+  const isLoadingSessionRef = useRef(false);
 
   // Input history hook
   const inputHistory = useInputHistory({ sessionId, sessionPk });
@@ -190,6 +191,7 @@ export function ChatInterface() {
   }, []);
 
   const loadSession = useCallback(async (targetSessionId: string) => {
+    isLoadingSessionRef.current = true;
     setIsLoadingSession(true);
     setSessionId(targetSessionId);
 
@@ -289,9 +291,36 @@ export function ChatInterface() {
     [sessionId, loadSession]
   );
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages.
+  // For session loads, jump instantly at multiple intervals to guarantee the
+  // scroll lands at the bottom regardless of how long messages take to render.
+  // For new messages during a conversation, use smooth scrolling.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!isLoadingSessionRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    isLoadingSessionRef.current = false;
+
+    const jumpToBottom = () => {
+      const el = messagesContainerRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    };
+
+    // Try immediately, after RAF, and at staggered timeouts to cover
+    // varying message rendering times.
+    jumpToBottom();
+    const raf = requestAnimationFrame(jumpToBottom);
+    const t1 = setTimeout(jumpToBottom, 50);
+    const t2 = setTimeout(jumpToBottom, 150);
+    const t3 = setTimeout(jumpToBottom, 400);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
   }, [messages, isLoading]);
 
   const handleCancel = useCallback(async () => {
