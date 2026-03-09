@@ -46,6 +46,10 @@ jest.mock('@/hooks/useInputHistory', () => ({
   }),
 }))
 
+jest.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+}))
+
 // Mock scrollIntoView (not available in jsdom)
 Element.prototype.scrollIntoView = jest.fn()
 

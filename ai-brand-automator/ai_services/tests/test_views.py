@@ -1373,3 +1373,96 @@ class TestThumbnailUrl:
         )
         att = data[0]["attachments"][0]
         assert att["thumbnail_url"] is None
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestChatSessionPinAndRename:
+    """Tests for pin, rename, and ordering features."""
+
+    def url_detail(self, pk):
+        return reverse("chatsession-detail", kwargs={"pk": pk})
+
+    def url_toggle_pin(self, pk):
+        return reverse("chatsession-toggle-pin", kwargs={"pk": pk})
+
+    def test_rename_session_via_patch(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        """PATCH title updates the session title."""
+        session = ChatSessionFactory(tenant=public_tenant, title="Old Title")
+        response = authenticated_client_with_tenant.patch(
+            self.url_detail(session.pk),
+            {"title": "New Title"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        session.refresh_from_db()
+        assert session.title == "New Title"
+
+    def test_toggle_pin_action(self, authenticated_client_with_tenant, public_tenant):
+        """POST toggle-pin toggles is_pinned."""
+        session = ChatSessionFactory(tenant=public_tenant)
+        assert session.is_pinned is False
+
+        response = authenticated_client_with_tenant.post(
+            self.url_toggle_pin(session.pk)
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["is_pinned"] is True
+
+        # Toggle back
+        response = authenticated_client_with_tenant.post(
+            self.url_toggle_pin(session.pk)
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["is_pinned"] is False
+
+    def test_pinned_sessions_ordered_first(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        """Pinned sessions appear before unpinned in list."""
+        from django.utils import timezone
+        from datetime import timedelta
+
+        ChatSessionFactory(
+            tenant=public_tenant,
+            title="Pinned Old",
+            is_pinned=True,
+            last_activity=timezone.now() - timedelta(days=5),
+        )
+        ChatSessionFactory(
+            tenant=public_tenant,
+            title="Unpinned New",
+            is_pinned=False,
+            last_activity=timezone.now(),
+        )
+
+        response = authenticated_client_with_tenant.get(reverse("chatsession-list"))
+        assert response.status_code == status.HTTP_200_OK
+        results = (
+            response.data
+            if isinstance(response.data, list)
+            else response.data.get("results", response.data)
+        )
+        titles = [r["title"] for r in results]
+        assert titles.index("Pinned Old") < titles.index("Unpinned New")
+
+    def test_rename_invalidates_cache(
+        self, authenticated_client_with_tenant, public_tenant
+    ):
+        """PATCH rename should invalidate the session list cache."""
+        from django.core.cache import cache
+
+        session = ChatSessionFactory(tenant=public_tenant, title="Old")
+        cache_key = f"chat:sessions:{public_tenant.id}:" f"page=:page_size=:ordering="
+        cache.set(cache_key, "stale-data", timeout=60)
+
+        authenticated_client_with_tenant.patch(
+            self.url_detail(session.pk),
+            {"title": "Renamed"},
+            format="json",
+        )
+
+        cached = cache.get(cache_key)
+        assert cached is None

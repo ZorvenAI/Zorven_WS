@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { MessageBubble } from './MessageBubble';
 import { ChatHistorySidebar } from './ChatHistorySidebar';
 import { ChatInput } from './ChatInput';
@@ -10,6 +10,7 @@ import { getJobQuickStatus } from '@/lib/orchestration';
 import { cancelJob } from '@/lib/orchestration';
 import { useTenantRole } from '@/hooks/useTenantRole';
 import { useInputHistory } from '@/hooks/useInputHistory';
+import { useSearchParams } from 'next/navigation';
 import { PanelLeftOpen, PanelLeftClose, ArrowDown, Upload } from 'lucide-react';
 
 export interface Attachment {
@@ -260,6 +261,13 @@ export function ChatInterface() {
     setIsLoadingSession(false);
   }, []);
 
+  // Support ?session= query param for shared links (takes priority over localStorage)
+  const searchParams = useSearchParams();
+  const querySessionId = useMemo(
+    () => searchParams.get('session'),
+    [searchParams]
+  );
+
   // Read localStorage once on mount to seed the initial session ID.
   // This prevents the sidebar from auto-selecting a different session.
   const initialSessionRef = useRef<string | null>(
@@ -268,13 +276,12 @@ export function ChatInterface() {
       : null
   );
   useEffect(() => {
-    const saved = initialSessionRef.current;
-    if (saved && !sessionId) {
-      // Kick off the session load asynchronously — allowed because we
-      // only trigger an external fetch, not a synchronous setState cascade.
+    // Query param takes priority over localStorage
+    const target = querySessionId || initialSessionRef.current;
+    if (target && !sessionId) {
       (async () => {
         try {
-          await loadSession(saved);
+          await loadSession(target);
         } catch {
           // Session may no longer exist; sidebar auto-select will handle it.
         }

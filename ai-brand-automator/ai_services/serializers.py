@@ -37,6 +37,7 @@ class ChatSessionSerializer(serializers.ModelSerializer):
             "tenant",
             "session_id",
             "title",
+            "is_pinned",
             "messages",
             "context",
             "created_at",
