@@ -70,6 +70,7 @@ export function Navigation({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Read persisted state on mount (requestAnimationFrame avoids sync setState in effect)
   useEffect(() => {
@@ -174,7 +175,7 @@ export function Navigation({ children }: { children: React.ReactNode }) {
           {/* Logout / Login */}
           {isLoggedIn ? (
             <button
-              onClick={handleLogout}
+              onClick={() => setShowLogoutConfirm(true)}
               className="hidden sm:flex items-center gap-1.5 text-sm text-brand-silver/70 hover:text-brand-electric transition-colors px-2 py-1.5 rounded-md hover:bg-white/5"
             >
               <LogOut className="w-4 h-4" />
@@ -256,7 +257,7 @@ export function Navigation({ children }: { children: React.ReactNode }) {
           {mobileOpen && (
             <div className="md:hidden border-t border-white/8 p-2">
               <button
-                onClick={handleLogout}
+                onClick={() => setShowLogoutConfirm(true)}
                 className="flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
               >
                 <LogOut className="w-5 h-5 shrink-0" />
@@ -277,6 +278,50 @@ export function Navigation({ children }: { children: React.ReactNode }) {
       >
         {children}
       </div>
+
+      {/* ── Logout confirmation dialog ── */}
+      {showLogoutConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="logout-dialog-title"
+          onClick={() => setShowLogoutConfirm(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setShowLogoutConfirm(false);
+          }}
+        >
+          <div
+            className="glass-card p-6 w-full max-w-sm mx-4 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="logout-dialog-title" className="text-lg font-heading font-semibold text-white">
+              Confirm Logout
+            </h3>
+            <p className="text-sm text-brand-silver/70">
+              Are you sure you want to logout? You will need to sign in again to access your account.
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="px-4 py-2 text-sm text-brand-silver/70 hover:text-white rounded-lg hover:bg-white/5 transition-colors"
+                autoFocus
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  handleLogout();
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

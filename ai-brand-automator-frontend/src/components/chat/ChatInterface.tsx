@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { MessageBubble } from './MessageBubble';
 import { ChatHistorySidebar } from './ChatHistorySidebar';
 import { ChatInput } from './ChatInput';
@@ -10,6 +10,7 @@ import { getJobQuickStatus } from '@/lib/orchestration';
 import { cancelJob } from '@/lib/orchestration';
 import { useTenantRole } from '@/hooks/useTenantRole';
 import { useInputHistory } from '@/hooks/useInputHistory';
+import { useSearchParams } from 'next/navigation';
 import { PanelLeftOpen, PanelLeftClose, ArrowDown, Upload } from 'lucide-react';
 
 export interface Attachment {
@@ -71,6 +72,7 @@ export function ChatInterface() {
   const activePipelineJobIdRef = useRef<string | null>(null);
   const pipelinePollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPipelineRunning, setIsPipelineRunning] = useState(false);
+  const isLoadingSessionRef = useRef(false);
 
   // Input history hook
   const inputHistory = useInputHistory({ sessionId, sessionPk });
@@ -190,6 +192,7 @@ export function ChatInterface() {
   }, []);
 
   const loadSession = useCallback(async (targetSessionId: string) => {
+    isLoadingSessionRef.current = true;
     setIsLoadingSession(true);
     setSessionId(targetSessionId);
 
@@ -258,6 +261,13 @@ export function ChatInterface() {
     setIsLoadingSession(false);
   }, []);
 
+  // Support ?session= query param for shared links (takes priority over localStorage)
+  const searchParams = useSearchParams();
+  const querySessionId = useMemo(
+    () => searchParams.get('session'),
+    [searchParams]
+  );
+
   // Read localStorage once on mount to seed the initial session ID.
   // This prevents the sidebar from auto-selecting a different session.
   const initialSessionRef = useRef<string | null>(
@@ -266,13 +276,12 @@ export function ChatInterface() {
       : null
   );
   useEffect(() => {
-    const saved = initialSessionRef.current;
-    if (saved && !sessionId) {
-      // Kick off the session load asynchronously — allowed because we
-      // only trigger an external fetch, not a synchronous setState cascade.
+    // Query param takes priority over localStorage
+    const target = querySessionId || initialSessionRef.current;
+    if (target && !sessionId) {
       (async () => {
         try {
-          await loadSession(saved);
+          await loadSession(target);
         } catch {
           // Session may no longer exist; sidebar auto-select will handle it.
         }
@@ -289,9 +298,36 @@ export function ChatInterface() {
     [sessionId, loadSession]
   );
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages.
+  // For session loads, jump instantly at multiple intervals to guarantee the
+  // scroll lands at the bottom regardless of how long messages take to render.
+  // For new messages during a conversation, use smooth scrolling.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!isLoadingSessionRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    isLoadingSessionRef.current = false;
+
+    const jumpToBottom = () => {
+      const el = messagesContainerRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    };
+
+    // Try immediately, after RAF, and at staggered timeouts to cover
+    // varying message rendering times.
+    jumpToBottom();
+    const raf = requestAnimationFrame(jumpToBottom);
+    const t1 = setTimeout(jumpToBottom, 50);
+    const t2 = setTimeout(jumpToBottom, 150);
+    const t3 = setTimeout(jumpToBottom, 400);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
   }, [messages, isLoading]);
 
   const handleCancel = useCallback(async () => {

@@ -56,6 +56,7 @@ class ChatSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         "update": [IsAuthenticated, IsTenantEditor],
         "partial_update": [IsAuthenticated, IsTenantEditor],
         "destroy": [IsAuthenticated, IsTenantEditor],
+        "toggle_pin": [IsAuthenticated, IsTenantEditor],
     }
 
     def get_queryset(self):
@@ -73,7 +74,7 @@ class ChatSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 _message_count=Count("chat_messages"),
                 _last_message_preview=Subquery(last_msg_subquery),
             )
-            .order_by("-last_activity")
+            .order_by("-is_pinned", "-last_activity")
         )
 
     def list(self, request, *args, **kwargs):
@@ -114,10 +115,30 @@ class ChatSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         serializer.save(tenant=tenant, session_id=str(uuid.uuid4()))
         _invalidate_session_list_cache(tenant)
 
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        _invalidate_session_list_cache(instance.tenant)
+
     def perform_destroy(self, instance):
         tenant = instance.tenant
         super().perform_destroy(instance)
         _invalidate_session_list_cache(tenant)
+
+    @action(detail=True, methods=["post"], url_path="toggle-pin")
+    def toggle_pin(self, request, pk=None):
+        """Toggle the is_pinned flag on a chat session (atomic)."""
+        from django.db.models import Case, When, Value
+
+        session = self.get_object()
+        ChatSession.objects.filter(pk=session.pk).update(
+            is_pinned=Case(
+                When(is_pinned=True, then=Value(False)),
+                default=Value(True),
+            )
+        )
+        session.refresh_from_db(fields=["is_pinned"])
+        _invalidate_session_list_cache(session.tenant)
+        return Response({"is_pinned": session.is_pinned}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"])
     def messages(self, request, pk=None):

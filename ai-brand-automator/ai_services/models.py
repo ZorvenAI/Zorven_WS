@@ -28,6 +28,8 @@ class ChatSession(models.Model):
         default=dict, help_text="Session context (company info, etc.)"
     )
 
+    is_pinned = models.BooleanField(default=False)
+
     # Metadata
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
@@ -36,7 +38,7 @@ class ChatSession(models.Model):
     class Meta:
         verbose_name = "Chat Session"
         verbose_name_plural = "Chat Sessions"
-        ordering = ["-last_activity"]
+        ordering = ["-is_pinned", "-last_activity"]
 
     def __str__(self):
         return f"{self.title or 'Chat Session'} ({self.tenant.name})"
