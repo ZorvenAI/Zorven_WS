@@ -3,7 +3,7 @@ name: odoo-financial-reporting
 version: "1.0"
 description: Financial statement generation and analysis
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "balance sheet"
   - "P&L"

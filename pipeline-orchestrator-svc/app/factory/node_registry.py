@@ -37,6 +37,7 @@ EXTERNAL_ENDPOINTS: dict[str, str] = {
     "social": "http://social-agent-svc:8060/v1/execute",
     "rag_uploader": "http://rag-uploader-agent-svc:8070/v1/execute",
     "odoo_mcp": "http://odoo-mcp-server:8095/execute",
+    "odoo_worker": "http://odoo-worker-agent:8100/v1/execute",
 }
 
 

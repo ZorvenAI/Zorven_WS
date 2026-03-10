@@ -1,0 +1,27 @@
+version: "3.8"
+services:
+  odoo-worker-agent:
+    build: .
+    ports:
+      - "8100:8100"
+    environment:
+      - ODOO_WORKER_REDIS_URL=redis://redis:6379/10
+      - ODOO_WORKER_MCP_SERVER_URL=http://odoo-mcp-server:8095
+      - ODOO_WORKER_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - ODOO_WORKER_SERVICE_TOKEN=${ODOO_WORKER_SERVICE_TOKEN:-dev-service-token}
+      - ODOO_WORKER_LOG_LEVEL=INFO
+    depends_on:
+      - redis
+      - odoo-mcp-server
+
+  odoo-mcp-server:
+    image: odoo-mcp-server-svc:latest
+    ports:
+      - "8095:8095"
+    environment:
+      - ODOO_MCP_REDIS_URL=redis://redis:6379/9
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6389:6379"

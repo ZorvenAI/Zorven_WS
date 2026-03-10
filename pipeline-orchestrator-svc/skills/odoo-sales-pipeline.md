@@ -3,7 +3,7 @@ name: odoo-sales-pipeline
 version: "1.0"
 description: Sales pipeline management and lead scoring for Odoo CRM
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "lead"
   - "pipeline"

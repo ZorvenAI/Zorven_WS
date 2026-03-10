@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { MessageBubble } from './MessageBubble';
 import { ChatHistorySidebar } from './ChatHistorySidebar';
 import { ChatInput } from './ChatInput';
@@ -52,6 +52,8 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  // Start null — localStorage is read in the mount effect (not useState) to avoid
+  // SSR/hydration issues where the server returns null and React reuses it.
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionPk, setSessionPk] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -177,86 +179,142 @@ export function ChatInterface() {
     };
   }, [sessionId]);
 
-  // Persist sessionId to localStorage so sidebar can restore it on remount
+  // Persist sessionId and sessionPk to localStorage so we can restore on remount
   useEffect(() => {
     if (sessionId) {
       localStorage.setItem('active_chat_session', sessionId);
     }
-  }, [sessionId]);
+    if (sessionPk) {
+      localStorage.setItem('active_chat_session_pk', String(sessionPk));
+    }
+  }, [sessionId, sessionPk]);
 
   const handleNewChat = useCallback(() => {
     setSessionId(null);
     setSessionPk(null);
     setMessages([WELCOME_MESSAGE]);
     localStorage.removeItem('active_chat_session');
+    localStorage.removeItem('active_chat_session_pk');
   }, []);
 
-  const loadSession = useCallback(async (targetSessionId: string) => {
+  const loadSession = useCallback(async (targetSessionId: string, savedPk?: number) => {
     isLoadingSessionRef.current = true;
     setIsLoadingSession(true);
     setSessionId(targetSessionId);
 
     try {
-      // Find the session pk from the sessions list (cache-bust to avoid stale browser cache)
-      const sessionsResp = await apiClient.get(
-        `/ai/chat-sessions/?_t=${Date.now()}`
-      );
-      if (!sessionsResp.ok) {
-        setIsLoadingSession(false);
-        return;
-      }
-      const sessionsData = await sessionsResp.json();
-      const list = Array.isArray(sessionsData)
-        ? sessionsData
-        : sessionsData.results ?? [];
-      const session = list.find(
-        (s: { session_id: string }) =>
-          s.session_id === targetSessionId
-      );
-      if (!session) {
-        // Session no longer exists — clear stale reference
-        setSessionId(null);
-        setSessionPk(null);
-        setMessages([WELCOME_MESSAGE]);
-        setIsLoadingSession(false);
-        return;
+      let pk = savedPk;
+
+      // Strategy 1: Use saved PK for direct session lookup (fast, no pagination issues)
+      if (pk) {
+        const directResp = await apiClient.get(
+          `/ai/chat-sessions/${pk}/?_t=${Date.now()}`
+        );
+        if (directResp.ok) {
+          const sessionData = await directResp.json();
+          if (sessionData.session_id !== targetSessionId) {
+            pk = undefined; // PK is stale, fall through to list lookup
+          }
+        } else {
+          pk = undefined;
+        }
       }
 
-      setSessionPk(session.id);
+      // Strategy 2: Fall back to sessions list lookup
+      if (!pk) {
+        const sessionsResp = await apiClient.get(
+          `/ai/chat-sessions/?_t=${Date.now()}`
+        );
+        if (!sessionsResp.ok) {
+          isLoadingSessionRef.current = false;
+          setIsLoadingSession(false);
+          return;
+        }
+        const sessionsData = await sessionsResp.json();
+        const list = Array.isArray(sessionsData)
+          ? sessionsData
+          : sessionsData.results ?? [];
+        const session = list.find(
+          (s: { session_id: string }) =>
+            s.session_id === targetSessionId
+        );
+        if (!session) {
+          // Session no longer exists — clear stale reference
+          setSessionId(null);
+          setSessionPk(null);
+          setMessages([WELCOME_MESSAGE]);
+          localStorage.removeItem('active_chat_session');
+          localStorage.removeItem('active_chat_session_pk');
+          isLoadingSessionRef.current = false;
+          setIsLoadingSession(false);
+          return;
+        }
+        pk = session.id;
+      }
 
-      // Load messages
-      const msgResp = await apiClient.get(
-        `/ai/chat-sessions/${session.id}/messages/`
-      );
-      if (msgResp.ok) {
+      setSessionPk(pk as number);
+
+      // Load ALL message pages (DRF paginates at PAGE_SIZE=20).
+      // Messages are ordered ascending by created_at, so page 1 is oldest.
+      // Fetch all pages to ensure the most recent messages are included.
+      type RawMessage = {
+        id: number;
+        role: string;
+        content: string;
+        thinking?: string;
+        metadata?: { job_id?: string };
+        attachments?: Attachment[];
+        created_at: string;
+      };
+      let allRaw: RawMessage[] = [];
+      let nextUrl: string | null = `/ai/chat-sessions/${pk}/messages/?_t=${Date.now()}`;
+
+      while (nextUrl) {
+        const msgResp = await apiClient.get(nextUrl);
+        if (!msgResp.ok) break;
         const msgData = await msgResp.json();
-        const loaded: Message[] = (
-          Array.isArray(msgData) ? msgData : msgData.results ?? []
-        ).map(
-          (m: {
-            id: number;
-            role: string;
-            content: string;
-            thinking?: string;
-            metadata?: { job_id?: string };
-            attachments?: Attachment[];
-            created_at: string;
-          }) => ({
-            id: String(m.id),
-            content: m.content,
-            isUser: m.role === 'user',
-            timestamp: new Date(m.created_at),
-            thinking: m.thinking || '',
-            pipelineJobId: m.metadata?.job_id ?? null,
-            attachments: m.attachments ?? [],
-          })
-        );
-        setMessages(
-          loaded.length > 0 ? loaded : [WELCOME_MESSAGE]
-        );
+
+        if (Array.isArray(msgData)) {
+          // Non-paginated response
+          allRaw = msgData;
+          break;
+        }
+
+        const results: RawMessage[] = msgData.results ?? [];
+        allRaw = [...allRaw, ...results];
+
+        // DRF returns absolute URLs for `next` (e.g.
+        // http://localhost:8000/api/v1/ai/chat-sessions/109/messages/?page=2).
+        // apiClient.get() already prepends /api/v1, so strip it to avoid
+        // a doubled /api/v1/api/v1/... prefix that causes 404s.
+        if (msgData.next) {
+          try {
+            const parsed = new URL(msgData.next);
+            let path = parsed.pathname + parsed.search;
+            path = path.replace(/^\/api\/v1/, '');
+            nextUrl = path;
+          } catch {
+            nextUrl = null;
+          }
+        } else {
+          nextUrl = null;
+        }
       }
-    } catch (err) {
-      console.error('Failed to load session:', err);
+
+      const loaded: Message[] = allRaw.map((m) => ({
+        id: String(m.id),
+        content: m.content,
+        isUser: m.role === 'user',
+        timestamp: new Date(m.created_at),
+        thinking: m.thinking || '',
+        pipelineJobId: m.metadata?.job_id ?? null,
+        attachments: m.attachments ?? [],
+      }));
+
+      setMessages(loaded.length > 0 ? loaded : [WELCOME_MESSAGE]);
+    } catch {
+      // Network error — keep whatever state we have
+      isLoadingSessionRef.current = false;
     }
     setIsLoadingSession(false);
   }, []);
@@ -268,24 +326,38 @@ export function ChatInterface() {
     [searchParams]
   );
 
-  // Read localStorage once on mount to seed the initial session ID.
-  // This prevents the sidebar from auto-selecting a different session.
-  const initialSessionRef = useRef<string | null>(
-    typeof window !== 'undefined'
-      ? localStorage.getItem('active_chat_session')
-      : null
-  );
+  // On mount: restore session from query param, localStorage, or auto-select most recent.
+  // All session selection logic lives here — the sidebar never auto-selects.
+  // We read localStorage HERE (not in useState) to avoid SSR hydration issues.
+  // Guard: React StrictMode double-mounts in dev — skip if loadSession is already running.
   useEffect(() => {
-    // Query param takes priority over localStorage
-    const target = querySessionId || initialSessionRef.current;
-    if (target && !sessionId) {
-      (async () => {
-        try {
-          await loadSession(target);
-        } catch {
-          // Session may no longer exist; sidebar auto-select will handle it.
-        }
-      })();
+    if (isLoadingSessionRef.current) return;
+
+    const savedId = localStorage.getItem('active_chat_session');
+    const savedPkStr = localStorage.getItem('active_chat_session_pk');
+    const savedPk = savedPkStr ? Number(savedPkStr) : undefined;
+    const target = querySessionId || savedId;
+
+    if (target) {
+      loadSession(target, savedPk).catch(() => {});
+    } else {
+      // No saved session — auto-select the most recent one
+      apiClient
+        .get(`/ai/chat-sessions/?_t=${Date.now()}`)
+        .then(async (resp) => {
+          if (!resp.ok) return;
+          const data = await resp.json();
+          const list = Array.isArray(data) ? data : data.results ?? [];
+          if (list.length > 0) {
+            const sorted = [...list].sort(
+              (a: { last_activity: string }, b: { last_activity: string }) =>
+                new Date(b.last_activity).getTime() -
+                new Date(a.last_activity).getTime()
+            );
+            await loadSession(sorted[0].session_id, sorted[0].id);
+          }
+        })
+        .catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -298,37 +370,41 @@ export function ChatInterface() {
     [sessionId, loadSession]
   );
 
-  // Auto-scroll to bottom on new messages.
-  // For session loads, jump instantly at multiple intervals to guarantee the
-  // scroll lands at the bottom regardless of how long messages take to render.
-  // For new messages during a conversation, use smooth scrolling.
-  useEffect(() => {
-    if (!isLoadingSessionRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      return;
-    }
+  // Instant scroll-to-bottom when a loaded session becomes visible.
+  // useLayoutEffect fires before paint, preventing a visual flash at the wrong position.
+  // A MutationObserver re-scrolls as child content settles (markdown rendering, images, etc.).
+  useLayoutEffect(() => {
+    if (isLoadingSession || !isLoadingSessionRef.current) return;
     isLoadingSessionRef.current = false;
 
+    const el = messagesContainerRef.current;
+    if (!el) return;
+
     const jumpToBottom = () => {
-      const el = messagesContainerRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
+      el.scrollTop = el.scrollHeight;
     };
 
-    // Try immediately, after RAF, and at staggered timeouts to cover
-    // varying message rendering times.
+    // Immediate scroll before paint
     jumpToBottom();
-    const raf = requestAnimationFrame(jumpToBottom);
-    const t1 = setTimeout(jumpToBottom, 50);
-    const t2 = setTimeout(jumpToBottom, 150);
-    const t3 = setTimeout(jumpToBottom, 400);
+
+    // Re-scroll whenever child content changes (react-markdown, syntax highlighting,
+    // image loads, PipelineInlineCard status updates). Auto-disconnect after 3s.
+    const observer = new MutationObserver(jumpToBottom);
+    observer.observe(el, { childList: true, subtree: true, attributes: true, characterData: true });
+
+    const disconnectTimer = setTimeout(() => observer.disconnect(), 3000);
 
     return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
+      observer.disconnect();
+      clearTimeout(disconnectTimer);
     };
-  }, [messages, isLoading]);
+  }, [messages, isLoadingSession]);
+
+  // Smooth scroll on new messages during conversation
+  useEffect(() => {
+    if (isLoadingSession || isLoadingSessionRef.current) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isLoading, isLoadingSession]);
 
   const handleCancel = useCallback(async () => {
     setIsCancelling(true);

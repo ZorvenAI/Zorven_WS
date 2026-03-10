@@ -3,7 +3,7 @@ name: odoo-ecommerce-ops
 version: "1.0"
 description: E-commerce operations and online sales
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "ecommerce"
   - "cart"

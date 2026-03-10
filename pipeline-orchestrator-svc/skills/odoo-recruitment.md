@@ -3,7 +3,7 @@ name: odoo-recruitment
 version: "1.0"
 description: Recruitment pipeline and applicant tracking
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "recruit"
   - "applicant"

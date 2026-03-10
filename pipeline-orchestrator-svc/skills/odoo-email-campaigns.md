@@ -3,7 +3,7 @@ name: odoo-email-campaigns
 version: "1.0"
 description: Email marketing campaign management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "email"
   - "mailing"

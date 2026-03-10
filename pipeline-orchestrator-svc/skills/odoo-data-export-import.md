@@ -3,7 +3,7 @@ name: odoo-data-export-import
 version: "1.0"
 description: Data migration and CSV export/import
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "export"
   - "import"

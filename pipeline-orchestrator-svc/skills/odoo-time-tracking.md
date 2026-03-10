@@ -3,7 +3,7 @@ name: odoo-time-tracking
 version: "1.0"
 description: Timesheet entry and billing rate management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "timesheet"
   - "hours"

@@ -78,15 +78,89 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     routes.rag_client = rag_client
 
+    # ── Tool registry + connection pool + dispatcher ──
+    from app.tools.registry import ToolRegistry
+    from app.tools.dispatcher import ToolDispatcher
+    from app.services.connection_pool import TenantConnectionPool
+    from app.tenancy.registry import TenantRegistry
+
+    tool_registry = ToolRegistry()
+    # Register all 101 domain tools
+    from app.tools.generic.orm_tools import ALL_GENERIC_TOOLS
+    from app.tools.crm.tools import ALL_CRM_TOOLS
+    from app.tools.sales.tools import ALL_SALES_TOOLS
+    from app.tools.accounting.tools import ALL_ACCOUNTING_TOOLS
+    from app.tools.inventory.tools import ALL_INVENTORY_TOOLS
+    from app.tools.manufacturing.tools import ALL_MANUFACTURING_TOOLS
+    from app.tools.hr.tools import ALL_HR_TOOLS
+    from app.tools.project.tools import ALL_PROJECT_TOOLS
+    from app.tools.website.tools import ALL_WEBSITE_TOOLS
+    from app.tools.marketing.tools import ALL_MARKETING_TOOLS
+    from app.tools.comms.tools import ALL_COMMS_TOOLS
+    from app.tools.admin.tools import ALL_ADMIN_TOOLS
+    from app.tools.rag.tools import ALL_RAG_TOOLS
+
+    all_tools = (
+        ALL_GENERIC_TOOLS
+        + ALL_CRM_TOOLS
+        + ALL_SALES_TOOLS
+        + ALL_ACCOUNTING_TOOLS
+        + ALL_INVENTORY_TOOLS
+        + ALL_MANUFACTURING_TOOLS
+        + ALL_HR_TOOLS
+        + ALL_PROJECT_TOOLS
+        + ALL_WEBSITE_TOOLS
+        + ALL_MARKETING_TOOLS
+        + ALL_COMMS_TOOLS
+        + ALL_ADMIN_TOOLS
+        + ALL_RAG_TOOLS
+    )
+    for tool in all_tools:
+        tool_registry.register(tool)
+    logger.info("Tool registry loaded: %d tools", tool_registry.count)
+
+    connection_pool = TenantConnectionPool(
+        default_pool_size=settings.POOL_SIZE_DEFAULT,
+        max_pool_size=settings.POOL_SIZE_MAX,
+    )
+    tenant_registry = TenantRegistry(redis_manager=redis_manager)
+    tool_dispatcher = ToolDispatcher(registry=tool_registry)
+
+    routes.tool_dispatcher = tool_dispatcher
+    routes.connection_pool = connection_pool
+    routes.tenant_registry = tenant_registry
+
     # MCP server (optional — only if mcp SDK is available)
     try:
         from app.mcp.server import create_mcp_server
 
-        mcp_srv = create_mcp_server()
+        mcp_srv = create_mcp_server(tool_registry=tool_registry)
         transport.mcp_server = mcp_srv
         logger.info("MCP server initialized with tools/resources/prompts")
     except Exception as exc:
         logger.warning("MCP server not initialized: %s", exc)
+
+    # ── Odoo connectivity check (fail-open) ──
+    if settings.ODOO_MASTER_PASSWORD:
+        try:
+            from app.services.odoo_rpc_client import OdooRPCClient
+
+            _test_client = OdooRPCClient(
+                url=settings.ODOO_URL,
+                db="odoo",
+                username="admin",
+                password=settings.ODOO_MASTER_PASSWORD,
+            )
+            await _test_client.authenticate()
+            routes.odoo_connected = True
+            logger.info("Odoo connectivity verified (uid=%d)", _test_client.uid)
+        except Exception as exc:
+            logger.warning("Odoo connectivity check failed (non-fatal): %s", exc)
+            routes.odoo_connected = False
+    else:
+        logger.warning(
+            "ODOO_MCP_ODOO_MASTER_PASSWORD not set — skipping Odoo connectivity check"
+        )
 
     if settings.SERVICE_TOKEN == "dev-service-token":
         logger.warning(
@@ -103,6 +177,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     transport.mcp_server = None
+    routes.odoo_connected = False
+    routes.tool_dispatcher = None
+    routes.tenant_registry = None
+    await connection_pool.close_all()
+    routes.connection_pool = None
     await rag_client.close()
     if tenant_resolver:
         await tenant_resolver.close()

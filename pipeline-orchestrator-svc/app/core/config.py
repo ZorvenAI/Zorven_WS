@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     SOCIAL_AGENT_URL: str = "http://social-agent-svc:8060"
     INTELLIGENCE_AGENT_URL: str = "http://intelligence-agent-svc:8030"
     RAG_UPLOADER_AGENT_URL: str = "http://rag-uploader-agent-svc:8070"
+    ODOO_WORKER_AGENT_URL: str = "http://odoo-worker-agent:8100"
 
 
 settings = Settings()

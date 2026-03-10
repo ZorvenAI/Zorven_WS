@@ -3,7 +3,7 @@ name: odoo-user-management
 version: "1.0"
 description: User accounts and access group management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "user"
   - "access"

@@ -1,7 +1,7 @@
 """API routes for Odoo MCP Server."""
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from fastapi import APIRouter, HTTPException, Header, Request
 
@@ -9,18 +9,34 @@ from app.api.schemas import (
     ExecuteRequest,
     ExecuteResponse,
     HealthResponse,
+    ToolCallRequest,
+    ToolCallResponse,
 )
+from app.core.config import settings
 
 if TYPE_CHECKING:
     from app.cache.redis_manager import RedisManager
+    from app.services.connection_pool import TenantConnectionPool
+    from app.tenancy.registry import TenantRegistry
+    from app.tools.dispatcher import ToolDispatcher
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
+def _verify_service_token(token: str) -> None:
+    """Verify X-Service-Token for internal endpoints."""
+    if token != settings.SERVICE_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid service token")
+
+
 # Set by the lifespan hook in main.py.
 redis_manager: Optional["RedisManager"] = None
 rag_client: Optional[object] = None
+tool_dispatcher: Optional["ToolDispatcher"] = None
+connection_pool: Optional["TenantConnectionPool"] = None
+tenant_registry: Optional["TenantRegistry"] = None
 odoo_connected: bool = False
 
 
@@ -83,3 +99,84 @@ async def execute(
             "skill_context_length": len(skill_context),
         },
     )
+
+
+async def _get_rpc_client(tenant_id: str) -> Any:
+    """Resolve tenant config and return an authenticated OdooRPCClient."""
+    if connection_pool is None or tenant_registry is None:
+        raise HTTPException(status_code=503, detail="Tool dispatch not initialized")
+    config = await tenant_registry.get_config(tenant_id)
+    return await connection_pool.get_client(
+        tenant_id=tenant_id,
+        url=config.odoo_url,
+        db=config.odoo_db,
+        username=config.odoo_username,
+        password=config.odoo_password,
+    )
+
+
+@router.post("/tools/call", response_model=ToolCallResponse)
+async def call_tool(
+    request: ToolCallRequest,
+    x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
+    x_service_token: str = Header(alias="X-Service-Token"),
+) -> ToolCallResponse:
+    """Execute an MCP tool by name with tenant-scoped Odoo connection."""
+    _verify_service_token(x_service_token)
+    if tool_dispatcher is None:
+        raise HTTPException(status_code=503, detail="Tool dispatcher not initialized")
+
+    tenant_id = request.tenant_id or x_tenant_id
+
+    # Get an authenticated Odoo RPC client for this tenant
+    try:
+        rpc_client = await _get_rpc_client(tenant_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to get RPC client for tenant %s: %s", tenant_id, exc)
+        return ToolCallResponse(
+            tool_name=request.tool_name,
+            success=False,
+            error=f"Odoo connection failed: {exc}",
+        )
+
+    context = {
+        "rpc_client": rpc_client,
+        "tenant_id": tenant_id,
+    }
+
+    logger.info(
+        "Tool call: %s (tenant=%s, args=%s)",
+        request.tool_name,
+        tenant_id,
+        list(request.arguments.keys()),
+    )
+
+    result = await tool_dispatcher.dispatch(
+        tool_name=request.tool_name,
+        arguments=request.arguments,
+        context=context,
+    )
+
+    return ToolCallResponse(
+        tool_name=request.tool_name,
+        success=result.get("success", False),
+        result=result.get("result"),
+        error=result.get("error"),
+        duration_ms=result.get("duration_ms"),
+    )
+
+
+@router.get("/tools")
+async def list_tools(
+    domain: Optional[str] = None,
+    x_service_token: str = Header(alias="X-Service-Token"),
+) -> dict[str, Any]:
+    """List available MCP tools, optionally filtered by domain."""
+    _verify_service_token(x_service_token)
+    if tool_dispatcher is None:
+        return {"tools": [], "count": 0}
+
+    tools = tool_dispatcher.registry.list_tools(domain=domain)
+    return {"tools": tools, "count": len(tools)}

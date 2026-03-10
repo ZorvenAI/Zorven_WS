@@ -441,6 +441,36 @@ class Command(BaseCommand):
                 },
             },
         },
+        {
+            "pipeline_id": "odoo-erp-operations",
+            "name": "Odoo ERP Operations",
+            "description": (
+                "Execute Odoo ERP operations: sales orders, inventory, "
+                "accounting, HR, procurement, and other business "
+                "processes via a multi-persona AI worker agent"
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "odoo_worker",
+                        "type": "external",
+                        "url": "http://odoo-worker-agent:8100/v1/execute",
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["odoo_worker", "manager"],
+                ],
+                "global_config": {
+                    "model": "gemini-2.0-flash",
+                    "temperature": 0.3,
+                },
+            },
+        },
     ]
 
     def handle(self, *args, **options):

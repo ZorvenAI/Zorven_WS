@@ -3,7 +3,7 @@ name: odoo-multi-currency
 version: "1.0"
 description: Multi-currency transaction and exchange rate management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "currency"
   - "exchange rate"

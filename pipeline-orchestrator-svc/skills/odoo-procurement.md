@@ -3,7 +3,7 @@ name: odoo-procurement
 version: "1.0"
 description: Purchase order and vendor management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "purchase"
   - "RFQ"

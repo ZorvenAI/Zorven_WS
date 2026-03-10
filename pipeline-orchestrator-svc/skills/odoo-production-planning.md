@@ -3,7 +3,7 @@ name: odoo-production-planning
 version: "1.0"
 description: Manufacturing production planning and BOM management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "BOM"
   - "manufacturing"

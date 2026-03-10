@@ -193,16 +193,9 @@ export function ChatHistorySidebar({
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameCancelledRef = useRef(false);
-  const didAutoSelect = useRef(false);
-  const propsRef = useRef({ activeSessionId, onSelectSession });
-  propsRef.current = { activeSessionId, onSelectSession };
 
-  useEffect(() => {
-    if (activeSessionId) {
-      didAutoSelect.current = true;
-    }
-  }, [activeSessionId]);
-
+  // Sidebar is purely display + click handler.
+  // All session selection logic lives in ChatInterface (mount effect).
   const fetchSessions = useCallback(async () => {
     try {
       const response = await apiClient.get(
@@ -212,35 +205,6 @@ export function ChatHistorySidebar({
         const data = await response.json();
         const list = Array.isArray(data) ? data : data.results ?? [];
         setSessions(list);
-
-        if (
-          !didAutoSelect.current &&
-          !propsRef.current.activeSessionId &&
-          list.length > 0
-        ) {
-          didAutoSelect.current = true;
-
-          const savedSessionId =
-            typeof window !== 'undefined'
-              ? localStorage.getItem('active_chat_session')
-              : null;
-          const savedExists =
-            savedSessionId &&
-            list.some(
-              (s: ChatSessionSummary) => s.session_id === savedSessionId
-            );
-
-          if (savedExists) {
-            propsRef.current.onSelectSession(savedSessionId);
-          } else {
-            const sorted = [...list].sort(
-              (a: ChatSessionSummary, b: ChatSessionSummary) =>
-                new Date(b.last_activity).getTime() -
-                new Date(a.last_activity).getTime()
-            );
-            propsRef.current.onSelectSession(sorted[0].session_id);
-          }
-        }
       }
     } catch (err) {
       console.error('Failed to fetch chat sessions:', err);

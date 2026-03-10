@@ -3,7 +3,7 @@ name: odoo-pricing-strategy
 version: "1.0"
 description: Pricing, discounts, and pricelist management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "price"
   - "discount"

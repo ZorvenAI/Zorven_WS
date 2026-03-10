@@ -3,7 +3,7 @@ name: odoo-payroll-admin
 version: "1.0"
 description: Payroll processing and salary structure management
 target_agents:
-  - odoo_mcp
+  - odoo_worker
 triggers:
   - "payroll"
   - "salary"
