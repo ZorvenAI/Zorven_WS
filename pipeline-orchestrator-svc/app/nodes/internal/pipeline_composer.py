@@ -121,10 +121,13 @@ NODE_CATALOG: list[dict[str, Any]] = [
         "url": f"{settings.ODOO_WORKER_AGENT_URL}/v1/execute",
         "description": (
             "Odoo ERP worker agent: assumes a business persona "
-            "(sales, accounting, HR, etc.) and executes multi-step "
-            "Odoo operations via MCP tools. Use for any Odoo ERP "
-            "task: creating orders, checking inventory, managing "
-            "employees, running reports, or any business operation."
+            "(sales, accounting, HR, marketing, etc.) and executes "
+            "multi-step Odoo operations via MCP tools. Use for any "
+            "Odoo ERP task: creating orders, checking inventory, "
+            "managing employees, running reports, email campaigns, "
+            "mass mailing, email marketing, marketing campaigns, "
+            "procurement, manufacturing, or any business operation "
+            "inside Odoo."
         ),
         "output_key": "odoo_worker",
         "config": {},
