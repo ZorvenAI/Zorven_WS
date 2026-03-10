@@ -184,7 +184,9 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
         "id": "odoo-erp-operations",
         "description": (
             "Odoo ERP operations: sales orders, inventory, accounting, "
-            "HR, procurement, and other business processes via Odoo"
+            "HR, procurement, email campaigns, mass mailing, email "
+            "marketing, manufacturing, and other business processes "
+            "via Odoo"
         ),
     },
 ]
@@ -201,6 +203,9 @@ Examples of prompt → pipeline compositions:
 - "Write a blog from the uploaded brand study and share on LinkedIn" → [default_agent, blog_author, social_promoter, manager]
 - "Create a sales order for 100 units of Product X in Odoo" → [odoo_worker, manager]
 - "Check inventory levels and reorder low-stock items in Odoo" → [odoo_worker, manager]
+- "Launch an email campaign for our new product" → [odoo_worker, manager]
+- "Send a mass mailing to all customers about the sale" → [odoo_worker, manager]
+- "Create a marketing campaign in Odoo" → [odoo_worker, manager]
 """.strip()
 
 
@@ -291,6 +296,11 @@ def _build_system_prompt(catalog: list[dict]) -> str:
         "before them\n"
         "- social_promoter should come after content creation "
         "(blog_author)\n"
+        "- Email campaigns, mass mailings, and marketing campaigns "
+        "are Odoo ERP operations — use odoo_worker, NOT "
+        "social_promoter\n"
+        "- social_promoter is ONLY for social media platforms "
+        "(LinkedIn, Twitter, Facebook, Instagram)\n"
         "- Always end with manager\n"
         "- For document/RAG queries use default_agent, for web research "
         "use web_research"
@@ -325,7 +335,8 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
         "- RAG + blog + social → rag-blog-social\n"
         "- RAG + blog (no social) → rag-blog-authoring\n"
         "- Brand positioning, market analysis → brand-analysis\n"
-        "- Odoo ERP tasks, sales orders, inventory, HR, accounting → odoo-erp-operations\n"
+        "- Odoo ERP tasks, sales orders, inventory, HR, accounting, "
+        "email campaigns, mass mailing, marketing campaigns → odoo-erp-operations\n"
         f"- Default for ambiguous queries → general-chat{rag_hint}"
     )
 
