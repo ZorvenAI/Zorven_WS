@@ -181,9 +181,7 @@ class AgentEngine:
 
                 # Track failures for retry prevention
                 if not result.success:
-                    failed_tools[tc.tool_name] = (
-                        failed_tools.get(tc.tool_name, 0) + 1
-                    )
+                    failed_tools[tc.tool_name] = failed_tools.get(tc.tool_name, 0) + 1
 
                 # Emit audit event
                 await self._emit_audit(
