@@ -42,10 +42,12 @@ class MCPClient:
         base_url: str,
         timeout: float = 60.0,
         circuit_breaker: Optional[CircuitBreaker] = None,
+        service_token: str = "",
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self._timeout = timeout
         self._circuit_breaker = circuit_breaker or CircuitBreaker()
+        self._service_token = service_token
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -79,7 +81,10 @@ class MCPClient:
                 "tool_name": tool_name,
                 "arguments": arguments,
             }
-            headers = {"X-Tenant-ID": tenant_id}
+            headers = {
+                "X-Tenant-ID": tenant_id,
+                "X-Service-Token": self._service_token,
+            }
 
             response = await client.post(
                 "/tools/call",
@@ -140,7 +145,10 @@ class MCPClient:
             client = await self._get_client()
             response = await client.get(
                 "/tools",
-                headers={"X-Tenant-ID": tenant_id},
+                headers={
+                    "X-Tenant-ID": tenant_id,
+                    "X-Service-Token": self._service_token,
+                },
             )
             response.raise_for_status()
             return response.json().get("tools", [])

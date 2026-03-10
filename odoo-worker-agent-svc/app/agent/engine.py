@@ -125,7 +125,24 @@ class AgentEngine:
 
             # --- ACT ---
             if not plan.tool_calls:
-                break
+                # Gemini returned no tool calls but didn't declare complete.
+                # Return an explicit error rather than falling through to the
+                # misleading "max steps reached" message.
+                return AgentResult(
+                    persona_used=persona.name,
+                    reasoning_steps=reasoning_steps,
+                    final_answer="I was unable to determine which tools to call "
+                    "for this request. Please try rephrasing your prompt.",
+                    findings=[f"Plan thought: {plan.thought}"],
+                    recommendations=[
+                        "Try a more specific request",
+                        "Ensure the relevant Odoo modules are installed",
+                    ],
+                    tools_called=tools_called,
+                    total_steps=step_num,
+                    success=False,
+                    error="No tool calls planned",
+                )
 
             await self._emit_trace(
                 tenant_id,
@@ -136,14 +153,15 @@ class AgentEngine:
 
             act_results: list[ToolResult] = []
             for tc in plan.tool_calls:
-                # Skip tools that have already failed twice
-                if failed_tools.get(tc.tool_name, 0) >= 2:
+                # Block retries after first failure — matches the LLM prompt
+                # instruction "If a tool call FAILED, do NOT retry it."
+                if failed_tools.get(tc.tool_name, 0) >= 1:
                     act_results.append(
                         ToolResult(
                             tool_name=tc.tool_name,
                             success=False,
-                            error=f"Skipped: {tc.tool_name} has already "
-                            f"failed {failed_tools[tc.tool_name]} times",
+                            error=f"Skipped: {tc.tool_name} already failed "
+                            f"— retries are blocked per policy",
                         )
                     )
                     continue

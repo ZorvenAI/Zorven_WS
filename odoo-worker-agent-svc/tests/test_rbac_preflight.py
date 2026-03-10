@@ -2,8 +2,6 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from app.rbac.preflight import RBACPreflight
 
 
@@ -13,54 +11,50 @@ async def test_disabled_always_allows():
     assert await preflight.check("any_tool", "tenant", ["role"]) is True
 
 
-async def test_no_roles_allows():
-    """Should allow when no user roles provided."""
-    preflight = RBACPreflight(enabled=True)
-    assert await preflight.check("any_tool", "tenant", []) is True
-
-
 async def test_no_mcp_client_allows():
     """Should allow when no MCP client available."""
     preflight = RBACPreflight(mcp_client=None, enabled=True)
     assert await preflight.check("tool", "tenant", ["role"]) is True
 
 
-async def test_mcp_check_allowed():
-    """Should return True when MCP RBAC allows."""
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"allowed": True}
-
-    mock_http = AsyncMock()
-    mock_http.post = AsyncMock(return_value=mock_response)
-
+async def test_tool_exists_in_registry():
+    """Should allow when tool exists in MCP registry."""
     mock_mcp = MagicMock()
-    mock_mcp._get_client = AsyncMock(return_value=mock_http)
+    mock_mcp.list_tools = AsyncMock(
+        return_value=[{"name": "odoo_search"}, {"name": "sales_create_order"}]
+    )
 
     preflight = RBACPreflight(mcp_client=mock_mcp, enabled=True)
     assert await preflight.check("odoo_search", "tenant", ["sales_user"]) is True
 
 
-async def test_mcp_check_denied():
-    """Should return False when MCP RBAC denies."""
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"allowed": False}
-
-    mock_http = AsyncMock()
-    mock_http.post = AsyncMock(return_value=mock_response)
-
+async def test_tool_not_in_registry():
+    """Should deny when tool does not exist in MCP registry."""
     mock_mcp = MagicMock()
-    mock_mcp._get_client = AsyncMock(return_value=mock_http)
+    mock_mcp.list_tools = AsyncMock(
+        return_value=[{"name": "odoo_search"}, {"name": "sales_create_order"}]
+    )
 
     preflight = RBACPreflight(mcp_client=mock_mcp, enabled=True)
-    assert await preflight.check("admin_tool", "tenant", ["basic_user"]) is False
+    assert await preflight.check("nonexistent_tool", "tenant", ["role"]) is False
 
 
-async def test_mcp_check_error_fails_open():
-    """Should fail open on MCP errors."""
+async def test_tool_list_cached():
+    """Should only call list_tools once (cache on first check)."""
     mock_mcp = MagicMock()
-    mock_mcp._get_client = AsyncMock(side_effect=Exception("connection error"))
+    mock_mcp.list_tools = AsyncMock(return_value=[{"name": "odoo_search"}])
+
+    preflight = RBACPreflight(mcp_client=mock_mcp, enabled=True)
+    await preflight.check("odoo_search", "tenant", ["role"])
+    await preflight.check("odoo_search", "tenant", ["role"])
+
+    mock_mcp.list_tools.assert_awaited_once()
+
+
+async def test_list_tools_error_fails_open():
+    """Should fail open when list_tools raises an error."""
+    mock_mcp = MagicMock()
+    mock_mcp.list_tools = AsyncMock(side_effect=Exception("connection error"))
 
     preflight = RBACPreflight(mcp_client=mock_mcp, enabled=True)
     assert await preflight.check("tool", "tenant", ["role"]) is True

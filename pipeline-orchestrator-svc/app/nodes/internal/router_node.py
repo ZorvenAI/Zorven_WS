@@ -148,7 +148,7 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("questionnaire", 2),
         ("feedback form", 2),
         ("survey response", 2),
-        # Email marketing — moderate signal (weight 2)
+        # Email marketing — strong signal (weight 3)
         ("email marketing", 3),
         ("email campaign", 3),
         ("mailing list", 2),

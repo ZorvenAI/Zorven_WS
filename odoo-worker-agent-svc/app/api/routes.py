@@ -9,9 +9,10 @@ Endpoints:
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, HTTPException
 
 from app.api.schemas import ExecuteRequest, ExecuteResponse, HealthResponse
+from app.core.config import settings
 from app.services.executor import WorkerExecutor
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,12 @@ router = APIRouter()
 
 # Module-level executor — initialized in main.py lifespan
 executor: Optional[WorkerExecutor] = None
+
+
+def _verify_service_token(token: str) -> None:
+    """Verify X-Service-Token for internal endpoints."""
+    if token != settings.SERVICE_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid service token")
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -32,6 +39,7 @@ async def health() -> HealthResponse:
 async def execute(
     request: ExecuteRequest,
     x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
+    x_service_token: str = Header(alias="X-Service-Token"),
 ) -> ExecuteResponse:
     """
     Execute Odoo operations via persona-driven PAOR loop.
@@ -40,6 +48,8 @@ async def execute(
     Resolves a business persona, loads relevant skills, and executes
     multi-step MCP tool calls through the PAOR reasoning loop.
     """
+    _verify_service_token(x_service_token)
+
     if executor is not None:
         return await executor.execute(request, x_tenant_id)
 

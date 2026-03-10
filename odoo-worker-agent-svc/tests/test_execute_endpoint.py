@@ -26,13 +26,25 @@ async def test_execute_missing_prompt(client, tenant_headers):
     assert response.status_code == 200
 
 
-async def test_execute_default_tenant(client, valid_execute_payload):
+async def test_execute_default_tenant(
+    client, valid_execute_payload, service_token_headers
+):
     """POST /v1/execute without X-Tenant-ID should use default."""
     response = await client.post(
         "/v1/execute",
         json=valid_execute_payload,
+        headers=service_token_headers,
     )
     assert response.status_code == 200
+
+
+async def test_execute_missing_service_token(client, valid_execute_payload):
+    """POST /v1/execute without X-Service-Token should be rejected."""
+    response = await client.post(
+        "/v1/execute",
+        json=valid_execute_payload,
+    )
+    assert response.status_code == 422  # Missing required header
 
 
 async def test_execute_response_schema(client, valid_execute_payload, tenant_headers):

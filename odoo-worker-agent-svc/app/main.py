@@ -86,6 +86,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         base_url=settings.MCP_SERVER_URL,
         timeout=settings.MCP_TIMEOUT,
         circuit_breaker=circuit_breaker,
+        service_token=settings.SERVICE_TOKEN,
     )
 
     # Initialize Kafka producers

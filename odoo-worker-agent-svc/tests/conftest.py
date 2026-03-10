@@ -35,8 +35,14 @@ def valid_execute_payload() -> dict[str, Any]:
 
 @pytest.fixture
 def tenant_headers() -> dict[str, str]:
-    """Headers with X-Tenant-ID for authenticated requests."""
-    return {"X-Tenant-ID": "test-tenant"}
+    """Headers with X-Tenant-ID and X-Service-Token for authenticated requests."""
+    return {"X-Tenant-ID": "test-tenant", "X-Service-Token": "dev-service-token"}
+
+
+@pytest.fixture
+def service_token_headers() -> dict[str, str]:
+    """Headers with only X-Service-Token (no tenant)."""
+    return {"X-Service-Token": "dev-service-token"}
 
 
 @pytest.fixture

@@ -436,48 +436,37 @@ def _process_chat_message(
 
         # Skip brand extraction for Odoo/ERP prompts — they don't need
         # a target brand; the orchestrator routes them to odoo_worker.
-        _odoo_cues = (
-            "odoo",
-            "erp",
-            "inventory",
+        # Only includes Odoo-specific terms; generic words like "customer",
+        # "products", "campaign" are omitted to avoid false positives.
+        _odoo_strong = ("odoo", "erp")
+        _odoo_domain = (
             "sales order",
             "purchase order",
-            "invoice",
+            "production order",
+            "vendor bill",
+            "leave request",
+            "stock transfer",
+            "bill of materials",
+            "email marketing",
+            "email campaign",
+            "mass mailing",
+            "mailing list",
+            "feedback form",
+        )
+        _odoo_module = (
+            "inventory",
             "warehouse",
-            "stock",
             "payroll",
             "procurement",
             "manufacturing",
-            "production order",
-            "employee",
-            "leave request",
-            "accounting",
             "quotation",
             "timesheet",
-            "vendor bill",
-            "crm",
-            "module",
-            "customer",
-            "customers",
-            "supplier",
-            "vendors",
-            "contacts",
-            "leads",
-            "opportunity",
-            "products",
-            "survey",
-            "surveys",
             "questionnaire",
-            "feedback form",
-            "email marketing",
-            "email campaign",
-            "mailing",
-            "newsletter",
-            "mass email",
-            "campaign",
         )
         msg_lower = message.lower()
-        if any(cue in msg_lower for cue in _odoo_cues):
+        if any(cue in msg_lower for cue in _odoo_strong) or any(
+            cue in msg_lower for cue in _odoo_domain + _odoo_module
+        ):
             target_brand = None
         else:
             target_brand = GeminiAIService.extract_target_brand(message)

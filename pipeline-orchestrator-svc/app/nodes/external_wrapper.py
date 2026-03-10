@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 
+from app.core.config import settings
 from app.nodes.base import BaseNode
 from app.state.schema import AgentState
 
@@ -51,7 +52,10 @@ class ExternalWrapper(BaseNode):
                 response = await client.post(
                     self.url,
                     json=payload,
-                    headers={"X-Tenant-ID": str(tenant_id)},
+                    headers={
+                        "X-Tenant-ID": str(tenant_id),
+                        "X-Service-Token": settings.SERVICE_TOKEN,
+                    },
                 )
                 response.raise_for_status()
                 result = response.json()

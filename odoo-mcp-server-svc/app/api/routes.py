@@ -12,6 +12,7 @@ from app.api.schemas import (
     ToolCallRequest,
     ToolCallResponse,
 )
+from app.core.config import settings
 
 if TYPE_CHECKING:
     from app.cache.redis_manager import RedisManager
@@ -22,6 +23,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _verify_service_token(token: str) -> None:
+    """Verify X-Service-Token for internal endpoints."""
+    if token != settings.SERVICE_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid service token")
+
 
 # Set by the lifespan hook in main.py.
 redis_manager: Optional["RedisManager"] = None
@@ -96,9 +104,7 @@ async def execute(
 async def _get_rpc_client(tenant_id: str) -> Any:
     """Resolve tenant config and return an authenticated OdooRPCClient."""
     if connection_pool is None or tenant_registry is None:
-        raise HTTPException(
-            status_code=503, detail="Tool dispatch not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Tool dispatch not initialized")
     config = await tenant_registry.get_config(tenant_id)
     return await connection_pool.get_client(
         tenant_id=tenant_id,
@@ -113,12 +119,12 @@ async def _get_rpc_client(tenant_id: str) -> Any:
 async def call_tool(
     request: ToolCallRequest,
     x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
+    x_service_token: str = Header(alias="X-Service-Token"),
 ) -> ToolCallResponse:
     """Execute an MCP tool by name with tenant-scoped Odoo connection."""
+    _verify_service_token(x_service_token)
     if tool_dispatcher is None:
-        raise HTTPException(
-            status_code=503, detail="Tool dispatcher not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Tool dispatcher not initialized")
 
     tenant_id = request.tenant_id or x_tenant_id
 
@@ -165,8 +171,10 @@ async def call_tool(
 @router.get("/tools")
 async def list_tools(
     domain: Optional[str] = None,
+    x_service_token: str = Header(alias="X-Service-Token"),
 ) -> dict[str, Any]:
     """List available MCP tools, optionally filtered by domain."""
+    _verify_service_token(x_service_token)
     if tool_dispatcher is None:
         return {"tools": [], "count": 0}
 

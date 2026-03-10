@@ -454,7 +454,7 @@ class Command(BaseCommand):
                     {
                         "id": "odoo_worker",
                         "type": "external",
-                        "url": "http://odoo-worker-agent-svc:8100/v1/execute",
+                        "url": "http://odoo-worker-agent:8100/v1/execute",
                     },
                     {
                         "id": "manager",

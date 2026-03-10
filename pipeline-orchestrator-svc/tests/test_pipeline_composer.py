@@ -50,6 +50,7 @@ class TestNodeCatalog:
             "valuation_logic",
             "gap_analyzer",
             "rag_uploader",
+            "odoo_worker",
         }
         assert expected == ids
 
