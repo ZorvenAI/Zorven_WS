@@ -258,6 +258,19 @@ def _save_final_chat_message(job):
             session_id,
         )
 
+    # Update last_activity so the session stays at the top of the list
+    session.last_activity = timezone.now()
+    session.save(update_fields=["last_activity"])
+
+    # Invalidate cached session list so sidebar picks up changes
+    if session.tenant_id:
+        try:
+            cache.delete(
+                f"chat:sessions:{session.tenant_id}:page=:page_size=:ordering="
+            )
+        except Exception:
+            pass
+
 
 def _build_result_summary(job):
     """Build a concise text summary from the pipeline result_data."""

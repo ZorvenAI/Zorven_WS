@@ -440,3 +440,8 @@ jobs:
         run: |
           cd odoo-mcp-server-svc
           docker build -t ai-brand-automator-odoo-mcp:${{ github.sha }} .
+
+      - name: Build odoo worker agent image
+        run: |
+          cd odoo-worker-agent-svc
+          docker build -t ai-brand-automator-odoo-worker:${{ github.sha }} .

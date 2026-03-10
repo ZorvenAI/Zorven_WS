@@ -158,6 +158,14 @@ class GeminiClient:
             "## Available MCP Tools",
             tools_desc if tools_desc else "No tools available.",
             "",
+            "## Odoo 19 Field Conventions",
+            "- To find customers: use domain [['customer_rank', '>', 0]] on res.partner",
+            "- To find suppliers: use domain [['supplier_rank', '>', 0]] on res.partner",
+            "- The 'customer' and 'is_customer' fields do NOT exist in Odoo 19",
+            "- For partners with email: add ['email', '!=', false] to domain",
+            "- Use odoo_search_read (not odoo_search) for reading records with fields",
+            "- When no filter is needed, use an empty domain: []",
+            "",
         ]
 
         if skill_context:
@@ -170,6 +178,11 @@ class GeminiClient:
             [
                 "## Instructions",
                 "Analyze the user's request and decide what to do.",
+                "You MUST use the available MCP tools to query or modify Odoo data.",
+                "NEVER answer from memory or fabricate data — always call tools first.",
+                "Only set is_complete=true AFTER tool results have been observed "
+                "(i.e. there are previous observations above).",
+                "",
                 "Respond with a JSON object:",
                 "{",
                 '  "thought": "Your reasoning about what to do",',
@@ -178,8 +191,15 @@ class GeminiClient:
                 '  "final_answer": ""',
                 "}",
                 "",
-                "If the task is complete or can be answered directly, set "
-                '"is_complete": true and provide "final_answer".',
+                "Set is_complete=true and provide final_answer ONLY when previous "
+                "observations show the task is complete. If there are no previous "
+                "observations, you MUST call at least one tool.",
+                "",
+                "IMPORTANT:",
+                "- If previous observations show a tool FAILED, do NOT retry it.",
+                "- If a model 'doesn't exist', the module is not installed — skip it.",
+                "- For email campaigns, use marketing_create_campaign (NOT website_create_page).",
+                "- Summarize partial results if some steps fail.",
                 f"Maximum {self._max_tool_calls_per_step} tool calls per step.",
             ]
         )
@@ -207,7 +227,16 @@ class GeminiClient:
             '  "final_answer": "Summary for the user (if complete)",\n'
             '  "next_actions": [{"tool_name": "...", "arguments": {...}}]\n'
             "}\n\n"
-            "Set is_complete=true if the task is done or no further "
+            "CRITICAL RULES:\n"
+            "- If a tool call FAILED, do NOT retry the same tool. Try a "
+            "different tool or approach instead.\n"
+            "- If an Odoo model 'doesn't exist', the module is not installed. "
+            "Do NOT retry — skip that step and proceed with what you can do.\n"
+            "- Set is_complete=true and summarize partial results if some "
+            "steps succeeded and others cannot be completed.\n"
+            "- For email campaigns use marketing_create_campaign, NOT "
+            "website_create_page.\n"
+            "- Set is_complete=true if the task is done or no further "
             "actions are needed."
         )
 

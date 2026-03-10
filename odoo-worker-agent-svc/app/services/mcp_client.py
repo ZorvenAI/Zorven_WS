@@ -82,7 +82,7 @@ class MCPClient:
             headers = {"X-Tenant-ID": tenant_id}
 
             response = await client.post(
-                "/execute",
+                "/tools/call",
                 json=payload,
                 headers=headers,
             )
@@ -91,9 +91,14 @@ class MCPClient:
             data = response.json()
             self._circuit_breaker.record_success()
 
+            # Propagate the inner success/error from the MCP server
+            inner_success = data.get("success", True)
+            inner_error = data.get("error")
+
             return ToolCallResponse(
-                success=True,
+                success=inner_success,
                 data=data,
+                error=inner_error,
                 tool_name=tool_name,
             )
 

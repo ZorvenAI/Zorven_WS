@@ -59,6 +59,7 @@ class AgentEngine:
         tools_called: list[str] = []
         reasoning_steps: list[ReasoningStep] = []
         observation_history = ""
+        failed_tools: dict[str, int] = {}  # tool_name → failure count
 
         # Enrich context with RAG if available
         rag_context = ""
@@ -135,6 +136,18 @@ class AgentEngine:
 
             act_results: list[ToolResult] = []
             for tc in plan.tool_calls:
+                # Skip tools that have already failed twice
+                if failed_tools.get(tc.tool_name, 0) >= 2:
+                    act_results.append(
+                        ToolResult(
+                            tool_name=tc.tool_name,
+                            success=False,
+                            error=f"Skipped: {tc.tool_name} has already "
+                            f"failed {failed_tools[tc.tool_name]} times",
+                        )
+                    )
+                    continue
+
                 # RBAC pre-flight check
                 if self._rbac and not await self._rbac.check(
                     tool_name=tc.tool_name,
@@ -166,6 +179,12 @@ class AgentEngine:
                 act_results.append(result)
                 tools_called.append(tc.tool_name)
 
+                # Track failures for retry prevention
+                if not result.success:
+                    failed_tools[tc.tool_name] = (
+                        failed_tools.get(tc.tool_name, 0) + 1
+                    )
+
                 # Emit audit event
                 await self._emit_audit(
                     tenant_id, tc.tool_name, tc.arguments, response.success
@@ -194,6 +213,11 @@ class AgentEngine:
                 f"\n### Step {step_num} Results\n"
                 f"{json.dumps(obs, indent=2, default=str)}\n"
             )
+            if failed_tools:
+                observation_history += (
+                    f"\n### BLOCKED TOOLS (do NOT retry): "
+                    f"{', '.join(f'{k} (failed {v}x)' for k, v in failed_tools.items())}\n"
+                )
 
             # --- REFLECT ---
             await self._emit_trace(

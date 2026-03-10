@@ -76,13 +76,26 @@ class WorkerExecutor:
                 context=context,
             )
 
-            # 5. Build response
+            # 5. Collect tool results data from reasoning steps
+            tool_results_data: list[dict] = []
+            for step in result.reasoning_steps:
+                for tr in step.tool_results:
+                    if tr.data:
+                        tool_results_data.append(
+                            {
+                                "tool_name": tr.tool_name,
+                                "data": tr.data,
+                            }
+                        )
+
+            # 6. Build response
             return ExecuteResponse(
                 status="success" if result.success else "error",
                 findings=result.findings,
                 recommendations=result.recommendations,
                 data={
                     "final_answer": result.final_answer,
+                    "tool_results": tool_results_data,
                     "reasoning_steps": [
                         {
                             "step": s.step_number,

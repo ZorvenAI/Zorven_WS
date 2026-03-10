@@ -434,7 +434,24 @@ def _process_chat_message(
         from orchestration.models import AnalysisJob
         from orchestration.tasks import dispatch_job_task
 
-        target_brand = GeminiAIService.extract_target_brand(message)
+        # Skip brand extraction for Odoo/ERP prompts — they don't need
+        # a target brand; the orchestrator routes them to odoo_worker.
+        _odoo_cues = (
+            "odoo", "erp", "inventory", "sales order", "purchase order",
+            "invoice", "warehouse", "stock", "payroll", "procurement",
+            "manufacturing", "production order", "employee", "leave request",
+            "accounting", "quotation", "timesheet", "vendor bill",
+            "crm", "module", "customer", "customers", "supplier", "vendors",
+            "contacts", "leads", "opportunity", "products",
+            "survey", "surveys", "questionnaire", "feedback form",
+            "email marketing", "email campaign", "mailing", "newsletter",
+            "mass email", "campaign",
+        )
+        msg_lower = message.lower()
+        if any(cue in msg_lower for cue in _odoo_cues):
+            target_brand = None
+        else:
+            target_brand = GeminiAIService.extract_target_brand(message)
 
         # Check if brand lookup returned an error
         if target_brand and "error" in target_brand:

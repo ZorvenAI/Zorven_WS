@@ -35,6 +35,13 @@ class OdooSearchTool(BaseTool):
             return {"error": "No RPC client available", "ids": []}
         model = arguments["model"]
         domain = arguments.get("domain", [])
+        # LLMs sometimes serialize domain as a JSON string — parse it
+        if isinstance(domain, str):
+            try:
+                import json as _json
+                domain = _json.loads(domain)
+            except (ValueError, TypeError):
+                domain = []
         rbac_domain = arguments.pop("_rbac_domain", [])
         if rbac_domain:
             domain = domain + rbac_domain
@@ -194,6 +201,13 @@ class OdooSearchReadTool(BaseTool):
         if rpc_client is None:
             return {"error": "No RPC client available", "records": []}
         domain = arguments.get("domain", [])
+        # LLMs sometimes serialize domain as a JSON string — parse it
+        if isinstance(domain, str):
+            try:
+                import json as _json
+                domain = _json.loads(domain)
+            except (ValueError, TypeError):
+                domain = []
         rbac_domain = arguments.pop("_rbac_domain", [])
         if rbac_domain:
             domain = domain + rbac_domain
