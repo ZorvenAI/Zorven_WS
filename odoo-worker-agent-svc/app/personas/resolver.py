@@ -37,8 +37,20 @@ class PersonaResolver:
     ) -> PersonaDefinition:
         """Resolve the best persona for the given prompt.
 
-        Tries Gemini classification first, falls back to keyword matching.
+        Resolution tiers:
+          Tier 0: Explicit persona_hint from orchestrator config (instant).
+          Tier 1: Gemini function-calling classification.
+          Tier 2: Keyword matching against persona triggers.
+          Default: general_assistant.
         """
+        # Tier 0: Explicit persona_hint from orchestrator config
+        if context and context.get("persona_hint"):
+            hint = context["persona_hint"]
+            if hint in self._personas:
+                logger.info("Persona resolved via hint: %s", hint)
+                return self._personas[hint]
+            logger.warning("persona_hint '%s' not found, falling through", hint)
+
         # Tier 1: Gemini classification
         if self._gemini_client is not None:
             try:

@@ -801,3 +801,212 @@ class TestTopologicalSort:
         edges = [["a", "ghost"]]
         with pytest.raises(ValueError, match="unknown"):
             JobExecutor._topological_sort(nodes, edges)
+
+
+class TestComputeExecutionLevels:
+    """Unit tests for JobExecutor._compute_execution_levels."""
+
+    def test_parallel_nodes(self):
+        """Two independent nodes + manager → [[A, B], [manager]]."""
+        nodes = [{"id": "A"}, {"id": "B"}, {"id": "manager"}]
+        edges = [["A", "manager"], ["B", "manager"]]
+        levels = JobExecutor._compute_execution_levels(nodes, edges)
+        assert len(levels) == 2
+        assert set(levels[0]) == {"A", "B"}
+        assert levels[1] == ["manager"]
+
+    def test_sequential_nodes(self):
+        """Linear chain → each node in its own level."""
+        nodes = [{"id": "A"}, {"id": "B"}, {"id": "manager"}]
+        edges = [["A", "B"], ["B", "manager"]]
+        levels = JobExecutor._compute_execution_levels(nodes, edges)
+        assert levels == [["A"], ["B"], ["manager"]]
+
+    def test_no_edges_single_level(self):
+        """No edges → all nodes in one level."""
+        nodes = [{"id": "x"}, {"id": "y"}]
+        levels = JobExecutor._compute_execution_levels(nodes, [])
+        assert levels == [["x", "y"]]
+
+    def test_single_node(self):
+        """Single node → one level."""
+        nodes = [{"id": "only"}]
+        levels = JobExecutor._compute_execution_levels(nodes, [])
+        assert levels == [["only"]]
+
+    def test_diamond_graph(self):
+        """Diamond: A→B, A→C, B→D, C→D → [[A], [B,C], [D]]."""
+        nodes = [{"id": "A"}, {"id": "B"}, {"id": "C"}, {"id": "D"}]
+        edges = [["A", "B"], ["A", "C"], ["B", "D"], ["C", "D"]]
+        levels = JobExecutor._compute_execution_levels(nodes, edges)
+        assert len(levels) == 3
+        assert levels[0] == ["A"]
+        assert set(levels[1]) == {"B", "C"}
+        assert levels[2] == ["D"]
+
+
+class TestParallelExecution:
+    """Tests for level-based parallel execution in JobExecutor."""
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_parallel_execution_completes(self, mock_get_redis):
+        """Manifest with parallel edges → completed callback."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        # Manifest: A and B are independent, both feed into manager
+        parallel_manifest = ManifestData(
+            nodes=[
+                ManifestNode(id="nodeA", type="internal", handler="StrategyNode"),
+                ManifestNode(id="nodeB", type="internal", handler="ReportNode"),
+                ManifestNode(id="manager", type="internal", handler="ManagerNode"),
+            ],
+            edges=[["nodeA", "manager"], ["nodeB", "manager"]],
+            global_config={"model": "gemini-2.0-flash"},
+        )
+
+        mock_a = AsyncMock(return_value={"node_outputs": {"nodeA": {"data": "a"}}})
+        mock_b = AsyncMock(return_value={"node_outputs": {"nodeB": {"data": "b"}}})
+        mock_mgr = AsyncMock(
+            return_value={
+                "result_data": {
+                    "summary": "Done",
+                    "findings": [],
+                    "recommendations": [],
+                }
+            }
+        )
+
+        def _mock_resolve(name):
+            handler_map = {
+                "StrategyNode": lambda config=None: mock_a,
+                "ReportNode": lambda config=None: mock_b,
+                "ManagerNode": lambda config=None: mock_mgr,
+            }
+            return handler_map[name]
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
+        executor.callback.send_completed.return_value = True
+
+        with patch(
+            "app.services.job_executor.resolve_handler",
+            side_effect=_mock_resolve,
+        ):
+            request = _make_request(manifest=parallel_manifest)
+            await executor.execute(request)
+
+        # Verify completed
+        executor.callback.send_completed.assert_called_once()
+        call_kwargs = executor.callback.send_completed.call_args.kwargs
+        progress = call_kwargs.get("progress", {})
+        assert progress["nodeA"]["status"] == "done"
+        assert progress["nodeB"]["status"] == "done"
+        assert progress["manager"]["status"] == "done"
+
+        # Both parallel handlers were called
+        mock_a.assert_called_once()
+        mock_b.assert_called_once()
+        mock_mgr.assert_called_once()
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_parallel_node_failure_fails_pipeline(self, mock_get_redis):
+        """One parallel node throws → pipeline fails."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        parallel_manifest = ManifestData(
+            nodes=[
+                ManifestNode(id="nodeA", type="internal", handler="StrategyNode"),
+                ManifestNode(id="nodeB", type="internal", handler="ReportNode"),
+                ManifestNode(id="manager", type="internal", handler="ManagerNode"),
+            ],
+            edges=[["nodeA", "manager"], ["nodeB", "manager"]],
+            global_config={},
+        )
+
+        mock_a = AsyncMock(return_value={"node_outputs": {"nodeA": {"data": "a"}}})
+        mock_b = AsyncMock(side_effect=RuntimeError("Service unavailable"))
+        mock_mgr = AsyncMock(return_value={})
+
+        def _mock_resolve(name):
+            handler_map = {
+                "StrategyNode": lambda config=None: mock_a,
+                "ReportNode": lambda config=None: mock_b,
+                "ManagerNode": lambda config=None: mock_mgr,
+            }
+            return handler_map[name]
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
+        executor.callback.send_failed.return_value = True
+
+        with patch(
+            "app.services.job_executor.resolve_handler",
+            side_effect=_mock_resolve,
+        ):
+            request = _make_request(manifest=parallel_manifest)
+            await executor.execute(request)
+
+        # Verify failed callback sent
+        executor.callback.send_failed.assert_called()
+        call_kwargs = executor.callback.send_failed.call_args.kwargs
+        assert "nodeB" in call_kwargs.get("error_message", "")
+        # Manager should be marked as failed (not executed)
+        progress = call_kwargs.get("progress", {})
+        assert progress["manager"]["status"] == "failed"
+
+    @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)
+    async def test_parallel_nodes_marked_running_together(self, mock_get_redis):
+        """Parallel nodes are all marked 'running' in the same progress update."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
+        parallel_manifest = ManifestData(
+            nodes=[
+                ManifestNode(id="nodeA", type="internal", handler="StrategyNode"),
+                ManifestNode(id="nodeB", type="internal", handler="ReportNode"),
+                ManifestNode(id="manager", type="internal", handler="ManagerNode"),
+            ],
+            edges=[["nodeA", "manager"], ["nodeB", "manager"]],
+            global_config={},
+        )
+
+        mock_handler = AsyncMock(return_value={"node_outputs": {}})
+
+        def _mock_resolve(name):
+            return lambda config=None: mock_handler
+
+        executor = JobExecutor()
+        executor.callback = AsyncMock()
+        executor.callback.send_running.return_value = True
+        executor.callback.send_progress.return_value = True
+        executor.callback.send_completed.return_value = True
+
+        with patch(
+            "app.services.job_executor.resolve_handler",
+            side_effect=_mock_resolve,
+        ):
+            request = _make_request(manifest=parallel_manifest)
+            await executor.execute(request)
+
+        # Find a progress call where both nodeA and nodeB are running
+        found_both_running = False
+        for c in executor.callback.send_progress.call_args_list:
+            progress = c.args[1] if len(c.args) > 1 else c.kwargs.get("progress", {})
+            if isinstance(progress, dict):
+                a_status = progress.get("nodeA", {}).get("status")
+                b_status = progress.get("nodeB", {}).get("status")
+                if a_status == "running" and b_status == "running":
+                    found_both_running = True
+                    break
+        assert (
+            found_both_running
+        ), "Both parallel nodes should be marked running together"

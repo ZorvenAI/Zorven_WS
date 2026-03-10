@@ -69,3 +69,40 @@ async def test_resolve_with_context(resolver):
     """Context dict should not break resolution."""
     persona = await resolver.resolve("Create a sales order", context={"extra": "data"})
     assert isinstance(persona, PersonaDefinition)
+
+
+async def test_persona_hint_override(resolver):
+    """persona_hint in context should bypass Gemini/keyword resolution."""
+    persona = await resolver.resolve(
+        "xyzzy foobar baz",  # would normally resolve to general_assistant
+        context={"persona_hint": "sales_manager"},
+    )
+    assert persona.name == "sales_manager"
+
+
+async def test_persona_hint_hr(resolver):
+    """persona_hint should work for any known persona."""
+    persona = await resolver.resolve(
+        "Create a sales order",  # would normally resolve to sales_manager
+        context={"persona_hint": "hr_manager"},
+    )
+    assert persona.name == "hr_manager"
+
+
+async def test_unknown_hint_falls_through(resolver):
+    """Unknown persona_hint should fall through to normal resolution."""
+    persona = await resolver.resolve(
+        "Create a sales order",
+        context={"persona_hint": "nonexistent_persona"},
+    )
+    # Falls through to keyword matching → sales_manager
+    assert persona.name == "sales_manager"
+
+
+async def test_empty_hint_falls_through(resolver):
+    """Empty persona_hint should fall through to normal resolution."""
+    persona = await resolver.resolve(
+        "Create a sales order",
+        context={"persona_hint": ""},
+    )
+    assert persona.name == "sales_manager"
