@@ -121,13 +121,96 @@ NODE_CATALOG: list[dict[str, Any]] = [
         "url": f"{settings.ODOO_WORKER_AGENT_URL}/v1/execute",
         "description": (
             "Odoo ERP worker agent: assumes a business persona "
-            "(sales, accounting, HR, etc.) and executes multi-step "
-            "Odoo operations via MCP tools. Use for any Odoo ERP "
-            "task: creating orders, checking inventory, managing "
-            "employees, running reports, or any business operation."
+            "(sales, accounting, HR, marketing, etc.) and executes "
+            "multi-step Odoo operations via MCP tools. Use for "
+            "general or ambiguous Odoo tasks that don't clearly "
+            "fit a single domain."
         ),
         "output_key": "odoo_worker",
         "config": {},
+    },
+    # ── Persona-specific Odoo workers ──
+    # Each targets the same service URL but with a persona_hint
+    # so the worker agent skips auto-resolution and uses the
+    # correct persona directly. Use these for multi-domain Odoo
+    # tasks that require outputs to flow between personas.
+    {
+        "id": "odoo_sales_crm",
+        "type": "external",
+        "url": f"{settings.ODOO_WORKER_AGENT_URL}/v1/execute",
+        "description": (
+            "Odoo Sales/CRM specialist: handles sales orders, "
+            "quotations, CRM leads, opportunities, customers, "
+            "contacts, and product lookups. Use when the task "
+            "involves finding customer or product data in Odoo."
+        ),
+        "output_key": "odoo_sales_crm",
+        "config": {"persona_hint": "sales_manager"},
+    },
+    {
+        "id": "odoo_finance",
+        "type": "external",
+        "url": f"{settings.ODOO_WORKER_AGENT_URL}/v1/execute",
+        "description": (
+            "Odoo Finance specialist: handles invoices, payments, "
+            "accounting entries, financial reports, and bank "
+            "reconciliation. Use when the task involves billing, "
+            "invoicing, or financial operations."
+        ),
+        "output_key": "odoo_finance",
+        "config": {"persona_hint": "accountant"},
+    },
+    {
+        "id": "odoo_inventory",
+        "type": "external",
+        "url": f"{settings.ODOO_WORKER_AGENT_URL}/v1/execute",
+        "description": (
+            "Odoo Inventory specialist: handles stock levels, "
+            "warehouse transfers, receipts, deliveries, and "
+            "reordering rules. Use when the task involves "
+            "inventory checks or warehouse operations."
+        ),
+        "output_key": "odoo_inventory",
+        "config": {"persona_hint": "warehouse_manager"},
+    },
+    {
+        "id": "odoo_hr",
+        "type": "external",
+        "url": f"{settings.ODOO_WORKER_AGENT_URL}/v1/execute",
+        "description": (
+            "Odoo HR specialist: handles employees, leave "
+            "requests, payroll, recruitment, and attendance. "
+            "Use when the task involves HR or workforce "
+            "management."
+        ),
+        "output_key": "odoo_hr",
+        "config": {"persona_hint": "hr_manager"},
+    },
+    {
+        "id": "odoo_marketing",
+        "type": "external",
+        "url": f"{settings.ODOO_WORKER_AGENT_URL}/v1/execute",
+        "description": (
+            "Odoo Marketing specialist: handles email campaigns, "
+            "mass mailings, newsletters, marketing automation, "
+            "and contact lists. Use when the task involves email "
+            "marketing, campaigns, or mass communication in Odoo."
+        ),
+        "output_key": "odoo_marketing",
+        "config": {"persona_hint": "marketing_manager"},
+    },
+    {
+        "id": "odoo_manufacturing",
+        "type": "external",
+        "url": f"{settings.ODOO_WORKER_AGENT_URL}/v1/execute",
+        "description": (
+            "Odoo Manufacturing specialist: handles production "
+            "orders, bills of materials (BOM), work orders, and "
+            "manufacturing planning. Use when the task involves "
+            "production or manufacturing operations."
+        ),
+        "output_key": "odoo_manufacturing",
+        "config": {"persona_hint": "manufacturing_supervisor"},
     },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
@@ -181,7 +264,9 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
         "id": "odoo-erp-operations",
         "description": (
             "Odoo ERP operations: sales orders, inventory, accounting, "
-            "HR, procurement, and other business processes via Odoo"
+            "HR, procurement, email campaigns, mass mailing, email "
+            "marketing, manufacturing, and other business processes "
+            "via Odoo"
         ),
     },
 ]
@@ -196,8 +281,16 @@ Examples of prompt → pipeline compositions:
 - "Analyze our competitors in the SaaS market" → [web_research, gap_analyzer, manager]
 - "Summarize the document I uploaded" → [default_agent, manager]
 - "Write a blog from the uploaded brand study and share on LinkedIn" → [default_agent, blog_author, social_promoter, manager]
-- "Create a sales order for 100 units of Product X in Odoo" → [odoo_worker, manager]
-- "Check inventory levels and reorder low-stock items in Odoo" → [odoo_worker, manager]
+- "Create a sales order for 100 units of Product X in Odoo" → [odoo_sales_crm, manager]
+- "Check inventory levels and reorder low-stock items in Odoo" → [odoo_inventory, manager]
+- "Launch an email campaign for our new product" → node_ids: [odoo_sales_crm, odoo_marketing, manager], sub_tasks: '{"odoo_sales_crm": "Find the product details and customer contact list", "odoo_marketing": "Create and send the email campaign using the product and customer data"}'
+- "Send a mass mailing to all customers about the sale" → node_ids: [odoo_sales_crm, odoo_marketing, manager], sub_tasks: '{"odoo_sales_crm": "Retrieve the customer contact list", "odoo_marketing": "Create and send the mass mailing to the customers"}'
+- "Create a sales order and generate the invoice" → node_ids: [odoo_sales_crm, odoo_finance, manager], sub_tasks: '{"odoo_sales_crm": "Create the sales order", "odoo_finance": "Generate the invoice for the sales order"}'
+- "Create a marketing campaign in Odoo" → [odoo_marketing, manager]
+- "Approve leave request for John" → [odoo_hr, manager]
+- "Check production order status" → [odoo_manufacturing, manager]
+- "Check inventory levels and sales pipeline status" → node_ids: [odoo_sales_crm, odoo_inventory, manager], dependencies: '{"odoo_sales_crm": "", "odoo_inventory": "", "manager": "odoo_sales_crm,odoo_inventory"}'
+- "Get employee list and check stock levels" → node_ids: [odoo_hr, odoo_inventory, manager], dependencies: '{"odoo_hr": "", "odoo_inventory": "", "manager": "odoo_hr,odoo_inventory"}'
 """.strip()
 
 
@@ -227,6 +320,30 @@ def _build_compose_tool(catalog: list[dict]) -> dict:
                             "description": (
                                 "Ordered list of node IDs to execute. "
                                 "Must end with 'manager'."
+                            ),
+                        },
+                        "sub_tasks": {
+                            "type": "string",
+                            "description": (
+                                "Optional JSON object mapping node_id to "
+                                "sub-task description. Narrows each worker's "
+                                "prompt to its specific responsibility. "
+                                "Example: "
+                                '{"odoo_sales_crm": "List open sales orders", '
+                                '"odoo_hr": "List all employees"}'
+                            ),
+                        },
+                        "dependencies": {
+                            "type": "string",
+                            "description": (
+                                "Per-node prerequisites as a JSON object. "
+                                "Keys are node_ids, values are comma-separated "
+                                "node_ids that must complete first. Use empty "
+                                "string for no dependencies. Nodes without "
+                                "dependencies on each other run in parallel. "
+                                "Example: "
+                                '{"odoo_sales_crm": "", "odoo_inventory": "", '
+                                '"manager": "odoo_sales_crm,odoo_inventory"}'
                             ),
                         },
                     },
@@ -288,6 +405,20 @@ def _build_system_prompt(catalog: list[dict]) -> str:
         "before them\n"
         "- social_promoter should come after content creation "
         "(blog_author)\n"
+        "- Email campaigns, mass mailings, and marketing campaigns "
+        "are Odoo ERP operations — use odoo_marketing, NOT "
+        "social_promoter\n"
+        "- social_promoter is ONLY for social media platforms "
+        "(LinkedIn, Twitter, Facebook, Instagram)\n"
+        "- For multi-domain Odoo tasks, use multiple persona-specific "
+        "workers (e.g., odoo_sales_crm then odoo_marketing). Place "
+        "data-gathering nodes before action nodes.\n"
+        "- When using persona-specific Odoo workers, provide a sub_tasks "
+        "object mapping each node_id to a focused sub-task description\n"
+        "- When multiple Odoo workers are independent (don't need each "
+        "other's output), provide dependencies so they can run in "
+        "parallel. Workers that need prior output must list the "
+        "producing node as a dependency.\n"
         "- Always end with manager\n"
         "- For document/RAG queries use default_agent, for web research "
         "use web_research"
@@ -322,7 +453,9 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
         "- RAG + blog + social → rag-blog-social\n"
         "- RAG + blog (no social) → rag-blog-authoring\n"
         "- Brand positioning, market analysis → brand-analysis\n"
-        "- Odoo ERP tasks, sales orders, inventory, HR, accounting → odoo-erp-operations\n"
+        "- Odoo ERP tasks, sales orders, inventory, HR, accounting, "
+        "email campaigns, mass mailing, email marketing, marketing "
+        "campaigns, newsletters → odoo-erp-operations\n"
         f"- Default for ambiguous queries → general-chat{rag_hint}"
     )
 
@@ -353,9 +486,10 @@ class PipelineComposer:
         # Tier 1: Enhanced Gemini dynamic composition
         if settings.GOOGLE_API_KEY:
             try:
-                node_ids = await self._gemini_compose(state)
-                if node_ids:
-                    manifest = self._build_manifest(node_ids)
+                compose_result = await self._gemini_compose(state)
+                if compose_result:
+                    node_ids, sub_tasks, dependencies = compose_result
+                    manifest = self._build_manifest(node_ids, sub_tasks, dependencies)
                     logger.info(
                         "Gemini composed pipeline: %s",
                         " → ".join(node_ids),
@@ -467,7 +601,9 @@ class PipelineComposer:
 
         return prompt
 
-    async def _gemini_compose(self, state: AgentState) -> list[str] | None:
+    async def _gemini_compose(
+        self, state: AgentState
+    ) -> tuple[list[str], dict[str, str], dict[str, list[str]]] | None:
         """Use Gemini function-calling to select and order nodes.
 
         Retries up to GEMINI_COMPOSE_MAX_RETRIES times with linear
@@ -501,6 +637,56 @@ class PipelineComposer:
                     if fn := part.function_call:
                         if fn.name == "compose_pipeline":
                             raw_ids = list(fn.args.get("node_ids", []))
+                            # sub_tasks comes as JSON string
+                            raw_st = fn.args.get("sub_tasks", "")
+                            if isinstance(raw_st, str) and raw_st.strip():
+                                try:
+                                    import json
+
+                                    raw_sub_tasks = json.loads(raw_st)
+                                    if not isinstance(raw_sub_tasks, dict):
+                                        raw_sub_tasks = {}
+                                except (json.JSONDecodeError, ValueError):
+                                    raw_sub_tasks = {}
+                            elif isinstance(raw_st, dict):
+                                raw_sub_tasks = raw_st
+                            else:
+                                raw_sub_tasks = {}
+                            # dependencies comes as JSON string
+                            raw_dep_str = fn.args.get("dependencies", "")
+                            if isinstance(raw_dep_str, str) and raw_dep_str.strip():
+                                try:
+                                    import json
+
+                                    raw_dep_obj = json.loads(raw_dep_str)
+                                    if not isinstance(raw_dep_obj, dict):
+                                        raw_dep_obj = {}
+                                except (json.JSONDecodeError, ValueError):
+                                    raw_dep_obj = {}
+                            elif isinstance(raw_dep_str, dict):
+                                raw_dep_obj = raw_dep_str
+                            else:
+                                raw_dep_obj = {}
+                            # Normalise dep values defensively:
+                            # accept list[str] or comma-separated string.
+                            deps: dict[str, list[str]] = {}
+                            for k, v in raw_dep_obj.items():
+                                if isinstance(v, str):
+                                    deps[k] = [
+                                        s.strip() for s in v.split(",") if s.strip()
+                                    ]
+                                elif isinstance(v, list) and all(
+                                    isinstance(item, str) for item in v
+                                ):
+                                    deps[k] = v
+                                else:
+                                    logger.warning(
+                                        "Ignoring malformed dependency value "
+                                        "for %s: %r",
+                                        k,
+                                        v,
+                                    )
+                                    deps[k] = []
                             result = self._validate_node_ids(raw_ids)
                             if result:
                                 logger.info(
@@ -508,7 +694,7 @@ class PipelineComposer:
                                     attempt + 1,
                                     " → ".join(result),
                                 )
-                                return result
+                                return result, raw_sub_tasks, deps
 
                 logger.warning(
                     "Gemini did not return a compose_pipeline call " "(attempt %d)",
@@ -607,8 +793,22 @@ class PipelineComposer:
 
         return filtered
 
-    def _build_manifest(self, node_ids: list[str]) -> dict[str, Any]:
-        """Build a complete manifest dict from an ordered list of node IDs."""
+    def _build_manifest(
+        self,
+        node_ids: list[str],
+        sub_tasks: dict[str, str] | None = None,
+        dependencies: dict[str, list[str]] | None = None,
+    ) -> dict[str, Any]:
+        """Build a complete manifest dict from an ordered list of node IDs.
+
+        When *sub_tasks* is provided, each node's config is enriched with
+        a ``sub_task`` key containing the narrowed prompt for that node.
+
+        When *dependencies* is provided and non-empty, edges are derived
+        from the dependency graph (enabling parallel execution of
+        independent nodes). Otherwise falls back to sequential wiring.
+        """
+        sub_tasks = sub_tasks or {}
         nodes: list[dict[str, Any]] = []
         for nid in node_ids:
             if nid == "manager":
@@ -627,12 +827,36 @@ class PipelineComposer:
                 node_def["handler"] = entry["handler"]
             else:
                 node_def["url"] = entry["url"]
-            if entry.get("config"):
-                node_def["config"] = entry["config"]
+            # Merge catalog config + sub_task
+            config = dict(entry.get("config") or {})
+            if nid in sub_tasks:
+                config["sub_task"] = sub_tasks[nid]
+            if config:
+                node_def["config"] = config
             nodes.append(node_def)
 
-        # Auto-wire: sequential edges n1→n2→n3→...
-        edges = [[node_ids[i], node_ids[i + 1]] for i in range(len(node_ids) - 1)]
+        # Build edges from dependencies or fall back to sequential
+        node_id_set = set(node_ids)
+        if dependencies:
+            # Filter to only valid node IDs
+            edges: list[list[str]] = [
+                [dep, nid]
+                for nid, deps in dependencies.items()
+                if nid in node_id_set
+                for dep in deps
+                if dep in node_id_set
+            ]
+            # Auto-wire manager: if manager is in node_ids but not in
+            # dependencies, add edges from all non-manager nodes to manager
+            if "manager" in node_id_set and "manager" not in dependencies:
+                for nid in node_ids:
+                    if nid != "manager":
+                        edge = [nid, "manager"]
+                        if edge not in edges:
+                            edges.append(edge)
+        else:
+            # Sequential fallback: n1→n2→n3→...
+            edges = [[node_ids[i], node_ids[i + 1]] for i in range(len(node_ids) - 1)]
 
         return {
             "nodes": nodes,

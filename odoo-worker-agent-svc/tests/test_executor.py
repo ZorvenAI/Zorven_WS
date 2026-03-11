@@ -103,3 +103,66 @@ async def test_execute_handles_exception(executor, mock_agent_engine):
     response = await executor.execute(request, "test-tenant")
     assert response.status == "error"
     assert response.error is not None
+
+
+async def test_persona_hint_passed_from_config(
+    mock_persona_resolver, mock_skill_router, mock_agent_engine
+):
+    """persona_hint from config should reach the resolver via context."""
+    executor = WorkerExecutor(
+        persona_resolver=mock_persona_resolver,
+        skill_router=mock_skill_router,
+        agent_engine=mock_agent_engine,
+    )
+    request = ExecuteRequest(
+        input_prompt="Find customers",
+        config={"persona_hint": "sales_manager"},
+    )
+    await executor.execute(request, "test-tenant")
+
+    # Verify resolver was called with context containing persona_hint
+    call_args = mock_persona_resolver.resolve.call_args
+    context = call_args.kwargs.get("context") or call_args.args[1]
+    assert context["persona_hint"] == "sales_manager"
+
+
+async def test_sub_task_used_as_prompt(
+    mock_persona_resolver, mock_skill_router, mock_agent_engine
+):
+    """sub_task from config should be used as the effective prompt."""
+    executor = WorkerExecutor(
+        persona_resolver=mock_persona_resolver,
+        skill_router=mock_skill_router,
+        agent_engine=mock_agent_engine,
+    )
+    request = ExecuteRequest(
+        input_prompt="Launch an email campaign for Conference Chair",
+        config={
+            "persona_hint": "sales_manager",
+            "sub_task": "Find product details and customer contacts",
+        },
+    )
+    await executor.execute(request, "test-tenant")
+
+    # Verify agent engine received the sub_task as the prompt
+    call_args = mock_agent_engine.execute.call_args
+    assert call_args.kwargs["prompt"] == "Find product details and customer contacts"
+
+
+async def test_empty_sub_task_uses_original_prompt(
+    mock_persona_resolver, mock_skill_router, mock_agent_engine
+):
+    """Empty sub_task should fall back to original input_prompt."""
+    executor = WorkerExecutor(
+        persona_resolver=mock_persona_resolver,
+        skill_router=mock_skill_router,
+        agent_engine=mock_agent_engine,
+    )
+    request = ExecuteRequest(
+        input_prompt="Create a sales order",
+        config={"sub_task": ""},
+    )
+    await executor.execute(request, "test-tenant")
+
+    call_args = mock_agent_engine.execute.call_args
+    assert call_args.kwargs["prompt"] == "Create a sales order"

@@ -38,6 +38,7 @@ class WorkerExecutor:
             **request.tenant_context,
             "skill_context": request.config.get("skill_context", ""),
             "user_roles": request.tenant_context.get("user_roles", []),
+            "persona_hint": request.config.get("persona_hint", ""),
         }
 
         # 1. Rate limit check
@@ -67,16 +68,19 @@ class WorkerExecutor:
             )
             worker_skill_context = skill_data.get("worker_skill_context", "")
 
-            # 4. Run PAOR loop
+            # 4. Use sub_task as effective prompt if provided by orchestrator
+            effective_prompt = request.config.get("sub_task", "") or prompt
+
+            # 5. Run PAOR loop
             result = await self._agent_engine.execute(
-                prompt=prompt,
+                prompt=effective_prompt,
                 persona=persona,
                 skill_context=worker_skill_context,
                 tenant_id=tenant_id,
                 context=context,
             )
 
-            # 5. Collect tool results data from reasoning steps
+            # 6. Collect tool results data from reasoning steps
             tool_results_data: list[dict] = []
             for step in result.reasoning_steps:
                 for tr in step.tool_results:
@@ -88,7 +92,7 @@ class WorkerExecutor:
                             }
                         )
 
-            # 6. Build response
+            # 7. Build response
             return ExecuteResponse(
                 status="success" if result.success else "error",
                 findings=result.findings,

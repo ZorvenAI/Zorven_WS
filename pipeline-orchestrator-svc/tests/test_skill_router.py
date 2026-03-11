@@ -66,3 +66,21 @@ class TestSkillRouter:
         )
         assert "test-social-skill" in result["skill_names"]
         assert "test-seo-skill" not in result.get("skill_names", [])
+
+
+class TestOdooNodeAliases:
+    """Persona-specific Odoo node IDs should resolve skills via odoo_worker."""
+
+    def test_alias_mapping_exists(self):
+        from app.skills.router import _ODOO_NODE_ALIASES
+
+        expected = {
+            "odoo_sales_crm",
+            "odoo_finance",
+            "odoo_inventory",
+            "odoo_hr",
+            "odoo_marketing",
+            "odoo_manufacturing",
+        }
+        assert set(_ODOO_NODE_ALIASES.keys()) == expected
+        assert all(v == "odoo_worker" for v in _ODOO_NODE_ALIASES.values())

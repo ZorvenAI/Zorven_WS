@@ -51,6 +51,12 @@ class TestNodeCatalog:
             "gap_analyzer",
             "rag_uploader",
             "odoo_worker",
+            "odoo_sales_crm",
+            "odoo_finance",
+            "odoo_inventory",
+            "odoo_hr",
+            "odoo_marketing",
+            "odoo_manufacturing",
         }
         assert expected == ids
 
@@ -79,6 +85,13 @@ class TestToolGeneration:
         for entry in NODE_CATALOG:
             assert entry["id"] in enum_values
         assert "manager" in enum_values
+
+    def test_build_compose_tool_includes_dependencies(self):
+        tool = _build_compose_tool(NODE_CATALOG)
+        decl = tool["function_declarations"][0]
+        props = decl["parameters"]["properties"]
+        assert "dependencies" in props
+        assert props["dependencies"]["type"] == "string"
 
     def test_build_system_prompt_includes_all_nodes(self):
         prompt = _build_system_prompt(NODE_CATALOG)
@@ -412,7 +425,10 @@ class TestGeminiRetry:
             state = _base_state(input_prompt="Write a blog about Tesla")
             result = await composer._gemini_compose(state)
 
-        assert result == ["web_research", "blog_author", "manager"]
+        node_ids, sub_tasks, deps = result
+        assert node_ids == ["web_research", "blog_author", "manager"]
+        assert sub_tasks == {}
+        assert deps == {}
         mock_sleep.assert_called_once_with(1.0)
 
 
@@ -783,3 +799,342 @@ class TestClassifySystemPrompt:
         assert "social-promotion" in prompt
         assert "blog-authoring" in prompt
         assert "iso-brand-equity" in prompt
+
+    def test_includes_email_marketing_keywords(self):
+        prompt = _build_classify_system_prompt()
+        assert "email marketing" in prompt
+        assert "newsletters" in prompt
+
+
+# ── Persona-specific Odoo catalog tests ──
+
+
+class TestOdooCatalogEntries:
+    def test_persona_specific_nodes_have_persona_hint(self):
+        persona_nodes = {
+            "odoo_sales_crm": "sales_manager",
+            "odoo_finance": "accountant",
+            "odoo_inventory": "warehouse_manager",
+            "odoo_hr": "hr_manager",
+            "odoo_marketing": "marketing_manager",
+            "odoo_manufacturing": "manufacturing_supervisor",
+        }
+        for node_id, expected_hint in persona_nodes.items():
+            entry = NODE_CATALOG_MAP[node_id]
+            assert entry["config"]["persona_hint"] == expected_hint
+
+    def test_persona_nodes_share_odoo_worker_url(self):
+        base_url = NODE_CATALOG_MAP["odoo_worker"]["url"]
+        for node_id in [
+            "odoo_sales_crm",
+            "odoo_finance",
+            "odoo_inventory",
+            "odoo_hr",
+            "odoo_marketing",
+            "odoo_manufacturing",
+        ]:
+            assert NODE_CATALOG_MAP[node_id]["url"] == base_url
+
+    def test_generic_odoo_worker_has_no_persona_hint(self):
+        assert "persona_hint" not in NODE_CATALOG_MAP["odoo_worker"]["config"]
+
+
+# ── Sub-task manifest building tests ──
+
+
+class TestSubTaskManifestBuilding:
+    def test_build_manifest_with_sub_tasks(self):
+        composer = PipelineComposer()
+        sub_tasks = {
+            "odoo_sales_crm": "Find customers and product info",
+            "odoo_marketing": "Create email campaign",
+        }
+        manifest = composer._build_manifest(
+            ["odoo_sales_crm", "odoo_marketing", "manager"],
+            sub_tasks=sub_tasks,
+        )
+        nodes = manifest["nodes"]
+        # Sales node gets both persona_hint and sub_task
+        sales_node = nodes[0]
+        assert sales_node["config"]["persona_hint"] == "sales_manager"
+        assert sales_node["config"]["sub_task"] == "Find customers and product info"
+        # Marketing node gets both persona_hint and sub_task
+        marketing_node = nodes[1]
+        assert marketing_node["config"]["persona_hint"] == "marketing_manager"
+        assert marketing_node["config"]["sub_task"] == "Create email campaign"
+
+    def test_build_manifest_without_sub_tasks(self):
+        composer = PipelineComposer()
+        manifest = composer._build_manifest(
+            ["odoo_sales_crm", "manager"],
+        )
+        sales_node = manifest["nodes"][0]
+        assert sales_node["config"]["persona_hint"] == "sales_manager"
+        assert "sub_task" not in sales_node["config"]
+
+    def test_sub_tasks_only_applied_to_matching_nodes(self):
+        composer = PipelineComposer()
+        sub_tasks = {"odoo_sales_crm": "Find products"}
+        manifest = composer._build_manifest(
+            ["odoo_sales_crm", "odoo_marketing", "manager"],
+            sub_tasks=sub_tasks,
+        )
+        marketing_node = manifest["nodes"][1]
+        assert "sub_task" not in marketing_node["config"]
+
+
+# ── Multi-worker Gemini composition tests ──
+
+
+class TestMultiWorkerComposition:
+    @patch("app.nodes.internal.pipeline_composer.settings")
+    async def test_multi_worker_email_campaign(self, mock_settings):
+        """Gemini returns multi-worker pipeline for email campaign."""
+        mock_settings.GOOGLE_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
+        mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
+
+        composer = PipelineComposer()
+
+        mock_response = _mock_gemini_response(
+            "compose_pipeline",
+            {
+                "node_ids": ["odoo_sales_crm", "odoo_marketing", "manager"],
+                "sub_tasks": {
+                    "odoo_sales_crm": "Find product and customer list",
+                    "odoo_marketing": "Create email campaign",
+                },
+            },
+        )
+
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
+            mock_model = MagicMock()
+            mock_model.generate_content_async = AsyncMock(return_value=mock_response)
+            mock_model_class.return_value = mock_model
+
+            state = _base_state(
+                input_prompt="Launch an email campaign for Conference Chair"
+            )
+            result = await composer.compose(state)
+
+        assert "_composed_manifest" in result
+        manifest = result["_composed_manifest"]
+        node_ids = [n["id"] for n in manifest["nodes"]]
+        assert node_ids == ["odoo_sales_crm", "odoo_marketing", "manager"]
+        # Verify sub_tasks are merged into config
+        sales_node = manifest["nodes"][0]
+        assert sales_node["config"]["sub_task"] == "Find product and customer list"
+        assert sales_node["config"]["persona_hint"] == "sales_manager"
+
+    @patch("app.nodes.internal.pipeline_composer.settings")
+    async def test_multi_worker_sales_invoice(self, mock_settings):
+        """Gemini returns multi-worker pipeline for sales + invoice."""
+        mock_settings.GOOGLE_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
+        mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
+
+        composer = PipelineComposer()
+
+        mock_response = _mock_gemini_response(
+            "compose_pipeline",
+            {
+                "node_ids": ["odoo_sales_crm", "odoo_finance", "manager"],
+                "sub_tasks": {
+                    "odoo_sales_crm": "Create sales order",
+                    "odoo_finance": "Generate invoice",
+                },
+            },
+        )
+
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
+            mock_model = MagicMock()
+            mock_model.generate_content_async = AsyncMock(return_value=mock_response)
+            mock_model_class.return_value = mock_model
+
+            state = _base_state(
+                input_prompt="Create a sales order and generate the invoice"
+            )
+            result = await composer.compose(state)
+
+        assert "_composed_manifest" in result
+        manifest = result["_composed_manifest"]
+        node_ids = [n["id"] for n in manifest["nodes"]]
+        assert node_ids == ["odoo_sales_crm", "odoo_finance", "manager"]
+
+
+# ── Dependency-based manifest building tests ──
+
+
+class TestDependencyManifestBuilding:
+    def test_build_manifest_with_dependencies(self):
+        """Dependencies dict generates correct edges (not sequential)."""
+        composer = PipelineComposer()
+        deps = {
+            "odoo_sales_crm": [],
+            "odoo_inventory": [],
+            "manager": ["odoo_sales_crm", "odoo_inventory"],
+        }
+        manifest = composer._build_manifest(
+            ["odoo_sales_crm", "odoo_inventory", "manager"],
+            dependencies=deps,
+        )
+        edges = manifest["edges"]
+        assert ["odoo_sales_crm", "manager"] in edges
+        assert ["odoo_inventory", "manager"] in edges
+        # No edge between the two parallel nodes
+        assert ["odoo_sales_crm", "odoo_inventory"] not in edges
+        assert ["odoo_inventory", "odoo_sales_crm"] not in edges
+        assert len(edges) == 2
+
+    def test_build_manifest_dependencies_fallback_sequential(self):
+        """Empty dependencies → sequential edges (backward compat)."""
+        composer = PipelineComposer()
+        manifest = composer._build_manifest(
+            ["odoo_sales_crm", "odoo_inventory", "manager"],
+            dependencies={},
+        )
+        edges = manifest["edges"]
+        assert edges == [
+            ["odoo_sales_crm", "odoo_inventory"],
+            ["odoo_inventory", "manager"],
+        ]
+
+    def test_build_manifest_dependencies_none_sequential(self):
+        """None dependencies → sequential edges (backward compat)."""
+        composer = PipelineComposer()
+        manifest = composer._build_manifest(
+            ["odoo_sales_crm", "odoo_inventory", "manager"],
+            dependencies=None,
+        )
+        edges = manifest["edges"]
+        assert edges == [
+            ["odoo_sales_crm", "odoo_inventory"],
+            ["odoo_inventory", "manager"],
+        ]
+
+    def test_dependencies_auto_wire_manager(self):
+        """Manager not in dependencies → auto-wired from all others."""
+        composer = PipelineComposer()
+        deps = {
+            "odoo_sales_crm": [],
+            "odoo_inventory": [],
+        }
+        manifest = composer._build_manifest(
+            ["odoo_sales_crm", "odoo_inventory", "manager"],
+            dependencies=deps,
+        )
+        edges = manifest["edges"]
+        assert ["odoo_sales_crm", "manager"] in edges
+        assert ["odoo_inventory", "manager"] in edges
+
+    def test_dependencies_with_sub_tasks(self):
+        """Dependencies + sub_tasks are combined correctly."""
+        composer = PipelineComposer()
+        deps = {
+            "odoo_hr": [],
+            "odoo_inventory": [],
+            "manager": ["odoo_hr", "odoo_inventory"],
+        }
+        sub_tasks = {
+            "odoo_hr": "Get employee list",
+            "odoo_inventory": "Check stock levels",
+        }
+        manifest = composer._build_manifest(
+            ["odoo_hr", "odoo_inventory", "manager"],
+            sub_tasks=sub_tasks,
+            dependencies=deps,
+        )
+        # Edges are dependency-based
+        assert ["odoo_hr", "manager"] in manifest["edges"]
+        assert ["odoo_inventory", "manager"] in manifest["edges"]
+        # Sub-tasks are applied
+        hr_node = manifest["nodes"][0]
+        assert hr_node["config"]["sub_task"] == "Get employee list"
+
+
+# ── Gemini composition with dependencies tests ──
+
+
+class TestGeminiComposeWithDependencies:
+    @patch("app.nodes.internal.pipeline_composer.settings")
+    async def test_gemini_compose_returns_dependencies(self, mock_settings):
+        """Gemini returns dependencies for parallel execution."""
+        mock_settings.GOOGLE_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
+        mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
+
+        composer = PipelineComposer()
+
+        mock_response = _mock_gemini_response(
+            "compose_pipeline",
+            {
+                "node_ids": ["odoo_sales_crm", "odoo_inventory", "manager"],
+                "sub_tasks": {},
+                "dependencies": {
+                    "odoo_sales_crm": "",
+                    "odoo_inventory": "",
+                    "manager": "odoo_sales_crm,odoo_inventory",
+                },
+            },
+        )
+
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
+            mock_model = MagicMock()
+            mock_model.generate_content_async = AsyncMock(return_value=mock_response)
+            mock_model_class.return_value = mock_model
+
+            state = _base_state(
+                input_prompt="Check inventory and sales pipeline status"
+            )
+            result = await composer.compose(state)
+
+        assert "_composed_manifest" in result
+        manifest = result["_composed_manifest"]
+        edges = manifest["edges"]
+        # Parallel: sales_crm→manager, inventory→manager
+        assert ["odoo_sales_crm", "manager"] in edges
+        assert ["odoo_inventory", "manager"] in edges
+        assert len(edges) == 2
+
+    @patch("app.nodes.internal.pipeline_composer.settings")
+    async def test_gemini_compose_no_dependencies_fallback(self, mock_settings):
+        """Gemini returns no dependencies → sequential edges."""
+        mock_settings.GOOGLE_API_KEY = "test-key"
+        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
+        mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
+
+        composer = PipelineComposer()
+
+        mock_response = _mock_gemini_response(
+            "compose_pipeline",
+            {
+                "node_ids": [
+                    "odoo_sales_crm",
+                    "odoo_finance",
+                    "manager",
+                ],
+            },
+        )
+
+        with patch("google.generativeai.GenerativeModel") as mock_model_class:
+            mock_model = MagicMock()
+            mock_model.generate_content_async = AsyncMock(return_value=mock_response)
+            mock_model_class.return_value = mock_model
+
+            state = _base_state(
+                input_prompt="Create a sales order and generate invoice"
+            )
+            result = await composer.compose(state)
+
+        assert "_composed_manifest" in result
+        manifest = result["_composed_manifest"]
+        edges = manifest["edges"]
+        # Sequential fallback
+        assert edges == [
+            ["odoo_sales_crm", "odoo_finance"],
+            ["odoo_finance", "manager"],
+        ]
