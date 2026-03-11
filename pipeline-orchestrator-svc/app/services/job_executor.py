@@ -359,7 +359,9 @@ class JobExecutor:
                         tasks = [handlers[nid](state) for nid in level_nodes]
                         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                        # Check for exceptions first
+                        # Classify all results: mark each node done or failed
+                        failed_nodes: list[str] = []
+                        completed_at = self._now_iso()
                         for nid, result in zip(level_nodes, results):
                             if isinstance(result, Exception):
                                 logger.error(
@@ -367,47 +369,47 @@ class JobExecutor:
                                     job_id,
                                     nid,
                                     result,
-                                    exc_info=result,
+                                    exc_info=(
+                                        type(result),
+                                        result,
+                                        result.__traceback__,
+                                    ),
                                 )
                                 state["progress"][nid] = {
                                     "status": "failed",
                                     "started_at": started_at,
-                                    "completed_at": self._now_iso(),
+                                    "completed_at": completed_at,
                                 }
-                                # Mark remaining nodes as failed
-                                remaining_start = executed_node_count + len(level_nodes)
-                                for remaining_id in flat_sorted[remaining_start:]:
-                                    if (
-                                        state["progress"]
-                                        .get(remaining_id, {})
-                                        .get("status")
-                                        == "pending"
-                                    ):
-                                        state["progress"][remaining_id] = {
-                                            "status": "failed",
-                                            "completed_at": self._now_iso(),
-                                        }
-                                # Mark other parallel nodes that
-                                # succeeded as failed too (pipeline abort)
-                                for other_nid, other_result in zip(
-                                    level_nodes, results
-                                ):
-                                    if other_nid != nid and not isinstance(
-                                        other_result, Exception
-                                    ):
-                                        state["progress"][other_nid] = {
-                                            "status": "failed",
-                                            "started_at": started_at,
-                                            "completed_at": self._now_iso(),
-                                        }
-                                await self.callback.send_failed(
-                                    callback_url,
-                                    error_message=(f"Node {nid} failed: {result}"),
-                                    progress=state["progress"],
-                                )
-                                return
+                                failed_nodes.append(nid)
 
-                        # Merge all results
+                        # If any node failed, abort the pipeline
+                        if failed_nodes:
+                            # Mark remaining future nodes as failed
+                            remaining_start = (
+                                executed_node_count + len(level_nodes)
+                            )
+                            for remaining_id in flat_sorted[remaining_start:]:
+                                if (
+                                    state["progress"]
+                                    .get(remaining_id, {})
+                                    .get("status")
+                                    == "pending"
+                                ):
+                                    state["progress"][remaining_id] = {
+                                        "status": "failed",
+                                        "completed_at": completed_at,
+                                    }
+                            await self.callback.send_failed(
+                                callback_url,
+                                error_message=(
+                                    f"Parallel nodes failed: "
+                                    f"{', '.join(failed_nodes)}"
+                                ),
+                                progress=state["progress"],
+                            )
+                            return
+
+                        # All succeeded — merge results
                         for nid, result in zip(level_nodes, results):
                             if isinstance(result, dict):
                                 if "node_outputs" in result:

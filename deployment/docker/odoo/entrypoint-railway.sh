@@ -17,5 +17,5 @@ chown -R odoo:odoo /var/lib/odoo
 # Override PORT to the DB port so Odoo's entrypoint uses it correctly
 export PORT="$DB_PORT"
 
-# Drop to odoo user and delegate to the official entrypoint
-exec su -s /bin/bash odoo -c "/entrypoint.sh $* --http-port $WEB_PORT"
+# Drop to odoo user and delegate to the official entrypoint, preserving argument boundaries
+exec su -s /bin/bash odoo -c 'exec /entrypoint.sh "$@" --http-port '"$WEB_PORT"'' -- odoo-entrypoint "$@"

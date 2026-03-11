@@ -667,17 +667,25 @@ class PipelineComposer:
                                 raw_dep_obj = raw_dep_str
                             else:
                                 raw_dep_obj = {}
-                            # Normalise dep values: convert comma-
-                            # separated strings to lists.
+                            # Normalise dep values defensively:
+                            # accept list[str] or comma-separated string.
                             deps: dict[str, list[str]] = {}
                             for k, v in raw_dep_obj.items():
                                 if isinstance(v, str):
                                     deps[k] = [
                                         s.strip() for s in v.split(",") if s.strip()
                                     ]
-                                elif isinstance(v, list):
-                                    deps[k] = list(v)
+                                elif isinstance(v, list) and all(
+                                    isinstance(item, str) for item in v
+                                ):
+                                    deps[k] = v
                                 else:
+                                    logger.warning(
+                                        "Ignoring malformed dependency value "
+                                        "for %s: %r",
+                                        k,
+                                        v,
+                                    )
                                     deps[k] = []
                             result = self._validate_node_ids(raw_ids)
                             if result:
