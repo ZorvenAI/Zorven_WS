@@ -93,7 +93,7 @@ class ManagerNode(BaseNode):
                 "methodology_notes",
             ):
                 value = market_research_data.get(key)
-                if value:
+                if value is not None:
                     result_data[key] = value
 
         # Populate score from BSI (used by BrandEquityDashboard)

@@ -4,7 +4,7 @@ API routes for market-research-agent-svc.
 Endpoints:
   GET  /health        — Health check (no auth)
   POST /v1/execute    — Execute market research (primary endpoint)
-  POST /v1/research   — Alias for /v1/execute (matches seed manifest URLs)
+  POST /v1/research   — Alias for /v1/execute (alternative endpoint)
 """
 
 import logging

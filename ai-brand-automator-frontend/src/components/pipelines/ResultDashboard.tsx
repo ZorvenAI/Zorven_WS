@@ -305,8 +305,9 @@ function resultDataToText(data: Record<string, unknown>): string {
     lines.push('');
   }
 
-  // If no structured sections were added, fall back to generic extraction
-  if (lines.length === 0 || (lines.length === 1 && summary)) {
+  // If no structured sections beyond a possible summary were added,
+  // fall back to generic extraction. push(summary, '') adds 2 items.
+  if (lines.length <= 2) {
     const skip = new Set(['node_results', 'ui_schema', 'score', 'awareness', 'sentiment', 'financials', 'valuation', 'market_overview', 'market_sizing', 'competitive_landscape', 'industry_trends', 'economic_indicators', 'sources', 'confidence_score', 'methodology_notes']);
     for (const [key, val] of Object.entries(data)) {
       if (skip.has(key)) continue;

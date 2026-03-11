@@ -245,6 +245,6 @@ MRA_REDIS_URL=<railway-redis-url>/11
 MRA_KAFKA_BOOTSTRAP_SERVERS=
 MRA_ANTHROPIC_API_KEY=<anthropic-api-key>
 MRA_TAVILY_API_KEY=<tavily-api-key>
-MRA_NEWSAPI_KEY=<newsapi-key>
+MRA_GNEWS_API_KEY=<gnews-api-key>
 MRA_LLM_MODEL=claude-sonnet-4-20250514
 MRA_LOG_LEVEL=INFO

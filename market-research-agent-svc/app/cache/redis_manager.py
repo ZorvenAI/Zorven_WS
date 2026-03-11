@@ -19,18 +19,27 @@ import redis.asyncio as aioredis
 
 logger = logging.getLogger(__name__)
 
-# TTL constants
-RESEARCH_CACHE_TTL = 4 * 60 * 60  # 4 hours
-ECONOMIC_CACHE_TTL = 24 * 60 * 60  # 24 hours
-NEWS_CACHE_TTL = 60 * 60  # 1 hour
+# Default TTL constants (overridable via Settings)
+_DEFAULT_RESEARCH_TTL = 4 * 60 * 60  # 4 hours
+_DEFAULT_ECONOMIC_TTL = 24 * 60 * 60  # 24 hours
+_DEFAULT_NEWS_TTL = 60 * 60  # 1 hour
 RATE_LIMIT_TTL = 60  # 1 minute
 
 
 class RedisManager:
     """Async Redis manager for caching and rate limiting."""
 
-    def __init__(self, redis_url: str) -> None:
+    def __init__(
+        self,
+        redis_url: str,
+        research_cache_ttl: int = _DEFAULT_RESEARCH_TTL,
+        economic_cache_ttl: int = _DEFAULT_ECONOMIC_TTL,
+        news_cache_ttl: int = _DEFAULT_NEWS_TTL,
+    ) -> None:
         self.redis_url = redis_url
+        self.research_cache_ttl = research_cache_ttl
+        self.economic_cache_ttl = economic_cache_ttl
+        self.news_cache_ttl = news_cache_ttl
         self._redis: Optional[aioredis.Redis] = None
 
     async def _get_redis(self) -> aioredis.Redis:
@@ -70,13 +79,15 @@ class RedisManager:
             return None
 
     async def set_cached_result(
-        self, cache_key: str, result: dict[str, Any], ttl: int = RESEARCH_CACHE_TTL
+        self, cache_key: str, result: dict[str, Any], ttl: int | None = None
     ) -> None:
         """Cache research result."""
         try:
             r = await self._get_redis()
             key = f"mra:result:{cache_key}"
-            await r.set(key, json.dumps(result), ex=ttl)
+            await r.set(
+                key, json.dumps(result), ex=ttl or self.research_cache_ttl
+            )
             logger.debug("Result cache SET for key: %s", cache_key[:16])
         except Exception as exc:
             logger.warning("Redis error in set_cached_result: %s", exc)
@@ -110,7 +121,7 @@ class RedisManager:
         try:
             r = await self._get_redis()
             key = f"mra:economic:{indicator}:{country}:{year}"
-            await r.set(key, json.dumps(data), ex=ECONOMIC_CACHE_TTL)
+            await r.set(key, json.dumps(data), ex=self.economic_cache_ttl)
             logger.debug("Economic cache SET: %s/%s/%s", indicator, country, year)
         except Exception as exc:
             logger.warning("Redis error in set_cached_economic: %s", exc)
@@ -136,7 +147,7 @@ class RedisManager:
         try:
             r = await self._get_redis()
             key = f"mra:news:{self._hash(query)}"
-            await r.set(key, json.dumps(articles), ex=NEWS_CACHE_TTL)
+            await r.set(key, json.dumps(articles), ex=self.news_cache_ttl)
             logger.debug("News cache SET for query: %s", query[:50])
         except Exception as exc:
             logger.warning("Redis error in set_cached_news: %s", exc)

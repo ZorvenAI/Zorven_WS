@@ -38,7 +38,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
 
     # Initialize Redis manager
-    redis_manager = RedisManager(settings.REDIS_URL)
+    redis_manager = RedisManager(
+        settings.REDIS_URL,
+        research_cache_ttl=settings.RESEARCH_CACHE_TTL,
+        economic_cache_ttl=settings.ECONOMIC_DATA_CACHE_TTL,
+        news_cache_ttl=settings.NEWS_CACHE_TTL,
+    )
 
     # Initialize API clients
     tavily_client = TavilySearchClient(settings.TAVILY_API_KEY, redis_manager)

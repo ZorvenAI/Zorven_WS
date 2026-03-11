@@ -252,7 +252,7 @@ SERVICES = [
             "MRA_KAFKA_BOOTSTRAP_SERVERS": "",
             "MRA_ANTHROPIC_API_KEY": "",
             "MRA_TAVILY_API_KEY": "",
-            "MRA_NEWSAPI_KEY": "",
+            "MRA_GNEWS_API_KEY": "",
             "MRA_LOG_LEVEL": "INFO",
             "PORT": "8021",
         },
