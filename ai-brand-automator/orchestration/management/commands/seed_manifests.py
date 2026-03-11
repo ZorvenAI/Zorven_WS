@@ -491,7 +491,8 @@ class Command(BaseCommand):
                         "type": "external",
                         "url": "http://market-research-agent-svc:8021/v1/execute",
                         "config": {
-                            "focus": "market_analysis,sizing,trends,competitive_landscape",
+                            "focus": "market_analysis,sizing,"
+                            "trends,competitive_landscape",
                         },
                     },
                     {
