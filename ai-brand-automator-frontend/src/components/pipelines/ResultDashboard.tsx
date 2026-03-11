@@ -231,6 +231,109 @@ function renderValue(value: unknown): React.ReactNode {
   return null;
 }
 
+/** Convert resultData into human-readable plain text for copy/export. */
+function resultDataToText(data: Record<string, unknown>): string {
+  const lines: string[] = [];
+
+  const summary = data.summary as string | undefined;
+  if (summary) {
+    lines.push(summary, '');
+  }
+
+  // Market research sections
+  const overview = data.market_overview as string | undefined;
+  if (overview) {
+    lines.push('MARKET OVERVIEW', '-'.repeat(40), overview, '');
+  }
+
+  const sizing = data.market_sizing as Record<string, unknown> | undefined;
+  if (sizing) {
+    lines.push('MARKET SIZING', '-'.repeat(40));
+    for (const key of ['tam', 'sam', 'som']) {
+      const entry = sizing[key];
+      if (entry && typeof entry === 'object') {
+        const obj = entry as Record<string, unknown>;
+        const label = key.toUpperCase();
+        lines.push(`${label}: ${obj.value ?? '-'}`);
+        if (obj.description) lines.push(`  ${obj.description}`);
+      } else if (typeof entry === 'string') {
+        lines.push(`${key.toUpperCase()}: ${entry}`);
+      }
+    }
+    lines.push('');
+  }
+
+  const competitors = data.competitive_landscape as Array<Record<string, unknown>> | undefined;
+  if (competitors && competitors.length > 0) {
+    lines.push(`COMPETITIVE LANDSCAPE (${competitors.length})`, '-'.repeat(40));
+    for (const c of competitors) {
+      lines.push(`- ${c.name ?? '-'}${c.market_position ? ` -- ${c.market_position}` : ''}`);
+      if (c.description) lines.push(`  ${c.description}`);
+    }
+    lines.push('');
+  }
+
+  const trends = data.industry_trends as string[] | undefined;
+  if (trends && trends.length > 0) {
+    lines.push('INDUSTRY TRENDS', '-'.repeat(40));
+    trends.forEach((t, i) => lines.push(`${i + 1}. ${t}`));
+    lines.push('');
+  }
+
+  const findings = data.findings as string[] | undefined;
+  if (findings && findings.length > 0) {
+    lines.push('KEY FINDINGS', '-'.repeat(40));
+    findings.forEach((f) => lines.push(`- ${f}`));
+    lines.push('');
+  }
+
+  const recommendations = data.recommendations as string[] | undefined;
+  if (recommendations && recommendations.length > 0) {
+    lines.push('RECOMMENDATIONS', '-'.repeat(40));
+    recommendations.forEach((r, i) => lines.push(`${i + 1}. ${r}`));
+    lines.push('');
+  }
+
+  const sources = data.sources as Array<Record<string, unknown>> | undefined;
+  if (sources && sources.length > 0) {
+    lines.push(`SOURCES (${sources.length})`, '-'.repeat(40));
+    for (const s of sources) {
+      const title = s.title ?? s.url ?? '-';
+      const url = s.url ? ` -- ${s.url}` : '';
+      lines.push(`- ${title}${url}`);
+    }
+    lines.push('');
+  }
+
+  // If no structured sections beyond a possible summary were added,
+  // fall back to generic extraction. push(summary, '') adds 2 items.
+  if (lines.length <= 2) {
+    const skip = new Set(['node_results', 'ui_schema', 'score', 'awareness', 'sentiment', 'financials', 'valuation', 'market_overview', 'market_sizing', 'competitive_landscape', 'industry_trends', 'economic_indicators', 'sources', 'confidence_score', 'methodology_notes']);
+    for (const [key, val] of Object.entries(data)) {
+      if (skip.has(key)) continue;
+      const label = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      if (typeof val === 'string') {
+        lines.push(`${label}`, val, '');
+      } else if (Array.isArray(val)) {
+        lines.push(label);
+        val.forEach((item) => lines.push(`- ${typeof item === 'string' ? item : JSON.stringify(item)}`));
+        lines.push('');
+      }
+    }
+  }
+
+  return lines.join('\n').trim();
+}
+
+function formatCompactNumber(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+  return n.toLocaleString();
+}
+
 function sectionTitle(key: string): string {
   return key
     .replace(/_/g, ' ')
@@ -247,6 +350,328 @@ function formatScheduledDate(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+/* ── Market Research Types ─────────────────────────────────────────── */
+
+interface MarketSizingEntry {
+  value: string;
+  description?: string;
+  methodology?: string;
+}
+
+interface CompetitorEntry {
+  name: string;
+  description?: string;
+  market_position?: string;
+  strengths?: string[];
+  weaknesses?: string[];
+}
+
+interface SourceEntry {
+  type?: string;
+  title?: string;
+  url?: string;
+  description?: string;
+}
+
+/* ── MarketResearchDashboard (inline) ─────────────────────────────── */
+
+function MarketResearchSection({
+  marketOverview,
+  marketSizing,
+  competitiveLandscape,
+  industryTrends,
+  economicIndicators,
+  sources,
+  confidenceScore,
+  findings,
+  recommendations,
+}: {
+  marketOverview?: string;
+  marketSizing?: Record<string, unknown>;
+  competitiveLandscape?: CompetitorEntry[];
+  industryTrends?: string[];
+  economicIndicators?: Record<string, unknown>;
+  sources?: SourceEntry[];
+  confidenceScore?: number;
+  findings?: string[];
+  recommendations?: string[];
+}) {
+  // Extract TAM/SAM/SOM from market_sizing
+  const sizingEntries: Array<{ label: string; data: MarketSizingEntry }> = [];
+  if (marketSizing) {
+    for (const key of ['tam', 'sam', 'som']) {
+      const entry = marketSizing[key];
+      if (entry && typeof entry === 'object') {
+        const label =
+          key === 'tam'
+            ? 'Total Addressable Market (TAM)'
+            : key === 'sam'
+              ? 'Serviceable Addressable Market (SAM)'
+              : 'Serviceable Obtainable Market (SOM)';
+        sizingEntries.push({ label, data: entry as MarketSizingEntry });
+      } else if (typeof entry === 'string') {
+        const label =
+          key === 'tam' ? 'TAM' : key === 'sam' ? 'SAM' : 'SOM';
+        sizingEntries.push({ label, data: { value: entry } });
+      }
+    }
+  }
+
+  // Parse economic indicator entries
+  const econEntries: Array<{ name: string; value: string; date?: string }> = [];
+  if (economicIndicators && typeof economicIndicators === 'object') {
+    for (const [key, val] of Object.entries(economicIndicators)) {
+      if (val && typeof val === 'object') {
+        const obj = val as Record<string, unknown>;
+        const latestValue = obj.latest_value ?? obj.value;
+        const latestDate = obj.latest_date ?? obj.date;
+        if (latestValue != null) {
+          econEntries.push({
+            name: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+            value: typeof latestValue === 'number'
+              ? formatCompactNumber(latestValue)
+              : String(latestValue),
+            date: latestDate ? String(latestDate) : undefined,
+          });
+        }
+      }
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Confidence badge */}
+      {confidenceScore != null && confidenceScore > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
+            Confidence
+          </span>
+          <span
+            className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold ${
+              confidenceScore >= 0.7
+                ? 'bg-emerald-500/20 text-emerald-400'
+                : confidenceScore >= 0.4
+                  ? 'bg-amber-500/20 text-amber-400'
+                  : 'bg-red-500/20 text-red-400'
+            }`}
+          >
+            {Math.round(confidenceScore * 100)}%
+          </span>
+        </div>
+      )}
+
+      {/* Market Overview */}
+      {marketOverview && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Market Overview
+          </h4>
+          <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+            <MarkdownMessage content={marketOverview} />
+          </div>
+        </section>
+      )}
+
+      {/* TAM / SAM / SOM Cards */}
+      {sizingEntries.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Market Sizing
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {sizingEntries.map(({ label, data }, i) => (
+              <div
+                key={i}
+                className="glass-card p-4 rounded-lg border border-white/10"
+              >
+                <p className="text-xs text-brand-silver/60 mb-1">{label}</p>
+                <p className="text-sm font-medium text-brand-electric">
+                  {data.value}
+                </p>
+                {data.description && (
+                  <p className="text-xs text-brand-silver/70 mt-2 line-clamp-3">
+                    {data.description}
+                  </p>
+                )}
+                {data.methodology && (
+                  <p className="text-xs text-brand-silver/50 mt-1 italic">
+                    {data.methodology}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Competitive Landscape */}
+      {competitiveLandscape && competitiveLandscape.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Competitive Landscape ({competitiveLandscape.length})
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {competitiveLandscape.map((comp, i) => (
+              <div
+                key={i}
+                className="bg-white/5 rounded-lg p-4 border border-white/10"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h5 className="text-sm font-semibold text-white">
+                    {comp.name}
+                  </h5>
+                </div>
+                {comp.market_position && (
+                  <p className="text-xs text-brand-silver/80 mb-2 line-clamp-2">
+                    {comp.market_position}
+                  </p>
+                )}
+                {comp.description && (
+                  <p className="text-xs text-brand-silver/60 line-clamp-3">
+                    {comp.description}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Industry Trends */}
+      {industryTrends && industryTrends.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Industry Trends
+          </h4>
+          <div className="space-y-2">
+            {industryTrends.map((trend, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-3 bg-white/5 rounded-lg px-3 py-2 border border-white/10"
+              >
+                <span className="text-brand-electric font-bold text-sm mt-0.5">
+                  {i + 1}
+                </span>
+                <p className="text-sm text-brand-silver">{trend}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Economic Indicators */}
+      {econEntries.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Economic Indicators
+          </h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {econEntries.map((entry, i) => (
+              <div
+                key={i}
+                className="glass-card p-3 rounded-lg text-center"
+              >
+                <p className="text-lg font-bold text-brand-electric">
+                  {entry.value}
+                </p>
+                <p className="text-xs text-brand-silver/60 mt-1">
+                  {entry.name}
+                </p>
+                {entry.date && (
+                  <p className="text-xs text-brand-silver/40">{entry.date}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Key Findings */}
+      {findings && findings.length > 0 && (() => {
+        const filtered = findings.filter((f) => {
+          if (typeof f !== 'string') return false;
+          const trimmed = f.trim();
+          if (!trimmed || trimmed.startsWith('{') || trimmed.startsWith('[')) return false;
+          if (trimmed.split(/\s+/).length < 5) return false;
+          if (/^completed \d+ tool calls?$/i.test(trimmed)) return false;
+          if (/"[^"]+"\s*:/.test(trimmed)) return false;
+          return true;
+        });
+        if (filtered.length === 0) return null;
+        return (
+          <section>
+            <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+              Key Findings
+            </h4>
+            {filtered.map((f, i) => (
+              <div key={i} className="mb-2">
+                <MarkdownMessage content={f} />
+              </div>
+            ))}
+          </section>
+        );
+      })()}
+
+      {/* Recommendations */}
+      {recommendations && recommendations.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Recommendations
+          </h4>
+          {recommendations.map((r, i) => (
+            <div key={i} className="mb-2">
+              <MarkdownMessage content={r} />
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* Sources */}
+      {sources && sources.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Sources ({sources.length})
+          </h4>
+          <div className="overflow-x-auto rounded-lg border border-white/10 max-h-64 overflow-y-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-brand-midnight text-xs text-brand-silver/60 uppercase sticky top-0 z-10">
+                <tr>
+                  <th className="px-3 py-2">Type</th>
+                  <th className="px-3 py-2">Source</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {sources.map((src, i) => (
+                  <tr key={i} className="hover:bg-white/5">
+                    <td className="px-3 py-2 text-brand-silver/60 whitespace-nowrap capitalize text-xs">
+                      {(src.type || 'web').replace(/_/g, ' ')}
+                    </td>
+                    <td className="px-3 py-2 text-brand-silver">
+                      {src.url && /^https?:\/\//i.test(src.url) ? (
+                        <a
+                          href={src.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-brand-electric hover:underline inline-flex items-center gap-1"
+                        >
+                          {src.title || src.url}
+                          <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                        </a>
+                      ) : (
+                        <span>{src.title || '—'}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </div>
+  );
 }
 
 export default function ResultDashboard({
@@ -267,6 +692,10 @@ export default function ResultDashboard({
   if (isBrandEquityByName || isBrandEquityByContent) {
     return <BrandEquityDashboard resultData={resultData} />;
   }
+
+  // ── Detect market research data ──────────────────────────────────
+  const hasMarketResearch =
+    resultData.market_sizing != null || resultData.market_overview != null;
 
   // ── Extract well-known keys ──────────────────────────────────────
   const summary = resultData.summary as string | undefined;
@@ -385,6 +814,14 @@ export default function ResultDashboard({
     'financials',
     'valuation',
     'ui_schema',
+    'market_overview',
+    'market_sizing',
+    'competitive_landscape',
+    'industry_trends',
+    'economic_indicators',
+    'sources',
+    'confidence_score',
+    'methodology_notes',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),
@@ -398,14 +835,14 @@ export default function ResultDashboard({
           Analysis Results
         </h3>
         <DataToolbar
-          content={JSON.stringify(resultData, null, 2)}
+          content={resultDataToText(resultData)}
           title="Analysis Results"
-          format="json"
+          format="text"
         />
       </div>
 
-      {/* Score badge (only when meaningful, i.e. > 0) */}
-      {score !== undefined && score > 0 && (
+      {/* Score badge (only when meaningful, i.e. > 0, and not market research) */}
+      {!hasMarketResearch && score !== undefined && score > 0 && (
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
             Score
@@ -416,8 +853,8 @@ export default function ResultDashboard({
         </div>
       )}
 
-      {/* Summary */}
-      {summary && (
+      {/* Summary (skip generic "Pipeline analysis completed" for market research) */}
+      {summary && !hasMarketResearch && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Summary
@@ -426,8 +863,23 @@ export default function ResultDashboard({
         </section>
       )}
 
+      {/* ── Market Research Dashboard ──────────────────────────────── */}
+      {hasMarketResearch && (
+        <MarketResearchSection
+          marketOverview={resultData.market_overview as string | undefined}
+          marketSizing={resultData.market_sizing as Record<string, unknown> | undefined}
+          competitiveLandscape={resultData.competitive_landscape as CompetitorEntry[] | undefined}
+          industryTrends={resultData.industry_trends as string[] | undefined}
+          economicIndicators={resultData.economic_indicators as Record<string, unknown> | undefined}
+          sources={resultData.sources as SourceEntry[] | undefined}
+          confidenceScore={resultData.confidence_score as number | undefined}
+          findings={findings}
+          recommendations={recommendations}
+        />
+      )}
+
       {/* Key findings — filter out raw JSON blobs (internal agent state) */}
-      {findings && findings.length > 0 && (() => {
+      {!hasMarketResearch && findings && findings.length > 0 && (() => {
         const filtered = findings.filter((f) => {
           if (typeof f !== 'string') return false;
           const trimmed = f.trim();
@@ -459,7 +911,7 @@ export default function ResultDashboard({
       })()}
 
       {/* Recommendations */}
-      {recommendations && recommendations.length > 0 && (
+      {!hasMarketResearch && recommendations && recommendations.length > 0 && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations

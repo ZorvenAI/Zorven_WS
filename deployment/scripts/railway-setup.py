@@ -241,6 +241,23 @@ SERVICES = [
         },
         "needs_backend_vars": False,
     },
+    {
+        "name": "market-research-agent",
+        "root_dir": "market-research-agent-svc",
+        "dockerfile": "Dockerfile",
+        "start_command": None,
+        "health_check": "/health",
+        "env_vars": {
+            "MRA_REDIS_URL": f"{REDIS_BASE}/11",
+            "MRA_KAFKA_BOOTSTRAP_SERVERS": "",
+            "MRA_ANTHROPIC_API_KEY": "",
+            "MRA_TAVILY_API_KEY": "",
+            "MRA_GNEWS_API_KEY": "",
+            "MRA_LOG_LEVEL": "INFO",
+            "PORT": "8021",
+        },
+        "needs_backend_vars": False,
+    },
 ]
 
 

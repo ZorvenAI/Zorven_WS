@@ -31,6 +31,7 @@ jobs:
       rag-uploader-changed: ${{ steps.changes.outputs.rag-uploader }}
       odoo-mcp-changed: ${{ steps.changes.outputs.odoo-mcp }}
       odoo-worker-changed: ${{ steps.changes.outputs.odoo-worker }}
+      market-research-changed: ${{ steps.changes.outputs.market-research }}
 
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +56,7 @@ jobs:
             echo "rag-uploader=true" >> "$GITHUB_OUTPUT"
             echo "odoo-mcp=true" >> "$GITHUB_OUTPUT"
             echo "odoo-worker=true" >> "$GITHUB_OUTPUT"
+            echo "market-research=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           
@@ -133,6 +135,13 @@ jobs:
             echo "odoo-worker=true" >> "$GITHUB_OUTPUT"
           else
             echo "odoo-worker=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if market-research-agent-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^market-research-agent-svc/'; then
+            echo "market-research=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "market-research=false" >> "$GITHUB_OUTPUT"
           fi
 
   # ==========================================================================
@@ -655,11 +664,51 @@ jobs:
           fi
 
   # ==========================================================================
+  # Deploy Market Research Agent to Railway
+  # ==========================================================================
+  deploy-market-research-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.market-research-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Market Research Agent
+        working-directory: market-research-agent-svc
+        run: |
+          if [ -n "${{ secrets.RAILWAY_MARKET_RESEARCH_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_MARKET_RESEARCH_SERVICE }} --detach
+          else
+            echo "RAILWAY_MARKET_RESEARCH_SERVICE not set, skipping market-research deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for market-research-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          MRA_URL="${{ secrets.RAILWAY_MARKET_RESEARCH_URL }}"
+          if [ -n "$MRA_URL" ]; then
+            curl -f "${MRA_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_MARKET_RESEARCH_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
   # Post-Deployment Notification
   # ==========================================================================
   notify:
     runs-on: ubuntu-latest
-    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent, deploy-chat-titling, deploy-content-agent, deploy-social-agent, deploy-rag-uploader, deploy-odoo-mcp-server, deploy-odoo-worker-agent]
+    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent, deploy-chat-titling, deploy-content-agent, deploy-social-agent, deploy-rag-uploader, deploy-odoo-mcp-server, deploy-odoo-worker-agent, deploy-market-research-agent]
     if: always()
 
     steps:
@@ -683,5 +732,6 @@ jobs:
           echo "| RAG Uploader | ${{ needs.deploy-rag-uploader.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Odoo MCP Server | ${{ needs.deploy-odoo-mcp-server.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Odoo Worker Agent | ${{ needs.deploy-odoo-worker-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Market Research Agent | ${{ needs.deploy-market-research-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

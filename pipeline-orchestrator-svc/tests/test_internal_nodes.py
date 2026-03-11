@@ -128,6 +128,46 @@ class TestRouterNode:
         result = await node(_base_state(input_prompt=prompt))
         assert result["resolved_manifest_id"] == "rag-blog-social"
 
+    async def test_market_research_routing(self):
+        """Market sizing prompts → market-research."""
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt="What is the market size for AI-powered brand automation tools?"
+            )
+        )
+        assert result["resolved_manifest_id"] == "market-research"
+
+    async def test_market_research_tam_routing(self):
+        """TAM/SAM/SOM prompts → market-research."""
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt="Estimate the TAM SAM SOM for electric vehicle charging"
+            )
+        )
+        assert result["resolved_manifest_id"] == "market-research"
+
+    async def test_market_research_competitive_landscape(self):
+        """Competitive landscape prompts → market-research."""
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt="Analyze the competitive landscape for cloud computing"
+            )
+        )
+        assert result["resolved_manifest_id"] == "market-research"
+
+    async def test_market_research_industry_trends(self):
+        """Industry trends prompts → market-research."""
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt="What are the industry trends in renewable energy?"
+            )
+        )
+        assert result["resolved_manifest_id"] == "market-research"
+
     async def test_rag_blog_authoring_route(self):
         """RAG+blog without social → rag-blog-authoring."""
         node = RouterNode()
@@ -392,6 +432,55 @@ class TestManagerNode:
         assert rd["awareness"] == 78
         assert rd["sentiment"] == 70
         assert rd["valuation"]["brand_value_npv"] == 1245177.38
+
+    async def test_extracts_market_research_data(self):
+        """ManagerNode promotes market research fields to top-level result_data."""
+        node = ManagerNode()
+        state = _base_state(
+            node_outputs={
+                "market_research": {
+                    "query": "AI brand automation market size",
+                    "market_overview": "The AI brand automation market is growing.",
+                    "market_sizing": {
+                        "tam": {"value": "$50B", "description": "Global AI market"},
+                        "sam": {"value": "$8B", "description": "Brand AI segment"},
+                        "som": {"value": "$500M", "description": "Addressable now"},
+                    },
+                    "competitive_landscape": [
+                        {"name": "CompetitorA", "market_position": "Leader"},
+                    ],
+                    "industry_trends": ["AI adoption accelerating"],
+                    "economic_indicators": {
+                        "gdp_WLD": {"latest_value": 100_000_000, "latest_date": "2023"},
+                    },
+                    "sources": [
+                        {"type": "web", "title": "Market Report", "url": "https://example.com"},
+                    ],
+                    "findings": ["Market growing at 25% CAGR"],
+                    "recommendations": ["Enter market in Q3"],
+                    "confidence_score": 0.85,
+                    "methodology_notes": ["Top-down sizing approach"],
+                },
+            }
+        )
+        result = await node(state)
+        rd = result["result_data"]
+        # Market research fields promoted to top level
+        assert rd["market_overview"] == "The AI brand automation market is growing."
+        assert rd["market_sizing"]["tam"]["value"] == "$50B"
+        assert rd["market_sizing"]["sam"]["value"] == "$8B"
+        assert rd["market_sizing"]["som"]["value"] == "$500M"
+        assert len(rd["competitive_landscape"]) == 1
+        assert rd["competitive_landscape"][0]["name"] == "CompetitorA"
+        assert rd["industry_trends"] == ["AI adoption accelerating"]
+        assert "gdp_WLD" in rd["economic_indicators"]
+        assert len(rd["sources"]) == 1
+        assert rd["confidence_score"] == 0.85
+        assert len(rd["methodology_notes"]) == 1
+        # Standard fields still present
+        assert "findings" in rd
+        assert "recommendations" in rd
+        assert any("Market growing" in f for f in rd["findings"])
 
 
 # ── Stemmer tests ──

@@ -117,11 +117,41 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("calendar", 1),
         ("editorial", 1),
     ],
+    "market-research": [
+        # Market sizing — strong signal (weight 3)
+        ("market size", 3),
+        ("market sizing", 3),
+        ("tam sam som", 3),
+        ("total addressable market", 3),
+        ("serviceable addressable market", 3),
+        ("market opportunity", 3),
+        ("market research", 3),
+        # Domain phrases — moderate signal (weight 2)
+        ("competitive landscape", 2),
+        ("industry trends", 2),
+        ("market analysis", 2),
+        ("growth potential", 2),
+        ("addressable market", 2),
+        ("economic indicators", 2),
+        ("market forecast", 2),
+        ("market potential", 2),
+        ("market outlook", 2),
+        ("market growth", 2),
+        ("tam", 2),
+        ("sam", 2),
+        ("som", 2),
+        # Generic — weak signal (weight 1)
+        ("market", 1),
+        ("sizing", 1),
+        ("trends", 1),
+        ("competitors", 1),
+        ("landscape", 1),
+        ("forecast", 1),
+    ],
     "brand-analysis": [
         ("brand", 1),
         ("analysis", 1),
         ("positioning", 1),
-        ("market", 1),
     ],
     "odoo-erp-operations": [
         # Odoo-specific — strong signal (weight 3)
