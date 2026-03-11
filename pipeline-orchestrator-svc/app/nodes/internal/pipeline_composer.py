@@ -283,14 +283,14 @@ Examples of prompt → pipeline compositions:
 - "Write a blog from the uploaded brand study and share on LinkedIn" → [default_agent, blog_author, social_promoter, manager]
 - "Create a sales order for 100 units of Product X in Odoo" → [odoo_sales_crm, manager]
 - "Check inventory levels and reorder low-stock items in Odoo" → [odoo_inventory, manager]
-- "Launch an email campaign for our new product" → [odoo_sales_crm, odoo_marketing, manager] with sub_tasks: {"odoo_sales_crm": "Find the product details and customer contact list", "odoo_marketing": "Create and send the email campaign using the product and customer data"}
-- "Send a mass mailing to all customers about the sale" → [odoo_sales_crm, odoo_marketing, manager] with sub_tasks: {"odoo_sales_crm": "Retrieve the customer contact list", "odoo_marketing": "Create and send the mass mailing to the customers"}
-- "Create a sales order and generate the invoice" → [odoo_sales_crm, odoo_finance, manager] with sub_tasks: {"odoo_sales_crm": "Create the sales order", "odoo_finance": "Generate the invoice for the sales order"}
+- "Launch an email campaign for our new product" → node_ids: [odoo_sales_crm, odoo_marketing, manager], sub_tasks: '{"odoo_sales_crm": "Find the product details and customer contact list", "odoo_marketing": "Create and send the email campaign using the product and customer data"}'
+- "Send a mass mailing to all customers about the sale" → node_ids: [odoo_sales_crm, odoo_marketing, manager], sub_tasks: '{"odoo_sales_crm": "Retrieve the customer contact list", "odoo_marketing": "Create and send the mass mailing to the customers"}'
+- "Create a sales order and generate the invoice" → node_ids: [odoo_sales_crm, odoo_finance, manager], sub_tasks: '{"odoo_sales_crm": "Create the sales order", "odoo_finance": "Generate the invoice for the sales order"}'
 - "Create a marketing campaign in Odoo" → [odoo_marketing, manager]
 - "Approve leave request for John" → [odoo_hr, manager]
 - "Check production order status" → [odoo_manufacturing, manager]
-- "Check inventory levels and sales pipeline status" → [odoo_sales_crm, odoo_inventory, manager] with dependencies: {"odoo_sales_crm": [], "odoo_inventory": [], "manager": ["odoo_sales_crm", "odoo_inventory"]}
-- "Get employee list and check stock levels" → [odoo_hr, odoo_inventory, manager] with dependencies: {"odoo_hr": [], "odoo_inventory": [], "manager": ["odoo_hr", "odoo_inventory"]}
+- "Check inventory levels and sales pipeline status" → node_ids: [odoo_sales_crm, odoo_inventory, manager], dependencies: '{"odoo_sales_crm": "", "odoo_inventory": "", "manager": "odoo_sales_crm,odoo_inventory"}'
+- "Get employee list and check stock levels" → node_ids: [odoo_hr, odoo_inventory, manager], dependencies: '{"odoo_hr": "", "odoo_inventory": "", "manager": "odoo_hr,odoo_inventory"}'
 """.strip()
 
 
@@ -323,27 +323,28 @@ def _build_compose_tool(catalog: list[dict]) -> dict:
                             ),
                         },
                         "sub_tasks": {
-                            "type": "object",
+                            "type": "string",
                             "description": (
-                                "Optional per-node sub-task descriptions "
-                                "(keys = node_ids). Narrows each worker's "
-                                "prompt to its specific responsibility."
+                                "Optional JSON object mapping node_id to "
+                                "sub-task description. Narrows each worker's "
+                                "prompt to its specific responsibility. "
+                                "Example: "
+                                '{"odoo_sales_crm": "List open sales orders", '
+                                '"odoo_hr": "List all employees"}'
                             ),
-                            "additionalProperties": {"type": "string"},
                         },
                         "dependencies": {
-                            "type": "object",
+                            "type": "string",
                             "description": (
-                                "Per-node prerequisites. Keys are node_ids, "
-                                "values are arrays of node_ids that must "
-                                "complete first. Omit a node or use empty "
-                                "array for no dependencies. Nodes without "
-                                "dependencies on each other run in parallel."
+                                "Per-node prerequisites as a JSON object. "
+                                "Keys are node_ids, values are comma-separated "
+                                "node_ids that must complete first. Use empty "
+                                "string for no dependencies. Nodes without "
+                                "dependencies on each other run in parallel. "
+                                "Example: "
+                                '{"odoo_sales_crm": "", "odoo_inventory": "", '
+                                '"manager": "odoo_sales_crm,odoo_inventory"}'
                             ),
-                            "additionalProperties": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                            },
                         },
                     },
                     "required": ["node_ids"],
@@ -636,12 +637,48 @@ class PipelineComposer:
                     if fn := part.function_call:
                         if fn.name == "compose_pipeline":
                             raw_ids = list(fn.args.get("node_ids", []))
-                            raw_sub_tasks = dict(fn.args.get("sub_tasks", {}))
-                            raw_deps = dict(fn.args.get("dependencies", {}))
-                            # Normalise dep values to lists
-                            deps: dict[str, list[str]] = {
-                                k: list(v) for k, v in raw_deps.items()
-                            }
+                            # sub_tasks comes as JSON string
+                            raw_st = fn.args.get("sub_tasks", "")
+                            if isinstance(raw_st, str) and raw_st.strip():
+                                try:
+                                    import json
+
+                                    raw_sub_tasks = json.loads(raw_st)
+                                    if not isinstance(raw_sub_tasks, dict):
+                                        raw_sub_tasks = {}
+                                except (json.JSONDecodeError, ValueError):
+                                    raw_sub_tasks = {}
+                            elif isinstance(raw_st, dict):
+                                raw_sub_tasks = raw_st
+                            else:
+                                raw_sub_tasks = {}
+                            # dependencies comes as JSON string
+                            raw_dep_str = fn.args.get("dependencies", "")
+                            if isinstance(raw_dep_str, str) and raw_dep_str.strip():
+                                try:
+                                    import json
+
+                                    raw_dep_obj = json.loads(raw_dep_str)
+                                    if not isinstance(raw_dep_obj, dict):
+                                        raw_dep_obj = {}
+                                except (json.JSONDecodeError, ValueError):
+                                    raw_dep_obj = {}
+                            elif isinstance(raw_dep_str, dict):
+                                raw_dep_obj = raw_dep_str
+                            else:
+                                raw_dep_obj = {}
+                            # Normalise dep values: convert comma-
+                            # separated strings to lists.
+                            deps: dict[str, list[str]] = {}
+                            for k, v in raw_dep_obj.items():
+                                if isinstance(v, str):
+                                    deps[k] = [
+                                        s.strip() for s in v.split(",") if s.strip()
+                                    ]
+                                elif isinstance(v, list):
+                                    deps[k] = list(v)
+                                else:
+                                    deps[k] = []
                             result = self._validate_node_ids(raw_ids)
                             if result:
                                 logger.info(

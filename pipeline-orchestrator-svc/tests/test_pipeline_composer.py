@@ -91,7 +91,7 @@ class TestToolGeneration:
         decl = tool["function_declarations"][0]
         props = decl["parameters"]["properties"]
         assert "dependencies" in props
-        assert props["dependencies"]["type"] == "object"
+        assert props["dependencies"]["type"] == "string"
 
     def test_build_system_prompt_includes_all_nodes(self):
         prompt = _build_system_prompt(NODE_CATALOG)
@@ -1074,9 +1074,9 @@ class TestGeminiComposeWithDependencies:
                 "node_ids": ["odoo_sales_crm", "odoo_inventory", "manager"],
                 "sub_tasks": {},
                 "dependencies": {
-                    "odoo_sales_crm": [],
-                    "odoo_inventory": [],
-                    "manager": ["odoo_sales_crm", "odoo_inventory"],
+                    "odoo_sales_crm": "",
+                    "odoo_inventory": "",
+                    "manager": "odoo_sales_crm,odoo_inventory",
                 },
             },
         )
