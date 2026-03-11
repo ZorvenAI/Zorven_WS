@@ -212,6 +212,20 @@ NODE_CATALOG: list[dict[str, Any]] = [
         "output_key": "odoo_manufacturing",
         "config": {"persona_hint": "manufacturing_supervisor"},
     },
+    {
+        "id": "market_research",
+        "type": "external",
+        "url": f"{settings.MARKET_RESEARCH_AGENT_URL}/v1/execute",
+        "description": (
+            "Market research specialist: analyzes market size (TAM/SAM/SOM), "
+            "industry trends, competitive landscape, and economic indicators. "
+            "Uses web search, World Bank data, and news APIs. Use when the "
+            "prompt asks about market sizing, market analysis, industry trends, "
+            "growth potential, addressable market, or market opportunity."
+        ),
+        "output_key": "market_research",
+        "config": {"focus": "market_analysis,sizing,trends,competitive_landscape"},
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.
@@ -269,6 +283,13 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
             "via Odoo"
         ),
     },
+    {
+        "id": "market-research",
+        "description": (
+            "Market research and analysis: market sizing (TAM/SAM/SOM), "
+            "competitive landscape, industry trends, economic indicators"
+        ),
+    },
 ]
 
 # ── Few-shot examples for Tier 1 ──
@@ -291,6 +312,10 @@ Examples of prompt → pipeline compositions:
 - "Check production order status" → [odoo_manufacturing, manager]
 - "Check inventory levels and sales pipeline status" → node_ids: [odoo_sales_crm, odoo_inventory, manager], dependencies: '{"odoo_sales_crm": "", "odoo_inventory": "", "manager": "odoo_sales_crm,odoo_inventory"}'
 - "Get employee list and check stock levels" → node_ids: [odoo_hr, odoo_inventory, manager], dependencies: '{"odoo_hr": "", "odoo_inventory": "", "manager": "odoo_hr,odoo_inventory"}'
+- "What is the market size for AI-powered brand tools?" → [market_research, manager]
+- "Analyze the SaaS market opportunity and write a report" → [market_research, blog_author, manager]
+- "Research the competitive landscape for EV charging" → [market_research, manager]
+- "What are the industry trends in renewable energy and how does our brand fit?" → [web_research, market_research, manager]
 """.strip()
 
 
@@ -453,6 +478,8 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
         "- RAG + blog + social → rag-blog-social\n"
         "- RAG + blog (no social) → rag-blog-authoring\n"
         "- Brand positioning, market analysis → brand-analysis\n"
+        "- Market research, market sizing, TAM, SAM, SOM, industry trends, "
+        "growth potential, addressable market → market-research\n"
         "- Odoo ERP tasks, sales orders, inventory, HR, accounting, "
         "email campaigns, mass mailing, email marketing, marketing "
         "campaigns, newsletters → odoo-erp-operations\n"

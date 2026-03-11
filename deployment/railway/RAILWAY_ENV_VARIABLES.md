@@ -170,6 +170,7 @@ ORCHESTRATOR_CONTENT_AGENT_URL=http://content-agent.railway.internal:8050
 ORCHESTRATOR_SOCIAL_AGENT_URL=http://social-agent.railway.internal:8060
 ORCHESTRATOR_INTELLIGENCE_AGENT_URL=http://intelligence-agent.railway.internal:8030
 ORCHESTRATOR_RAG_UPLOADER_AGENT_URL=http://rag-uploader.railway.internal:8070
+ORCHESTRATOR_MARKET_RESEARCH_AGENT_URL=http://market-research-agent.railway.internal:8021
 
 # =============================================================================
 # Discovery Agent (DISCOVERY_ prefix, Redis DB 2)
@@ -236,3 +237,14 @@ UPLOADER_GCS_BUCKET_NAME=<bucket-name>
 UPLOADER_CORE_API_URL=http://backend.railway.internal:8000
 UPLOADER_CORE_API_TOKEN=<same-as-ORCHESTRATOR_SERVICE_TOKEN>
 UPLOADER_LOG_LEVEL=INFO
+
+# =============================================================================
+# Market Research Agent (MRA_ prefix, Redis DB 11)
+# =============================================================================
+MRA_REDIS_URL=<railway-redis-url>/11
+MRA_KAFKA_BOOTSTRAP_SERVERS=
+MRA_ANTHROPIC_API_KEY=<anthropic-api-key>
+MRA_TAVILY_API_KEY=<tavily-api-key>
+MRA_NEWSAPI_KEY=<newsapi-key>
+MRA_LLM_MODEL=claude-sonnet-4-20250514
+MRA_LOG_LEVEL=INFO

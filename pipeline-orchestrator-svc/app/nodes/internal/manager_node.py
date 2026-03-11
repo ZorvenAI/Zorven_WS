@@ -12,6 +12,7 @@ from app.nodes.base import BaseNode
 from app.state.schema import AgentState
 
 _RESEARCH_NODES = {"default_agent", "web_research"}
+_MARKET_RESEARCH_NODES = {"market_research"}
 
 
 def _source_label(source: dict) -> str:
@@ -65,6 +66,9 @@ class ManagerNode(BaseNode):
         bsi_data = self._extract_bsi(outputs)
         valuation_data = self._extract_valuation(outputs)
 
+        # Extract market research data
+        market_research_data = self._extract_market_research(outputs)
+
         result_data: dict[str, Any] = {
             "summary": (
                 f"Pipeline analysis completed. "
@@ -75,6 +79,22 @@ class ManagerNode(BaseNode):
             or ["Review the detailed node outputs for actionable insights."],
             "node_results": outputs,
         }
+
+        # Promote market research fields to top-level result_data
+        if market_research_data:
+            for key in (
+                "market_overview",
+                "market_sizing",
+                "competitive_landscape",
+                "industry_trends",
+                "economic_indicators",
+                "sources",
+                "confidence_score",
+                "methodology_notes",
+            ):
+                value = market_research_data.get(key)
+                if value:
+                    result_data[key] = value
 
         # Populate score from BSI (used by BrandEquityDashboard)
         if bsi_data:
@@ -123,6 +143,12 @@ class ManagerNode(BaseNode):
         """
         charts: list[dict[str, str]] = []
 
+        # Check for market research data
+        has_market_research = any(
+            isinstance(o, dict) and o.get("market_sizing")
+            for o in outputs.values()
+        )
+
         # Brand equity / valuation pipeline
         if bsi_data:
             charts.append(
@@ -165,6 +191,21 @@ class ManagerNode(BaseNode):
         # Determine dashboard type
         if bsi_data or valuation_data:
             schema_type = "brand_equity_dashboard"
+        elif has_market_research:
+            schema_type = "market_research_dashboard"
+            charts.append(
+                {"type": "market_sizing_cards", "data_key": "market_sizing"}
+            )
+            charts.append(
+                {
+                    "type": "competitive_landscape_table",
+                    "data_key": "competitive_landscape",
+                }
+            )
+            charts.append(
+                {"type": "industry_trends_list", "data_key": "industry_trends"}
+            )
+            charts.append({"type": "sources_table", "data_key": "sources"})
         elif has_blog or has_social:
             schema_type = "content_dashboard"
         elif any(isinstance(o, dict) and o.get("sources") for o in outputs.values()):
@@ -198,4 +239,17 @@ class ManagerNode(BaseNode):
                 val = output.get("valuation")
                 if isinstance(val, dict) and "brand_value_npv" in val:
                     return val
+        return None
+
+    @staticmethod
+    def _extract_market_research(outputs: dict[str, Any]) -> dict[str, Any] | None:
+        """Extract market research data from any node output.
+
+        Looks for outputs containing market_sizing or market_overview,
+        which are produced by the market-research-agent-svc.
+        """
+        for node_id, output in outputs.items():
+            if isinstance(output, dict):
+                if output.get("market_sizing") or output.get("market_overview"):
+                    return output
         return None

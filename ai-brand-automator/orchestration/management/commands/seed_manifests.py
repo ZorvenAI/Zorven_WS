@@ -471,6 +471,91 @@ class Command(BaseCommand):
                 },
             },
         },
+        {
+            "pipeline_id": "market-research",
+            "name": "Market Research & Analysis",
+            "description": (
+                "Comprehensive market research including market sizing "
+                "(TAM/SAM/SOM), competitive landscape analysis, industry "
+                "trend tracking, and economic indicator assessment."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "market_research",
+                        "type": "external",
+                        "url": "http://market-research-agent-svc:8021/v1/execute",
+                        "config": {
+                            "focus": "market_analysis,sizing,trends,competitive_landscape",
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "market_research"],
+                    ["market_research", "manager"],
+                ],
+                "global_config": {
+                    "model": "gemini-2.0-flash",
+                    "temperature": 0.3,
+                },
+            },
+        },
+        {
+            "pipeline_id": "market-research-report",
+            "name": "Market Research Report",
+            "description": (
+                "Market research followed by a structured research report. "
+                "Combines market analysis with content authoring for "
+                "publishable reports."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "market_research",
+                        "type": "external",
+                        "url": "http://market-research-agent-svc:8021/v1/execute",
+                        "config": {
+                            "focus": "market_analysis,sizing,trends",
+                        },
+                    },
+                    {
+                        "id": "blog_author",
+                        "type": "external",
+                        "url": "http://content-agent-svc:8050/v1/execute",
+                        "config": {"output_format": "markdown"},
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "market_research"],
+                    ["market_research", "blog_author"],
+                    ["blog_author", "manager"],
+                ],
+                "global_config": {
+                    "model": "gemini-2.0-flash",
+                    "temperature": 0.5,
+                },
+            },
+        },
     ]
 
     def handle(self, *args, **options):
