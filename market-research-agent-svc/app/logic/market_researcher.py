@@ -111,7 +111,8 @@ class MarketResearcher:
             import anthropic
 
             self._anthropic_client = anthropic.AsyncAnthropic(
-                api_key=self.anthropic_api_key
+                api_key=self.anthropic_api_key,
+                timeout=120.0,
             )
         return self._anthropic_client
 
@@ -137,17 +138,26 @@ class MarketResearcher:
             augmented_prompt += f" (focus: {focus})"
 
         # 1. PLAN — Decompose the research query
+        logger.info("PLAN phase starting for: %s", augmented_prompt[:100])
         research_plan = await self._plan_research(augmented_prompt, skill_context)
+        logger.info("PLAN phase complete: %d queries, %d indicators",
+                     len(research_plan.get("search_queries", [])),
+                     len(research_plan.get("indicators", [])))
 
         # 2. ACT — Execute data gathering in parallel
+        logger.info("ACT phase starting — gathering data from sources")
         web_results, economic_data, news_data = await self._gather_data(
             research_plan, previous_outputs
         )
+        logger.info("ACT phase complete: %d web, %d econ, %d news",
+                     len(web_results), len(economic_data), len(news_data))
 
         # 3. OBSERVE — Compile raw context and sources
         raw_context, sources = self._compile_context(
             web_results, economic_data, news_data
         )
+        logger.info("OBSERVE phase complete: %d chars context, %d sources",
+                     len(raw_context), len(sources))
 
         # Build geographic scope hint for synthesis
         geo_scope = research_plan.get("geographic_scope", "")
@@ -163,9 +173,11 @@ class MarketResearcher:
             )
 
         # 4. REFLECT — Synthesize via Claude
+        logger.info("REFLECT phase starting — synthesizing findings")
         synthesis = await self._synthesize(
             prompt, raw_context, skill_context, geo_hint
         )
+        logger.info("REFLECT phase complete")
 
         return MarketResearchResponse(
             query=prompt,
@@ -212,6 +224,7 @@ class MarketResearcher:
             if skill_context:
                 system += f"\n\nAdditional context:\n{skill_context[:2000]}"
 
+            logger.info("Calling Claude (%s) for research plan...", self.model)
             message = await client.messages.create(
                 model=self.model,
                 max_tokens=1024,
@@ -219,6 +232,7 @@ class MarketResearcher:
                 system=system,
                 messages=[{"role": "user", "content": prompt}],
             )
+            logger.info("Claude plan response received")
 
             content = message.content[0].text.strip()
             # Extract JSON from response (handle markdown code blocks)
@@ -425,6 +439,8 @@ class MarketResearcher:
                 user_message += f"{geo_hint}\n\n"
             user_message += f"Raw research data:\n{raw_context[:30000]}"
 
+            logger.info("Calling Claude (%s) for synthesis (%d chars context)...",
+                         self.model, len(user_message))
             message = await client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
@@ -432,6 +448,7 @@ class MarketResearcher:
                 system=system,
                 messages=[{"role": "user", "content": user_message}],
             )
+            logger.info("Claude synthesis response received")
 
             content = message.content[0].text.strip()
             # Extract JSON from response

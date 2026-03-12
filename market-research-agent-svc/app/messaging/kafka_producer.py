@@ -39,14 +39,16 @@ class TraceProducer:
         try:
             from aiokafka import AIOKafkaProducer
 
-            self._producer = AIOKafkaProducer(
+            producer = AIOKafkaProducer(
                 bootstrap_servers=self.bootstrap_servers,
                 value_serializer=lambda v: json.dumps(v).encode("utf-8"),
             )
-            await self._producer.start()
+            await producer.start()
+            self._producer = producer
             self._connected = True
             logger.info("TraceProducer connected to %s", self.bootstrap_servers)
         except Exception as exc:
+            self._producer = None
             logger.warning(
                 "TraceProducer failed to connect: %s. Running in no-op mode.",
                 exc,
@@ -117,14 +119,16 @@ class AuditProducer:
         try:
             from aiokafka import AIOKafkaProducer
 
-            self._producer = AIOKafkaProducer(
+            producer = AIOKafkaProducer(
                 bootstrap_servers=self.bootstrap_servers,
                 value_serializer=lambda v: json.dumps(v).encode("utf-8"),
             )
-            await self._producer.start()
+            await producer.start()
+            self._producer = producer
             self._connected = True
             logger.info("AuditProducer connected to %s", self.bootstrap_servers)
         except Exception as exc:
+            self._producer = None
             logger.warning(
                 "AuditProducer failed to connect: %s. Running in no-op mode.",
                 exc,
