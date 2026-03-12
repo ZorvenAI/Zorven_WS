@@ -778,37 +778,74 @@ function CompetitorIntelligenceSection({
             Competitors Analyzed ({competitors.length})
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {competitors.map((comp, i) => (
-              <div
-                key={i}
-                className="bg-white/5 rounded-lg p-4 border border-white/10"
-              >
-                <h5 className="text-sm font-semibold text-white mb-1">
-                  {comp.name}
-                </h5>
-                {comp.market_position && (
-                  <p className="text-xs text-brand-electric/80 mb-1.5 line-clamp-1">
-                    {comp.market_position}
-                  </p>
-                )}
-                {comp.description && (
-                  <p className="text-xs text-brand-silver/60 mb-2 line-clamp-3">
-                    {comp.description}
-                  </p>
-                )}
-                {comp.website && (
-                  <a
-                    href={comp.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-brand-electric hover:underline inline-flex items-center gap-1"
-                  >
-                    {comp.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
-                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                  </a>
-                )}
-              </div>
-            ))}
+            {competitors.map((comp, i) => {
+              const compAny = comp as unknown as Record<string, unknown>;
+              const swot = compAny.swot as Record<string, unknown> | undefined;
+              const reviewProfile = compAny.review_profile as Record<string, unknown> | undefined;
+              const pricingProfile = compAny.pricing_profile as Record<string, unknown> | undefined;
+              return (
+                <div
+                  key={i}
+                  className="bg-white/5 rounded-lg p-4 border border-white/10"
+                >
+                  <h5 className="text-sm font-semibold text-white mb-1">
+                    {comp.name}
+                  </h5>
+                  {comp.market_position && (
+                    <p className="text-xs text-brand-electric/80 mb-1.5 line-clamp-2">
+                      {comp.market_position}
+                    </p>
+                  )}
+                  {comp.description && (
+                    <p className="text-xs text-brand-silver/60 mb-2 line-clamp-3">
+                      {comp.description}
+                    </p>
+                  )}
+                  {/* Review summary */}
+                  {reviewProfile != null && reviewProfile.avg_rating != null ? (
+                    <p className="text-xs text-brand-silver/50 mb-1">
+                      Rating: <span className="text-amber-400 font-medium">{String(reviewProfile.avg_rating)}/5</span>
+                      {reviewProfile.total_reviews_estimated ? (
+                        <span> ({String(reviewProfile.total_reviews_estimated)} reviews)</span>
+                      ) : null}
+                    </p>
+                  ) : null}
+                  {/* Pricing hint */}
+                  {pricingProfile != null && pricingProfile.model_type ? (
+                    <p className="text-xs text-brand-silver/50 mb-1">
+                      Pricing: <span className="text-brand-silver font-medium capitalize">{String(pricingProfile.model_type)}</span>
+                      {pricingProfile.has_free_tier ? ' (Free tier available)' : null}
+                    </p>
+                  ) : null}
+                  {/* Inline SWOT mini-summary */}
+                  {swot && (
+                    <div className="mt-2 grid grid-cols-2 gap-1">
+                      {Array.isArray(swot.strengths) && swot.strengths.length > 0 && (
+                        <p className="text-xs text-emerald-400/80 line-clamp-1">
+                          + {String(swot.strengths[0])}
+                        </p>
+                      )}
+                      {Array.isArray(swot.weaknesses) && swot.weaknesses.length > 0 && (
+                        <p className="text-xs text-red-400/80 line-clamp-1">
+                          - {String(swot.weaknesses[0])}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {comp.website && (
+                    <a
+                      href={comp.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-brand-electric hover:underline inline-flex items-center gap-1 mt-2"
+                    >
+                      {comp.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
+                      <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                    </a>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -1376,6 +1413,8 @@ export default function ResultDashboard({
     'positioning_map',
     'benchmarking_report',
     'executive_summary',
+    'query',
+    'raw_context',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),
