@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Download spaCy model for Presidio PII detection (avoids 400MB download on first start)
+RUN python -m spacy download en_core_web_lg
+
 # Copy application code
 COPY . .
 

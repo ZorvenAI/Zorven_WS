@@ -3,7 +3,8 @@ Market Research Agent Service — FastAPI application entry point.
 
 Provides structured market research capabilities including market sizing
 (TAM/SAM/SOM), competitive landscape analysis, industry trend tracking,
-and economic indicator lookups.
+and economic indicator lookups. Implements 8 executable skills (SKL-MRA-01
+through SKL-MRA-08) with 3-layer guardrails, RBAC, and circuit breakers.
 """
 
 import logging
@@ -16,13 +17,31 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import routes
 from app.api.routes import router
 from app.cache.redis_manager import RedisManager
+from app.circuit_breaker.breaker import create_circuit_breakers
 from app.core.config import settings
 from app.core.logging_config import setup_logging
-from app.logic.guardrails import InputGuardrail, OutputGuardrail
+from app.events.catalog import EventEmitter
+from app.logic.guardrails import (
+    InputGuardrail,
+    InputGuardrails,
+    OutputGuardrail,
+    OutputGuardrails,
+    PlanToolGuardrails,
+)
 from app.logic.market_researcher import MarketResearcher
 from app.messaging.kafka_producer import AuditProducer, TraceProducer
+from app.rbac.engine import RBACEngine
 from app.services.api_clients import GNewsClient, TavilySearchClient, WorldBankClient
 from app.services.mra_executor import MRAExecutor
+from app.skills.economic_indicator_lookup import EconomicIndicatorLookup
+from app.skills.human_escalation import HumanEscalation
+from app.skills.industry_data_extraction import IndustryDataExtraction
+from app.skills.market_analysis_synthesis import MarketAnalysisSynthesis
+from app.skills.rag_context_retrieval import RAGContextRetrieval
+from app.skills.rag_store_indexer import RAGStoreIndexer
+from app.skills.registry import SkillRegistry
+from app.skills.research_report_generator import ResearchReportGenerator
+from app.skills.web_market_search import WebMarketSearch
 
 logger = logging.getLogger(__name__)
 
@@ -56,18 +75,80 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     audit_producer = AuditProducer(settings.KAFKA_BOOTSTRAP_SERVERS)
     await audit_producer.start()
 
-    # Initialize market researcher
+    # Initialize Anthropic client (lazy — only if API key present)
+    anthropic_client = None
+    if settings.ANTHROPIC_API_KEY:
+        try:
+            import anthropic
+
+            anthropic_client = anthropic.AsyncAnthropic(
+                api_key=settings.ANTHROPIC_API_KEY,
+                timeout=120.0,
+            )
+            logger.info("Anthropic client initialized — live LLM mode")
+        except Exception as exc:
+            logger.warning("Failed to initialize Anthropic client: %s", exc)
+    else:
+        logger.warning("No Anthropic API key — running in stub mode")
+
+    # Initialize circuit breakers
+    circuit_breakers = create_circuit_breakers(settings)
+
+    # Initialize skill registry with all 8 skills
+    skill_registry = SkillRegistry()
+    skill_registry.register(WebMarketSearch(tavily_client, news_client))
+    skill_registry.register(IndustryDataExtraction(tavily_client))
+    skill_registry.register(
+        MarketAnalysisSynthesis(
+            anthropic_client=anthropic_client,
+            model=settings.LLM_MODEL,
+            temperature=settings.LLM_TEMPERATURE,
+            max_tokens=settings.LLM_MAX_TOKENS,
+        )
+    )
+    skill_registry.register(EconomicIndicatorLookup(world_bank_client))
+    skill_registry.register(
+        RAGContextRetrieval(settings.RAG_SERVICE_URL, enabled=settings.RAG_ENABLED)
+    )
+    skill_registry.register(
+        ResearchReportGenerator(
+            anthropic_client=anthropic_client,
+            model=settings.LLM_MODEL,
+            max_tokens=settings.LLM_MAX_TOKENS,
+        )
+    )
+    skill_registry.register(
+        RAGStoreIndexer(settings.RAG_SERVICE_URL, enabled=settings.RAG_ENABLED)
+    )
+    skill_registry.register(HumanEscalation(audit_producer))
+
+    # Initialize RBAC engine
+    rbac_engine = RBACEngine(enabled=settings.RBAC_ENABLED)
+
+    # Initialize event emitter
+    event_emitter = EventEmitter(audit_producer)
+
+    # Initialize 3-layer guardrails
+    input_guardrails = InputGuardrails(redis_manager, settings)
+    plan_guardrails = PlanToolGuardrails(rbac_engine, settings)
+    output_guardrails = OutputGuardrails(settings)
+
+    # Initialize market researcher (skill-based PAOR engine)
     researcher = MarketResearcher(
-        tavily_client=tavily_client,
-        world_bank_client=world_bank_client,
-        news_client=news_client,
-        anthropic_api_key=settings.ANTHROPIC_API_KEY,
+        skill_registry=skill_registry,
+        rbac_engine=rbac_engine,
+        circuit_breakers=circuit_breakers,
+        input_guardrails=input_guardrails,
+        plan_guardrails=plan_guardrails,
+        output_guardrails=output_guardrails,
+        event_emitter=event_emitter,
+        anthropic_client=anthropic_client,
         model=settings.LLM_MODEL,
         temperature=settings.LLM_TEMPERATURE,
         max_tokens=settings.LLM_MAX_TOKENS,
     )
 
-    # Initialize executor
+    # Initialize executor (thin wrapper)
     executor = MRAExecutor(
         researcher=researcher,
         redis_manager=redis_manager,
@@ -78,28 +159,35 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     routes.executor = executor
 
-    if settings.ANTHROPIC_API_KEY:
-        logger.info("Anthropic API key configured — live LLM mode")
-    else:
-        logger.warning("No Anthropic API key — running in stub mode")
-
     if settings.TAVILY_API_KEY:
         logger.info("Tavily API key configured — live web search mode")
     else:
         logger.warning("No Tavily API key — web search disabled")
 
+    logger.info(
+        "MRA initialized: %d skills, RBAC=%s, %d circuit breakers",
+        len(skill_registry.get_all_skills()),
+        settings.RBAC_ENABLED,
+        len(circuit_breakers),
+    )
+
     yield
 
     # Shutdown
     await executor.close()
+    if anthropic_client:
+        try:
+            await anthropic_client.close()
+        except Exception:
+            pass
     routes.executor = None
     logger.info("Market Research Agent shut down")
 
 
 app = FastAPI(
     title="Market Research Agent Service",
-    description="Market research, sizing, and competitive analysis agent",
-    version="0.1.0",
+    description="Market research, sizing, and competitive analysis agent with 8 skills",
+    version="0.2.0",
     lifespan=lifespan,
 )
 

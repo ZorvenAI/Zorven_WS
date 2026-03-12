@@ -84,12 +84,23 @@ class TestExecuteHappyPath:
     async def test_emits_trace_events(self):
         executor = _make_executor()
         await executor.execute(_make_request(), "tenant-1")
-        assert executor.trace_producer.send_step.await_count >= 2  # Start + complete
+        assert executor.trace_producer.send_step.await_count >= 2
 
     async def test_emits_audit_event(self):
         executor = _make_executor()
         await executor.execute(_make_request(), "tenant-1")
         executor.audit_producer.send_audit.assert_awaited_once()
+
+    async def test_passes_user_role_from_tenant_context(self):
+        executor = _make_executor()
+        request = ExecuteRequest(
+            input_prompt="test market",
+            input_context={"job_id": "j1"},
+            tenant_context={"tenant_id": "t1", "user_role": "VIEWER"},
+        )
+        await executor.execute(request, "t1")
+        call_kwargs = executor.researcher.research.call_args.kwargs
+        assert call_kwargs["user_role"] == "VIEWER"
 
 
 class TestCacheBehavior:
@@ -110,29 +121,14 @@ class TestCacheBehavior:
         }
         executor = _make_executor(cached_result=cached)
         result = await executor.execute(_make_request(), "tenant-1")
-
         assert result.query == "cached query"
         assert result.confidence_score == 0.9
-        # Researcher should NOT be called on cache hit
         executor.researcher.research.assert_not_awaited()
 
     async def test_cache_miss_calls_researcher(self):
         executor = _make_executor(cached_result=None)
         await executor.execute(_make_request(), "tenant-1")
         executor.researcher.research.assert_awaited_once()
-
-
-class TestRateLimiting:
-    async def test_rate_limit_exceeded_raises_429(self):
-        executor = _make_executor(rate_limit_allowed=False)
-        with pytest.raises(HTTPException) as exc_info:
-            await executor.execute(_make_request(), "tenant-1")
-        assert exc_info.value.status_code == 429
-
-    async def test_rate_limit_allowed_proceeds(self):
-        executor = _make_executor(rate_limit_allowed=True)
-        result = await executor.execute(_make_request(), "tenant-1")
-        assert isinstance(result, MarketResearchResponse)
 
 
 class TestInputGuardrail:
@@ -190,7 +186,6 @@ class TestCacheKeyBuilding:
 
 class TestNoRedis:
     async def test_executes_without_redis(self):
-        """Executor works when redis_manager is None."""
         researcher = MagicMock(spec=MarketResearcher)
         researcher.research = AsyncMock(
             return_value=MarketResearchResponse(
