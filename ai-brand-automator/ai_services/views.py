@@ -463,10 +463,34 @@ def _process_chat_message(
             "timesheet",
             "questionnaire",
         )
+        # Skip brand extraction for market research prompts — they
+        # research markets/industries, not specific brands.
+        _market_research_cues = (
+            "market size",
+            "market sizing",
+            "market research",
+            "market analysis",
+            "market opportunity",
+            "market forecast",
+            "market outlook",
+            "market potential",
+            "market growth",
+            " market in ",
+            " market for ",
+            "competitive landscape",
+            "industry trends",
+            "industry analysis",
+            "addressable market",
+            "economic indicators",
+            "how big is the",
+            "growth opportunities",
+        )
         msg_lower = message.lower()
         if any(cue in msg_lower for cue in _odoo_strong) or any(
             cue in msg_lower for cue in _odoo_domain + _odoo_module
         ):
+            target_brand = None
+        elif any(cue in msg_lower for cue in _market_research_cues):
             target_brand = None
         else:
             target_brand = GeminiAIService.extract_target_brand(message)
