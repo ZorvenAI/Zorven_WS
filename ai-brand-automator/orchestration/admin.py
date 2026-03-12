@@ -4,7 +4,12 @@ Admin configuration for the orchestration app.
 
 from django.contrib import admin
 
-from .models import AnalysisJob, PipelineManifest
+from .models import (
+    AnalysisJob,
+    CompetitorProfile,
+    CompetitorSnapshot,
+    PipelineManifest,
+)
 
 
 @admin.register(PipelineManifest)
@@ -41,3 +46,32 @@ class AnalysisJobAdmin(admin.ModelAdmin):
         "started_at",
         "completed_at",
     ]
+
+
+@admin.register(CompetitorProfile)
+class CompetitorProfileAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "slug",
+        "competitor_type",
+        "is_active",
+        "tenant",
+        "last_profiled_at",
+        "created_at",
+    ]
+    list_filter = ["competitor_type", "is_active"]
+    search_fields = ["name", "slug", "website"]
+    readonly_fields = ["created_at", "updated_at"]
+
+
+@admin.register(CompetitorSnapshot)
+class CompetitorSnapshotAdmin(admin.ModelAdmin):
+    list_display = [
+        "competitor",
+        "snapshot_date",
+        "tenant",
+        "created_at",
+    ]
+    list_filter = ["snapshot_date"]
+    search_fields = ["competitor__name", "competitor__slug"]
+    readonly_fields = ["created_at"]

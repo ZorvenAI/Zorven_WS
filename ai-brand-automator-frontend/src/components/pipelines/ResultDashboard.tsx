@@ -375,6 +375,44 @@ interface SourceEntry {
   description?: string;
 }
 
+/* ── Competitor Intelligence Types ─────────────────────────────────── */
+
+interface CIACompetitorProfile {
+  slug?: string;
+  name: string;
+  website?: string;
+  description?: string;
+  market_position?: string;
+  confidence?: number;
+  website_profile?: Record<string, unknown>;
+  social_presence?: Record<string, unknown>;
+  review_profile?: Record<string, unknown>;
+  pricing_profile?: Record<string, unknown>;
+  market_share_estimate?: Record<string, unknown>;
+  swot?: Record<string, unknown>;
+}
+
+interface SWOTAnalysis {
+  competitor: string;
+  strengths?: string[];
+  weaknesses?: string[];
+  opportunities?: string[];
+  threats?: string[];
+}
+
+interface PositioningGap {
+  dimension: string;
+  gap_description?: string;
+  opportunity_score?: number;
+  evidence?: string;
+}
+
+interface BenchmarkRanking {
+  competitor: string;
+  overall_score?: number;
+  tier?: string;
+}
+
 /* ── MarketResearchDashboard (inline) ─────────────────────────────── */
 
 function MarketResearchSection({
@@ -674,6 +712,507 @@ function MarketResearchSection({
   );
 }
 
+/* ── CompetitorIntelligenceSection ──────────────────────────────────── */
+
+function CompetitorIntelligenceSection({
+  executiveSummary,
+  competitors,
+  competitorMatrix,
+  swotAnalyses,
+  positioningGaps,
+  benchmarkingReport,
+  sources,
+  confidenceScore,
+  findings,
+  recommendations,
+}: {
+  executiveSummary?: string;
+  competitors?: CIACompetitorProfile[];
+  competitorMatrix?: Record<string, Record<string, number>>;
+  swotAnalyses?: SWOTAnalysis[];
+  positioningGaps?: PositioningGap[];
+  benchmarkingReport?: Record<string, unknown>;
+  sources?: SourceEntry[];
+  confidenceScore?: number;
+  findings?: string[];
+  recommendations?: string[];
+}) {
+  return (
+    <div className="space-y-6">
+      {/* Confidence badge */}
+      {confidenceScore != null && confidenceScore > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
+            Confidence
+          </span>
+          <span
+            className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold ${
+              confidenceScore >= 0.7
+                ? 'bg-emerald-500/20 text-emerald-400'
+                : confidenceScore >= 0.4
+                  ? 'bg-amber-500/20 text-amber-400'
+                  : 'bg-red-500/20 text-red-400'
+            }`}
+          >
+            {Math.round(confidenceScore * 100)}%
+          </span>
+        </div>
+      )}
+
+      {/* Executive Summary */}
+      {executiveSummary && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Executive Summary
+          </h4>
+          <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+            <MarkdownMessage content={executiveSummary} />
+          </div>
+        </section>
+      )}
+
+      {/* Competitor Profiles */}
+      {competitors && competitors.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Competitors Analyzed ({competitors.length})
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {competitors.map((comp, i) => (
+              <div
+                key={i}
+                className="bg-white/5 rounded-lg p-4 border border-white/10"
+              >
+                <h5 className="text-sm font-semibold text-white mb-1">
+                  {comp.name}
+                </h5>
+                {comp.market_position && (
+                  <p className="text-xs text-brand-electric/80 mb-1.5 line-clamp-1">
+                    {comp.market_position}
+                  </p>
+                )}
+                {comp.description && (
+                  <p className="text-xs text-brand-silver/60 mb-2 line-clamp-3">
+                    {comp.description}
+                  </p>
+                )}
+                {comp.website && (
+                  <a
+                    href={comp.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-brand-electric hover:underline inline-flex items-center gap-1"
+                  >
+                    {comp.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
+                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Competitor Matrix */}
+      {competitorMatrix && Object.keys(competitorMatrix).length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Competitor Matrix
+          </h4>
+          <div className="overflow-x-auto rounded-lg border border-white/10">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-brand-midnight text-xs text-brand-silver/60 uppercase sticky top-0 z-10">
+                <tr>
+                  <th className="px-3 py-2">Dimension</th>
+                  {(() => {
+                    const allCompetitors = new Set<string>();
+                    Object.values(competitorMatrix).forEach((scores) => {
+                      if (typeof scores === 'object' && scores) {
+                        Object.keys(scores).forEach((k) => allCompetitors.add(k));
+                      }
+                    });
+                    return Array.from(allCompetitors)
+                      .slice(0, 8)
+                      .map((name) => (
+                        <th key={name} className="px-3 py-2 text-center">
+                          {name}
+                        </th>
+                      ));
+                  })()}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {Object.entries(competitorMatrix)
+                  .slice(0, 10)
+                  .map(([dimension, scores]) => {
+                    const allCompetitors = new Set<string>();
+                    Object.values(competitorMatrix).forEach((s) => {
+                      if (typeof s === 'object' && s) {
+                        Object.keys(s).forEach((k) => allCompetitors.add(k));
+                      }
+                    });
+                    return (
+                      <tr key={dimension} className="hover:bg-white/5">
+                        <td className="px-3 py-2 text-brand-silver font-medium capitalize">
+                          {dimension.replace(/_/g, ' ')}
+                        </td>
+                        {Array.from(allCompetitors)
+                          .slice(0, 8)
+                          .map((comp) => {
+                            const score =
+                              typeof scores === 'object' && scores
+                                ? (scores as Record<string, number>)[comp]
+                                : undefined;
+                            return (
+                              <td
+                                key={comp}
+                                className="px-3 py-2 text-center text-brand-silver"
+                              >
+                                {score != null ? (
+                                  <span
+                                    className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold ${
+                                      score >= 8
+                                        ? 'bg-emerald-500/20 text-emerald-400'
+                                        : score >= 5
+                                          ? 'bg-amber-500/20 text-amber-400'
+                                          : 'bg-red-500/20 text-red-400'
+                                    }`}
+                                  >
+                                    {score}
+                                  </span>
+                                ) : (
+                                  <span className="text-brand-silver/30">-</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* SWOT Analyses */}
+      {swotAnalyses && swotAnalyses.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            SWOT Analyses
+          </h4>
+          <div className="space-y-4">
+            {swotAnalyses.map((sw, i) => (
+              <div
+                key={i}
+                className="bg-white/5 rounded-lg p-4 border border-white/10"
+              >
+                <h5 className="text-sm font-semibold text-white mb-3">
+                  {sw.competitor}
+                </h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {sw.strengths && sw.strengths.length > 0 && (
+                    <div className="bg-emerald-500/10 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">
+                        Strengths
+                      </p>
+                      <ul className="space-y-1">
+                        {sw.strengths.slice(0, 5).map((s, j) => (
+                          <li key={j} className="text-xs text-brand-silver flex gap-2">
+                            <span className="text-emerald-400 mt-0.5">+</span>
+                            <span>{s}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {sw.weaknesses && sw.weaknesses.length > 0 && (
+                    <div className="bg-red-500/10 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">
+                        Weaknesses
+                      </p>
+                      <ul className="space-y-1">
+                        {sw.weaknesses.slice(0, 5).map((w, j) => (
+                          <li key={j} className="text-xs text-brand-silver flex gap-2">
+                            <span className="text-red-400 mt-0.5">-</span>
+                            <span>{w}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {sw.opportunities && sw.opportunities.length > 0 && (
+                    <div className="bg-blue-500/10 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">
+                        Opportunities
+                      </p>
+                      <ul className="space-y-1">
+                        {sw.opportunities.slice(0, 5).map((o, j) => (
+                          <li key={j} className="text-xs text-brand-silver flex gap-2">
+                            <span className="text-blue-400 mt-0.5">*</span>
+                            <span>{o}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {sw.threats && sw.threats.length > 0 && (
+                    <div className="bg-amber-500/10 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">
+                        Threats
+                      </p>
+                      <ul className="space-y-1">
+                        {sw.threats.slice(0, 5).map((t, j) => (
+                          <li key={j} className="text-xs text-brand-silver flex gap-2">
+                            <span className="text-amber-400 mt-0.5">!</span>
+                            <span>{t}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Positioning Gaps */}
+      {positioningGaps && positioningGaps.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Positioning Gap Analysis
+          </h4>
+          <div className="space-y-2">
+            {positioningGaps.map((gap, i) => (
+              <div
+                key={i}
+                className="bg-white/5 rounded-lg px-4 py-3 border border-white/10"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-white capitalize">
+                      {gap.dimension?.replace(/_/g, ' ')}
+                    </p>
+                    {gap.gap_description && (
+                      <p className="text-xs text-brand-silver/70 mt-1">
+                        {gap.gap_description}
+                      </p>
+                    )}
+                    {gap.evidence && (
+                      <p className="text-xs text-brand-silver/50 mt-1 italic">
+                        {gap.evidence}
+                      </p>
+                    )}
+                  </div>
+                  {gap.opportunity_score != null && (
+                    <span
+                      className={`inline-flex items-center justify-center w-10 h-10 rounded-full text-sm font-bold flex-shrink-0 ${
+                        gap.opportunity_score >= 7
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : gap.opportunity_score >= 4
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : 'bg-red-500/20 text-red-400'
+                      }`}
+                    >
+                      {gap.opportunity_score}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Benchmarking Report */}
+      {benchmarkingReport && Object.keys(benchmarkingReport).length > 0 && (() => {
+        const benchSummary = benchmarkingReport.summary
+          ? String(benchmarkingReport.summary)
+          : '';
+        const benchRankings: BenchmarkRanking[] = Array.isArray(
+          benchmarkingReport.rankings
+        )
+          ? (benchmarkingReport.rankings as BenchmarkRanking[])
+          : [];
+        const benchDifferentiators: string[] = Array.isArray(
+          benchmarkingReport.key_differentiators
+        )
+          ? (benchmarkingReport.key_differentiators as string[])
+          : [];
+        const benchDynamics = benchmarkingReport.market_dynamics
+          ? String(benchmarkingReport.market_dynamics)
+          : '';
+        return (
+          <section>
+            <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+              Competitive Benchmarking
+            </h4>
+            {benchSummary && (
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10 mb-4">
+                <MarkdownMessage content={benchSummary} />
+              </div>
+            )}
+            {benchRankings.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {benchRankings.map((r, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 bg-white/5 rounded-lg px-4 py-2 border border-white/10"
+                  >
+                    <span className="text-brand-electric font-bold text-lg w-6 text-center">
+                      {i + 1}
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-white">
+                        {r.competitor}
+                      </p>
+                      {r.tier && (
+                        <span className="text-xs text-brand-silver/60 capitalize">
+                          {r.tier}
+                        </span>
+                      )}
+                    </div>
+                    {r.overall_score != null && (
+                      <div className="flex items-center gap-2">
+                        <div className="w-20 h-2 bg-white/10 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${
+                              r.overall_score >= 70
+                                ? 'bg-emerald-400'
+                                : r.overall_score >= 40
+                                  ? 'bg-amber-400'
+                                  : 'bg-red-400'
+                            }`}
+                            style={{ width: `${Math.min(r.overall_score, 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-bold text-brand-silver w-8 text-right">
+                          {r.overall_score}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {benchDifferentiators.length > 0 && (
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10 mb-4">
+                <p className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                  Key Differentiators
+                </p>
+                <ul className="space-y-1">
+                  {benchDifferentiators.map((d, i) => (
+                    <li
+                      key={i}
+                      className="text-xs text-brand-silver flex gap-2"
+                    >
+                      <span className="text-brand-electric mt-0.5">*</span>
+                      <span>{d}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {benchDynamics && (
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                <p className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                  Market Dynamics
+                </p>
+                <MarkdownMessage content={benchDynamics} />
+              </div>
+            )}
+          </section>
+        );
+      })()}
+
+      {/* Key Findings */}
+      {findings && findings.length > 0 && (() => {
+        const filtered = findings.filter((f) => {
+          if (typeof f !== 'string') return false;
+          const trimmed = f.trim();
+          if (!trimmed || trimmed.startsWith('{') || trimmed.startsWith('[')) return false;
+          if (trimmed.split(/\s+/).length < 5) return false;
+          if (/^completed \d+ tool calls?$/i.test(trimmed)) return false;
+          if (/"[^"]+"\s*:/.test(trimmed)) return false;
+          return true;
+        });
+        if (filtered.length === 0) return null;
+        return (
+          <section>
+            <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+              Key Findings
+            </h4>
+            {filtered.map((f, i) => (
+              <div key={i} className="mb-2">
+                <MarkdownMessage content={f} />
+              </div>
+            ))}
+          </section>
+        );
+      })()}
+
+      {/* Recommendations */}
+      {recommendations && recommendations.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Recommendations
+          </h4>
+          {recommendations.map((r, i) => (
+            <div key={i} className="mb-2">
+              <MarkdownMessage content={r} />
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* Sources */}
+      {sources && sources.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Sources ({sources.length})
+          </h4>
+          <div className="overflow-x-auto rounded-lg border border-white/10 max-h-64 overflow-y-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-brand-midnight text-xs text-brand-silver/60 uppercase sticky top-0 z-10">
+                <tr>
+                  <th className="px-3 py-2">Type</th>
+                  <th className="px-3 py-2">Source</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {sources.map((src, i) => (
+                  <tr key={i} className="hover:bg-white/5">
+                    <td className="px-3 py-2 text-brand-silver/60 whitespace-nowrap capitalize text-xs">
+                      {(src.type || 'web').replace(/_/g, ' ')}
+                    </td>
+                    <td className="px-3 py-2 text-brand-silver">
+                      {src.url && /^https?:\/\//i.test(src.url) ? (
+                        <a
+                          href={src.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-brand-electric hover:underline inline-flex items-center gap-1"
+                        >
+                          {src.title || src.url}
+                          <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                        </a>
+                      ) : (
+                        <span>{src.title || '-'}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function ResultDashboard({
   resultData,
   manifestName,
@@ -696,6 +1235,12 @@ export default function ResultDashboard({
   // ── Detect market research data ──────────────────────────────────
   const hasMarketResearch =
     resultData.market_sizing != null || resultData.market_overview != null;
+
+  // ── Detect competitor intelligence data ────────────────────────
+  const hasCompetitorIntelligence =
+    resultData.competitors != null ||
+    resultData.competitor_matrix != null ||
+    resultData.swot_analyses != null;
 
   // ── Extract well-known keys ──────────────────────────────────────
   const summary = resultData.summary as string | undefined;
@@ -822,6 +1367,15 @@ export default function ResultDashboard({
     'sources',
     'confidence_score',
     'methodology_notes',
+    // Competitor Intelligence keys
+    'competitors',
+    'competitors_analyzed',
+    'competitor_matrix',
+    'swot_analyses',
+    'positioning_gaps',
+    'positioning_map',
+    'benchmarking_report',
+    'executive_summary',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),
@@ -842,7 +1396,7 @@ export default function ResultDashboard({
       </div>
 
       {/* Score badge (only when meaningful, i.e. > 0, and not market research) */}
-      {!hasMarketResearch && score !== undefined && score > 0 && (
+      {!hasMarketResearch && !hasCompetitorIntelligence && score !== undefined && score > 0 && (
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
             Score
@@ -853,8 +1407,8 @@ export default function ResultDashboard({
         </div>
       )}
 
-      {/* Summary (skip generic "Pipeline analysis completed" for market research) */}
-      {summary && !hasMarketResearch && (
+      {/* Summary (skip generic "Pipeline analysis completed" for market research / CIA) */}
+      {summary && !hasMarketResearch && !hasCompetitorIntelligence && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Summary
@@ -878,8 +1432,24 @@ export default function ResultDashboard({
         />
       )}
 
+      {/* ── Competitor Intelligence Dashboard ──────────────────────── */}
+      {hasCompetitorIntelligence && (
+        <CompetitorIntelligenceSection
+          executiveSummary={resultData.executive_summary as string | undefined}
+          competitors={resultData.competitors as CIACompetitorProfile[] | undefined}
+          competitorMatrix={resultData.competitor_matrix as Record<string, Record<string, number>> | undefined}
+          swotAnalyses={resultData.swot_analyses as SWOTAnalysis[] | undefined}
+          positioningGaps={resultData.positioning_gaps as PositioningGap[] | undefined}
+          benchmarkingReport={resultData.benchmarking_report as Record<string, unknown> | undefined}
+          sources={resultData.sources as SourceEntry[] | undefined}
+          confidenceScore={resultData.confidence_score as number | undefined}
+          findings={findings}
+          recommendations={recommendations}
+        />
+      )}
+
       {/* Key findings — filter out raw JSON blobs (internal agent state) */}
-      {!hasMarketResearch && findings && findings.length > 0 && (() => {
+      {!hasMarketResearch && !hasCompetitorIntelligence && findings && findings.length > 0 && (() => {
         const filtered = findings.filter((f) => {
           if (typeof f !== 'string') return false;
           const trimmed = f.trim();
@@ -911,7 +1481,7 @@ export default function ResultDashboard({
       })()}
 
       {/* Recommendations */}
-      {!hasMarketResearch && recommendations && recommendations.length > 0 && (
+      {!hasMarketResearch && !hasCompetitorIntelligence && recommendations && recommendations.length > 0 && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations

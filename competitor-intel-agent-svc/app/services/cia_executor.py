@@ -1,0 +1,173 @@
+"""
+CIA Executor - thin wrapper that delegates to CompetitorAnalyzer.
+
+The analyzer handles guardrails, skills, RBAC, and circuit breakers.
+The executor handles caching and audit/trace event emission.
+"""
+
+import hashlib
+import json
+import logging
+from typing import Optional
+
+from app.api.schemas import CompetitorIntelligenceResponse, ExecuteRequest
+from app.cache.redis_manager import RedisManager
+from app.core.config import settings
+from app.logic.competitor_analyzer import CompetitorAnalyzer
+from app.messaging.kafka_producer import AuditProducer, TraceProducer
+
+logger = logging.getLogger(__name__)
+
+
+class CIAExecutor:
+    """Orchestrates caching, analysis delegation, and audit."""
+
+    def __init__(
+        self,
+        analyzer: CompetitorAnalyzer,
+        redis_manager: Optional[RedisManager] = None,
+        trace_producer: Optional[TraceProducer] = None,
+        audit_producer: Optional[AuditProducer] = None,
+    ) -> None:
+        self.analyzer = analyzer
+        self.redis_manager = redis_manager
+        self.trace_producer = trace_producer
+        self.audit_producer = audit_producer
+
+    async def execute(
+        self,
+        request: ExecuteRequest,
+        tenant_id: str,
+    ) -> CompetitorIntelligenceResponse:
+        """
+        Execute competitive intelligence with caching and audit.
+
+        1. Cache check
+        2. Delegate to CompetitorAnalyzer (handles skills, RBAC, 3-layer guardrails)
+        3. Cache result
+        4. Audit event
+        """
+        job_id = request.input_context.get("job_id", "")
+        prompt = request.input_prompt
+
+        # 1. Cache check
+        cache_key = self._build_cache_key(prompt, request.config)
+        if self.redis_manager:
+            cached = await self.redis_manager.get_cached_result(cache_key)
+            if cached:
+                logger.info("Cache HIT for tenant %s", tenant_id)
+                await self._emit_trace(job_id, "Returning cached analysis results")
+                return CompetitorIntelligenceResponse(**cached)
+
+        # 2. Delegate to analyzer (handles 3-layer guardrails, RBAC, skills)
+        logger.info(
+            "Starting competitive intelligence for tenant %s: %s",
+            tenant_id,
+            prompt[:100],
+        )
+        await self._emit_trace(job_id, f"Analyzing: {prompt[:80]}")
+
+        # Extract user_role from tenant_context
+        tenant_ctx = request.tenant_context
+        if isinstance(tenant_ctx, dict):
+            user_role = tenant_ctx.get("user_role", "EDITOR")
+        else:
+            user_role = getattr(tenant_ctx, "user_role", "EDITOR")
+
+        result = await self.analyzer.analyze(
+            prompt=prompt,
+            config=request.config,
+            tenant_id=tenant_id,
+            user_role=user_role,
+            previous_outputs=request.previous_outputs,
+        )
+
+        # 3. Cache result
+        if self.redis_manager:
+            await self.redis_manager.set_cached_result(
+                cache_key,
+                result.model_dump(),
+                ttl=settings.RESULT_CACHE_TTL,
+            )
+
+        # 4. Audit event
+        await self._emit_audit(
+            job_id=job_id,
+            tenant_id=tenant_id,
+            query=prompt,
+            result=result,
+        )
+
+        await self._emit_trace(
+            job_id,
+            f"Analysis complete. {len(result.competitors)} competitors, "
+            f"{len(result.sources)} sources, {len(result.findings)} findings. "
+            f"Confidence: {result.confidence_score:.0%}",
+            status="COMPLETED",
+        )
+
+        return result
+
+    async def close(self) -> None:
+        """Clean up resources."""
+        if self.redis_manager:
+            await self.redis_manager.close()
+        if self.trace_producer:
+            await self.trace_producer.stop()
+        if self.audit_producer:
+            await self.audit_producer.stop()
+        await self.analyzer.close()
+
+    @staticmethod
+    def _build_cache_key(prompt: str, config: dict) -> str:
+        """Build a deterministic cache key from prompt + config."""
+        key_data = json.dumps({"prompt": prompt, "config": config}, sort_keys=True)
+        return hashlib.md5(key_data.encode()).hexdigest()
+
+    async def _emit_trace(
+        self,
+        job_id: str,
+        message: str,
+        status: str = "PROCESSING",
+        metadata: Optional[dict] = None,
+    ) -> None:
+        """Emit a trace event for ThoughtTrace UI (non-fatal)."""
+        if not self.trace_producer or not job_id:
+            return
+        await self.trace_producer.send_step(
+            job_id=job_id,
+            message=message,
+            status=status,
+            metadata=metadata,
+        )
+
+    async def _emit_audit(
+        self,
+        job_id: str,
+        tenant_id: str,
+        query: str,
+        result: CompetitorIntelligenceResponse,
+    ) -> None:
+        """Emit an audit event (non-fatal)."""
+        if not self.audit_producer or not job_id:
+            return
+
+        data_sources = []
+        source_types = {s.type for s in result.sources}
+        if "web" in source_types:
+            data_sources.append("tavily")
+        if "review" in source_types:
+            data_sources.append("review_sites")
+        if "social" in source_types:
+            data_sources.append("social_media")
+
+        await self.audit_producer.send_audit(
+            job_id=job_id,
+            tenant_id=tenant_id,
+            query=query,
+            competitors_count=len(result.competitors),
+            sources_count=len(result.sources),
+            findings_count=len(result.findings),
+            confidence_score=result.confidence_score,
+            data_sources_used=data_sources,
+        )

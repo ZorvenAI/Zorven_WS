@@ -13,6 +13,7 @@ from app.state.schema import AgentState
 
 _RESEARCH_NODES = {"default_agent", "web_research"}
 _MARKET_RESEARCH_NODES = {"market_research"}
+_COMPETITOR_INTEL_NODES = {"competitor_intelligence"}
 
 
 def _source_label(source: dict) -> str:
@@ -69,6 +70,9 @@ class ManagerNode(BaseNode):
         # Extract market research data
         market_research_data = self._extract_market_research(outputs)
 
+        # Extract competitor intelligence data
+        competitor_intel_data = self._extract_competitor_intelligence(outputs)
+
         result_data: dict[str, Any] = {
             "summary": (
                 f"Pipeline analysis completed. "
@@ -95,6 +99,38 @@ class ManagerNode(BaseNode):
                 value = market_research_data.get(key)
                 if value is not None:
                     result_data[key] = value
+
+        # Promote competitor intelligence fields to top-level result_data
+        if competitor_intel_data:
+            for key in (
+                "competitors",
+                "competitors_analyzed",
+                "competitor_matrix",
+                "swot_analyses",
+                "positioning_gaps",
+                "positioning_map",
+                "benchmarking_report",
+                "executive_summary",
+                "confidence_score",
+                "methodology_notes",
+            ):
+                value = competitor_intel_data.get(key)
+                if value is not None:
+                    result_data[key] = value
+            # Merge CIA sources with existing (from MRA)
+            cia_sources = competitor_intel_data.get("sources", [])
+            if cia_sources:
+                existing_sources = result_data.get("sources", [])
+                if isinstance(existing_sources, list):
+                    existing_urls = {
+                        s.get("url") for s in existing_sources if isinstance(s, dict)
+                    }
+                    for src in cia_sources:
+                        if isinstance(src, dict) and src.get("url") not in existing_urls:
+                            existing_sources.append(src)
+                    result_data["sources"] = existing_sources
+                else:
+                    result_data["sources"] = cia_sources
 
         # Populate score from BSI (used by BrandEquityDashboard)
         if bsi_data:
@@ -149,6 +185,13 @@ class ManagerNode(BaseNode):
             for o in outputs.values()
         )
 
+        # Check for competitor intelligence data
+        has_competitor_intel = any(
+            isinstance(o, dict)
+            and (o.get("competitors") or o.get("competitor_matrix"))
+            for o in outputs.values()
+        )
+
         # Brand equity / valuation pipeline
         if bsi_data:
             charts.append(
@@ -191,6 +234,21 @@ class ManagerNode(BaseNode):
         # Determine dashboard type
         if bsi_data or valuation_data:
             schema_type = "brand_equity_dashboard"
+        elif has_competitor_intel:
+            schema_type = "competitor_intelligence_dashboard"
+            charts.append(
+                {"type": "competitor_matrix", "data_key": "competitor_matrix"}
+            )
+            charts.append(
+                {"type": "swot_analyses", "data_key": "swot_analyses"}
+            )
+            charts.append(
+                {"type": "positioning_gaps", "data_key": "positioning_gaps"}
+            )
+            charts.append(
+                {"type": "benchmarking_report", "data_key": "benchmarking_report"}
+            )
+            charts.append({"type": "sources_table", "data_key": "sources"})
         elif has_market_research:
             schema_type = "market_research_dashboard"
             charts.append(
@@ -251,5 +309,20 @@ class ManagerNode(BaseNode):
         for node_id, output in outputs.items():
             if isinstance(output, dict):
                 if output.get("market_sizing") or output.get("market_overview"):
+                    return output
+        return None
+
+    @staticmethod
+    def _extract_competitor_intelligence(
+        outputs: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Extract competitor intelligence data from any node output.
+
+        Looks for outputs containing competitors or competitor_matrix,
+        which are produced by the competitor-intel-agent-svc.
+        """
+        for node_id, output in outputs.items():
+            if isinstance(output, dict):
+                if output.get("competitors") or output.get("competitor_matrix"):
                     return output
         return None

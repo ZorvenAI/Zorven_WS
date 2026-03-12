@@ -1,0 +1,23 @@
+[project]
+name = "competitor-intel-agent-svc"
+version = "0.1.0"
+description = "Competitor profiling, SWOT analysis, and competitive benchmarking agent service"
+requires-python = ">=3.12"
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+markers = [
+    "integration: integration tests requiring Redis (deselect with '-m not integration')",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
