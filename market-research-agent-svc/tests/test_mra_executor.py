@@ -7,7 +7,6 @@ from fastapi import HTTPException
 
 from app.api.schemas import ExecuteRequest, MarketResearchResponse, SourceItem
 from app.cache.redis_manager import RedisManager
-from app.logic.guardrails import InputGuardrail, OutputGuardrail
 from app.logic.market_researcher import MarketResearcher
 from app.messaging.kafka_producer import AuditProducer, TraceProducer
 from app.services.mra_executor import MRAExecutor
@@ -52,8 +51,6 @@ def _make_executor(
         redis_manager=redis_manager,
         trace_producer=trace_producer,
         audit_producer=audit_producer,
-        input_guard=InputGuardrail(),
-        output_guard=OutputGuardrail(),
     )
 
 
@@ -131,30 +128,28 @@ class TestCacheBehavior:
         executor.researcher.research.assert_awaited_once()
 
 
-class TestInputGuardrail:
-    async def test_empty_prompt_rejected(self):
+class TestInputValidation:
+    """Input validation is now handled by MarketResearcher's 3-layer guardrails.
+
+    The executor passes the prompt through to the researcher, which runs
+    InputGuardrails (IG-01 through IG-07) including Presidio PII detection.
+    """
+
+    async def test_empty_prompt_passed_to_researcher(self):
+        """Empty prompts are forwarded to the researcher (IG-06 handles rejection)."""
         executor = _make_executor()
-        with pytest.raises(HTTPException) as exc_info:
-            await executor.execute(_make_request(prompt=""), "tenant-1")
-        assert exc_info.value.status_code == 400
+        await executor.execute(_make_request(prompt=""), "tenant-1")
+        call_kwargs = executor.researcher.research.call_args.kwargs
+        assert call_kwargs["prompt"] == ""
 
-    async def test_prompt_with_ssn_rejected(self):
+    async def test_prompt_with_pii_passed_to_researcher(self):
+        """PII prompts are forwarded to the researcher (IG-04 handles redaction)."""
         executor = _make_executor()
-        with pytest.raises(HTTPException) as exc_info:
-            await executor.execute(
-                _make_request(prompt="Research 123-45-6789 market"), "tenant-1"
-            )
-        assert exc_info.value.status_code == 400
-
-
-class TestOutputGuardrail:
-    async def test_confidence_clamped(self):
-        response = MarketResearchResponse(
-            query="test", confidence_score=1.5, findings=["f1"]
+        await executor.execute(
+            _make_request(prompt="Research 123-45-6789 market"), "tenant-1"
         )
-        executor = _make_executor(researcher_result=response)
-        result = await executor.execute(_make_request(), "tenant-1")
-        assert result.confidence_score == 1.0
+        call_kwargs = executor.researcher.research.call_args.kwargs
+        assert "123-45-6789" in call_kwargs["prompt"]
 
 
 class TestClose:

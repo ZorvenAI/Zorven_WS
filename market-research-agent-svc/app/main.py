@@ -22,9 +22,7 @@ from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.events.catalog import EventEmitter
 from app.logic.guardrails import (
-    InputGuardrail,
     InputGuardrails,
-    OutputGuardrail,
     OutputGuardrails,
     PlanToolGuardrails,
 )
@@ -148,14 +146,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         max_tokens=settings.LLM_MAX_TOKENS,
     )
 
-    # Initialize executor (thin wrapper)
+    # Initialize executor (thin wrapper — guardrails handled by MarketResearcher)
     executor = MRAExecutor(
         researcher=researcher,
         redis_manager=redis_manager,
         trace_producer=trace_producer,
         audit_producer=audit_producer,
-        input_guard=InputGuardrail(),
-        output_guard=OutputGuardrail(),
     )
     routes.executor = executor
 

@@ -13,7 +13,7 @@ import re
 from typing import Any
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.api.schemas import MarketResearchResponse
 
@@ -33,6 +33,11 @@ try:
 except ImportError:
     _PRESIDIO_AVAILABLE = False
     logger.warning("Presidio not installed — falling back to regex PII detection")
+except Exception:
+    _PRESIDIO_AVAILABLE = False
+    logger.exception(
+        "Presidio failed to initialize — falling back to regex PII detection"
+    )
 
 # Entity type → replacement tag mapping for Presidio
 _PRESIDIO_OPERATORS = (

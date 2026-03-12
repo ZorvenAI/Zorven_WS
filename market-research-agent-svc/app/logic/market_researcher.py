@@ -8,10 +8,8 @@ Implements the Plan-Act-Observe-Reflect reasoning loop with 8 executable skills:
   4. REFLECT — Synthesize findings via Claude
 """
 
-import asyncio
 import json
 import logging
-import time
 import uuid
 from typing import Any, Optional
 
@@ -317,11 +315,24 @@ class MarketResearcher:
                 "to this geographic area."
             )
 
-        # ── REFLECT — Synthesize via Claude ──
-        logger.info("REFLECT phase starting — synthesizing findings")
-        synthesis = await self._synthesize(
-            sanitized_prompt, raw_context, skill_context_text, geo_hint
+        # ── REFLECT — Synthesize via Claude (RBAC: requires SKL-MRA-03 access) ──
+        synthesis_allowed = self.rbac_engine.check_permission(
+            "SKL-MRA-03", user_role
         )
+        if synthesis_allowed.decision == "ALLOW":
+            logger.info("REFLECT phase starting — synthesizing findings")
+            synthesis = await self._synthesize(
+                sanitized_prompt, raw_context, skill_context_text, geo_hint
+            )
+        else:
+            logger.info("REFLECT phase skipped — role %s denied SKL-MRA-03", user_role)
+            synthesis = {
+                "overview": raw_context[:500] if raw_context else "",
+                "findings": [r.data.get("summary", "") for r in skill_results.values() if r.success and r.data.get("summary")],
+                "recommendations": [],
+                "confidence": 0.4,
+                "methodology": ["LLM synthesis skipped (insufficient role permissions)"],
+            }
 
         # Build response
         economic_data = self._extract_economic_data(skill_results)
@@ -458,7 +469,11 @@ class MarketResearcher:
                 s for s in plan.get("skill_sequence", []) if s in available_skill_ids
             ]
             if not plan["skill_sequence"]:
-                plan["skill_sequence"] = default_plan["skill_sequence"]
+                # Fallback must also be filtered by available skills
+                plan["skill_sequence"] = [
+                    s for s in default_plan["skill_sequence"]
+                    if s in available_skill_ids
+                ]
 
             return plan
         except Exception as exc:

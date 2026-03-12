@@ -4,7 +4,6 @@ All events are emitted to Kafka audit topic (when available) and structured logg
 """
 
 import logging
-from datetime import datetime, timezone
 from typing import Any
 
 from app.messaging.kafka_producer import AuditProducer
@@ -67,24 +66,16 @@ class EventEmitter:
     ) -> None:
         """Emit a structured event."""
         event_name = EventCatalog.DESCRIPTIONS.get(event_id, "unknown")
-        event_data = {
-            "event_id": event_id,
-            "event_name": event_name,
-            "tenant_id": tenant_id,
-            "session_id": session_id,
-            "outcome": outcome,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "payload": payload or {},
-        }
 
-        # Always log structurally
+        # Log with full structured detail for observability
         logger.info(
-            "Event %s (%s) tenant=%s session=%s outcome=%s",
+            "Event %s (%s) tenant=%s session=%s outcome=%s payload=%s",
             event_id,
             event_name,
             tenant_id,
             session_id,
             outcome,
+            payload or {},
         )
 
         # Emit to Kafka audit topic (non-fatal)
@@ -93,7 +84,7 @@ class EventEmitter:
                 await self.audit_producer.send_audit(
                     job_id=session_id,
                     tenant_id=tenant_id,
-                    query=f"{event_id}:{event_name}",
+                    query=f"{event_id}:{event_name}:{outcome}",
                     sources_count=0,
                     findings_count=0,
                     confidence_score=0.0,

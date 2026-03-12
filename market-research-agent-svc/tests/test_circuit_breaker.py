@@ -113,7 +113,7 @@ class TestCreateCircuitBreakers:
         assert "worldbank" in breakers
         assert "rag_store" in breakers
         assert "kafka" in breakers
-        assert "newsapi" in breakers
+        assert "gnews" in breakers
 
     def test_llm_has_lower_threshold(self):
         class FakeSettings:

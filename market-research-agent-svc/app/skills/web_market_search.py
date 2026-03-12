@@ -68,12 +68,15 @@ class WebMarketSearch(BaseSkill):
                 search_query, max_results=max_results
             )
 
-            # Optionally search GNews
+            # Optionally search GNews (non-fatal — return web results even if news fails)
             news_results: list[dict[str, Any]] = []
             if include_news:
-                news_results = await self.gnews_client.search_news(
-                    search_query, max_results=max_results
-                )
+                try:
+                    news_results = await self.gnews_client.search_news(
+                        search_query, max_results=max_results
+                    )
+                except Exception as news_exc:
+                    logger.warning("GNews search failed (non-fatal): %s", news_exc)
 
             # Deduplicate by URL
             seen_urls: set[str] = set()

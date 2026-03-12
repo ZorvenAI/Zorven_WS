@@ -13,7 +13,6 @@ from typing import Optional
 from app.api.schemas import ExecuteRequest, MarketResearchResponse
 from app.cache.redis_manager import RedisManager
 from app.core.config import settings
-from app.logic.guardrails import InputGuardrail, OutputGuardrail
 from app.logic.market_researcher import MarketResearcher
 from app.messaging.kafka_producer import AuditProducer, TraceProducer
 
@@ -29,15 +28,11 @@ class MRAExecutor:
         redis_manager: Optional[RedisManager] = None,
         trace_producer: Optional[TraceProducer] = None,
         audit_producer: Optional[AuditProducer] = None,
-        input_guard: Optional[InputGuardrail] = None,
-        output_guard: Optional[OutputGuardrail] = None,
     ) -> None:
         self.researcher = researcher
         self.redis_manager = redis_manager
         self.trace_producer = trace_producer
         self.audit_producer = audit_producer
-        self.input_guard = input_guard or InputGuardrail()
-        self.output_guard = output_guard or OutputGuardrail()
 
     async def execute(
         self,
@@ -47,20 +42,16 @@ class MRAExecutor:
         """
         Execute market research with caching and audit.
 
-        1. Legacy input guardrail (basic validation)
-        2. Cache check
-        3. Delegate to MarketResearcher (handles skills, RBAC, guardrails)
-        4. Legacy output guardrail
-        5. Cache result
-        6. Audit event
+        1. Cache check
+        2. Delegate to MarketResearcher (handles skills, RBAC, 3-layer guardrails)
+        3. Cache result
+        4. Audit event
         """
         job_id = request.input_context.get("job_id", "")
+        prompt = request.input_prompt
 
-        # 1. Legacy input guardrail (basic sync validation)
-        sanitized_prompt = self.input_guard.validate(request.input_prompt)
-
-        # 2. Cache check
-        cache_key = self._build_cache_key(sanitized_prompt, request.config)
+        # 1. Cache check
+        cache_key = self._build_cache_key(prompt, request.config)
         if self.redis_manager:
             cached = await self.redis_manager.get_cached_result(cache_key)
             if cached:
@@ -68,13 +59,13 @@ class MRAExecutor:
                 await self._emit_trace(job_id, "Returning cached research results")
                 return MarketResearchResponse(**cached)
 
-        # 3. Delegate to researcher
+        # 2. Delegate to researcher (handles 3-layer guardrails, RBAC, skills)
         logger.info(
             "Starting market research for tenant %s: %s",
             tenant_id,
-            sanitized_prompt[:100],
+            prompt[:100],
         )
-        await self._emit_trace(job_id, f"Researching: {sanitized_prompt[:80]}")
+        await self._emit_trace(job_id, f"Researching: {prompt[:80]}")
 
         # Extract user_role from tenant_context
         tenant_ctx = request.tenant_context
@@ -84,17 +75,14 @@ class MRAExecutor:
             user_role = getattr(tenant_ctx, "user_role", "EDITOR")
 
         result = await self.researcher.research(
-            prompt=sanitized_prompt,
+            prompt=prompt,
             config=request.config,
             tenant_id=tenant_id,
             user_role=user_role,
             previous_outputs=request.previous_outputs,
         )
 
-        # 4. Legacy output guardrail
-        result = self.output_guard.validate(result)
-
-        # 5. Cache result
+        # 3. Cache result
         if self.redis_manager:
             await self.redis_manager.set_cached_result(
                 cache_key,
@@ -102,11 +90,11 @@ class MRAExecutor:
                 ttl=settings.RESEARCH_CACHE_TTL,
             )
 
-        # 6. Audit event
+        # 4. Audit event
         await self._emit_audit(
             job_id=job_id,
             tenant_id=tenant_id,
-            query=sanitized_prompt,
+            query=prompt,
             result=result,
         )
 

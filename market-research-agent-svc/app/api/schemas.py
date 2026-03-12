@@ -149,5 +149,3 @@ class HealthResponse(BaseModel):
 
     status: str = "ok"
     version: str = "0.2.0"
-    skills_count: int = 8
-    rbac_enabled: bool = True

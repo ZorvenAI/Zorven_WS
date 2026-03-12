@@ -74,9 +74,9 @@ class CircuitBreaker:
             result = await func(*args, **kwargs)
             await self._on_success()
             return result
-        except Exception as exc:
+        except Exception:
             await self._on_failure()
-            raise exc
+            raise
 
     async def _on_success(self) -> None:
         """Record a successful call."""
@@ -126,7 +126,7 @@ def create_circuit_breakers(settings: Any) -> dict[str, CircuitBreaker]:
 
     return {
         "tavily": CircuitBreaker("tavily", cb_threshold, cb_recovery, "CACHE"),
-        "newsapi": CircuitBreaker("newsapi", cb_threshold, cb_recovery, "SKIP"),
+        "gnews": CircuitBreaker("gnews", cb_threshold, cb_recovery, "SKIP"),
         "worldbank": CircuitBreaker("worldbank", cb_threshold, cb_recovery, "CACHE"),
         "llm": CircuitBreaker("llm", llm_threshold, llm_recovery, "ESCALATE"),
         "rag_store": CircuitBreaker("rag_store", cb_threshold, cb_recovery, "SKIP"),
