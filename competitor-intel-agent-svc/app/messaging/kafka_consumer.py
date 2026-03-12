@@ -167,7 +167,7 @@ class ScheduledScanConsumer:
                         "scan_type": command.payload.scan_type,
                     },
                 )
-                await self._executor.execute(request)
+                await self._executor.execute(request, command.tenant_id)
 
             logger.info("Scheduled scan completed: %s", command.command_id)
 

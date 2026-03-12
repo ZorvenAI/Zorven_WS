@@ -67,7 +67,8 @@ class TavilySearchClient:
 class WebScraperClient:
     """Website scraping via httpx for competitor profiling.
 
-    Respects robots.txt and rate limits. Max 5 pages per domain (PG-09).
+    Fetches and extracts text content from web pages. Max 5 pages per domain (PG-09).
+    Does not check robots.txt or enforce rate limits.
     """
 
     def __init__(self, max_pages_per_domain: int = 5) -> None:

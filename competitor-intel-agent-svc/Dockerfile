@@ -12,7 +12,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install spaCy model for Presidio PII detection (optional — falls back to regex)
-RUN python -m spacy download en_core_web_lg || echo "spaCy model download failed — Presidio will use regex fallback"
+RUN python -m spacy download en_core_web_sm || echo "spaCy model download failed — Presidio will use regex fallback"
 
 # Copy application code
 COPY . .

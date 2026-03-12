@@ -10,8 +10,9 @@ Endpoints:
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends, Header
 
+from app.api.auth import verify_service_token
 from app.api.schemas import (
     CompetitorIntelligenceResponse,
     ExecuteRequest,
@@ -61,7 +62,11 @@ async def health() -> HealthResponse:
     return HealthResponse()
 
 
-@router.post("/v1/execute", response_model=CompetitorIntelligenceResponse)
+@router.post(
+    "/v1/execute",
+    response_model=CompetitorIntelligenceResponse,
+    dependencies=[Depends(verify_service_token)],
+)
 async def execute(
     request: ExecuteRequest,
     x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
@@ -74,7 +79,11 @@ async def execute(
     return await _execute_analysis(request, x_tenant_id)
 
 
-@router.post("/v1/analyze", response_model=CompetitorIntelligenceResponse)
+@router.post(
+    "/v1/analyze",
+    response_model=CompetitorIntelligenceResponse,
+    dependencies=[Depends(verify_service_token)],
+)
 async def analyze(
     request: ExecuteRequest,
     x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
@@ -82,7 +91,7 @@ async def analyze(
     """
     Alias for /v1/execute.
 
-    Seed manifests reference http://competitor-intel-agent-svc/v1/analyze,
-    so this endpoint must exist alongside /v1/execute.
+    Maintained for backward compatibility with legacy pipeline manifests
+    that referenced http://competitor-intel-agent-svc/v1/analyze.
     """
     return await _execute_analysis(request, x_tenant_id)
