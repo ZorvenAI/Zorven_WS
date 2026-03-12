@@ -428,9 +428,7 @@ def _build_competitive_intelligence_summary(cia_output):
             weaknesses = sw.get("weaknesses", [])
             parts.append(f"\n*{name}*")
             if strengths:
-                parts.append(
-                    f"  Strengths: {', '.join(str(s) for s in strengths[:3])}"
-                )
+                parts.append(f"  Strengths: {', '.join(str(s) for s in strengths[:3])}")
             if weaknesses:
                 parts.append(
                     f"  Weaknesses: {', '.join(str(w) for w in weaknesses[:3])}"
