@@ -51,5 +51,31 @@ class Settings(BaseSettings):
     ECONOMIC_DATA_CACHE_TTL: int = 86400  # 24 hours
     NEWS_CACHE_TTL: int = 3600  # 1 hour
 
+    # Guardrail settings
+    INPUT_MAX_TOKENS: int = 16000  # ~4096 tokens
+    OUTPUT_MAX_CHARS: int = 100000
+    CONFIDENCE_THRESHOLD: float = 0.7
+    TOKEN_BUDGET_PER_SESSION: int = 50000
+    MAX_CONCURRENT_REQUESTS: int = 5
+
+    # RBAC
+    RBAC_ENABLED: bool = True
+
+    # Circuit breaker
+    CB_FAILURE_THRESHOLD: int = 5
+    CB_RECOVERY_TIMEOUT: int = 30
+    CB_LLM_FAILURE_THRESHOLD: int = 3
+    CB_LLM_RECOVERY_TIMEOUT: int = 60
+
+    # RAG service
+    RAG_SERVICE_URL: str = "http://localhost:8070"
+    RAG_ENABLED: bool = False
+
+    # Scope topics (IG-03 — comma-separated)
+    IN_SCOPE_TOPICS: str = (
+        "market_research,industry_analysis,market_sizing,"
+        "trend_analysis,economic_indicators"
+    )
+
 
 settings = Settings()

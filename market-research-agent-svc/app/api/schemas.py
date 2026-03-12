@@ -13,10 +13,13 @@ from pydantic import BaseModel, Field
 class TenantContext(BaseModel):
     """Tenant isolation context passed from the orchestrator."""
 
+    model_config = {"extra": "allow"}
+
     tenant_id: str = ""
     gcs_raw_bucket: str = ""
     gcs_processed_bucket: str = ""
     rag_data_store_id: str = ""
+    user_role: str = "EDITOR"
 
 
 class ExecuteRequest(BaseModel):
@@ -98,8 +101,51 @@ class MarketResearchResponse(BaseModel):
     )
 
 
+class SearchResult(BaseModel):
+    """A single web search result."""
+
+    title: str = ""
+    url: str = ""
+    snippet: str = ""
+    score: float = 0.0
+
+
+class IndustryDataPoint(BaseModel):
+    """A single extracted industry data point."""
+
+    metric: str = ""
+    value: str = ""
+    source: str = ""
+    date: str | None = None
+
+
+class EconomicIndicator(BaseModel):
+    """A formatted economic indicator entry."""
+
+    indicator_id: str = ""
+    indicator_name: str = ""
+    country: str = ""
+    values: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RAGChunk(BaseModel):
+    """A single RAG retrieval chunk."""
+
+    content: str = ""
+    score: float = 0.0
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class Citation(BaseModel):
+    """A claim-to-source citation."""
+
+    claim: str = ""
+    source_url: str = ""
+    source_title: str = ""
+
+
 class HealthResponse(BaseModel):
     """Health check response."""
 
     status: str = "ok"
-    version: str = "0.1.0"
+    version: str = "0.2.0"

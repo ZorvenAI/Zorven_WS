@@ -1,7 +1,7 @@
 ---
 name: industry-trend-tracking
-version: "1.0"
-description: Industry trend identification and tracking methodology
+version: "2.0"
+description: Industry trend identification and tracking (maps to SKL-MRA-01)
 target_agents:
   - market_research
 triggers:
@@ -10,11 +10,15 @@ triggers:
   - "growth"
   - "forecast"
   - "outlook"
+  - "emerging"
+  - "disruption"
 priority: 6
 max_tokens: 400
 ---
 
 # Industry Trend Tracking
+
+## Skills: SKL-MRA-01 (Web Market Search), SKL-MRA-03 (Market Analysis Synthesis)
 
 ## Trend Identification Framework
 - **Macro Trends**: Economic cycles, demographic shifts, regulatory changes, technology adoption curves

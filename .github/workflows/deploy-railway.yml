@@ -159,7 +159,6 @@ jobs:
         run: npm install -g @railway/cli
       
       - name: Deploy Backend
-        working-directory: ai-brand-automator
         run: |
           railway up --service ${{ secrets.RAILWAY_BACKEND_SERVICE }} --detach
         env:
@@ -194,7 +193,6 @@ jobs:
         run: npm install -g @railway/cli
       
       - name: Deploy Frontend
-        working-directory: ai-brand-automator-frontend
         run: |
           railway up --service ${{ secrets.RAILWAY_FRONTEND_SERVICE }} --detach
         env:
@@ -319,7 +317,6 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy Orchestrator
-        working-directory: pipeline-orchestrator-svc
         run: |
           if [ -n "${{ secrets.RAILWAY_ORCHESTRATOR_SERVICE }}" ]; then
             railway up --service ${{ secrets.RAILWAY_ORCHESTRATOR_SERVICE }} --detach
@@ -359,7 +356,6 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy Discovery Agent
-        working-directory: discovery-agent-svc
         run: |
           if [ -n "${{ secrets.RAILWAY_DISCOVERY_AGENT_SERVICE }}" ]; then
             railway up --service ${{ secrets.RAILWAY_DISCOVERY_AGENT_SERVICE }} --detach
@@ -399,7 +395,6 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy Intelligence Agent
-        working-directory: intelligence-agent-svc
         run: |
           if [ -n "${{ secrets.RAILWAY_INTELLIGENCE_AGENT_SERVICE }}" ]; then
             railway up --service ${{ secrets.RAILWAY_INTELLIGENCE_AGENT_SERVICE }} --detach
@@ -439,7 +434,6 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy Chat Titling Worker
-        working-directory: chat-titling-worker
         run: |
           if [ -n "${{ secrets.RAILWAY_CHAT_TITLING_SERVICE }}" ]; then
             railway up --service ${{ secrets.RAILWAY_CHAT_TITLING_SERVICE }} --detach
@@ -479,7 +473,6 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy Content Agent
-        working-directory: content-agent-service
         run: |
           if [ -n "${{ secrets.RAILWAY_CONTENT_AGENT_SERVICE }}" ]; then
             railway up --service ${{ secrets.RAILWAY_CONTENT_AGENT_SERVICE }} --detach
@@ -519,7 +512,6 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy Social Agent
-        working-directory: social-agent-service
         run: |
           if [ -n "${{ secrets.RAILWAY_SOCIAL_AGENT_SERVICE }}" ]; then
             railway up --service ${{ secrets.RAILWAY_SOCIAL_AGENT_SERVICE }} --detach
@@ -559,7 +551,6 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy RAG Uploader
-        working-directory: rag-uploader-agent-service
         run: |
           if [ -n "${{ secrets.RAILWAY_RAG_UPLOADER_SERVICE }}" ]; then
             railway up --service ${{ secrets.RAILWAY_RAG_UPLOADER_SERVICE }} --detach
@@ -599,7 +590,6 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy Odoo MCP Server
-        working-directory: odoo-mcp-server-svc
         run: |
           if [ -n "${{ secrets.RAILWAY_ODOO_MCP_SERVICE }}" ]; then
             railway up --service ${{ secrets.RAILWAY_ODOO_MCP_SERVICE }} --detach
@@ -639,7 +629,6 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy Odoo Worker Agent
-        working-directory: odoo-worker-agent-svc
         run: |
           if [ -n "${{ secrets.RAILWAY_ODOO_WORKER_SERVICE }}" ]; then
             railway up --service ${{ secrets.RAILWAY_ODOO_WORKER_SERVICE }} --detach
@@ -679,7 +668,6 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy Market Research Agent
-        working-directory: market-research-agent-svc
         run: |
           if [ -n "${{ secrets.RAILWAY_MARKET_RESEARCH_SERVICE }}" ]; then
             railway up --service ${{ secrets.RAILWAY_MARKET_RESEARCH_SERVICE }} --detach

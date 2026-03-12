@@ -239,9 +239,7 @@ class GNewsClient:
             if self.redis_manager and results:
                 await self.redis_manager.set_cached_news(query, results)
 
-            logger.info(
-                "GNews returned %d articles for: %s", len(results), query[:80]
-            )
+            logger.info("GNews returned %d articles for: %s", len(results), query[:80])
             return results
         except Exception as exc:
             logger.warning("GNews error: %s", exc)

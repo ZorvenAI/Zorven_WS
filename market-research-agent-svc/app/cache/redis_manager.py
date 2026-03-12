@@ -85,9 +85,7 @@ class RedisManager:
         try:
             r = await self._get_redis()
             key = f"mra:result:{cache_key}"
-            await r.set(
-                key, json.dumps(result), ex=ttl or self.research_cache_ttl
-            )
+            await r.set(key, json.dumps(result), ex=ttl or self.research_cache_ttl)
             logger.debug("Result cache SET for key: %s", cache_key[:16])
         except Exception as exc:
             logger.warning("Redis error in set_cached_result: %s", exc)

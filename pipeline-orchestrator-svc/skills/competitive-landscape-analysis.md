@@ -1,7 +1,7 @@
 ---
 name: competitive-landscape-analysis
-version: "1.0"
-description: Competitive landscape mapping and analysis framework
+version: "2.0"
+description: Competitive landscape mapping and analysis (maps to SKL-MRA-01, SKL-MRA-02)
 target_agents:
   - market_research
 triggers:
@@ -10,11 +10,15 @@ triggers:
   - "landscape"
   - "market share"
   - "positioning"
+  - "rivals"
+  - "competition"
 priority: 8
 max_tokens: 400
 ---
 
 # Competitive Landscape Analysis
+
+## Skills: SKL-MRA-01 (Web Market Search), SKL-MRA-02 (Industry Data Extraction)
 
 ## Porter's Five Forces Assessment
 - **Threat of New Entrants**: Barriers to entry, capital requirements, regulatory hurdles
@@ -32,6 +36,11 @@ For each key competitor, identify:
 - Recent strategic moves (acquisitions, product launches, partnerships)
 
 ## Market Position Mapping
-- Plot competitors on a 2×2 matrix (e.g., price vs. capability, breadth vs. depth)
+- Plot competitors on a 2x2 matrix (e.g., price vs. capability, breadth vs. depth)
 - Identify whitespace opportunities and underserved segments
 - Note competitive moats and sustainable advantages
+
+## Data Sources
+- Web search (Tavily) for latest competitive intelligence
+- Industry reports for market share data
+- News feeds for recent competitive moves
