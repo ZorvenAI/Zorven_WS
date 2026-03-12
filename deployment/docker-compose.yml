@@ -577,6 +577,7 @@ services:
       - ORCHESTRATOR_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ORCHESTRATOR_ODOO_WORKER_AGENT_URL=http://odoo-worker-agent:8100
       - ORCHESTRATOR_MARKET_RESEARCH_AGENT_URL=http://market-research-agent-svc:8021
+      - ORCHESTRATOR_COMPETITOR_INTEL_AGENT_URL=http://competitor-intel-agent-svc:8022
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
     volumes:
       - ../ai-brand-automator/credentials:/app/credentials:ro
@@ -628,6 +629,49 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8021/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Competitor Intelligence Agent — Competitor profiling, SWOT, benchmarking
+  # Uses Tavily, httpx scraping, Claude Sonnet 4 for analysis
+  # ==========================================================================
+  competitor-intel-agent-svc:
+    build:
+      context: ../competitor-intel-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-competitor-intel-agent
+    environment:
+      - CIA_REDIS_URL=redis://redis:6379/12
+      - CIA_KAFKA_BOOTSTRAP_SERVERS=${CIA_KAFKA_BOOTSTRAP_SERVERS:-}
+      - CIA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CIA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - CIA_LOG_LEVEL=${CIA_LOG_LEVEL:-INFO}
+      - CIA_HOST=0.0.0.0
+      - CIA_PORT=8022
+      - CIA_RBAC_ENABLED=${CIA_RBAC_ENABLED:-true}
+      - CIA_RAG_ENABLED=${CIA_RAG_ENABLED:-false}
+      - CIA_GCS_ENABLED=${CIA_GCS_ENABLED:-false}
+      - CIA_RAG_SERVICE_URL=http://rag-uploader-agent-svc:8070
+      - CIA_CONFIDENCE_THRESHOLD=${CIA_CONFIDENCE_THRESHOLD:-0.7}
+      - CIA_TOKEN_BUDGET_PER_SESSION=${CIA_TOKEN_BUDGET_PER_SESSION:-75000}
+      - CIA_MAX_COMPETITORS=${CIA_MAX_COMPETITORS:-20}
+      - CIA_KAFKA_CONSUMERS_ENABLED=${CIA_KAFKA_CONSUMERS_ENABLED:-false}
+      - CIA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+    expose:
+      - "8022"
+    ports:
+      - "18022:8022"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8022/health"]
       interval: 30s
       timeout: 10s
       retries: 3

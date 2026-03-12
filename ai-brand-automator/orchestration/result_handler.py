@@ -288,6 +288,14 @@ def _build_result_summary(job):
     if social_output or blog_output:
         return _build_content_social_summary(blog_output, social_output)
 
+    cia_output = node_results.get("competitor_intelligence", {})
+    if cia_output and (
+        cia_output.get("competitors_analyzed")
+        or cia_output.get("competitors")
+        or cia_output.get("competitor_matrix")
+    ):
+        return _build_competitive_intelligence_summary(cia_output)
+
     gap_output = node_results.get("gap_analyzer", {})
     if gap_output and gap_output.get("analysis_type") == "competitive_gap":
         return _build_gap_analysis_summary(gap_output)
@@ -365,6 +373,126 @@ def _build_content_social_summary(blog_output, social_output):
     if not parts:
         return "Content pipeline completed successfully."
 
+    return "\n".join(parts)
+
+
+def _build_competitive_intelligence_summary(cia_output):
+    """Build a summary for Competitor Intelligence Agent results."""
+    parts = ["**Competitive Intelligence Report completed.**"]
+
+    # Competitor names — support both "competitors_analyzed" (list of names)
+    # and "competitors" (list of profile dicts)
+    competitor_names = cia_output.get("competitors_analyzed", [])
+    if not competitor_names:
+        raw_competitors = cia_output.get("competitors", [])
+        competitor_names = [
+            c.get("name", "") for c in raw_competitors if isinstance(c, dict)
+        ]
+        competitor_names = [n for n in competitor_names if n]
+
+    if competitor_names:
+        parts.append(
+            f"Analyzed {len(competitor_names)} competitor(s): "
+            f"{', '.join(competitor_names[:5])}"
+        )
+        if len(competitor_names) > 5:
+            parts.append(f"  ...and {len(competitor_names) - 5} more")
+
+    executive_summary = cia_output.get("executive_summary", "")
+    if executive_summary:
+        parts.append("")
+        parts.append(executive_summary[:500])
+
+    # Competitor Matrix
+    matrix = cia_output.get("competitor_matrix", {})
+    if matrix and isinstance(matrix, dict):
+        parts.append("")
+        parts.append("**Competitor Matrix:**")
+        for dimension, scores in list(matrix.items())[:5]:
+            if isinstance(scores, dict):
+                score_strs = [
+                    f"{comp}: {score}" for comp, score in list(scores.items())[:5]
+                ]
+                parts.append(f"- {dimension}: {', '.join(score_strs)}")
+
+    # SWOT Analyses
+    swot_analyses = cia_output.get("swot_analyses", [])
+    if swot_analyses:
+        parts.append("")
+        parts.append("**SWOT Analyses:**")
+        for sw in swot_analyses[:3]:
+            if not isinstance(sw, dict):
+                continue
+            name = sw.get("competitor", "Unknown")
+            strengths = sw.get("strengths", [])
+            weaknesses = sw.get("weaknesses", [])
+            parts.append(f"\n*{name}*")
+            if strengths:
+                parts.append(f"  Strengths: {', '.join(str(s) for s in strengths[:3])}")
+            if weaknesses:
+                parts.append(
+                    f"  Weaknesses: {', '.join(str(w) for w in weaknesses[:3])}"
+                )
+        if len(swot_analyses) > 3:
+            parts.append(f"  ...and {len(swot_analyses) - 3} more")
+
+    # Positioning Gaps
+    positioning_gaps = cia_output.get("positioning_gaps", [])
+    if positioning_gaps:
+        parts.append("")
+        parts.append("**Positioning Gaps:**")
+        for gap in positioning_gaps[:5]:
+            if not isinstance(gap, dict):
+                continue
+            dim = gap.get("dimension", "")
+            desc = gap.get("gap_description", "")
+            score = gap.get("opportunity_score", "")
+            line = f"- {dim}"
+            if desc:
+                line += f": {desc[:100]}"
+            if score:
+                line += f" (opportunity: {score}/10)"
+            parts.append(line)
+
+    # Benchmarking Report
+    benchmarking = cia_output.get("benchmarking_report", {})
+    if benchmarking and isinstance(benchmarking, dict):
+        bench_summary = benchmarking.get("summary", "")
+        rankings = benchmarking.get("rankings", [])
+        if bench_summary:
+            parts.append("")
+            parts.append("**Benchmarking:**")
+            parts.append(bench_summary[:300])
+        if rankings:
+            parts.append("")
+            for r in rankings[:5]:
+                if isinstance(r, dict):
+                    name = r.get("competitor", "")
+                    score = r.get("overall_score", "")
+                    tier = r.get("tier", "")
+                    parts.append(f"- {name}: {score}/100 ({tier})")
+
+    # Key Findings
+    findings = cia_output.get("findings", [])
+    if findings:
+        parts.append("")
+        parts.append("**Key findings:**")
+        for f in findings[:5]:
+            parts.append(f"- {f}")
+
+    # Recommendations
+    recommendations = cia_output.get("recommendations", [])
+    if recommendations:
+        parts.append("")
+        parts.append("**Recommendations:**")
+        for r in recommendations[:3]:
+            parts.append(f"- {r}")
+
+    confidence = cia_output.get("confidence_score", 0)
+    if confidence:
+        parts.append(f"\nConfidence: {confidence:.0%}")
+
+    parts.append("\nView the full results in the pipeline card above.")
     return "\n".join(parts)
 
 

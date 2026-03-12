@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 9 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash and Anthropic Claude. ~2,950+ tests across all components.
+AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 11 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash and Anthropic Claude. ~3,180+ tests across all components.
 
 ## Monorepo Layout
 
@@ -19,13 +19,15 @@ content-agent-service/           # FastAPI — SEO/AEO/GEO blog authoring (port 
 social-agent-service/            # FastAPI — Social media promotion (port 8060)
 rag-uploader-agent-service/      # FastAPI — RAG document archival (port 8070)
 brand-equity-calculator-svc/     # FastAPI — Public brand equity calc, Anthropic Claude (port 8090)
+market-research-agent-svc/       # FastAPI — Market sizing, TAM/SAM/SOM, trends (port 8021)
+competitor-intel-agent-svc/      # FastAPI — Competitor profiling, SWOT, benchmarking (port 8022)
 odoo-mcp-server-svc/            # FastAPI — Odoo ERP MCP bridge, 101 tools (port 8095)
 vendor/odoo/community/           # Git submodule — Odoo Community Edition 19.0
 deployment/                      # Master docker-compose, Kong config, scripts
 docs/                            # Architecture docs
 ```
 
-Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service, brand-equity-calculator-svc, odoo-mcp-server-svc. Missing: rag-uploader-agent-service.
+Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service, brand-equity-calculator-svc, odoo-mcp-server-svc, market-research-agent-svc, competitor-intel-agent-svc. Missing: rag-uploader-agent-service.
 
 ## Build, Run, and Test Commands
 
@@ -107,7 +109,7 @@ docker compose --profile with-kafka --profile with-db up      # + Local PostgreS
 docker compose down -v                                        # Tear down
 ```
 
-**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, Orchestrator 8010, Discovery 8020, Intelligence 8030, Titling 8040, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090, Odoo MCP 8095
+**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, Orchestrator 8010, Discovery 8020, Market Research 8021, Competitor Intel 8022, Intelligence 8030, Titling 8040, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090, Odoo MCP 8095
 
 **Frontend Docker build** requires `output: "standalone"` in `next.config.ts`. Without it, the Dockerfile `COPY --from=builder /app/.next/standalone` step fails.
 
@@ -179,7 +181,7 @@ Schema-based via `django-tenants`. All models have a nullable `tenant` FK. Most 
 
 ### Redis Database Allocation
 
-DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP
+DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 11: Market Research, DB 12: Competitor Intel
 
 ### Microservice Layout Convention
 

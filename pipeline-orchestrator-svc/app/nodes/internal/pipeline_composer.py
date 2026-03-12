@@ -226,6 +226,23 @@ NODE_CATALOG: list[dict[str, Any]] = [
         "output_key": "market_research",
         "config": {"focus": "market_analysis,sizing,trends,competitive_landscape"},
     },
+    {
+        "id": "competitor_intelligence",
+        "type": "external",
+        "url": f"{settings.COMPETITOR_INTEL_AGENT_URL}/v1/execute",
+        "description": (
+            "Competitive intelligence specialist: identifies and profiles "
+            "competitors, generates SWOT analyses, positioning gap analysis, "
+            "and competitive benchmarking reports. Uses web search, website "
+            "scraping, review aggregation, and Claude for analysis. Use when "
+            "the prompt asks about competitors, competitive landscape, SWOT, "
+            "market positioning, benchmarking, or competitive strategy."
+        ),
+        "output_key": "competitor_intelligence",
+        "config": {
+            "focus": "competitor_profiling,swot,positioning,benchmarking",
+        },
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.
@@ -290,6 +307,20 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
             "competitive landscape, industry trends, economic indicators"
         ),
     },
+    {
+        "id": "competitor-intelligence",
+        "description": (
+            "Competitive intelligence: competitor profiling, SWOT analysis, "
+            "positioning gap analysis, competitive benchmarking reports"
+        ),
+    },
+    {
+        "id": "market-research-competitor-intel",
+        "description": (
+            "Combined market research and competitive intelligence: "
+            "market sizing followed by deep competitor analysis"
+        ),
+    },
 ]
 
 # ── Few-shot examples for Tier 1 ──
@@ -316,6 +347,11 @@ Examples of prompt → pipeline compositions:
 - "Analyze the SaaS market opportunity and write a report" → [market_research, blog_author, manager]
 - "Research the competitive landscape for EV charging" → [market_research, manager]
 - "What are the industry trends in renewable energy and how does our brand fit?" → [web_research, market_research, manager]
+- "Who are our main competitors in the SaaS CRM space?" → [competitor_intelligence, manager]
+- "Run a SWOT analysis on our top competitors" → [competitor_intelligence, manager]
+- "Analyze the competitive landscape and benchmark our brand" → [market_research, competitor_intelligence, manager]
+- "Research the market and profile our competitors in EV charging" → [market_research, competitor_intelligence, manager]
+- "What positioning gaps exist in the project management tool market?" → [competitor_intelligence, manager]
 """.strip()
 
 
@@ -480,6 +516,10 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
         "- Brand positioning, market analysis → brand-analysis\n"
         "- Market research, market sizing, TAM, SAM, SOM, industry trends, "
         "growth potential, addressable market → market-research\n"
+        "- Competitor profiling, SWOT analysis, competitive benchmarking, "
+        "positioning gaps → competitor-intelligence\n"
+        "- Market research + competitor analysis combined → "
+        "market-research-competitor-intel\n"
         "- Odoo ERP tasks, sales orders, inventory, HR, accounting, "
         "email campaigns, mass mailing, email marketing, marketing "
         "campaigns, newsletters → odoo-erp-operations\n"

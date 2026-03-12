@@ -512,6 +512,98 @@ class Command(BaseCommand):
             },
         },
         {
+            "pipeline_id": "competitor-intelligence",
+            "name": "Competitor Intelligence",
+            "description": (
+                "Identify and profile competitors, generate SWOT analyses, "
+                "positioning gap analysis, and competitive benchmarking reports."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "competitor_intelligence",
+                        "type": "external",
+                        "url": ("http://competitor-intel-agent-svc:8022/v1/execute"),
+                        "config": {
+                            "focus": (
+                                "competitor_profiling,swot," "benchmarking,positioning"
+                            ),
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "competitor_intelligence"],
+                    ["competitor_intelligence", "manager"],
+                ],
+                "global_config": {
+                    "model": "gemini-2.0-flash",
+                    "temperature": 0.3,
+                },
+            },
+        },
+        {
+            "pipeline_id": "market-research-competitor-intel",
+            "name": "Market Research + Competitor Intelligence",
+            "description": (
+                "Comprehensive market research followed by competitor "
+                "intelligence analysis. Combines TAM/SAM/SOM sizing with "
+                "competitor profiling, SWOT, and benchmarking."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "market_research",
+                        "type": "external",
+                        "url": ("http://market-research-agent-svc:8021/v1/execute"),
+                        "config": {
+                            "focus": (
+                                "market_analysis,sizing," "trends,competitive_landscape"
+                            ),
+                        },
+                    },
+                    {
+                        "id": "competitor_intelligence",
+                        "type": "external",
+                        "url": ("http://competitor-intel-agent-svc:8022/v1/execute"),
+                        "config": {
+                            "focus": (
+                                "competitor_profiling,swot," "benchmarking,positioning"
+                            ),
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "market_research"],
+                    ["market_research", "competitor_intelligence"],
+                    ["competitor_intelligence", "manager"],
+                ],
+                "global_config": {
+                    "model": "gemini-2.0-flash",
+                    "temperature": 0.3,
+                },
+            },
+        },
+        {
             "pipeline_id": "market-research-report",
             "name": "Market Research Report",
             "description": (

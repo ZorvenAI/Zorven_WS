@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     RAG_UPLOADER_AGENT_URL: str = "http://rag-uploader-agent-svc:8070"
     ODOO_WORKER_AGENT_URL: str = "http://odoo-worker-agent:8100"
     MARKET_RESEARCH_AGENT_URL: str = "http://market-research-agent-svc:8021"
+    COMPETITOR_INTEL_AGENT_URL: str = "http://competitor-intel-agent-svc:8022"
 
 
 settings = Settings()

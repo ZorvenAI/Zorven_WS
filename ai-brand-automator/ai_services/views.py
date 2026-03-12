@@ -484,6 +484,12 @@ def _process_chat_message(
             "economic indicators",
             "how big is the",
             "growth opportunities",
+            "competitor",
+            "competitors",
+            "competitive intelligence",
+            "swot analysis",
+            "benchmarking",
+            "positioning gap",
         )
         msg_lower = message.lower()
         if any(cue in msg_lower for cue in _odoo_strong) or any(

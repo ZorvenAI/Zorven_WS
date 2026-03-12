@@ -32,6 +32,7 @@ jobs:
       odoo-mcp-changed: ${{ steps.changes.outputs.odoo-mcp }}
       odoo-worker-changed: ${{ steps.changes.outputs.odoo-worker }}
       market-research-changed: ${{ steps.changes.outputs.market-research }}
+      competitor-intel-changed: ${{ steps.changes.outputs.competitor-intel }}
 
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +58,7 @@ jobs:
             echo "odoo-mcp=true" >> "$GITHUB_OUTPUT"
             echo "odoo-worker=true" >> "$GITHUB_OUTPUT"
             echo "market-research=true" >> "$GITHUB_OUTPUT"
+            echo "competitor-intel=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           
@@ -142,6 +144,13 @@ jobs:
             echo "market-research=true" >> "$GITHUB_OUTPUT"
           else
             echo "market-research=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if competitor-intel-agent-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^competitor-intel-agent-svc/'; then
+            echo "competitor-intel=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "competitor-intel=false" >> "$GITHUB_OUTPUT"
           fi
 
   # ==========================================================================
@@ -692,11 +701,50 @@ jobs:
           fi
 
   # ==========================================================================
+  # Deploy Competitor Intelligence Agent to Railway
+  # ==========================================================================
+  deploy-competitor-intel-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.competitor-intel-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Competitor Intelligence Agent
+        run: |
+          if [ -n "${{ secrets.RAILWAY_COMPETITOR_INTEL_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_COMPETITOR_INTEL_SERVICE }} --detach
+          else
+            echo "RAILWAY_COMPETITOR_INTEL_SERVICE not set, skipping competitor-intel deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for competitor-intel-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          CIA_URL="${{ secrets.RAILWAY_COMPETITOR_INTEL_URL }}"
+          if [ -n "$CIA_URL" ]; then
+            curl -f "${CIA_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_COMPETITOR_INTEL_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
   # Post-Deployment Notification
   # ==========================================================================
   notify:
     runs-on: ubuntu-latest
-    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent, deploy-chat-titling, deploy-content-agent, deploy-social-agent, deploy-rag-uploader, deploy-odoo-mcp-server, deploy-odoo-worker-agent, deploy-market-research-agent]
+    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent, deploy-chat-titling, deploy-content-agent, deploy-social-agent, deploy-rag-uploader, deploy-odoo-mcp-server, deploy-odoo-worker-agent, deploy-market-research-agent, deploy-competitor-intel-agent]
     if: always()
 
     steps:
@@ -721,5 +769,6 @@ jobs:
           echo "| Odoo MCP Server | ${{ needs.deploy-odoo-mcp-server.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Odoo Worker Agent | ${{ needs.deploy-odoo-worker-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Market Research Agent | ${{ needs.deploy-market-research-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Competitor Intel Agent | ${{ needs.deploy-competitor-intel-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
