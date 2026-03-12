@@ -46,10 +46,12 @@ class TestRouterNode:
         result = await node(_base_state(input_prompt="ISO brand equity valuation"))
         assert result["resolved_manifest_id"] == "iso-brand-equity"
 
-    async def test_keyword_competitor_audit(self):
+    async def test_keyword_competitor_intelligence(self):
         node = RouterNode()
-        result = await node(_base_state(input_prompt="competitor audit analysis"))
-        assert result["resolved_manifest_id"] == "competitor-audit"
+        result = await node(
+            _base_state(input_prompt="competitor analysis benchmarking")
+        )
+        assert result["resolved_manifest_id"] == "competitor-intelligence"
 
     async def test_keyword_content_strategy(self):
         node = RouterNode()
@@ -148,15 +150,15 @@ class TestRouterNode:
         )
         assert result["resolved_manifest_id"] == "market-research"
 
-    async def test_market_research_competitive_landscape(self):
-        """Competitive landscape prompts → market-research."""
+    async def test_competitive_landscape_routes_to_competitor_intelligence(self):
+        """Competitive landscape prompts → competitor-intelligence."""
         node = RouterNode()
         result = await node(
             _base_state(
                 input_prompt="Analyze the competitive landscape for cloud computing"
             )
         )
-        assert result["resolved_manifest_id"] == "market-research"
+        assert result["resolved_manifest_id"] == "competitor-intelligence"
 
     async def test_market_research_industry_trends(self):
         """Industry trends prompts → market-research."""
@@ -454,7 +456,11 @@ class TestManagerNode:
                         "gdp_WLD": {"latest_value": 100_000_000, "latest_date": "2023"},
                     },
                     "sources": [
-                        {"type": "web", "title": "Market Report", "url": "https://example.com"},
+                        {
+                            "type": "web",
+                            "title": "Market Report",
+                            "url": "https://example.com",
+                        },
                     ],
                     "findings": ["Market growing at 25% CAGR"],
                     "recommendations": ["Enter market in Q3"],
@@ -512,12 +518,12 @@ class TestStemmer:
 class TestStemmingRouting:
     """Test that stemming enables correct routing for inflected words."""
 
-    async def test_competitors_routes_to_competitor_audit(self):
+    async def test_competitors_routes_to_competitor_intelligence(self):
         node = RouterNode()
         result = await node(
             _base_state(input_prompt="analyze our competitors in the market")
         )
-        assert result["resolved_manifest_id"] == "competitor-audit"
+        assert result["resolved_manifest_id"] == "competitor-intelligence"
 
     async def test_valuations_routes_to_iso_brand_equity(self):
         node = RouterNode()

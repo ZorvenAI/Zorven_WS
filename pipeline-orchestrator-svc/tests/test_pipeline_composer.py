@@ -781,10 +781,10 @@ class TestFullFallbackChain:
         mock_settings.GOOGLE_API_KEY = ""
 
         composer = PipelineComposer()
-        state = _base_state(input_prompt="competitor audit analysis")
+        state = _base_state(input_prompt="competitor benchmarking analysis")
         result = await composer.compose(state)
 
-        assert result == {"resolved_manifest_id": "competitor-audit"}
+        assert result == {"resolved_manifest_id": "competitor-intelligence"}
 
 
 # ── Classify system prompt tests ──

@@ -94,9 +94,9 @@ NODE_CATALOG: list[dict[str, Any]] = [
         "type": "external",
         "url": f"{settings.INTELLIGENCE_AGENT_URL}/v1/analyze",
         "description": (
-            "Competitive gap analysis. Use when the prompt mentions "
-            "competitor analysis, audit, competitive gaps, or market "
-            "comparison."
+            "Brand gap analysis using intelligence agent. Use when the "
+            "prompt asks for brand audit, brand gaps, or brand "
+            "performance comparison against ISO benchmarks."
         ),
         "output_key": "gap_analyzer",
         "config": {"analysis_type": "competitive_gap"},
@@ -273,7 +273,7 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
     },
     {
         "id": "competitor-audit",
-        "description": "Competitive gap analysis comparing brand against competitors",
+        "description": "Brand gap audit: brand performance analysis against ISO benchmarks",
     },
     {
         "id": "content-strategy",
@@ -330,7 +330,7 @@ Examples of prompt → pipeline compositions:
 - "Write a blog about Tesla" → [web_research, blog_author, manager]
 - "Post about our brand on LinkedIn" → [web_research, blog_author, social_promoter, manager]
 - "Calculate brand equity for Nike" → [web_research, valuation_logic, manager]
-- "Analyze our competitors in the SaaS market" → [web_research, gap_analyzer, manager]
+- "Analyze our competitors in the SaaS market" → [competitor_intelligence, manager]
 - "Summarize the document I uploaded" → [default_agent, manager]
 - "Write a blog from the uploaded brand study and share on LinkedIn" → [default_agent, blog_author, social_promoter, manager]
 - "Create a sales order for 100 units of Product X in Odoo" → [odoo_sales_crm, manager]
@@ -508,7 +508,7 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
         "- Social platform mentions (LinkedIn, Twitter, etc.) → social-promotion\n"
         "- Blog/article writing → blog-authoring\n"
         "- Brand valuation, equity, ISO, royalty → iso-brand-equity\n"
-        "- Competitor analysis, competitive gaps → competitor-audit\n"
+        "- Competitor analysis, competitive gaps, SWOT, benchmarking → competitor-intelligence\n"
         "- Content calendar, editorial strategy → content-strategy\n"
         "- Document queries, RAG, summarize → general-chat\n"
         "- RAG + blog + social → rag-blog-social\n"
