@@ -561,6 +561,7 @@ class PipelineComposer:
                 compose_result = await self._gemini_compose(state)
                 if compose_result:
                     node_ids, sub_tasks, dependencies = compose_result
+                    node_ids = self._apply_rewrite_rules(node_ids, state)
                     manifest = self._build_manifest(node_ids, sub_tasks, dependencies)
                     logger.info(
                         "Gemini composed pipeline: %s",
@@ -578,6 +579,25 @@ class PipelineComposer:
             try:
                 manifest_id = await self._llm_classify_fallback(state)
                 if manifest_id:
+                    # Apply manifest-level rewrite for known misroutes
+                    if manifest_id == "competitor-audit":
+                        prompt = (state.get("input_prompt") or "").lower()
+                        competitor_signals = {
+                            "competitor",
+                            "competitors",
+                            "competitive",
+                            "swot",
+                            "benchmark",
+                            "benchmarking",
+                            "positioning gap",
+                            "competitive landscape",
+                        }
+                        if any(s in prompt for s in competitor_signals):
+                            logger.info(
+                                "Tier 2 rewrite: competitor-audit → "
+                                "competitor-intelligence"
+                            )
+                            manifest_id = "competitor-intelligence"
                     logger.info("LLM classify selected: %s", manifest_id)
                     return {"resolved_manifest_id": manifest_id}
             except Exception:
@@ -847,6 +867,49 @@ class PipelineComposer:
         return keyword_match(state)
 
     # ── Shared helpers ──
+
+    @staticmethod
+    def _apply_rewrite_rules(node_ids: list[str], state: AgentState) -> list[str]:
+        """Deterministic post-composition rewrites.
+
+        Fixes known LLM routing mistakes that can't be reliably prevented
+        via system prompt alone.
+        """
+        if "gap_analyzer" not in node_ids:
+            return node_ids
+
+        prompt = (state.get("input_prompt") or "").lower()
+        competitor_signals = {
+            "competitor",
+            "competitors",
+            "competitive",
+            "swot",
+            "benchmark",
+            "benchmarking",
+            "positioning gap",
+            "competitive landscape",
+            "competitor profiling",
+            "competitive intelligence",
+        }
+        if any(signal in prompt for signal in competitor_signals):
+            rewritten = [
+                "competitor_intelligence" if nid == "gap_analyzer" else nid
+                for nid in node_ids
+            ]
+            # Deduplicate in case both were already present
+            seen: set[str] = set()
+            deduped: list[str] = []
+            for nid in rewritten:
+                if nid not in seen:
+                    seen.add(nid)
+                    deduped.append(nid)
+            logger.info(
+                "Rewrite rule applied: gap_analyzer → competitor_intelligence "
+                "(prompt contains competitor signals)"
+            )
+            return deduped
+
+        return node_ids
 
     def _validate_node_ids(self, raw_ids: list[str]) -> list[str] | None:
         """Validate and sanitize node IDs from Gemini response."""
