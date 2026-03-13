@@ -498,8 +498,11 @@ def _build_competitive_intelligence_summary(cia_output):
 
     confidence = cia_output.get("confidence_score", 0)
     if confidence:
-        if isinstance(confidence, (int, float)) and confidence > 1:
-            confidence = confidence / 100
+        if isinstance(confidence, (int, float)):
+            if confidence > 10:
+                confidence = confidence / 100
+            elif confidence > 1:
+                confidence = confidence / 10
         parts.append(f"\nConfidence: {confidence:.0%}")
 
     parts.append("\nView the full results in the pipeline card above.")
@@ -518,6 +521,12 @@ def _build_audience_persona_summary(apa_output):
                 continue
             label = p.get("segment_label", p.get("slug", "Unknown"))
             confidence = p.get("confidence_score", 0)
+            # Normalize per-persona confidence to 0-1 range
+            if isinstance(confidence, (int, float)):
+                if confidence > 10:
+                    confidence = confidence / 100
+                elif confidence > 1:
+                    confidence = confidence / 10
             data_source = p.get("data_source", "")
             source_tag = f" [{data_source}]" if data_source else ""
             parts.append(f"- **{label}**{source_tag} (confidence: {confidence:.0%})")
@@ -578,8 +587,11 @@ def _build_audience_persona_summary(apa_output):
     confidence = apa_output.get("confidence_score", 0)
     if confidence:
         # Normalize: if > 1 treat as already a percentage
-        if isinstance(confidence, (int, float)) and confidence > 1:
-            confidence = confidence / 100
+        if isinstance(confidence, (int, float)):
+            if confidence > 10:
+                confidence = confidence / 100
+            elif confidence > 1:
+                confidence = confidence / 10
         parts.append(f"\nConfidence: {confidence:.0%}")
 
     parts.append("\nView the full results in the pipeline card above.")

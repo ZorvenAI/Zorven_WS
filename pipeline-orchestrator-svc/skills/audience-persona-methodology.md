@@ -1,7 +1,21 @@
+---
+name: audience-persona-methodology
+version: "1.0"
+description: Guide the Audience Persona Agent in constructing data-grounded buyer personas
+target_agents:
+  - audience_persona
+triggers:
+  - "persona"
+  - "audience"
+  - "buyer"
+  - "demographic"
+  - "psychographic"
+  - "target market"
+  - "customer segment"
+priority: 10
+max_tokens: 500
+---
 # Audience Persona Research Methodology
-
-**Priority**: 10
-**Trigger**: audience_persona node active in pipeline
 
 ## Purpose
 

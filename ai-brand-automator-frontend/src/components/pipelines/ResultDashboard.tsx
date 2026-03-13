@@ -1289,6 +1289,13 @@ interface BuyingJourneyMapFE {
   stages: JourneyStageFE[];
 }
 
+/** Normalize a 0-1, 1-10, or 11-100 score to 0-1 range. */
+function normalizeScore(v: number): number {
+  if (v > 10) return v / 100;
+  if (v > 1) return v / 10;
+  return v;
+}
+
 /* ── AudiencePersonaSection (inline) ─────────────────────────────── */
 
 function AudiencePersonaSection({
@@ -1330,8 +1337,7 @@ function AudiencePersonaSection({
           Audience &amp; Persona Analysis
         </h4>
         {confidenceScore != null && (() => {
-          // Normalize: if > 1 treat as already a percentage (e.g. 75 → 0.75)
-          const normalized = confidenceScore > 1 ? confidenceScore / 100 : confidenceScore;
+          const normalized = normalizeScore(confidenceScore);
           return (
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -1393,7 +1399,7 @@ function AudiencePersonaSection({
                         </span>
                         {persona.confidence_score != null && (
                           <span className="text-[10px] text-brand-silver/50">
-                            {((persona.confidence_score > 1 ? persona.confidence_score / 100 : persona.confidence_score) * 100).toFixed(0)}% confidence
+                            {(normalizeScore(persona.confidence_score) * 100).toFixed(0)}% confidence
                           </span>
                         )}
                         {persona.requires_admin_review && (
@@ -1405,7 +1411,7 @@ function AudiencePersonaSection({
                     </div>
                     {persona.priority_score != null && (
                       <span className="text-xs text-brand-silver/50">
-                        Priority: {((persona.priority_score > 1 ? persona.priority_score / 100 : persona.priority_score) * 100).toFixed(0)}%
+                        Priority: {(normalizeScore(persona.priority_score) * 100).toFixed(0)}%
                       </span>
                     )}
                   </div>

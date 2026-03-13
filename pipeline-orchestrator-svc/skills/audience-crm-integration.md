@@ -1,7 +1,19 @@
+---
+name: audience-crm-integration
+version: "1.0"
+description: CRM-grounded persona construction using Odoo customer and survey data
+target_agents:
+  - audience_persona
+triggers:
+  - "crm"
+  - "odoo"
+  - "customer data"
+  - "survey"
+  - "first-party"
+priority: 8
+max_tokens: 400
+---
 # Audience CRM Integration Methodology
-
-**Priority**: 8
-**Trigger**: audience_persona node with Odoo CRM/survey data available
 
 ## CRM-Grounded Persona Construction
 

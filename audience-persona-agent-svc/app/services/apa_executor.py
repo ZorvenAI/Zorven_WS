@@ -3,14 +3,12 @@
 Flow: cache check → delegate to PersonaAnalyzer → cache result → audit event.
 """
 
-import hashlib
-import json
 import logging
 import uuid
 from typing import Any
 
 from app.cache.redis_manager import RedisManager
-from app.events.catalog import EventEmitter, EventType
+from app.events.catalog import EventEmitter
 from app.logic.persona_analyzer import PersonaAnalyzer
 from app.messaging.kafka_producer import AuditProducer, TraceProducer
 from app.messaging.schemas import AuditEvent, TraceEvent
@@ -59,8 +57,7 @@ class APAExecutor:
         )
 
         # Check cache
-        cache_key_data = {"prompt": prompt, "config": config}
-        cached = await self._redis.get_cached_result(prompt, config)
+        cached = await self._redis.get_cached_result(prompt, config, tenant_id)
         if cached:
             logger.info("Cache hit for job %s", job_id)
             await self._trace.send_trace(
@@ -83,7 +80,7 @@ class APAExecutor:
         )
 
         # Cache result
-        await self._redis.cache_result(prompt, config, result)
+        await self._redis.cache_result(prompt, config, result, tenant_id)
 
         # Emit audit event
         await self._audit.send_event(

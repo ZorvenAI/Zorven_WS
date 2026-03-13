@@ -1,7 +1,20 @@
+---
+name: audience-segmentation-analysis
+version: "1.0"
+description: Audience segmentation dimensions and buying journey mapping framework
+target_agents:
+  - audience_persona
+triggers:
+  - "segment"
+  - "journey"
+  - "buying process"
+  - "funnel"
+  - "touchpoint"
+  - "decision maker"
+priority: 9
+max_tokens: 400
+---
 # Audience Segmentation & Journey Mapping
-
-**Priority**: 9
-**Trigger**: audience_persona node with journey mapping or segmentation focus
 
 ## Segmentation Strategy
 

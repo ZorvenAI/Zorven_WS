@@ -18,7 +18,15 @@ class TestRedisManager:
         key1 = RedisManager._cache_key("test prompt", {"key": "value"})
         key2 = RedisManager._cache_key("test prompt", {"key": "value"})
         assert key1 == key2
-        assert key1.startswith("apa:result:")
+        assert key1.startswith("apa:default:result:")
+
+    async def test_cache_key_tenant_scoped(self):
+        """Cache keys are scoped by tenant_id."""
+        key1 = RedisManager._cache_key("prompt", {}, "tenant-1")
+        key2 = RedisManager._cache_key("prompt", {}, "tenant-2")
+        assert key1 != key2
+        assert "tenant-1" in key1
+        assert "tenant-2" in key2
 
     async def test_cache_key_differs_for_different_input(self):
         """Different inputs produce different cache keys."""

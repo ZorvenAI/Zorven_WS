@@ -130,7 +130,10 @@ class ManagerNode(BaseNode):
                         s.get("url") for s in existing_sources if isinstance(s, dict)
                     }
                     for src in cia_sources:
-                        if isinstance(src, dict) and src.get("url") not in existing_urls:
+                        if (
+                            isinstance(src, dict)
+                            and src.get("url") not in existing_urls
+                        ):
                             existing_sources.append(src)
                     result_data["sources"] = existing_sources
                 else:
@@ -158,7 +161,10 @@ class ManagerNode(BaseNode):
                         s.get("url") for s in existing_sources if isinstance(s, dict)
                     }
                     for src in apa_sources:
-                        if isinstance(src, dict) and src.get("url") not in existing_urls:
+                        if (
+                            isinstance(src, dict)
+                            and src.get("url") not in existing_urls
+                        ):
                             existing_sources.append(src)
                     result_data["sources"] = existing_sources
                 else:
@@ -213,21 +219,18 @@ class ManagerNode(BaseNode):
 
         # Check for market research data
         has_market_research = any(
-            isinstance(o, dict) and o.get("market_sizing")
-            for o in outputs.values()
+            isinstance(o, dict) and o.get("market_sizing") for o in outputs.values()
         )
 
         # Check for competitor intelligence data
         has_competitor_intel = any(
-            isinstance(o, dict)
-            and (o.get("competitors") or o.get("competitor_matrix"))
+            isinstance(o, dict) and (o.get("competitors") or o.get("competitor_matrix"))
             for o in outputs.values()
         )
 
         # Check for audience persona data
         has_audience_persona = any(
-            isinstance(o, dict) and o.get("personas")
-            for o in outputs.values()
+            isinstance(o, dict) and o.get("personas") for o in outputs.values()
         )
 
         # Brand equity / valuation pipeline
@@ -273,37 +276,27 @@ class ManagerNode(BaseNode):
         if bsi_data or valuation_data:
             schema_type = "brand_equity_dashboard"
         elif has_audience_persona:
+            # Frontend renders APA via data-key detection (personas, journey_maps),
+            # not ui_schema.type. This hint is for future programmatic consumers.
             schema_type = "audience_persona_dashboard"
-            charts.append(
-                {"type": "persona_cards", "data_key": "personas"}
-            )
-            charts.append(
-                {"type": "journey_timelines", "data_key": "journey_maps"}
-            )
-            charts.append(
-                {"type": "segment_matrix", "data_key": "segment_matrix"}
-            )
+            charts.append({"type": "persona_cards", "data_key": "personas"})
+            charts.append({"type": "journey_timelines", "data_key": "journey_maps"})
+            charts.append({"type": "segment_matrix", "data_key": "segment_matrix"})
             charts.append({"type": "sources_table", "data_key": "sources"})
         elif has_competitor_intel:
             schema_type = "competitor_intelligence_dashboard"
             charts.append(
                 {"type": "competitor_matrix", "data_key": "competitor_matrix"}
             )
-            charts.append(
-                {"type": "swot_analyses", "data_key": "swot_analyses"}
-            )
-            charts.append(
-                {"type": "positioning_gaps", "data_key": "positioning_gaps"}
-            )
+            charts.append({"type": "swot_analyses", "data_key": "swot_analyses"})
+            charts.append({"type": "positioning_gaps", "data_key": "positioning_gaps"})
             charts.append(
                 {"type": "benchmarking_report", "data_key": "benchmarking_report"}
             )
             charts.append({"type": "sources_table", "data_key": "sources"})
         elif has_market_research:
             schema_type = "market_research_dashboard"
-            charts.append(
-                {"type": "market_sizing_cards", "data_key": "market_sizing"}
-            )
+            charts.append({"type": "market_sizing_cards", "data_key": "market_sizing"})
             charts.append(
                 {
                     "type": "competitive_landscape_table",

@@ -53,19 +53,19 @@ class RedisManager:
     # ── Result Cache ──
 
     @staticmethod
-    def _cache_key(prompt: str, config: dict) -> str:
-        """Generate deterministic cache key from prompt + config."""
-        raw = f"{prompt}:{json.dumps(config, sort_keys=True)}"
-        return f"apa:result:{hashlib.md5(raw.encode()).hexdigest()}"
+    def _cache_key(prompt: str, config: dict, tenant_id: str = "default") -> str:
+        """Generate deterministic, tenant-scoped cache key."""
+        raw = f"{tenant_id}:{prompt}:{json.dumps(config, sort_keys=True)}"
+        return f"apa:{tenant_id}:result:{hashlib.md5(raw.encode()).hexdigest()}"
 
     async def get_cached_result(
-        self, prompt: str, config: dict
+        self, prompt: str, config: dict, tenant_id: str = "default"
     ) -> dict[str, Any] | None:
         """Retrieve cached analysis result."""
         if not self._redis:
             return None
         try:
-            key = self._cache_key(prompt, config)
+            key = self._cache_key(prompt, config, tenant_id)
             data = await self._redis.get(key)
             if data:
                 logger.info("Cache hit: %s", key)
@@ -75,13 +75,17 @@ class RedisManager:
         return None
 
     async def cache_result(
-        self, prompt: str, config: dict, result: dict[str, Any]
+        self,
+        prompt: str,
+        config: dict,
+        result: dict[str, Any],
+        tenant_id: str = "default",
     ) -> None:
         """Cache an analysis result."""
         if not self._redis:
             return
         try:
-            key = self._cache_key(prompt, config)
+            key = self._cache_key(prompt, config, tenant_id)
             await self._redis.setex(key, settings.RESULT_CACHE_TTL, json.dumps(result))
             logger.info("Cached result: %s (TTL=%ds)", key, settings.RESULT_CACHE_TTL)
         except Exception as exc:

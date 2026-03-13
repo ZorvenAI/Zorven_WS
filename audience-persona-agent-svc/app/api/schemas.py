@@ -49,7 +49,7 @@ class DemographicProfile(BaseModel):
     """Demographic attributes for a persona."""
 
     age_range: str = ""
-    gender_distribution: str = ""
+    gender_distribution: dict[str, int] = Field(default_factory=dict)
     income_range: str = ""
     education_level: str = ""
     location: str = ""

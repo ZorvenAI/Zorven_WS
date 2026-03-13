@@ -752,17 +752,22 @@ def _flatten_list_to_strings(items: list) -> list[str]:
 
 
 def _normalize_confidence(value: Any) -> float:
-    """Normalize confidence_score to 0.0-1.0 range.
+    """Normalize a score to 0.0-1.0 range.
 
-    LLMs sometimes return 75 instead of 0.75.
+    Handles three common LLM return formats:
+      - 0.0-1.0: already normalized, return as-is
+      - 1-10: divide by 10 (e.g., 8.5 → 0.85)
+      - 11-100: divide by 100 (e.g., 75 → 0.75)
     """
     if not isinstance(value, (int, float)):
         try:
             value = float(value)
         except (TypeError, ValueError):
             return 0.0
-    if value > 1.0:
+    if value > 10.0:
         return value / 100.0
+    if value > 1.0:
+        return value / 10.0
     return float(value)
 
 

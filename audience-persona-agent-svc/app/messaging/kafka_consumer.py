@@ -136,28 +136,31 @@ class ScheduledScanConsumer:
 
             # Dispatch to executor
             if self._executor:
-                from app.api.schemas import ExecuteRequest
-
-                request = ExecuteRequest(
-                    input_prompt=(
-                        f"Scheduled {command.payload.scan_type} persona scan "
-                        f"for {command.payload.industry or 'general'} industry"
-                    ),
-                    input_context={
-                        "job_id": command.command_id,
-                        "brand_description": command.payload.brand_description,
-                        "industry": command.payload.industry,
-                        "geography": command.payload.geography,
-                    },
-                    tenant_context={
-                        "tenant_id": command.tenant_id,
-                    },
-                    config={
-                        "max_personas": command.payload.max_personas,
-                        "scan_type": command.payload.scan_type,
-                    },
+                prompt = (
+                    f"Scheduled {command.payload.scan_type} persona scan "
+                    f"for {command.payload.industry or 'general'} industry"
                 )
-                await self._executor.execute(request, command.tenant_id)
+                input_context = {
+                    "job_id": command.command_id,
+                    "brand_description": command.payload.brand_description,
+                    "industry": command.payload.industry,
+                    "geography": command.payload.geography,
+                }
+                tenant_context = {
+                    "tenant_id": command.tenant_id,
+                }
+                config = {
+                    "max_personas": command.payload.max_personas,
+                    "scan_type": command.payload.scan_type,
+                }
+                await self._executor.execute(
+                    prompt=prompt,
+                    input_context=input_context,
+                    tenant_context=tenant_context,
+                    config=config,
+                    previous_outputs={},
+                    tenant_id=command.tenant_id,
+                )
 
             logger.info("Scheduled scan completed: %s", command.command_id)
 
