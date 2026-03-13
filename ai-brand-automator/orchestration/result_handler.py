@@ -288,6 +288,10 @@ def _build_result_summary(job):
     if social_output or blog_output:
         return _build_content_social_summary(blog_output, social_output)
 
+    apa_output = node_results.get("audience_persona", {})
+    if apa_output and (apa_output.get("personas") or apa_output.get("journey_maps")):
+        return _build_audience_persona_summary(apa_output)
+
     cia_output = node_results.get("competitor_intelligence", {})
     if cia_output and (
         cia_output.get("competitors_analyzed")
@@ -478,7 +482,8 @@ def _build_competitive_intelligence_summary(cia_output):
         parts.append("")
         parts.append("**Key findings:**")
         for f in findings[:5]:
-            parts.append(f"- {f}")
+            if isinstance(f, str):
+                parts.append(f"- {f}")
 
     # Recommendations
     recommendations = cia_output.get("recommendations", [])
@@ -486,10 +491,103 @@ def _build_competitive_intelligence_summary(cia_output):
         parts.append("")
         parts.append("**Recommendations:**")
         for r in recommendations[:3]:
-            parts.append(f"- {r}")
+            if isinstance(r, str):
+                parts.append(f"- {r}")
 
     confidence = cia_output.get("confidence_score", 0)
     if confidence:
+        if isinstance(confidence, (int, float)):
+            if confidence > 10:
+                confidence = confidence / 100
+            elif confidence > 1:
+                confidence = confidence / 10
+        parts.append(f"\nConfidence: {confidence:.0%}")
+
+    parts.append("\nView the full results in the pipeline card above.")
+    return "\n".join(parts)
+
+
+def _build_audience_persona_summary(apa_output):
+    """Build a summary for Audience Persona Agent results."""
+    parts = ["**Audience Persona Research completed.**"]
+
+    personas = apa_output.get("personas", [])
+    if personas:
+        parts.append(f"Generated {len(personas)} buyer persona(s):")
+        for p in personas[:5]:
+            if not isinstance(p, dict):
+                continue
+            label = p.get("segment_label", p.get("slug", "Unknown"))
+            confidence = p.get("confidence_score", 0)
+            # Normalize per-persona confidence to 0-1 range
+            if isinstance(confidence, (int, float)):
+                if confidence > 10:
+                    confidence = confidence / 100
+                elif confidence > 1:
+                    confidence = confidence / 10
+            data_source = p.get("data_source", "")
+            source_tag = f" [{data_source}]" if data_source else ""
+            parts.append(f"- **{label}**{source_tag} (confidence: {confidence:.0%})")
+        if len(personas) > 5:
+            parts.append(f"  ...and {len(personas) - 5} more")
+
+    executive_summary = apa_output.get("executive_summary", "")
+    if executive_summary:
+        parts.append("")
+        parts.append(executive_summary[:500])
+
+    # Journey Maps
+    journey_maps = apa_output.get("journey_maps", [])
+    if journey_maps:
+        parts.append("")
+        parts.append(f"**Buying Journey Maps:** {len(journey_maps)} mapped")
+        for jm in journey_maps[:3]:
+            if not isinstance(jm, dict):
+                continue
+            slug = jm.get("persona_slug", "Unknown")
+            stages = jm.get("stages", [])
+            cycle = jm.get("total_estimated_cycle_days", 0)
+            parts.append(
+                f"- {slug}: {len(stages)} stages"
+                + (f", ~{cycle} days" if cycle else "")
+            )
+
+    # Segment Matrix
+    segment_matrix = apa_output.get("segment_matrix", {})
+    if segment_matrix and isinstance(segment_matrix, dict):
+        parts.append("")
+        parts.append("**Segment Matrix:**")
+        for dimension, values in list(segment_matrix.items())[:5]:
+            if isinstance(values, dict):
+                score_strs = [f"{seg}: {val}" for seg, val in list(values.items())[:4]]
+                parts.append(f"- {dimension}: {', '.join(score_strs)}")
+
+    # Key Findings
+    findings = apa_output.get("findings", [])
+    if findings:
+        parts.append("")
+        parts.append("**Key findings:**")
+        for f in findings[:5]:
+            if isinstance(f, str):
+                parts.append(f"- {f}")
+
+    # Recommendations
+    recommendations = apa_output.get("recommendations", [])
+    if recommendations:
+        parts.append("")
+        parts.append("**Recommendations:**")
+        for r in recommendations[:3]:
+            if isinstance(r, str):
+                parts.append(f"- {r}")
+
+    confidence = apa_output.get("confidence_score", 0)
+    if confidence:
+        # Normalize: if > 1 treat as already a percentage
+        if isinstance(confidence, (int, float)):
+            if confidence > 10:
+                confidence = confidence / 100
+            elif confidence > 1:
+                confidence = confidence / 10
         parts.append(f"\nConfidence: {confidence:.0%}")
 
     parts.append("\nView the full results in the pipeline card above.")

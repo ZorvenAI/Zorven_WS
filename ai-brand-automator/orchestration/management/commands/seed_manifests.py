@@ -649,6 +649,114 @@ class Command(BaseCommand):
                 },
             },
         },
+        {
+            "pipeline_id": "audience-persona",
+            "name": "Audience Persona Research",
+            "description": (
+                "Research and construct data-grounded buyer personas with "
+                "demographics, psychographics, behavioral patterns, "
+                "motivations, objections, preferred channels, and "
+                "buying journey maps."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "audience_persona",
+                        "type": "external",
+                        "url": ("http://audience-persona-agent-svc:8023/v1/execute"),
+                        "config": {
+                            "focus": (
+                                "buyer_personas,demographics,"
+                                "psychographics,buying_journey"
+                            ),
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "audience_persona"],
+                    ["audience_persona", "manager"],
+                ],
+                "global_config": {
+                    "model": "gemini-2.0-flash",
+                    "temperature": 0.3,
+                },
+            },
+        },
+        {
+            "pipeline_id": "audience-persona-discovery",
+            "name": "Audience Persona Discovery (MRA + CIA + APA)",
+            "description": (
+                "Full audience discovery pipeline: market research, "
+                "competitor intelligence, then audience persona "
+                "generation. Combines TAM/SAM/SOM sizing with "
+                "competitor profiling and buyer persona construction."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "market_research",
+                        "type": "external",
+                        "url": ("http://market-research-agent-svc:8021/v1/execute"),
+                        "config": {
+                            "focus": (
+                                "market_analysis,sizing," "trends,competitive_landscape"
+                            ),
+                        },
+                    },
+                    {
+                        "id": "competitor_intelligence",
+                        "type": "external",
+                        "url": ("http://competitor-intel-agent-svc:8022/v1/execute"),
+                        "config": {
+                            "focus": (
+                                "competitor_profiling,swot," "benchmarking,positioning"
+                            ),
+                        },
+                    },
+                    {
+                        "id": "audience_persona",
+                        "type": "external",
+                        "url": ("http://audience-persona-agent-svc:8023/v1/execute"),
+                        "config": {
+                            "focus": (
+                                "buyer_personas,demographics,"
+                                "psychographics,buying_journey"
+                            ),
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "market_research"],
+                    ["market_research", "competitor_intelligence"],
+                    ["competitor_intelligence", "audience_persona"],
+                    ["audience_persona", "manager"],
+                ],
+                "global_config": {
+                    "model": "gemini-2.0-flash",
+                    "temperature": 0.3,
+                },
+            },
+        },
     ]
 
     def handle(self, *args, **options):

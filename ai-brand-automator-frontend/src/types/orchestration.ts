@@ -99,6 +99,72 @@ export interface ManifestGraphData {
   global_config?: Record<string, unknown>;
 }
 
+// ── Audience Persona Types ──
+
+export interface DemographicProfile {
+  segment_label: string;
+  age_range?: string;
+  gender_distribution?: Record<string, number>;
+  income_range?: string;
+  education_level?: string;
+  job_titles?: string[];
+  company_size?: string;
+  industry_verticals?: string[];
+  geographic_distribution?: Record<string, number>;
+  confidence_score?: number;
+}
+
+export interface PsychographicProfile {
+  segment_label: string;
+  values?: string[];
+  interests?: string[];
+  lifestyle?: string;
+  personality_traits?: string[];
+  media_consumption?: string[];
+  decision_style?: string;
+  information_sources?: string[];
+  technology_adoption?: string;
+  brand_affinity_drivers?: string[];
+  confidence_score?: number;
+}
+
+export interface PersonaProfile {
+  slug: string;
+  segment_label: string;
+  data_source: 'crm_grounded' | 'research_based';
+  demographics?: DemographicProfile;
+  psychographics?: PsychographicProfile;
+  pain_points?: string[];
+  motivations?: string[];
+  objections?: string[];
+  preferred_channels?: string[];
+  priority_score?: number;
+  confidence_score?: number;
+  narrative?: string;
+  citations?: string[];
+  requires_admin_review?: boolean;
+}
+
+export interface JourneyStage {
+  name: string;
+  description?: string;
+  touchpoints?: string[];
+  info_needs?: string[];
+  emotional_state?: string;
+  decision_criteria?: string[];
+  objections?: string[];
+  content_recommendations?: string[];
+  estimated_days?: number;
+  key_actions?: string[];
+}
+
+export interface BuyingJourneyMap {
+  persona_slug: string;
+  persona_label: string;
+  total_estimated_cycle_days?: number;
+  stages: JourneyStage[];
+}
+
 // ── Log Console ──
 
 export interface LogEntry {

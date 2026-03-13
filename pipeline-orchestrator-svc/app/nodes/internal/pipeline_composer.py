@@ -243,6 +243,24 @@ NODE_CATALOG: list[dict[str, Any]] = [
             "focus": "competitor_profiling,swot,positioning,benchmarking",
         },
     },
+    {
+        "id": "audience_persona",
+        "type": "external",
+        "url": f"{settings.AUDIENCE_PERSONA_AGENT_URL}/v1/execute",
+        "description": (
+            "Audience persona specialist: researches and constructs data-grounded "
+            "buyer personas with demographics, psychographics, behavioral patterns, "
+            "motivations, objections, preferred channels, and buying journey maps. "
+            "Integrates Odoo CRM customer data and survey responses. Use when the "
+            "prompt asks about target audience, buyer personas, customer segments, "
+            "demographics, psychographics, customer profiles, buying journey, or "
+            "audience research."
+        ),
+        "output_key": "audience_persona",
+        "config": {
+            "focus": "buyer_personas,demographics,psychographics,buying_journey",
+        },
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.
@@ -321,6 +339,20 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
             "market sizing followed by deep competitor analysis"
         ),
     },
+    {
+        "id": "audience-persona",
+        "description": (
+            "Audience persona research: buyer personas with demographics, "
+            "psychographics, buying journeys, and customer segmentation"
+        ),
+    },
+    {
+        "id": "audience-persona-discovery",
+        "description": (
+            "Full audience discovery pipeline: market research, competitor "
+            "intelligence, then audience persona generation with CRM data"
+        ),
+    },
 ]
 
 # ── Few-shot examples for Tier 1 ──
@@ -352,6 +384,12 @@ Examples of prompt → pipeline compositions:
 - "Analyze the competitive landscape and benchmark our brand" → [market_research, competitor_intelligence, manager]
 - "Research the market and profile our competitors in EV charging" → [market_research, competitor_intelligence, manager]
 - "What positioning gaps exist in the project management tool market?" → [competitor_intelligence, manager]
+- "Who is our target audience for the new SaaS product?" → [audience_persona, manager]
+- "Create buyer personas for our EV charging brand" → [audience_persona, manager]
+- "Research audience demographics and psychographics for organic food" → [audience_persona, manager]
+- "Map the buying journey for enterprise software buyers" → [audience_persona, manager]
+- "Research the market, competitors, and build buyer personas for fintech" → [market_research, competitor_intelligence, audience_persona, manager]
+- "Analyze our audience segments and their competitive preferences" → [competitor_intelligence, audience_persona, manager]
 """.strip()
 
 
@@ -485,6 +523,11 @@ def _build_system_prompt(catalog: list[dict]) -> str:
         "profiling → ALWAYS use competitor_intelligence, NEVER "
         "gap_analyzer. gap_analyzer is ONLY for brand audits and "
         "ISO benchmark comparisons.\n"
+        "- For buyer personas, target audience, customer segments, "
+        "demographics, psychographics, buying journeys → use "
+        "audience_persona. When combined with market research or "
+        "competitor analysis, place audience_persona AFTER those nodes "
+        "so it can use their output.\n"
         "- Always end with manager\n"
         "- For document/RAG queries use default_agent, for web research "
         "use web_research"
@@ -525,6 +568,10 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
         "positioning gaps → competitor-intelligence\n"
         "- Market research + competitor analysis combined → "
         "market-research-competitor-intel\n"
+        "- Buyer personas, target audience, customer segments, demographics, "
+        "psychographics, buying journey → audience-persona\n"
+        "- Full audience discovery (market + competitors + personas) → "
+        "audience-persona-discovery\n"
         "- Odoo ERP tasks, sales orders, inventory, HR, accounting, "
         "email campaigns, mass mailing, email marketing, marketing "
         "campaigns, newsletters → odoo-erp-operations\n"
