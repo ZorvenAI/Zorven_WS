@@ -59,6 +59,7 @@ class TestNodeCatalog:
             "odoo_manufacturing",
             "market_research",
             "competitor_intelligence",
+            "audience_persona",
         }
         assert expected == ids
 
