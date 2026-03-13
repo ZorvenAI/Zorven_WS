@@ -1284,9 +1284,35 @@ interface JourneyStageFE {
 
 interface BuyingJourneyMapFE {
   persona_slug?: string;
-  persona_label: string;
+  persona_label?: string;
   total_estimated_cycle_days?: number;
   stages: JourneyStageFE[];
+}
+
+/** Safely render any value for display in persona grids. */
+function displayValue(val: unknown): string {
+  if (val == null) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+  if (Array.isArray(val)) {
+    return val.map((item) => {
+      if (typeof item === 'string') return item;
+      if (typeof item === 'object' && item != null) {
+        // Extract meaningful text from objects like {name: "X", description: "Y"}
+        const obj = item as Record<string, unknown>;
+        return obj.name || obj.label || obj.title || obj.description || obj.text || obj.value || JSON.stringify(obj);
+      }
+      return String(item);
+    }).join(', ');
+  }
+  if (typeof val === 'object') {
+    // For nested objects, render as "key: value" pairs
+    const obj = val as Record<string, unknown>;
+    return Object.entries(obj)
+      .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
+      .join('; ');
+  }
+  return String(val);
 }
 
 /** Normalize a 0-1, 1-10, or 11-100 score to 0-1 range. */
@@ -1460,9 +1486,7 @@ function AudiencePersonaSection({
                             {Object.entries(persona.demographics).map(([key, val]) => (
                               <div key={key} className="text-[11px]">
                                 <span className="text-brand-silver/50 capitalize">{key.replace(/_/g, ' ')}: </span>
-                                <span className="text-brand-silver">
-                                  {typeof val === 'object' ? JSON.stringify(val) : String(val)}
-                                </span>
+                                <span className="text-brand-silver">{displayValue(val)}</span>
                               </div>
                             ))}
                           </div>
@@ -1477,9 +1501,7 @@ function AudiencePersonaSection({
                             {Object.entries(persona.psychographics).map(([key, val]) => (
                               <div key={key} className="text-[11px]">
                                 <span className="text-brand-silver/50 capitalize">{key.replace(/_/g, ' ')}: </span>
-                                <span className="text-brand-silver">
-                                  {Array.isArray(val) ? val.join(', ') : typeof val === 'object' ? JSON.stringify(val) : String(val)}
-                                </span>
+                                <span className="text-brand-silver">{displayValue(val)}</span>
                               </div>
                             ))}
                           </div>
@@ -1542,6 +1564,13 @@ function AudiencePersonaSection({
             {journeyMaps.map((journey, idx) => {
               const jKey = journey.persona_slug || `j-${idx}`;
               const isJExpanded = expandedJourney === jKey;
+              // Resolve label: prefer persona_label, fall back to matching
+              // persona's segment_label, then slugify persona_slug
+              const journeyLabel =
+                journey.persona_label ||
+                personas?.find((p) => p.slug === journey.persona_slug)?.segment_label ||
+                journey.persona_slug?.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) ||
+                `Persona ${idx + 1}`;
 
               return (
                 <div
@@ -1553,7 +1582,7 @@ function AudiencePersonaSection({
                     onClick={() => setExpandedJourney(isJExpanded ? null : jKey)}
                   >
                     <h6 className="text-sm font-semibold text-white">
-                      {journey.persona_label}
+                      {journeyLabel}
                     </h6>
                     {journey.total_estimated_cycle_days != null && (
                       <span className="text-xs text-brand-silver/50">
@@ -1611,7 +1640,29 @@ function AudiencePersonaSection({
                                 <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Touchpoints</span>
                                 <ul className="mt-0.5 space-y-0.5">
                                   {stage.touchpoints.map((tp, ti) => (
-                                    <li key={ti} className="text-[10px] text-brand-silver/60">• {tp}</li>
+                                    <li key={ti} className="text-[10px] text-brand-silver/60">• {displayValue(tp)}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {stage.info_needs && stage.info_needs.length > 0 && (
+                              <div>
+                                <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Info Needs</span>
+                                <ul className="mt-0.5 space-y-0.5">
+                                  {stage.info_needs.map((need, ni) => (
+                                    <li key={ni} className="text-[10px] text-brand-silver/60">• {displayValue(need)}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {stage.decision_criteria && stage.decision_criteria.length > 0 && (
+                              <div>
+                                <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Decision Criteria</span>
+                                <ul className="mt-0.5 space-y-0.5">
+                                  {stage.decision_criteria.map((dc, di) => (
+                                    <li key={di} className="text-[10px] text-brand-silver/60">• {displayValue(dc)}</li>
                                   ))}
                                 </ul>
                               </div>
@@ -1622,7 +1673,7 @@ function AudiencePersonaSection({
                                 <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Content Recs</span>
                                 <ul className="mt-0.5 space-y-0.5">
                                   {stage.content_recommendations.map((cr, ci) => (
-                                    <li key={ci} className="text-[10px] text-brand-silver/60">• {cr}</li>
+                                    <li key={ci} className="text-[10px] text-brand-silver/60">• {displayValue(cr)}</li>
                                   ))}
                                 </ul>
                               </div>
@@ -1634,9 +1685,20 @@ function AudiencePersonaSection({
                               <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Objections at this stage</span>
                               <div className="flex flex-wrap gap-1 mt-0.5">
                                 {stage.objections.map((obj, oi) => (
-                                  <span key={oi} className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-400">{obj}</span>
+                                  <span key={oi} className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-400">{displayValue(obj)}</span>
                                 ))}
                               </div>
+                            </div>
+                          )}
+
+                          {stage.key_actions && stage.key_actions.length > 0 && (
+                            <div>
+                              <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Key Actions</span>
+                              <ul className="mt-0.5 space-y-0.5">
+                                {stage.key_actions.map((action, ai) => (
+                                  <li key={ai} className="text-[10px] text-brand-silver/60">• {displayValue(action)}</li>
+                                ))}
+                              </ul>
                             </div>
                           )}
                         </div>
