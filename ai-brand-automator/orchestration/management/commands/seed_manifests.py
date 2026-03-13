@@ -668,9 +668,7 @@ class Command(BaseCommand):
                     {
                         "id": "audience_persona",
                         "type": "external",
-                        "url": (
-                            "http://audience-persona-agent-svc:8023/v1/execute"
-                        ),
+                        "url": ("http://audience-persona-agent-svc:8023/v1/execute"),
                         "config": {
                             "focus": (
                                 "buyer_personas,demographics,"
@@ -713,35 +711,27 @@ class Command(BaseCommand):
                     {
                         "id": "market_research",
                         "type": "external",
-                        "url": (
-                            "http://market-research-agent-svc:8021/v1/execute"
-                        ),
+                        "url": ("http://market-research-agent-svc:8021/v1/execute"),
                         "config": {
                             "focus": (
-                                "market_analysis,sizing,"
-                                "trends,competitive_landscape"
+                                "market_analysis,sizing," "trends,competitive_landscape"
                             ),
                         },
                     },
                     {
                         "id": "competitor_intelligence",
                         "type": "external",
-                        "url": (
-                            "http://competitor-intel-agent-svc:8022/v1/execute"
-                        ),
+                        "url": ("http://competitor-intel-agent-svc:8022/v1/execute"),
                         "config": {
                             "focus": (
-                                "competitor_profiling,swot,"
-                                "benchmarking,positioning"
+                                "competitor_profiling,swot," "benchmarking,positioning"
                             ),
                         },
                     },
                     {
                         "id": "audience_persona",
                         "type": "external",
-                        "url": (
-                            "http://audience-persona-agent-svc:8023/v1/execute"
-                        ),
+                        "url": ("http://audience-persona-agent-svc:8023/v1/execute"),
                         "config": {
                             "focus": (
                                 "buyer_personas,demographics,"

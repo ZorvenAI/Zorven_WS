@@ -289,9 +289,7 @@ def _build_result_summary(job):
         return _build_content_social_summary(blog_output, social_output)
 
     apa_output = node_results.get("audience_persona", {})
-    if apa_output and (
-        apa_output.get("personas") or apa_output.get("journey_maps")
-    ):
+    if apa_output and (apa_output.get("personas") or apa_output.get("journey_maps")):
         return _build_audience_persona_summary(apa_output)
 
     cia_output = node_results.get("competitor_intelligence", {})
@@ -561,9 +559,7 @@ def _build_audience_persona_summary(apa_output):
         parts.append("**Segment Matrix:**")
         for dimension, values in list(segment_matrix.items())[:5]:
             if isinstance(values, dict):
-                score_strs = [
-                    f"{seg}: {val}" for seg, val in list(values.items())[:4]
-                ]
+                score_strs = [f"{seg}: {val}" for seg, val in list(values.items())[:4]]
                 parts.append(f"- {dimension}: {', '.join(score_strs)}")
 
     # Key Findings
