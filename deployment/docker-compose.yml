@@ -162,10 +162,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 60s
     restart: unless-stopped
     networks:
       - app-network
@@ -578,6 +578,7 @@ services:
       - ORCHESTRATOR_ODOO_WORKER_AGENT_URL=http://odoo-worker-agent:8100
       - ORCHESTRATOR_MARKET_RESEARCH_AGENT_URL=http://market-research-agent-svc:8021
       - ORCHESTRATOR_COMPETITOR_INTEL_AGENT_URL=http://competitor-intel-agent-svc:8022
+      - ORCHESTRATOR_AUDIENCE_PERSONA_AGENT_URL=http://audience-persona-agent-svc:8023
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
     volumes:
       - ../ai-brand-automator/credentials:/app/credentials:ro
@@ -672,6 +673,50 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8022/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Audience Persona Agent — Buyer persona research and synthesis
+  # Researches demographics, psychographics, buying journeys via Tavily + Claude
+  # ==========================================================================
+  audience-persona-agent-svc:
+    build:
+      context: ../audience-persona-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-audience-persona-agent
+    environment:
+      - APA_REDIS_URL=redis://redis:6379/13
+      - APA_KAFKA_BOOTSTRAP_SERVERS=${APA_KAFKA_BOOTSTRAP_SERVERS:-}
+      - APA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - APA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - APA_LOG_LEVEL=${APA_LOG_LEVEL:-INFO}
+      - APA_HOST=0.0.0.0
+      - APA_PORT=8023
+      - APA_RBAC_ENABLED=${APA_RBAC_ENABLED:-true}
+      - APA_RAG_ENABLED=${APA_RAG_ENABLED:-false}
+      - APA_GCS_ENABLED=${APA_GCS_ENABLED:-false}
+      - APA_ODOO_ENABLED=${APA_ODOO_ENABLED:-false}
+      - APA_RAG_SERVICE_URL=http://rag-uploader-agent-svc:8070
+      - APA_CONFIDENCE_THRESHOLD=${APA_CONFIDENCE_THRESHOLD:-0.7}
+      - APA_TOKEN_BUDGET_PER_SESSION=${APA_TOKEN_BUDGET_PER_SESSION:-80000}
+      - APA_MAX_PERSONAS=${APA_MAX_PERSONAS:-5}
+      - APA_KAFKA_CONSUMERS_ENABLED=${APA_KAFKA_CONSUMERS_ENABLED:-false}
+      - APA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+    expose:
+      - "8023"
+    ports:
+      - "18023:8023"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8023/health"]
       interval: 30s
       timeout: 10s
       retries: 3

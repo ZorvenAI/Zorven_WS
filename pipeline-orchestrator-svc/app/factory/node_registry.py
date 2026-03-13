@@ -40,6 +40,7 @@ EXTERNAL_ENDPOINTS: dict[str, str] = {
     "odoo_worker": "http://odoo-worker-agent:8100/v1/execute",
     "market_research": "http://market-research-agent-svc:8021/v1/execute",
     "competitor_intelligence": "http://competitor-intel-agent-svc:8022/v1/execute",
+    "audience_persona": "http://audience-persona-agent-svc:8023/v1/execute",
 }
 
 

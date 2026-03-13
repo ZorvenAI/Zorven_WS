@@ -114,6 +114,7 @@ class PipelineManifestSerializer(serializers.ModelSerializer):
         "http://pipeline-orchestrator-svc",
         "http://competitor-intel-agent-svc",
         "http://market-research-agent-svc",
+        "http://audience-persona-agent-svc",
         "http://localhost:",
         "https://discovery-agent-svc",
         "https://intelligence-agent-svc",
@@ -122,6 +123,7 @@ class PipelineManifestSerializer(serializers.ModelSerializer):
         "https://pipeline-orchestrator-svc",
         "https://competitor-intel-agent-svc",
         "https://market-research-agent-svc",
+        "https://audience-persona-agent-svc",
     )
 
     def _validate_external_url(self, node_id, url):

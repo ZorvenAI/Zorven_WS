@@ -1,0 +1,27 @@
+services:
+  audience-persona-agent:
+    build: .
+    ports:
+      - "8023:8023"
+    env_file:
+      - .env
+    environment:
+      - APA_REDIS_URL=redis://redis:6379/13
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8023/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6393:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

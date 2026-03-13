@@ -32,6 +32,7 @@ _SERVICE_URL_MAP: dict[str, str] = {
     "odoo-worker-agent-svc:8100": settings.ODOO_WORKER_AGENT_URL,
     "market-research-agent-svc:8021": settings.MARKET_RESEARCH_AGENT_URL,
     "competitor-intel-agent-svc:8022": settings.COMPETITOR_INTEL_AGENT_URL,
+    "audience-persona-agent-svc:8023": settings.AUDIENCE_PERSONA_AGENT_URL,
 }
 
 

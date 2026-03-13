@@ -14,6 +14,7 @@ from app.state.schema import AgentState
 _RESEARCH_NODES = {"default_agent", "web_research"}
 _MARKET_RESEARCH_NODES = {"market_research"}
 _COMPETITOR_INTEL_NODES = {"competitor_intelligence"}
+_AUDIENCE_PERSONA_NODES = {"audience_persona"}
 
 
 def _source_label(source: dict) -> str:
@@ -73,6 +74,9 @@ class ManagerNode(BaseNode):
         # Extract competitor intelligence data
         competitor_intel_data = self._extract_competitor_intelligence(outputs)
 
+        # Extract audience persona data
+        audience_persona_data = self._extract_audience_persona(outputs)
+
         result_data: dict[str, Any] = {
             "summary": (
                 f"Pipeline analysis completed. "
@@ -131,6 +135,34 @@ class ManagerNode(BaseNode):
                     result_data["sources"] = existing_sources
                 else:
                     result_data["sources"] = cia_sources
+
+        # Promote audience persona fields to top-level result_data
+        if audience_persona_data:
+            for key in (
+                "personas",
+                "journey_maps",
+                "segment_matrix",
+                "executive_summary",
+                "confidence_score",
+                "methodology_notes",
+            ):
+                value = audience_persona_data.get(key)
+                if value is not None:
+                    result_data[key] = value
+            # Merge APA sources with existing
+            apa_sources = audience_persona_data.get("sources", [])
+            if apa_sources:
+                existing_sources = result_data.get("sources", [])
+                if isinstance(existing_sources, list):
+                    existing_urls = {
+                        s.get("url") for s in existing_sources if isinstance(s, dict)
+                    }
+                    for src in apa_sources:
+                        if isinstance(src, dict) and src.get("url") not in existing_urls:
+                            existing_sources.append(src)
+                    result_data["sources"] = existing_sources
+                else:
+                    result_data["sources"] = apa_sources
 
         # Populate score from BSI (used by BrandEquityDashboard)
         if bsi_data:
@@ -192,6 +224,12 @@ class ManagerNode(BaseNode):
             for o in outputs.values()
         )
 
+        # Check for audience persona data
+        has_audience_persona = any(
+            isinstance(o, dict) and o.get("personas")
+            for o in outputs.values()
+        )
+
         # Brand equity / valuation pipeline
         if bsi_data:
             charts.append(
@@ -234,6 +272,18 @@ class ManagerNode(BaseNode):
         # Determine dashboard type
         if bsi_data or valuation_data:
             schema_type = "brand_equity_dashboard"
+        elif has_audience_persona:
+            schema_type = "audience_persona_dashboard"
+            charts.append(
+                {"type": "persona_cards", "data_key": "personas"}
+            )
+            charts.append(
+                {"type": "journey_timelines", "data_key": "journey_maps"}
+            )
+            charts.append(
+                {"type": "segment_matrix", "data_key": "segment_matrix"}
+            )
+            charts.append({"type": "sources_table", "data_key": "sources"})
         elif has_competitor_intel:
             schema_type = "competitor_intelligence_dashboard"
             charts.append(
@@ -324,5 +374,20 @@ class ManagerNode(BaseNode):
         for node_id, output in outputs.items():
             if isinstance(output, dict):
                 if output.get("competitors") or output.get("competitor_matrix"):
+                    return output
+        return None
+
+    @staticmethod
+    def _extract_audience_persona(
+        outputs: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Extract audience persona data from any node output.
+
+        Looks for outputs containing personas or journey_maps,
+        which are produced by the audience-persona-agent-svc.
+        """
+        for node_id, output in outputs.items():
+            if isinstance(output, dict):
+                if output.get("personas") or output.get("journey_maps"):
                     return output
         return None

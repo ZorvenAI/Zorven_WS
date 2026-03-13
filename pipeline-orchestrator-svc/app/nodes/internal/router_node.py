@@ -159,6 +159,37 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("landscape", 1),
         ("forecast", 1),
     ],
+    "audience-persona": [
+        # Persona-specific — strong signal (weight 3)
+        ("buyer persona", 3),
+        ("buyer personas", 3),
+        ("target audience", 3),
+        ("customer persona", 3),
+        ("audience persona", 3),
+        ("customer segmentation", 3),
+        ("buying journey", 3),
+        ("customer profile", 3),
+        # Domain phrases — moderate signal (weight 2)
+        ("audience research", 2),
+        ("audience analysis", 2),
+        ("demographics", 2),
+        ("psychographics", 2),
+        ("customer segments", 2),
+        ("ideal customer", 2),
+        ("audience segments", 2),
+        ("media habits", 2),
+        ("pain points", 2),
+        # Generic — weak signal (weight 1)
+        ("persona", 1),
+        ("audience", 1),
+        ("buyer", 1),
+        ("demographic", 1),
+    ],
+    "audience-persona-discovery": [
+        ("full audience discovery", 3),
+        ("audience discovery pipeline", 3),
+        ("market research and personas", 3),
+    ],
     "brand-analysis": [
         ("brand", 1),
         ("analysis", 1),

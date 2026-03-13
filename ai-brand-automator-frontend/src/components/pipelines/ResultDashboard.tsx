@@ -1250,6 +1250,519 @@ function CompetitorIntelligenceSection({
   );
 }
 
+/* ── Audience Persona Types ──────────────────────────────────────── */
+
+interface PersonaProfileFE {
+  slug?: string;
+  segment_label: string;
+  data_source?: 'crm_grounded' | 'research_based';
+  demographics?: Record<string, unknown>;
+  psychographics?: Record<string, unknown>;
+  pain_points?: string[];
+  motivations?: string[];
+  objections?: string[];
+  preferred_channels?: string[];
+  priority_score?: number;
+  confidence_score?: number;
+  narrative?: string;
+  citations?: string[];
+  requires_admin_review?: boolean;
+}
+
+interface JourneyStageFE {
+  name: string;
+  description?: string;
+  touchpoints?: string[];
+  info_needs?: string[];
+  emotional_state?: string;
+  decision_criteria?: string[];
+  objections?: string[];
+  content_recommendations?: string[];
+  estimated_days?: number;
+  key_actions?: string[];
+}
+
+interface BuyingJourneyMapFE {
+  persona_slug?: string;
+  persona_label: string;
+  total_estimated_cycle_days?: number;
+  stages: JourneyStageFE[];
+}
+
+/* ── AudiencePersonaSection (inline) ─────────────────────────────── */
+
+function AudiencePersonaSection({
+  executiveSummary,
+  personas,
+  journeyMaps,
+  segmentMatrix,
+  sources,
+  confidenceScore,
+  findings,
+  recommendations,
+}: {
+  executiveSummary?: string;
+  personas?: PersonaProfileFE[];
+  journeyMaps?: BuyingJourneyMapFE[];
+  segmentMatrix?: Record<string, unknown>;
+  sources?: SourceEntry[];
+  confidenceScore?: number;
+  findings?: string[];
+  recommendations?: string[];
+}) {
+  const [expandedPersona, setExpandedPersona] = useState<string | null>(null);
+  const [expandedJourney, setExpandedJourney] = useState<string | null>(null);
+
+  const stageEmojis: Record<string, string> = {
+    Awareness: '💡',
+    Consideration: '🔍',
+    Evaluation: '⚖️',
+    Decision: '✅',
+    Onboarding: '🚀',
+    Advocacy: '❤️',
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Section Header */}
+      <div className="flex items-center gap-2 border-b border-white/10 pb-2">
+        <h4 className="font-heading text-sm font-semibold text-brand-electric">
+          Audience &amp; Persona Analysis
+        </h4>
+        {confidenceScore != null && (() => {
+          // Normalize: if > 1 treat as already a percentage (e.g. 75 → 0.75)
+          const normalized = confidenceScore > 1 ? confidenceScore / 100 : confidenceScore;
+          return (
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                normalized >= 0.7
+                  ? 'bg-green-500/20 text-green-400'
+                  : normalized >= 0.4
+                    ? 'bg-yellow-500/20 text-yellow-400'
+                    : 'bg-red-500/20 text-red-400'
+              }`}
+            >
+              Confidence: {(normalized * 100).toFixed(0)}%
+            </span>
+          );
+        })()}
+      </div>
+
+      {/* Executive Summary */}
+      {executiveSummary && (
+        <section>
+          <h5 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Executive Summary
+          </h5>
+          <MarkdownMessage content={executiveSummary} />
+        </section>
+      )}
+
+      {/* Persona Cards */}
+      {personas && personas.length > 0 && (
+        <section>
+          <h5 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Buyer Personas ({personas.length})
+          </h5>
+          <div className="grid gap-4 md:grid-cols-2">
+            {personas.map((persona, idx) => {
+              const isExpanded = expandedPersona === (persona.slug || `p-${idx}`);
+              const toggleKey = persona.slug || `p-${idx}`;
+
+              return (
+                <div
+                  key={toggleKey}
+                  className="rounded-lg border border-white/10 bg-white/5 p-4 space-y-3 cursor-pointer hover:border-brand-electric/30 transition-colors"
+                  onClick={() => setExpandedPersona(isExpanded ? null : toggleKey)}
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h6 className="text-sm font-semibold text-white">
+                        {persona.segment_label}
+                      </h6>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                            persona.data_source === 'crm_grounded'
+                              ? 'bg-blue-500/20 text-blue-400'
+                              : 'bg-purple-500/20 text-purple-400'
+                          }`}
+                        >
+                          {persona.data_source === 'crm_grounded' ? 'CRM Grounded' : 'Research Based'}
+                        </span>
+                        {persona.confidence_score != null && (
+                          <span className="text-[10px] text-brand-silver/50">
+                            {((persona.confidence_score > 1 ? persona.confidence_score / 100 : persona.confidence_score) * 100).toFixed(0)}% confidence
+                          </span>
+                        )}
+                        {persona.requires_admin_review && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-400">
+                            <AlertCircle className="w-3 h-3" /> Admin Review
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {persona.priority_score != null && (
+                      <span className="text-xs text-brand-silver/50">
+                        Priority: {((persona.priority_score > 1 ? persona.priority_score / 100 : persona.priority_score) * 100).toFixed(0)}%
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Pain Points & Motivations (always visible) */}
+                  {persona.pain_points && persona.pain_points.length > 0 && (
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Pain Points</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {persona.pain_points.slice(0, isExpanded ? undefined : 3).map((pp, i) => (
+                          <span key={i} className="rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] text-red-400">
+                            {pp}
+                          </span>
+                        ))}
+                        {!isExpanded && persona.pain_points.length > 3 && (
+                          <span className="text-[11px] text-brand-silver/40">+{persona.pain_points.length - 3} more</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {persona.motivations && persona.motivations.length > 0 && (
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Motivations</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {persona.motivations.slice(0, isExpanded ? undefined : 3).map((m, i) => (
+                          <span key={i} className="rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] text-green-400">
+                            {m}
+                          </span>
+                        ))}
+                        {!isExpanded && persona.motivations.length > 3 && (
+                          <span className="text-[11px] text-brand-silver/40">+{persona.motivations.length - 3} more</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Expanded Content */}
+                  {isExpanded && (
+                    <div className="space-y-3 pt-2 border-t border-white/5">
+                      {/* Demographics Grid */}
+                      {persona.demographics && Object.keys(persona.demographics).length > 0 && (
+                        <div>
+                          <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Demographics</span>
+                          <div className="grid grid-cols-2 gap-2 mt-1">
+                            {Object.entries(persona.demographics).map(([key, val]) => (
+                              <div key={key} className="text-[11px]">
+                                <span className="text-brand-silver/50 capitalize">{key.replace(/_/g, ' ')}: </span>
+                                <span className="text-brand-silver">
+                                  {typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Psychographics */}
+                      {persona.psychographics && Object.keys(persona.psychographics).length > 0 && (
+                        <div>
+                          <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Psychographics</span>
+                          <div className="grid grid-cols-2 gap-2 mt-1">
+                            {Object.entries(persona.psychographics).map(([key, val]) => (
+                              <div key={key} className="text-[11px]">
+                                <span className="text-brand-silver/50 capitalize">{key.replace(/_/g, ' ')}: </span>
+                                <span className="text-brand-silver">
+                                  {Array.isArray(val) ? val.join(', ') : typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Objections */}
+                      {persona.objections && persona.objections.length > 0 && (
+                        <div>
+                          <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Objections</span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {persona.objections.map((o, i) => (
+                              <span key={i} className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-400">
+                                {o}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Preferred Channels */}
+                      {persona.preferred_channels && persona.preferred_channels.length > 0 && (
+                        <div>
+                          <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Preferred Channels</span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {persona.preferred_channels.map((ch, i) => (
+                              <span key={i} className="rounded-full bg-brand-electric/10 px-2 py-0.5 text-[11px] text-brand-electric">
+                                {ch}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Narrative */}
+                      {persona.narrative && (
+                        <div>
+                          <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Narrative</span>
+                          <div className="mt-1 text-[12px] text-brand-silver/80 leading-relaxed">
+                            <MarkdownMessage content={persona.narrative} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Buying Journey Timelines */}
+      {journeyMaps && journeyMaps.length > 0 && (
+        <section>
+          <h5 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Buying Journey Maps
+          </h5>
+          <div className="space-y-4">
+            {journeyMaps.map((journey, idx) => {
+              const jKey = journey.persona_slug || `j-${idx}`;
+              const isJExpanded = expandedJourney === jKey;
+
+              return (
+                <div
+                  key={jKey}
+                  className="rounded-lg border border-white/10 bg-white/5 p-4 space-y-3"
+                >
+                  <div
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setExpandedJourney(isJExpanded ? null : jKey)}
+                  >
+                    <h6 className="text-sm font-semibold text-white">
+                      {journey.persona_label}
+                    </h6>
+                    {journey.total_estimated_cycle_days != null && (
+                      <span className="text-xs text-brand-silver/50">
+                        ~{journey.total_estimated_cycle_days} days
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Stage Timeline */}
+                  <div className="flex items-center gap-1 overflow-x-auto">
+                    {journey.stages.map((stage, si) => (
+                      <div key={si} className="flex items-center">
+                        <div className="flex flex-col items-center min-w-[80px]">
+                          <span className="text-lg">
+                            {stageEmojis[stage.name] || '📌'}
+                          </span>
+                          <span className="text-[10px] text-brand-silver/70 text-center mt-0.5">
+                            {stage.name}
+                          </span>
+                          {stage.estimated_days != null && (
+                            <span className="text-[9px] text-brand-silver/40">
+                              {stage.estimated_days}d
+                            </span>
+                          )}
+                        </div>
+                        {si < journey.stages.length - 1 && (
+                          <div className="w-4 h-px bg-white/20 mx-0.5" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Expanded Stage Details */}
+                  {isJExpanded && (
+                    <div className="space-y-3 pt-2 border-t border-white/5">
+                      {journey.stages.map((stage, si) => (
+                        <div key={si} className="rounded border border-white/5 bg-white/[0.02] p-3 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span>{stageEmojis[stage.name] || '📌'}</span>
+                            <span className="text-xs font-semibold text-white">{stage.name}</span>
+                            {stage.emotional_state && (
+                              <span className="text-[10px] text-brand-silver/50 italic">
+                                Feeling: {stage.emotional_state}
+                              </span>
+                            )}
+                          </div>
+
+                          {stage.description && (
+                            <p className="text-[11px] text-brand-silver/70">{stage.description}</p>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-2">
+                            {stage.touchpoints && stage.touchpoints.length > 0 && (
+                              <div>
+                                <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Touchpoints</span>
+                                <ul className="mt-0.5 space-y-0.5">
+                                  {stage.touchpoints.map((tp, ti) => (
+                                    <li key={ti} className="text-[10px] text-brand-silver/60">• {tp}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {stage.content_recommendations && stage.content_recommendations.length > 0 && (
+                              <div>
+                                <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Content Recs</span>
+                                <ul className="mt-0.5 space-y-0.5">
+                                  {stage.content_recommendations.map((cr, ci) => (
+                                    <li key={ci} className="text-[10px] text-brand-silver/60">• {cr}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+
+                          {stage.objections && stage.objections.length > 0 && (
+                            <div>
+                              <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Objections at this stage</span>
+                              <div className="flex flex-wrap gap-1 mt-0.5">
+                                {stage.objections.map((obj, oi) => (
+                                  <span key={oi} className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-400">{obj}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Segment Matrix */}
+      {segmentMatrix && Object.keys(segmentMatrix).length > 0 && (
+        <section>
+          <h5 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Segment Matrix
+          </h5>
+          <div className="space-y-3">
+            {Object.entries(segmentMatrix).map(([dimension, val]) => (
+              <div key={dimension} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                <h6 className="text-xs font-semibold text-white capitalize mb-2">
+                  {dimension.replace(/_/g, ' ')}
+                </h6>
+                {val && typeof val === 'object' && !Array.isArray(val) ? (
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(val as Record<string, unknown>).map(([group, members]) => (
+                      <div key={group} className="rounded-md bg-white/5 border border-white/10 px-2.5 py-1.5">
+                        <span className="text-[10px] font-medium text-brand-electric capitalize">
+                          {group.replace(/_/g, ' ')}
+                        </span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {(Array.isArray(members) ? members : [members]).map((m, i) => (
+                            <span key={i} className="rounded-full bg-brand-electric/10 px-2 py-0.5 text-[10px] text-brand-silver capitalize">
+                              {String(m).replace(/-/g, ' ')}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : Array.isArray(val) ? (
+                  <div className="flex flex-wrap gap-1">
+                    {(val as string[]).map((item, i) => (
+                      <span key={i} className="rounded-full bg-brand-electric/10 px-2 py-0.5 text-[10px] text-brand-silver capitalize">
+                        {String(item).replace(/-/g, ' ')}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs text-brand-silver">{String(val)}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Findings & Recommendations */}
+      {findings && findings.length > 0 && (
+        <section>
+          <h5 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Key Findings
+          </h5>
+          {findings.filter((f) => typeof f === 'string' && f.trim().length > 10 && !f.trim().startsWith('{')).map((f, i) => (
+            <div key={i} className="mb-2">
+              <MarkdownMessage content={f} />
+            </div>
+          ))}
+        </section>
+      )}
+
+      {recommendations && recommendations.length > 0 && (
+        <section>
+          <h5 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Recommendations
+          </h5>
+          {recommendations.filter((r) => typeof r === 'string' && r.trim().length > 0).map((r, i) => (
+            <div key={i} className="mb-2">
+              <MarkdownMessage content={r} />
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* Sources Table */}
+      {sources && sources.length > 0 && (
+        <section>
+          <h5 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Sources ({sources.length})
+          </h5>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[11px]">
+              <thead>
+                <tr className="border-b border-white/10">
+                  <th className="px-3 py-2 text-brand-silver/60 font-medium">Type</th>
+                  <th className="px-3 py-2 text-brand-silver/60 font-medium">Source</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {sources.map((src, i) => (
+                  <tr key={i} className="hover:bg-white/5">
+                    <td className="px-3 py-2 text-brand-silver/60 whitespace-nowrap capitalize text-xs">
+                      {(src.type || 'web').replace(/_/g, ' ')}
+                    </td>
+                    <td className="px-3 py-2 text-brand-silver">
+                      {src.url && /^https?:\/\//i.test(src.url) ? (
+                        <a
+                          href={src.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-brand-electric hover:underline inline-flex items-center gap-1"
+                        >
+                          {src.title || src.url}
+                          <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                        </a>
+                      ) : (
+                        <span>{src.title || '-'}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function ResultDashboard({
   resultData,
   manifestName,
@@ -1278,6 +1791,10 @@ export default function ResultDashboard({
     resultData.competitors != null ||
     resultData.competitor_matrix != null ||
     resultData.swot_analyses != null;
+
+  // ── Detect audience persona data ─────────────────────────────
+  const hasAudiencePersona =
+    resultData.personas != null || resultData.journey_maps != null;
 
   // ── Extract well-known keys ──────────────────────────────────────
   const summary = resultData.summary as string | undefined;
@@ -1415,6 +1932,10 @@ export default function ResultDashboard({
     'executive_summary',
     'query',
     'raw_context',
+    // Audience Persona keys
+    'personas',
+    'journey_maps',
+    'segment_matrix',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),
@@ -1435,7 +1956,7 @@ export default function ResultDashboard({
       </div>
 
       {/* Score badge (only when meaningful, i.e. > 0, and not market research) */}
-      {!hasMarketResearch && !hasCompetitorIntelligence && score !== undefined && score > 0 && (
+      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && score !== undefined && score > 0 && (
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
             Score
@@ -1447,7 +1968,7 @@ export default function ResultDashboard({
       )}
 
       {/* Summary (skip generic "Pipeline analysis completed" for market research / CIA) */}
-      {summary && !hasMarketResearch && !hasCompetitorIntelligence && (
+      {summary && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Summary
@@ -1487,8 +2008,22 @@ export default function ResultDashboard({
         />
       )}
 
+      {/* ── Audience Persona Dashboard ─────────────────────────────── */}
+      {hasAudiencePersona && (
+        <AudiencePersonaSection
+          executiveSummary={resultData.executive_summary as string | undefined}
+          personas={resultData.personas as PersonaProfileFE[] | undefined}
+          journeyMaps={resultData.journey_maps as BuyingJourneyMapFE[] | undefined}
+          segmentMatrix={resultData.segment_matrix as Record<string, unknown> | undefined}
+          sources={resultData.sources as SourceEntry[] | undefined}
+          confidenceScore={resultData.confidence_score as number | undefined}
+          findings={findings}
+          recommendations={recommendations}
+        />
+      )}
+
       {/* Key findings — filter out raw JSON blobs (internal agent state) */}
-      {!hasMarketResearch && !hasCompetitorIntelligence && findings && findings.length > 0 && (() => {
+      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && findings && findings.length > 0 && (() => {
         const filtered = findings.filter((f) => {
           if (typeof f !== 'string') return false;
           const trimmed = f.trim();
@@ -1520,7 +2055,7 @@ export default function ResultDashboard({
       })()}
 
       {/* Recommendations */}
-      {!hasMarketResearch && !hasCompetitorIntelligence && recommendations && recommendations.length > 0 && (
+      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && recommendations && recommendations.length > 0 && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations

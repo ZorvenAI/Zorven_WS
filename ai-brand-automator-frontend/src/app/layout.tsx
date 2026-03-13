@@ -1,10 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import { ToastContainer } from "@/components/common/ToastContainer";
-import { ErrorBoundary } from "@/components/common/ErrorBoundary";
-import { Navigation } from "@/components/common/Navigation";
-import { TenantProvider } from "@/contexts/TenantContext";
+import { ClientLayout } from "@/components/ClientLayout";
 
 // Default Geist fonts
 const geistSans = Geist({
@@ -56,12 +53,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} antialiased bg-brand-midnight text-brand-silver`}
       >
-        <ErrorBoundary>
-          <TenantProvider>
-            <Navigation>{children}</Navigation>
-            <ToastContainer />
-          </TenantProvider>
-        </ErrorBoundary>
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );

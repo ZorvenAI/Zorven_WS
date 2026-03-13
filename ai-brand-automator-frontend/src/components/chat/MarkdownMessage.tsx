@@ -7,7 +7,7 @@ import rehypeHighlight from 'rehype-highlight';
 import { ClipboardCopy, Check } from 'lucide-react';
 
 interface MarkdownMessageProps {
-  content: string;
+  content: unknown;
 }
 
 function CodeBlock({
@@ -58,6 +58,16 @@ function CodeBlock({
 }
 
 export function MarkdownMessage({ content }: MarkdownMessageProps) {
+  // Coerce to string — backend may return objects for fields like executive_summary
+  const text =
+    typeof content === 'string'
+      ? content
+      : content != null
+        ? JSON.stringify(content, null, 2)
+        : '';
+
+  if (!text) return null;
+
   return (
     <div className="prose-chat">
       <ReactMarkdown
@@ -160,7 +170,7 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
           hr: () => <hr className="border-white/10 my-3" />,
         }}
       >
-        {content}
+        {text}
       </ReactMarkdown>
     </div>
   );
