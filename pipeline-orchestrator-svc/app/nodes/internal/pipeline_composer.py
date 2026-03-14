@@ -427,8 +427,11 @@ Examples of prompt → pipeline compositions:
 - "Analyze social media trends and viral content patterns for skincare" → [trend_cultural, manager]
 - "What's trending on TikTok and Instagram for our industry?" → [trend_cultural, manager]
 - "Track generational preferences and emerging slang for our Gen Z audience" → [trend_cultural, manager]
+- "Brand discovery for AI brand building application in Pittsburgh PA" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
+- "Brand discovery for a SaaS startup in healthcare" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
 - "Run a full brand discovery with market research, competitors, personas, and cultural trends" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
 - "Complete brand analysis including trend insights for a DTC fashion brand" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
+- "Do a brand discovery for our new product line" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
 - "Analyze the market, competitors, and cultural trends for renewable energy" → [market_research, competitor_intelligence, trend_cultural, manager]
 """.strip()
 
@@ -568,6 +571,10 @@ def _build_system_prompt(catalog: list[dict]) -> str:
         "audience_persona. When combined with market research or "
         "competitor analysis, place audience_persona AFTER those nodes "
         "so it can use their output.\n"
+        "- 'Brand discovery' prompts ALWAYS use the full 4-agent chain: "
+        "[market_research, competitor_intelligence, audience_persona, "
+        "trend_cultural, manager]. trend_cultural MUST be included for "
+        "any brand discovery request.\n"
         "- Always end with manager\n"
         "- For document/RAG queries use default_agent, for web research "
         "use web_research"
@@ -612,6 +619,10 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
         "psychographics, buying journey → audience-persona\n"
         "- Full audience discovery (market + competitors + personas) → "
         "audience-persona-discovery\n"
+        "- Brand discovery, full brand analysis, comprehensive brand "
+        "intelligence → brand-discovery-full\n"
+        "- Cultural trends, social media trends, viral content, "
+        "generational preferences, emerging slang → trend-cultural-insights\n"
         "- Odoo ERP tasks, sales orders, inventory, HR, accounting, "
         "email campaigns, mass mailing, email marketing, marketing "
         "campaigns, newsletters → odoo-erp-operations\n"
