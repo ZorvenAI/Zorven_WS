@@ -746,7 +746,6 @@ services:
       - TCIA_LOG_LEVEL=${TCIA_LOG_LEVEL:-INFO}
       - TCIA_HOST=0.0.0.0
       - TCIA_PORT=8024
-      - TCIA_RBAC_ENABLED=${TCIA_RBAC_ENABLED:-true}
       - TCIA_RAG_SERVICE_URL=http://rag-uploader-agent-svc:8070
       - TCIA_GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
       - TCIA_GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}

@@ -40,14 +40,15 @@ class GCSClient:
             from google.cloud import storage
 
             if self._credentials_json:
-                import tempfile
+                from google.oauth2 import service_account
 
-                with tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".json", delete=False
-                ) as f:
-                    f.write(self._credentials_json)
-                    creds_path = f.name
-                self._client = storage.Client.from_service_account_json(creds_path)
+                info = json.loads(self._credentials_json)
+                credentials = service_account.Credentials.from_service_account_info(
+                    info
+                )
+                self._client = storage.Client(
+                    project=self._project_id, credentials=credentials
+                )
             elif self._credentials_path:
                 self._client = storage.Client.from_service_account_json(
                     self._credentials_path

@@ -131,7 +131,7 @@ class TrendReportPersister(BaseSkill):
             return
         async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
             await client.post(
-                f"{self._core_api_url}/api/v1/notifications/push/",
+                f"{self._core_api_url}/api/v1/orchestration/notifications/push/",
                 json={
                     "notification_type": "opportunity_alert",
                     "title": f"Trend Alert: {alert.get('trend_slug', '')}",

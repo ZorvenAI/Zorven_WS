@@ -97,12 +97,18 @@ class TrendReportSynthesizer(BaseSkill):
         )
 
         try:
-            response = await self._anthropic.messages.create(
+            llm_kwargs = dict(
                 model="claude-sonnet-4-20250514",
                 max_tokens=8192,
                 temperature=0.3,
                 messages=[{"role": "user", "content": prompt}],
             )
+            if self._cb_llm:
+                response = await self._cb_llm.call(
+                    self._anthropic.messages.create, **llm_kwargs
+                )
+            else:
+                response = await self._anthropic.messages.create(**llm_kwargs)
             text = response.content[0].text.strip()
             report = self._parse_json_response(text)
             tokens_used = (

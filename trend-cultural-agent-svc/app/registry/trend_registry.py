@@ -53,11 +53,13 @@ class TrendRegistry:
                 json.dumps(entry.model_dump()),
             )
 
-            # Add score to Sorted Set (score=timestamp, member=relevance_score)
+            # Add score to Sorted Set (score=timestamp, member=timestamp:relevance_score)
+            # Member includes timestamp to ensure uniqueness across observations
             timestamp = datetime.now(timezone.utc).timestamp()
+            member = f"{timestamp}:{entry.relevance_score}"
             await self._redis.zadd(
                 self._scores_key(tenant_id, slug),
-                {str(entry.relevance_score): timestamp},
+                {member: timestamp},
             )
 
             # Set TTL on scores key

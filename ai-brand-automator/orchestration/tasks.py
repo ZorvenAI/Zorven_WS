@@ -180,8 +180,8 @@ def consume_agent_traces(self, max_messages=100, timeout=2.0):
 def emit_tcia_daily_scan():
     """Emit daily trend scan commands for all active tenants.
 
-    Runs hourly; each tenant has an adaptive optimal scan hour
-    stored in Redis. Emits Kafka commands to the TCIA consumer.
+    Runs hourly via Celery beat; only emits at 06:00 UTC (hard-coded).
+    Emits Kafka commands to the TCIA consumer.
     """
     from datetime import datetime as dt
     from datetime import timezone as tz
@@ -201,9 +201,7 @@ def emit_tcia_daily_scan():
         count = 0
 
         for tenant in Tenant.objects.filter(is_active=True):
-            # Default scan hour is 6 UTC
-            optimal_hour = 6
-            if current_hour != optimal_hour:
+            if current_hour != 6:
                 continue
 
             command = {
@@ -232,13 +230,22 @@ def emit_tcia_daily_scan():
 
 @shared_task(name="orchestration.tasks.emit_tcia_weekly_report")
 def emit_tcia_weekly_report():
-    """Emit weekly comprehensive trend report commands (Mondays 04:00 UTC)."""
+    """Emit weekly comprehensive trend report commands.
+
+    Scheduled via Celery beat every 604800s (~weekly). Guards internally
+    to only emit on Mondays at 04:00 UTC.
+    """
     from datetime import datetime as dt
     from datetime import timezone as tz
 
     from django.conf import settings as django_settings
 
     if not getattr(django_settings, "ORCHESTRATION_KAFKA_ENABLED", False):
+        return
+
+    now = dt.now(tz.utc)
+    # Only emit on Monday (weekday 0) at 04:00 UTC
+    if now.weekday() != 0 or now.hour != 4:
         return
 
     try:

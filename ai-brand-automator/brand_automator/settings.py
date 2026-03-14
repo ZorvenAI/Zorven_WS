@@ -942,7 +942,7 @@ if ORCHESTRATION_KAFKA_ENABLED:
             },
             "emit-tcia-weekly-report": {
                 "task": "orchestration.tasks.emit_tcia_weekly_report",
-                "schedule": 604800.0,  # Weekly (Mondays handled by task logic)
+                "schedule": 3600.0,  # Hourly; task guards for Monday 04:00 UTC
             },
         }
     )
