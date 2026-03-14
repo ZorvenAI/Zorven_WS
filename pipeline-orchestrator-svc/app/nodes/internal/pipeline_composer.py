@@ -261,6 +261,23 @@ NODE_CATALOG: list[dict[str, Any]] = [
             "focus": "buyer_personas,demographics,psychographics,buying_journey",
         },
     },
+    {
+        "id": "trend_cultural",
+        "type": "external",
+        "url": f"{settings.TREND_CULTURAL_AGENT_URL}/v1/execute",
+        "description": (
+            "Trend & cultural insights specialist: monitors cultural shifts, "
+            "social media trends, viral content patterns, emerging slang, and "
+            "generational preferences for brand relevance. Produces trend reports "
+            "with cultural relevance scores (0-100), trend-to-persona mappings, "
+            "and opportunity alerts. Best used after market research, competitor "
+            "intelligence, and audience persona analysis for enriched context. "
+            "Use when the prompt asks about cultural trends, what's trending, "
+            "viral content, generational preferences, or brand relevance."
+        ),
+        "output_key": "trend_cultural",
+        "config": {"scan_type": "on_demand", "alert_threshold": 75},
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.

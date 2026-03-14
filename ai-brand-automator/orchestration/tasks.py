@@ -171,3 +171,104 @@ def consume_agent_traces(self, max_messages=100, timeout=2.0):
     except Exception as exc:
         logger.error("consume_agent_traces failed: %s", exc)
         raise self.retry(exc=exc)
+
+
+# ── TCIA Scheduled Scan Tasks ──
+
+
+@shared_task(name="orchestration.tasks.emit_tcia_daily_scan")
+def emit_tcia_daily_scan():
+    """Emit daily trend scan commands for all active tenants.
+
+    Runs hourly; each tenant has an adaptive optimal scan hour
+    stored in Redis. Emits Kafka commands to the TCIA consumer.
+    """
+    from datetime import datetime as dt
+    from datetime import timezone as tz
+
+    from django.conf import settings as django_settings
+
+    if not getattr(django_settings, "ORCHESTRATION_KAFKA_ENABLED", False):
+        return
+
+    try:
+        from tenants.models import Tenant
+
+        from .kafka_producer import KafkaTriggerProducer
+
+        producer = KafkaTriggerProducer()
+        current_hour = dt.now(tz.utc).hour
+        count = 0
+
+        for tenant in Tenant.objects.filter(is_active=True):
+            # Default scan hour is 6 UTC
+            optimal_hour = 6
+            if current_hour != optimal_hour:
+                continue
+
+            command = {
+                "command_type": "scheduled_trend_scan",
+                "tenant_id": str(tenant.id),
+                "payload": {
+                    "scan_type": "daily_scan",
+                    "industry": getattr(tenant, "industry", "") or "",
+                    "focus_areas": [],
+                },
+                "idempotency_key": (
+                    f"trend:daily:{tenant.id}:"
+                    f"{dt.now(tz.utc).date().isoformat()}"
+                ),
+                "timestamp": dt.now(tz.utc).isoformat(),
+            }
+            producer.send_to_topic(
+                "agent.commands.trend-cultural-agent", command
+            )
+            count += 1
+
+        logger.info("Emitted %d TCIA daily scan commands", count)
+    except Exception as exc:
+        logger.error("emit_tcia_daily_scan failed: %s", exc)
+
+
+@shared_task(name="orchestration.tasks.emit_tcia_weekly_report")
+def emit_tcia_weekly_report():
+    """Emit weekly comprehensive trend report commands (Mondays 04:00 UTC)."""
+    from datetime import datetime as dt
+    from datetime import timezone as tz
+
+    from django.conf import settings as django_settings
+
+    if not getattr(django_settings, "ORCHESTRATION_KAFKA_ENABLED", False):
+        return
+
+    try:
+        from tenants.models import Tenant
+
+        from .kafka_producer import KafkaTriggerProducer
+
+        producer = KafkaTriggerProducer()
+        count = 0
+
+        for tenant in Tenant.objects.filter(is_active=True):
+            command = {
+                "command_type": "scheduled_trend_report",
+                "tenant_id": str(tenant.id),
+                "payload": {
+                    "scan_type": "weekly_comprehensive",
+                    "industry": getattr(tenant, "industry", "") or "",
+                    "focus_areas": [],
+                },
+                "idempotency_key": (
+                    f"trend:weekly:{tenant.id}:"
+                    f"{dt.now(tz.utc).date().isoformat()}"
+                ),
+                "timestamp": dt.now(tz.utc).isoformat(),
+            }
+            producer.send_to_topic(
+                "agent.commands.trend-cultural-agent", command
+            )
+            count += 1
+
+        logger.info("Emitted %d TCIA weekly report commands", count)
+    except Exception as exc:
+        logger.error("emit_tcia_weekly_report failed: %s", exc)

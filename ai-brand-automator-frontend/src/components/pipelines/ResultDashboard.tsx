@@ -294,6 +294,40 @@ function resultDataToText(data: Record<string, unknown>): string {
     lines.push('');
   }
 
+  // Trend & Cultural Insights sections
+  const trendReport = data.trend_report as Record<string, unknown> | undefined;
+  if (trendReport?.executive_summary) {
+    lines.push('TREND EXECUTIVE SUMMARY', '-'.repeat(40), trendReport.executive_summary as string, '');
+  }
+
+  const scoredTrends = data.scored_trends as Array<Record<string, unknown>> | undefined;
+  if (scoredTrends && scoredTrends.length > 0) {
+    lines.push(`TREND SCORECARD (${scoredTrends.length})`, '-'.repeat(40));
+    for (const t of scoredTrends) {
+      lines.push(`- ${t.topic} [Score: ${t.relevance_score}] (${t.recommendation})`);
+      if (t.rationale) lines.push(`  ${t.rationale}`);
+    }
+    lines.push('');
+  }
+
+  const opportunityAlerts = data.opportunity_alerts as Array<Record<string, unknown>> | undefined;
+  if (opportunityAlerts && opportunityAlerts.length > 0) {
+    lines.push(`OPPORTUNITY ALERTS (${opportunityAlerts.length})`, '-'.repeat(40));
+    for (const a of opportunityAlerts) {
+      lines.push(`- [${(a.urgency as string || '').toUpperCase()}] ${a.trend_slug}: ${a.recommendation}`);
+    }
+    lines.push('');
+  }
+
+  const culturalShifts = data.cultural_shifts as Array<Record<string, unknown>> | undefined;
+  if (culturalShifts && culturalShifts.length > 0) {
+    lines.push(`CULTURAL SHIFTS (${culturalShifts.length})`, '-'.repeat(40));
+    for (const s of culturalShifts) {
+      lines.push(`- ${s.domain}: ${s.shift_description}`);
+    }
+    lines.push('');
+  }
+
   const sources = data.sources as Array<Record<string, unknown>> | undefined;
   if (sources && sources.length > 0) {
     lines.push(`SOURCES (${sources.length})`, '-'.repeat(40));
@@ -308,7 +342,7 @@ function resultDataToText(data: Record<string, unknown>): string {
   // If no structured sections beyond a possible summary were added,
   // fall back to generic extraction. push(summary, '') adds 2 items.
   if (lines.length <= 2) {
-    const skip = new Set(['node_results', 'ui_schema', 'score', 'awareness', 'sentiment', 'financials', 'valuation', 'market_overview', 'market_sizing', 'competitive_landscape', 'industry_trends', 'economic_indicators', 'sources', 'confidence_score', 'methodology_notes']);
+    const skip = new Set(['node_results', 'ui_schema', 'score', 'awareness', 'sentiment', 'financials', 'valuation', 'market_overview', 'market_sizing', 'competitive_landscape', 'industry_trends', 'economic_indicators', 'sources', 'confidence_score', 'methodology_notes', 'trend_report', 'scored_trends', 'trend_persona_matrix', 'opportunity_alerts', 'viral_patterns', 'cultural_shifts', 'generational_insights', 'language_trends', 'report_url']);
     for (const [key, val] of Object.entries(data)) {
       if (skip.has(key)) continue;
       const label = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -1289,6 +1323,660 @@ interface BuyingJourneyMapFE {
   stages: JourneyStageFE[];
 }
 
+/* ── Trend & Cultural Insights Types ──────────────────────────── */
+
+interface ScoredTrendFE {
+  trend_slug?: string;
+  topic: string;
+  relevance_score: number;
+  audience_alignment?: number;
+  competitive_landscape?: number;
+  brand_fit?: number;
+  momentum?: number;
+  recommendation?: 'capitalize' | 'monitor' | 'avoid';
+  rationale?: string;
+  citations?: string[];
+  platforms?: string[];
+}
+
+interface TrendPersonaMappingFE {
+  trend_slug: string;
+  persona_slug: string;
+  affinity_score: number;
+  content_angles?: string[];
+  recommended_channels?: string[];
+}
+
+interface OpportunityAlertFE {
+  alert_id?: string;
+  trend_slug: string;
+  relevance_score: number;
+  urgency: 'immediate' | 'this_week' | 'this_month';
+  recommendation: string;
+  affected_personas?: string[];
+  suggested_response?: string;
+  expiry_estimate?: string;
+}
+
+interface CulturalShiftFE {
+  domain: string;
+  shift_description: string;
+  evidence_strength?: number;
+  affected_demographics?: string[];
+  timeline_estimate?: string;
+}
+
+interface GenerationalProfileFE {
+  generation: string;
+  emerging_behaviors?: string[];
+  language_patterns?: string[];
+  platform_shifts?: string[];
+  brand_expectations?: string[];
+  subcultures?: string[];
+}
+
+interface SlangTermFE {
+  term: string;
+  definition: string;
+  origin_platform?: string;
+  adoption_stage?: string;
+  sensitivity_flag?: boolean;
+}
+
+interface LanguageTrendProfileFE {
+  emerging_terms?: SlangTermFE[];
+  fading_terms?: string[];
+  language_shifts?: string[];
+}
+
+interface ViralPatternProfileFE {
+  top_formats?: string[];
+  emotional_triggers?: string[];
+  amplification_mechanics?: string[];
+  brand_safe_patterns?: string[];
+  brand_unsafe_patterns?: string[];
+}
+
+interface TrendReportFE {
+  executive_summary?: string;
+  trend_scorecard?: ScoredTrendFE[];
+  new_trends?: string[];
+  rising_trends?: string[];
+  fading_trends?: string[];
+  competitive_trend_gaps?: string[];
+  strategic_recommendations?: string[];
+  confidence_score?: number;
+}
+
+/* ── TrendCulturalSection ────────────────────────────────────────── */
+
+function TrendCulturalSection({
+  trendReport,
+  scoredTrends,
+  trendPersonaMatrix,
+  opportunityAlerts,
+  viralPatterns,
+  culturalShifts,
+  generationalInsights,
+  languageTrends,
+  sources,
+  confidenceScore,
+  findings,
+  recommendations,
+}: {
+  trendReport?: TrendReportFE;
+  scoredTrends?: ScoredTrendFE[];
+  trendPersonaMatrix?: { mappings: TrendPersonaMappingFE[] };
+  opportunityAlerts?: OpportunityAlertFE[];
+  viralPatterns?: ViralPatternProfileFE;
+  culturalShifts?: CulturalShiftFE[];
+  generationalInsights?: GenerationalProfileFE[];
+  languageTrends?: LanguageTrendProfileFE;
+  sources?: SourceEntry[];
+  confidenceScore?: number;
+  findings?: string[];
+  recommendations?: string[];
+}) {
+  const [expandedTrend, setExpandedTrend] = useState<string | null>(null);
+  const [expandedGen, setExpandedGen] = useState<string | null>(null);
+
+  const execSummary = trendReport?.executive_summary;
+  const trendScorecard = scoredTrends ?? trendReport?.trend_scorecard ?? [];
+  const stratRecs = trendReport?.strategic_recommendations ?? recommendations ?? [];
+
+  function scoreBadgeColor(score: number) {
+    if (score >= 75) return 'text-green-400 bg-green-400/10 border-green-400/30';
+    if (score >= 50) return 'text-amber-400 bg-amber-400/10 border-amber-400/30';
+    return 'text-red-400 bg-red-400/10 border-red-400/30';
+  }
+
+  function recBadge(rec?: string) {
+    if (rec === 'capitalize') return { text: 'Capitalize', cls: 'bg-green-400/20 text-green-400' };
+    if (rec === 'monitor') return { text: 'Monitor', cls: 'bg-amber-400/20 text-amber-400' };
+    if (rec === 'avoid') return { text: 'Avoid', cls: 'bg-red-400/20 text-red-400' };
+    return { text: rec ?? '', cls: 'bg-white/10 text-brand-silver' };
+  }
+
+  function urgencyStyle(urgency: string) {
+    if (urgency === 'immediate') return 'border-red-400/50 bg-red-400/5';
+    if (urgency === 'this_week') return 'border-amber-400/50 bg-amber-400/5';
+    return 'border-blue-400/50 bg-blue-400/5';
+  }
+
+  function urgencyBadge(urgency: string) {
+    if (urgency === 'immediate') return { text: 'Immediate', cls: 'bg-red-400/20 text-red-400' };
+    if (urgency === 'this_week') return { text: 'This Week', cls: 'bg-amber-400/20 text-amber-400' };
+    return { text: 'This Month', cls: 'bg-blue-400/20 text-blue-400' };
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Confidence Score */}
+      {confidenceScore != null && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
+            Confidence
+          </span>
+          <span className="inline-flex items-center rounded-full bg-brand-electric/20 px-3 py-1 text-sm font-bold text-brand-electric">
+            {typeof confidenceScore === 'number' ? `${Math.round(confidenceScore * 100)}%` : confidenceScore}
+          </span>
+        </div>
+      )}
+
+      {/* Executive Summary */}
+      {execSummary && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Executive Summary
+          </h4>
+          <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+            <MarkdownMessage content={execSummary} />
+          </div>
+        </section>
+      )}
+
+      {/* Opportunity Alerts */}
+      {opportunityAlerts && opportunityAlerts.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-400" />
+            Opportunity Alerts ({opportunityAlerts.length})
+          </h4>
+          <div className="space-y-3">
+            {opportunityAlerts.map((alert, i) => {
+              const ub = urgencyBadge(alert.urgency);
+              return (
+                <div key={alert.alert_id ?? i} className={`rounded-lg p-4 border ${urgencyStyle(alert.urgency)}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-white">
+                      {alert.trend_slug?.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ub.cls}`}>{ub.text}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-bold border ${scoreBadgeColor(alert.relevance_score)}`}>
+                        {alert.relevance_score}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-brand-silver/80 mb-2">{alert.recommendation}</p>
+                  {alert.suggested_response && (
+                    <p className="text-xs text-brand-silver/60 italic">{alert.suggested_response}</p>
+                  )}
+                  {alert.affected_personas && alert.affected_personas.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {alert.affected_personas.map((p) => (
+                        <span key={p} className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-brand-silver/70">
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {alert.expiry_estimate && (
+                    <p className="text-xs text-brand-silver/50 mt-1">Estimated window: {alert.expiry_estimate}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Trend Scorecard */}
+      {trendScorecard.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Trend Scorecard ({trendScorecard.length})
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {trendScorecard.map((trend, i) => {
+              const rb = recBadge(trend.recommendation);
+              const key = trend.trend_slug ?? `trend-${i}`;
+              const isExpanded = expandedTrend === key;
+              return (
+                <div
+                  key={key}
+                  className="bg-white/5 rounded-lg p-4 border border-white/10 cursor-pointer hover:border-white/20 transition-colors"
+                  onClick={() => setExpandedTrend(isExpanded ? null : key)}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-white truncate mr-2">{trend.topic}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${rb.cls}`}>{rb.text}</span>
+                      <span className={`text-sm font-bold px-2 py-0.5 rounded-full border ${scoreBadgeColor(trend.relevance_score)}`}>
+                        {trend.relevance_score}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 4-dimension breakdown bars */}
+                  <div className="grid grid-cols-4 gap-1 mb-2">
+                    {([
+                      ['Audience', trend.audience_alignment],
+                      ['Competitive', trend.competitive_landscape],
+                      ['Brand Fit', trend.brand_fit],
+                      ['Momentum', trend.momentum],
+                    ] as [string, number | undefined][]).map(([label, val]) => (
+                      <div key={label} className="text-center">
+                        <div className="text-[10px] text-brand-silver/50 mb-0.5">{label}</div>
+                        <div className="w-full bg-white/10 rounded-full h-1.5">
+                          <div
+                            className="bg-brand-electric rounded-full h-1.5 transition-all"
+                            style={{ width: `${((val ?? 0) / 25) * 100}%` }}
+                          />
+                        </div>
+                        <div className="text-[10px] text-brand-silver/60 mt-0.5">{val ?? 0}/25</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Platform tags */}
+                  {trend.platforms && trend.platforms.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {trend.platforms.map((p) => (
+                        <span key={p} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-brand-silver/60">
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Expanded details */}
+                  {isExpanded && (
+                    <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+                      {trend.rationale && (
+                        <p className="text-xs text-brand-silver/70">{trend.rationale}</p>
+                      )}
+                      {trend.citations && trend.citations.length > 0 && (
+                        <div className="space-y-1">
+                          <span className="text-[10px] text-brand-silver/50 uppercase">Sources</span>
+                          {trend.citations.map((c, ci) => (
+                            <a
+                              key={ci}
+                              href={c}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block text-xs text-brand-electric/80 hover:text-brand-electric truncate"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {c}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Trend-Persona Matrix */}
+      {trendPersonaMatrix && trendPersonaMatrix.mappings && trendPersonaMatrix.mappings.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Trend-Persona Matrix
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-brand-silver/50 border-b border-white/10">
+                  <th className="text-left py-2 px-3">Trend</th>
+                  <th className="text-left py-2 px-3">Persona</th>
+                  <th className="text-center py-2 px-3">Affinity</th>
+                  <th className="text-left py-2 px-3">Content Angles</th>
+                  <th className="text-left py-2 px-3">Channels</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trendPersonaMatrix.mappings.map((m, i) => (
+                  <tr key={i} className="border-b border-white/5 hover:bg-white/5">
+                    <td className="py-2 px-3 text-white">
+                      {m.trend_slug?.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                    </td>
+                    <td className="py-2 px-3 text-brand-silver/80">
+                      {m.persona_slug?.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      <span className={`font-bold ${m.affinity_score >= 0.7 ? 'text-green-400' : m.affinity_score >= 0.4 ? 'text-amber-400' : 'text-red-400'}`}>
+                        {Math.round(m.affinity_score * 100)}%
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-brand-silver/70">
+                      {m.content_angles?.slice(0, 2).join(', ')}
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="flex flex-wrap gap-1">
+                        {m.recommended_channels?.slice(0, 3).map((ch) => (
+                          <span key={ch} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-brand-silver/60">
+                            {ch}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* Cultural Shifts */}
+      {culturalShifts && culturalShifts.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Cultural Shifts ({culturalShifts.length})
+          </h4>
+          <div className="space-y-3">
+            {culturalShifts.map((shift, i) => (
+              <div key={i} className="bg-white/5 rounded-lg p-4 border border-white/10">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-semibold text-white capitalize">{shift.domain}</span>
+                  {shift.evidence_strength != null && (
+                    <span className="text-xs text-brand-silver/50">
+                      Evidence: {Math.round(shift.evidence_strength * 100)}%
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-brand-silver/80">{shift.shift_description}</p>
+                {shift.affected_demographics && shift.affected_demographics.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {shift.affected_demographics.map((d) => (
+                      <span key={d} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-brand-silver/60">
+                        {d}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {shift.timeline_estimate && (
+                  <p className="text-xs text-brand-silver/50 mt-1">Timeline: {shift.timeline_estimate}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Viral Patterns */}
+      {viralPatterns && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Viral Content Patterns
+          </h4>
+          <div className="bg-white/5 rounded-lg p-4 border border-white/10 space-y-3">
+            {viralPatterns.top_formats && viralPatterns.top_formats.length > 0 && (
+              <div>
+                <span className="text-[10px] text-brand-silver/50 uppercase">Top Formats</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {viralPatterns.top_formats.map((f) => (
+                    <span key={f} className="text-xs px-2 py-0.5 rounded-full bg-brand-electric/10 text-brand-electric/80">
+                      {f}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {viralPatterns.emotional_triggers && viralPatterns.emotional_triggers.length > 0 && (
+              <div>
+                <span className="text-[10px] text-brand-silver/50 uppercase">Emotional Triggers</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {viralPatterns.emotional_triggers.map((t) => (
+                    <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-amber-400/10 text-amber-400/80">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {viralPatterns.brand_safe_patterns && viralPatterns.brand_safe_patterns.length > 0 && (
+              <div>
+                <span className="text-[10px] text-brand-silver/50 uppercase">Brand-Safe Patterns</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {viralPatterns.brand_safe_patterns.map((p) => (
+                    <span key={p} className="text-xs px-2 py-0.5 rounded-full bg-green-400/10 text-green-400/80">
+                      {p}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {viralPatterns.brand_unsafe_patterns && viralPatterns.brand_unsafe_patterns.length > 0 && (
+              <div>
+                <span className="text-[10px] text-brand-silver/50 uppercase">Brand-Unsafe Patterns</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {viralPatterns.brand_unsafe_patterns.map((p) => (
+                    <span key={p} className="text-xs px-2 py-0.5 rounded-full bg-red-400/10 text-red-400/80">
+                      {p}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Generational Insights */}
+      {generationalInsights && generationalInsights.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Generational Insights ({generationalInsights.length})
+          </h4>
+          <div className="space-y-2">
+            {generationalInsights.map((gen, i) => {
+              const key = gen.generation ?? `gen-${i}`;
+              const isOpen = expandedGen === key;
+              return (
+                <div
+                  key={key}
+                  className="bg-white/5 rounded-lg border border-white/10 overflow-hidden"
+                >
+                  <button
+                    className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors text-left"
+                    onClick={() => setExpandedGen(isOpen ? null : key)}
+                  >
+                    <span className="text-sm font-semibold text-white capitalize">{gen.generation?.replace(/_/g, ' ')}</span>
+                    <span className="text-brand-silver/50 text-xs">{isOpen ? '▲' : '▼'}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="px-3 pb-3 space-y-2">
+                      {gen.emerging_behaviors && gen.emerging_behaviors.length > 0 && (
+                        <div>
+                          <span className="text-[10px] text-brand-silver/50 uppercase">Behaviors</span>
+                          <ul className="list-disc list-inside text-xs text-brand-silver/70 mt-0.5">
+                            {gen.emerging_behaviors.map((b, bi) => <li key={bi}>{b}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {gen.platform_shifts && gen.platform_shifts.length > 0 && (
+                        <div>
+                          <span className="text-[10px] text-brand-silver/50 uppercase">Platform Shifts</span>
+                          <ul className="list-disc list-inside text-xs text-brand-silver/70 mt-0.5">
+                            {gen.platform_shifts.map((p, pi) => <li key={pi}>{p}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {gen.brand_expectations && gen.brand_expectations.length > 0 && (
+                        <div>
+                          <span className="text-[10px] text-brand-silver/50 uppercase">Brand Expectations</span>
+                          <ul className="list-disc list-inside text-xs text-brand-silver/70 mt-0.5">
+                            {gen.brand_expectations.map((e, ei) => <li key={ei}>{e}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {gen.language_patterns && gen.language_patterns.length > 0 && (
+                        <div>
+                          <span className="text-[10px] text-brand-silver/50 uppercase">Language</span>
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {gen.language_patterns.map((l) => (
+                              <span key={l} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-brand-silver/60">{l}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Language Trends */}
+      {languageTrends && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Language Trends
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Emerging Terms */}
+            {languageTrends.emerging_terms && languageTrends.emerging_terms.length > 0 && (
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                <h5 className="text-xs font-semibold text-green-400/80 uppercase mb-2">Emerging Terms</h5>
+                <div className="space-y-2">
+                  {languageTrends.emerging_terms.map((term, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className="text-sm font-medium text-white shrink-0">
+                        {term.term}
+                        {term.sensitivity_flag && (
+                          <span className="ml-1 text-[10px] px-1 py-0.5 rounded bg-red-400/20 text-red-400">sensitive</span>
+                        )}
+                      </span>
+                      <span className="text-xs text-brand-silver/60">{term.definition}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Fading Terms */}
+            {languageTrends.fading_terms && languageTrends.fading_terms.length > 0 && (
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                <h5 className="text-xs font-semibold text-red-400/80 uppercase mb-2">Fading Terms</h5>
+                <div className="flex flex-wrap gap-1">
+                  {languageTrends.fading_terms.map((t) => (
+                    <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-red-400/10 text-red-400/60 line-through">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* New / Rising / Fading Trends Summary */}
+      {trendReport && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {trendReport.new_trends && trendReport.new_trends.length > 0 && (
+            <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+              <h5 className="text-[10px] text-brand-silver/50 uppercase mb-1">New Trends</h5>
+              <ul className="text-xs text-brand-silver/70 space-y-0.5">
+                {trendReport.new_trends.map((t, i) => <li key={i}>+ {t}</li>)}
+              </ul>
+            </div>
+          )}
+          {trendReport.rising_trends && trendReport.rising_trends.length > 0 && (
+            <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+              <h5 className="text-[10px] text-green-400/60 uppercase mb-1">Rising Trends</h5>
+              <ul className="text-xs text-green-400/70 space-y-0.5">
+                {trendReport.rising_trends.map((t, i) => <li key={i}>↑ {t}</li>)}
+              </ul>
+            </div>
+          )}
+          {trendReport.fading_trends && trendReport.fading_trends.length > 0 && (
+            <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+              <h5 className="text-[10px] text-red-400/60 uppercase mb-1">Fading Trends</h5>
+              <ul className="text-xs text-red-400/70 space-y-0.5">
+                {trendReport.fading_trends.map((t, i) => <li key={i}>↓ {t}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Strategic Recommendations */}
+      {stratRecs.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Strategic Recommendations
+          </h4>
+          {stratRecs.map((r, i) => (
+            <div key={i} className="mb-2">
+              <MarkdownMessage content={typeof r === 'string' ? r : JSON.stringify(r)} />
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* Findings */}
+      {findings && findings.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Key Findings
+          </h4>
+          {findings.map((f, i) => (
+            <div key={i} className="mb-2">
+              <MarkdownMessage content={f} />
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* Sources */}
+      {sources && sources.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Sources ({sources.length})
+          </h4>
+          <div className="space-y-1">
+            {sources.map((s, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <ExternalLink className="w-3 h-3 text-brand-silver/40 shrink-0" />
+                {s.url ? (
+                  <a
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-electric/80 hover:text-brand-electric truncate"
+                  >
+                    {s.title || s.url}
+                  </a>
+                ) : (
+                  <span className="text-brand-silver/60">{s.title || '-'}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 /** Safely render any value for display in persona grids. */
 function displayValue(val: unknown): string {
   if (val == null) return '';
@@ -1864,6 +2552,12 @@ export default function ResultDashboard({
   const hasAudiencePersona =
     resultData.personas != null || resultData.journey_maps != null;
 
+  // ── Detect trend/cultural insights data ────────────────────────
+  const hasTrendCultural =
+    resultData.scored_trends != null ||
+    resultData.trend_report != null ||
+    resultData.trend_persona_matrix != null;
+
   // ── Extract well-known keys ──────────────────────────────────────
   const summary = resultData.summary as string | undefined;
   const findings = resultData.findings as string[] | undefined;
@@ -2004,6 +2698,16 @@ export default function ResultDashboard({
     'personas',
     'journey_maps',
     'segment_matrix',
+    // Trend & Cultural Insights keys
+    'trend_report',
+    'scored_trends',
+    'trend_persona_matrix',
+    'opportunity_alerts',
+    'viral_patterns',
+    'cultural_shifts',
+    'generational_insights',
+    'language_trends',
+    'report_url',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),
@@ -2024,7 +2728,7 @@ export default function ResultDashboard({
       </div>
 
       {/* Score badge (only when meaningful, i.e. > 0, and not market research) */}
-      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && score !== undefined && score > 0 && (
+      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && score !== undefined && score > 0 && (
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
             Score
@@ -2036,7 +2740,7 @@ export default function ResultDashboard({
       )}
 
       {/* Summary (skip generic "Pipeline analysis completed" for market research / CIA) */}
-      {summary && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && (
+      {summary && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Summary
@@ -2090,8 +2794,26 @@ export default function ResultDashboard({
         />
       )}
 
+      {/* ── Trend & Cultural Insights Dashboard ────────────────────── */}
+      {hasTrendCultural && (
+        <TrendCulturalSection
+          trendReport={resultData.trend_report as TrendReportFE | undefined}
+          scoredTrends={resultData.scored_trends as ScoredTrendFE[] | undefined}
+          trendPersonaMatrix={resultData.trend_persona_matrix as { mappings: TrendPersonaMappingFE[] } | undefined}
+          opportunityAlerts={resultData.opportunity_alerts as OpportunityAlertFE[] | undefined}
+          viralPatterns={resultData.viral_patterns as ViralPatternProfileFE | undefined}
+          culturalShifts={resultData.cultural_shifts as CulturalShiftFE[] | undefined}
+          generationalInsights={resultData.generational_insights as GenerationalProfileFE[] | undefined}
+          languageTrends={resultData.language_trends as LanguageTrendProfileFE | undefined}
+          sources={resultData.sources as SourceEntry[] | undefined}
+          confidenceScore={resultData.confidence_score as number | undefined}
+          findings={findings}
+          recommendations={recommendations}
+        />
+      )}
+
       {/* Key findings — filter out raw JSON blobs (internal agent state) */}
-      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && findings && findings.length > 0 && (() => {
+      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && findings && findings.length > 0 && (() => {
         const filtered = findings.filter((f) => {
           if (typeof f !== 'string') return false;
           const trimmed = f.trim();
@@ -2123,7 +2845,7 @@ export default function ResultDashboard({
       })()}
 
       {/* Recommendations */}
-      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && recommendations && recommendations.length > 0 && (
+      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && recommendations && recommendations.length > 0 && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations

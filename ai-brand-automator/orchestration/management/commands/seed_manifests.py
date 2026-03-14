@@ -757,6 +757,131 @@ class Command(BaseCommand):
                 },
             },
         },
+        {
+            "pipeline_id": "trend-cultural-insights",
+            "name": "Trend & Cultural Insights",
+            "description": (
+                "Analyze cultural trends, social media patterns, viral content, "
+                "and generational shifts for brand relevance. Can run standalone "
+                "or with upstream MRA/CIA/APA data for enriched analysis."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "trend_cultural",
+                        "type": "external",
+                        "url": (
+                            "http://trend-cultural-agent-svc:8024/v1/execute"
+                        ),
+                        "config": {
+                            "scan_type": "on_demand",
+                            "alert_threshold": 75,
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "trend_cultural"],
+                    ["trend_cultural", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.5,
+                },
+            },
+        },
+        {
+            "pipeline_id": "brand-discovery-full",
+            "name": "Brand Discovery & Research (Full Workflow)",
+            "description": (
+                "Complete brand discovery: market research, competitor "
+                "intelligence, audience personas, and trend/cultural "
+                "insights. Chains all 4 agents in Workflow 1 for "
+                "comprehensive brand intelligence."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "market_research",
+                        "type": "external",
+                        "url": (
+                            "http://market-research-agent-svc:8021/v1/execute"
+                        ),
+                        "config": {
+                            "focus": (
+                                "market_size,segments,"
+                                "demographics,industry_trends"
+                            ),
+                        },
+                    },
+                    {
+                        "id": "competitor_intel",
+                        "type": "external",
+                        "url": (
+                            "http://competitor-intel-agent-svc:8022/v1/execute"
+                        ),
+                        "config": {
+                            "focus": (
+                                "competitor_audiences,"
+                                "positioning_gaps,review_sentiment"
+                            ),
+                        },
+                    },
+                    {
+                        "id": "audience_persona",
+                        "type": "external",
+                        "url": (
+                            "http://audience-persona-agent-svc:8023/v1/execute"
+                        ),
+                        "config": {
+                            "include_survey_data": True,
+                            "include_crm_data": True,
+                        },
+                    },
+                    {
+                        "id": "trend_cultural",
+                        "type": "external",
+                        "url": (
+                            "http://trend-cultural-agent-svc:8024/v1/execute"
+                        ),
+                        "config": {
+                            "scan_type": "on_demand",
+                            "alert_threshold": 75,
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "market_research"],
+                    ["market_research", "competitor_intel"],
+                    ["competitor_intel", "audience_persona"],
+                    ["audience_persona", "trend_cultural"],
+                    ["trend_cultural", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.5,
+                },
+            },
+        },
     ]
 
     def handle(self, *args, **options):

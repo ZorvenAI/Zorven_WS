@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     MARKET_RESEARCH_AGENT_URL: str = "http://market-research-agent-svc:8021"
     COMPETITOR_INTEL_AGENT_URL: str = "http://competitor-intel-agent-svc:8022"
     AUDIENCE_PERSONA_AGENT_URL: str = "http://audience-persona-agent-svc:8023"
+    TREND_CULTURAL_AGENT_URL: str = "http://trend-cultural-agent-svc:8024"
 
 
 settings = Settings()

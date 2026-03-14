@@ -936,6 +936,14 @@ if ORCHESTRATION_KAFKA_ENABLED:
                 "task": "orchestration.tasks.consume_agent_traces",
                 "schedule": 5.0,
             },
+            "emit-tcia-daily-scan": {
+                "task": "orchestration.tasks.emit_tcia_daily_scan",
+                "schedule": 3600.0,  # Every hour (task checks optimal_hour)
+            },
+            "emit-tcia-weekly-report": {
+                "task": "orchestration.tasks.emit_tcia_weekly_report",
+                "schedule": 604800.0,  # Weekly (Mondays handled by task logic)
+            },
         }
     )
 

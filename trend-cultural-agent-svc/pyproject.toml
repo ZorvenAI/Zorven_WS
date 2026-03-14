@@ -1,0 +1,10 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "integration: marks tests requiring external services (Redis, Kafka)",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
