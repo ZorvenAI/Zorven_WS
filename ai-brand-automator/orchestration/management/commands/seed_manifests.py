@@ -775,9 +775,7 @@ class Command(BaseCommand):
                     {
                         "id": "trend_cultural",
                         "type": "external",
-                        "url": (
-                            "http://trend-cultural-agent-svc:8024/v1/execute"
-                        ),
+                        "url": ("http://trend-cultural-agent-svc:8024/v1/execute"),
                         "config": {
                             "scan_type": "on_demand",
                             "alert_threshold": 75,
@@ -818,22 +816,17 @@ class Command(BaseCommand):
                     {
                         "id": "market_research",
                         "type": "external",
-                        "url": (
-                            "http://market-research-agent-svc:8021/v1/execute"
-                        ),
+                        "url": ("http://market-research-agent-svc:8021/v1/execute"),
                         "config": {
                             "focus": (
-                                "market_size,segments,"
-                                "demographics,industry_trends"
+                                "market_size,segments," "demographics,industry_trends"
                             ),
                         },
                     },
                     {
                         "id": "competitor_intel",
                         "type": "external",
-                        "url": (
-                            "http://competitor-intel-agent-svc:8022/v1/execute"
-                        ),
+                        "url": ("http://competitor-intel-agent-svc:8022/v1/execute"),
                         "config": {
                             "focus": (
                                 "competitor_audiences,"
@@ -844,9 +837,7 @@ class Command(BaseCommand):
                     {
                         "id": "audience_persona",
                         "type": "external",
-                        "url": (
-                            "http://audience-persona-agent-svc:8023/v1/execute"
-                        ),
+                        "url": ("http://audience-persona-agent-svc:8023/v1/execute"),
                         "config": {
                             "include_survey_data": True,
                             "include_crm_data": True,
@@ -855,9 +846,7 @@ class Command(BaseCommand):
                     {
                         "id": "trend_cultural",
                         "type": "external",
-                        "url": (
-                            "http://trend-cultural-agent-svc:8024/v1/execute"
-                        ),
+                        "url": ("http://trend-cultural-agent-svc:8024/v1/execute"),
                         "config": {
                             "scan_type": "on_demand",
                             "alert_threshold": 75,

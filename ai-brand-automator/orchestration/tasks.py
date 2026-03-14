@@ -213,14 +213,11 @@ def emit_tcia_daily_scan():
                     "focus_areas": [],
                 },
                 "idempotency_key": (
-                    f"trend:daily:{tenant.id}:"
-                    f"{dt.now(tz.utc).date().isoformat()}"
+                    f"trend:daily:{tenant.id}:" f"{dt.now(tz.utc).date().isoformat()}"
                 ),
                 "timestamp": dt.now(tz.utc).isoformat(),
             }
-            producer.send_to_topic(
-                "agent.commands.trend-cultural-agent", command
-            )
+            producer.send_to_topic("agent.commands.trend-cultural-agent", command)
             count += 1
 
         logger.info("Emitted %d TCIA daily scan commands", count)
@@ -266,14 +263,11 @@ def emit_tcia_weekly_report():
                     "focus_areas": [],
                 },
                 "idempotency_key": (
-                    f"trend:weekly:{tenant.id}:"
-                    f"{dt.now(tz.utc).date().isoformat()}"
+                    f"trend:weekly:{tenant.id}:" f"{dt.now(tz.utc).date().isoformat()}"
                 ),
                 "timestamp": dt.now(tz.utc).isoformat(),
             }
-            producer.send_to_topic(
-                "agent.commands.trend-cultural-agent", command
-            )
+            producer.send_to_topic("agent.commands.trend-cultural-agent", command)
             count += 1
 
         logger.info("Emitted %d TCIA weekly report commands", count)

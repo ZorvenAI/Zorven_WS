@@ -1,0 +1,16 @@
+vendor/
+.venv/
+venv/
+node_modules/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+.hypothesis/
+htmlcov/
+*.egg-info/
+dist/
+build/
+docs/
+credentials/
+db.sqlite3

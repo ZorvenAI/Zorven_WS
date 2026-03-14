@@ -658,7 +658,9 @@ def _build_trend_cultural_summary(tcia_output):
         rising = report.get("rising_trends", [])
         fading = report.get("fading_trends", [])
         if new_trends:
-            parts.append(f"\n**New trends:** {', '.join(str(t) for t in new_trends[:5])}")
+            parts.append(
+                f"\n**New trends:** {', '.join(str(t) for t in new_trends[:5])}"
+            )
         if rising:
             parts.append(f"**Rising:** {', '.join(str(t) for t in rising[:5])}")
         if fading:
