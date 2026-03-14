@@ -55,7 +55,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
 
     # Initialize API clients
-    tavily_client = TavilySearchClient(settings.TAVILY_API_KEY, redis_manager)
+    tavily_client = TavilySearchClient(
+        settings.TAVILY_API_KEY, redis_manager,
+        mcp_server_url=settings.TAVILY_MCP_SERVER_URL,
+    )
     web_scraper = WebScraperClient(max_pages_per_domain=settings.MAX_PAGES_PER_DOMAIN)
 
     # Initialize Kafka producers

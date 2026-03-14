@@ -24,7 +24,7 @@ from tenants.permissions import (
     RoleBasedPermissionMixin,
 )
 
-from .models import AnalysisJob, PipelineManifest
+from .models import AnalysisJob, PipelineManifest, TrendNotification
 from .result_handler import handle_pipeline_result
 from .serializers import (
     AnalysisJobCreateSerializer,
@@ -32,6 +32,8 @@ from .serializers import (
     CallbackSerializer,
     PipelineManifestListSerializer,
     PipelineManifestSerializer,
+    TrendNotificationCreateSerializer,
+    TrendNotificationSerializer,
 )
 from .tasks import dispatch_job_task
 
@@ -379,4 +381,49 @@ def callback_debug(request):
             ),
             "host_header": request.META.get("HTTP_HOST", "(none)"),
         }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def push_notification(request):
+    """Receive push notifications from TCIA service.
+
+    Authenticated via X-Service-Token header (same as orchestrator callbacks).
+    Creates a TrendNotification record for the specified tenant.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "ORCHESTRATOR_SERVICE_TOKEN", "")
+    if not expected or token != expected:
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    serializer = TrendNotificationCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+
+    # Resolve tenant
+    tenant = None
+    tenant_id = data.get("tenant_id")
+    if tenant_id:
+        from tenants.models import Tenant
+
+        try:
+            tenant = Tenant.objects.get(pk=tenant_id)
+        except (Tenant.DoesNotExist, ValueError):
+            logger.warning("push_notification: tenant %s not found", tenant_id)
+
+    notification = TrendNotification.objects.create(
+        tenant=tenant,
+        notification_type=data["notification_type"],
+        title=data["title"],
+        body=data["body"],
+        metadata=data.get("metadata", {}),
+    )
+
+    return Response(
+        TrendNotificationSerializer(notification).data,
+        status=status.HTTP_201_CREATED,
     )

@@ -488,6 +488,87 @@ class TestManagerNode:
         assert "recommendations" in rd
         assert any("Market growing" in f for f in rd["findings"])
 
+    async def test_extracts_trend_cultural_data(self):
+        """ManagerNode promotes trend/cultural insights fields to top-level result_data."""
+        node = ManagerNode()
+        state = _base_state(
+            node_outputs={
+                "trend_cultural": {
+                    "trend_report": {
+                        "executive_summary": "Gen Z sustainability trends rising.",
+                        "trend_scorecard": [],
+                        "confidence_score": 0.82,
+                    },
+                    "scored_trends": [
+                        {
+                            "trend_slug": "sustainable-fashion",
+                            "topic": "Sustainable Fashion",
+                            "relevance_score": 85,
+                            "audience_alignment": 22,
+                            "competitive_landscape": 18,
+                            "brand_fit": 23,
+                            "momentum": 22,
+                            "recommendation": "capitalize",
+                            "rationale": "Strong alignment with Gen Z values.",
+                            "citations": ["https://example.com/trend"],
+                            "platforms": ["tiktok", "instagram"],
+                        },
+                    ],
+                    "trend_persona_matrix": {
+                        "mappings": [
+                            {
+                                "trend_slug": "sustainable-fashion",
+                                "persona_slug": "eco-warrior",
+                                "affinity_score": 0.92,
+                                "content_angles": ["eco tips"],
+                                "recommended_channels": ["instagram"],
+                            },
+                        ],
+                    },
+                    "opportunity_alerts": [
+                        {
+                            "alert_id": "alert-001",
+                            "trend_slug": "sustainable-fashion",
+                            "relevance_score": 85,
+                            "urgency": "immediate",
+                            "recommendation": "Launch eco campaign",
+                            "affected_personas": ["eco-warrior"],
+                        },
+                    ],
+                    "cultural_shifts": [
+                        {
+                            "domain": "sustainability",
+                            "shift_description": "Fast fashion backlash",
+                            "evidence_strength": 0.88,
+                        },
+                    ],
+                    "sources": [
+                        {
+                            "type": "web",
+                            "title": "Trend Source",
+                            "url": "https://trends.example.com",
+                        },
+                    ],
+                    "confidence_score": 0.82,
+                    "findings": ["Sustainability is top concern for Gen Z"],
+                    "recommendations": ["Align brand messaging with eco values"],
+                },
+            }
+        )
+        result = await node(state)
+        rd = result["result_data"]
+        # Trend cultural fields promoted to top level
+        assert rd["trend_report"]["executive_summary"] == "Gen Z sustainability trends rising."
+        assert len(rd["scored_trends"]) == 1
+        assert rd["scored_trends"][0]["topic"] == "Sustainable Fashion"
+        assert rd["scored_trends"][0]["relevance_score"] == 85
+        assert rd["trend_persona_matrix"]["mappings"][0]["affinity_score"] == 0.92
+        assert len(rd["opportunity_alerts"]) == 1
+        assert rd["opportunity_alerts"][0]["urgency"] == "immediate"
+        assert len(rd["cultural_shifts"]) == 1
+        assert rd["confidence_score"] == 0.82
+        assert len(rd["sources"]) == 1
+
 
 # ── Stemmer tests ──
 
@@ -576,3 +657,34 @@ class TestNeedsRagBoost:
             )
         )
         assert result["resolved_manifest_id"] == "blog-authoring"
+
+    async def test_cultural_trends_routes_to_brand_discovery_full(self):
+        """'cultural trends' is a strong signal for brand-discovery-full."""
+        node = RouterNode()
+        result = await node(
+            _base_state(input_prompt="analyze cultural trends for our brand")
+        )
+        assert result["resolved_manifest_id"] == "brand-discovery-full"
+
+    async def test_trend_cultural_standalone_with_available_manifests(self):
+        """When only trend-cultural-insights is available, it is selected."""
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt="what is trending in social media for fashion",
+                available_manifests=[
+                    {"pipeline_id": "trend-cultural-insights"},
+                    {"pipeline_id": "general-chat"},
+                ],
+            )
+        )
+        assert result["resolved_manifest_id"] == "trend-cultural-insights"
+
+    async def test_brand_discovery_full_route(self):
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt="run a full brand discovery with trend analysis"
+            )
+        )
+        assert result["resolved_manifest_id"] == "brand-discovery-full"

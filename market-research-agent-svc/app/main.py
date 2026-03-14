@@ -63,7 +63,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
 
     # Initialize API clients
-    tavily_client = TavilySearchClient(settings.TAVILY_API_KEY, redis_manager)
+    tavily_client = TavilySearchClient(
+        settings.TAVILY_API_KEY, redis_manager,
+        mcp_server_url=settings.TAVILY_MCP_SERVER_URL,
+    )
     world_bank_client = WorldBankClient(settings.WORLD_BANK_BASE_URL, redis_manager)
     news_client = GNewsClient(settings.GNEWS_API_KEY, redis_manager)
 

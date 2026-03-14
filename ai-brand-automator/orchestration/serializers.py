@@ -12,7 +12,7 @@ from collections import deque
 
 from rest_framework import serializers
 
-from .models import AnalysisJob, PipelineManifest
+from .models import AnalysisJob, PipelineManifest, TrendNotification
 
 
 class PipelineManifestSerializer(serializers.ModelSerializer):
@@ -115,6 +115,7 @@ class PipelineManifestSerializer(serializers.ModelSerializer):
         "http://competitor-intel-agent-svc",
         "http://market-research-agent-svc",
         "http://audience-persona-agent-svc",
+        "http://trend-cultural-agent-svc",
         "http://localhost:",
         "https://discovery-agent-svc",
         "https://intelligence-agent-svc",
@@ -124,6 +125,7 @@ class PipelineManifestSerializer(serializers.ModelSerializer):
         "https://competitor-intel-agent-svc",
         "https://market-research-agent-svc",
         "https://audience-persona-agent-svc",
+        "https://trend-cultural-agent-svc",
     )
 
     def _validate_external_url(self, node_id, url):
@@ -285,3 +287,33 @@ class CallbackSerializer(serializers.Serializer):
     def validate_result_data(self, value):
         """Validate result_data JSON size."""
         return self._validate_json_size(value, "result_data")
+
+
+class TrendNotificationSerializer(serializers.ModelSerializer):
+    """Serializer for TCIA push notifications."""
+
+    class Meta:
+        model = TrendNotification
+        fields = [
+            "id",
+            "notification_type",
+            "title",
+            "body",
+            "metadata",
+            "is_read",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
+class TrendNotificationCreateSerializer(serializers.Serializer):
+    """Validates push notification payload from TCIA service."""
+
+    notification_type = serializers.ChoiceField(
+        choices=TrendNotification.NotificationType.choices,
+        default=TrendNotification.NotificationType.OPPORTUNITY_ALERT,
+    )
+    title = serializers.CharField(max_length=255)
+    body = serializers.CharField()
+    metadata = serializers.JSONField(default=dict, required=False)
+    tenant_id = serializers.CharField(max_length=100)

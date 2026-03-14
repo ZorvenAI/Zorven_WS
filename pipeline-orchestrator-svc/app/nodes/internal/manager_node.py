@@ -15,6 +15,7 @@ _RESEARCH_NODES = {"default_agent", "web_research"}
 _MARKET_RESEARCH_NODES = {"market_research"}
 _COMPETITOR_INTEL_NODES = {"competitor_intelligence"}
 _AUDIENCE_PERSONA_NODES = {"audience_persona"}
+_TREND_CULTURAL_NODES = {"trend_cultural"}
 
 
 def _source_label(source: dict) -> str:
@@ -76,6 +77,9 @@ class ManagerNode(BaseNode):
 
         # Extract audience persona data
         audience_persona_data = self._extract_audience_persona(outputs)
+
+        # Extract trend/cultural insights data
+        trend_cultural_data = self._extract_trend_cultural(outputs)
 
         result_data: dict[str, Any] = {
             "summary": (
@@ -170,6 +174,41 @@ class ManagerNode(BaseNode):
                 else:
                     result_data["sources"] = apa_sources
 
+        # Promote trend/cultural insights fields to top-level result_data
+        if trend_cultural_data:
+            for key in (
+                "trend_report",
+                "scored_trends",
+                "trend_persona_matrix",
+                "opportunity_alerts",
+                "viral_patterns",
+                "cultural_shifts",
+                "generational_insights",
+                "language_trends",
+                "confidence_score",
+                "report_url",
+            ):
+                value = trend_cultural_data.get(key)
+                if value is not None:
+                    result_data[key] = value
+            # Merge TCIA sources with existing
+            tcia_sources = trend_cultural_data.get("sources", [])
+            if tcia_sources:
+                existing_sources = result_data.get("sources", [])
+                if isinstance(existing_sources, list):
+                    existing_urls = {
+                        s.get("url") for s in existing_sources if isinstance(s, dict)
+                    }
+                    for src in tcia_sources:
+                        if (
+                            isinstance(src, dict)
+                            and src.get("url") not in existing_urls
+                        ):
+                            existing_sources.append(src)
+                    result_data["sources"] = existing_sources
+                else:
+                    result_data["sources"] = tcia_sources
+
         # Populate score from BSI (used by BrandEquityDashboard)
         if bsi_data:
             result_data["score"] = bsi_data.get("score", 0)
@@ -233,6 +272,13 @@ class ManagerNode(BaseNode):
             isinstance(o, dict) and o.get("personas") for o in outputs.values()
         )
 
+        # Check for trend/cultural insights data
+        has_trend_cultural = any(
+            isinstance(o, dict)
+            and (o.get("scored_trends") or o.get("trend_report"))
+            for o in outputs.values()
+        )
+
         # Brand equity / valuation pipeline
         if bsi_data:
             charts.append(
@@ -282,6 +328,19 @@ class ManagerNode(BaseNode):
             charts.append({"type": "persona_cards", "data_key": "personas"})
             charts.append({"type": "journey_timelines", "data_key": "journey_maps"})
             charts.append({"type": "segment_matrix", "data_key": "segment_matrix"})
+            charts.append({"type": "sources_table", "data_key": "sources"})
+        elif has_trend_cultural:
+            schema_type = "trend_cultural_dashboard"
+            charts.append({"type": "trend_scorecard", "data_key": "scored_trends"})
+            charts.append(
+                {"type": "trend_persona_matrix", "data_key": "trend_persona_matrix"}
+            )
+            charts.append(
+                {"type": "opportunity_alerts", "data_key": "opportunity_alerts"}
+            )
+            charts.append(
+                {"type": "cultural_shifts", "data_key": "cultural_shifts"}
+            )
             charts.append({"type": "sources_table", "data_key": "sources"})
         elif has_competitor_intel:
             schema_type = "competitor_intelligence_dashboard"
@@ -382,5 +441,20 @@ class ManagerNode(BaseNode):
         for node_id, output in outputs.items():
             if isinstance(output, dict):
                 if output.get("personas") or output.get("journey_maps"):
+                    return output
+        return None
+
+    @staticmethod
+    def _extract_trend_cultural(
+        outputs: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Extract trend/cultural insights data from any node output.
+
+        Looks for outputs containing scored_trends or trend_report,
+        which are produced by the trend-cultural-agent-svc.
+        """
+        for node_id, output in outputs.items():
+            if isinstance(output, dict):
+                if output.get("scored_trends") or output.get("trend_report"):
                     return output
         return None

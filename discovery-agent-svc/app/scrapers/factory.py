@@ -27,6 +27,7 @@ class ScraperFactory:
         search_engine = SearchEngine(
             tavily_api_key=settings.TAVILY_API_KEY,
             redis_manager=redis_manager,
+            mcp_server_url=settings.TAVILY_MCP_SERVER_URL,
         )
 
         browser_engine = BrowserEngine(

@@ -621,6 +621,7 @@ services:
       - MRA_RAG_SERVICE_URL=http://rag-uploader-agent-svc:8070
       - MRA_CONFIDENCE_THRESHOLD=${MRA_CONFIDENCE_THRESHOLD:-0.7}
       - MRA_TOKEN_BUDGET_PER_SESSION=${MRA_TOKEN_BUDGET_PER_SESSION:-50000}
+      - MRA_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
     expose:
       - "8021"
     ports:
@@ -664,6 +665,7 @@ services:
       - CIA_MAX_COMPETITORS=${CIA_MAX_COMPETITORS:-20}
       - CIA_KAFKA_CONSUMERS_ENABLED=${CIA_KAFKA_CONSUMERS_ENABLED:-false}
       - CIA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - CIA_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
     expose:
       - "8022"
     ports:
@@ -708,6 +710,7 @@ services:
       - APA_MAX_PERSONAS=${APA_MAX_PERSONAS:-5}
       - APA_KAFKA_CONSUMERS_ENABLED=${APA_KAFKA_CONSUMERS_ENABLED:-false}
       - APA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - APA_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
     expose:
       - "8023"
     ports:
@@ -721,6 +724,55 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Trend & Cultural Insights Agent — Cultural trend monitoring and scoring
+  # Monitors social trends, cultural shifts, viral patterns, generational
+  # preferences, and emerging slang via Tavily + Claude for brand relevance
+  # ==========================================================================
+  trend-cultural-agent-svc:
+    build:
+      context: ../trend-cultural-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-trend-cultural-agent
+    environment:
+      - TCIA_REDIS_URL=redis://redis:6379/14
+      - TCIA_KAFKA_BOOTSTRAP_SERVERS=${TCIA_KAFKA_BOOTSTRAP_SERVERS:-}
+      - TCIA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - TCIA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - TCIA_LOG_LEVEL=${TCIA_LOG_LEVEL:-INFO}
+      - TCIA_HOST=0.0.0.0
+      - TCIA_PORT=8024
+      - TCIA_RAG_SERVICE_URL=http://rag-uploader-agent-svc:8070
+      - TCIA_GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
+      - TCIA_GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}
+      - TCIA_GCS_CREDENTIALS_JSON=${GCS_CREDENTIALS_JSON:-}
+      - TCIA_CORE_API_URL=http://backend:8001
+      - TCIA_CORE_API_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - TCIA_KAFKA_CONSUMERS_ENABLED=${TCIA_KAFKA_CONSUMERS_ENABLED:-false}
+      - TCIA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - TCIA_ODOO_ENABLED=${TCIA_ODOO_ENABLED:-false}
+      - TCIA_ALERT_THRESHOLD=${TCIA_ALERT_THRESHOLD:-75}
+      - TCIA_MAX_ALERTS_PER_DAY=${TCIA_MAX_ALERTS_PER_DAY:-5}
+      - TCIA_TOKEN_BUDGET_PER_SESSION=${TCIA_TOKEN_BUDGET_PER_SESSION:-60000}
+      - TCIA_MAX_TRENDS_PER_SESSION=${TCIA_MAX_TRENDS_PER_SESSION:-25}
+      - TCIA_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
+    expose:
+      - "8024"
+    ports:
+      - "18024:8024"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8024/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
     networks:
       - app-network
@@ -745,6 +797,7 @@ services:
       - DISCOVERY_TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - DISCOVERY_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - DISCOVERY_LOG_LEVEL=INFO
+      - DISCOVERY_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
     expose:
       - "8020"
     ports:

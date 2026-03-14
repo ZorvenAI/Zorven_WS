@@ -286,3 +286,46 @@ class CompetitorSnapshot(models.Model):
 
     def __str__(self):
         return f"Snapshot {self.competitor.slug} @ {self.snapshot_date}"
+
+
+class TrendNotification(models.Model):
+    """
+    Push notification record for TCIA opportunity alerts and escalations.
+
+    Created by the TCIA service via POST /api/v1/orchestration/notifications/push/
+    (X-Service-Token auth). Displayed in the frontend notification bell.
+    """
+
+    class NotificationType(models.TextChoices):
+        OPPORTUNITY_ALERT = "opportunity_alert", "Opportunity Alert"
+        ESCALATION = "escalation", "Escalation"
+        TREND_REPORT = "trend_report", "Trend Report"
+
+    tenant = models.ForeignKey(
+        "tenants.Tenant",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="trend_notifications",
+    )
+    notification_type = models.CharField(
+        max_length=50,
+        choices=NotificationType.choices,
+        default=NotificationType.OPPORTUNITY_ALERT,
+    )
+    title = models.CharField(max_length=255)
+    body = models.TextField()
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Alert details: trend_slug, relevance_score, urgency, etc.",
+    )
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.notification_type}: {self.title}"

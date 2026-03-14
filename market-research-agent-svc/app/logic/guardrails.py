@@ -19,56 +19,7 @@ from app.api.schemas import MarketResearchResponse
 
 logger = logging.getLogger(__name__)
 
-# ── Presidio PII engine (IG-04 / OG-02) ──
-
-try:
-    from presidio_analyzer import AnalyzerEngine
-    from presidio_anonymizer import AnonymizerEngine
-    from presidio_anonymizer.entities import OperatorConfig
-
-    _analyzer = AnalyzerEngine()
-    _anonymizer = AnonymizerEngine()
-    _PRESIDIO_AVAILABLE = True
-    logger.info("Presidio PII engine loaded")
-except ImportError:
-    _PRESIDIO_AVAILABLE = False
-    logger.warning("Presidio not installed — falling back to regex PII detection")
-except Exception:
-    _PRESIDIO_AVAILABLE = False
-    logger.exception(
-        "Presidio failed to initialize — falling back to regex PII detection"
-    )
-
-# Entity type → replacement tag mapping for Presidio
-_PRESIDIO_OPERATORS = (
-    {
-        "US_SSN": OperatorConfig("replace", {"new_value": "[REDACTED-SSN]"}),
-        "CREDIT_CARD": OperatorConfig("replace", {"new_value": "[REDACTED-CC]"}),
-        "EMAIL_ADDRESS": OperatorConfig("replace", {"new_value": "[REDACTED-EMAIL]"}),
-        "PHONE_NUMBER": OperatorConfig("replace", {"new_value": "[REDACTED-PHONE]"}),
-        "US_BANK_NUMBER": OperatorConfig(
-            "replace", {"new_value": "[REDACTED-ACCOUNT]"}
-        ),
-        "IBAN_CODE": OperatorConfig("replace", {"new_value": "[REDACTED-ACCOUNT]"}),
-        "IP_ADDRESS": OperatorConfig("replace", {"new_value": "[REDACTED-IP]"}),
-        "PERSON": OperatorConfig("replace", {"new_value": "[REDACTED-NAME]"}),
-    }
-    if _PRESIDIO_AVAILABLE
-    else {}
-)
-
-# Presidio entity types to scan for
-_PRESIDIO_ENTITIES = [
-    "US_SSN",
-    "CREDIT_CARD",
-    "EMAIL_ADDRESS",
-    "PHONE_NUMBER",
-    "US_BANK_NUMBER",
-    "IBAN_CODE",
-    "IP_ADDRESS",
-]
-
-# ── Regex PII patterns (fallback when Presidio unavailable) ──
+# ── Regex PII patterns ──
 
 _SSN_PATTERN = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 _CREDIT_CARD_PATTERN = re.compile(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b")
@@ -497,30 +448,10 @@ class OutputGuardrail:
 
 
 def _redact_pii(text: str) -> str:
-    """Redact PII using Presidio + regex supplementary layer.
+    """Redact PII using regex pattern matching.
 
     Used by IG-04 (input) and OG-02 (output) guardrails.
-    Presidio provides NLP-based detection; regex catches patterns
-    that Presidio's context scoring may miss (e.g., bare SSNs).
     """
-    if _PRESIDIO_AVAILABLE:
-        try:
-            results = _analyzer.analyze(
-                text=text,
-                entities=_PRESIDIO_ENTITIES,
-                language="en",
-            )
-            if results:
-                anonymized = _anonymizer.anonymize(
-                    text=text,
-                    analyzer_results=results,
-                    operators=_PRESIDIO_OPERATORS,
-                )
-                text = anonymized.text
-        except Exception as exc:
-            logger.warning("Presidio PII redaction failed: %s", exc)
-
-    # Supplementary regex layer — catches patterns Presidio may miss
     text = _SSN_PATTERN.sub("[REDACTED-SSN]", text)
     text = _CREDIT_CARD_PATTERN.sub("[REDACTED-CC]", text)
     text = _EMAIL_PATTERN.sub("[REDACTED-EMAIL]", text)

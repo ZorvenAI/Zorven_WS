@@ -22,5 +22,10 @@ router.register(
 
 urlpatterns = [
     path("callback-debug/", views.callback_debug, name="callback-debug"),
+    path(
+        "notifications/push/",
+        views.push_notification,
+        name="push-notification",
+    ),
     path("", include(router.urls)),
 ]

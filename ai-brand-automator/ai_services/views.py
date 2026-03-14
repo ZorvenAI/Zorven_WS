@@ -490,6 +490,15 @@ def _process_chat_message(
             "swot analysis",
             "benchmarking",
             "positioning gap",
+            # Trend/cultural/persona — research markets, not specific brands
+            "brand discovery",
+            "brand intelligence",
+            "trend analysis",
+            "cultural trends",
+            "cultural insights",
+            "audience persona",
+            "buyer persona",
+            "target audience",
         )
         msg_lower = message.lower()
         if any(cue in msg_lower for cue in _odoo_strong) or any(

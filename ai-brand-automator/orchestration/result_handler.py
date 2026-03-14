@@ -300,6 +300,16 @@ def _build_result_summary(job):
     ):
         return _build_competitive_intelligence_summary(cia_output)
 
+    tcia_output = node_results.get("trend_cultural", {})
+    if not tcia_output:
+        # Also check top-level fields promoted by ManagerNode
+        if result.get("scored_trends") or result.get("trend_report"):
+            tcia_output = result
+    if tcia_output and (
+        tcia_output.get("scored_trends") or tcia_output.get("trend_report")
+    ):
+        return _build_trend_cultural_summary(tcia_output)
+
     gap_output = node_results.get("gap_analyzer", {})
     if gap_output and gap_output.get("analysis_type") == "competitive_gap":
         return _build_gap_analysis_summary(gap_output)
@@ -583,6 +593,90 @@ def _build_audience_persona_summary(apa_output):
     confidence = apa_output.get("confidence_score", 0)
     if confidence:
         # Normalize: if > 1 treat as already a percentage
+        if isinstance(confidence, (int, float)):
+            if confidence > 10:
+                confidence = confidence / 100
+            elif confidence > 1:
+                confidence = confidence / 10
+        parts.append(f"\nConfidence: {confidence:.0%}")
+
+    parts.append("\nView the full results in the pipeline card above.")
+    return "\n".join(parts)
+
+
+def _build_trend_cultural_summary(tcia_output):
+    """Build a summary for Trend & Cultural Insights Agent results."""
+    parts = ["**Trend & Cultural Insights Report completed.**"]
+
+    # Executive summary from trend_report
+    report = tcia_output.get("trend_report", {})
+    if isinstance(report, dict):
+        exec_summary = report.get("executive_summary", "")
+        if exec_summary:
+            parts.append("")
+            parts.append(exec_summary[:500])
+
+    # Top scored trends
+    scored = tcia_output.get("scored_trends", [])
+    if scored:
+        parts.append("")
+        parts.append(f"**Scored {len(scored)} trend(s):**")
+        for t in scored[:5]:
+            if not isinstance(t, dict):
+                continue
+            topic = t.get("topic", t.get("trend_slug", "Unknown"))
+            score = t.get("relevance_score", 0)
+            rec = t.get("recommendation", "")
+            line = f"- **{topic}**: {score}/100"
+            if rec:
+                line += f" ({rec})"
+            parts.append(line)
+        if len(scored) > 5:
+            parts.append(f"  ...and {len(scored) - 5} more")
+
+    # Opportunity alerts
+    alerts = tcia_output.get("opportunity_alerts", [])
+    if alerts:
+        parts.append("")
+        parts.append(f"**{len(alerts)} opportunity alert(s):**")
+        for a in alerts[:3]:
+            if not isinstance(a, dict):
+                continue
+            trend = a.get("trend_slug", "")
+            urgency = a.get("urgency", "")
+            rec = a.get("recommendation", "")
+            line = f"- {trend}"
+            if urgency:
+                line += f" [{urgency}]"
+            if rec:
+                line += f": {rec[:100]}"
+            parts.append(line)
+
+    # New / Rising / Fading trends from report
+    if isinstance(report, dict):
+        new_trends = report.get("new_trends", [])
+        rising = report.get("rising_trends", [])
+        fading = report.get("fading_trends", [])
+        if new_trends:
+            parts.append(
+                f"\n**New trends:** {', '.join(str(t) for t in new_trends[:5])}"
+            )
+        if rising:
+            parts.append(f"**Rising:** {', '.join(str(t) for t in rising[:5])}")
+        if fading:
+            parts.append(f"**Fading:** {', '.join(str(t) for t in fading[:5])}")
+
+        # Strategic recommendations
+        recs = report.get("strategic_recommendations", [])
+        if recs:
+            parts.append("")
+            parts.append("**Recommendations:**")
+            for r in recs[:3]:
+                if isinstance(r, str):
+                    parts.append(f"- {r}")
+
+    confidence = tcia_output.get("confidence_score", 0)
+    if confidence:
         if isinstance(confidence, (int, float)):
             if confidence > 10:
                 confidence = confidence / 100
