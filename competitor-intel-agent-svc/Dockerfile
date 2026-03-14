@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install spaCy model for Presidio PII detection (optional — falls back to regex)
-RUN python -m spacy download en_core_web_sm || echo "spaCy model download failed — Presidio will use regex fallback"
+# NOTE: spaCy model download removed to reduce container memory from ~742MiB
+# to ~100MiB. Presidio PII detection falls back to regex patterns (same as APA).
 
 # Copy application code
 COPY . .

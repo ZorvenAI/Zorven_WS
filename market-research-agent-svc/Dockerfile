@@ -11,9 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install pinned spaCy model for Presidio PII detection (avoids download on first start)
-ARG SPACY_MODEL_PACKAGE=en_core_web_lg==3.8.0
-RUN pip install --no-cache-dir "$SPACY_MODEL_PACKAGE"
+# NOTE: spaCy model download removed to reduce container memory from ~742MiB
+# to ~100MiB. Presidio PII detection falls back to regex patterns (same as APA).
 
 # Copy application code
 COPY . .

@@ -2,10 +2,11 @@
 External API clients for competitive intelligence data sources.
 
 Two clients:
-  - TavilySearchClient: Web search via Tavily SDK
+  - TavilySearchClient: Web search via Tavily SDK (MCP primary, SDK fallback)
   - WebScraperClient: Website scraping via httpx + BeautifulSoup
 """
 
+import json
 import logging
 from typing import Any, Optional
 
@@ -15,16 +16,27 @@ from app.cache.redis_manager import RedisManager
 
 logger = logging.getLogger(__name__)
 
+try:
+    from mcp.client.session import ClientSession
+    from mcp.client.sse import sse_client
+except ImportError:
+    ClientSession = None  # type: ignore[assignment,misc]
+    sse_client = None  # type: ignore[assignment]
+
 
 class TavilySearchClient:
-    """Web search via Tavily API for competitor discovery and research."""
+    """Web search via Tavily API with MCP primary, SDK fallback."""
 
     def __init__(
-        self, api_key: str, redis_manager: Optional[RedisManager] = None
+        self,
+        api_key: str,
+        redis_manager: Optional[RedisManager] = None,
+        mcp_server_url: str = "",
     ) -> None:
         self.api_key = api_key
         self.redis_manager = redis_manager
         self._client: Any = None
+        self._mcp_server_url = mcp_server_url
 
     def _get_client(self) -> Any:
         """Lazy-init Tavily client."""
@@ -36,11 +48,62 @@ class TavilySearchClient:
 
     async def search(self, query: str, max_results: int = 10) -> list[dict[str, Any]]:
         """
-        Search the web for competitive intelligence data.
+        Search via MCP (primary) or Tavily SDK (fallback).
 
         Returns list of {title, url, content} dicts.
         Falls back to empty list on failure.
         """
+        # 1. Try MCP if configured
+        if self._mcp_server_url and sse_client is not None:
+            try:
+                results = await self._mcp_search(query, max_results)
+                if results:
+                    logger.info("MCP search succeeded for: %s", query[:80])
+                    return results
+            except Exception as exc:
+                logger.warning("MCP search failed, falling back to SDK: %s", exc)
+
+        # 2. Fallback to SDK
+        return await self._sdk_search(query, max_results)
+
+    async def _mcp_search(
+        self, query: str, max_results: int
+    ) -> list[dict[str, Any]]:
+        """Search via Tavily MCP Server (SSE transport)."""
+        arguments: dict[str, Any] = {
+            "query": query,
+            "max_results": max_results,
+            "search_depth": "advanced",
+            "include_answer": True,
+        }
+
+        async with sse_client(url=self._mcp_server_url, timeout=15) as streams:
+            async with ClientSession(*streams) as session:
+                await session.initialize()
+                result = await session.call_tool(
+                    name="tavily_search", arguments=arguments
+                )
+                if hasattr(result, "isError") and result.isError:
+                    error_text = ""
+                    if hasattr(result, "content"):
+                        for item in result.content:
+                            if hasattr(item, "text"):
+                                error_text += item.text
+                    raise RuntimeError(f"MCP tool error: {error_text}")
+
+                raw = json.loads(result.content[0].text)
+                results = raw.get(
+                    "results", raw if isinstance(raw, list) else []
+                )
+                logger.info(
+                    "MCP returned %d results for: %s", len(results), query[:80]
+                )
+                return results
+
+    async def _sdk_search(
+        self, query: str, max_results: int
+    ) -> list[dict[str, Any]]:
+        """Search via Tavily Python SDK."""
         if not self.api_key:
             logger.info("No Tavily API key - returning empty results")
             return []

@@ -90,47 +90,46 @@ class SlangLanguageTracker(BaseSkill):
             logger.warning("Slang search failed: %s", exc)
             results = []
 
-        emerging_terms: list[dict[str, Any]] = []
+        # Collect raw search content for LLM extraction
+        raw_content_parts: list[str] = []
+        raw_urls: list[tuple[str, str]] = []  # (url, content)
         for r in results:
             content = r.get("content", "")
-            title = r.get("title", "")
             url = r.get("url", "")
+            if content:
+                raw_content_parts.append(content[:500])
+                raw_urls.append((url, content))
 
-            # Detect origin platform from URL and content
-            origin_platform = self._detect_origin_platform(url, content)
+        # Use LLM to extract actual slang terms from search results
+        emerging_terms: list[dict[str, Any]] = []
+        if self._anthropic and raw_content_parts:
+            try:
+                emerging_terms = await self._llm_extract_terms(
+                    industry, raw_content_parts, raw_urls
+                )
+            except Exception as exc:
+                logger.warning("LLM term extraction failed: %s", exc)
 
-            # Determine adoption stage from content signals
-            adoption_stage = self._detect_adoption_stage(content)
+        # Fallback: heuristic extraction if LLM unavailable or failed
+        if not emerging_terms:
+            for r in results:
+                content = r.get("content", "")
+                title = r.get("title", "")
+                url = r.get("url", "")
 
-            # Keyword-based sensitivity pre-filter (~50ms)
-            keyword_score = self._keyword_sensitivity_score(content)
-            sensitivity_flag = keyword_score >= 2
+                origin_platform = self._detect_origin_platform(url, content)
+                adoption_stage = self._detect_adoption_stage(content)
+                keyword_score = self._keyword_sensitivity_score(content)
+                sensitivity_flag = keyword_score >= 2
 
-            term_data = {
-                "term": title[:100],
-                "definition": content[:300],
-                "origin_platform": origin_platform,
-                "adoption_stage": adoption_stage,
-                "sensitivity_flag": sensitivity_flag,
-            }
-            emerging_terms.append(term_data)
-
-        # LLM sensitivity judge for borderline terms (score 1 = 0.3+ threshold)
-        if self._anthropic:
-            for term in emerging_terms:
-                kw_score = self._keyword_sensitivity_score(term["definition"])
-                if kw_score == 1 and not term["sensitivity_flag"]:
-                    try:
-                        is_sensitive = await self._llm_sensitivity_judge(
-                            term["term"], term["definition"]
-                        )
-                        term["sensitivity_flag"] = is_sensitive
-                    except Exception as exc:
-                        logger.warning(
-                            "LLM sensitivity judge failed for '%s': %s",
-                            term["term"],
-                            exc,
-                        )
+                term_data = {
+                    "term": title[:100],
+                    "definition": content[:300],
+                    "origin_platform": origin_platform,
+                    "adoption_stage": adoption_stage,
+                    "sensitivity_flag": sensitivity_flag,
+                }
+                emerging_terms.append(term_data)
 
         # Search for fading terms and language shifts
         fading_terms: list[str] = []
@@ -253,6 +252,66 @@ class SlangLanguageTracker(BaseSkill):
         ):
             return "fading"
         return "emerging"
+
+    async def _llm_extract_terms(
+        self,
+        industry: str,
+        content_parts: list[str],
+        raw_urls: list[tuple[str, str]],
+    ) -> list[dict[str, Any]]:
+        """Use LLM to extract actual slang/language terms from search content."""
+        import json as _json
+
+        combined = "\n---\n".join(content_parts[:8])
+        prompt = (
+            f"Extract emerging slang terms and language trends from the "
+            f"following web search results about {industry or 'social media'}. "
+            f"Return a JSON array of objects with these fields:\n"
+            f'- "term": the slang term or phrase (2-5 words max)\n'
+            f'- "definition": a clear 1-sentence definition\n'
+            f'- "origin_platform": where it originated '
+            f"(tiktok/twitter/reddit/instagram/unknown)\n"
+            f'- "adoption_stage": one of emerging/growing/mainstream/niche/fading\n'
+            f'- "sensitivity_flag": true if potentially offensive\n\n'
+            f"Extract 5-10 distinct terms. Only include actual slang/language "
+            f"trends, NOT article titles or generic phrases.\n\n"
+            f"Search content:\n{combined}\n\n"
+            f"Return ONLY the JSON array, no markdown fences."
+        )
+        call_kwargs = {
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 2000,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if self._cb_llm:
+            response = await self._cb_llm.call(
+                lambda: self._anthropic.messages.create(**call_kwargs)
+            )
+        else:
+            response = await self._anthropic.messages.create(**call_kwargs)
+
+        text = response.content[0].text.strip()
+        # Strip markdown fences if present
+        if text.startswith("```"):
+            text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        terms = _json.loads(text)
+        if not isinstance(terms, list):
+            return []
+
+        # Enrich with platform detection for any missing fields
+        enriched = []
+        for t in terms[:15]:
+            if not isinstance(t, dict) or not t.get("term"):
+                continue
+            definition = t.get("definition", "")
+            enriched.append({
+                "term": str(t["term"])[:100],
+                "definition": str(definition)[:300],
+                "origin_platform": t.get("origin_platform", "unknown"),
+                "adoption_stage": t.get("adoption_stage", "emerging"),
+                "sensitivity_flag": bool(t.get("sensitivity_flag", False)),
+            })
+        return enriched
 
     async def _llm_sensitivity_judge(self, term: str, definition: str) -> bool:
         """LLM-based sensitivity evaluation (~400ms) for borderline terms."""

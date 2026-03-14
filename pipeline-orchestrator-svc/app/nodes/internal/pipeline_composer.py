@@ -370,6 +370,22 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
             "intelligence, then audience persona generation with CRM data"
         ),
     },
+    {
+        "id": "trend-cultural-insights",
+        "description": (
+            "Trend & cultural insights: cultural shifts, social media trends, "
+            "viral content patterns, generational preferences, emerging slang, "
+            "and brand cultural relevance scoring with opportunity alerts"
+        ),
+    },
+    {
+        "id": "brand-discovery-full",
+        "description": (
+            "Complete brand discovery workflow: market research, competitor "
+            "intelligence, audience personas, and trend/cultural insights. "
+            "Full 4-agent chain for comprehensive brand intelligence"
+        ),
+    },
 ]
 
 # ── Few-shot examples for Tier 1 ──
@@ -407,6 +423,13 @@ Examples of prompt → pipeline compositions:
 - "Map the buying journey for enterprise software buyers" → [audience_persona, manager]
 - "Research the market, competitors, and build buyer personas for fintech" → [market_research, competitor_intelligence, audience_persona, manager]
 - "Analyze our audience segments and their competitive preferences" → [competitor_intelligence, audience_persona, manager]
+- "What cultural trends should our brand capitalize on?" → [trend_cultural, manager]
+- "Analyze social media trends and viral content patterns for skincare" → [trend_cultural, manager]
+- "What's trending on TikTok and Instagram for our industry?" → [trend_cultural, manager]
+- "Track generational preferences and emerging slang for our Gen Z audience" → [trend_cultural, manager]
+- "Run a full brand discovery with market research, competitors, personas, and cultural trends" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
+- "Complete brand analysis including trend insights for a DTC fashion brand" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
+- "Analyze the market, competitors, and cultural trends for renewable energy" → [market_research, competitor_intelligence, trend_cultural, manager]
 """.strip()
 
 

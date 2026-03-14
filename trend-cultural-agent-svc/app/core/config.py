@@ -40,6 +40,7 @@ class Settings(BaseSettings):
 
     # Data sources
     TAVILY_API_KEY: str = ""
+    TAVILY_MCP_SERVER_URL: str = ""
 
     # GCS (trend report persistence)
     GCS_PROJECT_ID: str = ""

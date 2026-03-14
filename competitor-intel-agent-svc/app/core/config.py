@@ -42,6 +42,7 @@ class Settings(BaseSettings):
 
     # Data sources
     TAVILY_API_KEY: str = ""
+    TAVILY_MCP_SERVER_URL: str = ""
 
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 10

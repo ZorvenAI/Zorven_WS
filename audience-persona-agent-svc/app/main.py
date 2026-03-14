@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
     await redis_manager.connect()
 
     # 2. API clients
-    tavily_client = TavilySearchClient()
+    tavily_client = TavilySearchClient(mcp_server_url=settings.TAVILY_MCP_SERVER_URL)
     web_scraper = WebScraperClient()
     await web_scraper.start()
 

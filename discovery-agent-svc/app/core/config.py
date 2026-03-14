@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # Tavily search API key (empty = stub mode)
     TAVILY_API_KEY: str = ""
+    TAVILY_MCP_SERVER_URL: str = ""
 
     # CORS origins (comma-separated)
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
