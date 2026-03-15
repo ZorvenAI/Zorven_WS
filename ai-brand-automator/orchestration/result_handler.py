@@ -114,11 +114,15 @@ def handle_pipeline_result(
     # Cache job status in Redis for fast polling
     _update_redis_cache(job)
 
+    # Broadcast to WebSocket clients via Channels
+    _broadcast_to_workspace(job, status)
+
     # On terminal states: auto-create ChatMessage and release session lock
     if status in (AnalysisJob.Status.COMPLETED, AnalysisJob.Status.FAILED):
         _release_session_lock(job)
         if status == AnalysisJob.Status.COMPLETED:
             _save_final_chat_message(job)
+            _update_workflow_snapshot(job)
 
     logger.info("Job %s result processed (status=%s)", job.job_id, status)
     return True
@@ -190,6 +194,75 @@ def _update_redis_cache(job):
             job.job_id,
             exc,
             exc_info=True,
+        )
+
+
+def _broadcast_to_workspace(job, status):
+    """Broadcast job progress/completion to workspace WebSocket clients.
+
+    Sends to the tenant's channel group so all connected workspace clients
+    receive real-time updates. Guarded by try/except so polling fallback
+    always works even if Channels is not configured.
+    """
+    tenant_id = getattr(job, "tenant_id", None)
+    if not tenant_id:
+        return
+
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        channel_layer = get_channel_layer()
+        if not channel_layer:
+            return
+
+        group_name = f"workspace_{tenant_id}"
+
+        # Derive progress metrics
+        progress = job.progress or {}
+        current_node = next(
+            (
+                nid
+                for nid, info in progress.items()
+                if isinstance(info, dict) and info.get("status") == "running"
+            ),
+            None,
+        )
+        total = len(progress)
+        done = sum(
+            1
+            for v in progress.values()
+            if isinstance(v, dict) and v.get("status") in ("done", "failed")
+        )
+        percent = int((done / total) * 100) if total else 0
+
+        data = {
+            "job_id": str(job.job_id),
+            "status": job.status,
+            "current_node": current_node,
+            "progress_percent": percent,
+            "progress": progress,
+        }
+
+        if status in (
+            AnalysisJob.Status.COMPLETED,
+            AnalysisJob.Status.FAILED,
+        ):
+            event_type = "job.completed"
+            if status == AnalysisJob.Status.FAILED:
+                data["error_message"] = job.error_message
+        else:
+            event_type = "job.progress"
+
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {"type": event_type, "data": data},
+        )
+    except Exception as exc:
+        logger.debug(
+            "WebSocket broadcast skipped for job %s: %s",
+            job.job_id,
+            exc,
         )
 
 
@@ -836,6 +909,31 @@ def _build_voice_of_customer_summary(voca_output):
 
     parts.append("\nView the full results in the pipeline card above.")
     return "\n".join(parts)
+
+
+def _update_workflow_snapshot(job):
+    """Update WorkflowSnapshot summary and dashboard_data on job completion."""
+    try:
+        from workspace.models import WorkflowSnapshot
+        from workspace.services import WorkflowService
+
+        snapshot = WorkflowSnapshot.objects.filter(job=job).first()
+        if not snapshot:
+            return
+
+        dashboard_data = WorkflowService.extract_dashboard_data(job.result_data)
+        snapshot.dashboard_data = dashboard_data
+        snapshot.summary = {
+            "final_response": (job.result_data or {}).get("final_response", "")
+        }
+        snapshot.save(update_fields=["dashboard_data", "summary"])
+        logger.info("Workflow snapshot updated for job %s", job.job_id)
+    except Exception as exc:
+        logger.warning(
+            "Failed to update workflow snapshot for job %s: %s",
+            job.job_id,
+            exc,
+        )
 
 
 def _build_gap_analysis_summary(gap_output):

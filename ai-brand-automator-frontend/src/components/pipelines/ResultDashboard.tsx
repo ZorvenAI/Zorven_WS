@@ -21,8 +21,10 @@ import {
   BookmarkPlus,
   BookmarkCheck,
   AlertCircle,
+  LayoutDashboard,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { linkFromChat } from '@/lib/workspace';
 import BrandEquityDashboard from './BrandEquityDashboard';
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage';
 
@@ -30,6 +32,10 @@ interface ResultDashboardProps {
   resultData: Record<string, unknown>;
   /** Optional manifest name — used to route to specialized dashboards. */
   manifestName?: string | null;
+  /** Job ID — enables "Save to Workspace" button when provided. */
+  jobId?: string | null;
+  /** Chat session ID — required together with jobId for Save to Workspace. */
+  chatSessionId?: string | null;
 }
 
 interface PublishResultEntry {
@@ -49,6 +55,10 @@ interface DataToolbarProps {
   content: string;
   title?: string;
   format?: DataFormat;
+  /** Job ID — enables "Save to Workspace" button. */
+  jobId?: string | null;
+  /** Chat session ID for workspace link. */
+  chatSessionId?: string | null;
 }
 
 function slugify(text: string): string {
@@ -79,11 +89,15 @@ function markdownToPlainText(md: string): string {
     .trim();
 }
 
-function DataToolbar({ content, title, format = 'text' }: DataToolbarProps) {
+function DataToolbar({ content, title, format = 'text', jobId, chatSessionId }: DataToolbarProps) {
   const [copied, setCopied] = useState(false);
   const [ragSaveState, setRagSaveState] = useState<
     'idle' | 'saving' | 'saved' | 'error'
   >('idle');
+  const [wsSaveState, setWsSaveState] = useState<
+    'idle' | 'saving' | 'saved' | 'error'
+  >('idle');
+  const [savedWorkflowId, setSavedWorkflowId] = useState<string | null>(null);
 
   const copyLabel =
     format === 'json' ? 'Copy JSON' : format === 'csv' ? 'Copy CSV' : 'Copy';
@@ -153,8 +167,24 @@ function DataToolbar({ content, title, format = 'text' }: DataToolbarProps) {
     setTimeout(() => setRagSaveState('idle'), 3000);
   };
 
+  const handleSaveToWorkspace = async () => {
+    if (wsSaveState === 'saving' || !jobId || !chatSessionId) return;
+    setWsSaveState('saving');
+    try {
+      const result = await linkFromChat({
+        job_id: jobId,
+        chat_session_id: chatSessionId,
+      });
+      setSavedWorkflowId(result.workflow_id);
+      setWsSaveState('saved');
+    } catch {
+      setWsSaveState('error');
+    }
+    setTimeout(() => setWsSaveState('idle'), 3000);
+  };
+
   return (
-    <div className="flex gap-2 mb-2">
+    <div className="flex gap-2 mb-2 flex-wrap">
       <button
         onClick={handleCopy}
         className="btn-outline flex items-center gap-1.5 text-xs px-3 py-1.5"
@@ -196,6 +226,36 @@ function DataToolbar({ content, title, format = 'text' }: DataToolbarProps) {
             ? 'Failed'
             : 'Save to RAG'}
       </button>
+      {jobId && chatSessionId && (
+        <button
+          onClick={handleSaveToWorkspace}
+          disabled={wsSaveState === 'saving' || wsSaveState === 'saved'}
+          className="btn-outline flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-60"
+        >
+          {wsSaveState === 'saving' && (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          )}
+          {wsSaveState === 'saved' && (
+            <Check className="w-3.5 h-3.5 text-emerald-400" />
+          )}
+          {wsSaveState === 'error' && (
+            <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+          )}
+          {wsSaveState === 'idle' && (
+            <LayoutDashboard className="w-3.5 h-3.5" />
+          )}
+          {wsSaveState === 'saved' ? 'Saved' : wsSaveState === 'error' ? 'Failed' : 'Save to Workspace'}
+        </button>
+      )}
+      {savedWorkflowId && (
+        <a
+          href={`/dashboard/workflows?workflow=${savedWorkflowId}`}
+          className="btn-outline flex items-center gap-1.5 text-xs px-3 py-1.5"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          Open in Workspace
+        </a>
+      )}
     </div>
   );
 }
@@ -2011,7 +2071,7 @@ function TrendCulturalSection({
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Sources ({sources.length})
           </h4>
-          <div className="space-y-1">
+          <div className="space-y-1 max-h-60 overflow-y-auto rounded-lg border border-white/5 p-2">
             {sources.map((s, i) => (
               <div key={i} className="flex items-center gap-2 text-xs">
                 <ExternalLink className="w-3 h-3 text-brand-silver/40 shrink-0" />
@@ -2538,7 +2598,7 @@ function AudiencePersonaSection({
           <h5 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Sources ({sources.length})
           </h5>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-60 overflow-y-auto rounded-lg border border-white/5">
             <table className="w-full text-left text-[11px]">
               <thead>
                 <tr className="border-b border-white/10">
@@ -3158,7 +3218,7 @@ function VoiceOfCustomerSection({
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Sources ({sources.length})
           </h4>
-          <div className="space-y-1">
+          <div className="space-y-1 max-h-60 overflow-y-auto rounded-lg border border-white/5 p-2">
             {sources.map((s, i) => (
               <div key={i} className="flex items-center gap-2 text-xs">
                 <ExternalLink className="w-3 h-3 text-brand-silver/40 shrink-0" />
@@ -3186,6 +3246,8 @@ function VoiceOfCustomerSection({
 export default function ResultDashboard({
   resultData,
   manifestName,
+  jobId,
+  chatSessionId,
 }: ResultDashboardProps) {
   // Route to specialized dashboard for Brand Equity / ISO pipelines.
   // Detect by manifest name OR by result_data shape (chat pipelines
@@ -3407,6 +3469,8 @@ export default function ResultDashboard({
           content={resultDataToText(resultData)}
           title="Analysis Results"
           format="text"
+          jobId={jobId}
+          chatSessionId={chatSessionId}
         />
       </div>
 

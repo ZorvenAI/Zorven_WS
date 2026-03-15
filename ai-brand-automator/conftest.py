@@ -483,3 +483,115 @@ def sample_pdf_file():
         b"%PDF-1.4 fake pdf content",
         content_type="application/pdf",
     )
+
+
+# --- Workspace fixtures ---
+
+
+@pytest.fixture
+def sample_manifest_data():
+    """Sample manifest_data for workspace tests."""
+    return {
+        "pipeline_id": "test-pipeline-v1",
+        "nodes": [
+            {
+                "id": "discovery",
+                "type": "external",
+                "url": "http://discovery-agent-svc:8020/v1/execute",
+                "config": {},
+            },
+            {
+                "id": "intelligence",
+                "type": "external",
+                "url": "http://intelligence-agent-svc:8030/v1/execute",
+                "config": {},
+            },
+            {
+                "id": "manager",
+                "type": "internal",
+                "handler": "ManagerNode",
+                "config": {},
+            },
+        ],
+        "edges": [
+            ["discovery", "intelligence"],
+            ["intelligence", "manager"],
+        ],
+        "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+    }
+
+
+@pytest.fixture
+def pipeline_manifest(db, public_tenant, sample_manifest_data):
+    """Create a test PipelineManifest."""
+    from orchestration.models import PipelineManifest
+
+    return PipelineManifest.objects.create(
+        pipeline_id="test-pipeline-v1",
+        name="Test Pipeline",
+        description="A test pipeline for workspace tests",
+        manifest_data=sample_manifest_data,
+        tenant=public_tenant,
+    )
+
+
+@pytest.fixture
+def user_workflow(db, public_tenant, user, pipeline_manifest):
+    """Create a test UserWorkflow."""
+    from workspace.models import UserWorkflow
+
+    return UserWorkflow.objects.create(
+        name="Test Workflow",
+        description="A test workflow",
+        manifest=pipeline_manifest,
+        layout_data={"nodes": {}, "viewport": {"x": 0, "y": 0, "zoom": 1}},
+        source=UserWorkflow.Source.CREATED,
+        tenant=public_tenant,
+        created_by=user,
+    )
+
+
+@pytest.fixture
+def workflow_factory(db, public_tenant, user):
+    """Factory fixture for creating workflows with custom attributes."""
+    from orchestration.models import PipelineManifest
+    from workspace.models import UserWorkflow
+    import uuid
+
+    def _create(name=None, manifest_data=None, **kwargs):
+        name = name or f"Workflow {uuid.uuid4().hex[:6]}"
+        m_data = manifest_data or {
+            "pipeline_id": f"pipe-{uuid.uuid4().hex[:6]}",
+            "nodes": [
+                {
+                    "id": "discovery",
+                    "type": "external",
+                    "url": "http://discovery-agent-svc:8020/v1/execute",
+                    "config": {},
+                },
+                {
+                    "id": "manager",
+                    "type": "internal",
+                    "handler": "ManagerNode",
+                    "config": {},
+                },
+            ],
+            "edges": [["discovery", "manager"]],
+            "global_config": {},
+        }
+        manifest = PipelineManifest.objects.create(
+            pipeline_id=f"workspace-{uuid.uuid4().hex[:8]}",
+            name=name,
+            manifest_data=m_data,
+            tenant=kwargs.get("tenant", public_tenant),
+            created_by=kwargs.get("created_by", user),
+        )
+        return UserWorkflow.objects.create(
+            name=name,
+            manifest=manifest,
+            tenant=kwargs.get("tenant", public_tenant),
+            created_by=kwargs.get("created_by", user),
+            **{k: v for k, v in kwargs.items() if k not in ("tenant", "created_by")},
+        )
+
+    return _create

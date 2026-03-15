@@ -532,3 +532,18 @@
 .datepicker-input::placeholder {
   color: rgba(225, 225, 230, 0.5);
 }
+
+/* ===== React Flow Dark Theme for Workflow Canvas ===== */
+.react-flow {
+  --xy-connectionline-stroke: #00f5ff;
+  --xy-connectionline-stroke-width: 2;
+  --xy-edge-stroke: #94a3b8;
+  --xy-edge-stroke-width: 2;
+}
+
+/* Fix: Tailwind base sets svg { max-width:100%; height:auto } which collapses
+   React Flow's internal edge SVG containers to 0 height, making edges invisible. */
+.react-flow svg {
+  max-width: initial;
+  height: initial;
+}

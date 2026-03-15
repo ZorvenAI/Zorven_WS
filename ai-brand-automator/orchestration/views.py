@@ -212,8 +212,11 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             "progress_percent": self._calc_percent(progress),
             "last_thought": None,
         }
-        if job.status == AnalysisJob.Status.COMPLETED:
+        # Include result_data whenever available (partial results during
+        # execution, full results when completed)
+        if job.result_data:
             data["result_data"] = job.result_data
+        if job.status == AnalysisJob.Status.COMPLETED:
             data["manifest_name"] = job.manifest.name if job.manifest else None
             data["progress_percent"] = 100
         elif job.status == AnalysisJob.Status.FAILED:

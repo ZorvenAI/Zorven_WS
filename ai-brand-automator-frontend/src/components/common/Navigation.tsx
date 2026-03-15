@@ -10,6 +10,7 @@ import {
   FolderOpen,
   Zap,
   GitBranch,
+  Workflow,
   Bot,
   BarChart3,
   Users,
@@ -128,6 +129,7 @@ export function Navigation({ children }: { children: React.ReactNode }) {
     { href: '/files', label: 'Files', icon: <FolderOpen className={iconCls} />, active: pathname === '/files' },
     { href: '/automation', label: 'Automation', icon: <Zap className={iconCls} />, active: pathname === '/automation' },
     { href: '/dashboard/pipelines', label: 'Pipelines', icon: <GitBranch className={iconCls} />, active: pathname?.startsWith('/dashboard/pipelines') ?? false },
+    { href: '/dashboard/workflows', label: 'Workflows', icon: <Workflow className={iconCls} />, active: pathname?.startsWith('/dashboard/workflows') ?? false },
     ...(canEdit
       ? [{ href: '/dashboard/ai-assistant', label: 'AI Assistant', icon: <Bot className={iconCls} />, active: pathname?.startsWith('/dashboard/ai-assistant') ?? false }]
       : []),

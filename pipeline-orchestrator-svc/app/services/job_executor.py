@@ -436,10 +436,19 @@ class JobExecutor:
                             len(levels),
                         )
 
-                    # Send per-level progress callback
+                    # Build partial result_data from accumulated node outputs
+                    # so the frontend can render per-agent results progressively
+                    partial_result_data: dict[str, Any] = {
+                        "node_results": dict(state["node_outputs"]),
+                    }
+                    if result_data:
+                        partial_result_data.update(result_data)
+
+                    # Send per-level progress callback with partial results
                     await self.callback.send_progress(
                         callback_url,
                         copy.deepcopy(state["progress"]),
+                        result_data=partial_result_data,
                     )
 
             except Exception as exc:

@@ -107,11 +107,14 @@ export function usePollingJob(
       }
     };
 
-    // Start with a full fetch to populate job state, then switch to quick-status
+    // Fetch full job state, then immediately poll quick-status so
+    // quickStatus is populated without waiting the full interval.
+    // This is critical for restored jobs (e.g. page refresh) where
+    // components depend on quickStatus to render results.
     (async () => {
       await fetchFull();
       if (!cancelled) {
-        timer = setTimeout(poll, intervalMs);
+        await poll();
       }
     })();
 

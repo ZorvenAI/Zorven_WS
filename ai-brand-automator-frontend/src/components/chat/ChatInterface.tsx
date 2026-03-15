@@ -711,7 +711,7 @@ export function ChatInterface() {
             ) : (
               <>
                 {messages.map((message) => (
-                  <MessageBubble key={message.id} message={message} />
+                  <MessageBubble key={message.id} message={message} chatSessionId={sessionId} />
                 ))}
                 {isLoading && !isPipelineRunning && (
                   <div className="flex justify-start">

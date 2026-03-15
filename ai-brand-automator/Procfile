@@ -1,4 +1,5 @@
 web: gunicorn brand_automator.wsgi:application --bind 0.0.0.0:$PORT --workers 4 --threads 2 --timeout 120
+websocket: daphne brand_automator.asgi:application --port ${WS_PORT:-8002} --bind 0.0.0.0
 worker: celery -A brand_automator worker -l info --concurrency=2
 orchestration-worker: celery -A brand_automator worker -Q orchestration -l info --concurrency=4
 beat: celery -A brand_automator beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler

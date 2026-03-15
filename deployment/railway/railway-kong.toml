@@ -108,6 +108,27 @@ PYTHONUNBUFFERED = "1"
 CELERY_LOG_LEVEL = "info"
 
 # ==============================================================================
+# Backend WebSocket Service (Daphne ASGI — Workspace Real-Time)
+# ==============================================================================
+[[services]]
+name = "backend-ws"
+dockerfilePath = "deployment/docker/backend/Dockerfile"
+port = 8002
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+startCommand = "daphne brand_automator.asgi:application --port 8002 --bind 0.0.0.0"
+
+[services.env]
+PORT = "8002"
+WS_PORT = "8002"
+DJANGO_SETTINGS_MODULE = "brand_automator.settings"
+PYTHONUNBUFFERED = "1"
+KONG_ENABLED = "true"
+USE_X_FORWARDED_HOST = "true"
+USE_X_FORWARDED_PORT = "true"
+# CHANNELS_REDIS_URL, DATABASE_URL, SECRET_KEY set via Railway dashboard
+
+# ==============================================================================
 # MCP Server Service (Optional)
 # ==============================================================================
 [[services]]
