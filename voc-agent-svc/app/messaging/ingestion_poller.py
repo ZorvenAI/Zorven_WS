@@ -94,7 +94,7 @@ class IngestionPoller:
                 cid = pid[0] if isinstance(pid, (list, tuple)) else pid or 0
                 fb = TicketFeedback(
                     feedback_id=f"poll-{uuid.uuid4().hex[:12]}",
-                    customer_id_hash=hash_customer_id(cid) if cid else "",
+                    customer_id_hash=hash_customer_id(cid, salt=tenant_id) if cid else "",
                     text=text[:2000],
                     timestamp=now,
                     sentiment_label=label,
@@ -131,7 +131,7 @@ class IngestionPoller:
                 cid = aid[0] if isinstance(aid, (list, tuple)) else aid or 0
                 fb = ChatterFeedback(
                     feedback_id=f"poll-{uuid.uuid4().hex[:12]}",
-                    customer_id_hash=hash_customer_id(cid) if cid else "",
+                    customer_id_hash=hash_customer_id(cid, salt=tenant_id) if cid else "",
                     text=text[:2000],
                     timestamp=now,
                     sentiment_label=label,
@@ -152,7 +152,7 @@ class IngestionPoller:
         if self._redis._redis:
             try:
                 await self._redis._redis.set(
-                    f"voca:{tenant_id}:registry:last_ingestion", now
+                    f"voca:{tenant_id}:config.last_ingestion", now
                 )
             except Exception:
                 pass

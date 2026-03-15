@@ -1,7 +1,6 @@
 """Tests for SKL-VoCA-13: VoC Report Persister."""
 
 import pytest
-from unittest.mock import AsyncMock
 
 from app.skills.voc_report_persister import VoCReportPersister
 from app.skills.models import SkillContext

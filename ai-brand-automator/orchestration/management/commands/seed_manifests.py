@@ -858,13 +858,12 @@ class Command(BaseCommand):
                         "url": "http://market-research-agent-svc:8021/v1/execute",
                         "config": {
                             "focus": (
-                                "market_size,segments,"
-                                "demographics,industry_trends"
+                                "market_size,segments," "demographics,industry_trends"
                             ),
                         },
                     },
                     {
-                        "id": "competitor_intel",
+                        "id": "competitor_intelligence",
                         "type": "external",
                         "url": "http://competitor-intel-agent-svc:8022/v1/execute",
                         "config": {
@@ -887,7 +886,7 @@ class Command(BaseCommand):
                         "config": {"scan_type": "on_demand"},
                     },
                     {
-                        "id": "voc_analysis",
+                        "id": "voice_of_customer",
                         "type": "external",
                         "url": "http://voc-agent-svc:8025/v1/execute",
                         "config": {
@@ -906,8 +905,8 @@ class Command(BaseCommand):
                     ["market_research", "competitor_intel"],
                     ["competitor_intel", "audience_persona"],
                     ["audience_persona", "trend_cultural"],
-                    ["trend_cultural", "voc_analysis"],
-                    ["voc_analysis", "manager"],
+                    ["trend_cultural", "voice_of_customer"],
+                    ["voice_of_customer", "manager"],
                 ],
                 "global_config": {
                     "model": "claude-sonnet-4-20250514",
@@ -942,7 +941,7 @@ class Command(BaseCommand):
                         },
                     },
                     {
-                        "id": "competitor_intel",
+                        "id": "competitor_intelligence",
                         "type": "external",
                         "url": ("http://competitor-intel-agent-svc:8022/v1/execute"),
                         "config": {
@@ -978,8 +977,8 @@ class Command(BaseCommand):
                 ],
                 "edges": [
                     ["intent_router", "market_research"],
-                    ["market_research", "competitor_intel"],
-                    ["competitor_intel", "audience_persona"],
+                    ["market_research", "competitor_intelligence"],
+                    ["competitor_intelligence", "audience_persona"],
                     ["audience_persona", "trend_cultural"],
                     ["trend_cultural", "manager"],
                 ],

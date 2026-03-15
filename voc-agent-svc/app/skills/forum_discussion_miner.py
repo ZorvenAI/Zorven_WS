@@ -190,7 +190,9 @@ class ForumDiscussionMiner(BaseSkill):
 
             for src in sources:
                 src_url = src.get("url", "")
-                if src_url and src_url not in seen_urls:
+                if src_url and src_url in seen_urls:
+                    continue
+                if src_url:
                     seen_urls.add(src_url)
                 deduped_sources.append(src)
 

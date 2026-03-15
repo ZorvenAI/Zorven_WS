@@ -169,7 +169,7 @@ class OdooEventConsumer:
         text = data.get("description", "") or data.get("body", "") or ""
         label, score = _quick_sentiment(text)
         customer_id = data.get("partner_id", 0)
-        cid_hash = hash_customer_id(customer_id) if customer_id else ""
+        cid_hash = hash_customer_id(customer_id, salt=tenant_id) if customer_id else ""
 
         if event_type in ("ticket_created", "ticket_updated"):
             return TicketFeedback(
