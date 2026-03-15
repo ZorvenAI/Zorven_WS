@@ -260,6 +260,109 @@ export interface TrendReport {
   citations: string[];
 }
 
+// ── Voice of Customer (VoCA) Types ──
+
+export interface SentimentDistributionFE {
+  positive: number;
+  neutral: number;
+  negative: number;
+}
+
+export interface EmotionProfileFE {
+  joy?: number;
+  trust?: number;
+  surprise?: number;
+  anticipation?: number;
+  anger?: number;
+  fear?: number;
+  sadness?: number;
+  disgust?: number;
+}
+
+export interface ChannelSentimentFE {
+  channel: string;
+  provenance?: 'internal' | 'external' | 'not_connected';
+  sentiment: SentimentDistributionFE;
+  feedback_count: number;
+  confidence?: number;
+}
+
+export interface VoCSentimentFE {
+  overall_sentiment: SentimentDistributionFE;
+  emotion_profile?: EmotionProfileFE;
+  channel_sentiments?: ChannelSentimentFE[];
+  persona_sentiments?: Record<string, SentimentDistributionFE>;
+  trend_direction?: string;
+  data_coverage_score?: number;
+}
+
+export interface SubThemeFE {
+  name: string;
+  feedback_count?: number;
+  sentiment?: SentimentDistributionFE;
+  representative_quotes?: string[];
+}
+
+export interface ThemeClusterFE {
+  theme_slug?: string;
+  theme_name: string;
+  feedback_count: number;
+  severity_score?: number;
+  sentiment?: SentimentDistributionFE;
+  sub_themes?: SubThemeFE[];
+  representative_quotes?: string[];
+  competitor_correlation?: string;
+  market_context?: string;
+}
+
+export interface VoCThemeMapFE {
+  themes: ThemeClusterFE[];
+  total_feedback_analyzed?: number;
+  clustering_method?: string;
+}
+
+export interface NPSBreakdownFE {
+  promoters: number;
+  passives: number;
+  detractors: number;
+  nps_score: number;
+  total_responses?: number;
+}
+
+export interface VoCNPSAnalysisFE {
+  nps_available: boolean;
+  current_nps?: NPSBreakdownFE;
+  proxy_nps?: NPSBreakdownFE;
+  drivers?: string[];
+  detractor_themes?: string[];
+  data_source?: string;
+}
+
+export interface PainPointFE {
+  name: string;
+  severity: number;
+  frequency: number;
+  persona_impact?: string[];
+  competitor_gap?: string;
+  trend_alignment?: string;
+  recommended_action?: string;
+}
+
+export interface PainPointPriorityMatrixFE {
+  pain_points: PainPointFE[];
+  methodology?: string;
+}
+
+export interface VoCStrategyBridgeFE {
+  executive_summary?: string;
+  voc_health_score?: number;
+  voc_health_breakdown?: Record<string, number>;
+  operating_mode?: string;
+  odoo_onboarding_recommendation?: string;
+  cross_agent_insights?: Record<string, string>;
+  strategic_recommendations?: string[];
+}
+
 // ── Log Console ──
 
 export interface LogEntry {

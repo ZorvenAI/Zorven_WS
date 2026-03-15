@@ -16,6 +16,7 @@ _MARKET_RESEARCH_NODES = {"market_research"}
 _COMPETITOR_INTEL_NODES = {"competitor_intelligence"}
 _AUDIENCE_PERSONA_NODES = {"audience_persona"}
 _TREND_CULTURAL_NODES = {"trend_cultural"}
+_VOICE_OF_CUSTOMER_NODES = {"voice_of_customer"}
 
 
 def _source_label(source: dict) -> str:
@@ -80,6 +81,9 @@ class ManagerNode(BaseNode):
 
         # Extract trend/cultural insights data
         trend_cultural_data = self._extract_trend_cultural(outputs)
+
+        # Extract voice of customer data
+        voice_of_customer_data = self._extract_voice_of_customer(outputs)
 
         result_data: dict[str, Any] = {
             "summary": (
@@ -209,6 +213,41 @@ class ManagerNode(BaseNode):
                 else:
                     result_data["sources"] = tcia_sources
 
+        # Promote voice of customer fields to top-level result_data
+        if voice_of_customer_data:
+            for key in (
+                "voc_health_score",
+                "operating_mode",
+                "data_coverage_score",
+                "sentiment",
+                "themes",
+                "nps_analysis",
+                "pain_point_priority_matrix",
+                "strategy_bridge",
+                "confidence_score",
+                "odoo_onboarding_recommendation",
+            ):
+                value = voice_of_customer_data.get(key)
+                if value is not None:
+                    result_data[key] = value
+            # Merge VoCA sources with existing
+            voca_sources = voice_of_customer_data.get("sources", [])
+            if voca_sources:
+                existing_sources = result_data.get("sources", [])
+                if isinstance(existing_sources, list):
+                    existing_urls = {
+                        s.get("url") for s in existing_sources if isinstance(s, dict)
+                    }
+                    for src in voca_sources:
+                        if (
+                            isinstance(src, dict)
+                            and src.get("url") not in existing_urls
+                        ):
+                            existing_sources.append(src)
+                    result_data["sources"] = existing_sources
+                else:
+                    result_data["sources"] = voca_sources
+
         # Populate score from BSI (used by BrandEquityDashboard)
         if bsi_data:
             result_data["score"] = bsi_data.get("score", 0)
@@ -279,6 +318,17 @@ class ManagerNode(BaseNode):
             for o in outputs.values()
         )
 
+        # Check for voice of customer data
+        has_voice_of_customer = any(
+            isinstance(o, dict)
+            and (
+                o.get("voc_health_score") is not None
+                or o.get("themes")
+                or o.get("pain_point_priority_matrix")
+            )
+            for o in outputs.values()
+        )
+
         # Brand equity / valuation pipeline
         if bsi_data:
             charts.append(
@@ -340,6 +390,21 @@ class ManagerNode(BaseNode):
             )
             charts.append(
                 {"type": "cultural_shifts", "data_key": "cultural_shifts"}
+            )
+            charts.append({"type": "sources_table", "data_key": "sources"})
+        elif has_voice_of_customer:
+            schema_type = "voice_of_customer_dashboard"
+            charts.append(
+                {"type": "voc_health_score", "data_key": "voc_health_score"}
+            )
+            charts.append({"type": "sentiment_analysis", "data_key": "sentiment"})
+            charts.append({"type": "theme_clusters", "data_key": "themes"})
+            charts.append({"type": "nps_analysis", "data_key": "nps_analysis"})
+            charts.append(
+                {
+                    "type": "pain_point_matrix",
+                    "data_key": "pain_point_priority_matrix",
+                }
             )
             charts.append({"type": "sources_table", "data_key": "sources"})
         elif has_competitor_intel:
@@ -456,5 +521,24 @@ class ManagerNode(BaseNode):
         for node_id, output in outputs.items():
             if isinstance(output, dict):
                 if output.get("scored_trends") or output.get("trend_report"):
+                    return output
+        return None
+
+    @staticmethod
+    def _extract_voice_of_customer(
+        outputs: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Extract voice of customer data from any node output.
+
+        Looks for outputs containing voc_health_score or sentiment analysis,
+        which are produced by the voc-agent-svc.
+        """
+        for node_id, output in outputs.items():
+            if isinstance(output, dict):
+                if (
+                    output.get("voc_health_score") is not None
+                    or output.get("themes")
+                    or output.get("pain_point_priority_matrix")
+                ):
                     return output
         return None

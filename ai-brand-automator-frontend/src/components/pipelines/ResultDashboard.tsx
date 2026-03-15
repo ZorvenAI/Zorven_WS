@@ -328,6 +328,65 @@ function resultDataToText(data: Record<string, unknown>): string {
     lines.push('');
   }
 
+  // Voice of Customer sections
+  const vocHealthScore = data.voc_health_score as number | undefined;
+  if (vocHealthScore != null) {
+    const mode = data.operating_mode as string | undefined;
+    lines.push(`VOC HEALTH SCORE: ${vocHealthScore}/100${mode ? ` (${mode})` : ''}`, '');
+  }
+
+  const vocSentiment = data.sentiment as Record<string, unknown> | undefined;
+  if (vocSentiment?.overall_sentiment) {
+    const overall = vocSentiment.overall_sentiment as Record<string, number>;
+    lines.push('SENTIMENT ANALYSIS', '-'.repeat(40));
+    lines.push(`Positive: ${((overall.positive ?? 0) * 100).toFixed(0)}%`);
+    lines.push(`Neutral: ${((overall.neutral ?? 0) * 100).toFixed(0)}%`);
+    lines.push(`Negative: ${((overall.negative ?? 0) * 100).toFixed(0)}%`);
+    lines.push('');
+  }
+
+  const vocThemes = data.themes as Record<string, unknown> | undefined;
+  if (vocThemes) {
+    const clusters = (vocThemes.themes ?? []) as Array<Record<string, unknown>>;
+    if (clusters.length > 0) {
+      lines.push(`THEME CLUSTERS (${clusters.length})`, '-'.repeat(40));
+      for (const t of clusters) {
+        lines.push(`- ${t.theme_name ?? t.theme_slug}: ${t.feedback_count ?? 0} mentions (severity: ${t.severity_score ?? 'N/A'})`);
+      }
+      lines.push('');
+    }
+  }
+
+  const vocNps = data.nps_analysis as Record<string, unknown> | undefined;
+  if (vocNps) {
+    const current = (vocNps.current_nps ?? vocNps.proxy_nps) as Record<string, number> | undefined;
+    if (current) {
+      const label = vocNps.nps_available ? 'NPS' : 'PROXY NPS';
+      lines.push(`${label} ANALYSIS`, '-'.repeat(40));
+      lines.push(`Score: ${current.nps_score ?? 'N/A'}`);
+      lines.push(`Promoters: ${current.promoters ?? 0} | Passives: ${current.passives ?? 0} | Detractors: ${current.detractors ?? 0}`);
+      lines.push('');
+    }
+  }
+
+  const vocPainPoints = data.pain_point_priority_matrix as Record<string, unknown> | undefined;
+  if (vocPainPoints) {
+    const pps = (vocPainPoints.pain_points ?? []) as Array<Record<string, unknown>>;
+    if (pps.length > 0) {
+      lines.push(`PAIN POINTS (${pps.length})`, '-'.repeat(40));
+      for (const pp of pps) {
+        lines.push(`- ${pp.name} (severity: ${pp.severity}, frequency: ${pp.frequency})`);
+        if (pp.recommended_action) lines.push(`  Action: ${pp.recommended_action}`);
+      }
+      lines.push('');
+    }
+  }
+
+  const vocStrategy = data.strategy_bridge as Record<string, unknown> | undefined;
+  if (vocStrategy?.executive_summary) {
+    lines.push('VOC STRATEGY BRIDGE', '-'.repeat(40), vocStrategy.executive_summary as string, '');
+  }
+
   const sources = data.sources as Array<Record<string, unknown>> | undefined;
   if (sources && sources.length > 0) {
     lines.push(`SOURCES (${sources.length})`, '-'.repeat(40));
@@ -342,7 +401,7 @@ function resultDataToText(data: Record<string, unknown>): string {
   // If no structured sections beyond a possible summary were added,
   // fall back to generic extraction. push(summary, '') adds 2 items.
   if (lines.length <= 2) {
-    const skip = new Set(['node_results', 'ui_schema', 'score', 'awareness', 'sentiment', 'financials', 'valuation', 'market_overview', 'market_sizing', 'competitive_landscape', 'industry_trends', 'economic_indicators', 'sources', 'confidence_score', 'methodology_notes', 'trend_report', 'scored_trends', 'trend_persona_matrix', 'opportunity_alerts', 'viral_patterns', 'cultural_shifts', 'generational_insights', 'language_trends', 'report_url']);
+    const skip = new Set(['node_results', 'ui_schema', 'score', 'awareness', 'sentiment', 'financials', 'valuation', 'market_overview', 'market_sizing', 'competitive_landscape', 'industry_trends', 'economic_indicators', 'sources', 'confidence_score', 'methodology_notes', 'trend_report', 'scored_trends', 'trend_persona_matrix', 'opportunity_alerts', 'viral_patterns', 'cultural_shifts', 'generational_insights', 'language_trends', 'report_url', 'voc_health_score', 'voc_health_breakdown', 'themes', 'nps_analysis', 'pain_point_priority_matrix', 'strategy_bridge', 'operating_mode', 'data_coverage_score', 'odoo_onboarding_recommendation']);
     for (const [key, val] of Object.entries(data)) {
       if (skip.has(key)) continue;
       const label = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -2519,6 +2578,611 @@ function AudiencePersonaSection({
   );
 }
 
+/* ── VoiceOfCustomerSection ─────────────────────────────────────────── */
+
+interface VoCSentimentFELocal {
+  overall_sentiment?: { positive?: number; neutral?: number; negative?: number };
+  emotion_profile?: Record<string, number>;
+  channel_sentiments?: Array<{
+    channel: string;
+    provenance?: string;
+    sentiment?: { positive?: number; neutral?: number; negative?: number };
+    feedback_count?: number;
+    confidence?: number;
+  }>;
+  persona_sentiments?: Record<string, { positive?: number; neutral?: number; negative?: number }>;
+  trend_direction?: string;
+  data_coverage_score?: number;
+}
+
+interface VoCThemeClusterLocal {
+  theme_slug?: string;
+  theme_name?: string;
+  feedback_count?: number;
+  severity_score?: number;
+  sentiment?: { positive?: number; neutral?: number; negative?: number };
+  sub_themes?: Array<{
+    name: string;
+    feedback_count?: number;
+    sentiment?: { positive?: number; neutral?: number; negative?: number };
+    representative_quotes?: string[];
+  }>;
+  representative_quotes?: string[];
+  competitor_correlation?: string;
+  market_context?: string;
+}
+
+interface VoCThemeMapLocal {
+  themes?: VoCThemeClusterLocal[];
+  total_feedback_analyzed?: number;
+}
+
+interface VoCNPSLocal {
+  nps_available?: boolean;
+  current_nps?: {
+    promoters?: number;
+    passives?: number;
+    detractors?: number;
+    nps_score?: number;
+    total_responses?: number;
+  };
+  proxy_nps?: {
+    promoters?: number;
+    passives?: number;
+    detractors?: number;
+    nps_score?: number;
+    total_responses?: number;
+  };
+  drivers?: string[];
+  detractor_themes?: string[];
+  data_source?: string;
+}
+
+interface VoCPainPointLocal {
+  name?: string;
+  severity?: number;
+  frequency?: number;
+  persona_impact?: string[];
+  competitor_gap?: string;
+  trend_alignment?: string;
+  recommended_action?: string;
+}
+
+interface VoCStrategyBridgeLocal {
+  executive_summary?: string;
+  voc_health_score?: number;
+  voc_health_breakdown?: Record<string, number>;
+  operating_mode?: string;
+  odoo_onboarding_recommendation?: string;
+  cross_agent_insights?: Record<string, string>;
+  strategic_recommendations?: string[];
+}
+
+function VoiceOfCustomerSection({
+  vocHealthScore,
+  operatingMode,
+  dataCoverageScore,
+  sentiment,
+  themes,
+  npsAnalysis,
+  painPointMatrix,
+  strategyBridge,
+  sources,
+  confidenceScore,
+  findings,
+  recommendations,
+}: {
+  vocHealthScore?: number;
+  operatingMode?: string;
+  dataCoverageScore?: number;
+  sentiment?: VoCSentimentFELocal;
+  themes?: VoCThemeMapLocal;
+  npsAnalysis?: VoCNPSLocal;
+  painPointMatrix?: { pain_points?: VoCPainPointLocal[]; methodology?: string };
+  strategyBridge?: VoCStrategyBridgeLocal;
+  sources?: SourceEntry[];
+  confidenceScore?: number;
+  findings?: string[];
+  recommendations?: string[];
+}) {
+  const [expandedTheme, setExpandedTheme] = useState<string | null>(null);
+
+  function healthScoreColor(score: number) {
+    if (score >= 70) return 'text-green-400 bg-green-400/10 border-green-400/30';
+    if (score >= 40) return 'text-amber-400 bg-amber-400/10 border-amber-400/30';
+    return 'text-red-400 bg-red-400/10 border-red-400/30';
+  }
+
+  function severityColor(severity: number) {
+    if (severity >= 7) return 'text-red-400';
+    if (severity >= 4) return 'text-amber-400';
+    return 'text-green-400';
+  }
+
+  function sentimentBar(pos: number, neu: number, neg: number) {
+    const total = pos + neu + neg;
+    if (total === 0) return null;
+    const pPct = (pos / total) * 100;
+    const nPct = (neu / total) * 100;
+    return (
+      <div className="flex w-full h-2 rounded-full overflow-hidden bg-white/10">
+        <div className="bg-green-400 h-full" style={{ width: `${pPct}%` }} />
+        <div className="bg-amber-400 h-full" style={{ width: `${nPct}%` }} />
+        <div className="bg-red-400 h-full flex-1" />
+      </div>
+    );
+  }
+
+  const overallSentiment = sentiment?.overall_sentiment;
+  const emotionProfile = sentiment?.emotion_profile;
+  const channelSentiments = sentiment?.channel_sentiments ?? [];
+  const themeClusters = themes?.themes ?? [];
+  const painPoints = painPointMatrix?.pain_points ?? [];
+  const nps = npsAnalysis;
+  const activeNps = nps?.nps_available ? nps?.current_nps : nps?.proxy_nps;
+  const execSummary = strategyBridge?.executive_summary;
+  const crossAgentInsights = strategyBridge?.cross_agent_insights;
+  const stratRecs = strategyBridge?.strategic_recommendations ?? recommendations ?? [];
+
+  return (
+    <div className="space-y-6">
+      {/* VoC Health Score + Operating Mode */}
+      <div className="flex flex-wrap items-center gap-3">
+        {vocHealthScore != null && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
+              VoC Health
+            </span>
+            <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold border ${healthScoreColor(vocHealthScore)}`}>
+              {vocHealthScore}/100
+            </span>
+          </div>
+        )}
+        {operatingMode && (
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${operatingMode === 'full' ? 'bg-green-400/20 text-green-400' : 'bg-amber-400/20 text-amber-400'}`}>
+            {operatingMode === 'full' ? 'Full Mode' : 'External-Only'}
+          </span>
+        )}
+        {dataCoverageScore != null && (
+          <span className="text-xs text-brand-silver/50">
+            Data coverage: {Math.round(dataCoverageScore * 100)}%
+          </span>
+        )}
+        {confidenceScore != null && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
+              Confidence
+            </span>
+            <span className="inline-flex items-center rounded-full bg-brand-electric/20 px-3 py-1 text-sm font-bold text-brand-electric">
+              {typeof confidenceScore === 'number' ? `${Math.round(confidenceScore * 100)}%` : confidenceScore}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Strategy Bridge Executive Summary */}
+      {execSummary && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Executive Summary
+          </h4>
+          <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+            <MarkdownMessage content={execSummary} />
+          </div>
+        </section>
+      )}
+
+      {/* Sentiment Analysis */}
+      {overallSentiment && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Sentiment Analysis
+          </h4>
+          <div className="space-y-4">
+            {/* Overall distribution bar */}
+            <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+              <h5 className="text-xs text-brand-silver/50 uppercase mb-2">Overall Distribution</h5>
+              {sentimentBar(
+                overallSentiment.positive ?? 0,
+                overallSentiment.neutral ?? 0,
+                overallSentiment.negative ?? 0,
+              )}
+              <div className="flex justify-between mt-2 text-xs text-brand-silver/60">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
+                  Positive {((overallSentiment.positive ?? 0) * 100).toFixed(0)}%
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                  Neutral {((overallSentiment.neutral ?? 0) * 100).toFixed(0)}%
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-red-400 inline-block" />
+                  Negative {((overallSentiment.negative ?? 0) * 100).toFixed(0)}%
+                </span>
+              </div>
+              {sentiment?.trend_direction && (
+                <p className="text-xs text-brand-silver/50 mt-2">
+                  Trend: {sentiment.trend_direction}
+                </p>
+              )}
+            </div>
+
+            {/* Emotion Profile */}
+            {emotionProfile && Object.keys(emotionProfile).length > 0 && (
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                <h5 className="text-xs text-brand-silver/50 uppercase mb-2">Emotion Profile</h5>
+                <div className="grid grid-cols-4 gap-2">
+                  {Object.entries(emotionProfile)
+                    .filter(([, v]) => typeof v === 'number' && v > 0)
+                    .sort(([, a], [, b]) => (b as number) - (a as number))
+                    .map(([emotion, value]) => (
+                      <div key={emotion} className="text-center">
+                        <div className="text-[10px] text-brand-silver/50 capitalize">{emotion}</div>
+                        <div className="w-full bg-white/10 rounded-full h-1.5 mt-0.5">
+                          <div
+                            className="bg-brand-electric rounded-full h-1.5"
+                            style={{ width: `${(value as number) * 100}%` }}
+                          />
+                        </div>
+                        <div className="text-[10px] text-brand-silver/60 mt-0.5">
+                          {((value as number) * 100).toFixed(0)}%
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Per-channel breakdown */}
+            {channelSentiments.length > 0 && (
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                <h5 className="text-xs text-brand-silver/50 uppercase mb-2">
+                  Channel Breakdown ({channelSentiments.length})
+                </h5>
+                <div className="space-y-3">
+                  {channelSentiments.map((ch, i) => (
+                    <div key={i}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-white capitalize">
+                          {ch.channel?.replace(/_/g, ' ')}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {ch.provenance && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${ch.provenance === 'internal' ? 'bg-blue-400/20 text-blue-400' : 'bg-purple-400/20 text-purple-400'}`}>
+                              {ch.provenance}
+                            </span>
+                          )}
+                          {ch.feedback_count != null && (
+                            <span className="text-[10px] text-brand-silver/40">
+                              {ch.feedback_count} items
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {ch.sentiment && sentimentBar(
+                        ch.sentiment.positive ?? 0,
+                        ch.sentiment.neutral ?? 0,
+                        ch.sentiment.negative ?? 0,
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Theme Clusters */}
+      {themeClusters.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Theme Clusters ({themeClusters.length})
+            {themes?.total_feedback_analyzed != null && (
+              <span className="font-normal ml-2 text-brand-silver/40">
+                {themes.total_feedback_analyzed} feedback items analyzed
+              </span>
+            )}
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {themeClusters.map((theme, i) => {
+              const key = theme.theme_slug ?? `theme-${i}`;
+              const isExpanded = expandedTheme === key;
+              return (
+                <div
+                  key={key}
+                  className="bg-white/5 rounded-lg p-4 border border-white/10 cursor-pointer hover:border-white/20 transition-colors"
+                  onClick={() => setExpandedTheme(isExpanded ? null : key)}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-white truncate mr-2">
+                      {theme.theme_name || theme.theme_slug}
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {theme.feedback_count != null && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-brand-silver/60">
+                          {theme.feedback_count} mentions
+                        </span>
+                      )}
+                      {theme.severity_score != null && (
+                        <span className={`text-xs font-bold ${severityColor(theme.severity_score)}`}>
+                          {theme.severity_score.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Sentiment bar for this theme */}
+                  {theme.sentiment && sentimentBar(
+                    theme.sentiment.positive ?? 0,
+                    theme.sentiment.neutral ?? 0,
+                    theme.sentiment.negative ?? 0,
+                  )}
+
+                  {/* Expanded details */}
+                  {isExpanded && (
+                    <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+                      {/* Sub-themes */}
+                      {theme.sub_themes && theme.sub_themes.length > 0 && (
+                        <div>
+                          <span className="text-[10px] text-brand-silver/50 uppercase">Sub-themes</span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {theme.sub_themes.map((st, si) => (
+                              <span key={si} className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-brand-silver/70">
+                                {st.name}{st.feedback_count ? ` (${st.feedback_count})` : ''}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* Representative quotes */}
+                      {theme.representative_quotes && theme.representative_quotes.length > 0 && (
+                        <div>
+                          <span className="text-[10px] text-brand-silver/50 uppercase">Quotes</span>
+                          {theme.representative_quotes.slice(0, 3).map((q, qi) => (
+                            <p key={qi} className="text-xs text-brand-silver/60 italic mt-0.5">&ldquo;{q}&rdquo;</p>
+                          ))}
+                        </div>
+                      )}
+                      {theme.competitor_correlation && (
+                        <p className="text-xs text-brand-silver/50">
+                          Competitor correlation: {theme.competitor_correlation}
+                        </p>
+                      )}
+                      {theme.market_context && (
+                        <p className="text-xs text-brand-silver/50">
+                          Market context: {theme.market_context}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* NPS Analysis */}
+      {nps && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            NPS Analysis
+          </h4>
+          {activeNps ? (
+            <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+              <div className="flex items-center gap-4 mb-3">
+                <div className="text-center">
+                  <div className="text-[10px] text-brand-silver/50 uppercase">
+                    {nps.nps_available ? 'NPS Score' : 'Proxy NPS'}
+                  </div>
+                  <div className={`text-2xl font-bold ${(activeNps.nps_score ?? 0) >= 50 ? 'text-green-400' : (activeNps.nps_score ?? 0) >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                    {activeNps.nps_score != null ? `${activeNps.nps_score >= 0 ? '+' : ''}${activeNps.nps_score.toFixed(0)}` : 'N/A'}
+                  </div>
+                </div>
+                <div className="flex-1 grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <div className="text-[10px] text-brand-silver/50">Promoters</div>
+                    <div className="text-sm font-bold text-green-400">{activeNps.promoters ?? 0}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-brand-silver/50">Passives</div>
+                    <div className="text-sm font-bold text-amber-400">{activeNps.passives ?? 0}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-brand-silver/50">Detractors</div>
+                    <div className="text-sm font-bold text-red-400">{activeNps.detractors ?? 0}</div>
+                  </div>
+                </div>
+              </div>
+              {!nps.nps_available && (
+                <p className="text-xs text-amber-400/70 italic">
+                  Estimated from external feedback — connect Odoo for actual NPS data
+                </p>
+              )}
+              {nps.data_source && (
+                <p className="text-xs text-brand-silver/40 mt-1">Source: {nps.data_source}</p>
+              )}
+              {nps.drivers && nps.drivers.length > 0 && (
+                <div className="mt-3">
+                  <span className="text-[10px] text-brand-silver/50 uppercase">NPS Drivers</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {nps.drivers.map((d) => (
+                      <span key={d} className="text-xs px-2 py-0.5 rounded-full bg-green-400/10 text-green-400/80">
+                        {d}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {nps.detractor_themes && nps.detractor_themes.length > 0 && (
+                <div className="mt-2">
+                  <span className="text-[10px] text-brand-silver/50 uppercase">Detractor Themes</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {nps.detractor_themes.map((d) => (
+                      <span key={d} className="text-xs px-2 py-0.5 rounded-full bg-red-400/10 text-red-400/80">
+                        {d}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-white/5 rounded-lg p-4 border border-white/10 text-center">
+              <p className="text-sm text-brand-silver/50">NPS data not available</p>
+              <p className="text-xs text-brand-silver/40 mt-1">
+                Connect Odoo Helpdesk surveys for NPS tracking
+              </p>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Pain Point Priority Matrix */}
+      {painPoints.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Pain Point Priority Matrix ({painPoints.length})
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-brand-silver/50 border-b border-white/10">
+                  <th className="text-left py-2 px-3">#</th>
+                  <th className="text-left py-2 px-3">Pain Point</th>
+                  <th className="text-center py-2 px-3">Severity</th>
+                  <th className="text-center py-2 px-3">Frequency</th>
+                  <th className="text-left py-2 px-3">Affected Personas</th>
+                  <th className="text-left py-2 px-3">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {painPoints.map((pp, i) => (
+                  <tr key={i} className="border-b border-white/5 hover:bg-white/5">
+                    <td className="py-2 px-3 text-brand-silver/40">{i + 1}</td>
+                    <td className="py-2 px-3 text-white font-medium">{pp.name}</td>
+                    <td className="py-2 px-3 text-center">
+                      <span className={`font-bold ${severityColor(pp.severity ?? 0)}`}>
+                        {pp.severity?.toFixed(1)}
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-center text-brand-silver/70">
+                      {pp.frequency ?? 0}
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="flex flex-wrap gap-1">
+                        {pp.persona_impact?.slice(0, 3).map((p) => (
+                          <span key={p} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-brand-silver/60">
+                            {p}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="py-2 px-3 text-brand-silver/60 max-w-[200px] truncate">
+                      {pp.recommended_action}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* Cross-Agent Insights */}
+      {crossAgentInsights && Object.keys(crossAgentInsights).length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+            Cross-Agent Insights
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {Object.entries(crossAgentInsights).map(([agent, insight]) => (
+              <div key={agent} className="bg-white/5 rounded-lg p-3 border border-white/10">
+                <span className="text-[10px] text-brand-electric/60 uppercase">
+                  {agent.replace(/_/g, ' ')}
+                </span>
+                <p className="text-xs text-brand-silver/70 mt-1">{insight}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Strategic Recommendations */}
+      {stratRecs.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Strategic Recommendations
+          </h4>
+          {stratRecs.map((r, i) => (
+            <div key={i} className="mb-2">
+              <MarkdownMessage content={typeof r === 'string' ? r : JSON.stringify(r)} />
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* Odoo Onboarding Recommendation */}
+      {strategyBridge?.odoo_onboarding_recommendation && (
+        <section>
+          <div className="bg-blue-400/5 rounded-lg p-4 border border-blue-400/20">
+            <h4 className="font-heading text-xs font-semibold text-blue-400/80 uppercase tracking-wider mb-2">
+              Odoo Onboarding Recommendation
+            </h4>
+            <p className="text-sm text-brand-silver/70">
+              {strategyBridge.odoo_onboarding_recommendation}
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* Findings */}
+      {findings && findings.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Key Findings
+          </h4>
+          {findings.map((f, i) => (
+            <div key={i} className="mb-2">
+              <MarkdownMessage content={f} />
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* Sources */}
+      {sources && sources.length > 0 && (
+        <section>
+          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Sources ({sources.length})
+          </h4>
+          <div className="space-y-1">
+            {sources.map((s, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <ExternalLink className="w-3 h-3 text-brand-silver/40 shrink-0" />
+                {s.url ? (
+                  <a
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-electric/80 hover:text-brand-electric truncate"
+                  >
+                    {s.title || s.url}
+                  </a>
+                ) : (
+                  <span className="text-brand-silver/60">{s.title || '-'}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function ResultDashboard({
   resultData,
   manifestName,
@@ -2557,6 +3221,14 @@ export default function ResultDashboard({
     resultData.scored_trends != null ||
     resultData.trend_report != null ||
     resultData.trend_persona_matrix != null;
+
+  // ── Detect voice of customer data ───────────────────────────────
+  const hasVoiceOfCustomer =
+    resultData.voc_health_score != null ||
+    resultData.sentiment != null ||
+    resultData.themes != null ||
+    resultData.nps_analysis != null ||
+    resultData.pain_point_priority_matrix != null;
 
   // ── Extract well-known keys ──────────────────────────────────────
   const summary = resultData.summary as string | undefined;
@@ -2708,6 +3380,17 @@ export default function ResultDashboard({
     'generational_insights',
     'language_trends',
     'report_url',
+    // Voice of Customer keys
+    'voc_health_score',
+    'voc_health_breakdown',
+    'sentiment',
+    'themes',
+    'nps_analysis',
+    'pain_point_priority_matrix',
+    'strategy_bridge',
+    'operating_mode',
+    'data_coverage_score',
+    'odoo_onboarding_recommendation',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),
@@ -2728,7 +3411,7 @@ export default function ResultDashboard({
       </div>
 
       {/* Score badge (only when meaningful, i.e. > 0, and not market research) */}
-      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && score !== undefined && score > 0 && (
+      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && score !== undefined && score > 0 && (
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
             Score
@@ -2740,7 +3423,7 @@ export default function ResultDashboard({
       )}
 
       {/* Summary (skip generic "Pipeline analysis completed" for market research / CIA) */}
-      {summary && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && (
+      {summary && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Summary
@@ -2812,8 +3495,26 @@ export default function ResultDashboard({
         />
       )}
 
+      {/* ── Voice of Customer Dashboard ──────────────────────────────── */}
+      {hasVoiceOfCustomer && (
+        <VoiceOfCustomerSection
+          vocHealthScore={resultData.voc_health_score as number | undefined}
+          operatingMode={resultData.operating_mode as string | undefined}
+          dataCoverageScore={resultData.data_coverage_score as number | undefined}
+          sentiment={resultData.sentiment as VoCSentimentFELocal | undefined}
+          themes={resultData.themes as VoCThemeMapLocal | undefined}
+          npsAnalysis={resultData.nps_analysis as VoCNPSLocal | undefined}
+          painPointMatrix={resultData.pain_point_priority_matrix as { pain_points?: VoCPainPointLocal[]; methodology?: string } | undefined}
+          strategyBridge={resultData.strategy_bridge as VoCStrategyBridgeLocal | undefined}
+          sources={resultData.sources as SourceEntry[] | undefined}
+          confidenceScore={resultData.confidence_score as number | undefined}
+          findings={findings}
+          recommendations={recommendations}
+        />
+      )}
+
       {/* Key findings — filter out raw JSON blobs (internal agent state) */}
-      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && findings && findings.length > 0 && (() => {
+      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && findings && findings.length > 0 && (() => {
         const filtered = findings.filter((f) => {
           if (typeof f !== 'string') return false;
           const trimmed = f.trim();
@@ -2845,7 +3546,7 @@ export default function ResultDashboard({
       })()}
 
       {/* Recommendations */}
-      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && recommendations && recommendations.length > 0 && (
+      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && recommendations && recommendations.length > 0 && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations
