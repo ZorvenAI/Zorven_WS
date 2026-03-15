@@ -166,6 +166,7 @@ export function ChatInterface() {
       }
       activePipelineJobIdRef.current = null;
       setIsPipelineRunning(false);
+      setIsLoading(false);
     };
   }, [sessionId]);
 
@@ -600,12 +601,13 @@ export function ChatInterface() {
           setMessages((prev) => [...prev, aiMessage]);
           setSidebarRefreshKey((k) => k + 1);
 
-          // If a pipeline was dispatched, keep isLoading true and poll
-          // until the pipeline reaches a terminal state.
+          // If a pipeline was dispatched, start polling for progress.
+          // isPipelineRunning tracks the pipeline state independently;
+          // isLoading is cleared below so the typing indicator disappears
+          // once the AI response is rendered.
           if (pipelineJobId) {
             abortControllerRef.current = null;
             startPipelinePolling(pipelineJobId);
-            return; // Don't call setIsLoading(false) below
           }
         } else {
           setMessages((prev) => [
@@ -751,7 +753,7 @@ export function ChatInterface() {
           onSend={handleSend}
           onCancel={handleCancel}
           disabled={!canEdit}
-          isLoading={isLoading}
+          isLoading={isLoading || isPipelineRunning}
           isCancelling={isCancelling}
           placeholder="Ask me about your brand strategy..."
           disabledTitle={!canEdit ? 'You need editor access to use the AI chat' : undefined}

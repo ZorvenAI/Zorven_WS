@@ -61,6 +61,7 @@ class TestNodeCatalog:
             "competitor_intelligence",
             "audience_persona",
             "trend_cultural",
+            "voice_of_customer",
         }
         assert expected == ids
 

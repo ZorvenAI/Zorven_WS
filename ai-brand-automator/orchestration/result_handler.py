@@ -310,6 +310,17 @@ def _build_result_summary(job):
     ):
         return _build_trend_cultural_summary(tcia_output)
 
+    voca_output = node_results.get("voice_of_customer", {})
+    if not voca_output:
+        if result.get("voc_health_score") is not None or result.get("sentiment"):
+            voca_output = result
+    if voca_output and (
+        voca_output.get("voc_health_score") is not None
+        or voca_output.get("sentiment")
+        or voca_output.get("themes")
+    ):
+        return _build_voice_of_customer_summary(voca_output)
+
     gap_output = node_results.get("gap_analyzer", {})
     if gap_output and gap_output.get("analysis_type") == "competitive_gap":
         return _build_gap_analysis_summary(gap_output)
@@ -676,6 +687,145 @@ def _build_trend_cultural_summary(tcia_output):
                     parts.append(f"- {r}")
 
     confidence = tcia_output.get("confidence_score", 0)
+    if confidence:
+        if isinstance(confidence, (int, float)):
+            if confidence > 10:
+                confidence = confidence / 100
+            elif confidence > 1:
+                confidence = confidence / 10
+        parts.append(f"\nConfidence: {confidence:.0%}")
+
+    parts.append("\nView the full results in the pipeline card above.")
+    return "\n".join(parts)
+
+
+def _build_voice_of_customer_summary(voca_output):
+    """Build a summary for Voice of Customer Agent results."""
+    parts = ["**Voice of Customer Analysis completed.**"]
+
+    # VoC Health Score + operating mode
+    health_score = voca_output.get("voc_health_score", 0)
+    operating_mode = voca_output.get("operating_mode", "")
+    if health_score:
+        mode_tag = f" ({operating_mode})" if operating_mode else ""
+        parts.append(f"VoC Health Score: **{health_score}/100**{mode_tag}")
+
+    # Strategy bridge executive summary
+    strategy_bridge = voca_output.get("strategy_bridge", {})
+    if isinstance(strategy_bridge, dict):
+        exec_summary = strategy_bridge.get("executive_summary", "")
+        if exec_summary:
+            parts.append("")
+            parts.append(exec_summary[:500])
+
+    # Sentiment summary
+    sentiment = voca_output.get("sentiment", {})
+    if isinstance(sentiment, dict):
+        overall = sentiment.get("overall_sentiment", {})
+        if isinstance(overall, dict) and any(overall.values()):
+            pos = overall.get("positive", 0)
+            neu = overall.get("neutral", 0)
+            neg = overall.get("negative", 0)
+            parts.append("")
+            parts.append(
+                f"**Sentiment:** {pos:.0%} positive, "
+                f"{neu:.0%} neutral, {neg:.0%} negative"
+            )
+
+        channels = sentiment.get("channel_sentiments", [])
+        if channels:
+            parts.append(f"Analyzed {len(channels)} feedback channel(s)")
+
+    # Theme clusters
+    themes = voca_output.get("themes", {})
+    if isinstance(themes, dict):
+        clusters = themes.get("themes", [])
+        total_feedback = themes.get("total_feedback_analyzed", 0)
+        if clusters:
+            parts.append("")
+            parts.append(
+                f"**Theme Clusters:** {len(clusters)} identified"
+                + (f" ({total_feedback} feedback items)" if total_feedback else "")
+            )
+            for t in clusters[:5]:
+                if not isinstance(t, dict):
+                    continue
+                name = t.get("theme_name", t.get("theme_slug", "Unknown"))
+                count = t.get("feedback_count", 0)
+                severity = t.get("severity_score", 0)
+                line = f"- **{name}**: {count} mentions"
+                if severity:
+                    line += f" (severity: {severity:.1f}/10)"
+                parts.append(line)
+            if len(clusters) > 5:
+                parts.append(f"  ...and {len(clusters) - 5} more")
+
+    # NPS Analysis
+    nps = voca_output.get("nps_analysis", {})
+    if isinstance(nps, dict):
+        if nps.get("nps_available"):
+            current = nps.get("current_nps", {})
+            if isinstance(current, dict):
+                score = current.get("nps_score", 0)
+                parts.append("")
+                parts.append(f"**NPS Score:** {score:+.0f}")
+                promoters = current.get("promoters", 0)
+                passives = current.get("passives", 0)
+                detractors = current.get("detractors", 0)
+                parts.append(
+                    f"  Promoters: {promoters} | "
+                    f"Passives: {passives} | "
+                    f"Detractors: {detractors}"
+                )
+        else:
+            proxy = nps.get("proxy_nps", {})
+            if isinstance(proxy, dict) and proxy.get("nps_score") is not None:
+                parts.append("")
+                parts.append(
+                    f"**Proxy NPS:** {proxy['nps_score']:+.0f} "
+                    "(estimated from external feedback)"
+                )
+
+    # Pain points
+    pain_matrix = voca_output.get("pain_point_priority_matrix", {})
+    if isinstance(pain_matrix, dict):
+        pain_points = pain_matrix.get("pain_points", [])
+        if pain_points:
+            parts.append("")
+            parts.append(f"**Pain Points:** {len(pain_points)} identified")
+            for pp in pain_points[:5]:
+                if not isinstance(pp, dict):
+                    continue
+                name = pp.get("name", "Unknown")
+                severity = pp.get("severity", 0)
+                frequency = pp.get("frequency", 0)
+                line = f"- {name} (severity: {severity:.1f}/10"
+                if frequency:
+                    line += f", {frequency} mentions"
+                line += ")"
+                parts.append(line)
+            if len(pain_points) > 5:
+                parts.append(f"  ...and {len(pain_points) - 5} more")
+
+    # Key Findings
+    findings = voca_output.get("findings", [])
+    if findings:
+        parts.append("")
+        parts.append("**Key findings:**")
+        for f in findings[:5]:
+            if isinstance(f, str):
+                parts.append(f"- {f}")
+
+    # Recommendations
+    recommendations = voca_output.get("recommendations", [])
+    if recommendations:
+        parts.append("")
+        parts.append("**Recommendations:**")
+        for r in recommendations[:3]:
+            if isinstance(r, str):
+                parts.append(f"- {r}")
+
+    confidence = voca_output.get("confidence_score", 0)
     if confidence:
         if isinstance(confidence, (int, float)):
             if confidence > 10:

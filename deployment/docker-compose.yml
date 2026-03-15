@@ -579,6 +579,8 @@ services:
       - ORCHESTRATOR_MARKET_RESEARCH_AGENT_URL=http://market-research-agent-svc:8021
       - ORCHESTRATOR_COMPETITOR_INTEL_AGENT_URL=http://competitor-intel-agent-svc:8022
       - ORCHESTRATOR_AUDIENCE_PERSONA_AGENT_URL=http://audience-persona-agent-svc:8023
+      - ORCHESTRATOR_TREND_CULTURAL_AGENT_URL=http://trend-cultural-agent-svc:8024
+      - ORCHESTRATOR_VOC_AGENT_URL=http://voc-agent-svc:8025
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-credentials.json
     volumes:
       - ../ai-brand-automator/credentials:/app/credentials:ro
@@ -773,6 +775,51 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Voice of Customer Agent — Customer feedback aggregation & VoC intelligence
+  # Sentiment analysis, theme clustering, NPS trends, strategy bridge
+  # ==========================================================================
+  voc-agent-svc:
+    build:
+      context: ../voc-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-voc-agent
+    environment:
+      - VOCA_REDIS_URL=redis://redis:6379/15
+      - VOCA_KAFKA_BOOTSTRAP_SERVERS=${VOCA_KAFKA_BOOTSTRAP_SERVERS:-}
+      - VOCA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - VOCA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - VOCA_LOG_LEVEL=${VOCA_LOG_LEVEL:-INFO}
+      - VOCA_HOST=0.0.0.0
+      - VOCA_PORT=8025
+      - VOCA_RAG_SERVICE_URL=http://rag-uploader-agent-svc:8070
+      - VOCA_GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
+      - VOCA_GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}
+      - VOCA_GCS_CREDENTIALS_JSON=${GCS_CREDENTIALS_JSON:-}
+      - VOCA_CORE_API_URL=http://backend:8001
+      - VOCA_CORE_API_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - VOCA_KAFKA_CONSUMERS_ENABLED=${VOCA_KAFKA_CONSUMERS_ENABLED:-false}
+      - VOCA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - VOCA_ODOO_ENABLED=${VOCA_ODOO_ENABLED:-false}
+      - VOCA_TOKEN_BUDGET_PER_SESSION=${VOCA_TOKEN_BUDGET_PER_SESSION:-100000}
+      - VOCA_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
+    expose:
+      - "8025"
+    ports:
+      - "18025:8025"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8025/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
     networks:
       - app-network
