@@ -126,6 +126,8 @@ class PipelineManifestSerializer(serializers.ModelSerializer):
         "https://market-research-agent-svc",
         "https://audience-persona-agent-svc",
         "https://trend-cultural-agent-svc",
+        "http://voc-agent-svc",
+        "https://voc-agent-svc",
     )
 
     def _validate_external_url(self, node_id, url):

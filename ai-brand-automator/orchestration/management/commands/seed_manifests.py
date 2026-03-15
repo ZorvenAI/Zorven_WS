@@ -798,6 +798,124 @@ class Command(BaseCommand):
             },
         },
         {
+            "pipeline_id": "voice-of-customer",
+            "name": "Voice of Customer Analysis",
+            "description": (
+                "Analyze customer feedback from reviews, social media, forums, "
+                "and Odoo ERP. Produces sentiment analysis, theme clusters, "
+                "NPS trends, and strategy recommendations."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "voice_of_customer",
+                        "type": "external",
+                        "url": "http://voc-agent-svc:8025/v1/execute",
+                        "config": {
+                            "include_nps": True,
+                            "synthesis_type": "comprehensive",
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "voice_of_customer"],
+                    ["voice_of_customer", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.5,
+                },
+            },
+        },
+        {
+            "pipeline_id": "brand-discovery-complete",
+            "name": "Brand Discovery & Research (Complete Workflow 1)",
+            "description": (
+                "Complete brand discovery with all 5 agents: market research, "
+                "competitor intelligence, audience personas, trend insights, "
+                "and voice of customer analysis."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "market_research",
+                        "type": "external",
+                        "url": "http://market-research-agent-svc:8021/v1/execute",
+                        "config": {
+                            "focus": (
+                                "market_size,segments,"
+                                "demographics,industry_trends"
+                            ),
+                        },
+                    },
+                    {
+                        "id": "competitor_intel",
+                        "type": "external",
+                        "url": "http://competitor-intel-agent-svc:8022/v1/execute",
+                        "config": {
+                            "focus": (
+                                "competitor_audiences,"
+                                "positioning_gaps,review_sentiment"
+                            ),
+                        },
+                    },
+                    {
+                        "id": "audience_persona",
+                        "type": "external",
+                        "url": "http://audience-persona-agent-svc:8023/v1/execute",
+                        "config": {"include_crm_data": True},
+                    },
+                    {
+                        "id": "trend_cultural",
+                        "type": "external",
+                        "url": "http://trend-cultural-agent-svc:8024/v1/execute",
+                        "config": {"scan_type": "on_demand"},
+                    },
+                    {
+                        "id": "voc_analysis",
+                        "type": "external",
+                        "url": "http://voc-agent-svc:8025/v1/execute",
+                        "config": {
+                            "include_nps": True,
+                            "synthesis_type": "comprehensive",
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "market_research"],
+                    ["market_research", "competitor_intel"],
+                    ["competitor_intel", "audience_persona"],
+                    ["audience_persona", "trend_cultural"],
+                    ["trend_cultural", "voc_analysis"],
+                    ["voc_analysis", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.5,
+                },
+            },
+        },
+        {
             "pipeline_id": "brand-discovery-full",
             "name": "Brand Discovery & Research (Full Workflow)",
             "description": (

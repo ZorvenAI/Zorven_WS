@@ -278,6 +278,25 @@ NODE_CATALOG: list[dict[str, Any]] = [
         "output_key": "trend_cultural",
         "config": {"scan_type": "on_demand", "alert_threshold": 75},
     },
+    {
+        "id": "voice_of_customer",
+        "type": "external",
+        "url": f"{settings.VOC_AGENT_URL}/v1/execute",
+        "description": (
+            "Voice of Customer specialist: aggregates and analyzes customer "
+            "feedback from reviews, social media, forums, and Odoo ERP "
+            "(helpdesk tickets, surveys, CRM chatter). Produces sentiment "
+            "analysis, theme clusters, NPS trends, pain point rankings, "
+            "and a VoC-to-strategy bridge document. Best used as the final "
+            "agent after market research, competitor intelligence, audience "
+            "personas, and trend insights for the most complete analysis. "
+            "Use when the prompt asks about customer feedback, customer "
+            "sentiment, NPS, net promoter score, customer complaints, "
+            "support ticket analysis, pain points, or voice of customer."
+        ),
+        "output_key": "voice_of_customer",
+        "config": {"include_nps": True, "synthesis_type": "comprehensive"},
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.
@@ -379,11 +398,28 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
         ),
     },
     {
+        "id": "voice-of-customer",
+        "description": (
+            "Voice of customer analysis: customer feedback aggregation, "
+            "sentiment analysis, theme clustering, NPS trends, and "
+            "VoC-to-strategy bridge from reviews, social, forums, and Odoo"
+        ),
+    },
+    {
         "id": "brand-discovery-full",
         "description": (
             "Complete brand discovery workflow: market research, competitor "
             "intelligence, audience personas, and trend/cultural insights. "
             "Full 4-agent chain for comprehensive brand intelligence"
+        ),
+    },
+    {
+        "id": "brand-discovery-complete",
+        "description": (
+            "Complete brand discovery workflow with all 5 agents: market "
+            "research, competitor intelligence, audience personas, trend "
+            "insights, AND voice of customer analysis. The most comprehensive "
+            "brand intelligence pipeline available"
         ),
     },
 ]
@@ -433,6 +469,13 @@ Examples of prompt → pipeline compositions:
 - "Complete brand analysis including trend insights for a DTC fashion brand" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
 - "Do a brand discovery for our new product line" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
 - "Analyze the market, competitors, and cultural trends for renewable energy" → [market_research, competitor_intelligence, trend_cultural, manager]
+- "Analyze customer feedback for our brand" → [voice_of_customer, manager]
+- "What are our customers saying about us?" → [voice_of_customer, manager]
+- "Run NPS analysis and customer sentiment" → [voice_of_customer, manager]
+- "Analyze customer complaints and support tickets" → [voice_of_customer, manager]
+- "Complete brand discovery with customer feedback for AI tools" → [market_research, competitor_intelligence, audience_persona, trend_cultural, voice_of_customer, manager]
+- "Full brand analysis including voice of customer" → [market_research, competitor_intelligence, audience_persona, trend_cultural, voice_of_customer, manager]
+- "Run brand discovery with customer sentiment analysis" → [market_research, competitor_intelligence, audience_persona, trend_cultural, voice_of_customer, manager]
 """.strip()
 
 
