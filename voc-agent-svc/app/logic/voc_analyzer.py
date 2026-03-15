@@ -477,7 +477,8 @@ class VoCAAnalyzer:
                 elif sid == "SKL-VoCA-07":
                     active_channels.append("forums")
 
-        total_channels = 6  # helpdesk, survey, chatter, reviews, social, forums
+        # In external-only mode, only 3 channels are possible (no Odoo)
+        total_channels = 6 if operating_mode == "full" else 3
         data_coverage = (
             len(active_channels) / total_channels * 100
             if total_channels > 0
@@ -497,7 +498,6 @@ class VoCAAnalyzer:
         pain_points = strategy_data.get(
             "pain_point_priority_matrix", {}
         )
-        confidence = strategy_data.get("confidence_score", 0.5)
 
         # Compile sources (deduplicate by URL)
         seen_urls: set[str] = set()
@@ -507,6 +507,12 @@ class VoCAAnalyzer:
             if url and url not in seen_urls:
                 seen_urls.add(url)
                 unique_sources.append(s)
+
+        # Compute confidence from data quality signals
+        confidence = self._compute_confidence(
+            skill_results, data_coverage, sentiment_data,
+            theme_data, strategy_data, len(unique_sources),
+        )
 
         return {
             "query": query,
@@ -524,6 +530,59 @@ class VoCAAnalyzer:
             "confidence_score": round(confidence, 2),
             "raw_context": raw_context[:settings.OUTPUT_MAX_CHARS],
         }
+
+    @staticmethod
+    def _compute_confidence(
+        skill_results: dict[str, SkillResult],
+        data_coverage: float,
+        sentiment_data: dict[str, Any],
+        theme_data: dict[str, Any],
+        strategy_data: dict[str, Any],
+        source_count: int,
+    ) -> float:
+        """Compute confidence score (0.0-1.0) from data quality signals.
+
+        Components (weighted):
+          - Skill success rate (30%): fraction of executed skills that succeeded
+          - Data coverage (25%): channel coverage percentage / 100
+          - Source diversity (20%): capped at 1.0 for 10+ unique sources
+          - Analysis depth (25%): presence of sentiment, themes, strategy bridge
+        """
+        # Skill success rate (0.0 - 1.0)
+        total_skills = len(skill_results)
+        successful_skills = sum(
+            1 for sr in skill_results.values() if sr.success
+        )
+        skill_rate = (
+            successful_skills / total_skills if total_skills > 0 else 0.0
+        )
+
+        # Data coverage (0.0 - 1.0)
+        coverage_score = min(data_coverage / 100.0, 1.0)
+
+        # Source diversity (0.0 - 1.0, saturates at 10 sources)
+        source_score = min(source_count / 10.0, 1.0)
+
+        # Analysis depth (0.0 - 1.0)
+        depth_signals = 0
+        depth_total = 4
+        if sentiment_data and sentiment_data.get("overall_sentiment"):
+            depth_signals += 1
+        if theme_data and theme_data.get("clusters"):
+            depth_signals += 1
+        if strategy_data and strategy_data.get("executive_summary"):
+            depth_signals += 1
+        if strategy_data and strategy_data.get("pain_point_priority_matrix"):
+            depth_signals += 1
+        depth_score = depth_signals / depth_total
+
+        confidence = (
+            skill_rate * 0.30
+            + coverage_score * 0.25
+            + source_score * 0.20
+            + depth_score * 0.25
+        )
+        return max(0.0, min(confidence, 1.0))
 
     @staticmethod
     def _get_skill_data(
