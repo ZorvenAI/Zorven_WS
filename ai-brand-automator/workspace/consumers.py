@@ -11,7 +11,6 @@ Clients connect to: ws://<host>/ws/workspace/<tenant_id>/?token=<jwt>
 import logging
 
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from django.contrib.auth.models import AnonymousUser
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,7 @@ class WorkspaceConsumer(AsyncJsonWebsocketConsumer):
         self.group_name = f"workspace_{self.tenant_id}"
 
         user = self.scope.get("user")
-        if not user or isinstance(user, AnonymousUser):
+        if not user or not getattr(user, "is_authenticated", False):
             logger.warning(
                 "WebSocket connection rejected: unauthenticated (tenant=%s)",
                 self.tenant_id,

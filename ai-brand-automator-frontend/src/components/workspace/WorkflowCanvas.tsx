@@ -86,16 +86,18 @@ export default function WorkflowCanvas({
     [state.edges, progress],
   );
 
-  // Apply progress status to node data
+  // Apply progress status to node data and enforce readonly draggable
   const styledNodes = useMemo(
     () =>
       state.nodes.map((n) => {
         const agentProgress = progress[n.id];
-        if (!agentProgress) return n;
         const data = n.data as AgentNodeData;
         return {
           ...n,
-          data: { ...data, status: agentProgress.status } as Record<string, unknown>,
+          data: {
+            ...data,
+            ...(agentProgress ? { status: agentProgress.status } : {}),
+          } as Record<string, unknown>,
           draggable: !readonly,
         };
       }),

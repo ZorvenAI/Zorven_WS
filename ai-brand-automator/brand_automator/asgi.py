@@ -24,8 +24,10 @@ from workspace.middleware import JWTAuthMiddleware  # noqa: E402
 application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
-        "websocket": JWTAuthMiddleware(
-            AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
+        # JWTAuthMiddleware runs AFTER AuthMiddlewareStack so it can
+        # override the session-based user with the JWT-authenticated one.
+        "websocket": AuthMiddlewareStack(
+            JWTAuthMiddleware(URLRouter(websocket_urlpatterns))
         ),
     }
 )

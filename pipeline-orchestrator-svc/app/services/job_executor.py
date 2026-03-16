@@ -436,10 +436,15 @@ class JobExecutor:
                             len(levels),
                         )
 
-                    # Build partial result_data from accumulated node outputs
-                    # so the frontend can render per-agent results progressively
+                    # Build partial result_data with only this level's outputs
+                    # to avoid exceeding the 1 MB CallbackSerializer limit
+                    level_outputs = {
+                        nid: state["node_outputs"][nid]
+                        for nid in level_nodes
+                        if nid in state["node_outputs"]
+                    }
                     partial_result_data: dict[str, Any] = {
-                        "node_results": dict(state["node_outputs"]),
+                        "node_results": level_outputs,
                     }
                     if result_data:
                         partial_result_data.update(result_data)

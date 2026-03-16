@@ -377,6 +377,15 @@ class SnapshotListSerializer(serializers.ModelSerializer):
 
     def get_chat_session_id(self, obj):
         """Return chat_session_id from the associated ChatWorkspaceLink, if any."""
+        # Use prefetched reverse FK (from view's prefetch_related) to avoid N+1
+        links = getattr(obj, "chatworkspacelink_set", None)
+        if links is not None:
+            # prefetch_related caches as a manager; .all() hits the cache
+            cached = links.all()
+            if cached:
+                return cached[0].chat_session_id
+            return None
+        # Fallback if not prefetched
         link = ChatWorkspaceLink.objects.filter(snapshot=obj).first()
         return link.chat_session_id if link else None
 

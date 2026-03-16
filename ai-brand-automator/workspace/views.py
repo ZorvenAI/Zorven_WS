@@ -80,12 +80,16 @@ class WorkflowViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Filter workflows by tenant with backward compatibility."""
-        qs = UserWorkflow.objects.select_related("manifest", "created_by").filter(
-            is_active=True
+        qs = (
+            UserWorkflow.objects.select_related("manifest", "created_by")
+            .prefetch_related("snapshots__job")
+            .filter(is_active=True)
         )
         tenant = getattr(self.request, "tenant", None)
         if tenant:
             qs = qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+        else:
+            qs = qs.filter(tenant__isnull=True)
         return qs
 
     def get_serializer_class(self):
@@ -212,7 +216,9 @@ class WorkflowViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
     def snapshots(self, request, workflow_id=None):
         """List snapshots for a workflow (paginated)."""
         workflow = self.get_object()
-        snapshots = workflow.snapshots.select_related("job").all()
+        snapshots = workflow.snapshots.select_related("job").prefetch_related(
+            "chatworkspacelink_set"
+        ).all()
         page = self.paginate_queryset(snapshots)
         if page is not None:
             serializer = SnapshotListSerializer(page, many=True)

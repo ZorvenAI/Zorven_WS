@@ -13,6 +13,14 @@ from orchestration.models import PipelineManifest
 class Command(BaseCommand):
     help = "Seed default pipeline manifests (idempotent)"
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--fix-edges",
+            action="store_true",
+            default=False,
+            help="Also fix competitor_intel edge typos in existing manifests",
+        )
+
     MANIFESTS = [
         {
             "pipeline_id": "iso-brand-equity",
@@ -1008,7 +1016,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Pipeline manifest seeding complete."))
 
         # One-time fixup: patch any manifests with "competitor_intel" edge typo
-        self._fix_competitor_intel_edges()
+        # Guarded behind --fix-edges flag to avoid surprise writes on every seed
+        if options.get("fix_edges"):
+            self._fix_competitor_intel_edges()
 
     def _fix_competitor_intel_edges(self):
         """Fix 'competitor_intel' → 'competitor_intelligence' in all manifests."""
