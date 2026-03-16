@@ -146,9 +146,17 @@ class CallbackClient:
         self,
         callback_url: str,
         progress: dict[str, Any],
+        result_data: dict[str, Any] | None = None,
     ) -> bool:
-        """Send a progress update (node status changes)."""
-        return await self._patch(callback_url, {"progress": progress})
+        """Send a progress update (node status changes).
+
+        Optionally includes partial ``result_data`` so the frontend can
+        render per-agent results progressively as each level completes.
+        """
+        payload: dict[str, Any] = {"progress": progress}
+        if result_data is not None:
+            payload["result_data"] = result_data
+        return await self._patch(callback_url, payload)
 
     async def send_completed(
         self,

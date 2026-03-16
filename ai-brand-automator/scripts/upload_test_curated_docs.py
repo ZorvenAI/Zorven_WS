@@ -25,7 +25,7 @@ def main():
         "content": (
             "This document outlines the key elements of brand strategy "
             "including positioning, messaging, and visual identity "
-            "guidelines for the AI Brand Automator platform."
+            "guidelines for the Zorven AI platform."
         ),
         "metadata": {
             "author": "AI Curator",

@@ -1,5 +1,5 @@
 """
-AI Services for BranSol AI
+AI Services for Zorven AI
 Integration with Google Gemini AI
 """
 
@@ -1006,7 +1006,7 @@ class GeminiAIService:
         """Build a system prompt for conversational chat with brand context."""
         company = context.get("company", {})
         parts = [
-            "You are BranSol AI, an expert brand strategy assistant.",
+            "You are Zorven AI, an expert brand strategy assistant.",
             "You help users build, evaluate, and improve their brands.",
             "Provide thoughtful, actionable advice using markdown formatting.",
             "Use headings, bullet points, and bold text for clarity.",

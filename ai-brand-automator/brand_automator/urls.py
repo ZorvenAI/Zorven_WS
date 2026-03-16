@@ -85,6 +85,8 @@ urlpatterns = [
                 path("rag-index/", include("rag_index.api.urls")),
                 # Pipeline Orchestration (job dispatch + callback)
                 path("orchestration/", include("orchestration.urls")),
+                # Workflow Management Workspace
+                path("workspace/", include("workspace.urls")),
             ]
         ),
     ),

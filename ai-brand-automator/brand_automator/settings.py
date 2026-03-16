@@ -83,6 +83,7 @@ if _railway_private_domain and _railway_private_domain not in ALLOWED_HOSTS:
 # ]
 
 SHARED_APPS = [
+    "daphne",  # ASGI server — must be before django.contrib.staticfiles
     "django_tenants",  # mandatory
     "tenants",  # our tenant app
     # Django apps
@@ -107,6 +108,7 @@ SHARED_APPS = [
     "media_curation",  # Media curation pipeline (Hexagonal Architecture)
     "rag_index",  # RAG Index sync service (Hexagonal Architecture)
     "orchestration",  # Pipeline orchestration (core-api-service)
+    "workspace",  # Workflow management workspace
 ]
 
 TENANT_APPS = [
@@ -169,6 +171,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "brand_automator.wsgi.application"
+ASGI_APPLICATION = "brand_automator.asgi.application"
 
 
 # Database
@@ -865,6 +868,27 @@ else:
             "LOCATION": REDIS_URL,
             "KEY_PREFIX": "ba:",
             "TIMEOUT": 300,  # 5 minutes default
+        }
+    }
+
+# =============================================================================
+# Django Channels (WebSocket) Configuration
+# =============================================================================
+CHANNELS_REDIS_URL = config("CHANNELS_REDIS_URL", default="redis://localhost:6379/0")
+
+if "pytest" in sys.modules:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [CHANNELS_REDIS_URL],
+            },
         }
     }
 

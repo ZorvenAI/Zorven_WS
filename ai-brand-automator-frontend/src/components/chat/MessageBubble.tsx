@@ -21,9 +21,11 @@ export interface Message {
 
 export interface MessageBubbleProps {
   message: Message;
+  /** Chat session ID — enables "Save to Workspace" in pipeline results. */
+  chatSessionId?: string | null;
 }
 
-function PipelineInlineCard({ jobId }: { jobId: string }) {
+function PipelineInlineCard({ jobId, chatSessionId }: { jobId: string; chatSessionId?: string | null }) {
   const { job, quickStatus, isLoading } = usePollingJob(jobId);
 
   if (isLoading && !job) {
@@ -61,6 +63,8 @@ function PipelineInlineCard({ jobId }: { jobId: string }) {
           <ResultDashboard
             resultData={job.result_data ?? quickStatus?.result_data ?? {}}
             manifestName={job.manifest_name ?? quickStatus?.manifest_name}
+            jobId={jobId}
+            chatSessionId={chatSessionId}
           />
         </div>
       )}
@@ -84,7 +88,7 @@ function timeAgo(date: Date): string {
   return date.toLocaleDateString();
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, chatSessionId }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -161,7 +165,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
         {/* Pipeline inline card */}
         {message.pipelineJobId && (
-          <PipelineInlineCard jobId={message.pipelineJobId} />
+          <PipelineInlineCard jobId={message.pipelineJobId} chatSessionId={chatSessionId} />
         )}
       </div>
     </div>

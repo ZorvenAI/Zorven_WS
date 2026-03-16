@@ -10,6 +10,7 @@ import {
   FolderOpen,
   Zap,
   GitBranch,
+  Workflow,
   Bot,
   BarChart3,
   Users,
@@ -118,6 +119,7 @@ export function Navigation({ children }: { children: React.ReactNode }) {
   const canBilling = hasMounted ? canManageBilling : false;
 
   const navLinks: NavLink[] = [
+    { href: '/dashboard/workflows', label: 'Workflows', icon: <Workflow className={iconCls} />, active: pathname?.startsWith('/dashboard/workflows') ?? false },
     ...(canEdit
       ? [{ href: '/chat', label: 'AI Chat', icon: <MessageSquare className={iconCls} />, active: pathname === '/chat' }]
       : []),
@@ -163,7 +165,7 @@ export function Navigation({ children }: { children: React.ReactNode }) {
           {/* Logo */}
           <Link href="/" className="flex items-center">
             <span className="text-lg font-heading font-bold text-brand-electric">
-              AI Brand Automator
+              Zorven AI
             </span>
           </Link>
         </div>

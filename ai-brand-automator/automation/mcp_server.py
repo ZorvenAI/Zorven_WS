@@ -59,7 +59,7 @@ Example Tool Invocations:
     # Post immediately to Twitter
     {"tool": "post_to_twitter", "arguments": {
         "user_email": "user@example.com",
-        "text": "Hello from the AI Brand Automator! 🚀"
+        "text": "Hello from Zorven AI! 🚀"
     }}
 """
 
@@ -97,7 +97,7 @@ from mcp.types import (  # noqa: E402
 # Server metadata for agent discovery
 SERVER_NAME = "automation-mcp-server"
 SERVER_VERSION = "1.0.0"
-SERVER_DESCRIPTION = """AI Brand Automator - Social Media Automation MCP Server.
+SERVER_DESCRIPTION = """Zorven AI - Social Media Automation MCP Server.
 
 This server enables AI agents to manage social media accounts, schedule content,
 and publish posts across LinkedIn, Twitter/X, Facebook, and Instagram.

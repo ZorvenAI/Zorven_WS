@@ -50,7 +50,7 @@ function RadialGauge({
   label,
   score,
   maxScore = 100,
-  color = '#00F5FF',
+  color = '#fad55c',
 }: GaugeProps) {
   const radius = 40;
   const circumference = 2 * Math.PI * radius;
@@ -412,7 +412,7 @@ export default function BrandEquityDashboard({
                   x2="100%"
                   y2="100%"
                 >
-                  <stop offset="0%" stopColor="#00F5FF" />
+                  <stop offset="0%" stopColor="#fad55c" />
                   <stop offset="100%" stopColor="#14b8a6" />
                 </linearGradient>
               </defs>
@@ -444,7 +444,7 @@ export default function BrandEquityDashboard({
       {hasPillars && (
         <div className="flex justify-center gap-10 py-2">
           {awareness !== null && (
-            <RadialGauge label="Awareness" score={awareness} color="#00F5FF" />
+            <RadialGauge label="Awareness" score={awareness} color="#fad55c" />
           )}
           {sentiment !== null && (
             <RadialGauge label="Sentiment" score={sentiment} color="#8b5cf6" />

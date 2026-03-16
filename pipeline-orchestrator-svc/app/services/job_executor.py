@@ -436,10 +436,24 @@ class JobExecutor:
                             len(levels),
                         )
 
-                    # Send per-level progress callback
+                    # Build partial result_data with only this level's outputs
+                    # to avoid exceeding the 1 MB CallbackSerializer limit
+                    level_outputs = {
+                        nid: state["node_outputs"][nid]
+                        for nid in level_nodes
+                        if nid in state["node_outputs"]
+                    }
+                    partial_result_data: dict[str, Any] = {
+                        "node_results": level_outputs,
+                    }
+                    if result_data:
+                        partial_result_data.update(result_data)
+
+                    # Send per-level progress callback with partial results
                     await self.callback.send_progress(
                         callback_url,
                         copy.deepcopy(state["progress"]),
+                        result_data=partial_result_data,
                     )
 
             except Exception as exc:

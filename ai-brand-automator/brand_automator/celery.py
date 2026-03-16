@@ -1,5 +1,5 @@
 """
-Celery configuration for the AI Brand Automator project.
+Celery configuration for the Zorven AI project.
 """
 
 import os

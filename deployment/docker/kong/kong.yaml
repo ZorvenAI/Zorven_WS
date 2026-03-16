@@ -206,6 +206,31 @@ services:
           - events
           - protected
 
+  # ---------------------------------------------------------------------------
+  # 7. WebSocket Service (Daphne ASGI for workspace real-time)
+  # ---------------------------------------------------------------------------
+  - name: workspace-ws-service
+    url: http://backend-ws:8002
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 0
+    tags:
+      - websocket
+      - workspace
+    routes:
+      - name: workspace-ws-route
+        paths:
+          - /ws/workspace
+        strip_path: false
+        preserve_host: true
+        protocols:
+          - http
+          - https
+        tags:
+          - websocket
+          - workspace
+
 # =============================================================================
 # CONSUMERS (JWT Authentication)
 # =============================================================================

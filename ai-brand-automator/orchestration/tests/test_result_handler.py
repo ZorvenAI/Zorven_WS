@@ -5,7 +5,7 @@ Covers status transitions, Redis caching, ChatMessage auto-creation,
 row locking idempotency, and session lock release.
 """
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from django.core.cache import cache
@@ -150,3 +150,108 @@ class TestHandlePipelineResult:
             error_message="Oops",
         )
         mock_save.assert_not_called()
+
+    @patch("orchestration.result_handler._broadcast_to_workspace")
+    def test_broadcast_called_on_progress(self, mock_broadcast, running_job):
+        """_broadcast_to_workspace called on every update."""
+        handle_pipeline_result(
+            str(running_job.job_id),
+            progress={"discovery": {"status": "running"}},
+        )
+        mock_broadcast.assert_called_once()
+
+    @patch("orchestration.result_handler._broadcast_to_workspace")
+    def test_broadcast_called_on_completion(self, mock_broadcast, running_job):
+        """_broadcast_to_workspace called on completion."""
+        handle_pipeline_result(
+            str(running_job.job_id),
+            status="completed",
+            result_data={"summary": "Done"},
+        )
+        mock_broadcast.assert_called_once()
+
+
+@pytest.mark.django_db
+class TestBroadcastToWorkspace:
+    """Tests for _broadcast_to_workspace."""
+
+    def test_broadcast_sends_group_event(self, tenant, user):
+        """Should send to the correct channel group."""
+        from orchestration.result_handler import _broadcast_to_workspace
+
+        job = AnalysisJob.objects.create(
+            tenant=tenant,
+            input_prompt="test broadcast",
+            status=AnalysisJob.Status.RUNNING,
+            progress={"discovery": {"status": "running"}},
+            created_by=user,
+        )
+
+        with patch("channels.layers.get_channel_layer") as mock_get_layer:
+            mock_layer = mock_get_layer.return_value
+            mock_layer.group_send = AsyncMock()
+
+            _broadcast_to_workspace(job, "running")
+
+            mock_layer.group_send.assert_called_once()
+            call_args = mock_layer.group_send.call_args
+            group_name = call_args[0][0]
+            event = call_args[0][1]
+
+            assert group_name == f"workspace_{tenant.id}"
+            assert event["type"] == "job.progress"
+            assert event["data"]["job_id"] == str(job.job_id)
+            assert event["data"]["status"] == "running"
+
+    def test_broadcast_sends_completed_event(self, tenant, user):
+        """Should send job.completed event on terminal status."""
+        from orchestration.result_handler import _broadcast_to_workspace
+
+        job = AnalysisJob.objects.create(
+            tenant=tenant,
+            input_prompt="test completed",
+            status=AnalysisJob.Status.COMPLETED,
+            progress={"discovery": {"status": "done"}},
+            created_by=user,
+        )
+
+        with patch("channels.layers.get_channel_layer") as mock_get_layer:
+            mock_layer = mock_get_layer.return_value
+            mock_layer.group_send = AsyncMock()
+
+            _broadcast_to_workspace(job, "completed")
+
+            event = mock_layer.group_send.call_args[0][1]
+            assert event["type"] == "job.completed"
+
+    def test_broadcast_no_tenant_skipped(self, user):
+        """Should skip broadcast if job has no tenant."""
+        from orchestration.result_handler import _broadcast_to_workspace
+
+        job = AnalysisJob.objects.create(
+            input_prompt="no tenant",
+            status=AnalysisJob.Status.RUNNING,
+            created_by=user,
+        )
+
+        with patch("channels.layers.get_channel_layer") as mock_get_layer:
+            _broadcast_to_workspace(job, "running")
+            mock_get_layer.assert_not_called()
+
+    def test_broadcast_exception_handled(self, tenant, user):
+        """Should not raise even if channel_layer fails."""
+        from orchestration.result_handler import _broadcast_to_workspace
+
+        job = AnalysisJob.objects.create(
+            tenant=tenant,
+            input_prompt="test error",
+            status=AnalysisJob.Status.RUNNING,
+            created_by=user,
+        )
+
+        with patch(
+            "channels.layers.get_channel_layer",
+            side_effect=Exception("Channel layer unavailable"),
+        ):
+            # Should not raise
+            _broadcast_to_workspace(job, "running")

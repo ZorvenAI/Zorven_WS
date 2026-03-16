@@ -36,7 +36,7 @@ export function SubscriptionStatus({
             No Active Subscription
           </h3>
           <p className="mt-2 text-sm text-brand-silver/70 font-body">
-            Choose a plan below to get started with AI Brand Automator.
+            Choose a plan below to get started with Zorven AI.
           </p>
         </div>
       </div>

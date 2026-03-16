@@ -75,8 +75,8 @@ export default function NpvChart({
       >
         <defs>
           <linearGradient id="npv-area-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#00F5FF" stopOpacity={0.35} />
-            <stop offset="100%" stopColor="#00F5FF" stopOpacity={0.02} />
+            <stop offset="0%" stopColor="#fad55c" stopOpacity={0.35} />
+            <stop offset="100%" stopColor="#fad55c" stopOpacity={0.02} />
           </linearGradient>
         </defs>
 
@@ -110,7 +110,7 @@ export default function NpvChart({
         <path
           d={lineD}
           fill="none"
-          stroke="#00F5FF"
+          stroke="#fad55c"
           strokeWidth="2"
           strokeLinejoin="round"
         />
@@ -123,7 +123,7 @@ export default function NpvChart({
               cy={p.y}
               r="4"
               fill="var(--brand-midnight)"
-              stroke="#00F5FF"
+              stroke="#fad55c"
               strokeWidth="2"
             />
             {/* Tooltip text */}

@@ -134,6 +134,43 @@ services:
       - app-network
 
   # ==========================================================================
+  # Backend WebSocket - Daphne ASGI Server (workspace real-time)
+  # ==========================================================================
+  backend-ws:
+    build:
+      context: ..
+      dockerfile: deployment/docker/backend/Dockerfile
+    container_name: ai-brand-automator-backend-ws
+    command: ["daphne", "brand_automator.asgi:application", "--port", "8002", "--bind", "0.0.0.0"]
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/ai_brand_automator}
+      - REDIS_URL=redis://redis:6379/0
+      - CHANNELS_REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - ALLOWED_HOSTS=localhost,127.0.0.1,backend-ws,kong
+      - KONG_ENABLED=true
+      - PORT=8002
+    expose:
+      - "8002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health/"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    volumes:
+      - ../ai-brand-automator:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
   # Frontend - Next.js
   # ==========================================================================
   frontend:

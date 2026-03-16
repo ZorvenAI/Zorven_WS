@@ -9,7 +9,7 @@ A sophisticated, futuristic palette designed for AI-powered brand building.
 | Token | Hex | Usage |
 |-------|-----|-------|
 | `brand-midnight` | `#0A0B10` | Deep background, primary dark surface |
-| `brand-electric` | `#00F5FF` | Primary CTAs, AI spark, interactive elements |
+| `brand-electric` | `#fad55c` | Primary CTAs, AI spark, interactive elements |
 | `brand-ghost` | `#8A2BE2` | Accent, secondary gradients, hover states |
 | `brand-silver` | `#E1E1E6` | Primary text, body content |
 | `brand-mint` | `#39FF14` | Success states, automated/active indicators |
@@ -38,7 +38,7 @@ Glass morphism card with blur, subtle border, and shadow.
 ```
 
 #### `.btn-primary`
-Electric cyan button with glow hover effect.
+Pista green button with glow hover effect.
 ```css
 @apply bg-brand-electric text-brand-midnight font-bold px-6 py-3 rounded-lg;
 ```
