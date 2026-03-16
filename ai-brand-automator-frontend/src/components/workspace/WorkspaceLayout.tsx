@@ -79,10 +79,8 @@ export default function WorkspaceLayout({
   const startWidth = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Open right panel when parent requests it
-  useEffect(() => {
-    if (forceRightOpen) setRightOpen(true);
-  }, [forceRightOpen]);
+  // Derive effective right-open: local toggle OR parent forcing it open
+  const effectiveRightOpen = rightOpen || !!forceRightOpen;
 
   const toggleLeft = useCallback(() => setLeftOpen((p) => !p), []);
   const toggleRight = useCallback(() => setRightOpen((p) => !p), []);
@@ -177,7 +175,7 @@ export default function WorkspaceLayout({
               <button
                 onClick={toggleRight}
                 className="p-1 rounded hover:bg-white/10 text-brand-silver/50 hover:text-brand-silver transition-colors"
-                title={rightOpen ? 'Hide inspector' : 'Show inspector'}
+                title={effectiveRightOpen ? 'Hide inspector' : 'Show inspector'}
               >
                 <PanelRight className="w-4 h-4" />
               </button>
@@ -192,20 +190,20 @@ export default function WorkspaceLayout({
       </div>
 
       {/* Right resize handle */}
-      {rightPanel && rightOpen && <ResizeHandle side="right" onMouseDown={handleMouseDown('right')} />}
+      {rightPanel && effectiveRightOpen && <ResizeHandle side="right" onMouseDown={handleMouseDown('right')} />}
       {/* Border when collapsed */}
-      {rightPanel && !rightOpen && <div className="shrink-0 border-l border-white/10" />}
+      {rightPanel && !effectiveRightOpen && <div className="shrink-0 border-l border-white/10" />}
 
       {/* Right Panel */}
       {rightPanel && (
         <div
           className={`
             shrink-0 bg-brand-surface/50 overflow-hidden
-            ${rightOpen ? '' : 'w-0'}
+            ${effectiveRightOpen ? '' : 'w-0'}
           `}
-          style={rightOpen ? { width: rightWidth } : undefined}
+          style={effectiveRightOpen ? { width: rightWidth } : undefined}
         >
-          {rightOpen && (
+          {effectiveRightOpen && (
             <div className="h-full overflow-hidden" style={{ width: rightWidth }}>
               {rightPanel}
             </div>

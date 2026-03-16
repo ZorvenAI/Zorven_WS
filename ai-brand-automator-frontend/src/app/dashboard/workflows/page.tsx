@@ -188,7 +188,7 @@ function WorkflowsPageInner() {
     }
   }, [activeJobId]);
 
-  const { isConnected: wsConnected } = useWorkspaceWebSocket({
+  useWorkspaceWebSocket({
     tenantId: activeTenant?.id ?? null,
     onEvent: handleWSEvent,
     enabled: !!activeJobId,
@@ -433,7 +433,6 @@ function WorkflowsPageInner() {
     setActiveJobId(null);
     setWsProgress({});
     setWsQuickStatus(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, lockInfo?.is_mine]);
 
   const handleCreateNew = useCallback(async () => {
