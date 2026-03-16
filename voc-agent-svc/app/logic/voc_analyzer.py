@@ -568,7 +568,7 @@ class VoCAAnalyzer:
         depth_total = 4
         if sentiment_data and sentiment_data.get("overall_sentiment"):
             depth_signals += 1
-        if theme_data and theme_data.get("clusters"):
+        if theme_data and theme_data.get("themes"):
             depth_signals += 1
         if strategy_data and strategy_data.get("executive_summary"):
             depth_signals += 1

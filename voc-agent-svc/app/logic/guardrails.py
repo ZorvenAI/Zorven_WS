@@ -137,9 +137,12 @@ class InputGuardrails:
         results.append(GuardrailResult(True, "IG-02"))
 
         # IG-03: Out-of-scope filter
-        words = set(prompt_lower.split())
+        # When previous_outputs exist, this agent is running as part of a
+        # pipeline — the orchestrator intentionally dispatched here, so the
+        # generic user prompt is expected to lack VoC keywords.
+        has_pipeline_context = bool(previous_outputs)
         scope_match = any(kw in prompt_lower for kw in _SCOPE_KEYWORDS)
-        if not scope_match and len(prompt.split()) > 3:
+        if not scope_match and not has_pipeline_context and len(prompt.split()) > 3:
             results.append(
                 GuardrailResult(
                     False, "IG-03", "Prompt appears out of VoC scope"

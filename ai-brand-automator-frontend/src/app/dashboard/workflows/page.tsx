@@ -28,7 +28,7 @@ import {
   listTemplates,
 } from '@/lib/workspace';
 import { computeElkLayout } from '@/lib/elkLayout';
-import { useWorkflowStore } from '@/hooks/useWorkflowStore';
+import { useWorkflowStore, restoreDraft } from '@/hooks/useWorkflowStore';
 import { useWorkspaceWebSocket, type WorkspaceWSEvent } from '@/hooks/useWorkspaceWebSocket';
 import { usePollingJob } from '@/hooks/usePollingJob';
 import type {
@@ -49,6 +49,11 @@ import WorkflowSidebar from '@/components/workspace/WorkflowSidebar';
 import WorkflowCanvas from '@/components/workspace/WorkflowCanvas';
 import WorkflowToolbar from '@/components/workspace/WorkflowToolbar';
 import ResultsInspector from '@/components/workspace/ResultsInspector';
+import AgentInfoModal from '@/components/workspace/AgentInfoModal';
+import WorkflowInfoModal from '@/components/workspace/WorkflowInfoModal';
+import { listAgents } from '@/lib/workspace';
+import type { AgentCatalogEntry } from '@/types/workspace';
+import type { AgentNodeData } from '@/components/workspace/AgentNode';
 
 // ── Agent metadata for enriching loaded nodes ──
 
@@ -124,7 +129,13 @@ function WorkflowsPageInner() {
   const [hasMounted, setHasMounted] = useState(false);
   const [workflows, setWorkflows] = useState<UserWorkflowSummary[]>([]);
   const [templates, setTemplates] = useState<PipelineManifestListItem[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem('workspace-selected-workflow');
+    } catch {
+      return null;
+    }
+  });
   const [selectedDetail, setSelectedDetail] = useState<UserWorkflowDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
@@ -137,6 +148,11 @@ function WorkflowsPageInner() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [wsProgress, setWsProgress] = useState<Record<string, AgentProgress>>({});
   const [wsQuickStatus, setWsQuickStatus] = useState<QuickStatus | null>(null);
+
+  // Modal state
+  const [agentInfoTarget, setAgentInfoTarget] = useState<AgentNodeData | AgentCatalogEntry | null>(null);
+  const [showWorkflowInfo, setShowWorkflowInfo] = useState(false);
+  const [agentCatalog, setAgentCatalog] = useState<AgentCatalogEntry[]>([]);
 
   const { zoomIn, zoomOut } = useReactFlow();
   const { activeTenant } = useTenantContext();
@@ -199,6 +215,19 @@ function WorkflowsPageInner() {
     }
   }, [effectiveQuickStatus]);
 
+  // Sync effective job status into sidebar badge so it updates in real-time
+  // (covers both WebSocket and polling paths)
+  useEffect(() => {
+    if (!selectedId || !effectiveQuickStatus?.status) return;
+    setWorkflows((prev) =>
+      prev.map((w) =>
+        w.workflow_id === selectedId
+          ? { ...w, last_job_status: effectiveQuickStatus.status }
+          : w,
+      ),
+    );
+  }, [selectedId, effectiveQuickStatus?.status]);
+
   // Clear job tracking on terminal state
   useEffect(() => {
     if (
@@ -214,9 +243,40 @@ function WorkflowsPageInner() {
     }
   }, [effectiveQuickStatus?.status]);
 
+  // Persist selectedId to sessionStorage for cross-navigation continuity
+  useEffect(() => {
+    try {
+      if (selectedId) {
+        sessionStorage.setItem('workspace-selected-workflow', selectedId);
+      } else {
+        sessionStorage.removeItem('workspace-selected-workflow');
+      }
+    } catch {
+      // sessionStorage unavailable
+    }
+  }, [selectedId]);
+
   useEffect(() => {
     setHasMounted(true);
   }, []);
+
+  // ── Listen for agent-info custom events (from AgentNode / AgentCatalogPanel) ──
+
+  useEffect(() => {
+    function handleAgentInfo(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (detail) setAgentInfoTarget(detail);
+    }
+    window.addEventListener('agent-info', handleAgentInfo);
+    return () => window.removeEventListener('agent-info', handleAgentInfo);
+  }, []);
+
+  // ── Fetch agent catalog (for WorkflowInfoModal) ──
+
+  useEffect(() => {
+    if (!hasMounted) return;
+    listAgents().then(setAgentCatalog).catch(() => {});
+  }, [hasMounted]);
 
   // ── Fetch workflow list and templates ──
 
@@ -288,13 +348,37 @@ function WorkflowsPageInner() {
           setActiveJobId(detail.last_job_id);
           setWsQuickStatus(null);
 
-          // Load into store
+          // Load into store — check for unsaved draft first
           if (detail.manifest_data) {
-            const { nodes, edges } = manifestToFlow(
-              detail.manifest_data,
-              detail.layout_data?.nodes,
-            );
-            store.dispatch({ type: 'LOAD', nodes, edges });
+            const draft = restoreDraft(selectedId!);
+            const apiUpdatedAt = detail.updated_at
+              ? new Date(detail.updated_at).getTime()
+              : 0;
+
+            if (draft && draft.savedAt > apiUpdatedAt) {
+              // Draft is newer than the last save — restore unsaved edits
+              const draftNodes: Node[] = draft.nodes.map((n) => ({
+                id: n.id,
+                type: (n.type as string) ?? 'agent',
+                position: n.position,
+                data: n.data as Record<string, unknown>,
+                draggable: true,
+              }));
+              const draftEdges: Edge[] = draft.edges.map((e) => ({
+                id: e.id,
+                source: e.source,
+                target: e.target,
+                style: { stroke: '#94a3b8', strokeWidth: 2 },
+              }));
+              store.dispatch({ type: 'LOAD_DIRTY', nodes: draftNodes, edges: draftEdges });
+            } else {
+              // No draft or draft is stale — load from API
+              const { nodes, edges } = manifestToFlow(
+                detail.manifest_data,
+                detail.layout_data?.nodes,
+              );
+              store.dispatch({ type: 'LOAD', nodes, edges });
+            }
           }
         }
       } catch (err) {
@@ -401,6 +485,7 @@ function WorkflowsPageInner() {
         setLockInfo(null);
         setActiveJobId(null);
         store.dispatch({ type: 'LOAD', nodes: [], edges: [] });
+        try { sessionStorage.removeItem('workspace-selected-workflow'); } catch { /* ignore */ }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete workflow');
@@ -423,11 +508,25 @@ function WorkflowsPageInner() {
     }
   }, [selectedDetail?.workflow_id]);
 
+  const handleShowWorkflowInfo = useCallback((workflowId: string) => {
+    // If the workflow is already selected and detail loaded, just show the modal.
+    // Otherwise, select it first — the detail fetch effect will load it.
+    if (workflowId === selectedId && selectedDetail) {
+      setShowWorkflowInfo(true);
+    } else {
+      // Select the workflow (detail will load), then show modal after detail arrives
+      setSelectedId(workflowId);
+      // We'll show the modal once detail is loaded — set a flag
+      setShowWorkflowInfo(true);
+    }
+  }, [selectedId, selectedDetail]);
+
   const handleCloneTemplate = useCallback(async (templateId: string, templateName: string) => {
     try {
-      // Find the template manifest to get its data
-      const templateManifest = templates.find((t) => String(t.id) === templateId);
-      if (!templateManifest) return;
+      // Re-fetch templates to get the latest manifest_data (avoids stale browser state)
+      const freshTemplates = await listTemplates();
+      const templateManifest = freshTemplates.find((t) => String(t.id) === templateId);
+      if (!templateManifest || !(templateManifest as unknown as PipelineManifest).manifest_data) return;
 
       // Create a new workflow using the template name
       const workflow = await createWorkflow({
@@ -443,7 +542,7 @@ function WorkflowsPageInner() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create from template');
     }
-  }, [templates]);
+  }, []);
 
   const handleSave = useCallback(async () => {
     if (!selectedId || !selectedDetail || isReadonly) return;
@@ -637,6 +736,7 @@ function WorkflowsPageInner() {
             onToggleFavorite={handleToggleFavorite}
             onDelete={handleDelete}
             onRename={handleRename}
+            onShowInfo={handleShowWorkflowInfo}
             onCloneTemplate={handleCloneTemplate}
             templates={templates}
             isLoading={isLoading}
@@ -733,6 +833,23 @@ function WorkflowsPageInner() {
           ) : undefined
         }
       />
+
+      {/* Agent info modal */}
+      {agentInfoTarget && (
+        <AgentInfoModal
+          agent={agentInfoTarget}
+          onClose={() => setAgentInfoTarget(null)}
+        />
+      )}
+
+      {/* Workflow info modal */}
+      {showWorkflowInfo && selectedDetail && (
+        <WorkflowInfoModal
+          workflow={selectedDetail}
+          agents={agentCatalog}
+          onClose={() => setShowWorkflowInfo(false)}
+        />
+      )}
     </div>
   );
 }

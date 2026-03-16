@@ -24,6 +24,7 @@ const AUTOSAVE_DEBOUNCE_MS = 2000;
 
 export type WorkflowAction =
   | { type: 'LOAD'; nodes: Node[]; edges: Edge[] }
+  | { type: 'LOAD_DIRTY'; nodes: Node[]; edges: Edge[] }
   | { type: 'ADD_NODE'; node: Node }
   | { type: 'REMOVE_NODE'; nodeId: string }
   | { type: 'ADD_EDGE'; edge: Edge }
@@ -81,6 +82,16 @@ function workflowReducer(
         nodes: action.nodes,
         edges: action.edges,
         isDirty: false,
+        undoStack: [],
+        redoStack: [],
+      };
+
+    case 'LOAD_DIRTY':
+      return {
+        ...state,
+        nodes: action.nodes,
+        edges: action.edges,
+        isDirty: true,
         undoStack: [],
         redoStack: [],
       };
@@ -187,6 +198,37 @@ function workflowReducer(
 
     default:
       return state;
+  }
+}
+
+// ── Draft restore ──
+
+const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+interface DraftData {
+  nodes: Array<{ id: string; position: { x: number; y: number }; data: unknown; type?: string }>;
+  edges: Array<{ id: string; source: string; target: string }>;
+  savedAt: number;
+}
+
+/**
+ * Read a draft from localStorage if it exists and is within the max age window.
+ * Returns null if no draft, expired, or unparseable.
+ */
+export function restoreDraft(workflowId: string): DraftData | null {
+  try {
+    const raw = localStorage.getItem(`workflow-draft-${workflowId}`);
+    if (!raw) return null;
+
+    const draft = JSON.parse(raw) as DraftData;
+    if (!draft.savedAt || Date.now() - draft.savedAt > DRAFT_MAX_AGE_MS) {
+      localStorage.removeItem(`workflow-draft-${workflowId}`);
+      return null;
+    }
+
+    return draft;
+  } catch {
+    return null;
   }
 }
 

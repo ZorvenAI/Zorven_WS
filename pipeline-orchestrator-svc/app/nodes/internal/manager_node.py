@@ -96,6 +96,9 @@ class ManagerNode(BaseNode):
             "node_results": outputs,
         }
 
+        # Per-agent confidence scores (namespaced to avoid overwriting)
+        confidence_scores: dict[str, float] = {}
+
         # Promote market research fields to top-level result_data
         if market_research_data:
             for key in (
@@ -105,12 +108,14 @@ class ManagerNode(BaseNode):
                 "industry_trends",
                 "economic_indicators",
                 "sources",
-                "confidence_score",
                 "methodology_notes",
             ):
                 value = market_research_data.get(key)
                 if value is not None:
                     result_data[key] = value
+            mra_conf = market_research_data.get("confidence_score")
+            if mra_conf is not None:
+                confidence_scores["market_research"] = mra_conf
 
         # Promote competitor intelligence fields to top-level result_data
         if competitor_intel_data:
@@ -123,12 +128,14 @@ class ManagerNode(BaseNode):
                 "positioning_map",
                 "benchmarking_report",
                 "executive_summary",
-                "confidence_score",
                 "methodology_notes",
             ):
                 value = competitor_intel_data.get(key)
                 if value is not None:
                     result_data[key] = value
+            cia_conf = competitor_intel_data.get("confidence_score")
+            if cia_conf is not None:
+                confidence_scores["competitor_intelligence"] = cia_conf
             # Merge CIA sources with existing (from MRA)
             cia_sources = competitor_intel_data.get("sources", [])
             if cia_sources:
@@ -154,12 +161,14 @@ class ManagerNode(BaseNode):
                 "journey_maps",
                 "segment_matrix",
                 "executive_summary",
-                "confidence_score",
                 "methodology_notes",
             ):
                 value = audience_persona_data.get(key)
                 if value is not None:
                     result_data[key] = value
+            apa_conf = audience_persona_data.get("confidence_score")
+            if apa_conf is not None:
+                confidence_scores["audience_persona"] = apa_conf
             # Merge APA sources with existing
             apa_sources = audience_persona_data.get("sources", [])
             if apa_sources:
@@ -189,12 +198,14 @@ class ManagerNode(BaseNode):
                 "cultural_shifts",
                 "generational_insights",
                 "language_trends",
-                "confidence_score",
                 "report_url",
             ):
                 value = trend_cultural_data.get(key)
                 if value is not None:
                     result_data[key] = value
+            tcia_conf = trend_cultural_data.get("confidence_score")
+            if tcia_conf is not None:
+                confidence_scores["trend_cultural"] = tcia_conf
             # Merge TCIA sources with existing
             tcia_sources = trend_cultural_data.get("sources", [])
             if tcia_sources:
@@ -224,12 +235,14 @@ class ManagerNode(BaseNode):
                 "nps_analysis",
                 "pain_point_priority_matrix",
                 "strategy_bridge",
-                "confidence_score",
                 "odoo_onboarding_recommendation",
             ):
                 value = voice_of_customer_data.get(key)
                 if value is not None:
                     result_data[key] = value
+            voca_conf = voice_of_customer_data.get("confidence_score")
+            if voca_conf is not None:
+                confidence_scores["voice_of_customer"] = voca_conf
             # Merge VoCA sources with existing
             voca_sources = voice_of_customer_data.get("sources", [])
             if voca_sources:
@@ -247,6 +260,13 @@ class ManagerNode(BaseNode):
                     result_data["sources"] = existing_sources
                 else:
                     result_data["sources"] = voca_sources
+
+        # Store per-agent confidence scores and compute average
+        if confidence_scores:
+            result_data["confidence_scores"] = confidence_scores
+            result_data["confidence_score"] = round(
+                sum(confidence_scores.values()) / len(confidence_scores), 2
+            )
 
         # Populate score from BSI (used by BrandEquityDashboard)
         if bsi_data:

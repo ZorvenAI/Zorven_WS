@@ -14,6 +14,8 @@ import {
   Circle,
   Loader2,
   XCircle,
+  Info,
+  Trash2,
   Search,
   BarChart3,
   Swords,
@@ -100,7 +102,7 @@ const HEALTH_COLOR: Record<AgentHealth, string> = {
 
 // ── Component ──
 
-function AgentNodeComponent({ data, isConnectable }: NodeProps) {
+function AgentNodeComponent({ id, data, isConnectable }: NodeProps) {
   const nodeData = data as unknown as AgentNodeData;
   const status = nodeData.status ?? 'pending';
   const health = nodeData.health ?? 'unknown';
@@ -109,7 +111,7 @@ function AgentNodeComponent({ data, isConnectable }: NodeProps) {
   return (
     <div
       className={`
-        relative rounded-xl border-2 bg-white/5 backdrop-blur-sm
+        group relative rounded-xl border-2 bg-white/5 backdrop-blur-sm
         px-4 py-3 min-w-[160px] max-w-[200px]
         ${STATUS_BORDER[status] ?? STATUS_BORDER.pending}
       `}
@@ -121,13 +123,21 @@ function AgentNodeComponent({ data, isConnectable }: NodeProps) {
         className="!bg-brand-electric/40 !w-3 !h-3 !border !border-brand-electric/60 hover:!bg-brand-electric/80"
       />
 
-      {/* Header: icon + label + health */}
-      <div className="flex items-center gap-2">
+      {/* Header: icon + label + type badge + health */}
+      <div className="flex items-center gap-1.5">
         {IconComponent && (
           <IconComponent className="w-4 h-4 text-brand-electric shrink-0" />
         )}
         <span className="text-sm font-medium text-brand-silver truncate flex-1">
           {nodeData.label}
+        </span>
+        <span
+          className={`
+            text-[8px] px-1 py-0.5 rounded shrink-0
+            ${nodeData.agentType === 'external' ? 'bg-brand-electric/10 text-brand-electric' : 'bg-brand-ghost/10 text-brand-ghost'}
+          `}
+        >
+          {nodeData.agentType === 'external' ? 'EXT' : 'INT'}
         </span>
         <div
           className={`w-2 h-2 rounded-full shrink-0 ${HEALTH_COLOR[health]}`}
@@ -142,24 +152,36 @@ function AgentNodeComponent({ data, isConnectable }: NodeProps) {
         </p>
       )}
 
-      {/* Status indicator */}
+      {/* Status indicator + info button */}
       <div className="mt-1.5 flex items-center gap-1.5">
         {STATUS_ICON[status]}
-        <span className="text-[10px] text-brand-silver/40 capitalize">
+        <span className="text-[10px] text-brand-silver/40 capitalize flex-1">
           {status === 'running' ? 'Running\u2026' : status}
         </span>
-      </div>
-
-      {/* Type badge */}
-      <div className="absolute top-1 right-1">
-        <span
-          className={`
-            text-[8px] px-1 py-0.5 rounded
-            ${nodeData.agentType === 'external' ? 'bg-brand-electric/10 text-brand-electric' : 'bg-brand-ghost/10 text-brand-ghost'}
-          `}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            window.dispatchEvent(
+              new CustomEvent('agent-info', { detail: nodeData }),
+            );
+          }}
+          className="p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10"
+          title="Learn more"
         >
-          {nodeData.agentType === 'external' ? 'EXT' : 'INT'}
-        </span>
+          <Info className="w-3.5 h-3.5 text-brand-silver/40 hover:text-brand-electric" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            window.dispatchEvent(
+              new CustomEvent('agent-delete', { detail: { nodeId: id } }),
+            );
+          }}
+          className="p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/10"
+          title="Remove agent"
+        >
+          <Trash2 className="w-3.5 h-3.5 text-brand-silver/40 hover:text-red-400" />
+        </button>
       </div>
 
       <Handle

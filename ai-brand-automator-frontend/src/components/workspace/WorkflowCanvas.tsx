@@ -7,7 +7,7 @@
 
 'use client';
 
-import { useCallback, useRef, useMemo } from 'react';
+import { useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
@@ -236,6 +236,22 @@ export default function WorkflowCanvas({
     [readonly, screenToFlowPosition, state.nodes, dispatch],
   );
 
+  // ── Listen for agent-delete events from AgentNode buttons ──
+
+  useEffect(() => {
+    if (readonly) return;
+
+    function handleAgentDelete(e: Event) {
+      const nodeId = (e as CustomEvent).detail?.nodeId;
+      if (nodeId) {
+        dispatch({ type: 'REMOVE_NODE', nodeId });
+      }
+    }
+
+    window.addEventListener('agent-delete', handleAgentDelete);
+    return () => window.removeEventListener('agent-delete', handleAgentDelete);
+  }, [readonly, dispatch]);
+
   // ── Viewport change ──
 
   const onMoveEnd = useCallback(
@@ -272,7 +288,7 @@ export default function WorkflowCanvas({
         connectionRadius={40}
         connectionLineStyle={{ stroke: '#00f5ff', strokeWidth: 2 }}
         fitView
-        fitViewOptions={{ padding: 0.3 }}
+        fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
         deleteKeyCode={readonly ? null : ['Backspace', 'Delete']}
         panOnDrag={true}
         zoomOnScroll={true}

@@ -3505,7 +3505,7 @@ export default function ResultDashboard({
           industryTrends={resultData.industry_trends as string[] | undefined}
           economicIndicators={resultData.economic_indicators as Record<string, unknown> | undefined}
           sources={resultData.sources as SourceEntry[] | undefined}
-          confidenceScore={resultData.confidence_score as number | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.market_research ?? resultData.confidence_score) as number | undefined}
           findings={findings}
           recommendations={recommendations}
         />
@@ -3521,7 +3521,7 @@ export default function ResultDashboard({
           positioningGaps={resultData.positioning_gaps as PositioningGap[] | undefined}
           benchmarkingReport={resultData.benchmarking_report as Record<string, unknown> | undefined}
           sources={resultData.sources as SourceEntry[] | undefined}
-          confidenceScore={resultData.confidence_score as number | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.competitor_intelligence ?? resultData.confidence_score) as number | undefined}
           findings={findings}
           recommendations={recommendations}
         />
@@ -3535,7 +3535,7 @@ export default function ResultDashboard({
           journeyMaps={resultData.journey_maps as BuyingJourneyMapFE[] | undefined}
           segmentMatrix={resultData.segment_matrix as Record<string, unknown> | undefined}
           sources={resultData.sources as SourceEntry[] | undefined}
-          confidenceScore={resultData.confidence_score as number | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.audience_persona ?? resultData.confidence_score) as number | undefined}
           findings={findings}
           recommendations={recommendations}
         />
@@ -3553,7 +3553,7 @@ export default function ResultDashboard({
           generationalInsights={resultData.generational_insights as GenerationalProfileFE[] | undefined}
           languageTrends={resultData.language_trends as LanguageTrendProfileFE | undefined}
           sources={resultData.sources as SourceEntry[] | undefined}
-          confidenceScore={resultData.confidence_score as number | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.trend_cultural ?? resultData.confidence_score) as number | undefined}
           findings={findings}
           recommendations={recommendations}
         />
@@ -3571,7 +3571,7 @@ export default function ResultDashboard({
           painPointMatrix={resultData.pain_point_priority_matrix as { pain_points?: VoCPainPointLocal[]; methodology?: string } | undefined}
           strategyBridge={resultData.strategy_bridge as VoCStrategyBridgeLocal | undefined}
           sources={resultData.sources as SourceEntry[] | undefined}
-          confidenceScore={resultData.confidence_score as number | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.voice_of_customer ?? resultData.confidence_score) as number | undefined}
           findings={findings}
           recommendations={recommendations}
         />

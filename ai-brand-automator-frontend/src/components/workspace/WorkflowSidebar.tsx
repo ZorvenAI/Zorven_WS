@@ -21,6 +21,7 @@ import {
   Pencil,
   Check,
   X,
+  Info,
 } from 'lucide-react';
 import type { UserWorkflowSummary } from '@/types/workspace';
 import type { PipelineManifestListItem, JobStatus } from '@/types/orchestration';
@@ -36,6 +37,7 @@ interface WorkflowSidebarProps {
   onToggleFavorite: (workflowId: string, isFavorite: boolean) => void;
   onDelete: (workflowId: string) => void;
   onRename: (workflowId: string, newName: string) => void;
+  onShowInfo?: (workflowId: string) => void;
   onCloneTemplate?: (templateId: string, templateName: string) => void;
   templates?: PipelineManifestListItem[];
   isLoading?: boolean;
@@ -73,6 +75,7 @@ export default function WorkflowSidebar({
   onToggleFavorite,
   onDelete,
   onRename,
+  onShowInfo,
   onCloneTemplate,
   templates = [],
   isLoading = false,
@@ -189,6 +192,7 @@ export default function WorkflowSidebar({
                         onToggleFavorite={onToggleFavorite}
                         onDelete={onDelete}
                         onRename={onRename}
+                        onShowInfo={onShowInfo}
                       />
                     ))}
                   </div>
@@ -210,6 +214,7 @@ export default function WorkflowSidebar({
                       onToggleFavorite={onToggleFavorite}
                       onDelete={onDelete}
                       onRename={onRename}
+                      onShowInfo={onShowInfo}
                     />
                   ))}
                   {filteredWorkflows.length === 0 && (
@@ -255,6 +260,7 @@ function WorkflowItem({
   onToggleFavorite,
   onDelete,
   onRename,
+  onShowInfo,
 }: {
   workflow: UserWorkflowSummary;
   isSelected: boolean;
@@ -262,6 +268,7 @@ function WorkflowItem({
   onToggleFavorite: (id: string, isFavorite: boolean) => void;
   onDelete: (id: string) => void;
   onRename: (id: string, newName: string) => void;
+  onShowInfo?: (id: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(workflow.name);
@@ -354,6 +361,18 @@ function WorkflowItem({
 
         {!isEditing && (
           <div className="flex items-center gap-0.5 shrink-0">
+            {onShowInfo && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onShowInfo(workflow.workflow_id);
+                }}
+                className="p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10"
+                title="Learn more"
+              >
+                <Info className="w-3 h-3 text-brand-silver/40" />
+              </button>
+            )}
             <button
               onClick={handleStartRename}
               className="p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10"

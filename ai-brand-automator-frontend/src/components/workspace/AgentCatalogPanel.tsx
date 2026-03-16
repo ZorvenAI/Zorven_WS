@@ -9,7 +9,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { Search, GripVertical } from 'lucide-react';
+import { Search, GripVertical, Info } from 'lucide-react';
 import { listAgents } from '@/lib/workspace';
 import type { AgentCatalogEntry, AgentHealth } from '@/types/workspace';
 
@@ -152,6 +152,22 @@ function AgentCard({
           {agent.description}
         </p>
       </div>
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          window.dispatchEvent(
+            new CustomEvent('agent-info', { detail: agent }),
+          );
+        }}
+        className="p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10 shrink-0"
+        title="Learn more"
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
+      >
+        <Info className="w-3.5 h-3.5 text-brand-silver/40 hover:text-brand-electric" />
+      </button>
 
       <span
         className={`text-[8px] px-1 py-0.5 rounded shrink-0 ${

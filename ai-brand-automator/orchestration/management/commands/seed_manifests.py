@@ -902,8 +902,8 @@ class Command(BaseCommand):
                 ],
                 "edges": [
                     ["intent_router", "market_research"],
-                    ["market_research", "competitor_intel"],
-                    ["competitor_intel", "audience_persona"],
+                    ["market_research", "competitor_intelligence"],
+                    ["competitor_intelligence", "audience_persona"],
                     ["audience_persona", "trend_cultural"],
                     ["trend_cultural", "voice_of_customer"],
                     ["voice_of_customer", "manager"],
@@ -1006,3 +1006,46 @@ class Command(BaseCommand):
             status = "Created" if created else "Updated"
             self.stdout.write(f"  {status}: {obj.name}")
         self.stdout.write(self.style.SUCCESS("Pipeline manifest seeding complete."))
+
+        # One-time fixup: patch any manifests with "competitor_intel" edge typo
+        self._fix_competitor_intel_edges()
+
+    def _fix_competitor_intel_edges(self):
+        """Fix 'competitor_intel' → 'competitor_intelligence' in all manifests."""
+        import json
+
+        patched = 0
+        for manifest in PipelineManifest.objects.all():
+            data = manifest.manifest_data
+            if not data or "edges" not in data:
+                continue
+            raw = json.dumps(data)
+            if "competitor_intel" not in raw:
+                continue
+            # Only fix edges where the short form is used but not the full form
+            changed = False
+            new_edges = []
+            for edge in data.get("edges", []):
+                src, tgt = edge[0], edge[1]
+                if src == "competitor_intel":
+                    src = "competitor_intelligence"
+                    changed = True
+                if tgt == "competitor_intel":
+                    tgt = "competitor_intelligence"
+                    changed = True
+                new_edges.append([src, tgt])
+            if changed:
+                data["edges"] = new_edges
+                manifest.manifest_data = data
+                manifest.save(update_fields=["manifest_data", "updated_at"])
+                patched += 1
+                self.stdout.write(
+                    f"  Fixed edges in manifest: {manifest.name} "
+                    f"(pipeline_id={manifest.pipeline_id})"
+                )
+        if patched:
+            self.stdout.write(
+                self.style.SUCCESS(f"Patched {patched} manifest(s) with edge typo.")
+            )
+        else:
+            self.stdout.write("  No edge typos found.")
