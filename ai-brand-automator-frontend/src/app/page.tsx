@@ -12,7 +12,7 @@ export default function Home() {
     // Check if user is authenticated
     const token = localStorage.getItem('access_token');
     if (token) {
-      router.push('/chat');
+      router.push('/dashboard/workflows');
       return; // Don't set loaded if redirecting
     }
     // Use requestAnimationFrame to avoid synchronous setState in effect
@@ -46,7 +46,7 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <h1 className="text-xl sm:text-2xl font-heading font-bold text-white">AI Brand Automator</h1>
+            <h1 className="text-xl sm:text-2xl font-heading font-bold text-white">Zorven AI</h1>
           </div>
           <nav className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-brand-silver/70 hover:text-white transition-colors text-sm">Features</a>
@@ -63,7 +63,7 @@ export default function Home() {
             </Link>
             <Link
               href="/auth/register"
-              className="relative group bg-gradient-to-r from-brand-electric to-brand-ghost text-brand-midnight font-bold px-5 py-2.5 rounded-lg text-sm transition-all hover:shadow-[0_0_30px_rgba(0,245,255,0.4)] hover:-translate-y-0.5"
+              className="relative group bg-gradient-to-r from-brand-electric to-brand-ghost text-brand-midnight font-bold px-5 py-2.5 rounded-lg text-sm transition-all hover:shadow-[0_0_30px_rgba(208,233,192,0.4)] hover:-translate-y-0.5"
             >
               <span className="relative z-10">Get Started Free</span>
             </Link>
@@ -143,7 +143,7 @@ export default function Home() {
 
           {/* Brand Equity Calculator CTA — inside hero for maximum visibility */}
           <div className={`mt-12 sm:mt-16 max-w-3xl mx-auto transition-all duration-1000 delay-400 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-            <Link href="/brand-equity" className="group block glass-card p-6 sm:p-8 text-center border-brand-electric/30 hover:border-brand-electric/60 transition-all hover:shadow-[0_0_40px_rgba(0,245,255,0.15)]">
+            <Link href="/brand-equity" className="group block glass-card p-6 sm:p-8 text-center border-brand-electric/30 hover:border-brand-electric/60 transition-all hover:shadow-[0_0_40px_rgba(208,233,192,0.15)]">
               <div className="flex items-center justify-center gap-3 mb-3">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-mint/10 border border-brand-mint/20 text-xs text-brand-mint font-medium">
                   <span className="w-1.5 h-1.5 bg-brand-mint rounded-full animate-pulse" />
@@ -154,9 +154,9 @@ export default function Home() {
                 Know Your Brand&apos;s True Value
               </h3>
               <p className="text-sm text-brand-silver/60 mb-5 max-w-lg mx-auto">
-                Get an instant ISO 20671 brand equity score with competitor analysis — powered by BranSol AI. No sign up required.
+                Get an instant ISO 20671 brand equity score with competitor analysis — powered by Zorven AI. No sign up required.
               </p>
-              <span className="inline-flex items-center gap-2 bg-gradient-to-r from-brand-electric to-brand-ghost text-brand-midnight font-bold px-8 py-3.5 rounded-xl transition-all group-hover:shadow-[0_0_30px_rgba(0,245,255,0.4)] group-hover:-translate-y-0.5">
+              <span className="inline-flex items-center gap-2 bg-gradient-to-r from-brand-electric to-brand-ghost text-brand-midnight font-bold px-8 py-3.5 rounded-xl transition-all group-hover:shadow-[0_0_30px_rgba(208,233,192,0.4)] group-hover:-translate-y-0.5">
                 Calculate Brand Equity — Free
                 <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -178,7 +178,7 @@ export default function Home() {
                     <div className="w-3 h-3 rounded-full bg-green-500/80" />
                   </div>
                   <div className="flex-1 flex justify-center">
-                    <div className="px-4 py-1 rounded-md bg-white/5 text-xs text-brand-silver/50">app.aibrandautomator.com</div>
+                    <div className="px-4 py-1 rounded-md bg-white/5 text-xs text-brand-silver/50">app.zorven.ai</div>
                   </div>
                 </div>
                 {/* Dashboard mockup */}
@@ -379,7 +379,7 @@ export default function Home() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
                 {
-                  quote: "AI Brand Automator has completely transformed how we manage our social presence. We've saved 25+ hours per week!",
+                  quote: "Zorven AI has completely transformed how we manage our social presence. We've saved 25+ hours per week!",
                   author: "Sarah Chen",
                   role: "Marketing Director",
                   company: "TechFlow Inc.",
@@ -434,7 +434,7 @@ export default function Home() {
                   Ready to Transform Your Brand?
                 </h2>
                 <p className="text-lg text-brand-silver/70 mb-8 max-w-xl mx-auto">
-                  Join 10,000+ brands already using AI Brand Automator to grow their social presence.
+                  Join 10,000+ brands already using Zorven AI to grow their social presence.
                 </p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                   <Link
@@ -465,7 +465,7 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                 </div>
-                <span className="font-heading font-bold text-white">AI Brand Automator</span>
+                <span className="font-heading font-bold text-white">Zorven AI</span>
               </div>
               <p className="text-sm text-brand-silver/60">Automate your brand with the power of AI.</p>
             </div>
@@ -497,7 +497,7 @@ export default function Home() {
             </div>
           </div>
           <div className="pt-8 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p className="text-sm text-brand-silver/50">&copy; {new Date().getFullYear()} AI Brand Automator. All rights reserved.</p>
+            <p className="text-sm text-brand-silver/50">&copy; {new Date().getFullYear()} Zorven AI. All rights reserved.</p>
             <div className="flex items-center gap-4">
               {['twitter', 'linkedin', 'instagram'].map(social => (
                 <a key={social} href="#" className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">

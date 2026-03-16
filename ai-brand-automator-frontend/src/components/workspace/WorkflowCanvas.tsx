@@ -54,7 +54,7 @@ function getEdgeStyle(
       status === 'done'
         ? '#34d399'
         : status === 'running'
-          ? '#00f5ff'
+          ? '#fad55c'
           : '#94a3b8',
     strokeWidth: 2,
   };
@@ -286,7 +286,7 @@ export default function WorkflowCanvas({
         onMoveEnd={onMoveEnd}
         nodesConnectable={!readonly}
         connectionRadius={40}
-        connectionLineStyle={{ stroke: '#00f5ff', strokeWidth: 2 }}
+        connectionLineStyle={{ stroke: '#fad55c', strokeWidth: 2 }}
         fitView
         fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
         deleteKeyCode={readonly ? null : ['Backspace', 'Delete']}
@@ -307,7 +307,7 @@ export default function WorkflowCanvas({
         />
         <MiniMap
           className="!bg-brand-surface !border-white/10 !rounded-lg"
-          nodeColor={() => 'rgba(0, 245, 255, 0.3)'}
+          nodeColor={() => 'rgba(250, 213, 92, 0.3)'}
           maskColor="rgba(30, 30, 46, 0.8)"
         />
 

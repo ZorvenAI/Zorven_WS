@@ -21,7 +21,7 @@ interface PillarRadarProps {
   size?: number;
 }
 
-const COLORS = ['#00F5FF', '#8b5cf6', '#14b8a6', '#f59e0b', '#ef4444'];
+const COLORS = ['#fad55c', '#8b5cf6', '#14b8a6', '#f59e0b', '#ef4444'];
 
 export default function PillarRadar({
   pillars,
@@ -93,11 +93,11 @@ export default function PillarRadar({
         })}
 
         {/* Filled data polygon */}
-        <path d={dataPath} fill="#00F5FF" fillOpacity={0.15} />
+        <path d={dataPath} fill="#fad55c" fillOpacity={0.15} />
         <path
           d={dataPath}
           fill="none"
-          stroke="#00F5FF"
+          stroke="#fad55c"
           strokeWidth="2"
           strokeLinejoin="round"
         />

@@ -1,5 +1,5 @@
 """
-Kafka Consumer Service for AI Brand Automator
+Kafka Consumer Service for Zorven AI
 
 This module provides Kafka consumer functionality to process events
 from Kong Gateway and other producers.

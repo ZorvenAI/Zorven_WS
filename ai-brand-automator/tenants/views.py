@@ -485,7 +485,7 @@ class InviteMemberView(APIView):
             f"{accept_url}\n\n"
             f"If you don't have an account yet, you'll be able "
             f"to create one when you accept.\n\n"
-            f"Best regards,\nAI Brand Automator Team"
+            f"Best regards,\nZorven AI Team"
         )
 
         try:
@@ -513,7 +513,7 @@ class InviteMemberView(APIView):
             f'"{tenant_name}" as {role}.\n\n'
             f"You can access the workspace from your dashboard:\n"
             f"{dashboard_url}\n\n"
-            f"Best regards,\nAI Brand Automator Team"
+            f"Best regards,\nZorven AI Team"
         )
 
         try:
@@ -800,7 +800,7 @@ class MemberDetailView(APIView):
             f"those remains unchanged.\n\n"
             f"If you believe this was a mistake, please contact "
             f"the workspace administrator.\n\n"
-            f"Best regards,\nAI Brand Automator Team"
+            f"Best regards,\nZorven AI Team"
         )
 
         try:

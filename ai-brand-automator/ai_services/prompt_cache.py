@@ -82,7 +82,7 @@ _FIELD_LABELS = {
 def build_layer_1() -> str:
     """Layer 1: Static system instructions (never changes mid-session)."""
     return (
-        "You are BranSol AI, an expert brand strategy assistant.\n"
+        "You are Zorven AI, an expert brand strategy assistant.\n"
         "You help users build, evaluate, and improve their brands.\n"
         "Provide thoughtful, actionable advice using markdown formatting.\n"
         "Use headings, bullet points, and bold text for clarity."

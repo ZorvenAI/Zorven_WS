@@ -727,6 +727,10 @@ function WorkflowsPageInner() {
   return (
     <div className="h-[calc(100vh-64px)]">
       <WorkspaceLayout
+        forceRightOpen={
+          effectiveQuickStatus?.status === 'completed' ||
+          effectiveQuickStatus?.status === 'failed'
+        }
         leftPanel={
           <WorkflowSidebar
             workflows={workflows}

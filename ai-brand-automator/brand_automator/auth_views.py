@@ -404,18 +404,18 @@ class UserRegistrationView(APIView):
         # TODO: Implement actual email verification with token
         # For MVP, we'll just send a welcome email
         try:
-            subject = "Welcome to AI Brand Automator"
+            subject = "Welcome to Zorven AI"
             message = f"""
             Hi {user.first_name},
 
-            Welcome to AI Brand Automator! Your account has been created successfully.
+            Welcome to Zorven AI! Your account has been created successfully.
 
             Email: {user.email}
 
             You can now log in and start building your brand.
 
             Best regards,
-            AI Brand Automator Team
+            Zorven AI Team
             """
 
             # Only send if email backend is configured

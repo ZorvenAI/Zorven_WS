@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Full database reset script for AI Brand Automator.
+Full database reset script for Zorven AI.
 
 Drops all tenant schemas (except public), flushes all data,
 and recreates the public tenant. Use for a completely fresh start.

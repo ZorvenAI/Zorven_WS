@@ -39,7 +39,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "AI Brand Automator - Build Your Brand with AI",
+  title: "Zorven AI - Build Your Brand with AI",
   description: "AI-powered brand building platform for modern businesses",
 };
 

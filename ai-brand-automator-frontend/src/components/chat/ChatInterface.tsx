@@ -36,7 +36,7 @@ interface Message {
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   content:
-    "Hello! I'm BranSol AI your brand assistant. How can I help you with your brand strategy today?",
+    "Hello! I'm Zorven AI your brand assistant. How can I help you with your brand strategy today?",
   isUser: false,
   timestamp: new Date(),
 };

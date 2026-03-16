@@ -25,7 +25,7 @@ class TestBuildLayers:
 
     def test_layer_1_returns_static_instructions(self):
         result = build_layer_1()
-        assert "BranSol AI" in result
+        assert "Zorven AI" in result
         assert "brand strategy assistant" in result
 
     def test_layer_1_is_deterministic(self):
@@ -101,7 +101,7 @@ class TestGetOrCreatePromptSnapshot:
         assert "layer_2" in snapshot
         assert "layer_3" in snapshot
         assert "prefix_hash" in snapshot
-        assert "BranSol AI" in snapshot["layer_1"]
+        assert "Zorven AI" in snapshot["layer_1"]
         assert "Company: Test Co" in snapshot["layer_3"]
 
     def test_returns_cached_on_hit(self):

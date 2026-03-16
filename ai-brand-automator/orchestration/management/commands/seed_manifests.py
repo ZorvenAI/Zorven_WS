@@ -839,7 +839,7 @@ class Command(BaseCommand):
         },
         {
             "pipeline_id": "brand-discovery-complete",
-            "name": "Brand Discovery & Research (Complete Workflow 1)",
+            "name": "Brand Discovery & Research (Complete)",
             "description": (
                 "Complete brand discovery with all 5 agents: market research, "
                 "competitor intelligence, audience personas, trend insights, "

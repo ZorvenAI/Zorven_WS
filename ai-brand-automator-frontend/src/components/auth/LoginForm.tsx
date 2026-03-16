@@ -49,8 +49,8 @@ export function LoginForm() {
           // Non-critical — TenantProvider will retry on mount
         }
 
-        // Redirect to original destination or chat
-        window.location.href = redirectTo || '/chat';
+        // Redirect to original destination or workflows workspace
+        window.location.href = redirectTo || '/dashboard/workflows';
       } else {
         let error;
         try {

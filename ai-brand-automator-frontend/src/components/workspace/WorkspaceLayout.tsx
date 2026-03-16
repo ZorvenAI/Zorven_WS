@@ -30,6 +30,8 @@ interface WorkspaceLayoutProps {
   centerPanel: React.ReactNode;
   toolbar?: React.ReactNode;
   rightPanel?: React.ReactNode;
+  /** When this transitions to true, the right panel opens automatically. */
+  forceRightOpen?: boolean;
 }
 
 // ── Resize handle ──
@@ -64,6 +66,7 @@ export default function WorkspaceLayout({
   centerPanel,
   toolbar,
   rightPanel,
+  forceRightOpen,
 }: WorkspaceLayoutProps) {
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(false);
@@ -75,6 +78,11 @@ export default function WorkspaceLayout({
   const startX = useRef(0);
   const startWidth = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Open right panel when parent requests it
+  useEffect(() => {
+    if (forceRightOpen) setRightOpen(true);
+  }, [forceRightOpen]);
 
   const toggleLeft = useCallback(() => setLeftOpen((p) => !p), []);
   const toggleRight = useCallback(() => setRightOpen((p) => !p), []);
