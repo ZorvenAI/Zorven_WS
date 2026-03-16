@@ -216,9 +216,11 @@ class WorkflowViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
     def snapshots(self, request, workflow_id=None):
         """List snapshots for a workflow (paginated)."""
         workflow = self.get_object()
-        snapshots = workflow.snapshots.select_related("job").prefetch_related(
-            "chatworkspacelink_set"
-        ).all()
+        snapshots = (
+            workflow.snapshots.select_related("job")
+            .prefetch_related("chatworkspacelink_set")
+            .all()
+        )
         page = self.paginate_queryset(snapshots)
         if page is not None:
             serializer = SnapshotListSerializer(page, many=True)
