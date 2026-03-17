@@ -42,9 +42,7 @@ class CoreApiClient:
             "X-Tenant-ID": tenant_id,
         }
 
-    async def fetch_brand_persona(
-        self, tenant_id: str
-    ) -> dict[str, Any]:
+    async def fetch_brand_persona(self, tenant_id: str) -> dict[str, Any]:
         """Fetch brand persona from the onboarding companies endpoint."""
         try:
             client = await self._get_client()
@@ -64,9 +62,7 @@ class CoreApiClient:
                     "target_audience": company.get("target_audience", "professionals"),
                     "vision_statement": company.get("vision_statement", ""),
                     "values": company.get("values", []),
-                    "positioning_statement": company.get(
-                        "positioning_statement", ""
-                    ),
+                    "positioning_statement": company.get("positioning_statement", ""),
                     "demographics": company.get("demographics", ""),
                     "psychographics": company.get("psychographics", ""),
                     "pain_points": company.get("pain_points", []),
@@ -107,6 +103,7 @@ class CoreApiClient:
         job_id: str,
         media_urls: list[str] | None = None,
         user_id: str | int | None = None,
+        scheduled_date: str | None = None,
     ) -> dict[str, Any]:
         """Delegate publishing to the Django backend."""
         try:
@@ -121,6 +118,8 @@ class CoreApiClient:
             }
             if user_id is not None:
                 body["user_id"] = str(user_id)
+            if scheduled_date is not None:
+                body["scheduled_date"] = scheduled_date
             resp = await client.post(
                 f"{self._base_url}/api/v1/automation/internal/publish/",
                 headers=self._headers(tenant_id),
