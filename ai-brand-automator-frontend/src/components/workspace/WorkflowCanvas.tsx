@@ -36,8 +36,8 @@ interface WorkflowCanvasProps {
   dispatch: React.Dispatch<WorkflowAction>;
   progress?: Record<string, AgentProgress>;
   readonly?: boolean;
-  /** Fires when a node is selected (data) or deselected (null). */
-  onNodeSelect?: (data: AgentNodeData | null) => void;
+  /** Fires when a node is selected (id) or deselected (null). */
+  onNodeSelect?: (nodeId: string | null) => void;
 }
 
 // ── Node types ──
@@ -271,11 +271,7 @@ export default function WorkflowCanvas({
   const onSelectionChange = useCallback(
     ({ nodes: selectedNodes }: { nodes: Node[] }) => {
       if (!onNodeSelect) return;
-      if (selectedNodes.length === 1) {
-        onNodeSelect(selectedNodes[0].data as AgentNodeData);
-      } else {
-        onNodeSelect(null);
-      }
+      onNodeSelect(selectedNodes.length === 1 ? selectedNodes[0].id : null);
     },
     [onNodeSelect],
   );
