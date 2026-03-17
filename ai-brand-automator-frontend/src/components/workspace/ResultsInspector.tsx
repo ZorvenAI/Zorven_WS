@@ -25,7 +25,7 @@ import {
   CalendarClock,
 } from 'lucide-react';
 import type { AnalysisJob, AgentProgress, LogEntry, QuickStatus } from '@/types/orchestration';
-import type { WorkflowSnapshot } from '@/types/workspace';
+import type { WorkflowSnapshot, UserWorkflowDetail } from '@/types/workspace';
 import type { AgentNodeData } from './AgentNode';
 import ResultDashboard from '@/components/pipelines/ResultDashboard';
 import LogConsole from '@/components/pipelines/LogConsole';
@@ -40,6 +40,8 @@ interface ResultsInspectorProps {
   quickStatus: QuickStatus | null;
   /** Currently selected node on the canvas. */
   selectedNodeData?: AgentNodeData | null;
+  /** Active workflow detail (shown in Properties when no node selected). */
+  workflowDetail?: UserWorkflowDetail | null;
 }
 
 type TabId = 'results' | 'logs' | 'properties' | 'history';
@@ -68,6 +70,7 @@ export default function ResultsInspector({
   activeJobId,
   quickStatus,
   selectedNodeData,
+  workflowDetail,
 }: ResultsInspectorProps) {
   const [activeTab, setActiveTab] = useState<TabId>('results');
   const [job, setJob] = useState<AnalysisJob | null>(null);
@@ -207,7 +210,7 @@ export default function ResultsInspector({
         )}
         {activeTab === 'logs' && <LogConsole entries={logEntries} />}
         {activeTab === 'properties' && (
-          <PropertiesTab nodeData={selectedNodeData} />
+          <PropertiesTab nodeData={selectedNodeData} workflowDetail={workflowDetail} />
         )}
         {activeTab === 'history' && (
           <HistoryTab snapshots={snapshots} />
@@ -332,33 +335,78 @@ function ResultsTab({
 
 // ── Properties Tab ──
 
-function PropertiesTab({ nodeData }: { nodeData?: AgentNodeData | null }) {
-  if (!nodeData) {
+function PropertiesTab({
+  nodeData,
+  workflowDetail,
+}: {
+  nodeData?: AgentNodeData | null;
+  workflowDetail?: UserWorkflowDetail | null;
+}) {
+  // Show agent properties when a node is selected
+  if (nodeData) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-brand-silver/30">
-        <Info className="w-8 h-8 mb-3" />
-        <p className="text-xs">Select a node to view properties</p>
+      <div className="p-3 space-y-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-brand-silver/30 mb-1">Agent</p>
+          <h3 className="text-sm font-medium text-brand-silver mb-2">
+            {nodeData.label}
+          </h3>
+          {nodeData.description && (
+            <p className="text-xs text-brand-silver/50">{nodeData.description}</p>
+          )}
+        </div>
+
+        <div className="space-y-2 text-xs">
+          <PropertyRow label="Agent ID" value={nodeData.agentId} />
+          <PropertyRow label="Type" value={nodeData.agentType} />
+          <PropertyRow label="Status" value={nodeData.status || 'idle'} />
+          <PropertyRow label="Health" value={nodeData.health || 'unknown'} />
+        </div>
+      </div>
+    );
+  }
+
+  // Show workflow properties when no node is selected
+  if (workflowDetail) {
+    const nodeCount = workflowDetail.manifest_data?.nodes?.length ?? 0;
+    const edgeCount = workflowDetail.manifest_data?.edges?.length ?? 0;
+
+    return (
+      <div className="p-3 space-y-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-brand-silver/30 mb-1">Workflow</p>
+          <h3 className="text-sm font-medium text-brand-silver mb-2">
+            {workflowDetail.name}
+          </h3>
+          {workflowDetail.description && (
+            <p className="text-xs text-brand-silver/50">{workflowDetail.description}</p>
+          )}
+        </div>
+
+        <div className="space-y-2 text-xs">
+          <PropertyRow label="Workflow ID" value={workflowDetail.workflow_id.slice(0, 8) + '...'} />
+          <PropertyRow label="Source" value={workflowDetail.source} />
+          <PropertyRow label="Agents" value={String(nodeCount)} />
+          <PropertyRow label="Connections" value={String(edgeCount)} />
+          <PropertyRow label="Executions" value={String(workflowDetail.execution_count)} />
+          <PropertyRow label="Last Run" value={
+            workflowDetail.last_executed_at
+              ? new Date(workflowDetail.last_executed_at).toLocaleDateString()
+              : 'Never'
+          } />
+          <PropertyRow label="Last Status" value={workflowDetail.last_job_status || 'None'} />
+          <PropertyRow label="Created By" value={workflowDetail.created_by_email || '—'} />
+          <PropertyRow label="Created" value={new Date(workflowDetail.created_at).toLocaleDateString()} />
+          <PropertyRow label="Updated" value={new Date(workflowDetail.updated_at).toLocaleDateString()} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-3 space-y-3">
-      <div>
-        <h3 className="text-sm font-medium text-brand-silver mb-2">
-          {nodeData.label}
-        </h3>
-        {nodeData.description && (
-          <p className="text-xs text-brand-silver/50">{nodeData.description}</p>
-        )}
-      </div>
-
-      <div className="space-y-2 text-xs">
-        <PropertyRow label="Agent ID" value={nodeData.agentId} />
-        <PropertyRow label="Type" value={nodeData.agentType} />
-        <PropertyRow label="Status" value={nodeData.status || 'idle'} />
-        <PropertyRow label="Health" value={nodeData.health || 'unknown'} />
-      </div>
+    <div className="flex flex-col items-center justify-center py-12 text-brand-silver/30">
+      <Info className="w-8 h-8 mb-3" />
+      <p className="text-xs">Select a workflow or node to view properties</p>
     </div>
   );
 }

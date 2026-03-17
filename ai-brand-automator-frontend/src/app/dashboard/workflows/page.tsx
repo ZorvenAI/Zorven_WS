@@ -7,7 +7,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import { useAuth } from '@/hooks/useAuth';
@@ -149,6 +149,9 @@ function WorkflowsPageInner() {
   const [wsProgress, setWsProgress] = useState<Record<string, AgentProgress>>({});
   const [wsQuickStatus, setWsQuickStatus] = useState<QuickStatus | null>(null);
 
+  // Canvas selection state (for Properties tab) — store ID, derive data
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
   // Modal state
   const [agentInfoTarget, setAgentInfoTarget] = useState<AgentNodeData | AgentCatalogEntry | null>(null);
   const [showWorkflowInfo, setShowWorkflowInfo] = useState(false);
@@ -160,6 +163,13 @@ function WorkflowsPageInner() {
   const store = useWorkflowStore(selectedId);
 
   const isReadonly = lockInfo?.locked === true && !lockInfo?.is_mine;
+
+  // Derive current node data from store (always fresh with latest progress)
+  const selectedNodeData = useMemo(() => {
+    if (!selectedNodeId) return null;
+    const node = store.state.nodes.find((n) => n.id === selectedNodeId);
+    return node ? (node.data as AgentNodeData) : null;
+  }, [selectedNodeId, store.state.nodes]);
 
   // ── WebSocket for real-time updates ──
 
@@ -429,10 +439,11 @@ function WorkflowsPageInner() {
       releaseLock(selectedId).catch(() => {});
     }
     setSelectedId(workflowId);
-    // Clear job tracking when switching workflows
+    // Clear job tracking and node selection when switching workflows
     setActiveJobId(null);
     setWsProgress({});
     setWsQuickStatus(null);
+    setSelectedNodeId(null);
   }, [selectedId, lockInfo?.is_mine]);
 
   const handleCreateNew = useCallback(async () => {
@@ -806,6 +817,7 @@ function WorkflowsPageInner() {
                 dispatch={store.dispatch}
                 progress={wsProgress}
                 readonly={isReadonly}
+                onNodeSelect={setSelectedNodeId}
               />
             )}
 
@@ -832,6 +844,8 @@ function WorkflowsPageInner() {
               workflowId={selectedId}
               activeJobId={activeJobId}
               quickStatus={effectiveQuickStatus ?? null}
+              selectedNodeData={selectedNodeData}
+              workflowDetail={selectedDetail}
             />
           ) : undefined
         }
