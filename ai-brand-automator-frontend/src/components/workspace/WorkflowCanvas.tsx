@@ -36,6 +36,8 @@ interface WorkflowCanvasProps {
   dispatch: React.Dispatch<WorkflowAction>;
   progress?: Record<string, AgentProgress>;
   readonly?: boolean;
+  /** Fires when a node is selected (data) or deselected (null). */
+  onNodeSelect?: (data: AgentNodeData | null) => void;
 }
 
 // ── Node types ──
@@ -71,6 +73,7 @@ export default function WorkflowCanvas({
   dispatch,
   progress = {},
   readonly = false,
+  onNodeSelect,
 }: WorkflowCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
@@ -263,6 +266,20 @@ export default function WorkflowCanvas({
     [dispatch],
   );
 
+  // ── Node selection → notify parent ──
+
+  const onSelectionChange = useCallback(
+    ({ nodes: selectedNodes }: { nodes: Node[] }) => {
+      if (!onNodeSelect) return;
+      if (selectedNodes.length === 1) {
+        onNodeSelect(selectedNodes[0].data as AgentNodeData);
+      } else {
+        onNodeSelect(null);
+      }
+    },
+    [onNodeSelect],
+  );
+
   // ── Read-only empty state (no workflow selected) ──
 
   if (state.nodes.length === 0 && readonly) {
@@ -286,6 +303,7 @@ export default function WorkflowCanvas({
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onMoveEnd={onMoveEnd}
+        onSelectionChange={onSelectionChange}
         nodesConnectable={!readonly}
         connectionRadius={40}
         connectionLineStyle={{ stroke: '#fad55c', strokeWidth: 2 }}

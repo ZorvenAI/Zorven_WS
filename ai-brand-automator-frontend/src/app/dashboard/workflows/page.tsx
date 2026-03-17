@@ -149,6 +149,9 @@ function WorkflowsPageInner() {
   const [wsProgress, setWsProgress] = useState<Record<string, AgentProgress>>({});
   const [wsQuickStatus, setWsQuickStatus] = useState<QuickStatus | null>(null);
 
+  // Canvas selection state (for Properties tab)
+  const [selectedNodeData, setSelectedNodeData] = useState<AgentNodeData | null>(null);
+
   // Modal state
   const [agentInfoTarget, setAgentInfoTarget] = useState<AgentNodeData | AgentCatalogEntry | null>(null);
   const [showWorkflowInfo, setShowWorkflowInfo] = useState(false);
@@ -806,6 +809,7 @@ function WorkflowsPageInner() {
                 dispatch={store.dispatch}
                 progress={wsProgress}
                 readonly={isReadonly}
+                onNodeSelect={setSelectedNodeData}
               />
             )}
 
@@ -832,6 +836,8 @@ function WorkflowsPageInner() {
               workflowId={selectedId}
               activeJobId={activeJobId}
               quickStatus={effectiveQuickStatus ?? null}
+              selectedNodeData={selectedNodeData}
+              workflowDetail={selectedDetail}
             />
           ) : undefined
         }
