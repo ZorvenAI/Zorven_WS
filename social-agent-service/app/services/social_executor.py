@@ -63,7 +63,12 @@ class SocialExecutor:
         await self._emit_trace(job_id, "Starting social promotion")
 
         # 2. Extract content from previous outputs
-        blog_output = request.previous_outputs.get("blog_author", {})
+        # The orchestrator's ExternalWrapper stores output under the node ID.
+        # In auto-detect mode this is "content"; in manifest mode it may be
+        # "blog_author". Check both keys for compatibility.
+        blog_output = request.previous_outputs.get(
+            "content", {}
+        ) or request.previous_outputs.get("blog_author", {})
         blog_content = blog_output.get("blog_content", "")
         seo_meta = blog_output.get("seo_meta", {})
         if isinstance(seo_meta, str):
@@ -166,7 +171,10 @@ class SocialExecutor:
         # 7. Adapt blog to social posts (with optional skill context from orchestrator)
         skill_context = request.config.get("skill_context", "")
         adapted_posts = await self._adapter.adapt(
-            blog_content, seo_meta, persona, platforms,
+            blog_content,
+            seo_meta,
+            persona,
+            platforms,
             skill_context=skill_context,
         )
         await self._emit_trace(
@@ -259,6 +267,16 @@ class SocialExecutor:
                     elif pr.status == "scheduled":
                         platforms_scheduled.append(post.platform)
                 else:
+                    # REST path — pass scheduled_date when scheduling
+                    rest_scheduled_date: str | None = None
+                    if action.action == "schedule":
+                        rest_scheduled_date = action.scheduled_date
+                        if not rest_scheduled_date:
+                            tomorrow = datetime.now(timezone.utc) + timedelta(days=1)
+                            rest_scheduled_date = tomorrow.replace(
+                                hour=9, minute=0, second=0, microsecond=0
+                            ).isoformat()
+
                     result = await self._core_api.publish_to_platforms(
                         tenant_id=tenant_id,
                         platforms=[post.platform],
@@ -267,6 +285,7 @@ class SocialExecutor:
                         user_role=user_role,
                         job_id=job_id,
                         user_id=user_id,
+                        scheduled_date=rest_scheduled_date,
                     )
 
                     pub_status = result.get("status", "failed")
@@ -275,24 +294,34 @@ class SocialExecutor:
 
                     post_id = None
                     post_url = None
+                    scheduled_date_resp = result.get("scheduled_date")
                     if post.platform in platform_results:
                         plat_r = platform_results[post.platform]
                         if isinstance(plat_r, dict):
                             post_id = plat_r.get("post_id", plat_r.get("id"))
                             post_url = plat_r.get("post_url", plat_r.get("url"))
 
+                    content_id = result.get("content_id")
+
                     publish_results.append(
                         PublishResult(
                             platform=post.platform,
                             status=pub_status,
-                            post_id=str(post_id) if post_id else None,
+                            post_id=(
+                                str(content_id or post_id)
+                                if (content_id or post_id)
+                                else None
+                            ),
                             post_url=str(post_url) if post_url else None,
                             error=(platform_errors[0] if platform_errors else None),
+                            scheduled_date=scheduled_date_resp,
                         )
                     )
 
                     if pub_status == "published":
                         platforms_posted.append(post.platform)
+                    elif pub_status == "scheduled":
+                        platforms_scheduled.append(post.platform)
 
                 await self._audit.send_audit(
                     tenant_id=tenant_id,

@@ -48,7 +48,7 @@ class ExternalWrapper(BaseNode):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=300.0) as client:
+            async with httpx.AsyncClient(timeout=settings.AGENT_TIMEOUT) as client:
                 response = await client.post(
                     self.url,
                     json=payload,

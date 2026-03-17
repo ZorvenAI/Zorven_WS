@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     RAG_QUERY_CACHE_TTL: int = 3600
     RAG_SESSION_FILES_TTL: int = 86400
 
+    # External agent HTTP timeout (seconds). Content and social agents
+    # may take 10+ minutes for blog authoring / publishing.
+    AGENT_TIMEOUT: float = 900.0
+
     # Agent service URLs (override for Railway/cloud deployment)
     DISCOVERY_AGENT_URL: str = "http://discovery-agent-svc:8020"
     CONTENT_AGENT_URL: str = "http://content-agent-svc:8050"

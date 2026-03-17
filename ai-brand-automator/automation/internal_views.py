@@ -152,6 +152,7 @@ class InternalPublishView(APIView):
         user_role = request.data.get("user_role", "editor")
         job_id = request.data.get("job_id", "")
         user_id = request.data.get("user_id")
+        scheduled_date_str = request.data.get("scheduled_date")
 
         if not platforms or not content_text:
             return Response(
@@ -209,6 +210,23 @@ class InternalPublishView(APIView):
         clean_title = strip_markdown(title)
         clean_content = strip_markdown(content_text)
 
+        # Parse optional scheduled_date from the request.  When provided
+        # and in the future, the post is created as "scheduled" and the
+        # Celery beat task (publish_scheduled_posts) will publish it later.
+        from django.utils.dateparse import parse_datetime
+
+        schedule_for_later = False
+        parsed_scheduled_date = timezone.now()
+
+        if scheduled_date_str:
+            parsed = parse_datetime(str(scheduled_date_str))
+            if parsed is not None:
+                if timezone.is_naive(parsed):
+                    parsed = timezone.make_aware(parsed)
+                parsed_scheduled_date = parsed
+                if parsed > timezone.now():
+                    schedule_for_later = True
+
         # Create ContentCalendar entry
         calendar_entry = ContentCalendar.objects.create(
             tenant_id=tenant_id,
@@ -217,7 +235,7 @@ class InternalPublishView(APIView):
             content=clean_content,
             media_urls=media_urls or [],
             platforms=[p.platform for p in profiles],
-            scheduled_date=timezone.now(),
+            scheduled_date=parsed_scheduled_date,
             status="draft" if user_role == "editor" else "scheduled",
         )
         calendar_entry.social_profiles.set(profiles)
@@ -229,6 +247,19 @@ class InternalPublishView(APIView):
                     "status": "draft",
                     "content_id": calendar_entry.id,
                     "message": "Content saved as draft for admin approval",
+                }
+            )
+
+        # Admin/Owner with future schedule -> store as scheduled (Celery will publish)
+        if schedule_for_later:
+            return Response(
+                {
+                    "status": "scheduled",
+                    "content_id": calendar_entry.id,
+                    "scheduled_date": parsed_scheduled_date.isoformat(),
+                    "message": (
+                        f"Content scheduled for " f"{parsed_scheduled_date.isoformat()}"
+                    ),
                 }
             )
 
