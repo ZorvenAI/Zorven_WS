@@ -40,7 +40,6 @@ import type {
   AgentProgress,
   ManifestGraphData,
   PipelineManifest,
-  PipelineManifestListItem,
   QuickStatus,
 } from '@/types/orchestration';
 import type { Node, Edge } from '@xyflow/react';
@@ -128,7 +127,7 @@ function manifestToFlow(
 function WorkflowsPageInner() {
   const [hasMounted, setHasMounted] = useState(false);
   const [workflows, setWorkflows] = useState<UserWorkflowSummary[]>([]);
-  const [templates, setTemplates] = useState<PipelineManifestListItem[]>([]);
+  const [templates, setTemplates] = useState<PipelineManifest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try {
       return sessionStorage.getItem('workspace-selected-workflow');
@@ -137,6 +136,8 @@ function WorkflowsPageInner() {
     }
   });
   const [selectedDetail, setSelectedDetail] = useState<UserWorkflowDetail | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedTemplateName, setSelectedTemplateName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -162,7 +163,8 @@ function WorkflowsPageInner() {
   const searchParams = useSearchParams();
   const store = useWorkflowStore(selectedId);
 
-  const isReadonly = lockInfo?.locked === true && !lockInfo?.is_mine;
+  const isTemplatePreview = selectedTemplateId !== null;
+  const isReadonly = isTemplatePreview || (lockInfo?.locked === true && !lockInfo?.is_mine);
 
   // Derive current node data from store (always fresh with latest progress)
   const selectedNodeData = useMemo(() => {
@@ -303,7 +305,7 @@ function WorkflowsPageInner() {
         ]);
         if (!cancelled) {
           setWorkflows(wfData);
-          setTemplates(tmplData as PipelineManifestListItem[]);
+          setTemplates(tmplData);
           setError(null);
         }
       } catch (err) {
@@ -439,12 +441,46 @@ function WorkflowsPageInner() {
       releaseLock(selectedId).catch(() => {});
     }
     setSelectedId(workflowId);
+    // Clear template preview when selecting a workflow
+    setSelectedTemplateId(null);
+    setSelectedTemplateName(null);
     // Clear job tracking and node selection when switching workflows
     setActiveJobId(null);
     setWsProgress({});
     setWsQuickStatus(null);
     setSelectedNodeId(null);
   }, [selectedId, lockInfo?.is_mine]);
+
+  const handleSelectTemplate = useCallback((templateId: string) => {
+    // Find template in the list (typed as PipelineManifest with manifest_data)
+    const tmpl = templates.find((t) => String(t.id) === templateId);
+    if (!tmpl || !tmpl.manifest_data) {
+      setError(tmpl ? 'Template has no graph data to preview' : 'Template not found');
+      return;
+    }
+
+    // Clear workflow selection
+    if (selectedId && lockInfo?.is_mine) {
+      releaseLock(selectedId).catch(() => {});
+    }
+    setSelectedId(null);
+    setSelectedDetail(null);
+    setLockInfo(null);
+    setActiveJobId(null);
+    setWsProgress({});
+    setWsQuickStatus(null);
+    setSelectedNodeId(null);
+
+    // Set template preview state
+    setSelectedTemplateId(templateId);
+    setSelectedTemplateName(tmpl.name);
+
+    // Load template graph into canvas
+    const { nodes, edges } = manifestToFlow(
+      tmpl.manifest_data as unknown as ManifestGraphData,
+    );
+    store.dispatch({ type: 'LOAD', nodes, edges });
+  }, [templates, selectedId, lockInfo?.is_mine, store]);
 
   const handleCreateNew = useCallback(async () => {
     const name = window.prompt('Workflow name:', `Untitled Workflow ${workflows.length + 1}`);
@@ -536,13 +572,13 @@ function WorkflowsPageInner() {
       // Re-fetch templates to get the latest manifest_data (avoids stale browser state)
       const freshTemplates = await listTemplates();
       const templateManifest = freshTemplates.find((t) => String(t.id) === templateId);
-      if (!templateManifest || !(templateManifest as unknown as PipelineManifest).manifest_data) return;
+      if (!templateManifest || !templateManifest.manifest_data) return;
 
       // Create a new workflow using the template name
       const workflow = await createWorkflow({
         name: `${templateName} (copy)`,
         description: `Created from template: ${templateName}`,
-        manifest_data: (templateManifest as unknown as PipelineManifest).manifest_data as unknown as ManifestGraphData,
+        manifest_data: templateManifest.manifest_data as unknown as ManifestGraphData,
       });
       setWorkflows((prev) => [
         { ...workflow, last_job_status: null } as UserWorkflowSummary,
@@ -752,6 +788,8 @@ function WorkflowsPageInner() {
             onRename={handleRename}
             onShowInfo={handleShowWorkflowInfo}
             onCloneTemplate={handleCloneTemplate}
+            onSelectTemplate={handleSelectTemplate}
+            selectedTemplateId={selectedTemplateId}
             templates={templates}
             isLoading={isLoading}
           />
@@ -821,18 +859,22 @@ function WorkflowsPageInner() {
               />
             )}
 
-            {/* Workflow title overlay */}
-            {selectedDetail && (
+            {/* Workflow / template title overlay */}
+            {(selectedDetail || isTemplatePreview) && (
               <div className="absolute top-3 left-3 z-10">
                 <div className="glass-card px-3 py-1.5">
                   <h2 className="text-sm font-heading font-semibold text-white">
-                    {selectedDetail.name}
+                    {isTemplatePreview ? selectedTemplateName : selectedDetail?.name}
                   </h2>
-                  {selectedDetail.description && (
+                  {isTemplatePreview ? (
+                    <p className="text-[10px] text-brand-electric/60 mt-0.5">
+                      Template preview — Clone to edit
+                    </p>
+                  ) : selectedDetail?.description ? (
                     <p className="text-[10px] text-brand-silver/50 mt-0.5 max-w-[300px] truncate">
                       {selectedDetail.description}
                     </p>
-                  )}
+                  ) : null}
                 </div>
               </div>
             )}
