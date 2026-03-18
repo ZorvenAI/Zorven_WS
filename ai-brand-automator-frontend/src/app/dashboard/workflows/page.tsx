@@ -40,7 +40,6 @@ import type {
   AgentProgress,
   ManifestGraphData,
   PipelineManifest,
-  PipelineManifestListItem,
   QuickStatus,
 } from '@/types/orchestration';
 import type { Node, Edge } from '@xyflow/react';
@@ -128,7 +127,7 @@ function manifestToFlow(
 function WorkflowsPageInner() {
   const [hasMounted, setHasMounted] = useState(false);
   const [workflows, setWorkflows] = useState<UserWorkflowSummary[]>([]);
-  const [templates, setTemplates] = useState<PipelineManifestListItem[]>([]);
+  const [templates, setTemplates] = useState<PipelineManifest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try {
       return sessionStorage.getItem('workspace-selected-workflow');
@@ -306,7 +305,7 @@ function WorkflowsPageInner() {
         ]);
         if (!cancelled) {
           setWorkflows(wfData);
-          setTemplates(tmplData as PipelineManifestListItem[]);
+          setTemplates(tmplData);
           setError(null);
         }
       } catch (err) {
@@ -453,13 +452,12 @@ function WorkflowsPageInner() {
   }, [selectedId, lockInfo?.is_mine]);
 
   const handleSelectTemplate = useCallback((templateId: string) => {
-    // Find template in the list
+    // Find template in the list (typed as PipelineManifest with manifest_data)
     const tmpl = templates.find((t) => String(t.id) === templateId);
-    if (!tmpl) return;
-
-    // Access manifest_data (listTemplates returns PipelineManifest objects)
-    const manifest = (tmpl as unknown as PipelineManifest);
-    if (!manifest.manifest_data) return;
+    if (!tmpl || !tmpl.manifest_data) {
+      setError(tmpl ? 'Template has no graph data to preview' : 'Template not found');
+      return;
+    }
 
     // Clear workflow selection
     if (selectedId && lockInfo?.is_mine) {
@@ -479,7 +477,7 @@ function WorkflowsPageInner() {
 
     // Load template graph into canvas
     const { nodes, edges } = manifestToFlow(
-      manifest.manifest_data as unknown as ManifestGraphData,
+      tmpl.manifest_data as unknown as ManifestGraphData,
     );
     store.dispatch({ type: 'LOAD', nodes, edges });
   }, [templates, selectedId, lockInfo?.is_mine, store]);
@@ -574,13 +572,13 @@ function WorkflowsPageInner() {
       // Re-fetch templates to get the latest manifest_data (avoids stale browser state)
       const freshTemplates = await listTemplates();
       const templateManifest = freshTemplates.find((t) => String(t.id) === templateId);
-      if (!templateManifest || !(templateManifest as unknown as PipelineManifest).manifest_data) return;
+      if (!templateManifest || !templateManifest.manifest_data) return;
 
       // Create a new workflow using the template name
       const workflow = await createWorkflow({
         name: `${templateName} (copy)`,
         description: `Created from template: ${templateName}`,
-        manifest_data: (templateManifest as unknown as PipelineManifest).manifest_data as unknown as ManifestGraphData,
+        manifest_data: templateManifest.manifest_data as unknown as ManifestGraphData,
       });
       setWorkflows((prev) => [
         { ...workflow, last_job_status: null } as UserWorkflowSummary,

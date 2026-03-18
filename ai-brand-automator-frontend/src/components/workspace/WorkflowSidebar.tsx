@@ -431,7 +431,8 @@ function TemplateItem({
       role="button"
       tabIndex={0}
       onClick={() => onSelect?.(String(template.id))}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect?.(String(template.id)); }}
+      aria-pressed={isSelected}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect?.(String(template.id)); } }}
       className={`
         flex items-center gap-2 px-2 py-2 rounded-lg mb-0.5 transition-colors group cursor-pointer
         ${isSelected ? 'bg-brand-electric/10 border border-brand-electric/30' : 'hover:bg-white/5 border border-transparent'}
