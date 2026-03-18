@@ -84,9 +84,13 @@ export default function WorkflowCanvas({
       state.edges.map((e) => ({
         ...e,
         animated: progress[e.source]?.status === 'running',
-        style: getEdgeStyle(e.source, progress),
+        style: e.selected
+          ? { stroke: '#fad55c', strokeWidth: 3 }
+          : getEdgeStyle(e.source, progress),
+        selectable: !readonly,
+        interactionWidth: 20,
       })),
-    [state.edges, progress],
+    [state.edges, progress, readonly],
   );
 
   // Apply progress status to node data and enforce readonly draggable
@@ -281,7 +285,7 @@ export default function WorkflowCanvas({
   if (state.nodes.length === 0 && readonly) {
     return (
       <div className="flex items-center justify-center h-full text-brand-silver/50">
-        <p>Select a workflow to view its pipeline graph</p>
+        <p>Select a workflow or template to view its pipeline graph</p>
       </div>
     );
   }

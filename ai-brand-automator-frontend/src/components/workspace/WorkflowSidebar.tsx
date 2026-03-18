@@ -39,6 +39,8 @@ interface WorkflowSidebarProps {
   onRename: (workflowId: string, newName: string) => void;
   onShowInfo?: (workflowId: string) => void;
   onCloneTemplate?: (templateId: string, templateName: string) => void;
+  onSelectTemplate?: (templateId: string) => void;
+  selectedTemplateId?: string | null;
   templates?: PipelineManifestListItem[];
   isLoading?: boolean;
 }
@@ -77,6 +79,8 @@ export default function WorkflowSidebar({
   onRename,
   onShowInfo,
   onCloneTemplate,
+  onSelectTemplate,
+  selectedTemplateId,
   templates = [],
   isLoading = false,
 }: WorkflowSidebarProps) {
@@ -238,6 +242,8 @@ export default function WorkflowSidebar({
                     <TemplateItem
                       key={t.id}
                       template={t}
+                      isSelected={selectedTemplateId === String(t.id)}
+                      onSelect={onSelectTemplate}
                       onClone={onCloneTemplate}
                     />
                   ))
@@ -411,13 +417,26 @@ function WorkflowItem({
 
 function TemplateItem({
   template,
+  isSelected,
+  onSelect,
   onClone,
 }: {
   template: PipelineManifestListItem;
+  isSelected?: boolean;
+  onSelect?: (templateId: string) => void;
   onClone?: (templateId: string, templateName: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 px-2 py-2 rounded-lg mb-0.5 hover:bg-white/5 border border-transparent group">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect?.(String(template.id))}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect?.(String(template.id)); }}
+      className={`
+        flex items-center gap-2 px-2 py-2 rounded-lg mb-0.5 transition-colors group cursor-pointer
+        ${isSelected ? 'bg-brand-electric/10 border border-brand-electric/30' : 'hover:bg-white/5 border border-transparent'}
+      `}
+    >
       <div className="flex-1 min-w-0">
         <span className="text-xs font-medium text-brand-silver truncate block">
           {template.name}
@@ -430,9 +449,12 @@ function TemplateItem({
       </div>
       {onClone && (
         <button
-          onClick={() => onClone(String(template.id), template.name)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClone(String(template.id), template.name);
+          }}
           className="p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-brand-electric/10"
-          title="Use template"
+          title="Clone as new workflow"
         >
           <Copy className="w-3.5 h-3.5 text-brand-electric" />
         </button>
