@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,6 +12,7 @@ from app.logic.action_resolver import (
     ResolvedAction,
     _default_scheduled_date,
     _extract_date_from_prompt,
+    _normalize_date,
 )
 
 
@@ -75,10 +76,14 @@ class TestGeminiResolve:
 
     async def test_gemini_returns_schedule(self):
         mock_model = MagicMock()
-        # Build a mock response with a function call
+        # Use a future date so _normalize_date accepts it
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).replace(
+            hour=9, minute=0, second=0, microsecond=0
+        ).isoformat()
+
         fc = MagicMock()
         fc.name = "schedule_post"
-        fc.args = {"platforms": ["linkedin"], "scheduled_date": "2026-03-01T09:00:00+00:00"}
+        fc.args = {"platforms": ["linkedin"], "scheduled_date": future_date}
 
         part = MagicMock()
         part.function_call = fc
@@ -100,7 +105,7 @@ class TestGeminiResolve:
             ["linkedin"],
         )
         assert result.action == "schedule"
-        assert result.scheduled_date == "2026-03-01T09:00:00+00:00"
+        assert result.scheduled_date == future_date
 
     async def test_gemini_returns_publish_now(self):
         mock_model = MagicMock()
@@ -277,6 +282,33 @@ class TestGeminiKeywordCrossValidation:
         # No schedule keywords → Gemini's publish_now is correct
         assert result.action == "publish_now"
         assert result.scheduled_date is None
+
+
+class TestNormalizeDateValidation:
+    """_normalize_date rejects past dates and non-ISO strings."""
+
+    def test_past_date_falls_back_to_prompt(self):
+        """Gemini returning a past date should fall back to prompt extraction."""
+        result = _normalize_date("2024-01-15T10:00:00+00:00", "schedule for tomorrow")
+        dt = datetime.fromisoformat(result)
+        # Should be tomorrow at 09:00, not the past date
+        assert dt > datetime.now(timezone.utc)
+        assert dt.hour == 9
+
+    def test_future_date_accepted(self):
+        future = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+        result = _normalize_date(future, "schedule for tomorrow")
+        assert result == future
+
+    def test_non_iso_string_falls_back(self):
+        result = _normalize_date("tomorrow at 09:00 UTC", "schedule for tomorrow")
+        dt = datetime.fromisoformat(result)
+        assert dt > datetime.now(timezone.utc)
+
+    def test_none_falls_back(self):
+        result = _normalize_date(None, "schedule for tomorrow")
+        dt = datetime.fromisoformat(result)
+        assert dt > datetime.now(timezone.utc)
 
 
 class TestDefaultScheduledDate:

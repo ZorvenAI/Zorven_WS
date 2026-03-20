@@ -223,9 +223,24 @@ class InternalPublishView(APIView):
             if parsed is not None:
                 if timezone.is_naive(parsed):
                     parsed = timezone.make_aware(parsed)
-                parsed_scheduled_date = parsed
                 if parsed > timezone.now():
+                    parsed_scheduled_date = parsed
                     schedule_for_later = True
+                else:
+                    # Past date received — default to tomorrow 09:00 UTC
+                    # so scheduled content is never published immediately.
+                    from datetime import timedelta
+
+                    tomorrow_9am = (timezone.now() + timedelta(days=1)).replace(
+                        hour=9, minute=0, second=0, microsecond=0
+                    )
+                    parsed_scheduled_date = tomorrow_9am
+                    schedule_for_later = True
+                    logger.warning(
+                        "Received past scheduled_date %s, defaulting to %s",
+                        scheduled_date_str,
+                        tomorrow_9am.isoformat(),
+                    )
 
         # Create ContentCalendar entry
         calendar_entry = ContentCalendar.objects.create(
