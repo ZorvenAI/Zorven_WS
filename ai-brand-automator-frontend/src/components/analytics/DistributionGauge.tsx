@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getDistribution } from '@/lib/analytics';
 import type { DistributionData, TimeRange } from '@/types/analytics';
 
@@ -12,15 +12,21 @@ export default function DistributionGauge({ range }: DistributionGaugeProps) {
   const [data, setData] = useState<DistributionData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchData = useCallback(async () => {
     setLoading(true);
-    getDistribution('sentiment_positive_pct', range)
-      .then((d) => { if (!cancelled) setData(d); })
-      .catch(() => { if (!cancelled) setData(null); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    try {
+      const d = await getDistribution('sentiment_positive_pct', range);
+      setData(d);
+    } catch {
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
   }, [range]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   if (loading) {
     return (

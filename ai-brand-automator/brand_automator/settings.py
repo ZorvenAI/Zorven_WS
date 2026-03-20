@@ -711,8 +711,10 @@ KAFKA_TOPIC_PIPELINE_RESULT = "pipeline-result-topic"
 KAFKA_TOPIC_ORCHESTRATION_DLQ = "orchestration-dlq"
 ORCHESTRATION_KAFKA_GROUP_ID = "orchestration-result-consumers"
 
-# Analytics Kafka events — conditionally enabled (matching ORCHESTRATION_KAFKA_ENABLED pattern)
-ANALYTICS_KAFKA_ENABLED = config("ANALYTICS_KAFKA_ENABLED", default=False, cast=bool)
+# Analytics Kafka events — conditionally enabled
+ANALYTICS_KAFKA_ENABLED = config(
+    "ANALYTICS_KAFKA_ENABLED", default=False, cast=bool
+)
 
 # =============================================================================
 # Data Ingestion Configuration (Hexagonal Architecture Pipeline)

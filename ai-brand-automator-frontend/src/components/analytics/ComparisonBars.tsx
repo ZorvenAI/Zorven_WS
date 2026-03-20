@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   BarChart,
   Bar,
@@ -22,15 +22,21 @@ export default function ComparisonBars({ range }: ComparisonBarsProps) {
   const [data, setData] = useState<ComparisonItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchData = useCallback(async () => {
     setLoading(true);
-    getComparison(range)
-      .then((d) => { if (!cancelled) setData(d); })
-      .catch(() => { if (!cancelled) setData([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    try {
+      const d = await getComparison(range);
+      setData(d);
+    } catch {
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
   }, [range]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   if (loading) {
     return (

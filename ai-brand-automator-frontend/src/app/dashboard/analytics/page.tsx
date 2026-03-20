@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
@@ -34,14 +34,30 @@ export default function AnalyticsPage() {
 
   const activeMetricDef = scorecard.find((s) => s.metric_name === activeMetric);
 
-  useEffect(() => {
+  const fetchDefinitions = useCallback(async () => {
     setHasMounted(true);
-    getMetricDefinitions().then(setDefinitions).catch(() => {});
+    try {
+      const defs = await getMetricDefinitions();
+      setDefinitions(defs);
+    } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => {
-    getComparison(range).then(setComparison).catch(() => setComparison([]));
+  const fetchComparison = useCallback(async () => {
+    try {
+      const data = await getComparison(range);
+      setComparison(data);
+    } catch {
+      setComparison([]);
+    }
   }, [range]);
+
+  useEffect(() => {
+    fetchDefinitions(); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [fetchDefinitions]);
+
+  useEffect(() => {
+    fetchComparison(); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [fetchComparison]);
 
   if (!hasMounted) {
     return (
