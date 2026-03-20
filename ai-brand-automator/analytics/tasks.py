@@ -19,7 +19,7 @@ def extract_metrics_task(self, job_id: int):
     """
     from orchestration.models import AnalysisJob
     from analytics.brand_affinity import BrandAffinityVerifier
-    from analytics.extractors import PIPELINE_EXTRACTORS
+    from analytics.extractors import PIPELINE_EXTRACTORS, detect_extractor_from_result
     from analytics.kafka_events import emit_analytics_event
     from analytics.models import MetricDefinition, MetricSnapshot
     from analytics.rollups import update_rollups
@@ -62,10 +62,19 @@ def extract_metrics_task(self, job_id: int):
 
     # IG-04: pipeline_id mapped to an extractor
     pipeline_id = _resolve_pipeline_id(job)
-    if pipeline_id not in PIPELINE_EXTRACTORS:
-        logger.debug("No extractor for pipeline %s (job %s)", pipeline_id, job_id)
-        cache.set(redis_key, "unmapped", 86400)
-        return
+    extractor = PIPELINE_EXTRACTORS.get(pipeline_id)
+    if not extractor:
+        # Fallback: detect extractor from result_data content (chat-mode)
+        extractor = detect_extractor_from_result(job.result_data)
+        if not extractor:
+            logger.debug("No extractor for pipeline %s (job %s)", pipeline_id, job_id)
+            cache.set(redis_key, "unmapped", 86400)
+            return
+        logger.info(
+            "Using content-detected extractor for pipeline %s (job %s)",
+            pipeline_id,
+            job_id,
+        )
 
     # IG-05: tenant exists
     if not job.tenant:
@@ -112,7 +121,6 @@ def extract_metrics_task(self, job_id: int):
         return
 
     # Extract metrics
-    extractor = PIPELINE_EXTRACTORS[pipeline_id]
     try:
         metrics = extractor.extract(job)
     except Exception as e:

@@ -2,17 +2,29 @@ from analytics.extractors.base import BaseExtractor
 
 
 class BrandEquityExtractor(BaseExtractor):
-    """Extracts metrics from iso-brand-equity pipeline."""
+    """Extracts metrics from iso-brand-equity pipeline.
+
+    Data may be at top level or under node_results.
+    """
 
     def extract(self, job) -> list:
         result = job.result_data or {}
+        node_results = result.get("node_results", {})
         metrics = []
 
-        # Brand equity scores (ISO 10668 dimensions)
+        # Try multiple paths for brand equity data
         equity = result.get("brand_equity", {})
         if not equity:
-            # Try alternate key structure
             equity = result.get("valuation", {}).get("brand_equity", {})
+        if not equity:
+            # Check under node_results (intelligence node)
+            intel = node_results.get("intelligence", {})
+            if not intel:
+                intel = node_results.get("brand_equity_calculator", {})
+            if intel:
+                equity = intel.get("brand_equity", {})
+                if not equity:
+                    equity = intel.get("valuation", {}).get("brand_equity", {})
 
         awareness = self._safe_get(equity, "awareness", default=None)
         if awareness is not None:
@@ -50,10 +62,20 @@ class BrandEquityExtractor(BaseExtractor):
                 )
             )
 
-        # Brand value NPV
+        # Brand value NPV — check multiple paths
         npv = self._safe_get(result, "brand_value", "npv", default=None)
         if npv is None:
             npv = self._safe_get(result, "valuation", "brand_value_npv", default=None)
+        if npv is None and node_results:
+            intel = node_results.get(
+                "intelligence", node_results.get("brand_equity_calculator", {})
+            )
+            if isinstance(intel, dict):
+                npv = self._safe_get(intel, "brand_value", "npv", default=None)
+                if npv is None:
+                    npv = self._safe_get(
+                        intel, "valuation", "brand_value_npv", default=None
+                    )
         if npv is not None:
             metrics.append(
                 self._make_metric(
