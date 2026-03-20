@@ -117,9 +117,7 @@ def update_rollups(tenant, pipeline_id: str, metrics: list[MetricSnapshot]):
                     .first()
                 )
 
-                trend_dir, change_pct = _calculate_trend(
-                    aggs["avg_val"], prev_rollup
-                )
+                trend_dir, change_pct = _calculate_trend(aggs["avg_val"], prev_rollup)
 
                 MetricRollup.objects.update_or_create(
                     tenant=tenant,

@@ -82,12 +82,14 @@ class ScorecardView(APIView):
         tenant_filter = Q(tenant=tenant) | Q(tenant__isnull=True)
 
         current_map = {}
-        for row in MetricSnapshot.objects.filter(
-            tenant_filter,
-            recorded_at__gte=start,
-            recorded_at__lte=end,
-        ).values("metric_name").annotate(
-            avg_val=Avg("metric_value"), count=Count("id")
+        for row in (
+            MetricSnapshot.objects.filter(
+                tenant_filter,
+                recorded_at__gte=start,
+                recorded_at__lte=end,
+            )
+            .values("metric_name")
+            .annotate(avg_val=Avg("metric_value"), count=Count("id"))
         ):
             current_map[row["metric_name"]] = (
                 row["avg_val"],
@@ -95,12 +97,16 @@ class ScorecardView(APIView):
             )
 
         prev_map = {}
-        for row in MetricSnapshot.objects.filter(
-            tenant_filter,
-            recorded_at__gte=prev_start,
-            recorded_at__lt=prev_end,
-        ).values("metric_name").annotate(
-            avg_val=Avg("metric_value"),
+        for row in (
+            MetricSnapshot.objects.filter(
+                tenant_filter,
+                recorded_at__gte=prev_start,
+                recorded_at__lt=prev_end,
+            )
+            .values("metric_name")
+            .annotate(
+                avg_val=Avg("metric_value"),
+            )
         ):
             prev_map[row["metric_name"]] = row["avg_val"]
 
@@ -120,8 +126,7 @@ class ScorecardView(APIView):
             # Change calculation
             if previous_value and previous_value != 0:
                 change_pct = round(
-                    ((current_value - previous_value) / abs(previous_value))
-                    * 100,
+                    ((current_value - previous_value) / abs(previous_value)) * 100,
                     1,
                 )
             else:
@@ -275,19 +280,27 @@ class ComparisonView(APIView):
         tenant_filter = Q(tenant=tenant) | Q(tenant__isnull=True)
 
         current_map = {}
-        for row in MetricSnapshot.objects.filter(
-            tenant_filter,
-            recorded_at__gte=start,
-            recorded_at__lte=end,
-        ).values("metric_name").annotate(avg=Avg("metric_value")):
+        for row in (
+            MetricSnapshot.objects.filter(
+                tenant_filter,
+                recorded_at__gte=start,
+                recorded_at__lte=end,
+            )
+            .values("metric_name")
+            .annotate(avg=Avg("metric_value"))
+        ):
             current_map[row["metric_name"]] = row["avg"]
 
         prev_map = {}
-        for row in MetricSnapshot.objects.filter(
-            tenant_filter,
-            recorded_at__gte=prev_start,
-            recorded_at__lt=prev_end,
-        ).values("metric_name").annotate(avg=Avg("metric_value")):
+        for row in (
+            MetricSnapshot.objects.filter(
+                tenant_filter,
+                recorded_at__gte=prev_start,
+                recorded_at__lt=prev_end,
+            )
+            .values("metric_name")
+            .annotate(avg=Avg("metric_value"))
+        ):
             prev_map[row["metric_name"]] = row["avg"]
 
         definitions = MetricDefinition.objects.all()
@@ -304,9 +317,7 @@ class ComparisonView(APIView):
             prev_avg = round(prev_avg, 2) if prev_avg else 0.0
 
             if prev_avg != 0:
-                change_pct = round(
-                    ((current_avg - prev_avg) / abs(prev_avg)) * 100, 1
-                )
+                change_pct = round(((current_avg - prev_avg) / abs(prev_avg)) * 100, 1)
             else:
                 change_pct = 0.0
 
