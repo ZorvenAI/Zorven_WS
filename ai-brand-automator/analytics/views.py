@@ -29,7 +29,7 @@ def _cache_key(tenant_id, endpoint, params):
     """Generate cache key with tenant-scoped version."""
     version = cache.get(f"analytics:version:{tenant_id}", "v0")
     raw = f"{endpoint}:{sorted(params.items())}:{version}"
-    query_hash = hashlib.md5(raw.encode()).hexdigest()
+    query_hash = hashlib.sha256(raw.encode()).hexdigest()[:16]
     return f"analytics:cache:{tenant_id}:{query_hash}"
 
 
@@ -78,42 +78,51 @@ class ScorecardView(APIView):
         prev_start = start - duration
         prev_end = start
 
+        # Grouped aggregation to avoid N+1 per-metric queries
+        tenant_filter = Q(tenant=tenant) | Q(tenant__isnull=True)
+
+        current_map = {}
+        for row in MetricSnapshot.objects.filter(
+            tenant_filter,
+            recorded_at__gte=start,
+            recorded_at__lte=end,
+        ).values("metric_name").annotate(
+            avg_val=Avg("metric_value"), count=Count("id")
+        ):
+            current_map[row["metric_name"]] = (
+                row["avg_val"],
+                row["count"],
+            )
+
+        prev_map = {}
+        for row in MetricSnapshot.objects.filter(
+            tenant_filter,
+            recorded_at__gte=prev_start,
+            recorded_at__lt=prev_end,
+        ).values("metric_name").annotate(
+            avg_val=Avg("metric_value"),
+        ):
+            prev_map[row["metric_name"]] = row["avg_val"]
+
         definitions = MetricDefinition.objects.all()
+        defn_map = {d.metric_name: d for d in definitions}
         results = []
 
-        for defn in definitions:
-            # Current period
-            current_qs = MetricSnapshot.objects.filter(
-                Q(tenant=tenant) | Q(tenant__isnull=True),
-                metric_name=defn.metric_name,
-                recorded_at__gte=start,
-                recorded_at__lte=end,
-            )
-            current_agg = current_qs.aggregate(
-                avg_val=Avg("metric_value"), count=Count("id")
-            )
-
-            if not current_agg["count"]:
+        for metric_name, (current_avg, count) in current_map.items():
+            defn = defn_map.get(metric_name)
+            if not defn or not count:
                 continue
 
-            current_value = round(current_agg["avg_val"], 2)
-
-            # Previous period
-            prev_qs = MetricSnapshot.objects.filter(
-                Q(tenant=tenant) | Q(tenant__isnull=True),
-                metric_name=defn.metric_name,
-                recorded_at__gte=prev_start,
-                recorded_at__lt=prev_end,
-            )
-            prev_agg = prev_qs.aggregate(avg_val=Avg("metric_value"))
-            previous_value = (
-                round(prev_agg["avg_val"], 2) if prev_agg["avg_val"] else None
-            )
+            current_value = round(current_avg, 2)
+            prev_avg = prev_map.get(metric_name)
+            previous_value = round(prev_avg, 2) if prev_avg else None
 
             # Change calculation
             if previous_value and previous_value != 0:
                 change_pct = round(
-                    ((current_value - previous_value) / abs(previous_value)) * 100, 1
+                    ((current_value - previous_value) / abs(previous_value))
+                    * 100,
+                    1,
                 )
             else:
                 change_pct = 0.0
@@ -128,9 +137,14 @@ class ScorecardView(APIView):
 
             # Sparkline data (last N values ordered chronologically)
             sparkline_values = list(
-                current_qs.order_by("recorded_at").values_list(
-                    "metric_value", flat=True
-                )[:20]
+                MetricSnapshot.objects.filter(
+                    tenant_filter,
+                    metric_name=metric_name,
+                    recorded_at__gte=start,
+                    recorded_at__lte=end,
+                )
+                .order_by("recorded_at")
+                .values_list("metric_value", flat=True)[:20]
             )
 
             results.append(
@@ -257,32 +271,42 @@ class ComparisonView(APIView):
         if cached:
             return Response(cached)
 
+        # Grouped aggregation to avoid N+1 queries
+        tenant_filter = Q(tenant=tenant) | Q(tenant__isnull=True)
+
+        current_map = {}
+        for row in MetricSnapshot.objects.filter(
+            tenant_filter,
+            recorded_at__gte=start,
+            recorded_at__lte=end,
+        ).values("metric_name").annotate(avg=Avg("metric_value")):
+            current_map[row["metric_name"]] = row["avg"]
+
+        prev_map = {}
+        for row in MetricSnapshot.objects.filter(
+            tenant_filter,
+            recorded_at__gte=prev_start,
+            recorded_at__lt=prev_end,
+        ).values("metric_name").annotate(avg=Avg("metric_value")):
+            prev_map[row["metric_name"]] = row["avg"]
+
         definitions = MetricDefinition.objects.all()
+        defn_lookup = {d.metric_name: d for d in definitions}
         results = []
 
-        for defn in definitions:
-            current_avg = MetricSnapshot.objects.filter(
-                Q(tenant=tenant) | Q(tenant__isnull=True),
-                metric_name=defn.metric_name,
-                recorded_at__gte=start,
-                recorded_at__lte=end,
-            ).aggregate(avg=Avg("metric_value"))["avg"]
-
-            if current_avg is None:
+        for metric_name, current_avg in current_map.items():
+            defn = defn_lookup.get(metric_name)
+            if not defn or current_avg is None:
                 continue
 
-            prev_avg = MetricSnapshot.objects.filter(
-                Q(tenant=tenant) | Q(tenant__isnull=True),
-                metric_name=defn.metric_name,
-                recorded_at__gte=prev_start,
-                recorded_at__lt=prev_end,
-            ).aggregate(avg=Avg("metric_value"))["avg"]
-
             current_avg = round(current_avg, 2)
+            prev_avg = prev_map.get(metric_name)
             prev_avg = round(prev_avg, 2) if prev_avg else 0.0
 
             if prev_avg != 0:
-                change_pct = round(((current_avg - prev_avg) / abs(prev_avg)) * 100, 1)
+                change_pct = round(
+                    ((current_avg - prev_avg) / abs(prev_avg)) * 100, 1
+                )
             else:
                 change_pct = 0.0
 
@@ -321,7 +345,6 @@ class DistributionView(APIView):
                 {"error": "Tenant required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        metric = request.query_params.get("metric", "sentiment_positive_pct")
         range_str = request.query_params.get("range", "30d")
 
         try:
@@ -332,7 +355,7 @@ class DistributionView(APIView):
         ck = _cache_key(
             tenant.id,
             "distribution",
-            {"metric": metric, "range": range_str},
+            {"range": range_str},
         )
         cached = cache.get(ck)
         if cached:

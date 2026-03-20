@@ -1,8 +1,6 @@
 'use client';
 
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -61,7 +59,7 @@ export default function TrendChart({
       <ResponsiveContainer width="100%" height={280}>
         <AreaChart data={chartData}>
           <defs>
-            <linearGradient id={`gradient-${metricName}`} x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={`gradient-${metricName?.replace(/[^a-zA-Z0-9_-]/g, '_')}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={color} stopOpacity={0.3} />
               <stop offset="95%" stopColor={color} stopOpacity={0} />
             </linearGradient>
@@ -90,7 +88,7 @@ export default function TrendChart({
             dataKey="avg_value"
             stroke={color}
             strokeWidth={2}
-            fill={`url(#gradient-${metricName})`}
+            fill={`url(#gradient-${metricName?.replace(/[^a-zA-Z0-9_-]/g, '_')})`}
           />
         </AreaChart>
       </ResponsiveContainer>

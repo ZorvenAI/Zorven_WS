@@ -26,8 +26,8 @@ def extract_metrics_task(self, job_id: int):
 
     redis_key = f"analytics:extracted:{job_id}"
 
-    # Idempotency check
-    if cache.get(redis_key):
+    # Atomic idempotency guard — cache.add() is a SET-if-not-exists
+    if not cache.add(redis_key, "processing", 86400):
         logger.debug("Job %s already extracted, skipping", job_id)
         return
 

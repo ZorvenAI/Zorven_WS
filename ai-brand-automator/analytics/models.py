@@ -26,9 +26,16 @@ class MetricSnapshot(models.Model):
     metadata = models.JSONField(default=dict, blank=True)
     recorded_at = models.DateTimeField(db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-recorded_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "job", "metric_name"],
+                name="unique_snap_tenant_job_metric",
+            ),
+        ]
         indexes = [
             models.Index(
                 fields=["tenant", "pipeline_id", "metric_name", "recorded_at"],

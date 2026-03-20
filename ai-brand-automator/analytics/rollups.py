@@ -42,10 +42,23 @@ def _calculate_trend(current_avg: float, previous_avg: float | None) -> tuple:
     return direction, round(change_pct, 2)
 
 
+def _period_end(period_start, period: str):
+    """Calculate the exclusive end date for a period bucket."""
+    if period == "daily":
+        return period_start + timedelta(days=1)
+    elif period == "weekly":
+        return period_start + timedelta(days=7)
+    elif period == "monthly":
+        next_month = period_start.replace(day=28) + timedelta(days=4)
+        return next_month.replace(day=1)
+    return period_start + timedelta(days=1)
+
+
 def update_rollups(tenant, pipeline_id: str, metrics: list[MetricSnapshot]):
     """Update rollup aggregates for the given metrics.
 
     Called after each extraction to keep rollups up to date.
+    Deduplicates period starts per (metric, period) to avoid redundant queries.
     """
     # Group metrics by (metric_name, metric_category)
     metric_groups = {}
@@ -55,28 +68,23 @@ def update_rollups(tenant, pipeline_id: str, metrics: list[MetricSnapshot]):
 
     for (metric_name, category), group_metrics in metric_groups.items():
         for period in ["daily", "weekly", "monthly"]:
+            # Deduplicate: only query once per unique period_start
+            seen_starts = set()
             for m in group_metrics:
-                period_start = _get_period_start(m.recorded_at, period)
+                ps = _get_period_start(m.recorded_at, period)
+                seen_starts.add(ps)
 
-                # Get all snapshots for this period
+            for period_start in seen_starts:
+                pe = _period_end(period_start, period)
+
+                # Single query per unique (metric, period, period_start)
                 qs = MetricSnapshot.objects.filter(
                     tenant=tenant,
                     pipeline_id=pipeline_id,
                     metric_name=metric_name,
                     recorded_at__date__gte=period_start,
+                    recorded_at__date__lt=pe,
                 )
-                if period == "daily":
-                    qs = qs.filter(
-                        recorded_at__date__lte=period_start,
-                    )
-                elif period == "weekly":
-                    qs = qs.filter(
-                        recorded_at__date__lt=period_start + timedelta(days=7),
-                    )
-                elif period == "monthly":
-                    next_month = period_start.replace(day=28) + timedelta(days=4)
-                    next_month = next_month.replace(day=1)
-                    qs = qs.filter(recorded_at__date__lt=next_month)
 
                 aggs = qs.aggregate(
                     avg_val=Avg("metric_value"),
@@ -109,7 +117,9 @@ def update_rollups(tenant, pipeline_id: str, metrics: list[MetricSnapshot]):
                     .first()
                 )
 
-                trend_dir, change_pct = _calculate_trend(aggs["avg_val"], prev_rollup)
+                trend_dir, change_pct = _calculate_trend(
+                    aggs["avg_val"], prev_rollup
+                )
 
                 MetricRollup.objects.update_or_create(
                     tenant=tenant,

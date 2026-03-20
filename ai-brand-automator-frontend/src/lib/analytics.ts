@@ -11,7 +11,8 @@ import type {
 } from '@/types/analytics';
 
 export async function getScorecard(range: TimeRange): Promise<ScorecardItem[]> {
-  const response = await apiClient.request(`/analytics/scorecard/?range=${range}`);
+  const params = new URLSearchParams({ range });
+  const response = await apiClient.request(`/analytics/scorecard/?${params}`);
   if (!response.ok) throw new Error('Failed to fetch scorecard');
   return response.json();
 }
@@ -22,9 +23,9 @@ export async function getTrends(
   period: Period = 'daily',
   pipelineId?: string
 ): Promise<TrendPoint[]> {
-  let url = `/analytics/trends/?metric=${metric}&range=${range}&period=${period}`;
-  if (pipelineId) url += `&pipeline_id=${pipelineId}`;
-  const response = await apiClient.request(url);
+  const params = new URLSearchParams({ metric, range, period });
+  if (pipelineId) params.set('pipeline_id', pipelineId);
+  const response = await apiClient.request(`/analytics/trends/?${params}`);
   if (!response.ok) throw new Error('Failed to fetch trends');
   return response.json();
 }
@@ -33,8 +34,9 @@ export async function getComparison(
   range: TimeRange,
   compare: 'previous' | 'yoy' = 'previous'
 ): Promise<ComparisonItem[]> {
+  const params = new URLSearchParams({ range, compare });
   const response = await apiClient.request(
-    `/analytics/comparison/?range=${range}&compare=${compare}`
+    `/analytics/comparison/?${params}`
   );
   if (!response.ok) throw new Error('Failed to fetch comparison');
   return response.json();
@@ -44,8 +46,9 @@ export async function getDistribution(
   metric: string,
   range: TimeRange
 ): Promise<DistributionData> {
+  const params = new URLSearchParams({ metric, range });
   const response = await apiClient.request(
-    `/analytics/distribution/?metric=${metric}&range=${range}`
+    `/analytics/distribution/?${params}`
   );
   if (!response.ok) throw new Error('Failed to fetch distribution');
   return response.json();

@@ -130,7 +130,7 @@ def handle_pipeline_result(
 
                 extract_metrics_task.delay(job.id)
             except Exception:
-                logger.warning(
+                logger.exception(
                     "Failed to dispatch analytics extraction for job %s",
                     job.job_id,
                 )
