@@ -71,6 +71,8 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         Callback action bypasses tenant filtering — it is a
         service-to-service call authenticated via token, not
         per-tenant middleware.
+
+        Supports ``?status=`` query-param filtering (e.g. ``?status=completed``).
         """
         qs = AnalysisJob.objects.select_related("manifest", "created_by")
         if self.action == "callback":
@@ -78,6 +80,12 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         tenant = getattr(self.request, "tenant", None)
         if tenant:
             qs = qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+
+        # Optional status filter
+        status = self.request.query_params.get("status")
+        if status and status in AnalysisJob.Status.values:
+            qs = qs.filter(status=status)
+
         return qs
 
     def get_serializer_class(self):
