@@ -241,11 +241,11 @@ def _normalize_date(raw: str | None, prompt: str) -> str:
     if raw:
         try:
             parsed = datetime.fromisoformat(raw)
-            # Ensure timezone-aware for comparison
+            # Ensure timezone-aware for comparison and output
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=timezone.utc)
             if parsed > datetime.now(timezone.utc):
-                return raw
+                return parsed.isoformat()
             logger.warning(
                 "Gemini returned past date %r, falling back to prompt extraction",
                 raw,
