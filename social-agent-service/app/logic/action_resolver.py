@@ -232,15 +232,24 @@ def _default_scheduled_date() -> str:
 
 
 def _normalize_date(raw: str | None, prompt: str) -> str:
-    """Validate a date string is ISO 8601; fall back to prompt extraction.
+    """Validate a date string is ISO 8601 and in the future.
 
     Gemini sometimes returns natural language like "tomorrow at 09:00 UTC"
-    instead of a proper ISO 8601 datetime.
+    instead of a proper ISO 8601 datetime, or copies example dates from
+    the tool description that are in the past.
     """
     if raw:
         try:
-            datetime.fromisoformat(raw)
-            return raw
+            parsed = datetime.fromisoformat(raw)
+            # Ensure timezone-aware for comparison
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            if parsed > datetime.now(timezone.utc):
+                return raw
+            logger.warning(
+                "Gemini returned past date %r, falling back to prompt extraction",
+                raw,
+            )
         except (ValueError, TypeError):
             logger.warning(
                 "Gemini returned non-ISO date %r, extracting from prompt", raw
