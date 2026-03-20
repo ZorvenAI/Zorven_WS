@@ -98,6 +98,8 @@ services:
       - CALLBACK_BASE_URL=${CALLBACK_BASE_URL:-http://backend:8001}
       # Orchestration Kafka integration
       - ORCHESTRATION_KAFKA_ENABLED=${ORCHESTRATION_KAFKA_ENABLED:-false}
+      # Analytics Kafka events (metrics extracted, brand affinity rejected, rollup updated)
+      - ANALYTICS_KAFKA_ENABLED=${ANALYTICS_KAFKA_ENABLED:-false}
       # Chat titling worker integration
       - WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}
       - TITLING_KAFKA_ENABLED=${TITLING_KAFKA_ENABLED:-false}
@@ -244,6 +246,8 @@ services:
       # Orchestration Kafka integration
       - ORCHESTRATION_KAFKA_ENABLED=${ORCHESTRATION_KAFKA_ENABLED:-false}
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-}
+      # Analytics Kafka events
+      - ANALYTICS_KAFKA_ENABLED=${ANALYTICS_KAFKA_ENABLED:-false}
       # Chat titling worker integration
       - WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}
       - TITLING_KAFKA_ENABLED=${TITLING_KAFKA_ENABLED:-false}

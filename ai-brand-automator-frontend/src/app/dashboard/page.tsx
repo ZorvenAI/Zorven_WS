@@ -4,6 +4,7 @@ import { OverviewCards } from '@/components/dashboard/OverviewCards';
 import RecentActivity from '@/components/dashboard/RecentActivity';
 import { QuickActions } from '@/components/dashboard/QuickActions';
 import SocialAnalytics from '@/components/dashboard/SocialAnalytics';
+import AnalyticsDashboard from '@/components/analytics/AnalyticsDashboard';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function DashboardPage() {
@@ -19,7 +20,12 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
             <OverviewCards />
-            
+
+            {/* Workflow Analytics Section */}
+            <div className="mt-6">
+              <AnalyticsDashboard />
+            </div>
+
             {/* Social Analytics Section */}
             <div className="mt-6">
               <h2 className="text-xl font-heading font-semibold text-white mb-4">Social Media Analytics</h2>

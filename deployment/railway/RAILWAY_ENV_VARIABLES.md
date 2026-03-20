@@ -62,6 +62,10 @@ ONBOARDING_KAFKA_ENABLED=true
 # Enable Celery Beat scheduled Kafka consumer tasks (default: false — set to true only after Kafka is configured)
 KAFKA_CONSUMERS_ENABLED=false
 
+# Enable analytics Kafka event emission (default: false — set to true when Kafka is available)
+# Events: metrics.extracted, brand.affinity.rejected, rollup.updated
+ANALYTICS_KAFKA_ENABLED=false
+
 # =============================================================================
 # Google Cloud Credentials (for pipeline workers)
 # =============================================================================
