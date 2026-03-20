@@ -68,6 +68,10 @@ python manage.py seed_manifests || echo "Manifest seeding skipped"
 echo "Seeding analytics metric definitions..."
 python manage.py seed_metrics || echo "Metric seeding skipped"
 
+# One-time backfill: extract analytics from existing completed jobs
+echo "Backfilling analytics from existing jobs..."
+python manage.py backfill_analytics || echo "Analytics backfill skipped"
+
 # Start Gunicorn
 echo "Starting Gunicorn server on port ${PORT:-8000}..."
 exec gunicorn brand_automator.wsgi:application \
