@@ -144,6 +144,8 @@ function WorkflowsPageInner() {
   const [error, setError] = useState<string | null>(null);
   const [lockInfo, setLockInfo] = useState<LockInfo | null>(null);
   const lockHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  const lockInfoRef = useRef<LockInfo | null>(null);
 
   // Execution tracking
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -165,6 +167,10 @@ function WorkflowsPageInner() {
 
   const isTemplatePreview = selectedTemplateId !== null;
   const isReadonly = isTemplatePreview || (lockInfo?.locked === true && !lockInfo?.is_mine);
+
+  // Keep refs in sync for cleanup on unmount (avoids stale closure)
+  selectedIdRef.current = selectedId;
+  lockInfoRef.current = lockInfo;
 
   // Derive current node data from store (always fresh with latest progress)
   const selectedNodeData = useMemo(() => {
@@ -441,6 +447,7 @@ function WorkflowsPageInner() {
       releaseLock(selectedId).catch(() => {});
     }
     setSelectedId(workflowId);
+    setLockInfo(null);
     // Clear template preview when selecting a workflow
     setSelectedTemplateId(null);
     setSelectedTemplateName(null);
@@ -755,11 +762,10 @@ function WorkflowsPageInner() {
 
   useEffect(() => {
     return () => {
-      if (selectedId && lockInfo?.is_mine) {
-        releaseLock(selectedId).catch(() => {});
+      if (selectedIdRef.current && lockInfoRef.current?.is_mine) {
+        releaseLock(selectedIdRef.current).catch(() => {});
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!hasMounted) {
