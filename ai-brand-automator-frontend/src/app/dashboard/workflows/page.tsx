@@ -144,6 +144,8 @@ function WorkflowsPageInner() {
   const [error, setError] = useState<string | null>(null);
   const [lockInfo, setLockInfo] = useState<LockInfo | null>(null);
   const lockHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  const lockInfoRef = useRef<LockInfo | null>(null);
 
   // Execution tracking
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -165,6 +167,10 @@ function WorkflowsPageInner() {
 
   const isTemplatePreview = selectedTemplateId !== null;
   const isReadonly = isTemplatePreview || (lockInfo?.locked === true && !lockInfo?.is_mine);
+
+  // Keep refs in sync for cleanup on unmount (avoids stale closure)
+  selectedIdRef.current = selectedId;
+  lockInfoRef.current = lockInfo;
 
   // Derive current node data from store (always fresh with latest progress)
   const selectedNodeData = useMemo(() => {
@@ -436,11 +442,13 @@ function WorkflowsPageInner() {
   // ── Actions ──
 
   const handleSelect = useCallback((workflowId: string) => {
-    // Release lock on previous workflow
-    if (selectedId && lockInfo?.is_mine) {
+    // Always attempt lock release on previous workflow — even if lockInfo
+    // hasn't resolved yet. releaseLock tolerates 403 (not holder) gracefully.
+    if (selectedId) {
       releaseLock(selectedId).catch(() => {});
     }
     setSelectedId(workflowId);
+    setLockInfo(null);
     // Clear template preview when selecting a workflow
     setSelectedTemplateId(null);
     setSelectedTemplateName(null);
@@ -449,7 +457,7 @@ function WorkflowsPageInner() {
     setWsProgress({});
     setWsQuickStatus(null);
     setSelectedNodeId(null);
-  }, [selectedId, lockInfo?.is_mine]);
+  }, [selectedId]);
 
   const handleSelectTemplate = useCallback((templateId: string) => {
     // Find template in the list (typed as PipelineManifest with manifest_data)
@@ -459,8 +467,8 @@ function WorkflowsPageInner() {
       return;
     }
 
-    // Clear workflow selection
-    if (selectedId && lockInfo?.is_mine) {
+    // Clear workflow selection — always attempt lock release
+    if (selectedId) {
       releaseLock(selectedId).catch(() => {});
     }
     setSelectedId(null);
@@ -480,7 +488,7 @@ function WorkflowsPageInner() {
       tmpl.manifest_data as unknown as ManifestGraphData,
     );
     store.dispatch({ type: 'LOAD', nodes, edges });
-  }, [templates, selectedId, lockInfo?.is_mine, store]);
+  }, [templates, selectedId, store]);
 
   const handleCreateNew = useCallback(async () => {
     const name = window.prompt('Workflow name:', `Untitled Workflow ${workflows.length + 1}`);
@@ -755,12 +763,11 @@ function WorkflowsPageInner() {
 
   useEffect(() => {
     return () => {
-      if (selectedId && lockInfo?.is_mine) {
-        releaseLock(selectedId).catch(() => {});
+      if (selectedIdRef.current && lockInfoRef.current?.is_mine) {
+        releaseLock(selectedIdRef.current).catch(() => {});
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [releaseLock]);
 
   if (!hasMounted) {
     return (
