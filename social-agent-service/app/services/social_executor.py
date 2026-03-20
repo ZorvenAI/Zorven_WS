@@ -125,8 +125,10 @@ class SocialExecutor:
         platforms = [p for p in requested if p in connected_platforms]
         unavailable = [p for p in requested if p not in connected_platforms]
 
-        # 4. Cache check (uses effective platforms, not request config)
-        cache_key = self._build_cache_key(tenant_id, blog_content, platforms)
+        # 4. Cache check (includes prompt so intent changes bust the cache)
+        cache_key = self._build_cache_key(
+            tenant_id, blog_content, platforms, request.input_prompt
+        )
         cached = await self._redis.get_cached_result(cache_key)
         if cached:
             logger.info("Cache hit for job %s", job_id)
@@ -191,11 +193,21 @@ class SocialExecutor:
             action = await self._action_resolver.resolve(
                 request.input_prompt, platforms
             )
+            logger.info(
+                "Job %s: ActionResolver result — action=%s, scheduled_date=%s, "
+                "prompt_snippet=%r",
+                job_id,
+                action.action,
+                action.scheduled_date,
+                request.input_prompt[:120],
+            )
             await self._emit_trace(
                 job_id,
                 f"Action: {action.action}"
                 + (f" at {action.scheduled_date}" if action.scheduled_date else ""),
             )
+        else:
+            logger.warning("Job %s: No action_resolver — defaulting to publish_now", job_id)
 
         # 8. Acquire post locks
         locked_platforms: list[str] = []
@@ -240,6 +252,16 @@ class SocialExecutor:
             # Admin/Owner — publish via MCP or fall back to REST
             user_email = request.input_context.get("user_email")
             use_mcp = self._mcp is not None and user_email is not None
+            logger.info(
+                "Job %s: Publishing path — use_mcp=%s (mcp=%s, email=%s), "
+                "action=%s, scheduled_date=%s",
+                job_id,
+                use_mcp,
+                self._mcp is not None,
+                user_email is not None,
+                action.action,
+                action.scheduled_date,
+            )
 
             for post in adapted_posts:
                 if post.platform not in locked_platforms:
@@ -277,6 +299,12 @@ class SocialExecutor:
                                 hour=9, minute=0, second=0, microsecond=0
                             ).isoformat()
 
+                    logger.info(
+                        "Job %s: REST publish — platform=%s, scheduled_date=%s",
+                        job_id,
+                        post.platform,
+                        rest_scheduled_date,
+                    )
                     result = await self._core_api.publish_to_platforms(
                         tenant_id=tenant_id,
                         platforms=[post.platform],
@@ -506,9 +534,19 @@ class SocialExecutor:
         )
 
     def _build_cache_key(
-        self, tenant_id: str, blog_content: str, platforms: list[str]
+        self,
+        tenant_id: str,
+        blog_content: str,
+        platforms: list[str],
+        input_prompt: str = "",
     ) -> str:
-        raw = f"{tenant_id}:{blog_content[:500]}:{','.join(sorted(platforms))}"
+        # Include input_prompt so different intents (publish vs schedule)
+        # produce different cache keys for the same content.
+        raw = (
+            f"{tenant_id}:{blog_content[:500]}"
+            f":{','.join(sorted(platforms))}"
+            f":{input_prompt[:200]}"
+        )
         return hashlib.md5(raw.encode()).hexdigest()
 
     async def _emit_trace(
