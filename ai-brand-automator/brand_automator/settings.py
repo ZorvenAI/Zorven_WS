@@ -109,6 +109,7 @@ SHARED_APPS = [
     "rag_index",  # RAG Index sync service (Hexagonal Architecture)
     "orchestration",  # Pipeline orchestration (core-api-service)
     "workspace",  # Workflow management workspace
+    "analytics",  # Workflow analytics layer
 ]
 
 TENANT_APPS = [
@@ -710,6 +711,9 @@ KAFKA_TOPIC_PIPELINE_RESULT = "pipeline-result-topic"
 KAFKA_TOPIC_ORCHESTRATION_DLQ = "orchestration-dlq"
 ORCHESTRATION_KAFKA_GROUP_ID = "orchestration-result-consumers"
 
+# Analytics Kafka events — conditionally enabled (matching ORCHESTRATION_KAFKA_ENABLED pattern)
+ANALYTICS_KAFKA_ENABLED = config("ANALYTICS_KAFKA_ENABLED", default=False, cast=bool)
+
 # =============================================================================
 # Data Ingestion Configuration (Hexagonal Architecture Pipeline)
 # =============================================================================
@@ -977,6 +981,14 @@ if RAG_DB_SYNC_ENABLED:
         "task": "rag_index.tasks.periodic_db_rag_sync",
         "schedule": float(RAG_DB_SYNC_PERIODIC_INTERVAL),
     }
+
+# Analytics rollup reconciliation — nightly at 02:00 UTC
+from celery.schedules import crontab  # noqa: E402
+
+CELERY_BEAT_SCHEDULE["reconcile-analytics-rollups"] = {
+    "task": "analytics.tasks.reconcile_rollups_task",
+    "schedule": crontab(hour=2, minute=0),
+}
 
 # --- Pipeline Orchestration Settings ---
 # URL of the external pipeline-orchestrator-svc (LangGraph)

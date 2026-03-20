@@ -124,6 +124,17 @@ def handle_pipeline_result(
             _save_final_chat_message(job)
             _update_workflow_snapshot(job)
 
+            # Extract analytics metrics (async, non-blocking)
+            try:
+                from analytics.tasks import extract_metrics_task
+
+                extract_metrics_task.delay(job.id)
+            except Exception:
+                logger.warning(
+                    "Failed to dispatch analytics extraction for job %s",
+                    job.job_id,
+                )
+
     logger.info("Job %s result processed (status=%s)", job.job_id, status)
     return True
 

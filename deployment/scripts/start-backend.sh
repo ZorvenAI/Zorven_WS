@@ -64,6 +64,10 @@ python scripts/provision_tenant_data_stores.py --apply || echo "Data store provi
 echo "Seeding default pipeline manifests..."
 python manage.py seed_manifests || echo "Manifest seeding skipped"
 
+# Seed analytics metric definitions
+echo "Seeding analytics metric definitions..."
+python manage.py seed_metrics || echo "Metric seeding skipped"
+
 # Start Gunicorn
 echo "Starting Gunicorn server on port ${PORT:-8000}..."
 exec gunicorn brand_automator.wsgi:application \

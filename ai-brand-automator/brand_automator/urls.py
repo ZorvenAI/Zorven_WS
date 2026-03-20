@@ -87,6 +87,8 @@ urlpatterns = [
                 path("orchestration/", include("orchestration.urls")),
                 # Workflow Management Workspace
                 path("workspace/", include("workspace.urls")),
+                # Workflow Analytics
+                path("analytics/", include("analytics.urls")),
             ]
         ),
     ),
