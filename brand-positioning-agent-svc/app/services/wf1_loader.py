@@ -24,7 +24,9 @@ class WF1ContextLoader:
         """Fetch latest WF1 context for a tenant.
 
         Returns None if no WF1 data is available (404).
-        Raises on other HTTP errors.
+        Re-raises on non-404 HTTP errors so callers can distinguish
+        'no WF1 data' from 'backend call failed'.
+        Returns None on network/connection errors (fail-open).
         """
         try:
             async with httpx.AsyncClient(timeout=10) as client:
@@ -46,13 +48,8 @@ class WF1ContextLoader:
                     data.get("snapshot_id", "unknown"),
                 )
                 return data
-        except httpx.HTTPStatusError as exc:
-            logger.error(
-                "WF1 context load failed (HTTP %d): %s",
-                exc.response.status_code,
-                exc,
-            )
-            return None
+        except httpx.HTTPStatusError:
+            raise
         except Exception as exc:
             logger.error("WF1 context load failed: %s", exc)
             return None

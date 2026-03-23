@@ -170,9 +170,9 @@ def validate_file_upload(
     if file_type in expected_extensions:
         if extension not in expected_extensions[file_type]:
             result["valid"] = False
-            result[
-                "error"
-            ] = f"File extension {extension} does not match content type {file_type}"
+            result["error"] = (
+                f"File extension {extension} does not match content type {file_type}"
+            )
             return result
 
     # Check for suspicious file names

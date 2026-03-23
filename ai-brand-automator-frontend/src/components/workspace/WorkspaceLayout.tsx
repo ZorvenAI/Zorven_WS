@@ -123,8 +123,8 @@ export default function WorkspaceLayout({
         // Dynamic max: container width minus left panel and center minimum
         const currentLeft = leftOpenRef.current ? leftWidthRef.current : 0;
         const dynamicMax = containerWidth - currentLeft - CENTER_MIN;
-        const effectiveMax = RIGHT_MAX === Infinity ? dynamicMax : Math.min(RIGHT_MAX, dynamicMax);
-        const newWidth = Math.min(effectiveMax, Math.max(RIGHT_MIN, startWidth.current - delta));
+        const clampedMax = Math.max(RIGHT_MIN, RIGHT_MAX === Infinity ? dynamicMax : Math.min(RIGHT_MAX, dynamicMax));
+        const newWidth = Math.max(RIGHT_MIN, Math.min(clampedMax, startWidth.current - delta));
         setRightWidth(newWidth);
       }
     };

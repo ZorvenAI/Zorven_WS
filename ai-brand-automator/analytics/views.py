@@ -169,7 +169,11 @@ class ScorecardView(APIView):
             )
 
         # Sort by MetricDefinition display_order so tiles appear consistently
-        results.sort(key=lambda r: defn_map.get(r["metric_name"], None) and defn_map[r["metric_name"]].display_order or 999)
+        def sort_key(result):
+            definition = defn_map.get(result["metric_name"])
+            return definition.display_order if definition is not None else 999
+
+        results.sort(key=sort_key)
 
         serializer = ScorecardItemSerializer(results, many=True)
         cache.set(ck, serializer.data, CACHE_TTL)

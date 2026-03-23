@@ -312,7 +312,7 @@ NODE_CATALOG: list[dict[str, Any]] = [
             "perceptual mapping, or value proposition canvas."
         ),
         "output_key": "brand_positioning",
-        "config": {"default_candidate_count": 3, "default_perceptual_maps": 3},
+        "config": {"candidate_count": 3, "perceptual_maps": 3},
     },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
