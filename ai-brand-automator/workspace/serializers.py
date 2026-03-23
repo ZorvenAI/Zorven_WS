@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 
 from rest_framework import serializers
 
-from brand_automator.validators import sanitize_plain_text, sanitize_text_input
+from brand_automator.validators import sanitize_plain_text
 from orchestration.serializers import PipelineManifestSerializer
 
 from .models import ChatWorkspaceLink, UserWorkflow, WorkflowSnapshot
