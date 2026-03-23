@@ -17,6 +17,7 @@ _COMPETITOR_INTEL_NODES = {"competitor_intelligence"}
 _AUDIENCE_PERSONA_NODES = {"audience_persona"}
 _TREND_CULTURAL_NODES = {"trend_cultural"}
 _VOICE_OF_CUSTOMER_NODES = {"voice_of_customer"}
+_BRAND_POSITIONING_NODES = {"brand_positioning"}
 
 
 def _source_label(source: dict) -> str:
@@ -84,6 +85,9 @@ class ManagerNode(BaseNode):
 
         # Extract voice of customer data
         voice_of_customer_data = self._extract_voice_of_customer(outputs)
+
+        # Extract brand positioning data
+        brand_positioning_data = self._extract_brand_positioning(outputs)
 
         result_data: dict[str, Any] = {
             "summary": (
@@ -261,6 +265,50 @@ class ManagerNode(BaseNode):
                 else:
                     result_data["sources"] = voca_sources
 
+        # Promote brand positioning fields to top-level result_data
+        if brand_positioning_data:
+            for key in (
+                "recommended_positioning",
+                "alternative_positions",
+                "positioning_candidates",
+                "canvas",
+                "perceptual_maps",
+                "differentiation",
+                "strategy",
+                "wf1_context_used",
+            ):
+                value = brand_positioning_data.get(key)
+                if value is not None:
+                    result_data[key] = value
+            bpa_conf = brand_positioning_data.get("confidence_score")
+            if bpa_conf is not None:
+                confidence_scores["brand_positioning"] = bpa_conf
+            # Build a richer summary from BPA data
+            pos = brand_positioning_data.get("recommended_positioning", {})
+            stmt = pos.get("statement", "")
+            if stmt:
+                result_data["summary"] = (
+                    f"Brand positioning strategy generated. "
+                    f"Recommended positioning: {stmt[:200]}"
+                )
+            # Merge BPA sources with existing
+            bpa_sources = brand_positioning_data.get("sources", [])
+            if bpa_sources:
+                existing_sources = result_data.get("sources", [])
+                if isinstance(existing_sources, list):
+                    existing_urls = {
+                        s.get("url") for s in existing_sources if isinstance(s, dict)
+                    }
+                    for src in bpa_sources:
+                        if (
+                            isinstance(src, dict)
+                            and src.get("url") not in existing_urls
+                        ):
+                            existing_sources.append(src)
+                    result_data["sources"] = existing_sources
+                else:
+                    result_data["sources"] = bpa_sources
+
         # Store per-agent confidence scores and compute average
         if confidence_scores:
             result_data["confidence_scores"] = confidence_scores
@@ -333,8 +381,7 @@ class ManagerNode(BaseNode):
 
         # Check for trend/cultural insights data
         has_trend_cultural = any(
-            isinstance(o, dict)
-            and (o.get("scored_trends") or o.get("trend_report"))
+            isinstance(o, dict) and (o.get("scored_trends") or o.get("trend_report"))
             for o in outputs.values()
         )
 
@@ -345,6 +392,17 @@ class ManagerNode(BaseNode):
                 o.get("voc_health_score") is not None
                 or o.get("themes")
                 or o.get("pain_point_priority_matrix")
+            )
+            for o in outputs.values()
+        )
+
+        # Check for brand positioning data
+        has_brand_positioning = any(
+            isinstance(o, dict)
+            and (
+                o.get("recommended_positioning")
+                or o.get("positioning_candidates")
+                or o.get("perceptual_maps")
             )
             for o in outputs.values()
         )
@@ -391,6 +449,27 @@ class ManagerNode(BaseNode):
         # Determine dashboard type
         if bsi_data or valuation_data:
             schema_type = "brand_equity_dashboard"
+        elif has_brand_positioning:
+            schema_type = "brand_positioning_dashboard"
+            charts.append(
+                {
+                    "type": "positioning_statement",
+                    "data_key": "recommended_positioning",
+                }
+            )
+            charts.append(
+                {
+                    "type": "positioning_candidates",
+                    "data_key": "positioning_candidates",
+                }
+            )
+            charts.append({"type": "value_proposition_canvas", "data_key": "canvas"})
+            charts.append({"type": "perceptual_maps", "data_key": "perceptual_maps"})
+            charts.append(
+                {"type": "differentiation_framework", "data_key": "differentiation"}
+            )
+            charts.append({"type": "strategy_overview", "data_key": "strategy"})
+            charts.append({"type": "sources_table", "data_key": "sources"})
         elif has_audience_persona:
             # Frontend renders APA via data-key detection (personas, journey_maps),
             # not ui_schema.type. This hint is for future programmatic consumers.
@@ -408,15 +487,11 @@ class ManagerNode(BaseNode):
             charts.append(
                 {"type": "opportunity_alerts", "data_key": "opportunity_alerts"}
             )
-            charts.append(
-                {"type": "cultural_shifts", "data_key": "cultural_shifts"}
-            )
+            charts.append({"type": "cultural_shifts", "data_key": "cultural_shifts"})
             charts.append({"type": "sources_table", "data_key": "sources"})
         elif has_voice_of_customer:
             schema_type = "voice_of_customer_dashboard"
-            charts.append(
-                {"type": "voc_health_score", "data_key": "voc_health_score"}
-            )
+            charts.append({"type": "voc_health_score", "data_key": "voc_health_score"})
             charts.append({"type": "sentiment_analysis", "data_key": "sentiment"})
             charts.append({"type": "theme_clusters", "data_key": "themes"})
             charts.append({"type": "nps_analysis", "data_key": "nps_analysis"})
@@ -559,6 +634,24 @@ class ManagerNode(BaseNode):
                     output.get("voc_health_score") is not None
                     or output.get("themes")
                     or output.get("pain_point_priority_matrix")
+                ):
+                    return output
+        return None
+
+    @staticmethod
+    def _extract_brand_positioning(
+        outputs: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Extract brand positioning data from any node output.
+
+        Looks for outputs containing recommended_positioning or
+        positioning_candidates, which are produced by
+        brand-positioning-agent-svc.
+        """
+        for node_id, output in outputs.items():
+            if isinstance(output, dict):
+                if output.get("recommended_positioning") or output.get(
+                    "positioning_candidates"
                 ):
                     return output
         return None

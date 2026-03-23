@@ -191,6 +191,18 @@ EXTERNAL_AGENTS = [
         "url": "http://odoo-worker-agent:8100/v1/execute",
         "icon": "briefcase",
     },
+    {
+        "id": "brand_positioning",
+        "name": "brand_positioning",
+        "label": "Brand Positioning",
+        "description": (
+            "Strategic brand positioning, differentiation, "
+            "messaging architecture, perceptual mapping"
+        ),
+        "type": "external",
+        "url": "http://brand-positioning-agent-svc:8031/v1/execute",
+        "icon": "target",
+    },
 ]
 
 

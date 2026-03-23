@@ -297,6 +297,23 @@ NODE_CATALOG: list[dict[str, Any]] = [
         "output_key": "voice_of_customer",
         "config": {"include_nps": True, "synthesis_type": "comprehensive"},
     },
+    {
+        "id": "brand_positioning",
+        "type": "external",
+        "url": f"{settings.BRAND_POSITIONING_AGENT_URL}/v1/execute",
+        "description": (
+            "Brand positioning strategist: generates framework-agnostic "
+            "positioning statements, value proposition canvas, perceptual "
+            "maps, and differentiation framework (POPs/PODs/RTBs). Requires "
+            "WF1 Brand Discovery data as input context. Best used after a "
+            "completed brand discovery pipeline. Use when the prompt asks "
+            "about brand positioning, positioning strategy, unique value "
+            "proposition, UVP, differentiation, competitive positioning, "
+            "perceptual mapping, or value proposition canvas."
+        ),
+        "output_key": "brand_positioning",
+        "config": {"default_candidate_count": 3, "default_perceptual_maps": 3},
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.
@@ -422,6 +439,14 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
             "brand intelligence pipeline available"
         ),
     },
+    {
+        "id": "brand-strategy-positioning",
+        "description": (
+            "Brand strategy and positioning: generates positioning statements, "
+            "value proposition canvas, perceptual maps, and differentiation "
+            "framework. Requires completed WF1 Brand Discovery data"
+        ),
+    },
 ]
 
 # ── Few-shot examples for Tier 1 ──
@@ -476,6 +501,11 @@ Examples of prompt → pipeline compositions:
 - "Complete brand discovery with customer feedback for AI tools" → [market_research, competitor_intelligence, audience_persona, trend_cultural, voice_of_customer, manager]
 - "Full brand analysis including voice of customer" → [market_research, competitor_intelligence, audience_persona, trend_cultural, voice_of_customer, manager]
 - "Run brand discovery with customer sentiment analysis" → [market_research, competitor_intelligence, audience_persona, trend_cultural, voice_of_customer, manager]
+- "Create a brand positioning strategy for our product" → [brand_positioning, manager]
+- "Develop positioning statements and differentiation for our brand" → [brand_positioning, manager]
+- "Generate a value proposition canvas and perceptual maps" → [brand_positioning, manager]
+- "What is our unique value proposition and competitive positioning?" → [brand_positioning, manager]
+- "Build brand positioning with market research context" → [market_research, competitor_intelligence, brand_positioning, manager]
 """.strip()
 
 

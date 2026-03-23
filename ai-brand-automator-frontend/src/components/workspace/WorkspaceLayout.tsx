@@ -20,8 +20,8 @@ const LEFT_MIN = 200;
 const LEFT_MAX = 480;
 
 const RIGHT_DEFAULT = 360;
-const RIGHT_MIN = 280;
-const RIGHT_MAX = 640;
+const RIGHT_MIN = 120;
+const RIGHT_MAX = Infinity;
 
 // ── Props ──
 
@@ -78,6 +78,11 @@ export default function WorkspaceLayout({
   const startX = useRef(0);
   const startWidth = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Refs to expose current values to the mousemove handler (stable closure)
+  const leftOpenRef = useRef(leftOpen);
+  const leftWidthRef = useRef(leftWidth);
+  leftOpenRef.current = leftOpen;
+  leftWidthRef.current = leftWidth;
 
   // Derive effective right-open: local toggle OR parent forcing it open
   const effectiveRightOpen = rightOpen || !!forceRightOpen;
@@ -104,12 +109,20 @@ export default function WorkspaceLayout({
       if (!dragging.current) return;
       const delta = e.clientX - startX.current;
 
+      // Reserve at least 200px for the center panel
+      const containerWidth = containerRef.current?.clientWidth ?? window.innerWidth;
+      const CENTER_MIN = 200;
+
       if (dragging.current === 'left') {
         const newWidth = Math.min(LEFT_MAX, Math.max(LEFT_MIN, startWidth.current + delta));
         setLeftWidth(newWidth);
       } else {
         // Right panel: dragging left increases width
-        const newWidth = Math.min(RIGHT_MAX, Math.max(RIGHT_MIN, startWidth.current - delta));
+        // Dynamic max: container width minus left panel and center minimum
+        const currentLeft = leftOpenRef.current ? leftWidthRef.current : 0;
+        const dynamicMax = containerWidth - currentLeft - CENTER_MIN;
+        const effectiveMax = RIGHT_MAX === Infinity ? dynamicMax : Math.min(RIGHT_MAX, dynamicMax);
+        const newWidth = Math.min(effectiveMax, Math.max(RIGHT_MIN, startWidth.current - delta));
         setRightWidth(newWidth);
       }
     };

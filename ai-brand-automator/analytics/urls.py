@@ -7,6 +7,7 @@ from analytics.views import (
     MetricsListView,
     ScorecardView,
     TrendsView,
+    WF1ContextView,
 )
 
 urlpatterns = [
@@ -16,4 +17,5 @@ urlpatterns = [
     path("distribution/", DistributionView.as_view(), name="analytics-distribution"),
     path("metrics/", MetricsListView.as_view(), name="analytics-metrics"),
     path("coverage/", CoverageView.as_view(), name="analytics-coverage"),
+    path("wf1-context/", WF1ContextView.as_view(), name="analytics-wf1-context"),
 ]

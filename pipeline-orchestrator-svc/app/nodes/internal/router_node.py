@@ -228,10 +228,33 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("trending", 1),
         ("culture", 1),
     ],
+    "brand-strategy-positioning": [
+        # Strong signal (weight 3)
+        ("brand positioning", 3),
+        ("market positioning", 3),
+        ("positioning strategy", 3),
+        ("value proposition", 3),
+        ("unique value proposition", 3),
+        ("uvp", 3),
+        ("differentiation strategy", 3),
+        ("competitive positioning", 3),
+        # Moderate signal (weight 2)
+        ("perceptual map", 2),
+        ("positioning statement", 2),
+        ("brand differentiation", 2),
+        ("market position", 2),
+        ("value prop canvas", 2),
+        ("competitive advantage", 2),
+        ("brand strategy", 2),
+        # Weak signal (weight 1)
+        ("positioning", 1),
+        ("differentiation", 1),
+        ("unique selling", 1),
+        ("usp", 1),
+    ],
     "brand-analysis": [
         ("brand", 1),
         ("analysis", 1),
-        ("positioning", 1),
     ],
     "odoo-erp-operations": [
         # Odoo-specific — strong signal (weight 3)

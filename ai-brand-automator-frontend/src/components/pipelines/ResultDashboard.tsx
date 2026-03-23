@@ -1803,40 +1803,88 @@ function TrendCulturalSection({
       )}
 
       {/* Cultural Shifts */}
-      {culturalShifts && culturalShifts.length > 0 && (
-        <section>
-          <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
-            Cultural Shifts ({culturalShifts.length})
-          </h4>
-          <div className="space-y-3">
-            {culturalShifts.map((shift, i) => (
-              <div key={i} className="bg-white/5 rounded-lg p-4 border border-white/10">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-semibold text-white capitalize">{shift.domain}</span>
-                  {shift.evidence_strength != null && (
-                    <span className="text-xs text-brand-silver/50">
-                      Evidence: {Math.round(shift.evidence_strength * 100)}%
-                    </span>
+      {culturalShifts && culturalShifts.length > 0 && (() => {
+        // Aggressively filter raw web-scrape content, word lists, and duplicates
+        const seen = new Set<string>();
+        const cleaned = culturalShifts.filter((s) => {
+          const desc = (s.shift_description ?? '').trim();
+          // Too short or too long to be a real synthesized insight
+          if (desc.length < 40 || desc.length > 600) return false;
+          // Word/number list (many commas relative to text length)
+          const commaRatio = (desc.match(/,/g)?.length ?? 0) / desc.length;
+          if (commaRatio > 0.06) return false;
+          // Numbered word lists (e.g. "word 2533 word 2534")
+          if (/\b\w+\s+\d{3,}\s+\w+\s+\d{3,}/.test(desc)) return false;
+          // JSON or structured data patterns
+          if (/"\w+":\s*\d{3,}/.test(desc)) return false;
+          if (/\b\d{4,}\b.*\b\d{4,}\b.*\b\d{4,}\b/.test(desc)) return false;
+          // Error/permission page content
+          if (/Oops!|do not have permission|cannot find what|something went wrong|Further Information|Get intouch/i.test(desc)) return false;
+          // Uppercase word lists (dictionary-like)
+          if ((desc.match(/\b[A-Z]{3,}\b/g)?.length ?? 0) > 6) return false;
+          // Raw web scrape indicators: markdown headers, bullet-heavy content, checkmarks
+          if ((desc.match(/^#{1,5}\s/gm)?.length ?? 0) >= 2) return false;
+          if ((desc.match(/^✅/gm)?.length ?? 0) >= 2) return false;
+          // Article/listicle patterns ("### 1.", "## Key", "#### Top")
+          if (/^#{2,}\s+\d+\.|^#{2,}\s+(Key|Top|Our|Looking|Further|Conclusion)/m.test(desc)) return false;
+          // Promotional / scraped marketing content
+          if (/^PROMOTED\b/i.test(desc)) return false;
+          // Academic citation fragments
+          if (/\(\d{4}\)\s*(stated|found|argued|noted)/i.test(desc)) return false;
+          if (/et al\.,?\s*\d{4}/.test(desc)) return false;
+          // Footer/nav junk (multiple "[...]" or "Get Report")
+          if ((desc.match(/\[\.\.\.\]/g)?.length ?? 0) >= 2) return false;
+          if (/^Get Report\b/i.test(desc)) return false;
+          // Sentence quality: a real insight should have coherent sentences.
+          // Reject if it has < 3 sentences (periods followed by space/end)
+          const sentenceCount = desc.split(/[.!?]\s+/).length;
+          if (sentenceCount < 2) return false;
+          // Content-based dedup (ignore domain — same text = same entry)
+          const contentKey = desc.slice(0, 120).toLowerCase().replace(/\s+/g, ' ');
+          if (seen.has(contentKey)) return false;
+          seen.add(contentKey);
+          return true;
+        });
+        if (cleaned.length === 0) return null;
+        return (
+          <section>
+            <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">
+              Cultural Shifts ({cleaned.length})
+            </h4>
+            <div className="space-y-3">
+              {cleaned.map((shift, i) => (
+                <div key={i} className="bg-white/5 rounded-lg p-4 border border-white/10">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-semibold text-white capitalize">{shift.domain}</span>
+                    {shift.evidence_strength != null && (
+                      <span className="text-xs text-brand-silver/50">
+                        Evidence: {Math.round(shift.evidence_strength * 100)}%
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-brand-silver/80">
+                    {shift.shift_description.length > 400
+                      ? shift.shift_description.slice(0, 400) + '…'
+                      : shift.shift_description}
+                  </p>
+                  {shift.affected_demographics && shift.affected_demographics.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {shift.affected_demographics.map((d) => (
+                        <span key={d} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-brand-silver/60">
+                          {d}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {shift.timeline_estimate && (
+                    <p className="text-xs text-brand-silver/50 mt-1">Timeline: {shift.timeline_estimate}</p>
                   )}
                 </div>
-                <p className="text-sm text-brand-silver/80">{shift.shift_description}</p>
-                {shift.affected_demographics && shift.affected_demographics.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {shift.affected_demographics.map((d) => (
-                      <span key={d} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-brand-silver/60">
-                        {d}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {shift.timeline_estimate && (
-                  <p className="text-xs text-brand-silver/50 mt-1">Timeline: {shift.timeline_estimate}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+              ))}
+            </div>
+          </section>
+        );
+      })()}
 
       {/* Viral Patterns */}
       {viralPatterns && (
@@ -2718,6 +2766,749 @@ interface VoCStrategyBridgeLocal {
   strategic_recommendations?: string[];
 }
 
+/* ── BrandDiscoverySection — tabbed container for WF1 agents ────── */
+
+type BrandDiscoveryTab = 'market_research' | 'competitor_intel' | 'audience_persona' | 'trend_cultural' | 'voice_of_customer';
+
+interface BrandDiscoverySectionProps {
+  // Market Research
+  hasMarketResearch: boolean;
+  marketOverview?: string;
+  marketSizing?: Record<string, unknown>;
+  competitiveLandscape?: CompetitorEntry[];
+  industryTrends?: string[];
+  economicIndicators?: Record<string, unknown>;
+  // Competitor Intelligence
+  hasCompetitorIntelligence: boolean;
+  ciaExecutiveSummary?: string;
+  competitors?: CIACompetitorProfile[];
+  competitorMatrix?: Record<string, Record<string, number>>;
+  swotAnalyses?: SWOTAnalysis[];
+  positioningGaps?: PositioningGap[];
+  benchmarkingReport?: Record<string, unknown>;
+  // Audience Persona
+  hasAudiencePersona: boolean;
+  apaExecutiveSummary?: string;
+  personas?: PersonaProfileFE[];
+  journeyMaps?: BuyingJourneyMapFE[];
+  segmentMatrix?: Record<string, unknown>;
+  // Trend & Cultural
+  hasTrendCultural: boolean;
+  trendReport?: TrendReportFE;
+  scoredTrends?: ScoredTrendFE[];
+  trendPersonaMatrix?: { mappings: TrendPersonaMappingFE[] };
+  opportunityAlerts?: OpportunityAlertFE[];
+  viralPatterns?: ViralPatternProfileFE;
+  culturalShifts?: CulturalShiftFE[];
+  generationalInsights?: GenerationalProfileFE[];
+  languageTrends?: LanguageTrendProfileFE;
+  // Voice of Customer
+  hasVoiceOfCustomer: boolean;
+  vocHealthScore?: number;
+  operatingMode?: string;
+  dataCoverageScore?: number;
+  sentiment?: VoCSentimentFELocal;
+  themes?: VoCThemeMapLocal;
+  npsAnalysis?: VoCNPSLocal;
+  painPointMatrix?: { pain_points?: VoCPainPointLocal[]; methodology?: string };
+  strategyBridge?: VoCStrategyBridgeLocal;
+  // Shared
+  sources?: SourceEntry[];
+  confidenceScores?: Record<string, number>;
+  confidenceScore?: number;
+  findings?: string[];
+  recommendations?: string[];
+}
+
+function BrandDiscoverySection(props: BrandDiscoverySectionProps) {
+  const tabs: { key: BrandDiscoveryTab; label: string; has: boolean }[] = [
+    { key: 'market_research', label: 'Market Research', has: props.hasMarketResearch },
+    { key: 'competitor_intel', label: 'Competitor Intel', has: props.hasCompetitorIntelligence },
+    { key: 'audience_persona', label: 'Audience Personas', has: props.hasAudiencePersona },
+    { key: 'trend_cultural', label: 'Trends & Culture', has: props.hasTrendCultural },
+    { key: 'voice_of_customer', label: 'Voice of Customer', has: props.hasVoiceOfCustomer },
+  ];
+
+  const availableTabs = tabs.filter((t) => t.has);
+  const [activeTab, setActiveTab] = useState<BrandDiscoveryTab>(availableTabs[0]?.key ?? 'market_research');
+
+  const cs = props.confidenceScores ?? {};
+
+  return (
+    <div className="space-y-6">
+      <h3 className="text-lg font-bold text-white">Brand Discovery Intelligence</h3>
+
+      {/* Tab navigation */}
+      <div className="flex gap-1 overflow-x-auto border-b border-white/10 pb-px">
+        {availableTabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-t-md transition-colors whitespace-nowrap ${activeTab === tab.key ? 'bg-brand-electric/20 text-brand-electric border-b-2 border-brand-electric' : 'text-brand-silver/60 hover:text-white hover:bg-white/5'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      {activeTab === 'market_research' && props.hasMarketResearch && (
+        <MarketResearchSection
+          marketOverview={props.marketOverview}
+          marketSizing={props.marketSizing}
+          competitiveLandscape={props.competitiveLandscape}
+          industryTrends={props.industryTrends}
+          economicIndicators={props.economicIndicators}
+          sources={props.sources}
+          confidenceScore={cs.market_research ?? props.confidenceScore}
+          findings={props.findings}
+          recommendations={props.recommendations}
+        />
+      )}
+
+      {activeTab === 'competitor_intel' && props.hasCompetitorIntelligence && (
+        <CompetitorIntelligenceSection
+          executiveSummary={props.ciaExecutiveSummary}
+          competitors={props.competitors}
+          competitorMatrix={props.competitorMatrix}
+          swotAnalyses={props.swotAnalyses}
+          positioningGaps={props.positioningGaps}
+          benchmarkingReport={props.benchmarkingReport}
+          sources={props.sources}
+          confidenceScore={cs.competitor_intelligence ?? props.confidenceScore}
+          findings={props.findings}
+          recommendations={props.recommendations}
+        />
+      )}
+
+      {activeTab === 'audience_persona' && props.hasAudiencePersona && (
+        <AudiencePersonaSection
+          executiveSummary={props.apaExecutiveSummary}
+          personas={props.personas}
+          journeyMaps={props.journeyMaps}
+          segmentMatrix={props.segmentMatrix}
+          sources={props.sources}
+          confidenceScore={cs.audience_persona ?? props.confidenceScore}
+          findings={props.findings}
+          recommendations={props.recommendations}
+        />
+      )}
+
+      {activeTab === 'trend_cultural' && props.hasTrendCultural && (
+        <TrendCulturalSection
+          trendReport={props.trendReport}
+          scoredTrends={props.scoredTrends}
+          trendPersonaMatrix={props.trendPersonaMatrix}
+          opportunityAlerts={props.opportunityAlerts}
+          viralPatterns={props.viralPatterns}
+          culturalShifts={props.culturalShifts}
+          generationalInsights={props.generationalInsights}
+          languageTrends={props.languageTrends}
+          sources={props.sources}
+          confidenceScore={cs.trend_cultural ?? props.confidenceScore}
+          findings={props.findings}
+          recommendations={props.recommendations}
+        />
+      )}
+
+      {activeTab === 'voice_of_customer' && props.hasVoiceOfCustomer && (
+        <VoiceOfCustomerSection
+          vocHealthScore={props.vocHealthScore}
+          operatingMode={props.operatingMode}
+          dataCoverageScore={props.dataCoverageScore}
+          sentiment={props.sentiment}
+          themes={props.themes}
+          npsAnalysis={props.npsAnalysis}
+          painPointMatrix={props.painPointMatrix}
+          strategyBridge={props.strategyBridge}
+          sources={props.sources}
+          confidenceScore={cs.voice_of_customer ?? props.confidenceScore}
+          findings={props.findings}
+          recommendations={props.recommendations}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── BrandPositioningDashboard (inline) ──────────────────────────── */
+
+interface BPAPositioningStatement {
+  statement?: string;
+  framework_used?: string;
+  framework_rationale?: string;
+  target_audience?: string;
+  need?: string;
+  category?: string;
+  key_benefit?: string;
+  reason_to_believe?: string;
+  scores?: Record<string, number>;
+  data_citations?: string[];
+}
+
+interface BPAPerceptualMap {
+  map_id?: string;
+  dimension_x?: string;
+  dimension_y?: string;
+  entities?: Array<{ name?: string; x?: number; y?: number; is_brand?: boolean; is_target?: boolean }>;
+  migration_vector?: { from_x?: number; from_y?: number; to_x?: number; to_y?: number };
+  white_space_highlighted?: Array<Record<string, unknown>>;
+  differentiation_potential_score?: number;
+  is_primary_recommended?: boolean;
+}
+
+interface BPACanvas {
+  fit_score?: number;
+  fit_analysis?: string;
+  customer_profile?: {
+    jobs?: string[];
+    pains?: string[];
+    gains?: string[];
+  };
+  value_map?: {
+    products?: string[];
+    pain_relievers?: string[];
+    gain_creators?: string[];
+  };
+}
+
+interface BPADifferentiation {
+  pods?: string[];
+  pops?: string[];
+  rtbs?: string[];
+  proof_points?: string[];
+  competitive_vulnerabilities?: string[];
+  overall_differentiation_score?: number;
+}
+
+interface BPAStrategy {
+  executive_summary?: string;
+  strategic_pillars?: Array<{ name?: string; description?: string }>;
+  implementation_timeline?: Array<{ phase?: string; timeframe?: string; actions?: string[] }>;
+  success_metrics?: Array<{ metric?: string; target?: string; timeframe?: string }>;
+}
+
+function BrandPositioningSection({
+  recommendedPositioning,
+  positioningCandidates,
+  canvas,
+  perceptualMaps,
+  differentiation,
+  strategy,
+  confidenceScore,
+  sources,
+  findings,
+  recommendations,
+}: {
+  recommendedPositioning?: BPAPositioningStatement;
+  positioningCandidates?: BPAPositioningStatement[];
+  canvas?: BPACanvas;
+  perceptualMaps?: BPAPerceptualMap[];
+  differentiation?: BPADifferentiation;
+  strategy?: BPAStrategy;
+  confidenceScore?: number;
+  sources?: SourceEntry[];
+  findings?: string[];
+  recommendations?: string[];
+}) {
+  const [activeTab, setActiveTab] = useState<'positioning' | 'canvas' | 'maps' | 'differentiation' | 'strategy'>('positioning');
+
+  function scoreColor(score: number) {
+    if (score >= 80) return 'text-green-400';
+    if (score >= 60) return 'text-amber-400';
+    return 'text-red-400';
+  }
+
+  function scoreBg(score: number) {
+    if (score >= 80) return 'bg-green-400';
+    if (score >= 60) return 'bg-amber-400';
+    return 'bg-red-400';
+  }
+
+  const tabs = [
+    { key: 'positioning' as const, label: 'Positioning' },
+    { key: 'canvas' as const, label: 'Value Canvas' },
+    { key: 'maps' as const, label: 'Perceptual Maps' },
+    { key: 'differentiation' as const, label: 'Differentiation' },
+    { key: 'strategy' as const, label: 'Strategy' },
+  ];
+
+  const scores = recommendedPositioning?.scores ?? {};
+  const candidates = positioningCandidates ?? [];
+  const maps = perceptualMaps ?? [];
+  const pods = differentiation?.pods ?? [];
+  const pops = differentiation?.pops ?? [];
+  const rtbs = differentiation?.rtbs ?? [];
+  const proofPoints = differentiation?.proof_points ?? [];
+
+  return (
+    <div className="space-y-6">
+      {/* Header: title + confidence */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-lg font-bold text-white">Brand Positioning Strategy</h3>
+        {confidenceScore != null && (() => {
+          const pct = confidenceScore <= 1 ? Math.round(confidenceScore * 100) : Math.round(confidenceScore);
+          return (
+            <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold border ${pct >= 70 ? 'text-green-400 bg-green-400/10 border-green-400/30' : pct >= 40 ? 'text-amber-400 bg-amber-400/10 border-amber-400/30' : 'text-red-400 bg-red-400/10 border-red-400/30'}`}>
+              Confidence: {pct}%
+            </span>
+          );
+        })()}
+      </div>
+
+      {/* Tab navigation */}
+      <div className="flex gap-1 overflow-x-auto border-b border-white/10 pb-px">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-t-md transition-colors whitespace-nowrap ${activeTab === tab.key ? 'bg-brand-electric/20 text-brand-electric border-b-2 border-brand-electric' : 'text-brand-silver/60 hover:text-white hover:bg-white/5'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Positioning Tab ──────────────────────────────── */}
+      {activeTab === 'positioning' && (
+        <div className="space-y-4">
+          {/* Recommended positioning */}
+          {recommendedPositioning?.statement && (
+            <div className="glass-card p-4 border border-brand-electric/30">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="inline-flex items-center rounded-full bg-brand-electric/20 px-2 py-0.5 text-xs font-semibold text-brand-electric">
+                  Recommended
+                </span>
+                {recommendedPositioning.framework_used && (
+                  <span className="text-xs text-brand-silver/50 capitalize">
+                    {recommendedPositioning.framework_used} framework
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-white leading-relaxed italic">
+                &ldquo;{recommendedPositioning.statement}&rdquo;
+              </p>
+              {/* Score bars */}
+              {Object.keys(scores).length > 0 && (
+                <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {['clarity', 'differentiation', 'believability', 'memorability', 'overall'].map((dim) => {
+                    const val = scores[dim];
+                    if (val == null) return null;
+                    return (
+                      <div key={dim} className="text-center">
+                        <div className="text-[10px] text-brand-silver/50 uppercase tracking-wider mb-1">{dim}</div>
+                        <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${scoreBg(val)}`} style={{ width: `${val}%` }} />
+                        </div>
+                        <div className={`text-xs font-bold mt-0.5 ${scoreColor(val)}`}>{val}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Details */}
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-brand-silver/70">
+                {recommendedPositioning.target_audience && (
+                  <div><span className="text-brand-silver/40">Target:</span> {recommendedPositioning.target_audience}</div>
+                )}
+                {recommendedPositioning.category && (
+                  <div><span className="text-brand-silver/40">Category:</span> {recommendedPositioning.category}</div>
+                )}
+                {recommendedPositioning.need && (
+                  <div><span className="text-brand-silver/40">Need:</span> {recommendedPositioning.need}</div>
+                )}
+                {recommendedPositioning.key_benefit && (
+                  <div><span className="text-brand-silver/40">Key Benefit:</span> {recommendedPositioning.key_benefit}</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Alternative candidates */}
+          {candidates.length > 1 && (
+            <div>
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                Alternative Positions ({candidates.length - 1})
+              </h4>
+              <div className="space-y-2">
+                {candidates.slice(1).map((c, i) => (
+                  <div key={i} className="glass-card p-3 border border-white/10">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs text-brand-silver/50 capitalize">
+                        {c.framework_used ?? 'classic'} framework
+                      </span>
+                      {c.scores?.overall != null && (
+                        <span className={`text-xs font-bold ${scoreColor(c.scores.overall)}`}>
+                          {c.scores.overall}/100
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-brand-silver/80 italic">
+                      &ldquo;{c.statement}&rdquo;
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Value Canvas Tab ────────────────────────────── */}
+      {activeTab === 'canvas' && canvas && (
+        <div className="space-y-4">
+          {canvas.fit_score != null && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-brand-silver/50">Canvas Fit Score:</span>
+              <span className={`text-sm font-bold ${scoreColor(canvas.fit_score)}`}>{canvas.fit_score}/100</span>
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Customer Profile */}
+            <div className="glass-card p-4 border border-purple-500/20">
+              <h4 className="text-sm font-bold text-purple-400 mb-3">Customer Profile</h4>
+              {canvas.customer_profile?.jobs && canvas.customer_profile.jobs.length > 0 && (
+                <div className="mb-2">
+                  <div className="text-[10px] text-brand-silver/40 uppercase tracking-wider mb-1">Jobs to be Done</div>
+                  <ul className="space-y-0.5">
+                    {canvas.customer_profile.jobs.map((j, i) => (
+                      <li key={i} className="text-xs text-brand-silver/70 flex gap-1.5"><span className="text-purple-400/60">•</span>{j}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {canvas.customer_profile?.pains && canvas.customer_profile.pains.length > 0 && (
+                <div className="mb-2">
+                  <div className="text-[10px] text-brand-silver/40 uppercase tracking-wider mb-1">Pains</div>
+                  <ul className="space-y-0.5">
+                    {canvas.customer_profile.pains.map((p, i) => (
+                      <li key={i} className="text-xs text-red-400/80 flex gap-1.5"><span className="text-red-400/40">•</span>{p}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {canvas.customer_profile?.gains && canvas.customer_profile.gains.length > 0 && (
+                <div>
+                  <div className="text-[10px] text-brand-silver/40 uppercase tracking-wider mb-1">Gains</div>
+                  <ul className="space-y-0.5">
+                    {canvas.customer_profile.gains.map((g, i) => (
+                      <li key={i} className="text-xs text-green-400/80 flex gap-1.5"><span className="text-green-400/40">•</span>{g}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* Value Map */}
+            <div className="glass-card p-4 border border-brand-electric/20">
+              <h4 className="text-sm font-bold text-brand-electric mb-3">Value Map</h4>
+              {canvas.value_map?.products && canvas.value_map.products.length > 0 && (
+                <div className="mb-2">
+                  <div className="text-[10px] text-brand-silver/40 uppercase tracking-wider mb-1">Products & Services</div>
+                  <ul className="space-y-0.5">
+                    {canvas.value_map.products.map((p, i) => (
+                      <li key={i} className="text-xs text-brand-silver/70 flex gap-1.5"><span className="text-brand-electric/60">•</span>{p}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {canvas.value_map?.pain_relievers && canvas.value_map.pain_relievers.length > 0 && (
+                <div className="mb-2">
+                  <div className="text-[10px] text-brand-silver/40 uppercase tracking-wider mb-1">Pain Relievers</div>
+                  <ul className="space-y-0.5">
+                    {canvas.value_map.pain_relievers.map((p, i) => (
+                      <li key={i} className="text-xs text-green-400/80 flex gap-1.5"><span className="text-green-400/40">•</span>{p}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {canvas.value_map?.gain_creators && canvas.value_map.gain_creators.length > 0 && (
+                <div>
+                  <div className="text-[10px] text-brand-silver/40 uppercase tracking-wider mb-1">Gain Creators</div>
+                  <ul className="space-y-0.5">
+                    {canvas.value_map.gain_creators.map((g, i) => (
+                      <li key={i} className="text-xs text-brand-electric/80 flex gap-1.5"><span className="text-brand-electric/40">•</span>{g}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+          {canvas.fit_analysis && (
+            <div className="glass-card p-3 border border-white/10">
+              <div className="text-[10px] text-brand-silver/40 uppercase tracking-wider mb-1">Fit Analysis</div>
+              <p className="text-xs text-brand-silver/70">{canvas.fit_analysis}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Perceptual Maps Tab ──────────────────────────── */}
+      {activeTab === 'maps' && maps.length > 0 && (
+        <div className="space-y-4">
+          {maps.map((map, idx) => (
+            <div key={map.map_id ?? idx} className="glass-card p-4 border border-white/10">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-semibold text-white capitalize">
+                    {(map.map_id ?? `map-${idx}`).replace(/_/g, ' ')}
+                  </h4>
+                  {map.is_primary_recommended && (
+                    <span className="inline-flex items-center rounded-full bg-brand-electric/20 px-2 py-0.5 text-[10px] font-medium text-brand-electric">
+                      Primary
+                    </span>
+                  )}
+                </div>
+                {map.differentiation_potential_score != null && (
+                  <span className={`text-xs font-bold ${scoreColor(map.differentiation_potential_score)}`}>
+                    Diff. Potential: {map.differentiation_potential_score}
+                  </span>
+                )}
+              </div>
+              {/* Axis labels */}
+              <div className="text-[10px] text-brand-silver/40 flex justify-between mb-1">
+                <span>{map.dimension_x ?? 'X Axis'} →</span>
+                <span>↑ {map.dimension_y ?? 'Y Axis'}</span>
+              </div>
+              {/* Scatter plot area */}
+              <div className="relative w-full aspect-square max-w-md mx-auto bg-white/5 rounded-lg border border-white/10 overflow-hidden">
+                {/* Grid lines */}
+                <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '25% 25%' }} />
+                {/* Entities */}
+                {(map.entities ?? []).map((entity, ei) => (
+                  <div
+                    key={ei}
+                    className="absolute flex flex-col items-center"
+                    style={{
+                      left: `${entity.x ?? 50}%`,
+                      bottom: `${entity.y ?? 50}%`,
+                      transform: 'translate(-50%, 50%)',
+                    }}
+                  >
+                    <div
+                      className={`w-3 h-3 rounded-full border-2 ${entity.is_brand ? 'bg-brand-electric border-brand-electric shadow-lg shadow-brand-electric/40' : entity.is_target ? 'bg-green-400 border-green-400' : 'bg-white/60 border-white/40'}`}
+                    />
+                    <span className={`text-[9px] mt-0.5 whitespace-nowrap ${entity.is_brand ? 'text-brand-electric font-bold' : 'text-brand-silver/50'}`}>
+                      {entity.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Differentiation Tab ──────────────────────────── */}
+      {activeTab === 'differentiation' && (
+        <div className="space-y-4">
+          {differentiation?.overall_differentiation_score != null && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-brand-silver/50">Overall Differentiation:</span>
+              <span className={`text-sm font-bold ${scoreColor(differentiation.overall_differentiation_score)}`}>
+                {differentiation.overall_differentiation_score}/100
+              </span>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Points of Difference */}
+            {pods.length > 0 && (
+              <div className="glass-card p-3 border border-green-500/20">
+                <h4 className="text-xs font-semibold text-green-400 uppercase tracking-wider mb-2">
+                  Points of Difference ({pods.length})
+                </h4>
+                <ul className="space-y-1">
+                  {pods.map((pod, i) => (
+                    <li key={i} className="text-xs text-brand-silver/70 flex gap-1.5">
+                      <span className="text-green-400/60 mt-0.5">◆</span>
+                      {typeof pod === 'string' ? pod : JSON.stringify(pod)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {/* Points of Parity */}
+            {pops.length > 0 && (
+              <div className="glass-card p-3 border border-white/10">
+                <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                  Points of Parity ({pops.length})
+                </h4>
+                <ul className="space-y-1">
+                  {pops.map((pop, i) => (
+                    <li key={i} className="text-xs text-brand-silver/60 flex gap-1.5">
+                      <span className="text-brand-silver/30 mt-0.5">○</span>
+                      {typeof pop === 'string' ? pop : JSON.stringify(pop)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          {/* RTBs */}
+          {rtbs.length > 0 && (
+            <div className="glass-card p-3 border border-brand-electric/20">
+              <h4 className="text-xs font-semibold text-brand-electric uppercase tracking-wider mb-2">
+                Reasons to Believe ({rtbs.length})
+              </h4>
+              <ul className="space-y-1">
+                {rtbs.map((rtb, i) => (
+                  <li key={i} className="text-xs text-brand-silver/70 flex gap-1.5">
+                    <span className="text-brand-electric/60 mt-0.5">✓</span>
+                    {typeof rtb === 'string' ? rtb : JSON.stringify(rtb)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {/* Proof Points */}
+          {proofPoints.length > 0 && (
+            <div className="glass-card p-3 border border-purple-500/20">
+              <h4 className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-2">
+                Proof Points ({proofPoints.length})
+              </h4>
+              <ul className="space-y-1">
+                {proofPoints.map((pp, i) => (
+                  <li key={i} className="text-xs text-brand-silver/70 flex gap-1.5">
+                    <span className="text-purple-400/60 mt-0.5">▸</span>
+                    {typeof pp === 'string' ? pp : JSON.stringify(pp)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Strategy Tab ─────────────────────────────────── */}
+      {activeTab === 'strategy' && strategy && (
+        <div className="space-y-4">
+          {strategy.executive_summary && (
+            <div className="glass-card p-4 border border-white/10">
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                Executive Summary
+              </h4>
+              <p className="text-sm text-brand-silver/80 leading-relaxed">{strategy.executive_summary}</p>
+            </div>
+          )}
+          {/* Strategic Pillars */}
+          {strategy.strategic_pillars && strategy.strategic_pillars.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                Strategic Pillars
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {strategy.strategic_pillars.map((pillar, i) => (
+                  <div key={i} className="glass-card p-3 border border-brand-electric/10">
+                    <div className="text-sm font-semibold text-white mb-1">{pillar.name}</div>
+                    <p className="text-xs text-brand-silver/60">{pillar.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Implementation Timeline */}
+          {strategy.implementation_timeline && strategy.implementation_timeline.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                Implementation Roadmap
+              </h4>
+              <div className="space-y-2">
+                {strategy.implementation_timeline.map((phase, i) => (
+                  <div key={i} className="glass-card p-3 border border-white/10">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-semibold text-white">{phase.phase}</span>
+                      {phase.timeframe && (
+                        <span className="text-[10px] text-brand-silver/40">{phase.timeframe}</span>
+                      )}
+                    </div>
+                    {phase.actions && phase.actions.length > 0 && (
+                      <ul className="space-y-0.5">
+                        {phase.actions.map((a, j) => (
+                          <li key={j} className="text-xs text-brand-silver/60 flex gap-1.5">
+                            <span className="text-brand-electric/40">→</span>{a}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Success Metrics */}
+          {strategy.success_metrics && strategy.success_metrics.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                Success Metrics
+              </h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left text-brand-silver/40 font-medium py-1 pr-4">Metric</th>
+                      <th className="text-left text-brand-silver/40 font-medium py-1 pr-4">Target</th>
+                      <th className="text-left text-brand-silver/40 font-medium py-1">Timeframe</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {strategy.success_metrics.map((m, i) => (
+                      <tr key={i} className="border-b border-white/5">
+                        <td className="py-1.5 pr-4 text-white">{m.metric}</td>
+                        <td className="py-1.5 pr-4 text-brand-electric">{m.target}</td>
+                        <td className="py-1.5 text-brand-silver/50">{m.timeframe}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sources */}
+      {sources && sources.length > 0 && (
+        <section>
+          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+            Sources ({sources.length})
+          </h4>
+          <div className="space-y-1">
+            {sources.filter((s) => s.title || s.url).map((s, i) => (
+              <div key={i} className="text-xs text-brand-silver/50">
+                {(s.url && /^https?:\/\//i.test(s.url)) ? (
+                  <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-brand-electric/70 hover:underline">
+                    {s.title || s.url}
+                  </a>
+                ) : (
+                  <span>{s.title || '-'}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Findings & Recommendations */}
+      {findings && findings.length > 0 && (
+        <section>
+          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Key Findings</h4>
+          {findings.map((f, i) => (
+            <div key={i} className="mb-1"><MarkdownMessage content={f} /></div>
+          ))}
+        </section>
+      )}
+      {recommendations && recommendations.length > 0 && (
+        <section>
+          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Recommendations</h4>
+          {recommendations.map((r, i) => (
+            <div key={i} className="mb-1"><MarkdownMessage content={r} /></div>
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+
 function VoiceOfCustomerSection({
   vocHealthScore,
   operatingMode,
@@ -3284,6 +4075,12 @@ export default function ResultDashboard({
     resultData.trend_report != null ||
     resultData.trend_persona_matrix != null;
 
+  // ── Detect brand positioning data ──────────────────────────────
+  const hasBrandPositioning =
+    resultData.recommended_positioning != null ||
+    resultData.positioning_candidates != null ||
+    resultData.perceptual_maps != null;
+
   // ── Detect voice of customer data ───────────────────────────────
   const hasVoiceOfCustomer =
     resultData.voc_health_score != null ||
@@ -3291,6 +4088,10 @@ export default function ResultDashboard({
     resultData.themes != null ||
     resultData.nps_analysis != null ||
     resultData.pain_point_priority_matrix != null;
+
+  // ── Detect brand discovery (2+ WF1 agents present → show tabbed) ──
+  const wf1AgentCount = [hasMarketResearch, hasCompetitorIntelligence, hasAudiencePersona, hasTrendCultural, hasVoiceOfCustomer].filter(Boolean).length;
+  const hasBrandDiscovery = wf1AgentCount >= 2;
 
   // ── Extract well-known keys ──────────────────────────────────────
   const summary = resultData.summary as string | undefined;
@@ -3453,6 +4254,16 @@ export default function ResultDashboard({
     'operating_mode',
     'data_coverage_score',
     'odoo_onboarding_recommendation',
+    // Brand Positioning keys
+    'recommended_positioning',
+    'alternative_positions',
+    'positioning_candidates',
+    'canvas',
+    'perceptual_maps',
+    'differentiation',
+    'strategy',
+    'wf1_context_used',
+    'confidence_scores',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),
@@ -3475,7 +4286,7 @@ export default function ResultDashboard({
       </div>
 
       {/* Score badge (only when meaningful, i.e. > 0, and not market research) */}
-      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && score !== undefined && score > 0 && (
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && score !== undefined && score > 0 && (
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
             Score
@@ -3487,7 +4298,7 @@ export default function ResultDashboard({
       )}
 
       {/* Summary (skip generic "Pipeline analysis completed" for market research / CIA) */}
-      {summary && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && (
+      {summary && !hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Summary
@@ -3496,8 +4307,55 @@ export default function ResultDashboard({
         </section>
       )}
 
-      {/* ── Market Research Dashboard ──────────────────────────────── */}
-      {hasMarketResearch && (
+      {/* ── Brand Discovery (tabbed when 2+ WF1 agents present) ──── */}
+      {hasBrandDiscovery && (
+        <BrandDiscoverySection
+          hasMarketResearch={hasMarketResearch}
+          marketOverview={resultData.market_overview as string | undefined}
+          marketSizing={resultData.market_sizing as Record<string, unknown> | undefined}
+          competitiveLandscape={resultData.competitive_landscape as CompetitorEntry[] | undefined}
+          industryTrends={resultData.industry_trends as string[] | undefined}
+          economicIndicators={resultData.economic_indicators as Record<string, unknown> | undefined}
+          hasCompetitorIntelligence={hasCompetitorIntelligence}
+          ciaExecutiveSummary={resultData.executive_summary as string | undefined}
+          competitors={resultData.competitors as CIACompetitorProfile[] | undefined}
+          competitorMatrix={resultData.competitor_matrix as Record<string, Record<string, number>> | undefined}
+          swotAnalyses={resultData.swot_analyses as SWOTAnalysis[] | undefined}
+          positioningGaps={resultData.positioning_gaps as PositioningGap[] | undefined}
+          benchmarkingReport={resultData.benchmarking_report as Record<string, unknown> | undefined}
+          hasAudiencePersona={hasAudiencePersona}
+          apaExecutiveSummary={resultData.executive_summary as string | undefined}
+          personas={resultData.personas as PersonaProfileFE[] | undefined}
+          journeyMaps={resultData.journey_maps as BuyingJourneyMapFE[] | undefined}
+          segmentMatrix={resultData.segment_matrix as Record<string, unknown> | undefined}
+          hasTrendCultural={hasTrendCultural}
+          trendReport={resultData.trend_report as TrendReportFE | undefined}
+          scoredTrends={resultData.scored_trends as ScoredTrendFE[] | undefined}
+          trendPersonaMatrix={resultData.trend_persona_matrix as { mappings: TrendPersonaMappingFE[] } | undefined}
+          opportunityAlerts={resultData.opportunity_alerts as OpportunityAlertFE[] | undefined}
+          viralPatterns={resultData.viral_patterns as ViralPatternProfileFE | undefined}
+          culturalShifts={resultData.cultural_shifts as CulturalShiftFE[] | undefined}
+          generationalInsights={resultData.generational_insights as GenerationalProfileFE[] | undefined}
+          languageTrends={resultData.language_trends as LanguageTrendProfileFE | undefined}
+          hasVoiceOfCustomer={hasVoiceOfCustomer}
+          vocHealthScore={resultData.voc_health_score as number | undefined}
+          operatingMode={resultData.operating_mode as string | undefined}
+          dataCoverageScore={resultData.data_coverage_score as number | undefined}
+          sentiment={resultData.sentiment as VoCSentimentFELocal | undefined}
+          themes={resultData.themes as VoCThemeMapLocal | undefined}
+          npsAnalysis={resultData.nps_analysis as VoCNPSLocal | undefined}
+          painPointMatrix={resultData.pain_point_priority_matrix as { pain_points?: VoCPainPointLocal[]; methodology?: string } | undefined}
+          strategyBridge={resultData.strategy_bridge as VoCStrategyBridgeLocal | undefined}
+          sources={resultData.sources as SourceEntry[] | undefined}
+          confidenceScores={resultData.confidence_scores as Record<string, number> | undefined}
+          confidenceScore={resultData.confidence_score as number | undefined}
+          findings={findings}
+          recommendations={recommendations}
+        />
+      )}
+
+      {/* ── Single-agent fallbacks (when only 1 WF1 agent ran) ────── */}
+      {!hasBrandDiscovery && hasMarketResearch && (
         <MarketResearchSection
           marketOverview={resultData.market_overview as string | undefined}
           marketSizing={resultData.market_sizing as Record<string, unknown> | undefined}
@@ -3511,8 +4369,7 @@ export default function ResultDashboard({
         />
       )}
 
-      {/* ── Competitor Intelligence Dashboard ──────────────────────── */}
-      {hasCompetitorIntelligence && (
+      {!hasBrandDiscovery && hasCompetitorIntelligence && (
         <CompetitorIntelligenceSection
           executiveSummary={resultData.executive_summary as string | undefined}
           competitors={resultData.competitors as CIACompetitorProfile[] | undefined}
@@ -3527,8 +4384,7 @@ export default function ResultDashboard({
         />
       )}
 
-      {/* ── Audience Persona Dashboard ─────────────────────────────── */}
-      {hasAudiencePersona && (
+      {!hasBrandDiscovery && hasAudiencePersona && (
         <AudiencePersonaSection
           executiveSummary={resultData.executive_summary as string | undefined}
           personas={resultData.personas as PersonaProfileFE[] | undefined}
@@ -3541,8 +4397,7 @@ export default function ResultDashboard({
         />
       )}
 
-      {/* ── Trend & Cultural Insights Dashboard ────────────────────── */}
-      {hasTrendCultural && (
+      {!hasBrandDiscovery && hasTrendCultural && (
         <TrendCulturalSection
           trendReport={resultData.trend_report as TrendReportFE | undefined}
           scoredTrends={resultData.scored_trends as ScoredTrendFE[] | undefined}
@@ -3559,8 +4414,7 @@ export default function ResultDashboard({
         />
       )}
 
-      {/* ── Voice of Customer Dashboard ──────────────────────────────── */}
-      {hasVoiceOfCustomer && (
+      {!hasBrandDiscovery && hasVoiceOfCustomer && (
         <VoiceOfCustomerSection
           vocHealthScore={resultData.voc_health_score as number | undefined}
           operatingMode={resultData.operating_mode as string | undefined}
@@ -3577,8 +4431,24 @@ export default function ResultDashboard({
         />
       )}
 
+      {/* ── Brand Positioning Dashboard ─────────────────────────────── */}
+      {hasBrandPositioning && (
+        <BrandPositioningSection
+          recommendedPositioning={resultData.recommended_positioning as BPAPositioningStatement | undefined}
+          positioningCandidates={resultData.positioning_candidates as BPAPositioningStatement[] | undefined}
+          canvas={resultData.canvas as BPACanvas | undefined}
+          perceptualMaps={resultData.perceptual_maps as BPAPerceptualMap[] | undefined}
+          differentiation={resultData.differentiation as BPADifferentiation | undefined}
+          strategy={resultData.strategy as BPAStrategy | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.brand_positioning ?? resultData.confidence_score) as number | undefined}
+          sources={resultData.sources as SourceEntry[] | undefined}
+          findings={findings}
+          recommendations={recommendations}
+        />
+      )}
+
       {/* Key findings — filter out raw JSON blobs (internal agent state) */}
-      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && findings && findings.length > 0 && (() => {
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && findings && findings.length > 0 && (() => {
         const filtered = findings.filter((f) => {
           if (typeof f !== 'string') return false;
           const trimmed = f.trim();
@@ -3610,7 +4480,7 @@ export default function ResultDashboard({
       })()}
 
       {/* Recommendations */}
-      {!hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && recommendations && recommendations.length > 0 && (
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && recommendations && recommendations.length > 0 && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations

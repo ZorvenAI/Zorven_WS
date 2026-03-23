@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 
 from rest_framework import serializers
 
-from brand_automator.validators import sanitize_text_input
+from brand_automator.validators import sanitize_plain_text, sanitize_text_input
 from orchestration.serializers import PipelineManifestSerializer
 
 from .models import ChatWorkspaceLink, UserWorkflow, WorkflowSnapshot
@@ -115,7 +115,7 @@ class WorkflowCreateSerializer(serializers.Serializer):
 
     def validate_name(self, value):
         """Sanitize workflow name (IG-07)."""
-        return sanitize_text_input(value, max_length=200)
+        return sanitize_plain_text(value, max_length=200)
 
     def validate_manifest_data(self, value):
         """Reuse PipelineManifest validation for manifest_data."""
@@ -161,7 +161,7 @@ class WorkflowUpdateSerializer(serializers.Serializer):
     is_favorite = serializers.BooleanField(required=False)
 
     def validate_name(self, value):
-        return sanitize_text_input(value, max_length=200)
+        return sanitize_plain_text(value, max_length=200)
 
     def validate_manifest_data(self, value):
         validator = PipelineManifestSerializer()
@@ -213,7 +213,7 @@ class WorkflowCloneSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=200)
 
     def validate_name(self, value):
-        return sanitize_text_input(value, max_length=200)
+        return sanitize_plain_text(value, max_length=200)
 
 
 class WorkflowExportSerializer(serializers.ModelSerializer):
@@ -264,7 +264,7 @@ class WorkflowImportSerializer(serializers.Serializer):
     layout_data = serializers.JSONField(required=False, default=dict)
 
     def validate_name(self, value):
-        return sanitize_text_input(value, max_length=200)
+        return sanitize_plain_text(value, max_length=200)
 
     def validate_manifest_data(self, value):
         """Validate manifest structure, allowing SERVICE_URL placeholders.

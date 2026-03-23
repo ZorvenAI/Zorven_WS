@@ -43,6 +43,7 @@ EXTERNAL_ENDPOINTS: dict[str, str] = {
     "audience_persona": "http://audience-persona-agent-svc:8023/v1/execute",
     "trend_cultural": "http://trend-cultural-agent-svc:8024/v1/execute",
     "voice_of_customer": "http://voc-agent-svc:8025/v1/execute",
+    "brand_positioning": "http://brand-positioning-agent-svc:8031/v1/execute",
 }
 
 

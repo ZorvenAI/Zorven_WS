@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 15 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash and Anthropic Claude. ~3,180+ tests across all components.
+AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 16 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash and Anthropic Claude. ~3,200+ tests across all components.
 
 ## Monorepo Layout
 
@@ -24,6 +24,7 @@ competitor-intel-agent-svc/      # FastAPI — Competitor profiling, SWOT, bench
 audience-persona-agent-svc/      # FastAPI — Audience persona profiling, Claude Sonnet 4 (port 8023)
 trend-cultural-agent-svc/       # FastAPI — Trend monitoring, cultural insights, opportunity alerts (port 8024)
 voc-agent-svc/                  # FastAPI — Voice of Customer analysis, sentiment, NPS, Claude Sonnet 4 (port 8025)
+brand-positioning-agent-svc/    # FastAPI — WF2 brand positioning, differentiation, perceptual mapping, Claude Sonnet 4 (port 8031)
 odoo-mcp-server-svc/            # FastAPI — Odoo ERP MCP bridge, 101 tools (port 8095)
 odoo-worker-agent-svc/          # FastAPI — Multi-persona Odoo worker, PAOR loop (port 8100)
 vendor/odoo/community/           # Git submodule — Odoo Community Edition 19.0
@@ -31,7 +32,7 @@ deployment/                      # Master docker-compose, Kong config, scripts
 docs/                            # Architecture docs
 ```
 
-Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service, brand-equity-calculator-svc, odoo-mcp-server-svc, market-research-agent-svc, competitor-intel-agent-svc, audience-persona-agent-svc, trend-cultural-agent-svc, voc-agent-svc, odoo-worker-agent-svc. Missing: rag-uploader-agent-service.
+Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service, brand-equity-calculator-svc, odoo-mcp-server-svc, market-research-agent-svc, competitor-intel-agent-svc, audience-persona-agent-svc, trend-cultural-agent-svc, voc-agent-svc, odoo-worker-agent-svc, brand-positioning-agent-svc. Missing: rag-uploader-agent-service.
 
 ## Build, Run, and Test Commands
 
@@ -62,15 +63,20 @@ python manage.py migrate_schemas --shared --noinput
 
 # Seed pipeline manifests (idempotent, run after manifest changes)
 python manage.py seed_manifests
+python manage.py seed_metrics                    # Seed analytics MetricDefinitions
 python manage.py seed_subscription_plans        # Seed Stripe plans
 python manage.py check                          # Django system check
 
+# Analytics backfill (one-time, from existing completed jobs)
+RUN_ANALYTICS_BACKFILL=true  # Set env var on Railway to trigger on next deploy
+python manage.py backfill_analytics             # Or run manually
+
 # Celery workers (6 queues: celery, high_priority, low_priority, orchestration, ingestion, curation)
 celery -A brand_automator worker -l info                       # Default queue
-celery -A brand_automator worker -Q orchestration -l info      # Orchestration queue
+celery -A brand_automator worker -Q orchestration -l info      # Orchestration queue (also handles analytics.tasks.*)
 celery -A brand_automator worker -Q ingestion -l info          # Ingestion queue
 celery -A brand_automator worker -Q curation -l info           # Curation queue
-celery -A brand_automator beat -l info                         # Scheduler (60s: publish_scheduled_posts, 5m: check_stale_jobs)
+celery -A brand_automator beat -l info                         # Scheduler (60s: publish_scheduled_posts, 5m: check_stale_jobs, 02:00 UTC: reconcile_rollups)
 ```
 
 ### Frontend (Next.js)
@@ -113,7 +119,7 @@ docker compose --profile with-kafka --profile with-db up      # + Local PostgreS
 docker compose down -v                                        # Tear down
 ```
 
-**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, Orchestrator 8010, Discovery 8020, Market Research 8021, Competitor Intel 8022, Audience Persona 8023, Trend Cultural 8024, VoC Agent 8025, Intelligence 8030, Titling 8040, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090, Odoo MCP 8095, Odoo Worker 8100
+**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, Orchestrator 8010, Discovery 8020, Market Research 8021, Competitor Intel 8022, Audience Persona 8023, Trend Cultural 8024, VoC Agent 8025, Intelligence 8030, Brand Positioning 8031, Titling 8040, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090, Odoo MCP 8095, Odoo Worker 8100
 
 **Frontend Docker build** requires `output: "standalone"` in `next.config.ts`. Without it, the Dockerfile `COPY --from=builder /app/.next/standalone` step fails.
 
@@ -136,12 +142,13 @@ Django dispatches job → pipeline-orchestrator-svc (:8010) → direct sequentia
   → audience-persona-agent-svc (:8023) → persona profiling
   → trend-cultural-agent-svc (:8024) → trend monitoring
   → voc-agent-svc (:8025) → voice of customer analysis
+  → brand-positioning-agent-svc (:8031) → brand positioning (WF2)
   → intelligence-agent-svc (:8030) → brand valuation
   → content-agent-service (:8050) → blog authoring
   → social-agent-service (:8060) → social posting
   → rag-uploader-agent-service (:8070) → RAG document archival
   → odoo-worker-agent-svc (:8100) → ERP operations
-  → Callback → Django AnalysisJob (atomic update)
+  → Callback → Django AnalysisJob (atomic update) → extract_metrics_task (analytics)
 ```
 
 When `ORCHESTRATION_KAFKA_ENABLED=false` (default), dispatch is HTTP. When `true`, dispatch goes through `pipeline-trigger-topic`. When Kafka is unavailable, system falls back to HTTP dispatch and Celery tasks for the data pipeline. Related env vars: `KAFKA_CONSUMERS_ENABLED` (controls Celery Kafka consumers), `ONBOARDING_KAFKA_ENABLED` (controls file upload Kafka publishing).
@@ -154,7 +161,7 @@ When `ORCHESTRATION_KAFKA_ENABLED=false` (default), dispatch is HTTP. When `true
 
 **Cancel mechanism**: Sets `cancel:{job_id}` key in Redis with 1-hour TTL. The executor checks this flag before each node in the sequential loop.
 
-**Dynamic skill loading**: `pipeline-orchestrator-svc/skills/` contains 54 `.md` skill files (27 general + 27 Odoo-specific). The skill router (`pipeline-orchestrator-svc/app/skills/`) resolves and injects relevant skills per-node at execution time based on user intent. Skills provide contextual LLM instructions to agent services.
+**Dynamic skill loading**: `pipeline-orchestrator-svc/skills/` contains 67 `.md` skill files (28 general + 12 brand-positioning + 27 Odoo-specific). The skill router (`pipeline-orchestrator-svc/app/skills/`) resolves and injects relevant skills per-node at execution time based on user intent. Skills provide contextual LLM instructions to agent services.
 
 **Social agent publishing**: Social agent generates content via Gemini, then delegates actual platform publishing to Django's MCP server (via `SOCIAL_MCP_SERVER_URL`), which has per-platform SDK wrappers.
 
@@ -172,6 +179,21 @@ Pipeline apps (`data_ingestion/`, `media_curation/`, `rag_index/`) use **Pydanti
 {app}/services/  # Business logic
 {app}/factory.py # DI wiring
 ```
+
+### Workflow Analytics Layer
+
+```
+Job completes → result_handler.py → extract_metrics_task (Celery)
+  → Brand affinity verification (3 tiers: input match, content scan, RAG)
+  → Pipeline-specific extractor → MetricSnapshot rows → Rollup aggregation
+  → Cache invalidation → Kafka event (optional)
+```
+
+The `analytics` app extracts KPIs from completed job `result_data`. Extractors read from `result_data.node_results.<node_id>` (e.g., `node_results.voice_of_customer.voc_health_score`). Models: `MetricSnapshot` (per-execution), `MetricRollup` (daily/weekly/monthly aggregates), `MetricDefinition` (metric registry). Nightly reconciliation via `reconcile_rollups_task` (02:00 UTC Celery Beat). Idempotent via Redis key `analytics:extracted:{job_id}`. API endpoints under `/api/v1/analytics/` (scorecard, trends, comparison, distribution, coverage).
+
+### Workspace Management
+
+The `workspace` app provides visual workflow editing with React Flow. Models: `UserWorkflow` (layout + manifest), `WorkflowSnapshot` (frozen execution state), `ChatWorkspaceLink` (bidirectional chat↔workflow navigation). Features collaborative editing locks (Redis, 2h TTL) and real-time progress via WebSocket (`WorkspaceConsumer` at `ws://host/ws/workspace/<tenant_id>/`). API under `/api/v1/workspace/`.
 
 ### Multi-Tenancy
 
@@ -191,7 +213,7 @@ Schema-based via `django-tenants`. All models have a nullable `tenant` FK. Most 
 
 ### Redis Database Allocation
 
-DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent
+DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent, DB 16: Brand Positioning (requires `databases 17` in redis.conf)
 
 ### Microservice Layout Convention
 
@@ -207,7 +229,7 @@ All 9 agent microservices follow this structure:
 └── main.py       # FastAPI application with lifespan management
 ```
 
-Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `CONTENT_`, `SOCIAL_`, `TITLING_`, `RAG_UPLOADER_`, `BRAND_EQUITY_`, `ODOO_MCP_`, `APA_`, `TCIA_`, `VOCA_`, `ODOO_WORKER_`).
+Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `CONTENT_`, `SOCIAL_`, `TITLING_`, `RAG_UPLOADER_`, `BRAND_EQUITY_`, `ODOO_MCP_`, `APA_`, `TCIA_`, `VOCA_`, `ODOO_WORKER_`, `BPA_`).
 
 ### Kafka Topics
 
@@ -235,6 +257,9 @@ Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `C
 | `voc-insights-topic` | VoC agent | — | VoC insight alerts |
 | `agent.commands.voice-of-customer-agent` | Django (Celery) | VoC agent | Scheduled VoC scan commands |
 | `odoo-worker-audit-topic` | Odoo Worker agent | — | Odoo worker tool call audit trail |
+| `bpa-positioning-audit-topic` | Brand Positioning agent | — | Positioning decision audit trail |
+| `bpa-positioning-events-topic` | Brand Positioning agent | — | Positioning strategy events |
+| `analytics-events` | Analytics extraction | — | Metric extraction/rejection audit (conditional via `ANALYTICS_KAFKA_ENABLED`) |
 
 ## Critical Code Patterns
 
@@ -332,7 +357,7 @@ Use `sanitize_text_input()`, `sanitize_ai_prompt()`, `validate_file_upload()` fr
 
 ### Frontend Design System
 
-Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `text-brand-electric`, `text-brand-silver`, `btn-primary`. Icons from `lucide-react`. See `ai-brand-automator-frontend/DESIGN_SYSTEM.md`.
+Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `text-brand-electric`, `text-brand-silver`, `btn-primary`. Icons from `lucide-react`. Charts via `recharts`. See `ai-brand-automator-frontend/DESIGN_SYSTEM.md`.
 
 ## Non-Negotiable Rules
 
@@ -375,6 +400,12 @@ Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `t
 | Orchestration dispatch service | `ai-brand-automator/orchestration/services.py` |
 | Pipeline manifest seeder | `ai-brand-automator/orchestration/management/commands/seed_manifests.py` |
 | Pipeline result handler | `ai-brand-automator/orchestration/result_handler.py` |
+| Analytics extractors | `ai-brand-automator/analytics/extractors/` |
+| Analytics brand affinity | `ai-brand-automator/analytics/brand_affinity.py` |
+| Analytics views (REST API) | `ai-brand-automator/analytics/views.py` |
+| Workspace views + lock mgmt | `ai-brand-automator/workspace/views.py` |
+| Workspace services (lock, snapshots) | `ai-brand-automator/workspace/services.py` |
+| Workspace WebSocket consumer | `ai-brand-automator/workspace/consumers.py` |
 | Orchestrator graph builder | `pipeline-orchestrator-svc/app/factory/graph_builder.py` |
 | Orchestrator job executor | `pipeline-orchestrator-svc/app/services/job_executor.py` |
 | Pipeline node tracker | `pipeline-orchestrator-svc/app/nodes/tracked.py` |
@@ -384,7 +415,7 @@ Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `t
 | Skill definitions (54 .md files) | `pipeline-orchestrator-svc/skills/` |
 | Odoo MCP tool registry | `odoo-mcp-server-svc/app/tools/registry.py` |
 | Odoo MCP RBAC engine | `odoo-mcp-server-svc/app/rbac/engine.py` |
-| Odoo MCP role definitions (17 YAML) | `odoo-mcp-server-svc/config/roles/` |
+| Odoo MCP role definitions (16 YAML) | `odoo-mcp-server-svc/config/roles/` |
 | Frontend API client | `ai-brand-automator-frontend/src/lib/api.ts` |
 | Frontend error types | `ai-brand-automator-frontend/src/lib/errors.ts` |
 | Tenant context | `ai-brand-automator-frontend/src/contexts/TenantContext.tsx` |
@@ -393,6 +424,10 @@ Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `t
 | Pipeline graph UI | `ai-brand-automator-frontend/src/components/pipelines/PipelineGraph.tsx` |
 | Orchestration types (FE) | `ai-brand-automator-frontend/src/types/orchestration.ts` |
 | Frontend orchestration helpers | `ai-brand-automator-frontend/src/lib/orchestration.ts` |
+| Frontend analytics API client | `ai-brand-automator-frontend/src/lib/analytics.ts` |
+| Frontend analytics dashboard | `ai-brand-automator-frontend/src/components/analytics/AnalyticsDashboard.tsx` |
+| Frontend workspace API client | `ai-brand-automator-frontend/src/lib/workspace.ts` |
+| Frontend workflow canvas | `ai-brand-automator-frontend/src/components/workspace/WorkflowCanvas.tsx` |
 | Frontend env config | `ai-brand-automator-frontend/src/lib/env.ts` |
 | Onboarding pipeline service | `ai-brand-automator/onboarding/services.py` |
 | Backend Procfile (9 processes) | `ai-brand-automator/Procfile` |
