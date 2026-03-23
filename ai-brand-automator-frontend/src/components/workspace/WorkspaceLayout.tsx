@@ -81,8 +81,10 @@ export default function WorkspaceLayout({
   // Refs to expose current values to the mousemove handler (stable closure)
   const leftOpenRef = useRef(leftOpen);
   const leftWidthRef = useRef(leftWidth);
-  leftOpenRef.current = leftOpen;
-  leftWidthRef.current = leftWidth;
+  useEffect(() => {
+    leftOpenRef.current = leftOpen;
+    leftWidthRef.current = leftWidth;
+  }, [leftOpen, leftWidth]);
 
   // Derive effective right-open: local toggle OR parent forcing it open
   const effectiveRightOpen = rightOpen || !!forceRightOpen;
