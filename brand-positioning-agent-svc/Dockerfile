@@ -1,4 +1,5 @@
 FROM python:3.12-slim
+LABEL service="brand-positioning-agent-svc" port="8031"
 
 WORKDIR /app
 
