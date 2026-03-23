@@ -613,10 +613,17 @@ class TestStemmingRouting:
         )
         assert result["resolved_manifest_id"] == "iso-brand-equity"
 
-    async def test_analyzing_routes_to_brand_analysis(self):
+    async def test_analyzing_routes_to_brand_strategy_positioning(self):
         node = RouterNode()
         result = await node(
             _base_state(input_prompt="analyzing brand positioning deeply")
+        )
+        assert result["resolved_manifest_id"] == "brand-strategy-positioning"
+
+    async def test_brand_analysis_without_positioning(self):
+        node = RouterNode()
+        result = await node(
+            _base_state(input_prompt="analyzing brand performance deeply")
         )
         assert result["resolved_manifest_id"] == "brand-analysis"
 

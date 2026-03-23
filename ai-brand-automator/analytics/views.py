@@ -2,10 +2,11 @@ import hashlib
 import logging
 from datetime import date, timedelta
 
+from django.conf import settings as django_settings
 from django.core.cache import cache
 from django.db.models import Avg, Count, Q
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -166,6 +167,13 @@ class ScorecardView(APIView):
                     "higher_is_better": defn.higher_is_better,
                 }
             )
+
+        # Sort by MetricDefinition display_order so tiles appear consistently
+        def sort_key(result):
+            definition = defn_map.get(result["metric_name"])
+            return definition.display_order if definition is not None else 999
+
+        results.sort(key=sort_key)
 
         serializer = ScorecardItemSerializer(results, many=True)
         cache.set(ck, serializer.data, CACHE_TTL)
@@ -460,5 +468,111 @@ class CoverageView(APIView):
                 "analytics_jobs": analytics_jobs,
                 "excluded_jobs": excluded_jobs,
                 "coverage_pct": coverage_pct,
+            }
+        )
+
+
+class WF1ContextView(APIView):
+    """GET /api/v1/analytics/wf1-context/ — Latest WF1 Brand Discovery result.
+
+    Used by WF2 agents (BPA, etc.) to consume WF1 intelligence
+    without Django ORM access. Authenticated via X-Service-Token.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        # Service-token auth (same pattern as callback endpoints)
+        service_token = request.headers.get("X-Service-Token", "")
+        expected_token = getattr(
+            django_settings,
+            "ORCHESTRATOR_SERVICE_TOKEN",
+            "dev-service-token",
+        )
+        if service_token != expected_token:
+            return Response(
+                {"error": "Invalid service token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # For service-to-service calls, prefer X-Tenant-ID header over
+        # request.tenant (which DefaultTenantMiddleware sets to the public
+        # tenant based on hostname).
+        tenant = None
+        tenant_id = request.headers.get("X-Tenant-ID", "")
+        if tenant_id:
+            from tenants.models import Tenant
+
+            try:
+                tenant = Tenant.objects.get(pk=tenant_id)
+            except (Tenant.DoesNotExist, ValueError):
+                pass
+        if not tenant:
+            tenant = _get_tenant(request)
+
+        if not tenant:
+            return Response(
+                {"error": "Tenant required"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        from orchestration.models import AnalysisJob
+
+        # WF1 node result keys that indicate a Brand Discovery pipeline
+        WF1_NODE_KEYS = {
+            "market_research",
+            "competitor_intelligence",
+            "audience_persona",
+            "trend_cultural",
+            "voice_of_customer",
+        }
+
+        # Find latest completed WF1 job — seeded manifests first
+        job = (
+            AnalysisJob.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True),
+                status=AnalysisJob.Status.COMPLETED,
+                manifest__pipeline_id__in=[
+                    "brand-discovery-complete",
+                    "brand-discovery-full",
+                ],
+            )
+            .select_related("manifest")
+            .order_by("-completed_at")
+            .first()
+        )
+
+        # Fallback: workspace copies that contain all 5 WF1 node results
+        if not job:
+            candidates = AnalysisJob.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True),
+                status=AnalysisJob.Status.COMPLETED,
+            ).order_by("-completed_at")[:20]
+            for candidate in candidates:
+                nr = (candidate.result_data or {}).get("node_results", {})
+                if WF1_NODE_KEYS.issubset(nr.keys()):
+                    job = candidate
+                    break
+
+        if not job:
+            return Response(
+                {"error": "No WF1 data"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        result_data = job.result_data or {}
+        node_results = result_data.get("node_results", {})
+
+        return Response(
+            {
+                "mra": node_results.get("market_research", {}),
+                "cia": node_results.get("competitor_intelligence", {}),
+                "apa": node_results.get("audience_persona", {}),
+                "tcia": node_results.get("trend_cultural", {}),
+                "voca": node_results.get("voice_of_customer", {}),
+                "wf1_completed_at": (
+                    job.completed_at.isoformat() if job.completed_at else None
+                ),
+                "wf1_job_id": str(job.job_id),
             }
         )

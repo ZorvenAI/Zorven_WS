@@ -3,6 +3,7 @@ Input validation and sanitization utilities
 Prevents injection attacks and ensures data integrity
 """
 
+import html
 import re
 import bleach
 from typing import Any, Dict, List
@@ -37,6 +38,25 @@ def sanitize_text_input(text: str, max_length: int = 10000) -> str:
     )
 
     return cleaned
+
+
+def sanitize_plain_text(text: str, max_length: int = 200) -> str:
+    """Sanitize a plain-text field (names, titles).
+
+    Strips all HTML tags but does NOT entity-encode characters like & or <.
+    Use this for fields rendered as React text content where HTML entities
+    would display literally (e.g. ``&amp;`` instead of ``&``).
+    """
+    if not isinstance(text, str):
+        text = str(text)
+
+    text = text[:max_length]
+
+    # Strip all HTML tags
+    cleaned = bleach.clean(text, tags=[], attributes={}, strip=True)
+
+    # bleach.clean entity-encodes &, <, > — undo that for plain-text fields
+    return html.unescape(cleaned)
 
 
 def sanitize_ai_prompt(prompt: str) -> str:

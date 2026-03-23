@@ -996,6 +996,52 @@ class Command(BaseCommand):
                 },
             },
         },
+        # ── WF2: Brand Strategy & Positioning ──
+        {
+            "pipeline_id": "brand-strategy-positioning",
+            "name": "Brand Strategy & Positioning",
+            "description": (
+                "Strategic brand positioning using WF1 brand discovery "
+                "intelligence. Generates framework-agnostic positioning "
+                "statements, value proposition canvas, perceptual maps, "
+                "and differentiation framework. Requires completed WF1 "
+                "Brand Discovery pipeline."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "brand_positioning",
+                        "type": "external",
+                        "url": (
+                            "http://brand-positioning-agent-svc" ":8031/v1/execute"
+                        ),
+                        "config": {
+                            "require_wf1_context": True,
+                            "default_candidate_count": 3,
+                            "default_perceptual_maps": 3,
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "brand_positioning"],
+                    ["brand_positioning", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.4,
+                },
+            },
+        },
     ]
 
     def handle(self, *args, **options):

@@ -313,6 +313,17 @@ function WorkflowsPageInner() {
           setWorkflows(wfData);
           setTemplates(tmplData);
           setError(null);
+          // Clear stale selectedId if it no longer exists in the list
+          // (e.g. new brand with no workflows, or workflow was deleted)
+          setSelectedId((prev) => {
+            if (prev && wfData.length > 0 && !wfData.some((w) => w.workflow_id === prev)) {
+              return null;
+            }
+            if (prev && wfData.length === 0) {
+              return null;
+            }
+            return prev;
+          });
         }
       } catch (err) {
         if (!cancelled) {
@@ -403,6 +414,10 @@ function WorkflowsPageInner() {
         if (!cancelled) {
           console.error('Failed to load workflow detail:', err);
           setSelectedDetail(null);
+          // Clear stale selection on 404 (e.g. workflow deleted or new brand)
+          if (err instanceof Error && err.message.includes('404')) {
+            setSelectedId(null);
+          }
         }
       } finally {
         if (!cancelled) setIsDetailLoading(false);
@@ -842,7 +857,7 @@ function WorkflowsPageInner() {
               </div>
             )}
 
-            {isReadonly && (
+            {isReadonly && !isTemplatePreview && (
               <div className="absolute inset-x-0 top-0 z-10 mx-4 mt-4">
                 <div className="glass-card border border-amber-400/30 p-2 text-center">
                   <p className="text-xs text-amber-300">
