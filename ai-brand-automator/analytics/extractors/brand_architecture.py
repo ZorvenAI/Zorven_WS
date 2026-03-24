@@ -1,6 +1,19 @@
 from analytics.extractors.base import BaseExtractor
 
 
+def _count_sub_brands(node: dict) -> int:
+    """Recursively count nodes with type 'sub_brand' in the hierarchy tree."""
+    if not isinstance(node, dict):
+        return 0
+    count = 0
+    node_type = (node.get("type", "") or "").lower()
+    if node_type == "sub_brand":
+        count += 1
+    for child in node.get("children", []):
+        count += _count_sub_brands(child)
+    return count
+
+
 class BrandArchitectureExtractor(BaseExtractor):
     """Extracts metrics from brand architecture (BAA) results.
 
@@ -81,19 +94,19 @@ class BrandArchitectureExtractor(BaseExtractor):
                     )
                 )
 
-            total_nodes = self._safe_get(hierarchy, "total_nodes", default=None)
-            if total_nodes is not None:
-                sub_brand_count = max(float(total_nodes) - 1, 0)
-                metrics.append(
-                    self._make_metric(
-                        job,
-                        "sub_brand_count",
-                        sub_brand_count,
-                        "brand_architecture",
-                        unit="count",
-                        agent_source="brand-architecture-agent",
-                    )
+            # Count actual sub-brand nodes by traversing the hierarchy tree,
+            # not total_nodes which includes product_lines/endorsed/etc.
+            sub_brand_count = _count_sub_brands(hierarchy.get("root", {}))
+            metrics.append(
+                self._make_metric(
+                    job,
+                    "sub_brand_count",
+                    float(sub_brand_count),
+                    "brand_architecture",
+                    unit="count",
+                    agent_source="brand-architecture-agent",
                 )
+            )
 
         # Naming consistency
         naming = baa.get("naming_hierarchy", {})

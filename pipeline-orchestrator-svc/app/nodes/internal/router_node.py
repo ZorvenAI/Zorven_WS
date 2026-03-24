@@ -269,10 +269,10 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("brand relationship", 2),
         ("master brand", 2),
         ("sub-brand", 2),
-        # Weak signal (weight 1) — generic terms, need context
-        ("architecture", 1),
-        ("portfolio", 1),
-        ("hierarchy", 1),
+        # Weak signal (weight 1) — require "brand" qualifier to avoid misrouting
+        ("brand architecture", 1),
+        ("brand portfolio", 1),
+        ("brand hierarchy", 1),
     ],
     "brand-analysis": [
         ("brand", 1),

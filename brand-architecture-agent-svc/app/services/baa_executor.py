@@ -173,12 +173,20 @@ class BAAExecutor:
                         f"Discovery and Brand Positioning pipelines first."
                     ],
                     "recommendations": [
-                        "Run WF1 Brand Discovery pipeline first" if not has_wf1 else "",
-                        (
-                            "Run WF2 Brand Positioning pipeline first"
-                            if not has_bpa
-                            else ""
-                        ),
+                        r
+                        for r in [
+                            (
+                                "Run WF1 Brand Discovery pipeline first"
+                                if not has_wf1
+                                else None
+                            ),
+                            (
+                                "Run WF2 Brand Positioning pipeline first"
+                                if not has_bpa
+                                else None
+                            ),
+                        ]
+                        if r
                     ],
                     "sources": [],
                 }
