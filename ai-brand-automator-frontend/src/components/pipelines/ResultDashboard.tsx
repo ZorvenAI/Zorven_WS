@@ -3296,48 +3296,198 @@ function BrandArchitectureSection({
       {/* Strategy tab */}
       {activeTab === 'strategy' && (
         <div className="space-y-4">
-          {archStrategy && Object.keys(archStrategy).length > 0 ? (
-            <div className="space-y-3">
-              {Object.entries(archStrategy).map(([key, value]) => (
-                <div key={key} className="p-3 rounded-lg bg-white/5 border border-white/10">
-                  <div className="text-xs text-brand-silver/60 uppercase tracking-wider mb-1">{key.replace(/_/g, ' ')}</div>
-                  <div className="text-sm text-white">
-                    {typeof value === 'string' ? value : <MarkdownMessage content={JSON.stringify(value, null, 2)} />}
-                  </div>
-                </div>
-              ))}
+          {/* Executive Summary */}
+          {archStrategy?.executive_summary && (
+            <div className="glass-card p-4 border border-white/10">
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                Executive Summary
+              </h4>
+              <p className="text-sm text-brand-silver/80 leading-relaxed">{archStrategy.executive_summary}</p>
             </div>
-          ) : (
-            <div className="text-sm text-brand-silver/60">No strategy details available.</div>
           )}
 
-          {/* Findings & Recommendations */}
-          {findings && findings.length > 0 && (
-            <div>
-              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Key Findings</h5>
-              {findings.filter(f => typeof f === 'string' && f.trim()).map((f, i) => (
-                <div key={i} className="mb-1.5 text-sm text-brand-silver/80">• {f}</div>
-              ))}
+          {/* Strategic Rationale */}
+          {archStrategy?.strategic_rationale && (
+            <div className="glass-card p-4 border border-white/10">
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                Strategic Rationale
+              </h4>
+              <p className="text-sm text-brand-silver/80 leading-relaxed">{archStrategy.strategic_rationale}</p>
             </div>
           )}
+
+          {/* Competitive Advantages */}
+          {(() => {
+            const advantages = archStrategy?.competitive_advantages;
+            if (!advantages || !Array.isArray(advantages) || advantages.length === 0) return null;
+            return (
+              <div>
+                <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                  Competitive Advantages
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {advantages.map((adv: string, i: number) => (
+                    <div key={i} className="glass-card p-3 border border-green-400/10 flex gap-2 items-start">
+                      <span className="text-green-400 mt-0.5 shrink-0">✓</span>
+                      <span className="text-sm text-brand-silver/80">{typeof adv === 'string' ? adv : JSON.stringify(adv)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Implementation Priorities */}
+          {(() => {
+            const priorities = archStrategy?.implementation_priorities;
+            if (!priorities || !Array.isArray(priorities) || priorities.length === 0) return null;
+            return (
+              <div>
+                <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                  Implementation Priorities
+                </h4>
+                <div className="space-y-2">
+                  {priorities.map((p: string, i: number) => (
+                    <div key={i} className="glass-card p-3 border border-white/10 flex gap-3 items-start">
+                      <span className="text-brand-electric font-semibold text-sm shrink-0">{i + 1}.</span>
+                      <span className="text-sm text-brand-silver/80">{typeof p === 'string' ? p : JSON.stringify(p)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Success Metrics */}
+          {(() => {
+            const metrics = archStrategy?.success_metrics;
+            if (!metrics || !Array.isArray(metrics) || metrics.length === 0) return null;
+            return (
+              <div>
+                <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                  Success Metrics
+                </h4>
+                <div className="space-y-1.5">
+                  {metrics.map((m: string | Record<string, unknown>, i: number) => (
+                    <div key={i} className="flex gap-2 items-start p-2.5 rounded-lg bg-white/5 border border-white/10">
+                      <span className="text-brand-electric shrink-0">◎</span>
+                      {typeof m === 'string' ? (
+                        <span className="text-sm text-brand-silver/80">{m}</span>
+                      ) : (
+                        <div className="text-sm">
+                          <span className="text-white">{(m as Record<string, unknown>).metric as string || (m as Record<string, unknown>).name as string || ''}</span>
+                          {(m as Record<string, unknown>).target && (
+                            <span className="text-brand-electric ml-2">{(m as Record<string, unknown>).target as string}</span>
+                          )}
+                          {(m as Record<string, unknown>).timeframe && (
+                            <span className="text-brand-silver/50 ml-2">({(m as Record<string, unknown>).timeframe as string})</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Remaining strategy fields (catch-all for any extra keys) */}
+          {(() => {
+            if (!archStrategy || typeof archStrategy !== 'object') return null;
+            const knownStrategyKeys = new Set([
+              'executive_summary', 'strategic_rationale', 'competitive_advantages',
+              'implementation_priorities', 'success_metrics',
+            ]);
+            const extraEntries = Object.entries(archStrategy as Record<string, unknown>).filter(
+              ([k]) => !knownStrategyKeys.has(k)
+            );
+            if (extraEntries.length === 0) return null;
+            return (
+              <div className="space-y-3">
+                {extraEntries.map(([key, value]) => (
+                  <div key={key} className="glass-card p-3 border border-white/10">
+                    <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                      {key.replace(/_/g, ' ')}
+                    </h4>
+                    {typeof value === 'string' ? (
+                      <p className="text-sm text-brand-silver/80 leading-relaxed">{value}</p>
+                    ) : Array.isArray(value) ? (
+                      <ul className="space-y-1">
+                        {(value as unknown[]).map((item, i) => (
+                          <li key={i} className="text-sm text-brand-silver/80 flex gap-2 items-start">
+                            <span className="text-brand-electric/40 shrink-0">→</span>
+                            {typeof item === 'string' ? item : JSON.stringify(item)}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-brand-silver/80">{JSON.stringify(value, null, 2)}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          {/* Key Findings */}
+          {findings && findings.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Key Findings</h4>
+              <div className="space-y-1.5">
+                {findings.filter(f => typeof f === 'string' && f.trim()).map((f, i) => (
+                  <div key={i} className="flex gap-2 items-start p-2.5 rounded-lg bg-white/5 border border-white/10">
+                    <span className="text-amber-400 shrink-0">●</span>
+                    <span className="text-sm text-brand-silver/80">{f}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recommendations */}
           {recommendations && recommendations.length > 0 && (
             <div>
-              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Recommendations</h5>
-              {recommendations.filter(r => typeof r === 'string' && r.trim()).map((r, i) => (
-                <div key={i} className="mb-1.5 text-sm text-brand-silver/80">→ {r}</div>
-              ))}
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Recommendations</h4>
+              <div className="space-y-1.5">
+                {recommendations.filter(r => typeof r === 'string' && r.trim()).map((r, i) => (
+                  <div key={i} className="flex gap-2 items-start p-2.5 rounded-lg bg-brand-electric/5 border border-brand-electric/10">
+                    <span className="text-brand-electric shrink-0">→</span>
+                    <span className="text-sm text-brand-silver/80">{r}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {/* Sources */}
           {sources && sources.length > 0 && (
             <div>
-              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Sources</h5>
-              {sources.map((s, i) => (
-                <div key={i} className="text-xs text-brand-silver/60">
-                  {s.url ? <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-brand-electric hover:underline">{s.title || s.url}</a> : (s.title || `Source ${i + 1}`)}
-                </div>
-              ))}
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Sources</h4>
+              <div className="space-y-1">
+                {sources.map((s, i) => {
+                  const src = typeof s === 'string' ? { title: s } : s;
+                  const title = src.title || src.name || src.source || src.description || '';
+                  const url = src.url || src.link || '';
+                  const detail = src.description || src.type || src.category || '';
+                  return (
+                    <div key={i} className="flex gap-2 items-start p-2 rounded-lg bg-white/5 border border-white/10">
+                      <span className="text-brand-silver/40 text-xs shrink-0 mt-0.5">[{i + 1}]</span>
+                      <div className="text-sm">
+                        {url ? (
+                          <a href={url} target="_blank" rel="noopener noreferrer" className="text-brand-electric hover:underline">
+                            {title || url}
+                          </a>
+                        ) : (
+                          <span className="text-white">{title || `Source ${i + 1}`}</span>
+                        )}
+                        {detail && title !== detail && (
+                          <span className="text-brand-silver/50 ml-2 text-xs">— {detail}</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
