@@ -384,7 +384,8 @@ METRIC_DEFINITIONS = [
         "higher_is_better": True,
         "chart_color": "#3B82F6",
         "display_order": 200,
-        "description": "Total score for recommended architecture model (4 dimensions x 0-25)",
+        "description": "Total score for recommended architecture model"
+        " (4 dimensions x 0-25)",
         "source_pipelines": ["brand-strategy-architecture"],
     },
     {

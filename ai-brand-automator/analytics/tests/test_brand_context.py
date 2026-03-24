@@ -10,11 +10,10 @@ Covers:
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.utils import timezone
 from rest_framework.test import APIClient
 
 User = get_user_model()
@@ -321,7 +320,6 @@ class TestMetricExtractionBrandContext:
 
     def test_brand_context_injected_into_metrics(self):
         """The brand context injection loop tags metrics correctly."""
-        from analytics.models import MetricSnapshot
         from types import SimpleNamespace
 
         # Simulate a job with sub-brand input_context
