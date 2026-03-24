@@ -17,7 +17,11 @@ export default function AnalyticsDashboard() {
   const [range, setRange] = useState<TimeRange>('30d');
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
   const { activeBrand } = useBrandContext();
-  const brandContext = activeBrand?.brand_context_id;
+  // Don't filter when "parent" is selected — show all metrics (aggregate view)
+  const brandContext =
+    activeBrand?.brand_context_id && activeBrand.brand_context_id !== 'parent'
+      ? activeBrand.brand_context_id
+      : undefined;
 
   const { scorecard, coverage, loading, error } = useAnalytics(
     range,
