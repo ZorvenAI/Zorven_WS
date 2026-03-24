@@ -46,20 +46,47 @@ class AnthropicClient:
                 messages=[{"role": "user", "content": user_prompt}],
             )
 
-            text = response.content[0].text
-            # Try to extract JSON from response
+            raw_text = response.content[0].text
+            text = raw_text
+
+            # Try to extract JSON from code fences
             if "```json" in text:
                 text = text.split("```json")[1].split("```")[0].strip()
             elif "```" in text:
                 text = text.split("```")[1].split("```")[0].strip()
 
-            return json.loads(text)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse JSON from Claude response")
-            return {"raw_text": response.content[0].text if response else ""}
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                # Try finding JSON object boundaries as fallback
+                start = raw_text.find("{")
+                end = raw_text.rfind("}")
+                if start != -1 and end > start:
+                    try:
+                        return json.loads(raw_text[start : end + 1])
+                    except json.JSONDecodeError:
+                        pass
+
+                logger.warning(
+                    "Failed to parse JSON from Claude response "
+                    "(length=%d, preview=%.200s)",
+                    len(raw_text),
+                    raw_text[:200],
+                )
+                return {
+                    "raw_text": raw_text,
+                    "findings": [
+                        "Architecture analysis completed but response "
+                        "format was unexpected. Please retry."
+                    ],
+                    "confidence_score": 0.0,
+                }
         except Exception as exc:
             logger.error("Anthropic API call failed: %s", exc)
-            return {}
+            return {
+                "findings": [f"LLM API call failed: {str(exc)[:100]}"],
+                "confidence_score": 0.0,
+            }
 
     async def generate_text(
         self,

@@ -126,7 +126,15 @@ class BAAExecutor:
                 )
 
             # Prerequisite check: BAA requires BOTH WF1 and BPA
-            has_wf1 = bool(wf1_context or previous_outputs)
+            wf1_keys = {
+                "market_research",
+                "competitor_intelligence",
+                "audience_persona",
+                "trend_cultural",
+                "voice_of_customer",
+            }
+            has_wf1_in_prev = any(k in previous_outputs for k in wf1_keys)
+            has_wf1 = bool(wf1_context or has_wf1_in_prev)
             has_bpa = bool(bpa_context or previous_outputs.get("brand_positioning"))
 
             if not has_wf1 or not has_bpa:

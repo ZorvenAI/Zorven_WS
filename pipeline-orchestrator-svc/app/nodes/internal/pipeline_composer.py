@@ -465,6 +465,16 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
             "framework. Requires completed WF1 Brand Discovery data"
         ),
     },
+    {
+        "id": "brand-strategy-architecture",
+        "description": (
+            "Brand architecture design: recommends optimal brand structure "
+            "(branded house, house of brands, endorsed, hybrid), builds "
+            "brand hierarchy tree, naming conventions, and portfolio growth "
+            "path. Requires completed WF1 Brand Discovery and WF2 Brand "
+            "Positioning data"
+        ),
+    },
 ]
 
 # ── Few-shot examples for Tier 1 ──
@@ -524,6 +534,11 @@ Examples of prompt → pipeline compositions:
 - "Generate a value proposition canvas and perceptual maps" → [brand_positioning, manager]
 - "What is our unique value proposition and competitive positioning?" → [brand_positioning, manager]
 - "Build brand positioning with market research context" → [market_research, competitor_intelligence, brand_positioning, manager]
+- "Design a brand architecture for our product portfolio" → [brand_architecture, manager]
+- "What brand structure should we use — branded house or house of brands?" → [brand_architecture, manager]
+- "Create a brand hierarchy with naming conventions" → [brand_architecture, manager]
+- "Build brand positioning and then design the brand architecture" → [brand_positioning, brand_architecture, manager]
+- "Full brand strategy with positioning and architecture" → [brand_positioning, brand_architecture, manager]
 """.strip()
 
 

@@ -218,6 +218,30 @@ class BAAAnalyzer:
 
         result = await self._llm.generate_json(system_prompt, user_prompt)
 
+        # Detect parse failure (raw_text key present means JSON parsing failed)
+        if "raw_text" in result and "recommendation" not in result:
+            logger.warning(
+                "Claude returned unparseable response for tenant %s",
+                tenant_id,
+            )
+            return {
+                "recommendation": {},
+                "hierarchy": {},
+                "naming_hierarchy": {},
+                "growth_path": {},
+                "strategy": {},
+                "confidence_score": 0.0,
+                "findings": result.get(
+                    "findings",
+                    [
+                        "Architecture analysis completed but the response "
+                        "could not be parsed. Please retry the analysis."
+                    ],
+                ),
+                "recommendations": [],
+                "sources": [],
+            }
+
         # Extract and structure the response
         recommendation = result.get("recommendation", {})
         hierarchy = result.get("hierarchy", {})

@@ -67,19 +67,29 @@ class StrategyPersister:
 
 
 def _flatten_hierarchy(hierarchy: dict[str, Any], parent_brand: str) -> list[dict]:
-    """Recursively walk the hierarchy tree and extract brand entities."""
+    """Recursively walk the hierarchy tree and extract brand entities.
+
+    Claude's output structure: {"root": {name, type, children: [...]}, "total_depth": N}
+    We skip the root (master) node and extract all children as brand entities.
+    """
     if not hierarchy:
         return []
 
     results = []
 
-    # The hierarchy may have a 'nodes' list or 'children' list
-    nodes = hierarchy.get("nodes") or hierarchy.get("children") or []
+    # Handle Claude's output format: hierarchy has a "root" key
+    root = hierarchy.get("root")
+    if root and isinstance(root, dict):
+        # Skip the root (master) node itself, extract its children
+        nodes = root.get("children") or root.get("sub_brands") or []
+    else:
+        # Fallback: try other key patterns
+        nodes = hierarchy.get("nodes") or hierarchy.get("children") or []
 
-    # Also handle the case where hierarchy IS the tree root with sub_brands
-    sub_brands = hierarchy.get("sub_brands") or []
-    if sub_brands:
-        nodes = sub_brands
+        # Also handle the case where hierarchy IS the tree root with sub_brands
+        sub_brands = hierarchy.get("sub_brands") or []
+        if sub_brands:
+            nodes = sub_brands
 
     for node in nodes:
         name = node.get("name", "")
@@ -115,7 +125,7 @@ def _flatten_hierarchy(hierarchy: dict[str, Any], parent_brand: str) -> list[dic
             }
         )
 
-        # Recurse into children
+        # Recurse into children (pass as root-less hierarchy)
         children = node.get("children") or node.get("sub_brands") or []
         if children:
             child_results = _flatten_hierarchy({"nodes": children}, parent_brand)

@@ -2988,6 +2988,364 @@ interface BPAStrategy {
   success_metrics?: Array<{ metric?: string; target?: string; timeframe?: string }>;
 }
 
+// ── Brand Architecture Section ──────────────────────────────────────
+
+interface BAAModelScore {
+  model: string;
+  positioning_alignment: number;
+  audience_fit: number;
+  competitive_diff: number;
+  operational_efficiency: number;
+  total: number;
+  rationale: string;
+}
+
+interface BAARecommendation {
+  recommended_model: string;
+  model_scores: BAAModelScore[];
+  why_not_others: string[];
+  confidence_score: number;
+  citations: string[];
+}
+
+interface BAAHierarchyNode {
+  name: string;
+  type: string;
+  relationship_to_parent?: string;
+  target_persona?: string;
+  positioning_score?: number;
+  visual_identity_guideline?: string;
+  children?: BAAHierarchyNode[];
+}
+
+interface BAAHierarchy {
+  root: BAAHierarchyNode;
+  total_depth: number;
+  total_nodes: number;
+}
+
+interface BAANamingHierarchy {
+  naming_pattern: string;
+  naming_rules: Array<{ rule?: string; scope?: string; example?: string }>;
+  consistency_score: number;
+}
+
+interface BAAGrowthPath {
+  phases: Array<{ phase?: string; timeline?: string; actions?: string[]; metrics?: string[] }>;
+  portfolio_risk_assessment: Array<{ risk?: string; severity?: string; mitigation?: string }>;
+}
+
+function BrandArchitectureSection({
+  recommendation,
+  hierarchy,
+  namingHierarchy,
+  growthPath,
+  archStrategy,
+  confidenceScore,
+  sources,
+  findings,
+  recommendations,
+}: {
+  recommendation?: BAARecommendation;
+  hierarchy?: BAAHierarchy;
+  namingHierarchy?: BAANamingHierarchy;
+  growthPath?: BAAGrowthPath;
+  archStrategy?: Record<string, unknown>;
+  confidenceScore?: number;
+  sources?: SourceEntry[];
+  findings?: string[];
+  recommendations?: string[];
+}) {
+  const [activeTab, setActiveTab] = useState<'model' | 'hierarchy' | 'naming' | 'growth' | 'strategy'>('model');
+
+  function scoreColor(score: number) {
+    if (score >= 80) return 'text-green-400';
+    if (score >= 60) return 'text-amber-400';
+    return 'text-red-400';
+  }
+
+  function scoreBg(score: number) {
+    if (score >= 80) return 'bg-green-400';
+    if (score >= 60) return 'bg-amber-400';
+    return 'bg-red-400';
+  }
+
+  const tabs = [
+    { key: 'model' as const, label: 'Architecture Model' },
+    { key: 'hierarchy' as const, label: 'Brand Hierarchy' },
+    { key: 'naming' as const, label: 'Naming' },
+    { key: 'growth' as const, label: 'Growth Path' },
+    { key: 'strategy' as const, label: 'Strategy' },
+  ];
+
+  const modelScores = recommendation?.model_scores ?? [];
+  const recommended = recommendation?.recommended_model ?? '';
+  const recommendedLabel = recommended.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const whyNot = recommendation?.why_not_others ?? [];
+  const root = hierarchy?.root;
+  const rules = namingHierarchy?.naming_rules ?? [];
+  const phases = growthPath?.phases ?? [];
+  const risks = growthPath?.portfolio_risk_assessment ?? [];
+
+  // Recursive hierarchy tree renderer
+  function renderNode(node: BAAHierarchyNode, depth: number = 0) {
+    const typeLabel = (node.type || '').replace(/_/g, ' ');
+    const indent = depth * 20;
+    return (
+      <div key={`${node.name}-${depth}`}>
+        <div className="flex items-center gap-2 py-1.5 border-b border-white/5" style={{ paddingLeft: `${indent}px` }}>
+          <span className="text-brand-electric text-xs">{depth === 0 ? '◆' : depth === 1 ? '├─' : '└──'}</span>
+          <span className="text-sm font-medium text-white">{node.name}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-brand-silver/70">{typeLabel}</span>
+          {node.positioning_score != null && (
+            <span className={`text-[10px] font-bold ${scoreColor(node.positioning_score)}`}>{node.positioning_score}</span>
+          )}
+        </div>
+        {node.children?.map(child => renderNode(child, depth + 1))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-lg font-bold text-white">Brand Architecture Strategy</h3>
+        {confidenceScore != null && (() => {
+          const pct = confidenceScore <= 1 ? Math.round(confidenceScore * 100) : Math.round(confidenceScore);
+          return (
+            <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold border ${pct >= 70 ? 'text-green-400 bg-green-400/10 border-green-400/30' : pct >= 40 ? 'text-amber-400 bg-amber-400/10 border-amber-400/30' : 'text-red-400 bg-red-400/10 border-red-400/30'}`}>
+              Confidence: {pct}%
+            </span>
+          );
+        })()}
+      </div>
+
+      {/* Recommended Model Badge */}
+      {recommended && (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-brand-electric/10 border border-brand-electric/20">
+          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-brand-electric/20 flex items-center justify-center text-brand-electric text-lg">◇</div>
+          <div>
+            <div className="text-xs text-brand-silver/60 uppercase tracking-wider">Recommended Model</div>
+            <div className="text-lg font-bold text-white">{recommendedLabel}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab navigation */}
+      <div className="flex gap-1 overflow-x-auto border-b border-white/10 pb-px">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-t-md transition-colors whitespace-nowrap ${activeTab === tab.key ? 'bg-brand-electric/20 text-brand-electric border-b-2 border-brand-electric' : 'text-brand-silver/60 hover:text-white hover:bg-white/5'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Model tab */}
+      {activeTab === 'model' && (
+        <div className="space-y-4">
+          {/* Model comparison table */}
+          {modelScores.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-brand-silver/60 text-xs uppercase">
+                    <th className="text-left py-2 pr-3">Model</th>
+                    <th className="text-center py-2 px-2">Positioning</th>
+                    <th className="text-center py-2 px-2">Audience</th>
+                    <th className="text-center py-2 px-2">Competitive</th>
+                    <th className="text-center py-2 px-2">Efficiency</th>
+                    <th className="text-center py-2 px-2">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modelScores
+                    .sort((a, b) => (b.total ?? 0) - (a.total ?? 0))
+                    .map((ms) => {
+                      const modelName = (ms.model || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                      const isRec = ms.model === recommended;
+                      return (
+                        <tr key={ms.model} className={`border-t border-white/5 ${isRec ? 'bg-brand-electric/5' : ''}`}>
+                          <td className="py-2 pr-3">
+                            <span className="text-white font-medium">{modelName}</span>
+                            {isRec && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-brand-electric/20 text-brand-electric">★ Recommended</span>}
+                          </td>
+                          <td className={`text-center py-2 px-2 font-bold ${scoreColor((ms.positioning_alignment / 25) * 100)}`}>{ms.positioning_alignment}/25</td>
+                          <td className={`text-center py-2 px-2 font-bold ${scoreColor((ms.audience_fit / 25) * 100)}`}>{ms.audience_fit}/25</td>
+                          <td className={`text-center py-2 px-2 font-bold ${scoreColor((ms.competitive_diff / 25) * 100)}`}>{ms.competitive_diff}/25</td>
+                          <td className={`text-center py-2 px-2 font-bold ${scoreColor((ms.operational_efficiency / 25) * 100)}`}>{ms.operational_efficiency}/25</td>
+                          <td className="text-center py-2 px-2">
+                            <div className="relative w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                              <div className={`absolute left-0 top-0 h-full rounded-full ${scoreBg(ms.total)}`} style={{ width: `${ms.total}%` }} />
+                            </div>
+                            <span className={`text-xs font-bold ${scoreColor(ms.total)}`}>{ms.total}/100</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Why not others */}
+          {whyNot.length > 0 && (
+            <div>
+              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Why Not Others</h5>
+              <ul className="space-y-1">
+                {whyNot.map((reason, i) => (
+                  <li key={i} className="text-sm text-brand-silver/80 flex items-start gap-2">
+                    <span className="text-red-400/60 mt-0.5">✕</span>
+                    <span>{reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Hierarchy tab */}
+      {activeTab === 'hierarchy' && root && (
+        <div className="space-y-3">
+          <div className="flex gap-4 text-xs text-brand-silver/60">
+            <span>Depth: <span className="text-white font-bold">{hierarchy?.total_depth ?? 0}</span></span>
+            <span>Entities: <span className="text-white font-bold">{hierarchy?.total_nodes ?? 0}</span></span>
+          </div>
+          <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+            {renderNode(root)}
+          </div>
+        </div>
+      )}
+
+      {/* Naming tab */}
+      {activeTab === 'naming' && namingHierarchy && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs text-brand-silver/60 uppercase">Naming Pattern</div>
+              <div className="text-white font-medium">{namingHierarchy.naming_pattern}</div>
+            </div>
+            <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold border ${(namingHierarchy.consistency_score ?? 0) >= 70 ? 'text-green-400 bg-green-400/10 border-green-400/30' : 'text-amber-400 bg-amber-400/10 border-amber-400/30'}`}>
+              Consistency: {namingHierarchy.consistency_score}/100
+            </span>
+          </div>
+          {rules.length > 0 && (
+            <div className="space-y-2">
+              {rules.map((rule, i) => (
+                <div key={i} className="p-3 rounded-lg bg-white/5 border border-white/10">
+                  <div className="text-sm text-white font-medium">{rule.rule || `Rule ${i + 1}`}</div>
+                  {rule.scope && <div className="text-xs text-brand-silver/60 mt-0.5">Scope: {rule.scope}</div>}
+                  {rule.example && <div className="text-xs text-brand-electric/80 mt-0.5">Example: {rule.example}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Growth tab */}
+      {activeTab === 'growth' && (
+        <div className="space-y-4">
+          {phases.length > 0 && (
+            <div>
+              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">Growth Phases</h5>
+              <div className="space-y-3">
+                {phases.map((phase, i) => (
+                  <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-bold text-white">{phase.phase || `Phase ${i + 1}`}</span>
+                      {phase.timeline && <span className="text-xs px-2 py-0.5 rounded-full bg-brand-electric/20 text-brand-electric">{phase.timeline}</span>}
+                    </div>
+                    {phase.actions && phase.actions.length > 0 && (
+                      <ul className="space-y-1 mt-2">
+                        {phase.actions.map((action, j) => (
+                          <li key={j} className="text-sm text-brand-silver/80 flex items-start gap-2">
+                            <span className="text-brand-electric mt-0.5">→</span>
+                            <span>{action}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {risks.length > 0 && (
+            <div>
+              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-3">Portfolio Risks</h5>
+              <div className="space-y-2">
+                {risks.map((risk, i) => (
+                  <div key={i} className="p-3 rounded-lg bg-red-400/5 border border-red-400/10">
+                    <div className="text-sm font-medium text-white">{risk.risk || `Risk ${i + 1}`}</div>
+                    {risk.severity && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-400/20 text-red-400">{risk.severity}</span>}
+                    {risk.mitigation && <div className="text-xs text-brand-silver/70 mt-1">Mitigation: {risk.mitigation}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Strategy tab */}
+      {activeTab === 'strategy' && (
+        <div className="space-y-4">
+          {archStrategy && Object.keys(archStrategy).length > 0 ? (
+            <div className="space-y-3">
+              {Object.entries(archStrategy).map(([key, value]) => (
+                <div key={key} className="p-3 rounded-lg bg-white/5 border border-white/10">
+                  <div className="text-xs text-brand-silver/60 uppercase tracking-wider mb-1">{key.replace(/_/g, ' ')}</div>
+                  <div className="text-sm text-white">
+                    {typeof value === 'string' ? value : <MarkdownMessage content={JSON.stringify(value, null, 2)} />}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-brand-silver/60">No strategy details available.</div>
+          )}
+
+          {/* Findings & Recommendations */}
+          {findings && findings.length > 0 && (
+            <div>
+              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Key Findings</h5>
+              {findings.filter(f => typeof f === 'string' && f.trim()).map((f, i) => (
+                <div key={i} className="mb-1.5 text-sm text-brand-silver/80">• {f}</div>
+              ))}
+            </div>
+          )}
+          {recommendations && recommendations.length > 0 && (
+            <div>
+              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Recommendations</h5>
+              {recommendations.filter(r => typeof r === 'string' && r.trim()).map((r, i) => (
+                <div key={i} className="mb-1.5 text-sm text-brand-silver/80">→ {r}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Sources */}
+          {sources && sources.length > 0 && (
+            <div>
+              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Sources</h5>
+              {sources.map((s, i) => (
+                <div key={i} className="text-xs text-brand-silver/60">
+                  {s.url ? <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-brand-electric hover:underline">{s.title || s.url}</a> : (s.title || `Source ${i + 1}`)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BrandPositioningSection({
   recommendedPositioning,
   positioningCandidates,
@@ -4081,6 +4439,13 @@ export default function ResultDashboard({
     resultData.positioning_candidates != null ||
     resultData.perceptual_maps != null;
 
+  // ── Detect brand architecture data ───────────────────────────
+  const hasBrandArchitecture =
+    resultData.recommendation != null &&
+    typeof resultData.recommendation === 'object' &&
+    (resultData.recommendation as Record<string, unknown>).recommended_model != null &&
+    resultData.hierarchy != null;
+
   // ── Detect voice of customer data ───────────────────────────────
   const hasVoiceOfCustomer =
     resultData.voc_health_score != null ||
@@ -4254,6 +4619,15 @@ export default function ResultDashboard({
     'operating_mode',
     'data_coverage_score',
     'odoo_onboarding_recommendation',
+    // Brand Architecture keys
+    'recommendation',
+    'hierarchy',
+    'naming_hierarchy',
+    'growth_path',
+    'arch_strategy',
+    'wf1_context_used',
+    'bpa_context_used',
+    'execution_time_ms',
     // Brand Positioning keys
     'recommended_positioning',
     'alternative_positions',
@@ -4286,7 +4660,7 @@ export default function ResultDashboard({
       </div>
 
       {/* Score badge (only when meaningful, i.e. > 0, and not market research) */}
-      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && score !== undefined && score > 0 && (
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandArchitecture && score !== undefined && score > 0 && (
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
             Score
@@ -4298,7 +4672,7 @@ export default function ResultDashboard({
       )}
 
       {/* Summary (skip generic "Pipeline analysis completed" for market research / CIA) */}
-      {summary && !hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && (
+      {summary && !hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Summary
@@ -4432,6 +4806,20 @@ export default function ResultDashboard({
       )}
 
       {/* ── Brand Positioning Dashboard ─────────────────────────────── */}
+      {hasBrandArchitecture && (
+        <BrandArchitectureSection
+          recommendation={resultData.recommendation as BAARecommendation | undefined}
+          hierarchy={resultData.hierarchy as BAAHierarchy | undefined}
+          namingHierarchy={resultData.naming_hierarchy as BAANamingHierarchy | undefined}
+          growthPath={resultData.growth_path as BAAGrowthPath | undefined}
+          archStrategy={resultData.arch_strategy as Record<string, unknown> | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.brand_architecture ?? resultData.confidence_score) as number | undefined}
+          sources={resultData.sources as SourceEntry[] | undefined}
+          findings={findings}
+          recommendations={recommendations}
+        />
+      )}
+
       {hasBrandPositioning && (
         <BrandPositioningSection
           recommendedPositioning={resultData.recommended_positioning as BPAPositioningStatement | undefined}
@@ -4448,7 +4836,7 @@ export default function ResultDashboard({
       )}
 
       {/* Key findings — filter out raw JSON blobs (internal agent state) */}
-      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && findings && findings.length > 0 && (() => {
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && findings && findings.length > 0 && (() => {
         const filtered = findings.filter((f) => {
           if (typeof f !== 'string') return false;
           const trimmed = f.trim();
@@ -4480,7 +4868,7 @@ export default function ResultDashboard({
       })()}
 
       {/* Recommendations */}
-      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && recommendations && recommendations.length > 0 && (
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && recommendations && recommendations.length > 0 && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations
