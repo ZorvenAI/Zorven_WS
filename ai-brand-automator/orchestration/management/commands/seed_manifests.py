@@ -1065,8 +1065,7 @@ class Command(BaseCommand):
                         "id": "brand_architecture",
                         "type": "external",
                         "url": (
-                            "http://brand-architecture-agent-svc"
-                            ":8032/v1/execute"
+                            "http://brand-architecture-agent-svc" ":8032/v1/execute"
                         ),
                         "config": {
                             "require_wf1_context": True,
