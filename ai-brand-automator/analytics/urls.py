@@ -1,6 +1,10 @@
 from django.urls import path
 
 from analytics.views import (
+    BPAContextView,
+    BrandContextOptionsView,
+    BrandContextSyncView,
+    CompanyContextView,
     ComparisonView,
     CoverageView,
     DistributionView,
@@ -18,4 +22,20 @@ urlpatterns = [
     path("metrics/", MetricsListView.as_view(), name="analytics-metrics"),
     path("coverage/", CoverageView.as_view(), name="analytics-coverage"),
     path("wf1-context/", WF1ContextView.as_view(), name="analytics-wf1-context"),
+    path("bpa-context/", BPAContextView.as_view(), name="analytics-bpa-context"),
+    path(
+        "company-context/",
+        CompanyContextView.as_view(),
+        name="analytics-company-context",
+    ),
+    path(
+        "brand-context-options/",
+        BrandContextOptionsView.as_view(),
+        name="analytics-brand-context-options",
+    ),
+    path(
+        "brand-context-sync/",
+        BrandContextSyncView.as_view(),
+        name="analytics-brand-context-sync",
+    ),
 ]

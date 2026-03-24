@@ -35,6 +35,7 @@ _SERVICE_URL_MAP: dict[str, str] = {
     "audience-persona-agent-svc:8023": settings.AUDIENCE_PERSONA_AGENT_URL,
     "trend-cultural-agent-svc:8024": settings.TREND_CULTURAL_AGENT_URL,
     "brand-positioning-agent-svc:8031": settings.BRAND_POSITIONING_AGENT_URL,
+    "brand-architecture-agent-svc:8032": settings.BRAND_ARCHITECTURE_AGENT_URL,
 }
 
 

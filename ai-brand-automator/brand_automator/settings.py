@@ -1017,6 +1017,10 @@ BRAND_POSITIONING_AGENT_URL = config(
     "BRAND_POSITIONING_AGENT_URL",
     default="http://brand-positioning-agent-svc:8031",
 )
+BRAND_ARCHITECTURE_AGENT_URL = config(
+    "BRAND_ARCHITECTURE_AGENT_URL",
+    default="http://brand-architecture-agent-svc:8032",
+)
 
 WORKER_TOKEN = config("WORKER_TOKEN", default="dev-worker-token" if DEBUG else "")
 # Enable Kafka-based titling (set true when chat-titling-worker is deployed)

@@ -130,6 +130,9 @@ class ChatInputSerializer(serializers.Serializer):
         required=False,
         default=list,
     )
+    brand_context_id = serializers.CharField(
+        required=False, allow_blank=True, default=""
+    )
 
 
 class AIGenerationSerializer(serializers.ModelSerializer):

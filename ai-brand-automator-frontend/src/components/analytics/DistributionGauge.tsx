@@ -7,6 +7,7 @@ import type { DistributionData, TimeRange } from '@/types/analytics';
 
 interface DistributionGaugeProps {
   range: TimeRange;
+  brandContext?: string;
 }
 
 function DonutGauge({
@@ -101,7 +102,7 @@ function SentimentLegend({ data, textSize = 'text-sm' }: { data: DistributionDat
   );
 }
 
-export default function DistributionGauge({ range }: DistributionGaugeProps) {
+export default function DistributionGauge({ range, brandContext }: DistributionGaugeProps) {
   const [data, setData] = useState<DistributionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
@@ -109,14 +110,14 @@ export default function DistributionGauge({ range }: DistributionGaugeProps) {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const d = await getDistribution('sentiment_positive_pct', range);
+      const d = await getDistribution('sentiment_positive_pct', range, brandContext);
       setData(d);
     } catch {
       setData(null);
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, [range, brandContext]);
 
   useEffect(() => {
     fetchData();

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { BarChart3 } from 'lucide-react';
 import { useAnalytics, useMetricTrend } from '@/hooks/useAnalytics';
+import { useBrandContext } from '@/hooks/useBrandContext';
 import type { TimeRange } from '@/types/analytics';
 import TimeRangePicker from './TimeRangePicker';
 import KpiScorecard from './KpiScorecard';
@@ -10,14 +11,23 @@ import TrendChart from './TrendChart';
 import ComparisonBars from './ComparisonBars';
 import DistributionGauge from './DistributionGauge';
 import AnalyticsCoverage from './AnalyticsCoverage';
+import BrandContextSelector from '@/components/brand/BrandContextSelector';
 
 export default function AnalyticsDashboard() {
   const [range, setRange] = useState<TimeRange>('30d');
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
-  const { scorecard, coverage, loading, error } = useAnalytics(range);
+  const { activeBrand } = useBrandContext();
+  const brandContext = activeBrand?.brand_context_id;
+
+  const { scorecard, coverage, loading, error } = useAnalytics(
+    range,
+    brandContext
+  );
   const { data: trendData, loading: trendLoading } = useMetricTrend(
     selectedMetric || (scorecard.length > 0 ? scorecard[0].metric_name : null),
-    range
+    range,
+    'daily',
+    brandContext
   );
 
   const activeMetric = selectedMetric || (scorecard.length > 0 ? scorecard[0] : null);
@@ -57,6 +67,7 @@ export default function AnalyticsDashboard() {
           <AnalyticsCoverage data={coverage} />
         </div>
         <div className="flex items-center gap-3">
+          <BrandContextSelector />
           <TimeRangePicker value={range} onChange={setRange} />
           <a
             href="/dashboard/analytics"
@@ -94,10 +105,10 @@ export default function AnalyticsDashboard() {
           metricName={activeMetricDef?.display_name}
           loading={trendLoading}
         />
-        <ComparisonBars range={range} />
+        <ComparisonBars range={range} brandContext={brandContext} />
       </div>
 
-      <DistributionGauge range={range} />
+      <DistributionGauge range={range} brandContext={brandContext} />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 from analytics.extractors.brand_discovery import BrandDiscoveryExtractor
 from analytics.extractors.brand_equity import BrandEquityExtractor
 from analytics.extractors.brand_analysis import BrandAnalysisExtractor
+from analytics.extractors.brand_architecture import BrandArchitectureExtractor
 from analytics.extractors.brand_positioning import BrandPositioningExtractor
 from analytics.extractors.content_social import ContentSocialExtractor
 
@@ -35,6 +36,8 @@ PIPELINE_EXTRACTORS = {
     "default-full-pipeline": ContentSocialExtractor(),
     # Brand positioning (WF2)
     "brand-strategy-positioning": BrandPositioningExtractor(),
+    # Brand architecture (WF2)
+    "brand-strategy-architecture": BrandArchitectureExtractor(),
     # General chat — uses brand discovery extractor to grab any
     # agent results that were composed dynamically
     "general-chat": BrandDiscoveryExtractor(),
@@ -50,6 +53,16 @@ def detect_extractor_from_result(result_data: dict):
         return None
 
     node_results = result_data.get("node_results", {})
+
+    # Check for brand architecture outputs (WF2)
+    has_baa = bool(
+        node_results.get("brand_architecture")
+        or result_data.get("hierarchy")
+        or result_data.get("recommendation", {}).get("recommended_model")
+    )
+
+    if has_baa:
+        return BrandArchitectureExtractor()
 
     # Check for brand positioning outputs (WF2)
     has_bpa = bool(

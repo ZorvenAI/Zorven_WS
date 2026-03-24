@@ -9,9 +9,12 @@ import { apiClient } from '@/lib/api';
 import { getJobQuickStatus } from '@/lib/orchestration';
 import { cancelJob } from '@/lib/orchestration';
 import { useTenantRole } from '@/hooks/useTenantRole';
+import { useBrandContext } from '@/hooks/useBrandContext';
 import { useInputHistory } from '@/hooks/useInputHistory';
 import { useSearchParams } from 'next/navigation';
 import { PanelLeftOpen, PanelLeftClose, ArrowDown, Upload } from 'lucide-react';
+import BrandContextSelector from '@/components/brand/BrandContextSelector';
+import BrandContextBadge from '@/components/brand/BrandContextBadge';
 
 export interface Attachment {
   id: number;
@@ -43,6 +46,7 @@ const WELCOME_MESSAGE: Message = {
 
 export function ChatInterface() {
   const { canEdit: canEditFlag } = useTenantRole();
+  const { activeBrand } = useBrandContext();
   const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => {
     requestAnimationFrame(() => setHasMounted(true));
@@ -521,9 +525,10 @@ export function ChatInterface() {
           }
         }
 
-        // Send message WITH attachment_ids
+        // Send message WITH attachment_ids and brand context
         const body: Record<string, unknown> = {
           message: message || 'Attached files for analysis',
+          brand_context_id: activeBrand?.brand_context_id || 'parent',
         };
         if (uploadSessionId || sessionId) {
           body.session_id = uploadSessionId || sessionId;
@@ -639,7 +644,7 @@ export function ChatInterface() {
       setIsLoading(false);
       abortControllerRef.current = null;
     },
-    [sessionId, inputHistory, startPipelinePolling]
+    [sessionId, inputHistory, startPipelinePolling, activeBrand]
   );
 
   if (!hasMounted) {
@@ -686,14 +691,18 @@ export function ChatInterface() {
                 <PanelLeftOpen className="w-4 h-4" />
               )}
             </button>
-            <div>
-              <h1 className="text-lg sm:text-xl font-heading font-semibold text-white truncate">
-                AI Brand Assistant
-              </h1>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg sm:text-xl font-heading font-semibold text-white truncate">
+                  AI Brand Assistant
+                </h1>
+                <BrandContextBadge />
+              </div>
               <p className="text-xs sm:text-sm text-brand-silver/70 hidden sm:block">
                 Ask anything about your brand or run an analysis pipeline
               </p>
             </div>
+            <BrandContextSelector />
           </div>
         </div>
 

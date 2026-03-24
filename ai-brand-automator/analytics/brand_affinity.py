@@ -3,6 +3,8 @@ import logging
 import re
 from urllib.parse import urlparse
 
+from django.core.cache import cache as django_cache
+
 from analytics.rag_query import RAGSearchClient
 
 logger = logging.getLogger(__name__)
@@ -104,8 +106,21 @@ class BrandAffinityVerifier:
         except Exception:
             return ""
 
+    def _get_registered_sub_brands(self, tenant) -> list:
+        """Load sub-brands from brand context cache (written by BAA)."""
+        try:
+            cache_key = f"brand_context:{tenant.id}:options"
+            options = django_cache.get(cache_key)
+            if not options or not isinstance(options, list):
+                return []
+            return [o for o in options if o.get("brand_scope") != "parent"]
+        except Exception:
+            return []
+
     def tier1_input_match(self, job) -> float:
         """Compare job input_context.company_name vs tenant's company name.
+
+        Also checks registered sub-brands from the BAA architecture registry.
 
         Returns:
             Score 0.0-1.0
@@ -119,16 +134,27 @@ class BrandAffinityVerifier:
         if not job_company:
             return 1.0  # No company specified in input, assume own brand
 
-        # Exact match
+        # Exact match against parent brand
         if job_company.lower() == self.brand_name.lower():
             return 1.0
 
-        # Containment match
+        # Containment match against parent brand
         if (
             self.brand_name.lower() in job_company.lower()
             or job_company.lower() in self.brand_name.lower()
         ):
             return 0.95
+
+        # Check registered sub-brands from architecture registry
+        sub_brands = self._get_registered_sub_brands(self.tenant)
+        for sb in sub_brands:
+            sb_name = (sb.get("name", "") or "").strip().lower()
+            if not sb_name:
+                continue
+            if job_company.lower() == sb_name:
+                return 1.0  # Exact sub-brand match
+            if sb_name in job_company.lower() or job_company.lower() in sb_name:
+                return 0.95  # Containment match
 
         # Jaccard token overlap
         brand_tokens = set(self.brand_name.lower().split())

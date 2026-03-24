@@ -314,6 +314,24 @@ NODE_CATALOG: list[dict[str, Any]] = [
         "output_key": "brand_positioning",
         "config": {"candidate_count": 3, "perceptual_maps": 3},
     },
+    {
+        "id": "brand_architecture",
+        "type": "external",
+        "url": f"{settings.BRAND_ARCHITECTURE_AGENT_URL}/v1/execute",
+        "description": (
+            "Brand architecture designer: recommends optimal brand structure "
+            "(Branded House, House of Brands, Hybrid/Endorsed, Sub-Brand), "
+            "builds brand hierarchy tree, naming conventions, and portfolio "
+            "growth path. Requires WF1 Brand Discovery AND BPA Brand "
+            "Positioning data as input context. Best used after completed "
+            "brand discovery and brand positioning pipelines. Use when the "
+            "prompt asks about brand architecture, brand hierarchy, sub-brands, "
+            "brand portfolio structure, branded house, house of brands, naming "
+            "hierarchy, or brand structure."
+        ),
+        "output_key": "brand_architecture",
+        "config": {"require_wf1_context": True, "require_bpa_context": True},
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.

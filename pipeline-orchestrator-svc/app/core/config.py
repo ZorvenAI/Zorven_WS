@@ -80,6 +80,7 @@ class Settings(BaseSettings):
     TREND_CULTURAL_AGENT_URL: str = "http://trend-cultural-agent-svc:8024"
     VOC_AGENT_URL: str = "http://voc-agent-svc:8025"
     BRAND_POSITIONING_AGENT_URL: str = "http://brand-positioning-agent-svc:8031"
+    BRAND_ARCHITECTURE_AGENT_URL: str = "http://brand-architecture-agent-svc:8032"
 
 
 settings = Settings()

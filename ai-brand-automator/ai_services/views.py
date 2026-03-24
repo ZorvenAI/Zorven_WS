@@ -294,10 +294,34 @@ def _collect_attachment_data(attachment_ids, session):
     return data
 
 
+def _resolve_brand_context(tenant, brand_context_id):
+    """Resolve a brand_context_id to brand context data from cache.
+
+    Returns dict with brand context fields, or empty dict if parent/absent.
+    """
+    if not brand_context_id or brand_context_id == "parent":
+        return {}
+    try:
+        cache_key = f"brand_context:{tenant.id}:options"
+        options = cache.get(cache_key)
+        if not options or not isinstance(options, list):
+            return {}
+        for entry in options:
+            if entry.get("brand_context_id") == brand_context_id:
+                return entry
+    except Exception:
+        pass
+    return {}
+
+
 def _process_chat_message(
     request, session, message, tenant, is_new_session, serializer
 ):
     """Process a chat message (extracted for write-lock wrapper)."""
+    # Resolve brand context
+    brand_context_id = serializer.validated_data.get("brand_context_id", "") or "parent"
+    brand_ctx_data = _resolve_brand_context(tenant, brand_context_id)
+
     # Get company context if available
     try:
         company = Company.objects.get(tenant=tenant)
@@ -372,7 +396,11 @@ def _process_chat_message(
             "user_email": request.user.email,
             "chat_history": chat_history,
             "attachments": attachments_data,
+            "brand_context_id": brand_context_id,
+            "brand_scope": brand_ctx_data.get("brand_scope", "parent"),
         }
+        if brand_ctx_data:
+            job_context["parent_brand"] = brand_ctx_data.get("parent_brand", "")
 
         job = AnalysisJob.objects.create(
             tenant=tenant,
@@ -552,7 +580,11 @@ def _process_chat_message(
             "user_email": request.user.email,
             "chat_history": chat_history,
             "needs_rag": intent_result.get("needs_rag", False),
+            "brand_context_id": brand_context_id,
+            "brand_scope": brand_ctx_data.get("brand_scope", "parent"),
         }
+        if brand_ctx_data:
+            job_context["parent_brand"] = brand_ctx_data.get("parent_brand", "")
         if attachments_data:
             job_context["attachments"] = attachments_data
         if target_brand:
@@ -564,9 +596,15 @@ def _process_chat_message(
         else:
             company_info = context.get("company", {})
             if company_info:
-                job_context["company_name"] = company_info.get("name", "")
+                # If sub-brand selected, override company_name
+                if brand_ctx_data and brand_ctx_data.get("name"):
+                    job_context["company_name"] = brand_ctx_data["name"]
+                else:
+                    job_context["company_name"] = company_info.get("name", "")
                 job_context["sector"] = company_info.get("industry", "default")
-                job_context["target_audience"] = company_info.get("target_audience", "")
+                job_context["target_audience"] = brand_ctx_data.get(
+                    "target_persona"
+                ) or company_info.get("target_audience", "")
                 job_context["brand_voice"] = company_info.get("brand_voice", "")
                 job_context["core_problem"] = company_info.get("core_problem", "")
 

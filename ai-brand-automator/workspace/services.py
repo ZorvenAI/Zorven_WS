@@ -203,6 +203,18 @@ EXTERNAL_AGENTS = [
         "url": "http://brand-positioning-agent-svc:8031/v1/execute",
         "icon": "target",
     },
+    {
+        "id": "brand_architecture",
+        "name": "brand_architecture",
+        "label": "Brand Architecture",
+        "description": (
+            "Brand architecture design, hierarchy tree, naming "
+            "conventions, portfolio growth strategy"
+        ),
+        "type": "external",
+        "url": "http://brand-architecture-agent-svc:8032/v1/execute",
+        "icon": "git-branch",
+    },
 ]
 
 
