@@ -12,6 +12,7 @@ import { useSearchParams } from 'next/navigation';
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenantContext } from '@/contexts/TenantContext';
+import { useBrandContext } from '@/hooks/useBrandContext';
 import {
   listWorkflows,
   getWorkflow,
@@ -162,6 +163,7 @@ function WorkflowsPageInner() {
 
   const { zoomIn, zoomOut } = useReactFlow();
   const { activeTenant } = useTenantContext();
+  const { activeBrand } = useBrandContext();
   const searchParams = useSearchParams();
   const store = useWorkflowStore(selectedId);
 
@@ -668,7 +670,22 @@ function WorkflowsPageInner() {
         await handleSave();
       }
 
-      const job = await executeWorkflow(selectedId, { input_prompt: prompt.trim() });
+      // Inject brand context into execution payload
+      const inputContext: Record<string, unknown> = {
+        brand_context_id: activeBrand?.brand_context_id || 'parent',
+        brand_scope: activeBrand?.brand_scope || 'parent',
+      };
+      if (activeBrand?.parent_brand) {
+        inputContext.parent_brand = activeBrand.parent_brand;
+      }
+      if (activeBrand?.name && activeBrand.brand_scope !== 'parent') {
+        inputContext.company_name = activeBrand.name;
+      }
+
+      const job = await executeWorkflow(selectedId, {
+        input_prompt: prompt.trim(),
+        input_context: inputContext,
+      });
       setError(null);
 
       // Track the active job for WebSocket/polling
@@ -682,7 +699,7 @@ function WorkflowsPageInner() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to execute');
     }
-  }, [selectedId, isReadonly, store.state.isDirty, handleSave]);
+  }, [selectedId, isReadonly, store.state.isDirty, handleSave, activeBrand]);
 
   const handleAutoLayout = useCallback(async () => {
     if (store.state.nodes.length === 0) return;

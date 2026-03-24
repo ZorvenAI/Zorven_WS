@@ -19,6 +19,7 @@ import {
   Upload,
   Lock,
 } from 'lucide-react';
+import BrandContextSelector from '@/components/brand/BrandContextSelector';
 
 interface WorkflowToolbarProps {
   onSave: () => void;
@@ -164,6 +165,11 @@ export default function WorkflowToolbar({
       >
         <Play className="w-4 h-4" />
       </ToolbarButton>
+
+      <Divider />
+
+      {/* Brand Context */}
+      <BrandContextSelector />
 
       <div className="flex-1" />
 

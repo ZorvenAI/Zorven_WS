@@ -252,6 +252,28 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("unique selling", 1),
         ("usp", 1),
     ],
+    "brand-strategy-architecture": [
+        # Strong signal (weight 3) — unambiguous intent
+        ("brand architecture", 3),
+        ("brand hierarchy", 3),
+        ("brand structure", 3),
+        ("sub-brand strategy", 3),
+        ("branded house", 3),
+        ("house of brands", 3),
+        ("portfolio strategy", 3),
+        ("brand portfolio", 3),
+        # Medium signal (weight 2) — domain-specific
+        ("product line structure", 2),
+        ("naming hierarchy", 2),
+        ("endorsed brand", 2),
+        ("brand relationship", 2),
+        ("master brand", 2),
+        ("sub-brand", 2),
+        # Weak signal (weight 1) — require "brand" qualifier to avoid misrouting
+        ("brand architecture", 1),
+        ("brand portfolio", 1),
+        ("brand hierarchy", 1),
+    ],
     "brand-analysis": [
         ("brand", 1),
         ("analysis", 1),

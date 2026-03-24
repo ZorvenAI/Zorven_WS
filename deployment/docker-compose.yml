@@ -311,7 +311,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ai-brand-automator-redis
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 17
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 18
     ports:
       - "6379:6379"
     volumes:
@@ -1287,6 +1287,43 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8031/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Brand Architecture Agent — WF2 brand architecture design (port 8032)
+  # Powered by Claude Sonnet 4. Requires WF1 + BPA context.
+  # ==========================================================================
+  brand-architecture-agent-svc:
+    build:
+      context: ../brand-architecture-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-brand-architecture
+    environment:
+      - BAA_REDIS_URL=redis://redis:6379/17
+      - BAA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - BAA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - BAA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - BAA_BACKEND_URL=http://backend:8001
+      - BAA_BACKEND_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - BAA_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - BAA_GCS_BUCKET_PREFIX=${GCS_BUCKET_PREFIX:-}
+      - BAA_VERTEX_PROJECT_ID=${VERTEX_PROJECT_ID:-}
+      - BAA_LOG_LEVEL=INFO
+      - BAA_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+    expose:
+      - "8032"
+    ports:
+      - "8032:8032"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8032/health"]
       interval: 10s
       timeout: 5s
       retries: 3

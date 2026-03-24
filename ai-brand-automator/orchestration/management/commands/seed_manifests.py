@@ -1042,6 +1042,52 @@ class Command(BaseCommand):
                 },
             },
         },
+        {
+            "pipeline_id": "brand-strategy-architecture",
+            "name": "Brand Strategy: Architecture",
+            "description": (
+                "Design brand architecture using positioning strategy + WF1 "
+                "intelligence. Recommends optimal brand structure model "
+                "(Branded House, House of Brands, Hybrid, Endorsed, "
+                "Sub-Brand), builds brand hierarchy tree for visual "
+                "rendering, naming conventions, and portfolio growth path. "
+                "Requires completed WF1 Brand Discovery and WF2 Brand "
+                "Positioning pipelines."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "brand_architecture",
+                        "type": "external",
+                        "url": (
+                            "http://brand-architecture-agent-svc" ":8032/v1/execute"
+                        ),
+                        "config": {
+                            "require_wf1_context": True,
+                            "require_bpa_context": True,
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "brand_architecture"],
+                    ["brand_architecture", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.4,
+                },
+            },
+        },
     ]
 
     def handle(self, *args, **options):

@@ -34,6 +34,13 @@ def _cache_key(tenant_id, endpoint, params):
     return f"analytics:cache:{tenant_id}:{query_hash}"
 
 
+def _apply_brand_context_filter(qs, brand_context):
+    """Apply brand_context filter to a MetricSnapshot queryset."""
+    if brand_context:
+        qs = qs.filter(metadata__brand_context_id=brand_context)
+    return qs
+
+
 def _get_tenant(request):
     """Get tenant from request with defensive access."""
     return getattr(request, "tenant", None)
@@ -64,11 +71,18 @@ class ScorecardView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+        brand_ctx = request.query_params.get("brand_context", "")
+
         # Check cache
         ck = _cache_key(
             tenant.id,
             "scorecard",
-            {"range": range_str, "s": str(start_date), "e": str(end_date)},
+            {
+                "range": range_str,
+                "s": str(start_date),
+                "e": str(end_date),
+                "bc": brand_ctx,
+            },
         )
         cached = cache.get(ck)
         if cached:
@@ -82,32 +96,32 @@ class ScorecardView(APIView):
         # Grouped aggregation to avoid N+1 per-metric queries
         tenant_filter = Q(tenant=tenant) | Q(tenant__isnull=True)
 
+        current_qs = MetricSnapshot.objects.filter(
+            tenant_filter,
+            recorded_at__gte=start,
+            recorded_at__lte=end,
+        )
+        current_qs = _apply_brand_context_filter(current_qs, brand_ctx)
+
         current_map = {}
-        for row in (
-            MetricSnapshot.objects.filter(
-                tenant_filter,
-                recorded_at__gte=start,
-                recorded_at__lte=end,
-            )
-            .values("metric_name")
-            .annotate(avg_val=Avg("metric_value"), count=Count("id"))
+        for row in current_qs.values("metric_name").annotate(
+            avg_val=Avg("metric_value"), count=Count("id")
         ):
             current_map[row["metric_name"]] = (
                 row["avg_val"],
                 row["count"],
             )
 
+        prev_qs = MetricSnapshot.objects.filter(
+            tenant_filter,
+            recorded_at__gte=prev_start,
+            recorded_at__lt=prev_end,
+        )
+        prev_qs = _apply_brand_context_filter(prev_qs, brand_ctx)
+
         prev_map = {}
-        for row in (
-            MetricSnapshot.objects.filter(
-                tenant_filter,
-                recorded_at__gte=prev_start,
-                recorded_at__lt=prev_end,
-            )
-            .values("metric_name")
-            .annotate(
-                avg_val=Avg("metric_value"),
-            )
+        for row in prev_qs.values("metric_name").annotate(
+            avg_val=Avg("metric_value"),
         ):
             prev_map[row["metric_name"]] = row["avg_val"]
 
@@ -142,15 +156,17 @@ class ScorecardView(APIView):
                 trend = "declining"
 
             # Sparkline data (last N values ordered chronologically)
+            sparkline_qs = MetricSnapshot.objects.filter(
+                tenant_filter,
+                metric_name=metric_name,
+                recorded_at__gte=start,
+                recorded_at__lte=end,
+            )
+            sparkline_qs = _apply_brand_context_filter(sparkline_qs, brand_ctx)
             sparkline_values = list(
-                MetricSnapshot.objects.filter(
-                    tenant_filter,
-                    metric_name=metric_name,
-                    recorded_at__gte=start,
-                    recorded_at__lte=end,
-                )
-                .order_by("recorded_at")
-                .values_list("metric_value", flat=True)[:20]
+                sparkline_qs.order_by("recorded_at").values_list(
+                    "metric_value", flat=True
+                )[:20]
             )
 
             results.append(
@@ -208,6 +224,8 @@ class TrendsView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+        brand_ctx = request.query_params.get("brand_context", "")
+
         ck = _cache_key(
             tenant.id,
             "trends",
@@ -216,6 +234,7 @@ class TrendsView(APIView):
                 "range": range_str,
                 "period": period,
                 "pid": pipeline_id or "",
+                "bc": brand_ctx,
             },
         )
         cached = cache.get(ck)
@@ -232,6 +251,11 @@ class TrendsView(APIView):
 
         if pipeline_id:
             qs = qs.filter(pipeline_id=pipeline_id)
+
+        # Note: MetricRollup does not have a metadata field, so brand_context
+        # filtering is not applied to trends. Rollups are pre-aggregated across
+        # all brand contexts. Per-brand trend data would require rollup
+        # partitioning (future enhancement).
 
         # OG-03: limit data points
         qs = qs.order_by("period_start")[:MAX_DATA_POINTS]
@@ -275,10 +299,12 @@ class ComparisonView(APIView):
             prev_start = start - duration
             prev_end = start
 
+        brand_ctx = request.query_params.get("brand_context", "")
+
         ck = _cache_key(
             tenant.id,
             "comparison",
-            {"range": range_str, "compare": compare},
+            {"range": range_str, "compare": compare, "bc": brand_ctx},
         )
         cached = cache.get(ck)
         if cached:
@@ -287,28 +313,26 @@ class ComparisonView(APIView):
         # Grouped aggregation to avoid N+1 queries
         tenant_filter = Q(tenant=tenant) | Q(tenant__isnull=True)
 
+        current_qs = MetricSnapshot.objects.filter(
+            tenant_filter,
+            recorded_at__gte=start,
+            recorded_at__lte=end,
+        )
+        current_qs = _apply_brand_context_filter(current_qs, brand_ctx)
+
         current_map = {}
-        for row in (
-            MetricSnapshot.objects.filter(
-                tenant_filter,
-                recorded_at__gte=start,
-                recorded_at__lte=end,
-            )
-            .values("metric_name")
-            .annotate(avg=Avg("metric_value"))
-        ):
+        for row in current_qs.values("metric_name").annotate(avg=Avg("metric_value")):
             current_map[row["metric_name"]] = row["avg"]
 
+        prev_qs = MetricSnapshot.objects.filter(
+            tenant_filter,
+            recorded_at__gte=prev_start,
+            recorded_at__lt=prev_end,
+        )
+        prev_qs = _apply_brand_context_filter(prev_qs, brand_ctx)
+
         prev_map = {}
-        for row in (
-            MetricSnapshot.objects.filter(
-                tenant_filter,
-                recorded_at__gte=prev_start,
-                recorded_at__lt=prev_end,
-            )
-            .values("metric_name")
-            .annotate(avg=Avg("metric_value"))
-        ):
+        for row in prev_qs.values("metric_name").annotate(avg=Avg("metric_value")):
             prev_map[row["metric_name"]] = row["avg"]
 
         definitions = MetricDefinition.objects.all()
@@ -371,10 +395,12 @@ class DistributionView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+        brand_ctx = request.query_params.get("brand_context", "")
+
         ck = _cache_key(
             tenant.id,
             "distribution",
-            {"range": range_str},
+            {"range": range_str, "bc": brand_ctx},
         )
         cached = cache.get(ck)
         if cached:
@@ -383,23 +409,21 @@ class DistributionView(APIView):
         base_filter = Q(tenant=tenant) | Q(tenant__isnull=True)
         time_filter = Q(recorded_at__gte=start, recorded_at__lte=end)
 
-        positive = (
-            MetricSnapshot.objects.filter(
-                base_filter,
-                time_filter,
-                metric_name="sentiment_positive_pct",
-            ).aggregate(avg=Avg("metric_value"))["avg"]
-            or 0
+        pos_qs = MetricSnapshot.objects.filter(
+            base_filter,
+            time_filter,
+            metric_name="sentiment_positive_pct",
         )
+        pos_qs = _apply_brand_context_filter(pos_qs, brand_ctx)
+        positive = pos_qs.aggregate(avg=Avg("metric_value"))["avg"] or 0
 
-        negative = (
-            MetricSnapshot.objects.filter(
-                base_filter,
-                time_filter,
-                metric_name="sentiment_negative_pct",
-            ).aggregate(avg=Avg("metric_value"))["avg"]
-            or 0
+        neg_qs = MetricSnapshot.objects.filter(
+            base_filter,
+            time_filter,
+            metric_name="sentiment_negative_pct",
         )
+        neg_qs = _apply_brand_context_filter(neg_qs, brand_ctx)
+        negative = neg_qs.aggregate(avg=Avg("metric_value"))["avg"] or 0
 
         neutral = max(0, 100 - positive - negative)
 
@@ -436,27 +460,33 @@ class CoverageView(APIView):
                 {"error": "Tenant required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
+        brand_ctx = request.query_params.get("brand_context", "")
+
         from orchestration.models import AnalysisJob
 
-        total_jobs = AnalysisJob.objects.filter(
-            Q(tenant=tenant) | Q(tenant__isnull=True),
-            status=AnalysisJob.Status.COMPLETED,
-        ).count()
-
-        analytics_jobs = (
-            MetricSnapshot.objects.filter(
-                Q(tenant=tenant) | Q(tenant__isnull=True),
-            )
-            .values("job_id")
-            .distinct()
-            .count()
+        job_filter = Q(tenant=tenant) | Q(tenant__isnull=True)
+        job_qs = AnalysisJob.objects.filter(
+            job_filter, status=AnalysisJob.Status.COMPLETED
         )
+        if brand_ctx:
+            job_qs = job_qs.filter(input_context__brand_context_id=brand_ctx)
 
-        excluded_jobs = AnalysisJob.objects.filter(
+        total_jobs = job_qs.count()
+
+        snapshot_qs = MetricSnapshot.objects.filter(
             Q(tenant=tenant) | Q(tenant__isnull=True),
+        )
+        snapshot_qs = _apply_brand_context_filter(snapshot_qs, brand_ctx)
+        analytics_jobs = snapshot_qs.values("job_id").distinct().count()
+
+        excluded_qs = AnalysisJob.objects.filter(
+            job_filter,
             status=AnalysisJob.Status.COMPLETED,
             input_context__analytics_excluded=True,
-        ).count()
+        )
+        if brand_ctx:
+            excluded_qs = excluded_qs.filter(input_context__brand_context_id=brand_ctx)
+        excluded_jobs = excluded_qs.count()
 
         coverage_pct = (
             round((analytics_jobs / total_jobs) * 100, 1) if total_jobs else 0
@@ -576,3 +606,287 @@ class WF1ContextView(APIView):
                 "wf1_job_id": str(job.job_id),
             }
         )
+
+
+class BPAContextView(APIView):
+    """GET /api/v1/analytics/bpa-context/ — Latest BPA positioning result.
+
+    Used by WF2 agents (BAA, etc.) to consume BPA positioning strategy.
+    Authenticated via X-Service-Token.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        # Service-token auth
+        service_token = request.headers.get("X-Service-Token", "")
+        expected_token = getattr(
+            django_settings,
+            "ORCHESTRATOR_SERVICE_TOKEN",
+            "dev-service-token",
+        )
+        if service_token != expected_token:
+            return Response(
+                {"error": "Invalid service token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        tenant = None
+        tenant_id = request.headers.get("X-Tenant-ID", "")
+        if tenant_id:
+            from tenants.models import Tenant
+
+            try:
+                tenant = Tenant.objects.get(pk=tenant_id)
+            except (Tenant.DoesNotExist, ValueError):
+                pass
+        if not tenant:
+            tenant = _get_tenant(request)
+
+        if not tenant:
+            return Response(
+                {"error": "Tenant required"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        from orchestration.models import AnalysisJob
+
+        # Find latest completed BPA job
+        job = (
+            AnalysisJob.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True),
+                status=AnalysisJob.Status.COMPLETED,
+                manifest__pipeline_id="brand-strategy-positioning",
+            )
+            .select_related("manifest")
+            .order_by("-completed_at")
+            .first()
+        )
+
+        # Fallback: any job with brand_positioning node results
+        if not job:
+            candidates = AnalysisJob.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True),
+                status=AnalysisJob.Status.COMPLETED,
+            ).order_by("-completed_at")[:20]
+            for candidate in candidates:
+                nr = (candidate.result_data or {}).get("node_results", {})
+                if "brand_positioning" in nr:
+                    job = candidate
+                    break
+
+        if not job:
+            return Response(
+                {"error": "No BPA data"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        result_data = job.result_data or {}
+        node_results = result_data.get("node_results", {})
+        bpa = node_results.get("brand_positioning", {})
+
+        return Response(
+            {
+                "recommended_positioning": bpa.get("recommended_positioning", {}),
+                "positioning_candidates": bpa.get("positioning_candidates", []),
+                "canvas": bpa.get("canvas", {}),
+                "perceptual_maps": bpa.get("perceptual_maps", []),
+                "differentiation": bpa.get("differentiation", {}),
+                "strategy": bpa.get("strategy", {}),
+                "confidence_score": bpa.get("confidence_score", 0.0),
+                "bpa_completed_at": (
+                    job.completed_at.isoformat() if job.completed_at else None
+                ),
+                "bpa_job_id": str(job.job_id),
+            }
+        )
+
+
+class CompanyContextView(APIView):
+    """GET /api/v1/analytics/company-context/ — Company model + portfolio.
+
+    Used by WF2 agents (BAA, etc.) to load brand identity and portfolio.
+    Authenticated via X-Service-Token.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        # Service-token auth
+        service_token = request.headers.get("X-Service-Token", "")
+        expected_token = getattr(
+            django_settings,
+            "ORCHESTRATOR_SERVICE_TOKEN",
+            "dev-service-token",
+        )
+        if service_token != expected_token:
+            return Response(
+                {"error": "Invalid service token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        tenant = None
+        tenant_id = request.headers.get("X-Tenant-ID", "")
+        if tenant_id:
+            from tenants.models import Tenant
+
+            try:
+                tenant = Tenant.objects.get(pk=tenant_id)
+            except (Tenant.DoesNotExist, ValueError):
+                pass
+        if not tenant:
+            tenant = _get_tenant(request)
+
+        if not tenant:
+            return Response(
+                {"error": "Tenant required"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        from onboarding.models import Company
+
+        try:
+            company = Company.objects.get(Q(tenant=tenant) | Q(tenant__isnull=True))
+        except Company.DoesNotExist:
+            return Response(
+                {"error": "No company data"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Company.MultipleObjectsReturned:
+            company = Company.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True)
+            ).first()
+
+        return Response(
+            {
+                "name": company.name,
+                "description": company.description,
+                "industry": company.industry,
+                "target_audience": company.target_audience,
+                "core_problem": company.core_problem,
+                "website": company.website,
+                "brand_voice": company.brand_voice,
+                "values": company.values,
+                "vision_statement": company.vision_statement,
+                "mission_statement": company.mission_statement,
+                "positioning_statement": company.positioning_statement,
+                "tagline": company.tagline,
+                "value_proposition": company.value_proposition,
+                "elevator_pitch": company.elevator_pitch,
+                "demographics": company.demographics,
+                "psychographics": company.psychographics,
+                "pain_points": company.pain_points,
+                "desired_outcomes": company.desired_outcomes,
+                "products": [],  # Populated from Odoo or future product model
+            }
+        )
+
+
+class BrandContextOptionsView(APIView):
+    """GET /api/v1/analytics/brand-context-options/
+
+    Returns all brand entities (parent + sub-brands) for the Brand Context
+    Selector. Reads from onboarding Company model (parent) and BAA
+    architecture registry in Django Redis (sub-brands, written by BAA
+    via brand-context-sync/).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        tenant = _get_tenant(request)
+        if not tenant:
+            return Response(
+                {"error": "Tenant required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        options = []
+
+        # 1. Parent brand from Company model (always present)
+        try:
+            from onboarding.models import Company
+
+            company = Company.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True)
+            ).first()
+            if company:
+                options.append(
+                    {
+                        "brand_context_id": "parent",
+                        "name": company.name or "Parent Brand",
+                        "brand_scope": "parent",
+                        "parent_brand": company.name or "",
+                        "relationship_to_parent": "root",
+                        "target_persona": company.target_audience or None,
+                        "industry": company.industry or "",
+                    }
+                )
+        except Exception:
+            logger.warning("Could not load company for tenant %s", tenant.id)
+
+        # 2. Sub-brands from BAA registry (only after BAA runs)
+        try:
+            cache_key = f"brand_context:{tenant.id}:options"
+            sub_brands = cache.get(cache_key)
+            if sub_brands and isinstance(sub_brands, list):
+                for sb in sub_brands:
+                    if sb.get("brand_scope") != "parent":
+                        options.append(sb)
+        except Exception:
+            logger.warning(
+                "Could not load brand context options for tenant %s", tenant.id
+            )
+
+        return Response(options)
+
+
+class BrandContextSyncView(APIView):
+    """POST /api/v1/analytics/brand-context-sync/
+
+    Called by BAA strategy_persister to sync brand options to Django Redis.
+    Authenticated via X-Service-Token (service-to-service).
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        # Service-token auth
+        service_token = request.headers.get("X-Service-Token", "")
+        expected_token = getattr(
+            django_settings,
+            "ORCHESTRATOR_SERVICE_TOKEN",
+            "dev-service-token",
+        )
+        if service_token != expected_token:
+            return Response(
+                {"error": "Invalid service token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        tenant_id = request.data.get("tenant_id")
+        options = request.data.get("options")
+
+        if not tenant_id or not isinstance(options, list):
+            return Response(
+                {"error": "tenant_id and options[] required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Write to Django Redis (DB 0)
+        cache_key = f"brand_context:{tenant_id}:options"
+        cache.set(cache_key, options, timeout=None)
+
+        # Bump version for cache busting
+        version_key = f"brand_context:{tenant_id}:version"
+        try:
+            current = cache.get(version_key) or 0
+            cache.set(version_key, int(current) + 1, timeout=None)
+        except Exception:
+            cache.set(version_key, 1, timeout=None)
+
+        logger.info(
+            "Brand context synced for tenant %s: %d options",
+            tenant_id,
+            len(options),
+        )
+        return Response({"synced": len(options)})

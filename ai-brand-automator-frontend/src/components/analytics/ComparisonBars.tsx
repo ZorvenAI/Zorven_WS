@@ -17,6 +17,7 @@ import type { ComparisonItem, TimeRange } from '@/types/analytics';
 
 interface ComparisonBarsProps {
   range: TimeRange;
+  brandContext?: string;
 }
 
 function ComparisonBarChart({
@@ -67,7 +68,7 @@ function ComparisonBarChart({
   );
 }
 
-export default function ComparisonBars({ range }: ComparisonBarsProps) {
+export default function ComparisonBars({ range, brandContext }: ComparisonBarsProps) {
   const [data, setData] = useState<ComparisonItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
@@ -75,14 +76,14 @@ export default function ComparisonBars({ range }: ComparisonBarsProps) {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const d = await getComparison(range);
+      const d = await getComparison(range, 'previous', brandContext);
       setData(d);
     } catch {
       setData([]);
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, [range, brandContext]);
 
   useEffect(() => {
     fetchData();

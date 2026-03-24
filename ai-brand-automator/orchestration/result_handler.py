@@ -409,6 +409,16 @@ def _build_result_summary(job):
     if gap_output and gap_output.get("analysis_type") == "competitive_gap":
         return _build_gap_analysis_summary(gap_output)
 
+    baa_output = node_results.get("brand_architecture", {})
+    if not baa_output:
+        if result.get("recommendation") and result.get("hierarchy"):
+            baa_output = result
+    if baa_output and (
+        baa_output.get("recommendation", {}).get("recommended_model")
+        or baa_output.get("hierarchy", {}).get("root")
+    ):
+        return _build_brand_architecture_summary(baa_output)
+
     if "summary" in result:
         return result["summary"]
 
@@ -968,6 +978,64 @@ def _build_gap_analysis_summary(gap_output):
         parts.append("")
         for f in findings[:3]:
             parts.append(f"- {f}")
+
+    parts.append("\nView the full results in the pipeline card above.")
+    return "\n".join(parts)
+
+
+def _build_brand_architecture_summary(baa_output):
+    """Build a rich summary for brand architecture pipelines."""
+    parts = []
+
+    rec = baa_output.get("recommendation", {})
+    model = rec.get("recommended_model", "")
+    confidence = baa_output.get("confidence_score", 0)
+    hierarchy = baa_output.get("hierarchy", {})
+    root = hierarchy.get("root", {})
+    depth = hierarchy.get("total_depth", 0)
+    total_nodes = hierarchy.get("total_nodes", 0)
+    naming = baa_output.get("naming_hierarchy", {})
+
+    if model:
+        model_label = model.replace("_", " ").title()
+        parts.append("**Brand Architecture Strategy Generated**")
+        parts.append(
+            f"Recommended model: **{model_label}** " f"(confidence: {confidence:.0%})"
+        )
+
+    if root.get("name"):
+        parts.append(f"\n**Brand Hierarchy**: {root['name']}")
+        children = root.get("children", [])
+        if children:
+            parts.append(f"{total_nodes} brand entities across {depth} levels:")
+            for child in children[:6]:
+                child_name = child.get("name", "")
+                child_type = (child.get("type", "") or "").replace("_", " ")
+                if child_name:
+                    parts.append(f"  - {child_name} ({child_type})")
+
+    naming_pattern = naming.get("naming_pattern", "")
+    if naming_pattern:
+        consistency = naming.get("consistency_score", 0)
+        parts.append(
+            f"\n**Naming Convention**: {naming_pattern} "
+            f"(consistency: {consistency}/100)"
+        )
+
+    scores = rec.get("model_scores", [])
+    if scores:
+        top = sorted(scores, key=lambda s: s.get("total", 0), reverse=True)
+        parts.append("\n**Model Comparison**:")
+        for s in top[:3]:
+            m = (s.get("model", "") or "").replace("_", " ").title()
+            parts.append(f"  - {m}: {s.get('total', 0)}/100")
+
+    findings = baa_output.get("findings", [])
+    if findings:
+        parts.append("\n**Key Findings**:")
+        for f in findings[:4]:
+            if isinstance(f, str) and f.strip():
+                parts.append(f"- {f}")
 
     parts.append("\nView the full results in the pipeline card above.")
     return "\n".join(parts)

@@ -132,6 +132,18 @@ def extract_metrics_task(self, job_id: int):
         cache.set(redis_key, "no_metrics", 86400)
         return
 
+    # Inject brand context into each metric's metadata
+    input_ctx = job.input_context or {}
+    brand_ctx_id = input_ctx.get("brand_context_id", "parent")
+    brand_scope = input_ctx.get("brand_scope", "parent")
+    parent_brand = input_ctx.get("parent_brand", "")
+    for m in metrics:
+        m.metadata = m.metadata or {}
+        m.metadata["brand_context_id"] = brand_ctx_id
+        m.metadata["brand_scope"] = brand_scope
+        if parent_brand:
+            m.metadata["parent_brand"] = parent_brand
+
     # PG-02: Clamp values per MetricDefinition ranges
     definitions = {
         d.metric_name: d

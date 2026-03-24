@@ -18,6 +18,7 @@ _AUDIENCE_PERSONA_NODES = {"audience_persona"}
 _TREND_CULTURAL_NODES = {"trend_cultural"}
 _VOICE_OF_CUSTOMER_NODES = {"voice_of_customer"}
 _BRAND_POSITIONING_NODES = {"brand_positioning"}
+_BRAND_ARCHITECTURE_NODES = {"brand_architecture"}
 
 
 def _source_label(source: dict) -> str:
@@ -88,6 +89,9 @@ class ManagerNode(BaseNode):
 
         # Extract brand positioning data
         brand_positioning_data = self._extract_brand_positioning(outputs)
+
+        # Extract brand architecture data
+        brand_architecture_data = self._extract_brand_architecture(outputs)
 
         result_data: dict[str, Any] = {
             "summary": (
@@ -309,6 +313,59 @@ class ManagerNode(BaseNode):
                 else:
                     result_data["sources"] = bpa_sources
 
+        # Promote brand architecture fields to top-level result_data
+        if brand_architecture_data:
+            for key in (
+                "recommendation",
+                "hierarchy",
+                "naming_hierarchy",
+                "growth_path",
+                "wf1_context_used",
+                "bpa_context_used",
+                "execution_time_ms",
+            ):
+                value = brand_architecture_data.get(key)
+                if value is not None:
+                    result_data[key] = value
+            # Copy strategy as arch_strategy to avoid collision with BPA strategy
+            arch_strategy = brand_architecture_data.get("strategy")
+            if arch_strategy:
+                result_data["arch_strategy"] = arch_strategy
+            baa_conf = brand_architecture_data.get("confidence_score")
+            if baa_conf is not None:
+                confidence_scores["brand_architecture"] = baa_conf
+            # Build a richer summary from BAA data
+            rec = brand_architecture_data.get("recommendation", {})
+            model = rec.get("recommended_model", "")
+            hierarchy = brand_architecture_data.get("hierarchy", {})
+            depth = hierarchy.get("total_depth", 0)
+            nodes = hierarchy.get("total_nodes", 0)
+            if model:
+                model_label = model.replace("_", " ").title()
+                result_data["summary"] = (
+                    f"Brand architecture strategy generated. "
+                    f"Recommended model: **{model_label}** "
+                    f"({nodes} brand entities, {depth} levels deep). "
+                    f"Confidence: {baa_conf or 0:.0%}"
+                )
+            # Merge BAA sources with existing
+            baa_sources = brand_architecture_data.get("sources", [])
+            if baa_sources:
+                existing_sources = result_data.get("sources", [])
+                if isinstance(existing_sources, list):
+                    existing_urls = {
+                        s.get("url") for s in existing_sources if isinstance(s, dict)
+                    }
+                    for src in baa_sources:
+                        if (
+                            isinstance(src, dict)
+                            and src.get("url") not in existing_urls
+                        ):
+                            existing_sources.append(src)
+                    result_data["sources"] = existing_sources
+                else:
+                    result_data["sources"] = baa_sources
+
         # Store per-agent confidence scores and compute average
         if confidence_scores:
             result_data["confidence_scores"] = confidence_scores
@@ -407,6 +464,14 @@ class ManagerNode(BaseNode):
             for o in outputs.values()
         )
 
+        # Check for brand architecture data
+        has_brand_architecture = any(
+            isinstance(o, dict)
+            and o.get("recommendation", {}).get("recommended_model")
+            and o.get("hierarchy", {}).get("root")
+            for o in outputs.values()
+        )
+
         # Brand equity / valuation pipeline
         if bsi_data:
             charts.append(
@@ -449,6 +514,19 @@ class ManagerNode(BaseNode):
         # Determine dashboard type
         if bsi_data or valuation_data:
             schema_type = "brand_equity_dashboard"
+        elif has_brand_architecture:
+            schema_type = "brand_architecture_dashboard"
+            charts.append(
+                {
+                    "type": "architecture_recommendation",
+                    "data_key": "recommendation",
+                }
+            )
+            charts.append({"type": "brand_hierarchy_tree", "data_key": "hierarchy"})
+            charts.append({"type": "naming_hierarchy", "data_key": "naming_hierarchy"})
+            charts.append({"type": "growth_roadmap", "data_key": "growth_path"})
+            charts.append({"type": "strategy_overview", "data_key": "arch_strategy"})
+            charts.append({"type": "sources_table", "data_key": "sources"})
         elif has_brand_positioning:
             schema_type = "brand_positioning_dashboard"
             charts.append(
@@ -652,6 +730,29 @@ class ManagerNode(BaseNode):
             if isinstance(output, dict):
                 if output.get("recommended_positioning") or output.get(
                     "positioning_candidates"
+                ):
+                    return output
+        return None
+
+    @staticmethod
+    def _extract_brand_architecture(
+        outputs: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Extract brand architecture data from any node output.
+
+        Looks for outputs containing recommendation with recommended_model
+        and hierarchy with root, which are produced by
+        brand-architecture-agent-svc.
+        """
+        for node_id, output in outputs.items():
+            if isinstance(output, dict):
+                rec = output.get("recommendation")
+                hier = output.get("hierarchy")
+                if (
+                    isinstance(rec, dict)
+                    and rec.get("recommended_model")
+                    and isinstance(hier, dict)
+                    and hier.get("root")
                 ):
                     return output
         return None

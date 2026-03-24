@@ -14,7 +14,7 @@ import type {
   TrendPoint,
 } from '@/types/analytics';
 
-export function useAnalytics(range: TimeRange) {
+export function useAnalytics(range: TimeRange, brandContext?: string) {
   const [scorecard, setScorecard] = useState<ScorecardItem[]>([]);
   const [coverage, setCoverage] = useState<AnalyticsCoverage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,8 +25,8 @@ export function useAnalytics(range: TimeRange) {
     setError(null);
     try {
       const [scorecardData, coverageData] = await Promise.all([
-        getScorecard(range),
-        getCoverage(),
+        getScorecard(range, brandContext),
+        getCoverage(brandContext),
       ]);
       setScorecard(scorecardData);
       setCoverage(coverageData);
@@ -35,7 +35,7 @@ export function useAnalytics(range: TimeRange) {
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, [range, brandContext]);
 
   useEffect(() => {
     fetchData();
@@ -47,7 +47,8 @@ export function useAnalytics(range: TimeRange) {
 export function useMetricTrend(
   metric: string | null,
   range: TimeRange,
-  period: Period = 'daily'
+  period: Period = 'daily',
+  brandContext?: string
 ) {
   const [data, setData] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(false);
@@ -58,14 +59,20 @@ export function useMetricTrend(
     setLoading(true);
     setError(null);
     try {
-      const trendData = await getTrends(metric, range, period);
+      const trendData = await getTrends(
+        metric,
+        range,
+        period,
+        undefined,
+        brandContext
+      );
       setData(trendData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load trend data');
     } finally {
       setLoading(false);
     }
-  }, [metric, range, period]);
+  }, [metric, range, period, brandContext]);
 
   useEffect(() => {
     fetchData();
