@@ -3297,7 +3297,7 @@ function BrandArchitectureSection({
       {activeTab === 'strategy' && (
         <div className="space-y-4">
           {/* Executive Summary */}
-          {archStrategy?.executive_summary && (
+          {typeof archStrategy?.executive_summary === 'string' && (
             <div className="glass-card p-4 border border-white/10">
               <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
                 Executive Summary
@@ -3307,7 +3307,7 @@ function BrandArchitectureSection({
           )}
 
           {/* Strategic Rationale */}
-          {archStrategy?.strategic_rationale && (
+          {typeof archStrategy?.strategic_rationale === 'string' && (
             <div className="glass-card p-4 border border-white/10">
               <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
                 Strategic Rationale
@@ -3368,24 +3368,27 @@ function BrandArchitectureSection({
                   Success Metrics
                 </h4>
                 <div className="space-y-1.5">
-                  {metrics.map((m: string | Record<string, unknown>, i: number) => (
-                    <div key={i} className="flex gap-2 items-start p-2.5 rounded-lg bg-white/5 border border-white/10">
-                      <span className="text-brand-electric shrink-0">◎</span>
-                      {typeof m === 'string' ? (
-                        <span className="text-sm text-brand-silver/80">{m}</span>
-                      ) : (
-                        <div className="text-sm">
-                          <span className="text-white">{(m as Record<string, unknown>).metric as string || (m as Record<string, unknown>).name as string || ''}</span>
-                          {(m as Record<string, unknown>).target && (
-                            <span className="text-brand-electric ml-2">{(m as Record<string, unknown>).target as string}</span>
-                          )}
-                          {(m as Record<string, unknown>).timeframe && (
-                            <span className="text-brand-silver/50 ml-2">({(m as Record<string, unknown>).timeframe as string})</span>
-                          )}
+                  {metrics.map((m: unknown, i: number) => {
+                    if (typeof m === 'string') {
+                      return (
+                        <div key={i} className="flex gap-2 items-start p-2.5 rounded-lg bg-white/5 border border-white/10">
+                          <span className="text-brand-electric shrink-0">◎</span>
+                          <span className="text-sm text-brand-silver/80">{m}</span>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      );
+                    }
+                    const obj = m as Record<string, string>;
+                    return (
+                      <div key={i} className="flex gap-2 items-start p-2.5 rounded-lg bg-white/5 border border-white/10">
+                        <span className="text-brand-electric shrink-0">◎</span>
+                        <div className="text-sm">
+                          <span className="text-white">{obj.metric || obj.name || ''}</span>
+                          {obj.target && <span className="text-brand-electric ml-2">{obj.target}</span>}
+                          {obj.timeframe && <span className="text-brand-silver/50 ml-2">({obj.timeframe})</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -3416,12 +3419,12 @@ function BrandArchitectureSection({
                         {(value as unknown[]).map((item, i) => (
                           <li key={i} className="text-sm text-brand-silver/80 flex gap-2 items-start">
                             <span className="text-brand-electric/40 shrink-0">→</span>
-                            {typeof item === 'string' ? item : JSON.stringify(item)}
+                            {typeof item === 'string' ? item : String(JSON.stringify(item))}
                           </li>
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-sm text-brand-silver/80">{JSON.stringify(value, null, 2)}</p>
+                      <p className="text-sm text-brand-silver/80">{String(JSON.stringify(value, null, 2))}</p>
                     )}
                   </div>
                 ))}
@@ -3465,10 +3468,10 @@ function BrandArchitectureSection({
               <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Sources</h4>
               <div className="space-y-1">
                 {sources.map((s, i) => {
-                  const src = typeof s === 'string' ? { title: s } : s;
-                  const title = src.title || src.name || src.source || src.description || '';
-                  const url = src.url || src.link || '';
-                  const detail = src.description || src.type || src.category || '';
+                  const src = typeof s === 'string' ? { title: s } : (s as SourceEntry & Record<string, string>);
+                  const title = src.title || src['name'] || src['source'] || src.description || '';
+                  const url = src.url || src['link'] || '';
+                  const detail = src.description || src.type || src['category'] || '';
                   return (
                     <div key={i} className="flex gap-2 items-start p-2 rounded-lg bg-white/5 border border-white/10">
                       <span className="text-brand-silver/40 text-xs shrink-0 mt-0.5">[{i + 1}]</span>
