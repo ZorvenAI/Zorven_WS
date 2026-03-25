@@ -45,6 +45,7 @@ EXTERNAL_ENDPOINTS: dict[str, str] = {
     "voice_of_customer": "http://voc-agent-svc:8025/v1/execute",
     "brand_positioning": "http://brand-positioning-agent-svc:8031/v1/execute",
     "brand_architecture": "http://brand-architecture-agent-svc:8032/v1/execute",
+    "brand_personality": "http://brand-personality-agent-svc:8033/v1/execute",
 }
 
 

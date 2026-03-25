@@ -228,18 +228,38 @@ class WorkflowService:
     @staticmethod
     @transaction.atomic
     def create_workflow(name, description, manifest_data, layout_data, tenant, user):
-        """Create a new workflow with a dedicated PipelineManifest."""
+        """Create a new workflow with a dedicated PipelineManifest.
+
+        Auto-increments the name if a workflow with the same name already
+        exists for this tenant (e.g. "Foo (copy)" → "Foo (copy 2)").
+        """
+        # Deduplicate name within the tenant
+        final_name = name
+        existing = UserWorkflow.objects.filter(
+            tenant=tenant, is_active=True, name=final_name
+        ).exists()
+        if existing:
+            counter = 2
+            while True:
+                candidate = f"{name} ({counter})"
+                if not UserWorkflow.objects.filter(
+                    tenant=tenant, is_active=True, name=candidate
+                ).exists():
+                    final_name = candidate
+                    break
+                counter += 1
+
         pipeline_id = f"workspace-{uuid.uuid4().hex[:8]}"
         manifest = PipelineManifest.objects.create(
             pipeline_id=pipeline_id,
-            name=name,
+            name=final_name,
             description=description,
             manifest_data=manifest_data,
             tenant=tenant,
             created_by=user,
         )
         workflow = UserWorkflow.objects.create(
-            name=name,
+            name=final_name,
             description=description,
             manifest=manifest,
             layout_data=layout_data or {},

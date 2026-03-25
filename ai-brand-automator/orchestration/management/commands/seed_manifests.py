@@ -996,16 +996,17 @@ class Command(BaseCommand):
                 },
             },
         },
-        # ── WF2: Brand Strategy & Positioning ──
+        # ── WF2: Brand Strategy & Positioning (full chain: BPA → BAA → BPV) ──
         {
             "pipeline_id": "brand-strategy-positioning",
             "name": "Brand Strategy & Positioning",
             "description": (
-                "Strategic brand positioning using WF1 brand discovery "
-                "intelligence. Generates framework-agnostic positioning "
-                "statements, value proposition canvas, perceptual maps, "
-                "and differentiation framework. Requires completed WF1 "
-                "Brand Discovery pipeline."
+                "Full WF2 brand strategy pipeline: positioning, architecture, "
+                "and personality & values. Generates positioning statements, "
+                "value proposition canvas, perceptual maps, brand hierarchy "
+                "tree, naming conventions, Aaker 5D personality profile, "
+                "archetype selection, values hierarchy, and voice matrix. "
+                "Requires completed WF1 Brand Discovery pipeline."
             ),
             "manifest_data": {
                 "nodes": [
@@ -1027,6 +1028,28 @@ class Command(BaseCommand):
                         },
                     },
                     {
+                        "id": "brand_architecture",
+                        "type": "external",
+                        "url": (
+                            "http://brand-architecture-agent-svc" ":8032/v1/execute"
+                        ),
+                        "config": {
+                            "require_wf1_context": True,
+                            "require_bpa_context": True,
+                        },
+                    },
+                    {
+                        "id": "brand_personality",
+                        "type": "external",
+                        "url": (
+                            "http://brand-personality-agent-svc" ":8033/v1/execute"
+                        ),
+                        "config": {
+                            "require_wf1_context": True,
+                            "require_bpa_context": True,
+                        },
+                    },
+                    {
                         "id": "manager",
                         "type": "internal",
                         "handler": "ManagerNode",
@@ -1034,7 +1057,9 @@ class Command(BaseCommand):
                 ],
                 "edges": [
                     ["intent_router", "brand_positioning"],
-                    ["brand_positioning", "manager"],
+                    ["brand_positioning", "brand_architecture"],
+                    ["brand_architecture", "brand_personality"],
+                    ["brand_personality", "manager"],
                 ],
                 "global_config": {
                     "model": "claude-sonnet-4-20250514",
@@ -1081,6 +1106,50 @@ class Command(BaseCommand):
                 "edges": [
                     ["intent_router", "brand_architecture"],
                     ["brand_architecture", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.4,
+                },
+            },
+        },
+        {
+            "pipeline_id": "brand-strategy-personality",
+            "name": "Brand Strategy: Personality & Values",
+            "description": (
+                "Design brand personality using Aaker 5-dimension framework, "
+                "Jungian archetype selection, values hierarchy, emotional "
+                "attribute mapping, voice matrix, and brand character brief. "
+                "Requires completed WF1 Brand Discovery and WF2 Brand "
+                "Positioning pipelines. Brand Architecture recommended."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "brand_personality",
+                        "type": "external",
+                        "url": (
+                            "http://brand-personality-agent-svc" ":8033/v1/execute"
+                        ),
+                        "config": {
+                            "require_wf1_context": True,
+                            "require_bpa_context": True,
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "brand_personality"],
+                    ["brand_personality", "manager"],
                 ],
                 "global_config": {
                     "model": "claude-sonnet-4-20250514",

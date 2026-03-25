@@ -840,6 +840,62 @@ class BrandContextOptionsView(APIView):
         return Response(options)
 
 
+class BrandPersonalitySyncView(APIView):
+    """POST /api/v1/analytics/brand-personality-sync/
+
+    Called by BPV personality_persister to cache personality data in Django Redis.
+    Authenticated via X-Service-Token (service-to-service).
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        # Service-token auth
+        service_token = request.headers.get("X-Service-Token", "")
+        expected_token = getattr(
+            django_settings,
+            "ORCHESTRATOR_SERVICE_TOKEN",
+            "dev-service-token",
+        )
+        if service_token != expected_token:
+            return Response(
+                {"error": "Invalid service token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        tenant_id = request.data.get("tenant_id")
+        brand_context_id = request.data.get("brand_context_id", "parent")
+        aaker_profile = request.data.get("aaker_profile", {})
+        archetype = request.data.get("archetype", {})
+        values_hierarchy = request.data.get("values_hierarchy", {})
+
+        if not tenant_id:
+            return Response(
+                {"error": "tenant_id required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cache_key = f"brand_personality:{tenant_id}:{brand_context_id}"
+        cache.set(
+            cache_key,
+            {
+                "aaker_profile": aaker_profile,
+                "archetype": archetype,
+                "values_hierarchy": values_hierarchy,
+            },
+            timeout=None,
+        )
+
+        logger.info(
+            "Brand personality synced for tenant %s (context: %s)",
+            tenant_id,
+            brand_context_id,
+        )
+        return Response(
+            {"synced": True, "brand_context_id": brand_context_id}
+        )
+
+
 class BrandContextSyncView(APIView):
     """POST /api/v1/analytics/brand-context-sync/
 

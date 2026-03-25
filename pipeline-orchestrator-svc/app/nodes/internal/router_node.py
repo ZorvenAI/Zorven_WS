@@ -274,6 +274,30 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("brand portfolio", 1),
         ("brand hierarchy", 1),
     ],
+    "brand-strategy-personality": [
+        # Strong signal (weight 3) — unambiguous intent
+        ("brand personality", 3),
+        ("brand character", 3),
+        ("brand archetype", 3),
+        ("brand values", 3),
+        ("brand voice", 3),
+        ("brand tone", 3),
+        ("personality traits", 3),
+        ("brand identity character", 3),
+        # Medium signal (weight 2) — domain-specific
+        ("aaker personality", 2),
+        ("jungian archetype", 2),
+        ("values hierarchy", 2),
+        ("emotional attributes", 2),
+        ("voice matrix", 2),
+        ("brand character brief", 2),
+        # Weak signal (weight 1) — require qualifier to avoid misrouting
+        ("personality", 1),
+        ("archetype", 1),
+        ("character", 1),
+        ("values", 1),
+        ("tone of voice", 1),
+    ],
     "brand-analysis": [
         ("brand", 1),
         ("analysis", 1),
