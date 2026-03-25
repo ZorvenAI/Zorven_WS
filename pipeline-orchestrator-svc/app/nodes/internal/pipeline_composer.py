@@ -332,6 +332,24 @@ NODE_CATALOG: list[dict[str, Any]] = [
         "output_key": "brand_architecture",
         "config": {"require_wf1_context": True, "require_bpa_context": True},
     },
+    {
+        "id": "brand_personality",
+        "type": "external",
+        "url": f"{settings.BRAND_PERSONALITY_AGENT_URL}/v1/execute",
+        "description": (
+            "Brand personality & values designer: Aaker 5-dimension "
+            "personality profile, Jungian archetypes (primary + secondary), "
+            "values hierarchy (core/supporting/aspirational), emotional "
+            "attribute map, voice matrix, and character brief. Requires "
+            "WF1 Brand Discovery AND BPA Brand Positioning data. BAA Brand "
+            "Architecture recommended but not required. Use when the prompt "
+            "asks about brand personality, brand character, brand values, "
+            "brand voice, brand tone, archetypes, personality traits, "
+            "values hierarchy, or voice matrix."
+        ),
+        "output_key": "brand_personality",
+        "config": {"require_wf1_context": True, "require_bpa_context": True},
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.

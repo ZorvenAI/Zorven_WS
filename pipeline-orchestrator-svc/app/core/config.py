@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     VOC_AGENT_URL: str = "http://voc-agent-svc:8025"
     BRAND_POSITIONING_AGENT_URL: str = "http://brand-positioning-agent-svc:8031"
     BRAND_ARCHITECTURE_AGENT_URL: str = "http://brand-architecture-agent-svc:8032"
+    BRAND_PERSONALITY_AGENT_URL: str = "http://brand-personality-agent-svc:8033"
 
 
 settings = Settings()

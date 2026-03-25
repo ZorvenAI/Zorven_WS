@@ -33,6 +33,12 @@ jobs:
       odoo-worker-changed: ${{ steps.changes.outputs.odoo-worker }}
       market-research-changed: ${{ steps.changes.outputs.market-research }}
       competitor-intel-changed: ${{ steps.changes.outputs.competitor-intel }}
+      brand-positioning-changed: ${{ steps.changes.outputs.brand-positioning }}
+      brand-architecture-changed: ${{ steps.changes.outputs.brand-architecture }}
+      brand-personality-changed: ${{ steps.changes.outputs.brand-personality }}
+      audience-persona-changed: ${{ steps.changes.outputs.audience-persona }}
+      trend-cultural-changed: ${{ steps.changes.outputs.trend-cultural }}
+      voc-agent-changed: ${{ steps.changes.outputs.voc-agent }}
 
     steps:
       - uses: actions/checkout@v4
@@ -59,6 +65,12 @@ jobs:
             echo "odoo-worker=true" >> "$GITHUB_OUTPUT"
             echo "market-research=true" >> "$GITHUB_OUTPUT"
             echo "competitor-intel=true" >> "$GITHUB_OUTPUT"
+            echo "brand-positioning=true" >> "$GITHUB_OUTPUT"
+            echo "brand-architecture=true" >> "$GITHUB_OUTPUT"
+            echo "brand-personality=true" >> "$GITHUB_OUTPUT"
+            echo "audience-persona=true" >> "$GITHUB_OUTPUT"
+            echo "trend-cultural=true" >> "$GITHUB_OUTPUT"
+            echo "voc-agent=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           
@@ -151,6 +163,48 @@ jobs:
             echo "competitor-intel=true" >> "$GITHUB_OUTPUT"
           else
             echo "competitor-intel=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if brand-positioning-agent-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^brand-positioning-agent-svc/'; then
+            echo "brand-positioning=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "brand-positioning=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if brand-architecture-agent-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^brand-architecture-agent-svc/'; then
+            echo "brand-architecture=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "brand-architecture=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if brand-personality-agent-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^brand-personality-agent-svc/'; then
+            echo "brand-personality=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "brand-personality=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if audience-persona-agent-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^audience-persona-agent-svc/'; then
+            echo "audience-persona=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "audience-persona=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if trend-cultural-agent-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^trend-cultural-agent-svc/'; then
+            echo "trend-cultural=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "trend-cultural=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if voc-agent-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^voc-agent-svc/'; then
+            echo "voc-agent=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "voc-agent=false" >> "$GITHUB_OUTPUT"
           fi
 
   # ==========================================================================
@@ -740,11 +794,245 @@ jobs:
           fi
 
   # ==========================================================================
+  # Deploy Brand Positioning Agent to Railway
+  # ==========================================================================
+  deploy-brand-positioning-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.brand-positioning-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Brand Positioning Agent
+        run: |
+          if [ -n "${{ secrets.RAILWAY_BRAND_POSITIONING_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_BRAND_POSITIONING_SERVICE }} --detach
+          else
+            echo "RAILWAY_BRAND_POSITIONING_SERVICE not set, skipping brand-positioning deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for brand-positioning-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          BPA_URL="${{ secrets.RAILWAY_BRAND_POSITIONING_URL }}"
+          if [ -n "$BPA_URL" ]; then
+            curl -f "${BPA_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_BRAND_POSITIONING_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
+  # Deploy Brand Architecture Agent to Railway
+  # ==========================================================================
+  deploy-brand-architecture-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.brand-architecture-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Brand Architecture Agent
+        run: |
+          if [ -n "${{ secrets.RAILWAY_BRAND_ARCHITECTURE_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_BRAND_ARCHITECTURE_SERVICE }} --detach
+          else
+            echo "RAILWAY_BRAND_ARCHITECTURE_SERVICE not set, skipping brand-architecture deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for brand-architecture-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          BAA_URL="${{ secrets.RAILWAY_BRAND_ARCHITECTURE_URL }}"
+          if [ -n "$BAA_URL" ]; then
+            curl -f "${BAA_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_BRAND_ARCHITECTURE_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
+  # Deploy Brand Personality Agent to Railway
+  # ==========================================================================
+  deploy-brand-personality-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.brand-personality-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Brand Personality Agent
+        run: |
+          if [ -n "${{ secrets.RAILWAY_BRAND_PERSONALITY_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_BRAND_PERSONALITY_SERVICE }} --detach
+          else
+            echo "RAILWAY_BRAND_PERSONALITY_SERVICE not set, skipping brand-personality deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for brand-personality-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          BPV_URL="${{ secrets.RAILWAY_BRAND_PERSONALITY_URL }}"
+          if [ -n "$BPV_URL" ]; then
+            curl -f "${BPV_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_BRAND_PERSONALITY_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
+  # Deploy Audience Persona Agent to Railway
+  # ==========================================================================
+  deploy-audience-persona-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.audience-persona-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Audience Persona Agent
+        run: |
+          if [ -n "${{ secrets.RAILWAY_AUDIENCE_PERSONA_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_AUDIENCE_PERSONA_SERVICE }} --detach
+          else
+            echo "RAILWAY_AUDIENCE_PERSONA_SERVICE not set, skipping audience-persona deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for audience-persona-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          APA_URL="${{ secrets.RAILWAY_AUDIENCE_PERSONA_URL }}"
+          if [ -n "$APA_URL" ]; then
+            curl -f "${APA_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_AUDIENCE_PERSONA_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
+  # Deploy Trend Cultural Agent to Railway
+  # ==========================================================================
+  deploy-trend-cultural-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.trend-cultural-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Trend Cultural Agent
+        run: |
+          if [ -n "${{ secrets.RAILWAY_TREND_CULTURAL_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_TREND_CULTURAL_SERVICE }} --detach
+          else
+            echo "RAILWAY_TREND_CULTURAL_SERVICE not set, skipping trend-cultural deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for trend-cultural-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          TCIA_URL="${{ secrets.RAILWAY_TREND_CULTURAL_URL }}"
+          if [ -n "$TCIA_URL" ]; then
+            curl -f "${TCIA_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_TREND_CULTURAL_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
+  # Deploy VoC Agent to Railway
+  # ==========================================================================
+  deploy-voc-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.voc-agent-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy VoC Agent
+        run: |
+          if [ -n "${{ secrets.RAILWAY_VOC_AGENT_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_VOC_AGENT_SERVICE }} --detach
+          else
+            echo "RAILWAY_VOC_AGENT_SERVICE not set, skipping voc-agent deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for voc-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          VOC_URL="${{ secrets.RAILWAY_VOC_AGENT_URL }}"
+          if [ -n "$VOC_URL" ]; then
+            curl -f "${VOC_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_VOC_AGENT_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
   # Post-Deployment Notification
   # ==========================================================================
   notify:
     runs-on: ubuntu-latest
-    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent, deploy-chat-titling, deploy-content-agent, deploy-social-agent, deploy-rag-uploader, deploy-odoo-mcp-server, deploy-odoo-worker-agent, deploy-market-research-agent, deploy-competitor-intel-agent]
+    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent, deploy-chat-titling, deploy-content-agent, deploy-social-agent, deploy-rag-uploader, deploy-odoo-mcp-server, deploy-odoo-worker-agent, deploy-market-research-agent, deploy-competitor-intel-agent, deploy-brand-positioning-agent, deploy-brand-architecture-agent, deploy-brand-personality-agent, deploy-audience-persona-agent, deploy-trend-cultural-agent, deploy-voc-agent]
     if: always()
 
     steps:
@@ -770,5 +1058,11 @@ jobs:
           echo "| Odoo Worker Agent | ${{ needs.deploy-odoo-worker-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Market Research Agent | ${{ needs.deploy-market-research-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Competitor Intel Agent | ${{ needs.deploy-competitor-intel-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Brand Positioning Agent | ${{ needs.deploy-brand-positioning-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Brand Architecture Agent | ${{ needs.deploy-brand-architecture-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Brand Personality Agent | ${{ needs.deploy-brand-personality-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Audience Persona Agent | ${{ needs.deploy-audience-persona-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trend Cultural Agent | ${{ needs.deploy-trend-cultural-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| VoC Agent | ${{ needs.deploy-voc-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

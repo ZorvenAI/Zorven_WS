@@ -3499,6 +3499,626 @@ function BrandArchitectureSection({
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * Brand Personality & Values (BPV) Section — 6 tabs
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+interface BPVAakerDimension {
+  dimension: string;
+  score: number;
+  sub_traits?: Array<{ name: string; score: number }>;
+}
+
+interface BPVAakerProfile {
+  dimensions: BPVAakerDimension[];
+  primary_dimension?: string;
+  secondary_dimension?: string;
+  differentiation_score?: number;
+}
+
+interface BPVArchetypeDetail {
+  name?: string;
+  core_desire?: string;
+  fear?: string;
+  strategy?: string;
+  gift?: string;
+  shadow?: string;
+  brand_expression?: string;
+}
+
+interface BPVArchetype {
+  primary: string | BPVArchetypeDetail;
+  secondary?: string | BPVArchetypeDetail;
+  primary_detail?: BPVArchetypeDetail;
+  secondary_detail?: BPVArchetypeDetail;
+  blend_rationale?: string;
+  resonance_score?: number;
+}
+
+interface BPVValueItem {
+  name: string;
+  definition?: string;
+  behavioral_manifestation?: string;
+}
+
+interface BPVValuesHierarchy {
+  core: BPVValueItem[];
+  supporting?: BPVValueItem[];
+  aspirational?: BPVValueItem[];
+  authenticity_score?: number;
+}
+
+interface BPVEmotionalMap {
+  personas: Array<{
+    persona: string;
+    emotions: Array<{ emotion: string; intensity: number }>;
+  }>;
+  consistency_score?: number;
+}
+
+interface BPVVoiceMatrix {
+  tone_spectrum?: Array<{
+    dimension?: string; attribute?: string;
+    low_end?: string; min_label?: string;
+    high_end?: string; max_label?: string;
+    position: number;
+  }>;
+  vocabulary?: { preferred: string[]; avoided: string[] };
+  style?: Record<string, string>;
+  humor?: string | { overall_tone?: string; do_examples?: string[]; dont_examples?: string[]; [key: string]: unknown };
+  dos?: string[];
+  donts?: string[];
+  channel_adaptations?: Array<{ channel: string; adaptation?: string; guideline?: string }>;
+}
+
+interface BPVCharacterBrief {
+  persona_card?: {
+    name?: string;
+    personality_snapshot?: string;
+    core_belief?: string;
+    superpower?: string;
+    fear?: string;
+    communication_style?: string;
+    emotional_signature?: string[];
+  };
+  executive_summary?: string;
+  positioning_alignment_score?: number;
+}
+
+function BrandPersonalitySection({
+  aakerProfile,
+  archetype,
+  valuesHierarchy,
+  emotionalMap,
+  voiceMatrix,
+  characterBrief,
+  confidenceScore,
+  findings,
+  recommendations,
+}: {
+  aakerProfile?: BPVAakerProfile;
+  archetype?: BPVArchetype;
+  valuesHierarchy?: BPVValuesHierarchy;
+  emotionalMap?: BPVEmotionalMap;
+  voiceMatrix?: BPVVoiceMatrix;
+  characterBrief?: BPVCharacterBrief;
+  confidenceScore?: number;
+  findings?: string[];
+  recommendations?: string[];
+}) {
+  const [activeTab, setActiveTab] = useState<'profile' | 'archetype' | 'values' | 'emotional' | 'voice' | 'brief'>('profile');
+
+  function scoreColor(score: number) {
+    if (score >= 80) return 'text-green-400';
+    if (score >= 60) return 'text-amber-400';
+    return 'text-red-400';
+  }
+
+  function scoreBg(score: number) {
+    if (score >= 80) return 'bg-green-400';
+    if (score >= 60) return 'bg-amber-400';
+    return 'bg-red-400';
+  }
+
+  const tabs = [
+    { key: 'profile' as const, label: 'Personality Profile' },
+    { key: 'archetype' as const, label: 'Archetype' },
+    { key: 'values' as const, label: 'Values' },
+    { key: 'emotional' as const, label: 'Emotional Map' },
+    { key: 'voice' as const, label: 'Voice Matrix' },
+    { key: 'brief' as const, label: 'Character Brief' },
+  ];
+
+  // Helper: archetype.primary/secondary may be a string OR an object with {name, fear, gift, ...}
+  function archetypeName(val: string | BPVArchetypeDetail | undefined): string | undefined {
+    if (!val) return undefined;
+    if (typeof val === 'string') return val;
+    return val.name ?? 'Unknown';
+  }
+  function archetypeDetail(val: string | BPVArchetypeDetail | undefined, detail: BPVArchetypeDetail | undefined): BPVArchetypeDetail | undefined {
+    if (detail) return detail;
+    if (val && typeof val === 'object') return val;
+    return undefined;
+  }
+
+  const primaryName = archetypeName(archetype?.primary);
+  const secondaryName = archetypeName(archetype?.secondary);
+  const primaryDetail = archetypeDetail(archetype?.primary, archetype?.primary_detail);
+  const secondaryDetail = archetypeDetail(archetype?.secondary, archetype?.secondary_detail);
+
+  const dimensions = aakerProfile?.dimensions ?? [];
+  const maxDim = dimensions.length > 0 ? Math.max(...dimensions.map(d => d.score)) : 100;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-lg font-bold text-white">Brand Personality & Values</h3>
+        {confidenceScore != null && (() => {
+          const pct = confidenceScore <= 1 ? Math.round(confidenceScore * 100) : Math.round(confidenceScore);
+          return (
+            <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold border ${pct >= 70 ? 'text-green-400 bg-green-400/10 border-green-400/30' : pct >= 40 ? 'text-amber-400 bg-amber-400/10 border-amber-400/30' : 'text-red-400 bg-red-400/10 border-red-400/30'}`}>
+              Confidence: {pct}%
+            </span>
+          );
+        })()}
+      </div>
+
+      {/* Archetype Badge */}
+      {primaryName && (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-brand-electric/10 border border-brand-electric/20">
+          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-brand-electric/20 flex items-center justify-center text-brand-electric text-lg">&#9672;</div>
+          <div>
+            <div className="text-xs text-brand-silver/60 uppercase tracking-wider">Primary Archetype</div>
+            <div className="text-lg font-bold text-white">{primaryName}{secondaryName ? ` / ${secondaryName}` : ''}</div>
+          </div>
+          {archetype?.resonance_score != null && (
+            <span className={`ml-auto text-sm font-bold ${scoreColor(archetype.resonance_score)}`}>
+              Resonance: {Math.round(archetype.resonance_score)}%
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Tab Navigation */}
+      <div className="flex gap-1 overflow-x-auto border-b border-white/10 pb-px">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors rounded-t-md ${activeTab === tab.key ? 'text-brand-electric bg-brand-electric/10 border-b-2 border-brand-electric' : 'text-brand-silver/60 hover:text-brand-silver'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tab: Personality Profile (Aaker 5D Radar) ─────────────── */}
+      {activeTab === 'profile' && (
+        <div className="space-y-4">
+          {dimensions.length > 0 ? (
+            <>
+              {/* Horizontal bar chart for Aaker dimensions */}
+              <div className="space-y-3">
+                {dimensions.map((dim) => {
+                  const label = (dim.dimension || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                  const isPrimary = dim.dimension === aakerProfile?.primary_dimension;
+                  const isSecondary = dim.dimension === aakerProfile?.secondary_dimension;
+                  return (
+                    <div key={dim.dimension} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-white font-medium">{label}</span>
+                          {isPrimary && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-electric/20 text-brand-electric font-bold">PRIMARY</span>}
+                          {isSecondary && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-400/20 text-purple-400 font-bold">SECONDARY</span>}
+                        </div>
+                        <span className={`text-sm font-bold ${scoreColor(dim.score)}`}>{Math.round(dim.score)}</span>
+                      </div>
+                      <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${scoreBg(dim.score)}`} style={{ width: `${Math.min(100, (dim.score / maxDim) * 100)}%`, opacity: 0.8 }} />
+                      </div>
+                      {/* Sub-traits */}
+                      {dim.sub_traits && dim.sub_traits.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {dim.sub_traits.map((st) => (
+                            <span key={st.name} className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-brand-silver/70">
+                              {st.name}: {Math.round(st.score)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Differentiation Score */}
+              {aakerProfile?.differentiation_score != null && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-white/5 border border-white/10">
+                  <span className="text-xs text-brand-silver/60">Differentiation Score:</span>
+                  <span className={`text-sm font-bold ${scoreColor(aakerProfile.differentiation_score)}`}>
+                    {Math.round(aakerProfile.differentiation_score)}
+                  </span>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-brand-silver/50 italic">No Aaker dimension data available.</p>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Archetype ────────────────────────────────────────── */}
+      {activeTab === 'archetype' && (
+        <div className="space-y-4">
+          {primaryName ? (
+            <>
+              {/* Primary Archetype Card */}
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-base font-bold text-white">Primary: {primaryName}</h4>
+                  {archetype?.resonance_score != null && (
+                    <span className={`text-sm font-bold ${scoreColor(archetype.resonance_score)}`}>
+                      {Math.round(archetype.resonance_score)}% resonance
+                    </span>
+                  )}
+                </div>
+                {primaryDetail && (
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {primaryDetail.core_desire && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Core Desire:</span> <span className="text-white">{primaryDetail.core_desire}</span></div>
+                    )}
+                    {primaryDetail.fear && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Fear:</span> <span className="text-white">{primaryDetail.fear}</span></div>
+                    )}
+                    {primaryDetail.strategy && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Strategy:</span> <span className="text-white">{primaryDetail.strategy}</span></div>
+                    )}
+                    {primaryDetail.gift && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Gift:</span> <span className="text-white">{primaryDetail.gift}</span></div>
+                    )}
+                    {primaryDetail.shadow && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Shadow:</span> <span className="text-white">{primaryDetail.shadow}</span></div>
+                    )}
+                    {primaryDetail.brand_expression && (
+                      <div className="col-span-2 p-2 rounded bg-white/5"><span className="text-brand-silver/50">Brand Expression:</span> <span className="text-white">{primaryDetail.brand_expression}</span></div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Secondary Archetype Card */}
+              {secondaryName && (
+                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
+                  <h4 className="text-sm font-bold text-purple-400">Secondary: {secondaryName}</h4>
+                  {secondaryDetail && (
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {secondaryDetail.core_desire && (
+                        <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Core Desire:</span> <span className="text-white">{secondaryDetail.core_desire}</span></div>
+                      )}
+                      {secondaryDetail.gift && (
+                        <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Gift:</span> <span className="text-white">{secondaryDetail.gift}</span></div>
+                      )}
+                      {secondaryDetail.brand_expression && (
+                        <div className="col-span-2 p-2 rounded bg-white/5"><span className="text-brand-silver/50">Brand Expression:</span> <span className="text-white">{secondaryDetail.brand_expression}</span></div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Blend Rationale */}
+              {archetype?.blend_rationale && (
+                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                  <span className="text-xs text-brand-silver/50 block mb-1">Blend Rationale</span>
+                  <p className="text-sm text-brand-silver">{archetype.blend_rationale}</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-brand-silver/50 italic">No archetype data available.</p>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Values Hierarchy ─────────────────────────────────── */}
+      {activeTab === 'values' && (
+        <div className="space-y-4">
+          {valuesHierarchy ? (
+            <>
+              {/* Core Values */}
+              {valuesHierarchy.core.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Core Values</h4>
+                  {valuesHierarchy.core.map((v, i) => (
+                    <div key={i} className="p-3 rounded-lg bg-amber-400/5 border border-amber-400/20">
+                      <div className="text-sm font-bold text-white">{v.name}</div>
+                      {v.definition && <p className="text-xs text-brand-silver/70 mt-1">{v.definition}</p>}
+                      {v.behavioral_manifestation && <p className="text-xs text-brand-silver/50 mt-1 italic">{v.behavioral_manifestation}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Supporting Values */}
+              {valuesHierarchy.supporting && valuesHierarchy.supporting.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider">Supporting Values</h4>
+                  {valuesHierarchy.supporting.map((v, i) => (
+                    <div key={i} className="p-3 rounded-lg bg-white/5 border border-white/10">
+                      <div className="text-sm font-bold text-white">{v.name}</div>
+                      {v.definition && <p className="text-xs text-brand-silver/70 mt-1">{v.definition}</p>}
+                      {v.behavioral_manifestation && <p className="text-xs text-brand-silver/50 mt-1 italic">{v.behavioral_manifestation}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Aspirational Values */}
+              {valuesHierarchy.aspirational && valuesHierarchy.aspirational.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Aspirational Values</h4>
+                  {valuesHierarchy.aspirational.map((v, i) => (
+                    <div key={i} className="p-3 rounded-lg bg-blue-400/5 border border-blue-400/20">
+                      <div className="text-sm font-bold text-white">{v.name}</div>
+                      {v.definition && <p className="text-xs text-brand-silver/70 mt-1">{v.definition}</p>}
+                      {v.behavioral_manifestation && <p className="text-xs text-brand-silver/50 mt-1 italic">{v.behavioral_manifestation}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Authenticity Score */}
+              {valuesHierarchy.authenticity_score != null && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-white/5 border border-white/10">
+                  <span className="text-xs text-brand-silver/60">Authenticity Score:</span>
+                  <span className={`text-sm font-bold ${scoreColor(valuesHierarchy.authenticity_score)}`}>
+                    {Math.round(valuesHierarchy.authenticity_score)}%
+                  </span>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-brand-silver/50 italic">No values data available.</p>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Emotional Map ────────────────────────────────────── */}
+      {activeTab === 'emotional' && (
+        <div className="space-y-4">
+          {emotionalMap?.personas && emotionalMap.personas.length > 0 ? (
+            <>
+              {/* Emotion intensity table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left py-2 px-2 text-brand-silver/50 font-medium">Persona</th>
+                      {emotionalMap.personas[0]?.emotions.map((e) => (
+                        <th key={e.emotion} className="text-center py-2 px-2 text-brand-silver/50 font-medium capitalize">{e.emotion}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {emotionalMap.personas.map((p, pi) => (
+                      <tr key={pi} className="border-b border-white/5">
+                        <td className="py-2 px-2 text-white font-medium">{p.persona}</td>
+                        {p.emotions.map((e) => {
+                          const intensity = Math.round(e.intensity);
+                          const bg = intensity >= 70 ? 'bg-brand-electric/30' : intensity >= 40 ? 'bg-amber-400/20' : 'bg-white/5';
+                          return (
+                            <td key={e.emotion} className={`text-center py-2 px-2 ${bg}`}>
+                              <span className={scoreColor(intensity)}>{intensity}</span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Consistency Score */}
+              {emotionalMap.consistency_score != null && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-white/5 border border-white/10">
+                  <span className="text-xs text-brand-silver/60">Emotional Consistency:</span>
+                  <span className={`text-sm font-bold ${scoreColor(emotionalMap.consistency_score)}`}>
+                    {Math.round(emotionalMap.consistency_score)}%
+                  </span>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-brand-silver/50 italic">No emotional map data available.</p>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Voice Matrix ─────────────────────────────────────── */}
+      {activeTab === 'voice' && (
+        <div className="space-y-4">
+          {voiceMatrix ? (
+            <>
+              {/* Tone Spectrum */}
+              {voiceMatrix.tone_spectrum && voiceMatrix.tone_spectrum.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider">Tone Spectrum</h4>
+                  {voiceMatrix.tone_spectrum.map((t, idx) => (
+                    <div key={t.dimension || t.attribute || idx} className="space-y-1">
+                      <div className="flex justify-between text-xs text-brand-silver/50">
+                        <span>{t.low_end || t.min_label}</span>
+                        <span className="text-white font-medium">{t.dimension || t.attribute}</span>
+                        <span>{t.high_end || t.max_label}</span>
+                      </div>
+                      <div className="relative w-full h-2 bg-white/10 rounded-full">
+                        <div className="absolute top-0 h-2 w-3 rounded-full bg-brand-electric" style={{ left: `${Math.min(100, Math.max(0, t.position))}%`, transform: 'translateX(-50%)' }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Vocabulary */}
+              {voiceMatrix.vocabulary && (
+                <div className="grid grid-cols-2 gap-3">
+                  {voiceMatrix.vocabulary.preferred && voiceMatrix.vocabulary.preferred.length > 0 && (
+                    <div className="p-3 rounded-lg bg-green-400/5 border border-green-400/20">
+                      <h5 className="text-[10px] font-bold text-green-400 uppercase mb-2">Preferred Words</h5>
+                      <div className="flex flex-wrap gap-1">
+                        {voiceMatrix.vocabulary.preferred.map((w) => (
+                          <span key={w} className="text-[10px] px-1.5 py-0.5 rounded bg-green-400/10 text-green-300">{w}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {voiceMatrix.vocabulary.avoided && voiceMatrix.vocabulary.avoided.length > 0 && (
+                    <div className="p-3 rounded-lg bg-red-400/5 border border-red-400/20">
+                      <h5 className="text-[10px] font-bold text-red-400 uppercase mb-2">Avoided Words</h5>
+                      <div className="flex flex-wrap gap-1">
+                        {voiceMatrix.vocabulary.avoided.map((w) => (
+                          <span key={w} className="text-[10px] px-1.5 py-0.5 rounded bg-red-400/10 text-red-300">{w}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Dos / Don'ts */}
+              {(voiceMatrix.dos || voiceMatrix.donts) && (
+                <div className="grid grid-cols-2 gap-3">
+                  {voiceMatrix.dos && voiceMatrix.dos.length > 0 && (
+                    <div className="p-3 rounded-lg bg-green-400/5 border border-green-400/20">
+                      <h5 className="text-[10px] font-bold text-green-400 uppercase mb-2">Do</h5>
+                      <ul className="space-y-1">
+                        {voiceMatrix.dos.map((d, i) => (
+                          <li key={i} className="text-xs text-brand-silver flex gap-1.5"><span className="text-green-400">+</span>{d}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {voiceMatrix.donts && voiceMatrix.donts.length > 0 && (
+                    <div className="p-3 rounded-lg bg-red-400/5 border border-red-400/20">
+                      <h5 className="text-[10px] font-bold text-red-400 uppercase mb-2">Don&apos;t</h5>
+                      <ul className="space-y-1">
+                        {voiceMatrix.donts.map((d, i) => (
+                          <li key={i} className="text-xs text-brand-silver flex gap-1.5"><span className="text-red-400">-</span>{d}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Channel Adaptations */}
+              {voiceMatrix.channel_adaptations && voiceMatrix.channel_adaptations.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider">Channel Adaptations</h4>
+                  {voiceMatrix.channel_adaptations.map((ch) => (
+                    <div key={ch.channel} className="flex gap-3 p-2 rounded bg-white/5 border border-white/10">
+                      <span className="text-xs font-bold text-brand-electric min-w-[80px]">{ch.channel}</span>
+                      <span className="text-xs text-brand-silver">{ch.adaptation || ch.guideline}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-brand-silver/50 italic">No voice matrix data available.</p>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Character Brief ──────────────────────────────────── */}
+      {activeTab === 'brief' && (
+        <div className="space-y-4">
+          {characterBrief ? (
+            <>
+              {/* Persona Card */}
+              {characterBrief.persona_card && (
+                <div className="p-4 rounded-xl bg-gradient-to-br from-brand-electric/10 to-purple-500/10 border border-brand-electric/20 space-y-3">
+                  {characterBrief.persona_card.name && (
+                    <h4 className="text-base font-bold text-white">{characterBrief.persona_card.name}</h4>
+                  )}
+                  {characterBrief.persona_card.personality_snapshot && (
+                    <p className="text-sm text-brand-silver">{characterBrief.persona_card.personality_snapshot}</p>
+                  )}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {characterBrief.persona_card.core_belief && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Core Belief:</span> <span className="text-white">{characterBrief.persona_card.core_belief}</span></div>
+                    )}
+                    {characterBrief.persona_card.superpower && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Superpower:</span> <span className="text-white">{characterBrief.persona_card.superpower}</span></div>
+                    )}
+                    {characterBrief.persona_card.fear && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Fear:</span> <span className="text-white">{characterBrief.persona_card.fear}</span></div>
+                    )}
+                    {characterBrief.persona_card.communication_style && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Communication:</span> <span className="text-white">{characterBrief.persona_card.communication_style}</span></div>
+                    )}
+                  </div>
+                  {characterBrief.persona_card.emotional_signature && characterBrief.persona_card.emotional_signature.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {characterBrief.persona_card.emotional_signature.map((e) => (
+                        <span key={e} className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-electric/20 text-brand-electric">{e}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Executive Summary */}
+              {characterBrief.executive_summary && (
+                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                  <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Executive Summary</h4>
+                  <div className="text-sm text-brand-silver prose prose-invert prose-sm max-w-none">
+                    <MarkdownMessage content={characterBrief.executive_summary} />
+                  </div>
+                </div>
+              )}
+
+              {/* Positioning Alignment Score */}
+              {characterBrief.positioning_alignment_score != null && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-white/5 border border-white/10">
+                  <span className="text-xs text-brand-silver/60">Positioning Alignment:</span>
+                  <span className={`text-sm font-bold ${scoreColor(characterBrief.positioning_alignment_score)}`}>
+                    {Math.round(characterBrief.positioning_alignment_score)}%
+                  </span>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-brand-silver/50 italic">No character brief data available.</p>
+          )}
+        </div>
+      )}
+
+      {/* Findings & Recommendations */}
+      {findings && findings.length > 0 && (
+        <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Key Findings</h4>
+          <ul className="space-y-1">
+            {findings.filter(f => typeof f === 'string' && f.trim()).map((f, i) => (
+              <li key={i} className="text-xs text-brand-silver flex gap-1.5"><span className="text-brand-electric">&#8226;</span>{f}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {recommendations && recommendations.length > 0 && (
+        <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Recommendations</h4>
+          <ul className="space-y-1">
+            {recommendations.filter(r => typeof r === 'string' && r.trim()).map((r, i) => (
+              <li key={i} className="text-xs text-brand-silver flex gap-1.5"><span className="text-green-400">&#8594;</span>{r}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BrandPositioningSection({
   recommendedPositioning,
   positioningCandidates,
@@ -4599,6 +5219,12 @@ export default function ResultDashboard({
     (resultData.recommendation as Record<string, unknown>).recommended_model != null &&
     resultData.hierarchy != null;
 
+  // ── Detect brand personality data ───────────────────────────────
+  const hasBrandPersonality =
+    resultData.aaker_profile != null ||
+    resultData.archetype != null ||
+    resultData.values_hierarchy != null;
+
   // ── Detect voice of customer data ───────────────────────────────
   const hasVoiceOfCustomer =
     resultData.voc_health_score != null ||
@@ -4813,7 +5439,7 @@ export default function ResultDashboard({
       </div>
 
       {/* Score badge (only when meaningful, i.e. > 0, and not market research) */}
-      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandArchitecture && score !== undefined && score > 0 && (
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandArchitecture && !hasBrandPersonality && score !== undefined && score > 0 && (
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
             Score
@@ -4825,7 +5451,7 @@ export default function ResultDashboard({
       )}
 
       {/* Summary (skip generic "Pipeline analysis completed" for market research / CIA) */}
-      {summary && !hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && (
+      {summary && !hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Summary
@@ -4973,6 +5599,21 @@ export default function ResultDashboard({
         />
       )}
 
+      {/* ── Brand Personality Dashboard ─────────────────────────────── */}
+      {hasBrandPersonality && (
+        <BrandPersonalitySection
+          aakerProfile={resultData.aaker_profile as BPVAakerProfile | undefined}
+          archetype={resultData.archetype as BPVArchetype | undefined}
+          valuesHierarchy={resultData.values_hierarchy as BPVValuesHierarchy | undefined}
+          emotionalMap={resultData.emotional_map as BPVEmotionalMap | undefined}
+          voiceMatrix={resultData.voice_matrix as BPVVoiceMatrix | undefined}
+          characterBrief={resultData.character_brief as BPVCharacterBrief | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.brand_personality ?? resultData.confidence_score) as number | undefined}
+          findings={findings}
+          recommendations={recommendations}
+        />
+      )}
+
       {hasBrandPositioning && (
         <BrandPositioningSection
           recommendedPositioning={resultData.recommended_positioning as BPAPositioningStatement | undefined}
@@ -4989,7 +5630,7 @@ export default function ResultDashboard({
       )}
 
       {/* Key findings — filter out raw JSON blobs (internal agent state) */}
-      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && findings && findings.length > 0 && (() => {
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && findings && findings.length > 0 && (() => {
         const filtered = findings.filter((f) => {
           if (typeof f !== 'string') return false;
           const trimmed = f.trim();
@@ -5021,7 +5662,7 @@ export default function ResultDashboard({
       })()}
 
       {/* Recommendations */}
-      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && recommendations && recommendations.length > 0 && (
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && recommendations && recommendations.length > 0 && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations

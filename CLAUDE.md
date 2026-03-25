@@ -26,6 +26,7 @@ trend-cultural-agent-svc/       # FastAPI — Trend monitoring, cultural insight
 voc-agent-svc/                  # FastAPI — Voice of Customer analysis, sentiment, NPS, Claude Sonnet 4 (port 8025)
 brand-positioning-agent-svc/    # FastAPI — WF2 brand positioning, differentiation, perceptual mapping, Claude Sonnet 4 (port 8031)
 brand-architecture-agent-svc/   # FastAPI — WF2 brand architecture, hierarchy tree, naming, portfolio growth, Claude Sonnet 4 (port 8032)
+brand-personality-agent-svc/    # FastAPI — WF2 brand personality, Aaker 5D, archetypes, values, voice matrix, Claude Sonnet 4 (port 8033)
 odoo-mcp-server-svc/            # FastAPI — Odoo ERP MCP bridge, 101 tools (port 8095)
 odoo-worker-agent-svc/          # FastAPI — Multi-persona Odoo worker, PAOR loop (port 8100)
 vendor/odoo/community/           # Git submodule — Odoo Community Edition 19.0
@@ -33,7 +34,7 @@ deployment/                      # Master docker-compose, Kong config, scripts
 docs/                            # Architecture docs
 ```
 
-Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service, brand-equity-calculator-svc, odoo-mcp-server-svc, market-research-agent-svc, competitor-intel-agent-svc, audience-persona-agent-svc, trend-cultural-agent-svc, voc-agent-svc, odoo-worker-agent-svc, brand-positioning-agent-svc, brand-architecture-agent-svc. Missing: rag-uploader-agent-service.
+Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service, brand-equity-calculator-svc, odoo-mcp-server-svc, market-research-agent-svc, competitor-intel-agent-svc, audience-persona-agent-svc, trend-cultural-agent-svc, voc-agent-svc, odoo-worker-agent-svc, brand-positioning-agent-svc, brand-architecture-agent-svc, brand-personality-agent-svc. Missing: rag-uploader-agent-service.
 
 ## Build, Run, and Test Commands
 
@@ -120,7 +121,7 @@ docker compose --profile with-kafka --profile with-db up      # + Local PostgreS
 docker compose down -v                                        # Tear down
 ```
 
-**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, Orchestrator 8010, Discovery 8020, Market Research 8021, Competitor Intel 8022, Audience Persona 8023, Trend Cultural 8024, VoC Agent 8025, Intelligence 8030, Brand Positioning 8031, Brand Architecture 8032, Titling 8040, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090, Odoo MCP 8095, Odoo Worker 8100
+**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, Orchestrator 8010, Discovery 8020, Market Research 8021, Competitor Intel 8022, Audience Persona 8023, Trend Cultural 8024, VoC Agent 8025, Intelligence 8030, Brand Positioning 8031, Brand Architecture 8032, Brand Personality 8033, Titling 8040, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090, Odoo MCP 8095, Odoo Worker 8100
 
 **Frontend Docker build** requires `output: "standalone"` in `next.config.ts`. Without it, the Dockerfile `COPY --from=builder /app/.next/standalone` step fails.
 
@@ -145,6 +146,7 @@ Django dispatches job → pipeline-orchestrator-svc (:8010) → direct sequentia
   → voc-agent-svc (:8025) → voice of customer analysis
   → brand-positioning-agent-svc (:8031) → brand positioning (WF2)
   → brand-architecture-agent-svc (:8032) → brand architecture (WF2)
+  → brand-personality-agent-svc (:8033) → brand personality & values (WF2)
   → intelligence-agent-svc (:8030) → brand valuation
   → content-agent-service (:8050) → blog authoring
   → social-agent-service (:8060) → social posting
@@ -163,7 +165,7 @@ When `ORCHESTRATION_KAFKA_ENABLED=false` (default), dispatch is HTTP. When `true
 
 **Cancel mechanism**: Sets `cancel:{job_id}` key in Redis with 1-hour TTL. The executor checks this flag before each node in the sequential loop.
 
-**Dynamic skill loading**: `pipeline-orchestrator-svc/skills/` contains 79 `.md` skill files (28 general + 12 brand-positioning + 12 brand-architecture + 27 Odoo-specific). The skill router (`pipeline-orchestrator-svc/app/skills/`) resolves and injects relevant skills per-node at execution time based on user intent. Skills provide contextual LLM instructions to agent services.
+**Dynamic skill loading**: `pipeline-orchestrator-svc/skills/` contains 91 `.md` skill files (28 general + 12 brand-positioning + 12 brand-architecture + 12 brand-personality + 27 Odoo-specific). The skill router (`pipeline-orchestrator-svc/app/skills/`) resolves and injects relevant skills per-node at execution time based on user intent. Skills provide contextual LLM instructions to agent services.
 
 **Social agent publishing**: Social agent generates content via Gemini, then delegates actual platform publishing to Django's MCP server (via `SOCIAL_MCP_SERVER_URL`), which has per-platform SDK wrappers.
 
@@ -215,7 +217,7 @@ Schema-based via `django-tenants`. All models have a nullable `tenant` FK. Most 
 
 ### Redis Database Allocation
 
-DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent, DB 16: Brand Positioning, DB 17: Brand Architecture (requires `databases 18` in redis.conf)
+DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent, DB 16: Brand Positioning, DB 17: Brand Architecture, DB 18: Brand Personality (requires `databases 19` in redis.conf)
 
 ### Microservice Layout Convention
 
@@ -231,7 +233,7 @@ All 9 agent microservices follow this structure:
 └── main.py       # FastAPI application with lifespan management
 ```
 
-Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `CONTENT_`, `SOCIAL_`, `TITLING_`, `RAG_UPLOADER_`, `BRAND_EQUITY_`, `ODOO_MCP_`, `APA_`, `TCIA_`, `VOCA_`, `ODOO_WORKER_`, `BPA_`, `BAA_`).
+Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `CONTENT_`, `SOCIAL_`, `TITLING_`, `RAG_UPLOADER_`, `BRAND_EQUITY_`, `ODOO_MCP_`, `APA_`, `TCIA_`, `VOCA_`, `ODOO_WORKER_`, `BPA_`, `BAA_`, `BPV_`).
 
 ### Kafka Topics
 
@@ -263,6 +265,8 @@ Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `C
 | `bpa-positioning-events-topic` | Brand Positioning agent | — | Positioning strategy events |
 | `baa-architecture-audit-topic` | Brand Architecture agent | — | Architecture decision audit trail |
 | `baa-architecture-events-topic` | Brand Architecture agent | — | Architecture strategy events |
+| `bpv-personality-audit-topic` | Brand Personality agent | — | Personality decision audit trail |
+| `bpv-personality-events-topic` | Brand Personality agent | — | Personality strategy events |
 | `analytics-events` | Analytics extraction | — | Metric extraction/rejection audit (conditional via `ANALYTICS_KAFKA_ENABLED`) |
 
 ## Critical Code Patterns

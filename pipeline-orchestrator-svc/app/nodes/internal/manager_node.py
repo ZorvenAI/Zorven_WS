@@ -19,6 +19,7 @@ _TREND_CULTURAL_NODES = {"trend_cultural"}
 _VOICE_OF_CUSTOMER_NODES = {"voice_of_customer"}
 _BRAND_POSITIONING_NODES = {"brand_positioning"}
 _BRAND_ARCHITECTURE_NODES = {"brand_architecture"}
+_BRAND_PERSONALITY_NODES = {"brand_personality"}
 
 
 def _source_label(source: dict) -> str:
@@ -92,6 +93,9 @@ class ManagerNode(BaseNode):
 
         # Extract brand architecture data
         brand_architecture_data = self._extract_brand_architecture(outputs)
+
+        # Extract brand personality data
+        brand_personality_data = self._extract_brand_personality(outputs)
 
         result_data: dict[str, Any] = {
             "summary": (
@@ -366,6 +370,57 @@ class ManagerNode(BaseNode):
                 else:
                     result_data["sources"] = baa_sources
 
+        # Promote brand personality fields to top-level result_data
+        if brand_personality_data:
+            for key in (
+                "aaker_profile",
+                "archetype",
+                "values_hierarchy",
+                "emotional_map",
+                "voice_matrix",
+                "character_brief",
+                "wf1_context_used",
+                "bpa_context_used",
+                "baa_context_used",
+                "execution_time_ms",
+                "sub_brand_constraint_applied",
+            ):
+                value = brand_personality_data.get(key)
+                if value is not None:
+                    result_data[key] = value
+            bpv_conf = brand_personality_data.get("confidence_score")
+            if bpv_conf is not None:
+                confidence_scores["brand_personality"] = bpv_conf
+            # Build a richer summary from BPV data
+            aaker = brand_personality_data.get("aaker_profile", {})
+            primary_dim = aaker.get("primary_dimension", "")
+            arch = brand_personality_data.get("archetype", {})
+            primary_arch = arch.get("primary", {}).get("name", "")
+            if primary_dim and primary_arch:
+                result_data["summary"] = (
+                    f"Brand personality designed. "
+                    f"Primary dimension: **{primary_dim}**, "
+                    f"Primary archetype: **{primary_arch}**. "
+                    f"Confidence: {bpv_conf or 0:.0%}"
+                )
+            # Merge BPV sources with existing
+            bpv_sources = brand_personality_data.get("sources", [])
+            if bpv_sources:
+                existing_sources = result_data.get("sources", [])
+                if isinstance(existing_sources, list):
+                    existing_urls = {
+                        s.get("url") for s in existing_sources if isinstance(s, dict)
+                    }
+                    for src in bpv_sources:
+                        if (
+                            isinstance(src, dict)
+                            and src.get("url") not in existing_urls
+                        ):
+                            existing_sources.append(src)
+                    result_data["sources"] = existing_sources
+                else:
+                    result_data["sources"] = bpv_sources
+
         # Store per-agent confidence scores and compute average
         if confidence_scores:
             result_data["confidence_scores"] = confidence_scores
@@ -472,6 +527,16 @@ class ManagerNode(BaseNode):
             for o in outputs.values()
         )
 
+        # Check for brand personality data
+        has_brand_personality = any(
+            isinstance(o, dict)
+            and (
+                o.get("aaker_profile", {}).get("dimensions")
+                or o.get("archetype", {}).get("primary")
+            )
+            for o in outputs.values()
+        )
+
         # Brand equity / valuation pipeline
         if bsi_data:
             charts.append(
@@ -526,6 +591,27 @@ class ManagerNode(BaseNode):
             charts.append({"type": "naming_hierarchy", "data_key": "naming_hierarchy"})
             charts.append({"type": "growth_roadmap", "data_key": "growth_path"})
             charts.append({"type": "strategy_overview", "data_key": "arch_strategy"})
+            charts.append({"type": "sources_table", "data_key": "sources"})
+        elif has_brand_personality:
+            schema_type = "brand_personality_dashboard"
+            charts.append(
+                {"type": "aaker_radar", "data_key": "aaker_profile"}
+            )
+            charts.append(
+                {"type": "archetype_cards", "data_key": "archetype"}
+            )
+            charts.append(
+                {"type": "values_hierarchy", "data_key": "values_hierarchy"}
+            )
+            charts.append(
+                {"type": "emotional_map", "data_key": "emotional_map"}
+            )
+            charts.append(
+                {"type": "voice_matrix", "data_key": "voice_matrix"}
+            )
+            charts.append(
+                {"type": "character_brief", "data_key": "character_brief"}
+            )
             charts.append({"type": "sources_table", "data_key": "sources"})
         elif has_brand_positioning:
             schema_type = "brand_positioning_dashboard"
@@ -730,6 +816,29 @@ class ManagerNode(BaseNode):
             if isinstance(output, dict):
                 if output.get("recommended_positioning") or output.get(
                     "positioning_candidates"
+                ):
+                    return output
+        return None
+
+    @staticmethod
+    def _extract_brand_personality(
+        outputs: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Extract brand personality data from any node output.
+
+        Looks for outputs containing aaker_profile or archetype,
+        which are produced by brand-personality-agent-svc.
+        """
+        for node_id, output in outputs.items():
+            if isinstance(output, dict):
+                aaker = output.get("aaker_profile")
+                archetype = output.get("archetype")
+                if (
+                    isinstance(aaker, dict)
+                    and aaker.get("dimensions")
+                ) or (
+                    isinstance(archetype, dict)
+                    and archetype.get("primary")
                 ):
                     return output
         return None

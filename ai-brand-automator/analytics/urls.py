@@ -4,6 +4,7 @@ from analytics.views import (
     BPAContextView,
     BrandContextOptionsView,
     BrandContextSyncView,
+    BrandPersonalitySyncView,
     CompanyContextView,
     ComparisonView,
     CoverageView,
@@ -37,5 +38,10 @@ urlpatterns = [
         "brand-context-sync/",
         BrandContextSyncView.as_view(),
         name="analytics-brand-context-sync",
+    ),
+    path(
+        "brand-personality-sync/",
+        BrandPersonalitySyncView.as_view(),
+        name="analytics-brand-personality-sync",
     ),
 ]
