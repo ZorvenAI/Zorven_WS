@@ -14,6 +14,6 @@ COPY app/ app/
 EXPOSE 8032
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost:8032/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8032}/health || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8032"]
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8032}
