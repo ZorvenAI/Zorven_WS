@@ -81,7 +81,8 @@ class BPVExecutor:
             cached = await self._redis.get_cached_result(tenant_id, prompt_hash)
             if cached:
                 logger.info("Cache hit for tenant %s", tenant_id)
-                return cached
+                result = cached
+                return result
 
             # Load contexts in parallel
             contexts = await self._context.load_all(tenant_id)
@@ -128,7 +129,7 @@ class BPVExecutor:
                 previous_outputs.get("brand_positioning")
             )
 
-            if not has_wf1 and not has_bpa:
+            if not has_wf1 or not has_bpa:
                 result = {
                     "query": prompt,
                     "aaker_profile": {},
@@ -139,9 +140,11 @@ class BPVExecutor:
                     "character_brief": {},
                     "confidence_score": 0.0,
                     "findings": [
-                        "Cannot proceed: WF1 Brand Discovery and BPA Brand "
-                        "Positioning context required. Run brand discovery "
-                        "and brand positioning pipelines first."
+                        "Cannot proceed: "
+                        + ("WF1 Brand Discovery" if not has_wf1 else "")
+                        + (" and " if not has_wf1 and not has_bpa else "")
+                        + ("BPA Brand Positioning" if not has_bpa else "")
+                        + " context required. Run the missing pipeline(s) first."
                     ],
                     "recommendations": [],
                     "sources": [],
@@ -181,14 +184,6 @@ class BPVExecutor:
             # Save to personality registry
             await self._redis.save_personality(tenant_id, result)
 
-            # Emit completion
-            await self._events.emit(
-                EventType.SESSION_COMPLETED,
-                tenant_id,
-                job_id,
-                {"confidence_score": result.get("confidence_score", 0.0)},
-            )
-
         except Exception as exc:
             logger.error("BPV analysis failed: %s", exc, exc_info=True)
             result = {
@@ -211,14 +206,20 @@ class BPVExecutor:
                 ),
             }
 
-        # Trace: completed
-        await self._trace.send_trace(
-            {
-                "job_id": job_id,
-                "node_id": "brand_personality",
-                "status": "completed",
-                "tenant_id": tenant_id,
-            }
-        )
+        finally:
+            # Trace: completed (always fires, including cache hit/prereq failure)
+            await self._trace.send_trace(
+                {
+                    "job_id": job_id,
+                    "node_id": "brand_personality",
+                    "status": "completed",
+                    "tenant_id": tenant_id,
+                }
+            )
+            await self._events.emit(
+                EventType.SESSION_COMPLETED,
+                tenant_id,
+                job_id,
+            )
 
         return result

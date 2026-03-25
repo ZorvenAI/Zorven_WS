@@ -15,7 +15,7 @@ from app.cache.redis_manager import RedisManager
 from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.messaging.event_emitter import EventEmitter
-from app.messaging.kafka_producer import AuditProducer, EventProducer, TraceProducer
+from app.messaging.kafka_producer import AuditProducer, TraceProducer
 from app.services.bpv_analyzer import BPVAnalyzer
 from app.services.bpv_executor import BPVExecutor
 from app.services.context_loader import BPVContextLoader
@@ -38,8 +38,6 @@ async def lifespan(app: FastAPI):
     await trace_producer.start()
     audit_producer = AuditProducer(settings.KAFKA_BOOTSTRAP_SERVERS)
     await audit_producer.start()
-    event_producer = EventProducer(settings.KAFKA_BOOTSTRAP_SERVERS)
-    await event_producer.start()
 
     # 3. Anthropic client (lazy)
     anthropic_client = None
@@ -90,7 +88,6 @@ async def lifespan(app: FastAPI):
     # Teardown
     await trace_producer.stop()
     await audit_producer.stop()
-    await event_producer.stop()
     await redis_manager.close()
     logger.info("Brand Personality Agent service stopped")
 

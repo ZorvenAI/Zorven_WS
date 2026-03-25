@@ -53,9 +53,7 @@ class BrandPersonalityExtractor(BaseExtractor):
         # Archetype resonance score
         archetype = bpv.get("archetype", {})
         if isinstance(archetype, dict):
-            resonance = self._safe_get(
-                archetype, "resonance_score", default=None
-            )
+            resonance = self._safe_get(archetype, "resonance_score", default=None)
             if resonance is not None:
                 metrics.append(
                     self._make_metric(
@@ -98,9 +96,7 @@ class BrandPersonalityExtractor(BaseExtractor):
         # Emotional consistency score
         emo_map = bpv.get("emotional_map", {})
         if isinstance(emo_map, dict):
-            consistency = self._safe_get(
-                emo_map, "consistency_score", default=None
-            )
+            consistency = self._safe_get(emo_map, "consistency_score", default=None)
             if consistency is not None:
                 metrics.append(
                     self._make_metric(

@@ -891,9 +891,7 @@ class BrandPersonalitySyncView(APIView):
             tenant_id,
             brand_context_id,
         )
-        return Response(
-            {"synced": True, "brand_context_id": brand_context_id}
-        )
+        return Response({"synced": True, "brand_context_id": brand_context_id})
 
 
 class BrandContextSyncView(APIView):

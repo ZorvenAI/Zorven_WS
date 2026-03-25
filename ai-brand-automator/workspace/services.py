@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 import httpx
 from django.core.cache import cache
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from orchestration.models import AnalysisJob, PipelineManifest
@@ -232,42 +232,52 @@ class WorkflowService:
 
         Auto-increments the name if a workflow with the same name already
         exists for this tenant (e.g. "Foo (copy)" → "Foo (copy 2)").
+        Retries on IntegrityError to handle concurrent name races.
         """
-        # Deduplicate name within the tenant
-        final_name = name
-        existing = UserWorkflow.objects.filter(
-            tenant=tenant, is_active=True, name=final_name
-        ).exists()
-        if existing:
-            counter = 2
-            while True:
-                candidate = f"{name} ({counter})"
-                if not UserWorkflow.objects.filter(
-                    tenant=tenant, is_active=True, name=candidate
-                ).exists():
-                    final_name = candidate
-                    break
-                counter += 1
+        max_retries = 3
+        for attempt in range(max_retries):
+            # Deduplicate name within the tenant
+            final_name = name
+            existing = UserWorkflow.objects.filter(
+                tenant=tenant, is_active=True, name=final_name
+            ).exists()
+            if existing:
+                counter = 2
+                while True:
+                    candidate = f"{name} ({counter})"
+                    if not UserWorkflow.objects.filter(
+                        tenant=tenant, is_active=True, name=candidate
+                    ).exists():
+                        final_name = candidate
+                        break
+                    counter += 1
 
-        pipeline_id = f"workspace-{uuid.uuid4().hex[:8]}"
-        manifest = PipelineManifest.objects.create(
-            pipeline_id=pipeline_id,
-            name=final_name,
-            description=description,
-            manifest_data=manifest_data,
-            tenant=tenant,
-            created_by=user,
-        )
-        workflow = UserWorkflow.objects.create(
-            name=final_name,
-            description=description,
-            manifest=manifest,
-            layout_data=layout_data or {},
-            source=UserWorkflow.Source.CREATED,
-            tenant=tenant,
-            created_by=user,
-        )
-        return workflow
+            try:
+                with transaction.atomic():
+                    pipeline_id = f"workspace-{uuid.uuid4().hex[:8]}"
+                    manifest = PipelineManifest.objects.create(
+                        pipeline_id=pipeline_id,
+                        name=final_name,
+                        description=description,
+                        manifest_data=manifest_data,
+                        tenant=tenant,
+                        created_by=user,
+                    )
+                    workflow = UserWorkflow.objects.create(
+                        name=final_name,
+                        description=description,
+                        manifest=manifest,
+                        layout_data=layout_data or {},
+                        source=UserWorkflow.Source.CREATED,
+                        tenant=tenant,
+                        created_by=user,
+                    )
+                    return workflow
+            except IntegrityError:
+                if attempt == max_retries - 1:
+                    raise
+                # Retry with re-evaluated name on next iteration
+                continue
 
     @staticmethod
     def execute_workflow(workflow, input_prompt, input_context, user):

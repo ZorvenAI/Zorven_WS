@@ -75,7 +75,7 @@ class BPVAnalyzer:
             baa_context, previous_outputs,
         )
 
-        wf1_used = "mra" in context or "cia" in context
+        wf1_used = any(k in context for k in ("mra", "cia", "apa", "tcia", "voca"))
         bpa_used = "bpa" in context
         baa_used = "baa" in context
 
@@ -351,6 +351,9 @@ class BPVAnalyzer:
             parts.append(f"## Brand Positioning\n{_fmt(context['bpa'])}\n")
         if context.get("baa"):
             parts.append(f"## Brand Architecture\n{_fmt(context['baa'])}\n")
+        if rag_docs and rag_docs.get("documents"):
+            docs_text = _fmt(rag_docs["documents"])
+            parts.append(f"## Relevant Brand Documents (RAG)\n{docs_text}\n")
 
         return "\n".join(parts)
 

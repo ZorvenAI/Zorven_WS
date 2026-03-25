@@ -91,4 +91,4 @@ Write to `node_outputs.bpv_aaker_profile` with keys:
 ## Integration Notes
 - This is the central decision skill; its output drives SKL-BPV-06 (archetype selector), SKL-BPV-07 (values hierarchy), SKL-BPV-08 (emotional mapper), SKL-BPV-09 (voice matrix)
 - `confidence` < 0.5 triggers a warning escalation in SKL-BPV-12
-- PG-07 sub-brand constraint (applied post-Claude in BPVAnalyzer) may clamp sub-brand dimension deviations to +/-15 from parent
+- PG-07 sub-brand constraint (applied post-Claude in BPVAnalyzer) may clamp sub-brand dimension deviations to +/-20 from parent

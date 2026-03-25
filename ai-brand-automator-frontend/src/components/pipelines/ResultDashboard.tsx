@@ -3516,25 +3516,21 @@ interface BPVAakerProfile {
   differentiation_score?: number;
 }
 
+interface BPVArchetypeDetail {
+  name?: string;
+  core_desire?: string;
+  fear?: string;
+  strategy?: string;
+  gift?: string;
+  shadow?: string;
+  brand_expression?: string;
+}
+
 interface BPVArchetype {
-  primary: string;
-  secondary?: string;
-  primary_detail?: {
-    core_desire?: string;
-    fear?: string;
-    strategy?: string;
-    gift?: string;
-    shadow?: string;
-    brand_expression?: string;
-  };
-  secondary_detail?: {
-    core_desire?: string;
-    fear?: string;
-    strategy?: string;
-    gift?: string;
-    shadow?: string;
-    brand_expression?: string;
-  };
+  primary: string | BPVArchetypeDetail;
+  secondary?: string | BPVArchetypeDetail;
+  primary_detail?: BPVArchetypeDetail;
+  secondary_detail?: BPVArchetypeDetail;
   blend_rationale?: string;
   resonance_score?: number;
 }
@@ -3561,13 +3557,18 @@ interface BPVEmotionalMap {
 }
 
 interface BPVVoiceMatrix {
-  tone_spectrum?: Array<{ attribute: string; min_label: string; max_label: string; position: number }>;
+  tone_spectrum?: Array<{
+    dimension?: string; attribute?: string;
+    low_end?: string; min_label?: string;
+    high_end?: string; max_label?: string;
+    position: number;
+  }>;
   vocabulary?: { preferred: string[]; avoided: string[] };
   style?: Record<string, string>;
-  humor?: string;
+  humor?: string | { overall_tone?: string; do_examples?: string[]; dont_examples?: string[]; [key: string]: unknown };
   dos?: string[];
   donts?: string[];
-  channel_adaptations?: Array<{ channel: string; guideline: string }>;
+  channel_adaptations?: Array<{ channel: string; adaptation?: string; guideline?: string }>;
 }
 
 interface BPVCharacterBrief {
@@ -3628,6 +3629,23 @@ function BrandPersonalitySection({
     { key: 'brief' as const, label: 'Character Brief' },
   ];
 
+  // Helper: archetype.primary/secondary may be a string OR an object with {name, fear, gift, ...}
+  function archetypeName(val: string | BPVArchetypeDetail | undefined): string | undefined {
+    if (!val) return undefined;
+    if (typeof val === 'string') return val;
+    return val.name ?? 'Unknown';
+  }
+  function archetypeDetail(val: string | BPVArchetypeDetail | undefined, detail: BPVArchetypeDetail | undefined): BPVArchetypeDetail | undefined {
+    if (detail) return detail;
+    if (val && typeof val === 'object') return val;
+    return undefined;
+  }
+
+  const primaryName = archetypeName(archetype?.primary);
+  const secondaryName = archetypeName(archetype?.secondary);
+  const primaryDetail = archetypeDetail(archetype?.primary, archetype?.primary_detail);
+  const secondaryDetail = archetypeDetail(archetype?.secondary, archetype?.secondary_detail);
+
   const dimensions = aakerProfile?.dimensions ?? [];
   const maxDim = dimensions.length > 0 ? Math.max(...dimensions.map(d => d.score)) : 100;
 
@@ -3647,14 +3665,14 @@ function BrandPersonalitySection({
       </div>
 
       {/* Archetype Badge */}
-      {archetype?.primary && (
+      {primaryName && (
         <div className="flex items-center gap-3 p-4 rounded-xl bg-brand-electric/10 border border-brand-electric/20">
           <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-brand-electric/20 flex items-center justify-center text-brand-electric text-lg">&#9672;</div>
           <div>
             <div className="text-xs text-brand-silver/60 uppercase tracking-wider">Primary Archetype</div>
-            <div className="text-lg font-bold text-white">{archetype.primary}{archetype.secondary ? ` / ${archetype.secondary}` : ''}</div>
+            <div className="text-lg font-bold text-white">{primaryName}{secondaryName ? ` / ${secondaryName}` : ''}</div>
           </div>
-          {archetype.resonance_score != null && (
+          {archetype?.resonance_score != null && (
             <span className={`ml-auto text-sm font-bold ${scoreColor(archetype.resonance_score)}`}>
               Resonance: {Math.round(archetype.resonance_score)}%
             </span>
@@ -3733,56 +3751,56 @@ function BrandPersonalitySection({
       {/* ── Tab: Archetype ────────────────────────────────────────── */}
       {activeTab === 'archetype' && (
         <div className="space-y-4">
-          {archetype?.primary ? (
+          {primaryName ? (
             <>
               {/* Primary Archetype Card */}
               <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-base font-bold text-white">Primary: {archetype.primary}</h4>
-                  {archetype.resonance_score != null && (
+                  <h4 className="text-base font-bold text-white">Primary: {primaryName}</h4>
+                  {archetype?.resonance_score != null && (
                     <span className={`text-sm font-bold ${scoreColor(archetype.resonance_score)}`}>
                       {Math.round(archetype.resonance_score)}% resonance
                     </span>
                   )}
                 </div>
-                {archetype.primary_detail && (
+                {primaryDetail && (
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    {archetype.primary_detail.core_desire && (
-                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Core Desire:</span> <span className="text-white">{archetype.primary_detail.core_desire}</span></div>
+                    {primaryDetail.core_desire && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Core Desire:</span> <span className="text-white">{primaryDetail.core_desire}</span></div>
                     )}
-                    {archetype.primary_detail.fear && (
-                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Fear:</span> <span className="text-white">{archetype.primary_detail.fear}</span></div>
+                    {primaryDetail.fear && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Fear:</span> <span className="text-white">{primaryDetail.fear}</span></div>
                     )}
-                    {archetype.primary_detail.strategy && (
-                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Strategy:</span> <span className="text-white">{archetype.primary_detail.strategy}</span></div>
+                    {primaryDetail.strategy && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Strategy:</span> <span className="text-white">{primaryDetail.strategy}</span></div>
                     )}
-                    {archetype.primary_detail.gift && (
-                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Gift:</span> <span className="text-white">{archetype.primary_detail.gift}</span></div>
+                    {primaryDetail.gift && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Gift:</span> <span className="text-white">{primaryDetail.gift}</span></div>
                     )}
-                    {archetype.primary_detail.shadow && (
-                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Shadow:</span> <span className="text-white">{archetype.primary_detail.shadow}</span></div>
+                    {primaryDetail.shadow && (
+                      <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Shadow:</span> <span className="text-white">{primaryDetail.shadow}</span></div>
                     )}
-                    {archetype.primary_detail.brand_expression && (
-                      <div className="col-span-2 p-2 rounded bg-white/5"><span className="text-brand-silver/50">Brand Expression:</span> <span className="text-white">{archetype.primary_detail.brand_expression}</span></div>
+                    {primaryDetail.brand_expression && (
+                      <div className="col-span-2 p-2 rounded bg-white/5"><span className="text-brand-silver/50">Brand Expression:</span> <span className="text-white">{primaryDetail.brand_expression}</span></div>
                     )}
                   </div>
                 )}
               </div>
 
               {/* Secondary Archetype Card */}
-              {archetype.secondary && (
+              {secondaryName && (
                 <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
-                  <h4 className="text-sm font-bold text-purple-400">Secondary: {archetype.secondary}</h4>
-                  {archetype.secondary_detail && (
+                  <h4 className="text-sm font-bold text-purple-400">Secondary: {secondaryName}</h4>
+                  {secondaryDetail && (
                     <div className="grid grid-cols-2 gap-2 text-xs">
-                      {archetype.secondary_detail.core_desire && (
-                        <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Core Desire:</span> <span className="text-white">{archetype.secondary_detail.core_desire}</span></div>
+                      {secondaryDetail.core_desire && (
+                        <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Core Desire:</span> <span className="text-white">{secondaryDetail.core_desire}</span></div>
                       )}
-                      {archetype.secondary_detail.gift && (
-                        <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Gift:</span> <span className="text-white">{archetype.secondary_detail.gift}</span></div>
+                      {secondaryDetail.gift && (
+                        <div className="p-2 rounded bg-white/5"><span className="text-brand-silver/50">Gift:</span> <span className="text-white">{secondaryDetail.gift}</span></div>
                       )}
-                      {archetype.secondary_detail.brand_expression && (
-                        <div className="col-span-2 p-2 rounded bg-white/5"><span className="text-brand-silver/50">Brand Expression:</span> <span className="text-white">{archetype.secondary_detail.brand_expression}</span></div>
+                      {secondaryDetail.brand_expression && (
+                        <div className="col-span-2 p-2 rounded bg-white/5"><span className="text-brand-silver/50">Brand Expression:</span> <span className="text-white">{secondaryDetail.brand_expression}</span></div>
                       )}
                     </div>
                   )}
@@ -3790,7 +3808,7 @@ function BrandPersonalitySection({
               )}
 
               {/* Blend Rationale */}
-              {archetype.blend_rationale && (
+              {archetype?.blend_rationale && (
                 <div className="p-3 rounded-lg bg-white/5 border border-white/10">
                   <span className="text-xs text-brand-silver/50 block mb-1">Blend Rationale</span>
                   <p className="text-sm text-brand-silver">{archetype.blend_rationale}</p>
@@ -3926,12 +3944,12 @@ function BrandPersonalitySection({
               {voiceMatrix.tone_spectrum && voiceMatrix.tone_spectrum.length > 0 && (
                 <div className="space-y-3">
                   <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider">Tone Spectrum</h4>
-                  {voiceMatrix.tone_spectrum.map((t) => (
-                    <div key={t.attribute} className="space-y-1">
+                  {voiceMatrix.tone_spectrum.map((t, idx) => (
+                    <div key={t.dimension || t.attribute || idx} className="space-y-1">
                       <div className="flex justify-between text-xs text-brand-silver/50">
-                        <span>{t.min_label}</span>
-                        <span className="text-white font-medium">{t.attribute}</span>
-                        <span>{t.max_label}</span>
+                        <span>{t.low_end || t.min_label}</span>
+                        <span className="text-white font-medium">{t.dimension || t.attribute}</span>
+                        <span>{t.high_end || t.max_label}</span>
                       </div>
                       <div className="relative w-full h-2 bg-white/10 rounded-full">
                         <div className="absolute top-0 h-2 w-3 rounded-full bg-brand-electric" style={{ left: `${Math.min(100, Math.max(0, t.position))}%`, transform: 'translateX(-50%)' }} />
@@ -4000,7 +4018,7 @@ function BrandPersonalitySection({
                   {voiceMatrix.channel_adaptations.map((ch) => (
                     <div key={ch.channel} className="flex gap-3 p-2 rounded bg-white/5 border border-white/10">
                       <span className="text-xs font-bold text-brand-electric min-w-[80px]">{ch.channel}</span>
-                      <span className="text-xs text-brand-silver">{ch.guideline}</span>
+                      <span className="text-xs text-brand-silver">{ch.adaptation || ch.guideline}</span>
                     </div>
                   ))}
                 </div>
