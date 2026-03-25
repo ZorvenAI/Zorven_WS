@@ -5417,6 +5417,15 @@ export default function ResultDashboard({
     'strategy',
     'wf1_context_used',
     'confidence_scores',
+    // Brand Personality keys
+    'aaker_profile',
+    'archetype',
+    'values_hierarchy',
+    'emotional_map',
+    'voice_matrix',
+    'character_brief',
+    'baa_context_used',
+    'sub_brand_constraint_applied',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),
