@@ -393,9 +393,13 @@ class ManagerNode(BaseNode):
                 confidence_scores["brand_personality"] = bpv_conf
             # Build a richer summary from BPV data
             aaker = brand_personality_data.get("aaker_profile", {})
-            primary_dim = aaker.get("primary_dimension", "")
+            primary_dim = aaker.get("primary_dimension", "") if isinstance(aaker, dict) else ""
             arch = brand_personality_data.get("archetype", {})
-            primary_arch = arch.get("primary", {}).get("name", "")
+            raw_primary = arch.get("primary", {}) if isinstance(arch, dict) else {}
+            primary_arch = (
+                raw_primary.get("name", "") if isinstance(raw_primary, dict)
+                else str(raw_primary) if raw_primary else ""
+            )
             if primary_dim and primary_arch:
                 result_data["summary"] = (
                     f"Brand personality designed. "
@@ -826,20 +830,14 @@ class ManagerNode(BaseNode):
     ) -> dict[str, Any] | None:
         """Extract brand personality data from any node output.
 
-        Looks for outputs containing aaker_profile or archetype,
+        Looks for outputs containing aaker_profile AND archetype keys,
         which are produced by brand-personality-agent-svc.
+        Accepts empty dicts (error/prerequisite-failure responses)
+        so the frontend can display the error findings.
         """
         for node_id, output in outputs.items():
             if isinstance(output, dict):
-                aaker = output.get("aaker_profile")
-                archetype = output.get("archetype")
-                if (
-                    isinstance(aaker, dict)
-                    and aaker.get("dimensions")
-                ) or (
-                    isinstance(archetype, dict)
-                    and archetype.get("primary")
-                ):
+                if "aaker_profile" in output and "archetype" in output:
                     return output
         return None
 
