@@ -56,7 +56,10 @@ def _full_nta_result():
                     "ChargeLine": {
                         "domain": {".com": False, ".io": True},
                         "social": {"twitter": False},
-                        "trademark": {"clear": False, "conflicts": [{"title": "Existing"}]},
+                        "trademark": {
+                            "clear": False,
+                            "conflicts": [{"title": "Existing"}],
+                        },
                     },
                 },
                 "taglines": [
@@ -121,9 +124,7 @@ class TestBrandNamingExtractor:
         job = _mock_job(_full_nta_result())
         metrics = self.extractor.extract(job)
 
-        pct = next(
-            m for m in metrics if m.metric_name == "naming_domain_available_pct"
-        )
+        pct = next(m for m in metrics if m.metric_name == "naming_domain_available_pct")
         # 1 out of 2 have .com available → 50%
         assert pct.metric_value == 50.0
 
@@ -133,9 +134,7 @@ class TestBrandNamingExtractor:
         job = _mock_job(_full_nta_result())
         metrics = self.extractor.extract(job)
 
-        pct = next(
-            m for m in metrics if m.metric_name == "naming_trademark_clear_pct"
-        )
+        pct = next(m for m in metrics if m.metric_name == "naming_trademark_clear_pct")
         # 1 out of 2 are clear → 50%
         assert pct.metric_value == 50.0
 
@@ -145,9 +144,7 @@ class TestBrandNamingExtractor:
         job = _mock_job(_full_nta_result())
         metrics = self.extractor.extract(job)
 
-        conf = next(
-            m for m in metrics if m.metric_name == "naming_confidence"
-        )
+        conf = next(m for m in metrics if m.metric_name == "naming_confidence")
         # 0.82 * 100 = 82.0
         assert conf.metric_value == 82.0
 
@@ -165,14 +162,16 @@ class TestBrandNamingExtractor:
     def test_fallback_to_direct_result(self, MockSnapshot):
         """When data is not under node_results, fall back to result_data."""
         MockSnapshot.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
-        job = _mock_job({
-            "name_candidates": [
-                {"name": "Test", "scores": {"overall": 75}},
-            ],
-            "taglines": [],
-            "confidence_score": 0.7,
-            "execution_time_ms": 2000,
-        })
+        job = _mock_job(
+            {
+                "name_candidates": [
+                    {"name": "Test", "scores": {"overall": 75}},
+                ],
+                "taglines": [],
+                "confidence_score": 0.7,
+                "execution_time_ms": 2000,
+            }
+        )
         metrics = self.extractor.extract(job)
         names = [m.metric_name for m in metrics]
         assert "naming_candidates_count" in names

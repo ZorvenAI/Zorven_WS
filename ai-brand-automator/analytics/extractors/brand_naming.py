@@ -49,7 +49,12 @@ class BrandNamingExtractor(BaseExtractor):
                         )
 
             # Average scores across candidates
-            for dim in ("linguistic", "memorability", "availability", "strategy_alignment"):
+            for dim in (
+                "linguistic",
+                "memorability",
+                "availability",
+                "strategy_alignment",
+            ):
                 scores = []
                 for c in candidates:
                     if isinstance(c, dict):

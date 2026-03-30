@@ -1177,9 +1177,7 @@ class Command(BaseCommand):
                     {
                         "id": "brand_naming",
                         "type": "external",
-                        "url": (
-                            "http://brand-naming-agent-svc" ":8034/v1/execute"
-                        ),
+                        "url": ("http://brand-naming-agent-svc" ":8034/v1/execute"),
                         "config": {
                             "require_wf1_context": True,
                             "require_bpa_context": True,
