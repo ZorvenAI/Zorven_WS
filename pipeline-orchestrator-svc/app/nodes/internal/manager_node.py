@@ -21,6 +21,7 @@ _BRAND_POSITIONING_NODES = {"brand_positioning"}
 _BRAND_ARCHITECTURE_NODES = {"brand_architecture"}
 _BRAND_PERSONALITY_NODES = {"brand_personality"}
 _BRAND_NAMING_NODES = {"brand_naming"}
+_BRAND_STORY_NODES = {"brand_story"}
 
 
 def _source_label(source: dict) -> str:
@@ -100,6 +101,9 @@ class ManagerNode(BaseNode):
 
         # Extract brand naming data
         brand_naming_data = self._extract_brand_naming(outputs)
+
+        # Extract brand story data
+        brand_story_data = self._extract_brand_story(outputs)
 
         result_data: dict[str, Any] = {
             "summary": (
@@ -479,6 +483,39 @@ class ManagerNode(BaseNode):
                     result_data["sources"] = existing_sources
                 else:
                     result_data["sources"] = nta_sources
+
+        # Promote brand story & narrative fields to top-level result_data
+        if brand_story_data:
+            for key in (
+                "origin_story",
+                "mission_vision",
+                "pitches",
+                "channel_narratives",
+                "story_style_guide",
+                "subbrand_stories",
+                "narrative_package",
+                "wf2_strategy_summary",
+                "execution_time_ms",
+            ):
+                value = brand_story_data.get(key)
+                if value is not None:
+                    result_data[key] = value
+            bsa_conf = brand_story_data.get("confidence_score")
+            if bsa_conf is not None:
+                confidence_scores["brand_story"] = bsa_conf
+            # Build richer summary from BSA data
+            narrative_pkg = brand_story_data.get("narrative_package", {})
+            narrative_dna = narrative_pkg.get("narrative_dna", "")
+            if narrative_dna:
+                result_data["summary"] = (
+                    f"Brand story complete. "
+                    f"Narrative DNA: {narrative_dna} "
+                    f"Confidence: {bsa_conf or 0:.0%}"
+                )
+            # GCS URI
+            gcs_uri = brand_story_data.get("gcs_uri", "")
+            if gcs_uri:
+                result_data["gcs_uri"] = gcs_uri
 
         # Store per-agent confidence scores and compute average
         if confidence_scores:
@@ -910,6 +947,23 @@ class ManagerNode(BaseNode):
         for node_id, output in outputs.items():
             if isinstance(output, dict):
                 if "name_candidates" in output and "naming_brief" in output:
+                    return output
+        return None
+
+    @staticmethod
+    def _extract_brand_story(
+        outputs: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Extract brand story data from any node output.
+
+        Looks for outputs containing origin_story AND narrative_package keys,
+        which are produced by brand-story-agent-svc.
+        Accepts empty dicts (error/prerequisite-failure responses)
+        so the frontend can display the error findings.
+        """
+        for node_id, output in outputs.items():
+            if isinstance(output, dict):
+                if "origin_story" in output and "narrative_package" in output:
                     return output
         return None
 

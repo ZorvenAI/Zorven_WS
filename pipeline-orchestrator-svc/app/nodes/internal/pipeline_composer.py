@@ -370,6 +370,25 @@ NODE_CATALOG: list[dict[str, Any]] = [
             "require_bpv_context": True,
         },
     },
+    {
+        "id": "brand_story",
+        "type": "external",
+        "url": f"{settings.BRAND_STORY_AGENT_URL}/v1/execute",
+        "description": (
+            "Brand story & narrative agent: crafts origin stories (3 lengths), "
+            "mission/vision statements, elevator pitches (15s/30s/60s), "
+            "channel narratives (website/social/investor/press), story style "
+            "guide, and sub-brand story variations. Capstone WF2 agent that "
+            "synthesizes all prior strategy work. Requires WF1 + BPA + BPV + NTA."
+        ),
+        "output_key": "brand_story",
+        "config": {
+            "require_wf1_context": True,
+            "require_bpa_context": True,
+            "require_bpv_context": True,
+            "require_nta_context": True,
+        },
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.
@@ -511,6 +530,14 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
             "brand hierarchy tree, naming conventions, and portfolio growth "
             "path. Requires completed WF1 Brand Discovery and WF2 Brand "
             "Positioning data"
+        ),
+    },
+    {
+        "id": "brand-strategy-story",
+        "description": (
+            "Brand story & narrative: origin story (3 lengths), mission/vision, "
+            "elevator pitches (15s/30s/60s), channel narratives, story style "
+            "guide. Capstone WF2 agent. Requires WF1 + BPA + BPV + NTA"
         ),
     },
 ]

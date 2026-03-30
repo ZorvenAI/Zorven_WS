@@ -36,6 +36,7 @@ jobs:
       brand-positioning-changed: ${{ steps.changes.outputs.brand-positioning }}
       brand-architecture-changed: ${{ steps.changes.outputs.brand-architecture }}
       brand-personality-changed: ${{ steps.changes.outputs.brand-personality }}
+      brand-story-changed: ${{ steps.changes.outputs.brand-story }}
       audience-persona-changed: ${{ steps.changes.outputs.audience-persona }}
       trend-cultural-changed: ${{ steps.changes.outputs.trend-cultural }}
       voc-agent-changed: ${{ steps.changes.outputs.voc-agent }}
@@ -68,6 +69,7 @@ jobs:
             echo "brand-positioning=true" >> "$GITHUB_OUTPUT"
             echo "brand-architecture=true" >> "$GITHUB_OUTPUT"
             echo "brand-personality=true" >> "$GITHUB_OUTPUT"
+            echo "brand-story=true" >> "$GITHUB_OUTPUT"
             echo "audience-persona=true" >> "$GITHUB_OUTPUT"
             echo "trend-cultural=true" >> "$GITHUB_OUTPUT"
             echo "voc-agent=true" >> "$GITHUB_OUTPUT"
@@ -184,6 +186,13 @@ jobs:
             echo "brand-personality=true" >> "$GITHUB_OUTPUT"
           else
             echo "brand-personality=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if brand-story-agent-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^brand-story-agent-svc/'; then
+            echo "brand-story=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "brand-story=false" >> "$GITHUB_OUTPUT"
           fi
 
           # Check if audience-persona-agent-svc changed
@@ -911,6 +920,45 @@ jobs:
           fi
 
   # ==========================================================================
+  # Deploy Brand Story Agent to Railway
+  # ==========================================================================
+  deploy-brand-story-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.brand-story-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Brand Story Agent
+        run: |
+          if [ -n "${{ secrets.RAILWAY_BRAND_STORY_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_BRAND_STORY_SERVICE }} --detach
+          else
+            echo "RAILWAY_BRAND_STORY_SERVICE not set, skipping brand-story deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for brand-story-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          BSA_URL="${{ secrets.RAILWAY_BRAND_STORY_URL }}"
+          if [ -n "$BSA_URL" ]; then
+            curl -f "${BSA_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_BRAND_STORY_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
   # Deploy Audience Persona Agent to Railway
   # ==========================================================================
   deploy-audience-persona-agent:
@@ -1032,7 +1080,7 @@ jobs:
   # ==========================================================================
   notify:
     runs-on: ubuntu-latest
-    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent, deploy-chat-titling, deploy-content-agent, deploy-social-agent, deploy-rag-uploader, deploy-odoo-mcp-server, deploy-odoo-worker-agent, deploy-market-research-agent, deploy-competitor-intel-agent, deploy-brand-positioning-agent, deploy-brand-architecture-agent, deploy-brand-personality-agent, deploy-audience-persona-agent, deploy-trend-cultural-agent, deploy-voc-agent]
+    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent, deploy-chat-titling, deploy-content-agent, deploy-social-agent, deploy-rag-uploader, deploy-odoo-mcp-server, deploy-odoo-worker-agent, deploy-market-research-agent, deploy-competitor-intel-agent, deploy-brand-positioning-agent, deploy-brand-architecture-agent, deploy-brand-personality-agent, deploy-brand-story-agent, deploy-audience-persona-agent, deploy-trend-cultural-agent, deploy-voc-agent]
     if: always()
 
     steps:
@@ -1061,6 +1109,7 @@ jobs:
           echo "| Brand Positioning Agent | ${{ needs.deploy-brand-positioning-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Brand Architecture Agent | ${{ needs.deploy-brand-architecture-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Brand Personality Agent | ${{ needs.deploy-brand-personality-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Brand Story Agent | ${{ needs.deploy-brand-story-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Audience Persona Agent | ${{ needs.deploy-audience-persona-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Trend Cultural Agent | ${{ needs.deploy-trend-cultural-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| VoC Agent | ${{ needs.deploy-voc-agent.result }} |" >> $GITHUB_STEP_SUMMARY

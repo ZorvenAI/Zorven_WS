@@ -1406,6 +1406,43 @@ services:
       - app-network
 
   # ==========================================================================
+  # Brand Story Agent — WF2 capstone: origin stories, mission/vision, pitches,
+  # channel narratives, story style guide. Powered by Anthropic Claude.
+  # ==========================================================================
+  brand-story-agent-svc:
+    build:
+      context: ../brand-story-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-brand-story
+    environment:
+      - BSA_REDIS_URL=redis://redis:6379/20
+      - BSA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - BSA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - BSA_BACKEND_URL=http://backend:8001
+      - BSA_BACKEND_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - BSA_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - BSA_GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
+      - BSA_GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}
+      - BSA_GCS_CREDENTIALS_JSON=${GCS_CREDENTIALS_JSON:-}
+      - BSA_LOG_LEVEL=INFO
+      - BSA_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+    expose:
+      - "8035"
+    ports:
+      - "8035:8035"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8035/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
   # Brand Equity Calculator — ISO 20671:2019 brand evaluation (public)
   # Powered by Claude AI (Anthropic). No auth required.
   # ==========================================================================
