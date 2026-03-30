@@ -77,8 +77,7 @@ app/
     blueprint_persister.py           # SKL-CAA-11
     human_escalation.py              # SKL-CAA-12
     guardrails.py                    # Input/Plan/Output guardrails
-  skills/
-    registry.py              # SkillRegistry with 12 skills
+  skills/                    # Reserved for runtime skill wiring
 ```
 
 ### Key Components

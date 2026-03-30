@@ -1,6 +1,6 @@
 """Tests for TavilyClient."""
 
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 

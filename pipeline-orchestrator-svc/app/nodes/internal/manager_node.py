@@ -22,7 +22,6 @@ _BRAND_ARCHITECTURE_NODES = {"brand_architecture"}
 _BRAND_PERSONALITY_NODES = {"brand_personality"}
 _BRAND_NAMING_NODES = {"brand_naming"}
 _BRAND_STORY_NODES = {"brand_story"}
-_CAMPAIGN_ARCHITECTURE_NODES = {"campaign_architecture"}
 
 
 def _source_label(source: dict) -> str:

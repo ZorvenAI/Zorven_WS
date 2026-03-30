@@ -106,22 +106,46 @@ class RedisManager:
 
     # ── Blueprint registry ──
 
-    async def save_blueprint(self, tenant_id: str, blueprint_data: dict[str, Any]):
-        """Save blueprint results to registry (no TTL)."""
+    _BLUEPRINT_TTL = 60 * 60 * 24 * 7  # 7 days
+
+    async def save_blueprint(
+        self,
+        tenant_id: str,
+        job_id: str,
+        blueprint_data: dict[str, Any],
+    ):
+        """Save blueprint results to registry with 7-day TTL."""
         if not self._redis:
             return
         try:
-            key = f"caa:{tenant_id}:registry:blueprint"
-            await self._redis.set(key, json.dumps(blueprint_data, default=str))
+            key = f"caa:{tenant_id}:registry:campaign:{job_id}"
+            await self._redis.set(
+                key,
+                json.dumps(blueprint_data, default=str),
+                ex=self._BLUEPRINT_TTL,
+            )
+            # Also update latest pointer for quick lookups
+            latest_key = f"caa:{tenant_id}:registry:latest"
+            await self._redis.set(latest_key, job_id, ex=self._BLUEPRINT_TTL)
         except Exception as exc:
             logger.warning("Redis save_blueprint error: %s", exc)
 
-    async def get_blueprint(self, tenant_id: str) -> dict[str, Any] | None:
-        """Get blueprint results from registry."""
+    async def get_blueprint(
+        self,
+        tenant_id: str,
+        job_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Get blueprint results from registry by job_id or latest."""
         if not self._redis:
             return None
         try:
-            key = f"caa:{tenant_id}:registry:blueprint"
+            if not job_id:
+                latest_key = f"caa:{tenant_id}:registry:latest"
+                job_id = await self._redis.get(latest_key)
+                if not job_id:
+                    return None
+                job_id = job_id.decode() if isinstance(job_id, bytes) else job_id
+            key = f"caa:{tenant_id}:registry:campaign:{job_id}"
             data = await self._redis.get(key)
             return json.loads(data) if data else None
         except Exception as exc:

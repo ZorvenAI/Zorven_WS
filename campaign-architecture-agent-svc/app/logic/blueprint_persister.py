@@ -41,7 +41,7 @@ class BlueprintPersister:
         # Redis
         if self._redis:
             try:
-                await self._redis.save_blueprint(tenant_id, result)
+                await self._redis.save_blueprint(tenant_id, job_id, result)
                 persisted_to.append("redis")
             except Exception as exc:
                 logger.warning("Blueprint Redis persist failed: %s", exc)

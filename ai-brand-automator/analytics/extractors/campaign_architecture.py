@@ -76,21 +76,24 @@ class CampaignArchitectureExtractor(BaseExtractor):
                     )
                 )
 
-            # Daily budget total
-            campaign = blueprint.get("campaign", {})
-            if isinstance(campaign, dict):
-                daily_budget = campaign.get("daily_budget")
-                if daily_budget is not None:
-                    metrics.append(
-                        self._make_metric(
-                            job,
-                            "daily_budget_total",
-                            float(daily_budget),
-                            "campaign_architecture",
-                            unit="currency",
-                            agent_source="campaign-architecture-agent",
-                        )
+            # Daily budget total (top-level or nested under campaign)
+            daily_budget = blueprint.get("daily_budget")
+            if daily_budget is None:
+                # Backward compatibility for legacy nested schema
+                campaign = blueprint.get("campaign", {})
+                if isinstance(campaign, dict):
+                    daily_budget = campaign.get("daily_budget")
+            if daily_budget is not None:
+                metrics.append(
+                    self._make_metric(
+                        job,
+                        "daily_budget_total",
+                        float(daily_budget),
+                        "campaign_architecture",
+                        unit="currency",
+                        agent_source="campaign-architecture-agent",
                     )
+                )
 
         # A/B test variants planned
         test_plan = caa.get("test_plan", {})

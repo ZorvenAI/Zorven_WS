@@ -58,7 +58,9 @@ class TestExecuteEndpoint:
         assert data["meta_api_compatible"] is False
         assert "query" in data
 
-    async def test_execute_empty_prompt_422(self, client, auth_headers):
+    async def test_execute_empty_payload_valid_with_defaults(
+        self, client, auth_headers
+    ):
         payload = {}
         resp = await client.post(
             "/v1/execute",

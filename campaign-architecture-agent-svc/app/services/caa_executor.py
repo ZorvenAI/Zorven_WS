@@ -6,6 +6,7 @@ import uuid
 from typing import Any
 
 from app.cache.redis_manager import RedisManager
+from app.logic.blueprint_persister import BlueprintPersister
 from app.messaging.event_emitter import EventEmitter, EventType
 from app.messaging.kafka_producer import AuditProducer, TraceProducer
 from app.services.caa_analyzer import CAAAnalyzer
@@ -44,6 +45,7 @@ class CAAExecutor:
         self._events = event_emitter
         self._context = context_loader
         self._gcs = gcs_client
+        self._persister = BlueprintPersister(redis_manager, gcs_client)
 
     async def execute(
         self,
@@ -224,24 +226,21 @@ class CAAExecutor:
                 job_id=job_id,
             )
 
-            # GCS persist
-            gcs_uri = await self._gcs.upload_blueprint(tenant_id, job_id, result)
-            if gcs_uri:
-                result["gcs_uri"] = gcs_uri
+            # Persist blueprint (Redis registry + GCS)
+            persist_info = await self._persister.persist(tenant_id, job_id, result)
+            if persist_info.get("gcs_uri"):
+                result["gcs_uri"] = persist_info["gcs_uri"]
                 await self._events.emit(
                     EventType.GCS_UPLOAD_COMPLETED,
                     tenant_id,
                     job_id,
-                    {"gcs_uri": gcs_uri},
+                    {"gcs_uri": persist_info["gcs_uri"]},
                 )
-            else:
+            elif "gcs" not in persist_info.get("persisted_to", []):
                 await self._events.emit(EventType.GCS_UPLOAD_FAILED, tenant_id, job_id)
 
             # Cache result
             await self._redis.cache_result(tenant_id, prompt_hash, result)
-
-            # Save to blueprint registry
-            await self._redis.save_blueprint(tenant_id, result)
 
         except Exception as exc:
             logger.error("CAA analysis failed: %s", exc, exc_info=True)

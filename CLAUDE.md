@@ -432,7 +432,7 @@ Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `t
 | Pipeline composer (auto-detect) | `pipeline-orchestrator-svc/app/nodes/internal/pipeline_composer.py` |
 | Node registry (all available nodes) | `pipeline-orchestrator-svc/app/factory/node_registry.py` |
 | Skill loader + router | `pipeline-orchestrator-svc/app/skills/` |
-| Skill definitions (119 .md files) | `pipeline-orchestrator-svc/skills/` |
+| Skill definitions (131 .md files) | `pipeline-orchestrator-svc/skills/` |
 | Odoo MCP tool registry | `odoo-mcp-server-svc/app/tools/registry.py` |
 | Odoo MCP RBAC engine | `odoo-mcp-server-svc/app/rbac/engine.py` |
 | Odoo MCP role definitions (16 YAML) | `odoo-mcp-server-svc/config/roles/` |
