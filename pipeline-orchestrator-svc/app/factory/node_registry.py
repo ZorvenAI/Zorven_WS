@@ -46,6 +46,7 @@ EXTERNAL_ENDPOINTS: dict[str, str] = {
     "brand_positioning": "http://brand-positioning-agent-svc:8031/v1/execute",
     "brand_architecture": "http://brand-architecture-agent-svc:8032/v1/execute",
     "brand_personality": "http://brand-personality-agent-svc:8033/v1/execute",
+    "brand_naming": "http://brand-naming-agent-svc:8034/v1/execute",
 }
 
 

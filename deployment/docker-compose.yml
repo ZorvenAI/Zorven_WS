@@ -311,7 +311,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ai-brand-automator-redis
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 19
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 20
     ports:
       - "6379:6379"
     volumes:
@@ -1361,6 +1361,43 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8033/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Brand Naming Agent — WF2 brand naming & tagline generation (port 8034)
+  # Powered by Claude Sonnet 4. Requires WF1 + BPA + BPV context. BAA recommended.
+  # ==========================================================================
+  brand-naming-agent-svc:
+    build:
+      context: ../brand-naming-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-brand-naming
+    environment:
+      - NTA_REDIS_URL=redis://redis:6379/19
+      - NTA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - NTA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - NTA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - NTA_BACKEND_URL=http://backend:8001
+      - NTA_BACKEND_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - NTA_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - NTA_GCS_BUCKET_PREFIX=${GCS_BUCKET_PREFIX:-}
+      - NTA_VERTEX_PROJECT_ID=${VERTEX_PROJECT_ID:-}
+      - NTA_LOG_LEVEL=INFO
+      - NTA_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+    expose:
+      - "8034"
+    ports:
+      - "8034:8034"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8034/health"]
       interval: 10s
       timeout: 5s
       retries: 3

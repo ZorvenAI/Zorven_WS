@@ -298,6 +298,29 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("values", 1),
         ("tone of voice", 1),
     ],
+    "brand-strategy-naming": [
+        # Strong signal (weight 3) — unambiguous intent
+        ("brand naming", 3),
+        ("brand name", 3),
+        ("naming strategy", 3),
+        ("tagline", 3),
+        ("slogan", 3),
+        ("brand tagline", 3),
+        ("naming convention", 3),
+        ("name candidates", 3),
+        ("brand slogan", 3),
+        # Medium signal (weight 2) — domain-specific
+        ("naming brief", 2),
+        ("domain availability", 2),
+        ("trademark search", 2),
+        ("name scoring", 2),
+        ("linguistic analysis", 2),
+        ("name generator", 2),
+        ("naming guidelines", 2),
+        # Weak signal (weight 1) — require qualifier
+        ("naming", 1),
+        ("taglines", 1),
+    ],
     "brand-analysis": [
         ("brand", 1),
         ("analysis", 1),

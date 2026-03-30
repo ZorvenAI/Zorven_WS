@@ -840,6 +840,120 @@ class BrandContextOptionsView(APIView):
         return Response(options)
 
 
+class BPVContextView(APIView):
+    """GET /api/v1/analytics/bpv-context/ — Latest BPV personality result.
+
+    Used by WF2 agents (NTA, etc.) to consume BPV personality data.
+    Authenticated via X-Service-Token.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        # Service-token auth
+        service_token = request.headers.get("X-Service-Token", "")
+        expected_token = getattr(
+            django_settings,
+            "ORCHESTRATOR_SERVICE_TOKEN",
+            "dev-service-token",
+        )
+        if service_token != expected_token:
+            return Response(
+                {"error": "Invalid service token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        tenant = None
+        tenant_id = request.headers.get("X-Tenant-ID", "")
+        if tenant_id:
+            from tenants.models import Tenant
+
+            try:
+                tenant = Tenant.objects.get(pk=tenant_id)
+            except (Tenant.DoesNotExist, ValueError):
+                pass
+        if not tenant:
+            tenant = _get_tenant(request)
+
+        if not tenant:
+            return Response(
+                {"error": "Tenant required"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        from orchestration.models import AnalysisJob
+
+        # Find latest completed BPV job
+        job = (
+            AnalysisJob.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True),
+                status=AnalysisJob.Status.COMPLETED,
+                manifest__pipeline_id="brand-strategy-personality",
+            )
+            .select_related("manifest")
+            .order_by("-completed_at")
+            .first()
+        )
+
+        # Fallback: any job with brand_personality node results
+        if not job:
+            candidates = AnalysisJob.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True),
+                status=AnalysisJob.Status.COMPLETED,
+            ).order_by("-completed_at")[:20]
+            for candidate in candidates:
+                nr = (candidate.result_data or {}).get("node_results", {})
+                if "brand_personality" in nr:
+                    job = candidate
+                    break
+
+        # Fallback: check Django Redis cache
+        if not job:
+            cache_key = f"brand_personality:{tenant.id}:parent"
+            cached = cache.get(cache_key)
+            if cached and isinstance(cached, dict):
+                return Response(
+                    {
+                        "aaker_profile": cached.get("aaker_profile", {}),
+                        "archetype": cached.get("archetype", {}),
+                        "values_hierarchy": cached.get("values_hierarchy", {}),
+                        "emotional_map": {},
+                        "voice_matrix": {},
+                        "character_brief": {},
+                        "confidence_score": 0.0,
+                        "bpv_completed_at": None,
+                        "bpv_job_id": None,
+                        "source": "cache",
+                    }
+                )
+
+        if not job:
+            return Response(
+                {"error": "No BPV data"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        result_data = job.result_data or {}
+        node_results = result_data.get("node_results", {})
+        bpv = node_results.get("brand_personality", {})
+
+        return Response(
+            {
+                "aaker_profile": bpv.get("aaker_profile", {}),
+                "archetype": bpv.get("archetype", {}),
+                "values_hierarchy": bpv.get("values_hierarchy", {}),
+                "emotional_map": bpv.get("emotional_map", {}),
+                "voice_matrix": bpv.get("voice_matrix", {}),
+                "character_brief": bpv.get("character_brief", {}),
+                "confidence_score": bpv.get("confidence_score", 0.0),
+                "bpv_completed_at": (
+                    job.completed_at.isoformat() if job.completed_at else None
+                ),
+                "bpv_job_id": str(job.job_id),
+            }
+        )
+
+
 class BrandPersonalitySyncView(APIView):
     """POST /api/v1/analytics/brand-personality-sync/
 

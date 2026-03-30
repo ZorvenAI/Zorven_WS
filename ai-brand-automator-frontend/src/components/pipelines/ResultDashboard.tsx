@@ -3500,6 +3500,341 @@ function BrandArchitectureSection({
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+ * Brand Naming & Tagline (NTA) Section — 4 tabs
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+interface NTANameScore {
+  linguistic?: number;
+  memorability?: number;
+  availability?: number;
+  strategy_alignment?: number;
+  overall?: number;
+}
+
+interface NTAAvailability {
+  domain_com?: boolean | null;
+  domain_io?: boolean | null;
+  domain_co?: boolean | null;
+  twitter?: boolean | null;
+  instagram?: boolean | null;
+  linkedin?: boolean | null;
+  trademark_clear?: boolean | null;
+  trademark_notes?: string;
+}
+
+interface NTANameCandidate {
+  name: string;
+  rationale?: string;
+  naming_type?: string;
+  scores?: NTANameScore;
+  availability?: NTAAvailability;
+  shortlisted?: boolean;
+}
+
+interface NTATagline {
+  tagline: string;
+  name?: string;
+  emotional_appeal?: string;
+  memorability_score?: number;
+  positioning_alignment?: string;
+}
+
+interface NTANamingBrief {
+  recommended_name?: string;
+  recommended_tagline?: string;
+  rationale?: string;
+  positioning_alignment?: string;
+  personality_alignment?: string;
+  architecture_fit?: string;
+  next_steps?: string[];
+}
+
+function BrandNamingSection({
+  nameCandidates,
+  shortlistedNames,
+  taglines,
+  namingBrief,
+  confidenceScore,
+  findings,
+  recommendations,
+}: {
+  nameCandidates?: NTANameCandidate[];
+  shortlistedNames?: string[];
+  taglines?: NTATagline[];
+  namingBrief?: NTANamingBrief;
+  availabilityResults?: Record<string, unknown>;
+  scoringSummary?: Record<string, unknown>;
+  confidenceScore?: number;
+  findings?: string[];
+  recommendations?: string[];
+}) {
+  const [activeTab, setActiveTab] = useState<'candidates' | 'availability' | 'taglines' | 'brief'>('candidates');
+
+  const tabs = [
+    { id: 'candidates' as const, label: 'Name Candidates' },
+    { id: 'availability' as const, label: 'Availability' },
+    { id: 'taglines' as const, label: 'Taglines' },
+    { id: 'brief' as const, label: 'Naming Brief' },
+  ];
+
+  const shortlistSet = new Set(shortlistedNames ?? []);
+  const sortedCandidates = [...(nameCandidates ?? [])].sort(
+    (a, b) => (b.scores?.overall ?? 0) - (a.scores?.overall ?? 0),
+  );
+
+  return (
+    <div className="glass-card p-6 rounded-xl space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-brand-electric flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-brand-electric" />
+          Brand Naming & Tagline
+        </h3>
+        {confidenceScore != null && (
+          <span className="text-xs text-brand-silver">
+            Confidence: {(confidenceScore * 100).toFixed(0)}%
+          </span>
+        )}
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-1 bg-brand-midnight/40 rounded-lg p-1">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setActiveTab(t.id)}
+            className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              activeTab === t.id
+                ? 'bg-brand-electric/20 text-brand-electric'
+                : 'text-brand-silver hover:text-white'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tab: Name Candidates ─────────────────────────── */}
+      {activeTab === 'candidates' && (
+        <div className="space-y-3">
+          {sortedCandidates.length === 0 ? (
+            <p className="text-sm text-brand-silver">No name candidates generated.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-brand-silver border-b border-white/10">
+                    <th className="text-left py-2 px-2">#</th>
+                    <th className="text-left py-2 px-2">Name</th>
+                    <th className="text-left py-2 px-2">Type</th>
+                    <th className="text-right py-2 px-2">Overall</th>
+                    <th className="text-right py-2 px-2">Linguistic</th>
+                    <th className="text-right py-2 px-2">Memorability</th>
+                    <th className="text-right py-2 px-2">Strategy</th>
+                    <th className="text-right py-2 px-2">Availability</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedCandidates.map((c, i) => (
+                    <tr
+                      key={c.name}
+                      className={`border-b border-white/5 ${
+                        shortlistSet.has(c.name) ? 'bg-brand-electric/5' : ''
+                      }`}
+                    >
+                      <td className="py-2 px-2 text-brand-silver">{i + 1}</td>
+                      <td className="py-2 px-2 font-medium text-white">
+                        {c.name}
+                        {shortlistSet.has(c.name) && (
+                          <span className="ml-2 text-[10px] bg-brand-electric/20 text-brand-electric px-1.5 py-0.5 rounded">
+                            Shortlisted
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 px-2 text-brand-silver capitalize">{c.naming_type ?? '—'}</td>
+                      <td className="py-2 px-2 text-right font-mono text-brand-electric">{c.scores?.overall?.toFixed(1) ?? '—'}</td>
+                      <td className="py-2 px-2 text-right font-mono text-brand-silver">{c.scores?.linguistic?.toFixed(1) ?? '—'}</td>
+                      <td className="py-2 px-2 text-right font-mono text-brand-silver">{c.scores?.memorability?.toFixed(1) ?? '—'}</td>
+                      <td className="py-2 px-2 text-right font-mono text-brand-silver">{c.scores?.strategy_alignment?.toFixed(1) ?? '—'}</td>
+                      <td className="py-2 px-2 text-right font-mono text-brand-silver">{c.scores?.availability?.toFixed(1) ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {/* Rationale for top 3 */}
+          {sortedCandidates.slice(0, 3).map((c) => c.rationale ? (
+            <div key={c.name} className="bg-brand-midnight/30 rounded-lg p-3">
+              <span className="text-xs font-medium text-brand-electric">{c.name}</span>
+              <p className="text-xs text-brand-silver mt-1">{c.rationale}</p>
+            </div>
+          ) : null)}
+        </div>
+      )}
+
+      {/* ── Tab: Availability ────────────────────────────── */}
+      {activeTab === 'availability' && (
+        <div className="space-y-3">
+          {sortedCandidates.length === 0 ? (
+            <p className="text-sm text-brand-silver">No availability data.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-brand-silver border-b border-white/10">
+                    <th className="text-left py-2 px-2">Name</th>
+                    <th className="text-center py-2 px-2">.com</th>
+                    <th className="text-center py-2 px-2">.io</th>
+                    <th className="text-center py-2 px-2">.co</th>
+                    <th className="text-center py-2 px-2">Twitter</th>
+                    <th className="text-center py-2 px-2">Instagram</th>
+                    <th className="text-center py-2 px-2">LinkedIn</th>
+                    <th className="text-center py-2 px-2">Trademark</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedCandidates.map((c) => {
+                    const a = c.availability;
+                    const badge = (val: boolean | null | undefined) => {
+                      if (val === true) return <span className="text-green-400">✓</span>;
+                      if (val === false) return <span className="text-red-400">✗</span>;
+                      return <span className="text-brand-silver">—</span>;
+                    };
+                    return (
+                      <tr key={c.name} className="border-b border-white/5">
+                        <td className="py-2 px-2 font-medium text-white">{c.name}</td>
+                        <td className="py-2 px-2 text-center">{badge(a?.domain_com)}</td>
+                        <td className="py-2 px-2 text-center">{badge(a?.domain_io)}</td>
+                        <td className="py-2 px-2 text-center">{badge(a?.domain_co)}</td>
+                        <td className="py-2 px-2 text-center">{badge(a?.twitter)}</td>
+                        <td className="py-2 px-2 text-center">{badge(a?.instagram)}</td>
+                        <td className="py-2 px-2 text-center">{badge(a?.linkedin)}</td>
+                        <td className="py-2 px-2 text-center">{badge(a?.trademark_clear)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Taglines ────────────────────────────────── */}
+      {activeTab === 'taglines' && (
+        <div className="space-y-3">
+          {(!taglines || taglines.length === 0) ? (
+            <p className="text-sm text-brand-silver">No taglines generated.</p>
+          ) : (
+            taglines.map((t, i) => (
+              <div key={i} className="bg-brand-midnight/30 rounded-lg p-4 space-y-2">
+                <p className="text-white font-medium">&ldquo;{t.tagline}&rdquo;</p>
+                {t.name && (
+                  <p className="text-xs text-brand-electric">For: {t.name}</p>
+                )}
+                {t.emotional_appeal && (
+                  <p className="text-xs text-brand-silver">{t.emotional_appeal}</p>
+                )}
+                <div className="flex gap-4 text-xs text-brand-silver">
+                  {t.memorability_score != null && (
+                    <span>Memorability: {t.memorability_score.toFixed(0)}/100</span>
+                  )}
+                  {t.positioning_alignment && (
+                    <span>Positioning: {t.positioning_alignment}</span>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Naming Brief ────────────────────────────── */}
+      {activeTab === 'brief' && (
+        <div className="space-y-4">
+          {!namingBrief ? (
+            <p className="text-sm text-brand-silver">No naming brief available.</p>
+          ) : (
+            <>
+              {namingBrief.recommended_name && (
+                <div className="bg-brand-electric/10 rounded-lg p-4 border border-brand-electric/20">
+                  <p className="text-xs text-brand-silver uppercase tracking-wider mb-1">Recommended Name</p>
+                  <p className="text-xl font-bold text-brand-electric">{namingBrief.recommended_name}</p>
+                  {namingBrief.recommended_tagline && (
+                    <p className="text-sm text-white mt-1 italic">&ldquo;{namingBrief.recommended_tagline}&rdquo;</p>
+                  )}
+                </div>
+              )}
+              {namingBrief.rationale && (
+                <div>
+                  <p className="text-xs font-medium text-brand-silver mb-1">Rationale</p>
+                  <p className="text-sm text-white">{namingBrief.rationale}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {namingBrief.positioning_alignment && (
+                  <div className="bg-brand-midnight/30 rounded-lg p-3">
+                    <p className="text-xs text-brand-silver">Positioning Alignment</p>
+                    <p className="text-sm text-white mt-1">{namingBrief.positioning_alignment}</p>
+                  </div>
+                )}
+                {namingBrief.personality_alignment && (
+                  <div className="bg-brand-midnight/30 rounded-lg p-3">
+                    <p className="text-xs text-brand-silver">Personality Alignment</p>
+                    <p className="text-sm text-white mt-1">{namingBrief.personality_alignment}</p>
+                  </div>
+                )}
+                {namingBrief.architecture_fit && (
+                  <div className="bg-brand-midnight/30 rounded-lg p-3">
+                    <p className="text-xs text-brand-silver">Architecture Fit</p>
+                    <p className="text-sm text-white mt-1">{namingBrief.architecture_fit}</p>
+                  </div>
+                )}
+              </div>
+              {namingBrief.next_steps && namingBrief.next_steps.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-brand-silver mb-2">Next Steps</p>
+                  <ul className="space-y-1">
+                    {namingBrief.next_steps.map((step, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-white">
+                        <span className="text-brand-electric mt-0.5">→</span>
+                        {step}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Findings & Recommendations */}
+          {findings && findings.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-brand-silver mb-1">Findings</p>
+              <ul className="space-y-1">
+                {findings.map((f, i) => (
+                  <li key={i} className="text-sm text-brand-silver">• {f}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {recommendations && recommendations.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-brand-silver mb-1">Recommendations</p>
+              <ul className="space-y-1">
+                {recommendations.map((r, i) => (
+                  <li key={i} className="text-sm text-brand-silver">• {r}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
  * Brand Personality & Values (BPV) Section — 6 tabs
  * ══════════════════════════════════════════════════════════════════════════ */
 
@@ -5225,6 +5560,11 @@ export default function ResultDashboard({
     resultData.archetype != null ||
     resultData.values_hierarchy != null;
 
+  // ── Detect brand naming data ──────────────────────────────────
+  const hasBrandNaming =
+    resultData.name_candidates != null ||
+    resultData.naming_brief != null;
+
   // ── Detect voice of customer data ───────────────────────────────
   const hasVoiceOfCustomer =
     resultData.voc_health_score != null ||
@@ -5426,6 +5766,14 @@ export default function ResultDashboard({
     'character_brief',
     'baa_context_used',
     'sub_brand_constraint_applied',
+    // Brand Naming & Tagline keys
+    'name_candidates',
+    'shortlisted_names',
+    'taglines',
+    'naming_brief',
+    'availability_results',
+    'scoring_summary',
+    'bpv_context_used',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),
@@ -5618,6 +5966,21 @@ export default function ResultDashboard({
           voiceMatrix={resultData.voice_matrix as BPVVoiceMatrix | undefined}
           characterBrief={resultData.character_brief as BPVCharacterBrief | undefined}
           confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.brand_personality ?? resultData.confidence_score) as number | undefined}
+          findings={findings}
+          recommendations={recommendations}
+        />
+      )}
+
+      {/* ── Brand Naming & Tagline Dashboard ────────────────────────── */}
+      {hasBrandNaming && (
+        <BrandNamingSection
+          nameCandidates={resultData.name_candidates as NTANameCandidate[] | undefined}
+          shortlistedNames={resultData.shortlisted_names as string[] | undefined}
+          taglines={resultData.taglines as NTATagline[] | undefined}
+          namingBrief={resultData.naming_brief as NTANamingBrief | undefined}
+          availabilityResults={resultData.availability_results as Record<string, unknown> | undefined}
+          scoringSummary={resultData.scoring_summary as Record<string, unknown> | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.brand_naming ?? resultData.confidence_score) as number | undefined}
           findings={findings}
           recommendations={recommendations}
         />
