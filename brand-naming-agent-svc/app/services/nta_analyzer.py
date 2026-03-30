@@ -1,5 +1,6 @@
 """NTA Analyzer — 5-phase PAOR engine for naming & tagline generation."""
 
+import asyncio
 import logging
 import time
 from typing import Any
@@ -62,19 +63,22 @@ class NTAAnalyzer:
         bpv_context: dict[str, Any] | None,
         company_context: dict[str, Any] | None,
         baa_context: dict[str, Any] | None = None,
+        job_id: str = "",
     ) -> dict[str, Any]:
         """Run full naming & tagline analysis."""
         start_time = time.time()
 
         # Merge all context sources
         context = self._merge_context(
-            wf1_context, bpa_context, bpv_context, company_context,
-            baa_context, previous_outputs,
+            wf1_context,
+            bpa_context,
+            bpv_context,
+            company_context,
+            baa_context,
+            previous_outputs,
         )
 
-        wf1_used = any(
-            k in context for k in ("mra", "cia", "apa", "tcia", "voca")
-        )
+        wf1_used = any(k in context for k in ("mra", "cia", "apa", "tcia", "voca"))
         bpa_used = "bpa" in context
         bpv_used = "bpv" in context
         baa_used = "baa" in context
@@ -86,7 +90,9 @@ class NTAAnalyzer:
 
         # ── Phase 1: Research ──
         await self._events.emit(
-            EventType.ANALYSIS_PHASE_STARTED, tenant_id, "",
+            EventType.ANALYSIS_PHASE_STARTED,
+            tenant_id,
+            job_id,
             {"phase": "research"},
         )
 
@@ -95,10 +101,12 @@ class NTAAnalyzer:
             config,
         )
         audience_psych = await self._audience_psychology.analyze(
-            context.get("apa", {}), context.get("voca", {}),
+            context.get("apa", {}),
+            context.get("voca", {}),
         )
         competitive = await self._competitive_naming.analyze(
-            context.get("cia", {}), context.get("mra", {}),
+            context.get("cia", {}),
+            context.get("mra", {}),
         )
         identity_seed = await self._identity_seed.load(
             context.get("bpv", {}),
@@ -108,20 +116,29 @@ class NTAAnalyzer:
         rag_docs = await self._rag.retrieve(tenant_id, prompt)
 
         await self._events.emit(
-            EventType.ANALYSIS_PHASE_COMPLETED, tenant_id, "",
+            EventType.ANALYSIS_PHASE_COMPLETED,
+            tenant_id,
+            job_id,
             {"phase": "research"},
         )
 
         # ── Phase 2: Name Generation (Claude call 1) ──
         await self._events.emit(
-            EventType.ANALYSIS_PHASE_STARTED, tenant_id, "",
+            EventType.ANALYSIS_PHASE_STARTED,
+            tenant_id,
+            job_id,
             {"phase": "name_generation"},
         )
 
         name_system_prompt = self._name_generator.build_system_prompt()
         name_user_prompt = self._name_generator.build_user_prompt(
-            prompt, context, audience_psych, competitive,
-            identity_seed, brand_ctx, rag_docs,
+            prompt,
+            context,
+            audience_psych,
+            competitive,
+            identity_seed,
+            brand_ctx,
+            rag_docs,
         )
 
         name_result = await self._llm.generate_json(
@@ -134,31 +151,41 @@ class NTAAnalyzer:
         sources = name_result.get("sources", [])
 
         await self._events.emit(
-            EventType.NAMES_GENERATED, tenant_id, "",
+            EventType.NAMES_GENERATED,
+            tenant_id,
+            job_id,
             {"candidate_count": len(raw_candidates)},
         )
 
         await self._events.emit(
-            EventType.ANALYSIS_PHASE_COMPLETED, tenant_id, "",
+            EventType.ANALYSIS_PHASE_COMPLETED,
+            tenant_id,
+            job_id,
             {"phase": "name_generation"},
         )
 
         # ── Phase 3: Availability Checking ──
         await self._events.emit(
-            EventType.ANALYSIS_PHASE_STARTED, tenant_id, "",
+            EventType.ANALYSIS_PHASE_STARTED,
+            tenant_id,
+            job_id,
             {"phase": "availability"},
         )
 
         availability_results = {}
-        for candidate in raw_candidates:
+
+        async def _check_candidate(candidate: dict) -> None:
+            """Check availability for a single candidate concurrently."""
             name = candidate.get("name", "")
             if not name:
-                continue
+                return
             slug = name.lower().replace(" ", "").replace("-", "")
 
-            domain_avail = await self._domain_checker.check(slug)
-            social_avail = await self._social_checker.check(slug)
-            trademark_result = await self._trademark_searcher.search(name)
+            domain_avail, social_avail, trademark_result = await asyncio.gather(
+                self._domain_checker.check(slug),
+                self._social_checker.check(slug),
+                self._trademark_searcher.search(name),
+            )
 
             availability_results[name] = {
                 "domain": domain_avail,
@@ -178,10 +205,11 @@ class NTAAnalyzer:
                 "trademark_notes": trademark_result.get("notes", ""),
             }
 
+        # Run availability checks concurrently across all candidates
+        await asyncio.gather(*[_check_candidate(c) for c in raw_candidates])
+
         # Score candidates with availability data
-        scored_candidates = self._name_scorer.score_all(
-            raw_candidates, context
-        )
+        scored_candidates = self._name_scorer.score_all(raw_candidates, context)
 
         # Sort by overall score descending
         scored_candidates.sort(
@@ -192,9 +220,7 @@ class NTAAnalyzer:
         # Shortlist top N
         from app.core.config import settings
 
-        shortlist_size = config.get(
-            "shortlist_size", settings.SHORTLIST_SIZE
-        )
+        shortlist_size = config.get("shortlist_size", settings.SHORTLIST_SIZE)
         shortlisted = scored_candidates[:shortlist_size]
         shortlisted_names = [c.get("name", "") for c in shortlisted]
 
@@ -206,19 +232,26 @@ class NTAAnalyzer:
         scoring_summary = self._name_scorer.summarize(scored_candidates)
 
         await self._events.emit(
-            EventType.ANALYSIS_PHASE_COMPLETED, tenant_id, "",
+            EventType.ANALYSIS_PHASE_COMPLETED,
+            tenant_id,
+            job_id,
             {"phase": "availability", "shortlisted": shortlisted_names},
         )
 
         # ── Phase 4: Tagline Synthesis (Claude call 2) ──
         await self._events.emit(
-            EventType.ANALYSIS_PHASE_STARTED, tenant_id, "",
+            EventType.ANALYSIS_PHASE_STARTED,
+            tenant_id,
+            job_id,
             {"phase": "tagline_synthesis"},
         )
 
         tagline_system_prompt = self._tagline_synthesizer.build_system_prompt()
         tagline_user_prompt = self._tagline_synthesizer.build_user_prompt(
-            prompt, shortlisted, context, identity_seed,
+            prompt,
+            shortlisted,
+            context,
+            identity_seed,
         )
 
         tagline_result = await self._llm.generate_json(
@@ -230,7 +263,10 @@ class NTAAnalyzer:
 
         # Build final naming brief
         naming_brief = self._brief_builder.build(
-            naming_brief_data, shortlisted, taglines, context,
+            naming_brief_data,
+            shortlisted,
+            taglines,
+            context,
         )
 
         confidence = tagline_result.get(
@@ -244,33 +280,44 @@ class NTAAnalyzer:
         sources.extend(tagline_result.get("sources", []))
 
         await self._events.emit(
-            EventType.ANALYSIS_PHASE_COMPLETED, tenant_id, "",
+            EventType.ANALYSIS_PHASE_COMPLETED,
+            tenant_id,
+            job_id,
             {"phase": "tagline_synthesis", "tagline_count": len(taglines)},
         )
 
         # ── Phase 5: Persist + Escalation ──
         await self._events.emit(
-            EventType.ANALYSIS_PHASE_STARTED, tenant_id, "",
+            EventType.ANALYSIS_PHASE_STARTED,
+            tenant_id,
+            job_id,
             {"phase": "persist"},
         )
 
-        await self._persister.persist(tenant_id, {
-            "name_candidates": scored_candidates,
-            "shortlisted_names": shortlisted_names,
-            "taglines": taglines,
-            "naming_brief": naming_brief,
-        })
+        await self._persister.persist(
+            tenant_id,
+            {
+                "name_candidates": scored_candidates,
+                "shortlisted_names": shortlisted_names,
+                "taglines": taglines,
+                "naming_brief": naming_brief,
+            },
+        )
 
         escalation = await self._escalation.evaluate(confidence, {})
 
         if escalation.get("escalation_needed"):
             await self._events.emit(
-                EventType.ESCALATION_TRIGGERED, tenant_id, "",
+                EventType.ESCALATION_TRIGGERED,
+                tenant_id,
+                job_id,
                 escalation,
             )
 
         await self._events.emit(
-            EventType.ANALYSIS_PHASE_COMPLETED, tenant_id, "",
+            EventType.ANALYSIS_PHASE_COMPLETED,
+            tenant_id,
+            job_id,
             {"phase": "all"},
         )
 
@@ -384,4 +431,5 @@ class NTAAnalyzer:
 def _fmt(data: dict) -> str:
     """Format dict as compact string for prompt injection."""
     import json
+
     return json.dumps(data, indent=None, default=str)[:3000]

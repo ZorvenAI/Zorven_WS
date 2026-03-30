@@ -364,7 +364,11 @@ NODE_CATALOG: list[dict[str, Any]] = [
             "candidates, or naming strategy."
         ),
         "output_key": "brand_naming",
-        "config": {"require_wf1_context": True, "require_bpa_context": True},
+        "config": {
+            "require_wf1_context": True,
+            "require_bpa_context": True,
+            "require_bpv_context": True,
+        },
     },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.

@@ -71,9 +71,7 @@ class NTAExecutor:
                 "tenant_id": tenant_id,
             }
         )
-        await self._events.emit(
-            EventType.SESSION_STARTED, tenant_id, job_id
-        )
+        await self._events.emit(EventType.SESSION_STARTED, tenant_id, job_id)
 
         try:
             # Check cache
@@ -93,27 +91,21 @@ class NTAExecutor:
 
             # Emit context events
             if wf1_context:
-                await self._events.emit(
-                    EventType.WF1_CONTEXT_LOADED, tenant_id, job_id
-                )
+                await self._events.emit(EventType.WF1_CONTEXT_LOADED, tenant_id, job_id)
             else:
                 await self._events.emit(
                     EventType.WF1_CONTEXT_MISSING, tenant_id, job_id
                 )
 
             if bpa_context:
-                await self._events.emit(
-                    EventType.BPA_CONTEXT_LOADED, tenant_id, job_id
-                )
+                await self._events.emit(EventType.BPA_CONTEXT_LOADED, tenant_id, job_id)
             else:
                 await self._events.emit(
                     EventType.BPA_CONTEXT_MISSING, tenant_id, job_id
                 )
 
             if bpv_context:
-                await self._events.emit(
-                    EventType.BPV_CONTEXT_LOADED, tenant_id, job_id
-                )
+                await self._events.emit(EventType.BPV_CONTEXT_LOADED, tenant_id, job_id)
             else:
                 await self._events.emit(
                     EventType.BPV_CONTEXT_MISSING, tenant_id, job_id
@@ -122,18 +114,14 @@ class NTAExecutor:
             # Check for BAA context in previous_outputs
             baa_context = previous_outputs.get("brand_architecture")
             if baa_context:
-                await self._events.emit(
-                    EventType.BAA_CONTEXT_LOADED, tenant_id, job_id
-                )
+                await self._events.emit(EventType.BAA_CONTEXT_LOADED, tenant_id, job_id)
             else:
                 await self._events.emit(
                     EventType.BAA_CONTEXT_MISSING, tenant_id, job_id
                 )
 
             # Prerequisite check: require WF1 + BPA + BPV
-            has_wf1 = bool(wf1_context) or any(
-                k in previous_outputs for k in _WF1_KEYS
-            )
+            has_wf1 = bool(wf1_context) or any(k in previous_outputs for k in _WF1_KEYS)
             has_bpa = bool(bpa_context) or bool(
                 previous_outputs.get("brand_positioning")
             )
@@ -179,6 +167,7 @@ class NTAExecutor:
                 bpv_context=bpv_context,
                 company_context=company_context,
                 baa_context=baa_context,
+                job_id=job_id,
             )
 
             # Cache result

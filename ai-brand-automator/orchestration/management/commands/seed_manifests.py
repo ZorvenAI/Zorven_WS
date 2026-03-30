@@ -1181,6 +1181,7 @@ class Command(BaseCommand):
                         "config": {
                             "require_wf1_context": True,
                             "require_bpa_context": True,
+                            "require_bpv_context": True,
                         },
                     },
                     {
