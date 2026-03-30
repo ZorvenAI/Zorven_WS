@@ -105,6 +105,9 @@ class ManagerNode(BaseNode):
         # Extract brand story data
         brand_story_data = self._extract_brand_story(outputs)
 
+        # Extract campaign architecture data
+        campaign_arch_data = self._extract_campaign_architecture(outputs)
+
         result_data: dict[str, Any] = {
             "summary": (
                 f"Pipeline analysis completed. "
@@ -401,11 +404,14 @@ class ManagerNode(BaseNode):
                 confidence_scores["brand_personality"] = bpv_conf
             # Build a richer summary from BPV data
             aaker = brand_personality_data.get("aaker_profile", {})
-            primary_dim = aaker.get("primary_dimension", "") if isinstance(aaker, dict) else ""
+            primary_dim = (
+                aaker.get("primary_dimension", "") if isinstance(aaker, dict) else ""
+            )
             arch = brand_personality_data.get("archetype", {})
             raw_primary = arch.get("primary", {}) if isinstance(arch, dict) else {}
             primary_arch = (
-                raw_primary.get("name", "") if isinstance(raw_primary, dict)
+                raw_primary.get("name", "")
+                if isinstance(raw_primary, dict)
                 else str(raw_primary) if raw_primary else ""
             )
             if primary_dim and primary_arch:
@@ -516,6 +522,41 @@ class ManagerNode(BaseNode):
             gcs_uri = brand_story_data.get("gcs_uri", "")
             if gcs_uri:
                 result_data["gcs_uri"] = gcs_uri
+
+        # Promote campaign architecture fields to top-level result_data
+        if campaign_arch_data:
+            for key in (
+                "blueprint",
+                "funnel_map",
+                "targeting_specs",
+                "placement_budget",
+                "test_plan",
+                "kpi_targets",
+                "performance_projections",
+                "risk_assessment",
+                "creative_briefs",
+                "special_ad_category",
+                "meta_api_compatible",
+                "execution_time_ms",
+            ):
+                value = campaign_arch_data.get(key)
+                if value is not None:
+                    result_data[key] = value
+            caa_conf = campaign_arch_data.get("confidence_score")
+            if caa_conf is not None:
+                confidence_scores["campaign_architecture"] = caa_conf
+            # Build richer summary from CAA data
+            bp = campaign_arch_data.get("blueprint", {})
+            campaign_name = bp.get("campaign_name", "")
+            if campaign_name:
+                result_data["summary"] = (
+                    f"Campaign architecture complete. "
+                    f"Blueprint: {campaign_name}. "
+                    f"Confidence: {caa_conf or 0:.0%}"
+                )
+            caa_gcs = campaign_arch_data.get("gcs_uri", "")
+            if caa_gcs:
+                result_data["gcs_uri"] = caa_gcs
 
         # Store per-agent confidence scores and compute average
         if confidence_scores:
@@ -690,24 +731,12 @@ class ManagerNode(BaseNode):
             charts.append({"type": "sources_table", "data_key": "sources"})
         elif has_brand_personality:
             schema_type = "brand_personality_dashboard"
-            charts.append(
-                {"type": "aaker_radar", "data_key": "aaker_profile"}
-            )
-            charts.append(
-                {"type": "archetype_cards", "data_key": "archetype"}
-            )
-            charts.append(
-                {"type": "values_hierarchy", "data_key": "values_hierarchy"}
-            )
-            charts.append(
-                {"type": "emotional_map", "data_key": "emotional_map"}
-            )
-            charts.append(
-                {"type": "voice_matrix", "data_key": "voice_matrix"}
-            )
-            charts.append(
-                {"type": "character_brief", "data_key": "character_brief"}
-            )
+            charts.append({"type": "aaker_radar", "data_key": "aaker_profile"})
+            charts.append({"type": "archetype_cards", "data_key": "archetype"})
+            charts.append({"type": "values_hierarchy", "data_key": "values_hierarchy"})
+            charts.append({"type": "emotional_map", "data_key": "emotional_map"})
+            charts.append({"type": "voice_matrix", "data_key": "voice_matrix"})
+            charts.append({"type": "character_brief", "data_key": "character_brief"})
             charts.append({"type": "sources_table", "data_key": "sources"})
         elif has_brand_positioning:
             schema_type = "brand_positioning_dashboard"
@@ -986,6 +1015,26 @@ class ManagerNode(BaseNode):
                     and rec.get("recommended_model")
                     and isinstance(hier, dict)
                     and hier.get("root")
+                ):
+                    return output
+        return None
+
+    @staticmethod
+    def _extract_campaign_architecture(
+        outputs: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Extract campaign architecture data from any node output.
+
+        Looks for outputs containing blueprint OR funnel_map OR
+        targeting_specs keys, which are produced by
+        campaign-architecture-agent-svc.
+        """
+        for node_id, output in outputs.items():
+            if isinstance(output, dict):
+                if (
+                    "blueprint" in output
+                    or "funnel_map" in output
+                    or "targeting_specs" in output
                 ):
                     return output
         return None

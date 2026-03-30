@@ -1272,6 +1272,54 @@ class Command(BaseCommand):
                 },
             },
         },
+        # ── WF3: Meta Campaign Architecture (standalone CAA) ──
+        {
+            "pipeline_id": "meta-campaign-architecture",
+            "name": "Meta Ads: Campaign Architecture",
+            "description": (
+                "Design complete Meta Ads campaign structure: campaign "
+                "blueprint, funnel-objective mapping, audience targeting "
+                "specs, placement/budget strategy (CBO/ABO), A/B test "
+                "plan, KPI targets, and creative briefs. First agent in "
+                "WF3 Meta Ads workflow. Requires completed WF1 Brand "
+                "Discovery (min APA+CIA), WF2 Brand Positioning (min "
+                "BPA), and Company model."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "campaign_architecture",
+                        "type": "external",
+                        "url": (
+                            "http://campaign-architecture-agent-svc" ":8041/v1/execute"
+                        ),
+                        "config": {
+                            "require_wf1_context": True,
+                            "require_bpa_context": True,
+                            "require_company_context": True,
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "campaign_architecture"],
+                    ["campaign_architecture", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.3,
+                },
+            },
+        },
     ]
 
     def handle(self, *args, **options):

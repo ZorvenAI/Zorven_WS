@@ -389,6 +389,25 @@ NODE_CATALOG: list[dict[str, Any]] = [
             "require_nta_context": True,
         },
     },
+    {
+        "id": "campaign_architecture",
+        "type": "external",
+        "url": f"{settings.CAMPAIGN_ARCHITECTURE_AGENT_URL}/v1/execute",
+        "description": (
+            "Campaign architecture agent: designs complete Meta Ads campaign "
+            "structure — campaign -> ad set -> ad hierarchy. Produces funnel-"
+            "objective mapping, audience targeting specs, placement strategy, "
+            "budget allocation (CBO/ABO), A/B test plan, KPI targets, and "
+            "creative briefs. First agent in WF3 Meta Ads workflow. Requires "
+            "WF1 (min APA+CIA) + WF2 (min BPA) + Company."
+        ),
+        "output_key": "campaign_architecture",
+        "config": {
+            "require_wf1_context": True,
+            "require_bpa_context": True,
+            "require_company_context": True,
+        },
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.
@@ -538,6 +557,14 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
             "Brand story & narrative: origin story (3 lengths), mission/vision, "
             "elevator pitches (15s/30s/60s), channel narratives, story style "
             "guide. Capstone WF2 agent. Requires WF1 + BPA + BPV + NTA"
+        ),
+    },
+    {
+        "id": "meta-campaign-architecture",
+        "description": (
+            "Meta Ads campaign architecture: campaign blueprint, funnel-objective "
+            "mapping, audience targeting, placement/budget strategy, A/B test "
+            "plan, KPI targets, creative briefs. First WF3 agent."
         ),
     },
 ]
