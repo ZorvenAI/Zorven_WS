@@ -6,6 +6,7 @@ from analytics.extractors.brand_naming import BrandNamingExtractor
 from analytics.extractors.brand_personality import BrandPersonalityExtractor
 from analytics.extractors.brand_positioning import BrandPositioningExtractor
 from analytics.extractors.brand_story import BrandStoryExtractor
+from analytics.extractors.campaign_architecture import CampaignArchitectureExtractor
 from analytics.extractors.content_social import ContentSocialExtractor
 
 # Pipeline ID → Extractor mapping
@@ -47,6 +48,8 @@ PIPELINE_EXTRACTORS = {
     "brand-strategy-naming": BrandNamingExtractor(),
     # Brand story & narrative (WF2)
     "brand-strategy-story": BrandStoryExtractor(),
+    # Campaign architecture (WF3)
+    "meta-campaign-architecture": CampaignArchitectureExtractor(),
     # General chat — uses brand discovery extractor to grab any
     # agent results that were composed dynamically
     "general-chat": BrandDiscoveryExtractor(),
@@ -62,6 +65,17 @@ def detect_extractor_from_result(result_data: dict):
         return None
 
     node_results = result_data.get("node_results", {})
+
+    # Check for campaign architecture outputs (WF3)
+    has_caa = bool(
+        node_results.get("campaign_architecture")
+        or result_data.get("blueprint")
+        or result_data.get("funnel_map")
+        or result_data.get("targeting_specs")
+    )
+
+    if has_caa:
+        return CampaignArchitectureExtractor()
 
     # Check for brand story outputs (WF2) — check before NTA since BSA is capstone
     has_bsa = bool(

@@ -1,0 +1,9 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "integration: requires Redis/Kafka",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]

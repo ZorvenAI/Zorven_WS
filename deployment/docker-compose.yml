@@ -311,7 +311,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ai-brand-automator-redis
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 21
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 22
     ports:
       - "6379:6379"
     volumes:
@@ -1435,6 +1435,46 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8035/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Campaign Architecture Agent — WF3 Agent 3.1: Meta Ads campaign architecture.
+  # Designs campaign → ad set → ad hierarchy with funnel mapping, audience
+  # targeting, placement/budget strategy, A/B test plan. Powered by Claude.
+  # ==========================================================================
+  campaign-architecture-agent-svc:
+    build:
+      context: ../campaign-architecture-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-campaign-architecture
+    environment:
+      - CAA_REDIS_URL=redis://redis:6379/21
+      - CAA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CAA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - CAA_BACKEND_URL=http://backend:8001
+      - CAA_BACKEND_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - CAA_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - CAA_GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
+      - CAA_GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}
+      - CAA_GCS_CREDENTIALS_JSON=${GCS_CREDENTIALS_JSON:-}
+      - CAA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - CAA_ODOO_MCP_URL=http://odoo-mcp-server:8095
+      - CAA_LOG_LEVEL=INFO
+      - CAA_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+    expose:
+      - "8041"
+    ports:
+      - "8041:8041"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8041/health"]
       interval: 10s
       timeout: 5s
       retries: 3

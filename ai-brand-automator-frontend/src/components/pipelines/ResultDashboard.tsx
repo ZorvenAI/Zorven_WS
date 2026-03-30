@@ -5975,6 +5975,531 @@ function VoiceOfCustomerSection({
   );
 }
 
+// ── Campaign Architecture Agent (CAA) Types ──────────────────────
+
+interface CAAFunnelStage {
+  stage?: string;
+  meta_objective?: string;
+  budget_pct?: number;
+  description?: string;
+}
+
+interface CAAFunnelMap {
+  stages?: CAAFunnelStage[];
+}
+
+interface CAATargetingSpec {
+  ad_set_name?: string;
+  funnel_stage?: string;
+  demographics?: Record<string, unknown>;
+  interests?: string[];
+  behaviors?: string[];
+  custom_audiences?: string[];
+  lookalike_audiences?: string[];
+  exclusions?: string[];
+  estimated_audience_size?: number;
+}
+
+interface CAAAdSet {
+  name?: string;
+  funnel_stage?: string;
+  objective?: string;
+  targeting?: CAATargetingSpec;
+  placements?: string[];
+  daily_budget?: number;
+  bid_strategy?: string;
+  optimization_goal?: string;
+  creative_briefs?: Array<Record<string, unknown>>;
+}
+
+interface CAABlueprint {
+  campaign_name?: string;
+  campaign_objective?: string;
+  special_ad_category?: string;
+  buying_type?: string;
+  daily_budget?: number;
+  bid_strategy?: string;
+  cbo_enabled?: boolean;
+  ad_sets?: CAAAdSet[];
+}
+
+interface CAATestVariant {
+  variable?: string;
+  variants?: string[];
+  sample_size_per_variant?: number;
+  duration_days?: number;
+  success_metric?: string;
+  priority?: string;
+}
+
+interface CAATestPlan {
+  tests?: CAATestVariant[];
+  total_testing_budget_pct?: number;
+  total_variants?: number;
+}
+
+interface CAAPerformanceProjections {
+  estimated_reach?: number;
+  estimated_impressions?: number;
+  estimated_clicks?: number;
+  estimated_conversions?: number;
+  projected_roas?: number;
+  confidence_range?: Record<string, number>;
+}
+
+interface CAARiskAssessment {
+  risks?: Array<{ category?: string; description?: string; severity?: string; mitigation?: string }>;
+}
+
+interface CAACreativeBrief {
+  ad_set_name?: string;
+  format?: string;
+  headline?: string;
+  primary_text?: string;
+  cta?: string;
+  visual_direction?: string;
+}
+
+function CampaignArchitectureSection({
+  blueprint,
+  funnelMap,
+  targetingSpecs,
+  placementBudget,
+  testPlan,
+  kpiTargets,
+  performanceProjections,
+  riskAssessment,
+  creativeBriefs,
+  specialAdCategory,
+  confidenceScore,
+  findings,
+  recommendations,
+}: {
+  blueprint?: CAABlueprint;
+  funnelMap?: CAAFunnelMap;
+  targetingSpecs?: CAATargetingSpec[];
+  placementBudget?: Record<string, unknown>;
+  testPlan?: CAATestPlan;
+  kpiTargets?: Record<string, Record<string, number>>;
+  performanceProjections?: CAAPerformanceProjections;
+  riskAssessment?: CAARiskAssessment;
+  creativeBriefs?: CAACreativeBrief[];
+  specialAdCategory?: string;
+  confidenceScore?: number;
+  findings?: string[];
+  recommendations?: string[];
+}) {
+  const [activeTab, setActiveTab] = useState<'overview' | 'funnel' | 'targeting' | 'structure' | 'tests' | 'projections'>('overview');
+
+  const tabs = [
+    { key: 'overview' as const, label: 'Overview' },
+    { key: 'funnel' as const, label: 'Funnel Map' },
+    { key: 'targeting' as const, label: 'Audience Targeting' },
+    { key: 'structure' as const, label: 'Campaign Structure' },
+    { key: 'tests' as const, label: 'A/B Test Plan' },
+    { key: 'projections' as const, label: 'Projections & KPIs' },
+  ];
+
+  const adSets = blueprint?.ad_sets ?? [];
+  const stages = funnelMap?.stages ?? [];
+  const specs = targetingSpecs ?? [];
+  const tests = testPlan?.tests ?? [];
+  const risks = riskAssessment?.risks ?? [];
+  const briefs = creativeBriefs ?? [];
+
+  function scoreBg(score: number) {
+    if (score >= 80) return 'bg-green-400';
+    if (score >= 60) return 'bg-amber-400';
+    return 'bg-red-400';
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-lg font-bold text-white">Campaign Architecture Blueprint</h3>
+        {confidenceScore != null && (() => {
+          const pct = confidenceScore <= 1 ? Math.round(confidenceScore * 100) : Math.round(confidenceScore);
+          return (
+            <div className="flex items-center gap-2">
+              <div className="w-24 h-2 rounded-full bg-white/10">
+                <div className={`h-2 rounded-full ${scoreBg(pct)}`} style={{ width: `${pct}%` }} />
+              </div>
+              <span className="text-xs text-brand-silver">{pct}%</span>
+            </div>
+          );
+        })()}
+        {specialAdCategory && specialAdCategory !== 'NONE' && (
+          <span className="px-2 py-1 text-xs rounded bg-amber-900/40 text-amber-300 border border-amber-700/50">
+            Special Ad Category: {specialAdCategory}
+          </span>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 overflow-x-auto pb-1 border-b border-white/10">
+        {tabs.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-t whitespace-nowrap transition-colors ${
+              activeTab === t.key
+                ? 'bg-white/10 text-white border-b-2 border-brand-electric'
+                : 'text-brand-silver/60 hover:text-brand-silver'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Overview Tab */}
+      {activeTab === 'overview' && (
+        <div className="space-y-4">
+          {blueprint && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {blueprint.campaign_name && (
+                <div className="p-3 rounded-lg bg-white/5">
+                  <div className="text-xs text-brand-silver/60 mb-1">Campaign</div>
+                  <div className="text-sm text-white font-medium">{blueprint.campaign_name}</div>
+                </div>
+              )}
+              {blueprint.campaign_objective && (
+                <div className="p-3 rounded-lg bg-white/5">
+                  <div className="text-xs text-brand-silver/60 mb-1">Objective</div>
+                  <div className="text-sm text-white font-medium">{blueprint.campaign_objective}</div>
+                </div>
+              )}
+              {blueprint.daily_budget != null && (
+                <div className="p-3 rounded-lg bg-white/5">
+                  <div className="text-xs text-brand-silver/60 mb-1">Daily Budget</div>
+                  <div className="text-sm text-white font-medium">${blueprint.daily_budget.toLocaleString()}</div>
+                </div>
+              )}
+              {blueprint.bid_strategy && (
+                <div className="p-3 rounded-lg bg-white/5">
+                  <div className="text-xs text-brand-silver/60 mb-1">Bid Strategy</div>
+                  <div className="text-sm text-white font-medium">{blueprint.bid_strategy}</div>
+                </div>
+              )}
+            </div>
+          )}
+          {/* Quick stats */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="p-3 rounded-lg bg-white/5 text-center">
+              <div className="text-2xl font-bold text-brand-electric">{adSets.length}</div>
+              <div className="text-xs text-brand-silver/60">Ad Sets</div>
+            </div>
+            <div className="p-3 rounded-lg bg-white/5 text-center">
+              <div className="text-2xl font-bold text-brand-electric">{stages.length}</div>
+              <div className="text-xs text-brand-silver/60">Funnel Stages</div>
+            </div>
+            <div className="p-3 rounded-lg bg-white/5 text-center">
+              <div className="text-2xl font-bold text-brand-electric">{tests.length}</div>
+              <div className="text-xs text-brand-silver/60">A/B Tests</div>
+            </div>
+          </div>
+          {/* Risk Assessment */}
+          {risks.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider">Risk Assessment</h4>
+              {risks.map((r, i) => (
+                <div key={i} className="flex items-start gap-2 p-2 rounded bg-white/5">
+                  <span className={`px-1.5 py-0.5 text-[10px] rounded ${
+                    r.severity === 'high' ? 'bg-red-900/40 text-red-300' :
+                    r.severity === 'medium' ? 'bg-amber-900/40 text-amber-300' :
+                    'bg-green-900/40 text-green-300'
+                  }`}>{r.severity}</span>
+                  <div>
+                    <div className="text-xs text-white">{r.description}</div>
+                    {r.mitigation && <div className="text-xs text-brand-silver/60 mt-0.5">Mitigation: {r.mitigation}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Funnel Map Tab */}
+      {activeTab === 'funnel' && (
+        <div className="space-y-4">
+          {stages.length > 0 ? (
+            <>
+              {/* Budget allocation bar */}
+              <div className="flex rounded-lg overflow-hidden h-8">
+                {stages.map((s, i) => {
+                  const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-amber-500'];
+                  return (
+                    <div
+                      key={i}
+                      className={`${colors[i % colors.length]} flex items-center justify-center text-[10px] text-white font-medium`}
+                      style={{ width: `${s.budget_pct ?? 0}%` }}
+                      title={`${s.stage?.toUpperCase()}: ${s.budget_pct}%`}
+                    >
+                      {(s.budget_pct ?? 0) >= 10 ? `${s.stage?.toUpperCase()} ${s.budget_pct}%` : ''}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Stage table */}
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-brand-silver/60 border-b border-white/10">
+                    <th className="text-left py-2 px-2">Stage</th>
+                    <th className="text-left py-2 px-2">Meta Objective</th>
+                    <th className="text-right py-2 px-2">Budget %</th>
+                    <th className="text-left py-2 px-2">Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stages.map((s, i) => (
+                    <tr key={i} className="border-b border-white/5">
+                      <td className="py-2 px-2 text-white font-medium">{s.stage?.toUpperCase()}</td>
+                      <td className="py-2 px-2 text-brand-electric">{s.meta_objective}</td>
+                      <td className="py-2 px-2 text-right text-white">{s.budget_pct}%</td>
+                      <td className="py-2 px-2 text-brand-silver/80">{s.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ) : (
+            <p className="text-sm text-brand-silver/60">No funnel map data available.</p>
+          )}
+        </div>
+      )}
+
+      {/* Audience Targeting Tab */}
+      {activeTab === 'targeting' && (
+        <div className="space-y-4">
+          {specs.length > 0 ? specs.map((spec, i) => (
+            <div key={i} className="p-4 rounded-lg bg-white/5 space-y-2">
+              <div className="flex items-center justify-between">
+                <h5 className="text-sm font-medium text-white">{spec.ad_set_name || `Ad Set ${i + 1}`}</h5>
+                <span className="text-xs text-brand-silver/60">{spec.funnel_stage?.toUpperCase()}</span>
+              </div>
+              {spec.demographics && Object.keys(spec.demographics).length > 0 && (
+                <div className="text-xs text-brand-silver/80">
+                  Demographics: {Object.entries(spec.demographics).map(([k, v]) => `${k}: ${v}`).join(', ')}
+                </div>
+              )}
+              {spec.interests && spec.interests.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {spec.interests.map((int, j) => (
+                    <span key={j} className="px-2 py-0.5 text-[10px] rounded-full bg-blue-900/30 text-blue-300">{int}</span>
+                  ))}
+                </div>
+              )}
+              {spec.behaviors && spec.behaviors.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {spec.behaviors.map((b, j) => (
+                    <span key={j} className="px-2 py-0.5 text-[10px] rounded-full bg-purple-900/30 text-purple-300">{b}</span>
+                  ))}
+                </div>
+              )}
+              {spec.custom_audiences && spec.custom_audiences.length > 0 && (
+                <div className="text-xs text-brand-silver/80">Custom audiences: {spec.custom_audiences.join(', ')}</div>
+              )}
+              {spec.estimated_audience_size != null && spec.estimated_audience_size > 0 && (
+                <div className="text-xs text-brand-silver/60">Est. audience: {spec.estimated_audience_size.toLocaleString()}</div>
+              )}
+            </div>
+          )) : (
+            <p className="text-sm text-brand-silver/60">No targeting specs available.</p>
+          )}
+        </div>
+      )}
+
+      {/* Campaign Structure Tab */}
+      {activeTab === 'structure' && (
+        <div className="space-y-3">
+          {blueprint?.campaign_name && (
+            <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+              <div className="text-sm font-medium text-brand-electric mb-2">
+                Campaign: {blueprint.campaign_name}
+              </div>
+              <div className="text-xs text-brand-silver/60 space-x-4">
+                {blueprint.cbo_enabled != null && <span>CBO: {blueprint.cbo_enabled ? 'Enabled' : 'Disabled'}</span>}
+                {blueprint.buying_type && <span>Buying: {blueprint.buying_type}</span>}
+              </div>
+            </div>
+          )}
+          {adSets.map((as_, i) => (
+            <div key={i} className="ml-4 p-3 rounded-lg bg-white/5 border-l-2 border-brand-electric/30">
+              <div className="flex items-center justify-between mb-2">
+                <h5 className="text-sm font-medium text-white">{as_.name || `Ad Set ${i + 1}`}</h5>
+                <div className="flex gap-2 text-xs">
+                  {as_.funnel_stage && <span className="text-brand-silver/60">{as_.funnel_stage.toUpperCase()}</span>}
+                  {as_.daily_budget != null && <span className="text-green-400">${as_.daily_budget}/day</span>}
+                </div>
+              </div>
+              {as_.objective && <div className="text-xs text-brand-silver/80 mb-1">Objective: {as_.objective}</div>}
+              {as_.placements && as_.placements.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-1">
+                  {as_.placements.map((p, j) => (
+                    <span key={j} className="px-1.5 py-0.5 text-[10px] rounded bg-white/10 text-brand-silver">{p}</span>
+                  ))}
+                </div>
+              )}
+              {as_.optimization_goal && <div className="text-xs text-brand-silver/60">Optimize for: {as_.optimization_goal}</div>}
+            </div>
+          ))}
+          {adSets.length === 0 && (
+            <p className="text-sm text-brand-silver/60">No campaign structure available.</p>
+          )}
+        </div>
+      )}
+
+      {/* A/B Test Plan Tab */}
+      {activeTab === 'tests' && (
+        <div className="space-y-4">
+          {testPlan?.total_testing_budget_pct != null && (
+            <div className="p-3 rounded-lg bg-white/5 flex items-center justify-between">
+              <span className="text-xs text-brand-silver/60">Total testing budget</span>
+              <span className="text-sm text-white font-medium">{testPlan.total_testing_budget_pct}%</span>
+            </div>
+          )}
+          {tests.length > 0 ? tests.map((t, i) => (
+            <div key={i} className="p-4 rounded-lg bg-white/5 space-y-2">
+              <div className="flex items-center justify-between">
+                <h5 className="text-sm font-medium text-white">{t.variable}</h5>
+                {t.priority && (
+                  <span className={`px-2 py-0.5 text-[10px] rounded ${
+                    t.priority === 'high' ? 'bg-red-900/30 text-red-300' :
+                    t.priority === 'medium' ? 'bg-amber-900/30 text-amber-300' :
+                    'bg-green-900/30 text-green-300'
+                  }`}>{t.priority}</span>
+                )}
+              </div>
+              {t.variants && t.variants.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {t.variants.map((v, j) => (
+                    <span key={j} className="px-2 py-0.5 text-[10px] rounded bg-white/10 text-brand-silver">{v}</span>
+                  ))}
+                </div>
+              )}
+              <div className="text-xs text-brand-silver/60 space-x-3">
+                {t.duration_days && <span>{t.duration_days} days</span>}
+                {t.sample_size_per_variant && <span>{t.sample_size_per_variant.toLocaleString()} samples/variant</span>}
+                {t.success_metric && <span>Metric: {t.success_metric}</span>}
+              </div>
+            </div>
+          )) : (
+            <p className="text-sm text-brand-silver/60">No A/B test plan available.</p>
+          )}
+        </div>
+      )}
+
+      {/* Projections & KPIs Tab */}
+      {activeTab === 'projections' && (
+        <div className="space-y-4">
+          {/* Performance projections */}
+          {performanceProjections && (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {performanceProjections.estimated_reach != null && (
+                <div className="p-3 rounded-lg bg-white/5 text-center">
+                  <div className="text-lg font-bold text-white">{performanceProjections.estimated_reach.toLocaleString()}</div>
+                  <div className="text-[10px] text-brand-silver/60">Est. Reach</div>
+                </div>
+              )}
+              {performanceProjections.estimated_impressions != null && (
+                <div className="p-3 rounded-lg bg-white/5 text-center">
+                  <div className="text-lg font-bold text-white">{performanceProjections.estimated_impressions.toLocaleString()}</div>
+                  <div className="text-[10px] text-brand-silver/60">Est. Impressions</div>
+                </div>
+              )}
+              {performanceProjections.estimated_clicks != null && (
+                <div className="p-3 rounded-lg bg-white/5 text-center">
+                  <div className="text-lg font-bold text-white">{performanceProjections.estimated_clicks.toLocaleString()}</div>
+                  <div className="text-[10px] text-brand-silver/60">Est. Clicks</div>
+                </div>
+              )}
+              {performanceProjections.estimated_conversions != null && (
+                <div className="p-3 rounded-lg bg-white/5 text-center">
+                  <div className="text-lg font-bold text-white">{performanceProjections.estimated_conversions.toLocaleString()}</div>
+                  <div className="text-[10px] text-brand-silver/60">Est. Conversions</div>
+                </div>
+              )}
+              {performanceProjections.projected_roas != null && (
+                <div className="p-3 rounded-lg bg-white/5 text-center">
+                  <div className="text-lg font-bold text-brand-electric">{performanceProjections.projected_roas.toFixed(1)}x</div>
+                  <div className="text-[10px] text-brand-silver/60">Projected ROAS</div>
+                </div>
+              )}
+            </div>
+          )}
+          {/* KPI targets table */}
+          {kpiTargets && Object.keys(kpiTargets).length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">KPI Targets per Funnel</h4>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-brand-silver/60 border-b border-white/10">
+                    <th className="text-left py-2 px-2">Stage</th>
+                    <th className="text-right py-2 px-2">CPM</th>
+                    <th className="text-right py-2 px-2">CTR</th>
+                    <th className="text-right py-2 px-2">CPC</th>
+                    <th className="text-right py-2 px-2">CPA</th>
+                    <th className="text-right py-2 px-2">ROAS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(kpiTargets).map(([stage, kpis]) => (
+                    <tr key={stage} className="border-b border-white/5">
+                      <td className="py-2 px-2 text-white font-medium">{stage.toUpperCase()}</td>
+                      <td className="py-2 px-2 text-right text-brand-silver">{kpis.cpm != null ? `$${kpis.cpm.toFixed(2)}` : '—'}</td>
+                      <td className="py-2 px-2 text-right text-brand-silver">{kpis.ctr != null ? `${kpis.ctr.toFixed(2)}%` : '—'}</td>
+                      <td className="py-2 px-2 text-right text-brand-silver">{kpis.cpc != null ? `$${kpis.cpc.toFixed(2)}` : '—'}</td>
+                      <td className="py-2 px-2 text-right text-brand-silver">{kpis.cpa != null ? `$${kpis.cpa.toFixed(2)}` : '—'}</td>
+                      <td className="py-2 px-2 text-right text-brand-electric">{kpis.roas != null ? `${kpis.roas.toFixed(1)}x` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {/* Creative briefs */}
+          {briefs.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Creative Briefs</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {briefs.map((b, i) => (
+                  <div key={i} className="p-3 rounded-lg bg-white/5 space-y-1">
+                    <div className="text-sm font-medium text-white">{b.ad_set_name}</div>
+                    {b.format && <div className="text-xs text-brand-electric">{b.format}</div>}
+                    {b.headline && <div className="text-xs text-white">{b.headline}</div>}
+                    {b.primary_text && <div className="text-xs text-brand-silver/80">{b.primary_text}</div>}
+                    {b.cta && <div className="text-xs text-brand-silver/60">CTA: {b.cta}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Findings & Recommendations */}
+      {findings && findings.length > 0 && (
+        <section>
+          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Findings</h4>
+          {findings.map((f, i) => (
+            <div key={i} className="mb-1"><MarkdownMessage content={f} /></div>
+          ))}
+        </section>
+      )}
+      {recommendations && recommendations.length > 0 && (
+        <section>
+          <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Recommendations</h4>
+          {recommendations.map((r, i) => (
+            <div key={i} className="mb-1"><MarkdownMessage content={r} /></div>
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function ResultDashboard({
   resultData,
   manifestName,
@@ -6057,6 +6582,12 @@ export default function ResultDashboard({
   // ── Detect brand discovery (2+ WF1 agents present → show tabbed) ──
   const wf1AgentCount = [hasMarketResearch, hasCompetitorIntelligence, hasAudiencePersona, hasTrendCultural, hasVoiceOfCustomer].filter(Boolean).length;
   const hasBrandDiscovery = wf1AgentCount >= 2;
+
+  // ── Detect campaign architecture data ───────────────────────────
+  const hasCampaignArchitecture =
+    resultData.blueprint != null ||
+    resultData.funnel_map != null ||
+    resultData.targeting_specs != null;
 
   // ── Extract well-known keys ──────────────────────────────────────
   const summary = resultData.summary as string | undefined;
@@ -6266,6 +6797,23 @@ export default function ResultDashboard({
     'wf2_strategy_summary',
     'nta_context_used',
     'gcs_uri',
+    // Campaign Architecture keys
+    'blueprint',
+    'funnel_map',
+    'targeting_specs',
+    'placement_budget',
+    'test_plan',
+    'kpi_targets',
+    'performance_projections',
+    'risk_assessment',
+    'creative_briefs',
+    'special_ad_category',
+    'meta_api_compatible',
+    'wf2_context_used',
+    'company_context_used',
+    'tavily_benchmarks_used',
+    'odoo_data_used',
+    'rag_learnings_used',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),
@@ -6509,8 +7057,26 @@ export default function ResultDashboard({
         />
       )}
 
+      {hasCampaignArchitecture && (
+        <CampaignArchitectureSection
+          blueprint={resultData.blueprint as CAABlueprint | undefined}
+          funnelMap={resultData.funnel_map as CAAFunnelMap | undefined}
+          targetingSpecs={resultData.targeting_specs as CAATargetingSpec[] | undefined}
+          placementBudget={resultData.placement_budget as Record<string, unknown> | undefined}
+          testPlan={resultData.test_plan as CAATestPlan | undefined}
+          kpiTargets={(resultData.kpi_targets as Record<string, Record<string, number>> | undefined)}
+          performanceProjections={resultData.performance_projections as CAAPerformanceProjections | undefined}
+          riskAssessment={resultData.risk_assessment as CAARiskAssessment | undefined}
+          creativeBriefs={resultData.creative_briefs as CAACreativeBrief[] | undefined}
+          specialAdCategory={resultData.special_ad_category as string | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.campaign_architecture ?? resultData.confidence_score) as number | undefined}
+          findings={findings}
+          recommendations={recommendations}
+        />
+      )}
+
       {/* Key findings — filter out raw JSON blobs (internal agent state) */}
-      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && !hasBrandStory && findings && findings.length > 0 && (() => {
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && !hasBrandStory && !hasCampaignArchitecture && findings && findings.length > 0 && (() => {
         const filtered = findings.filter((f) => {
           if (typeof f !== 'string') return false;
           const trimmed = f.trim();
@@ -6542,7 +7108,7 @@ export default function ResultDashboard({
       })()}
 
       {/* Recommendations */}
-      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && !hasBrandStory && recommendations && recommendations.length > 0 && (
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && !hasBrandStory && !hasCampaignArchitecture && recommendations && recommendations.length > 0 && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations
