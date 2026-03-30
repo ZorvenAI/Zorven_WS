@@ -3,8 +3,6 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from analytics.extractors.brand_naming import BrandNamingExtractor
 
 
