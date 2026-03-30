@@ -321,6 +321,29 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("naming", 1),
         ("taglines", 1),
     ],
+    "brand-strategy-story": [
+        # Strong signal (weight 3) — unambiguous intent
+        ("brand story", 3),
+        ("origin story", 3),
+        ("brand narrative", 3),
+        ("mission statement", 3),
+        ("vision statement", 3),
+        ("elevator pitch", 3),
+        ("founder story", 3),
+        ("brand purpose", 3),
+        ("about us", 3),
+        # Medium signal (weight 2) — domain-specific
+        ("brand messaging", 2),
+        ("press kit", 2),
+        ("boilerplate", 2),
+        ("story style guide", 2),
+        ("brand storytelling", 2),
+        # Weak signal (weight 1) — require qualifier
+        ("narrative", 1),
+        ("story", 1),
+        ("mission", 1),
+        ("purpose", 1),
+    ],
     "brand-analysis": [
         ("brand", 1),
         ("analysis", 1),

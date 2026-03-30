@@ -3549,6 +3549,481 @@ interface NTANamingBrief {
   next_steps?: string[];
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * Brand Story & Narrative (BSA) Types
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+interface BSAStoryVersion {
+  version_label?: string;
+  word_count?: number;
+  content?: string;
+  archetype_arc_alignment?: number;
+  emotional_resonance_score?: number;
+  voice_consistency_score?: number;
+}
+
+interface BSAOriginStory {
+  archetype_used?: string;
+  emotional_arc?: string;
+  versions?: BSAStoryVersion[];
+}
+
+interface BSAMissionVisionStatement {
+  current?: string;
+  recommended?: string;
+  scores?: Record<string, number>;
+}
+
+interface BSAMissionVision {
+  mission?: BSAMissionVisionStatement;
+  mission_scores?: Record<string, number>;
+  vision?: BSAMissionVisionStatement;
+  vision_scores?: Record<string, number>;
+}
+
+interface BSAElevatorPitch {
+  duration_label?: string;
+  word_count?: number;
+  content?: string;
+  memorability_score?: number;
+  clarity_score?: number;
+}
+
+interface BSAPitches {
+  pitch_15s?: BSAElevatorPitch;
+  pitch_30s?: BSAElevatorPitch;
+  pitch_60s?: BSAElevatorPitch;
+}
+
+interface BSAChannelNarrative {
+  channel?: string;
+  tone?: string;
+  content?: string;
+  word_count?: number;
+}
+
+interface BSAChannelNarratives {
+  website_about?: BSAChannelNarrative;
+  social_bio?: BSAChannelNarrative;
+  investor?: BSAChannelNarrative;
+  press_boilerplate?: BSAChannelNarrative;
+  channel_consistency_score?: number;
+}
+
+interface BSAStoryStyleGuide {
+  narrative_principles?: string[];
+  approved_themes?: string[];
+  forbidden_themes?: string[];
+  tone_guidelines?: Record<string, string>;
+  story_examples?: Array<{ context?: string; example?: string }>;
+}
+
+interface BSASubBrandStory {
+  sub_brand?: string;
+  relationship_to_parent?: string;
+  narrative_snippet?: string;
+}
+
+interface BSANarrativePackage {
+  overall_confidence?: number;
+  positioning_narrative_alignment?: number;
+  archetype_consistency?: number;
+  summary?: string;
+}
+
+function BrandStorySection({
+  originStory,
+  missionVision,
+  pitches,
+  channelNarratives,
+  storyStyleGuide,
+  subbrandStories,
+  narrativePackage,
+  confidenceScore,
+  findings,
+  recommendations,
+}: {
+  originStory?: BSAOriginStory;
+  missionVision?: BSAMissionVision;
+  pitches?: BSAPitches;
+  channelNarratives?: BSAChannelNarratives;
+  storyStyleGuide?: BSAStoryStyleGuide;
+  subbrandStories?: BSASubBrandStory[];
+  narrativePackage?: BSANarrativePackage;
+  confidenceScore?: number;
+  findings?: string[];
+  recommendations?: string[];
+}) {
+  const [activeTab, setActiveTab] = useState<'origin' | 'mission' | 'pitches' | 'channels' | 'guide'>('origin');
+
+  function scoreColor(score: number) {
+    if (score >= 80) return 'text-green-400';
+    if (score >= 60) return 'text-amber-400';
+    return 'text-red-400';
+  }
+
+  function scoreBg(score: number) {
+    if (score >= 80) return 'bg-green-400';
+    if (score >= 60) return 'bg-amber-400';
+    return 'bg-red-400';
+  }
+
+  const tabs = [
+    { key: 'origin' as const, label: 'Origin Story' },
+    { key: 'mission' as const, label: 'Mission & Vision' },
+    { key: 'pitches' as const, label: 'Elevator Pitches' },
+    { key: 'channels' as const, label: 'Channel Narratives' },
+    { key: 'guide' as const, label: 'Style Guide' },
+  ];
+
+  const versions = originStory?.versions ?? [];
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-lg font-bold text-white">Brand Story & Narrative</h3>
+        {confidenceScore != null && (() => {
+          const pct = confidenceScore <= 1 ? Math.round(confidenceScore * 100) : Math.round(confidenceScore);
+          return (
+            <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold border ${pct >= 70 ? 'text-green-400 bg-green-400/10 border-green-400/30' : pct >= 40 ? 'text-amber-400 bg-amber-400/10 border-amber-400/30' : 'text-red-400 bg-red-400/10 border-red-400/30'}`}>
+              Confidence: {pct}%
+            </span>
+          );
+        })()}
+      </div>
+
+      {/* Narrative Package Summary */}
+      {narrativePackage?.summary && (
+        <div className="p-4 rounded-xl bg-brand-electric/10 border border-brand-electric/20">
+          <div className="text-xs text-brand-silver/60 uppercase tracking-wider mb-1">Narrative Summary</div>
+          <p className="text-sm text-white">{narrativePackage.summary}</p>
+          <div className="flex gap-4 mt-3 text-xs text-brand-silver">
+            {narrativePackage.overall_confidence != null && (
+              <span>Overall: <span className={scoreColor(narrativePackage.overall_confidence * 100)}>{Math.round(narrativePackage.overall_confidence * 100)}%</span></span>
+            )}
+            {narrativePackage.positioning_narrative_alignment != null && (
+              <span>Positioning Alignment: <span className={scoreColor(narrativePackage.positioning_narrative_alignment * 100)}>{Math.round(narrativePackage.positioning_narrative_alignment * 100)}%</span></span>
+            )}
+            {narrativePackage.archetype_consistency != null && (
+              <span>Archetype Consistency: <span className={scoreColor(narrativePackage.archetype_consistency * 100)}>{Math.round(narrativePackage.archetype_consistency * 100)}%</span></span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tab Navigation */}
+      <div className="flex gap-1 overflow-x-auto border-b border-white/10 pb-px">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors rounded-t-md ${activeTab === tab.key ? 'text-brand-electric bg-brand-electric/10 border-b-2 border-brand-electric' : 'text-brand-silver/60 hover:text-brand-silver'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tab: Origin Story ──────────────────────────────── */}
+      {activeTab === 'origin' && (
+        <div className="space-y-4">
+          {originStory?.archetype_used && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-brand-silver">Archetype:</span>
+              <span className="text-brand-electric font-medium">{originStory.archetype_used}</span>
+              {originStory.emotional_arc && (
+                <>
+                  <span className="text-brand-silver ml-4">Arc:</span>
+                  <span className="text-white">{originStory.emotional_arc}</span>
+                </>
+              )}
+            </div>
+          )}
+          {versions.length === 0 ? (
+            <p className="text-sm text-brand-silver">No origin story versions generated.</p>
+          ) : (
+            versions.map((v, i) => (
+              <div key={i} className="bg-brand-midnight/30 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-brand-electric uppercase tracking-wider">
+                    {v.version_label ?? `Version ${i + 1}`}
+                    {v.word_count != null && <span className="text-brand-silver ml-2">({v.word_count} words)</span>}
+                  </span>
+                  <div className="flex gap-3 text-xs text-brand-silver">
+                    {v.archetype_arc_alignment != null && (
+                      <span>Arc: <span className={scoreColor(v.archetype_arc_alignment * 100)}>{Math.round(v.archetype_arc_alignment * 100)}%</span></span>
+                    )}
+                    {v.emotional_resonance_score != null && (
+                      <span>Resonance: <span className={scoreColor(v.emotional_resonance_score * 100)}>{Math.round(v.emotional_resonance_score * 100)}%</span></span>
+                    )}
+                    {v.voice_consistency_score != null && (
+                      <span>Voice: <span className={scoreColor(v.voice_consistency_score * 100)}>{Math.round(v.voice_consistency_score * 100)}%</span></span>
+                    )}
+                  </div>
+                </div>
+                {v.content && (
+                  <div className="bg-white/5 rounded-lg p-3 border border-white/10 max-h-60 overflow-y-auto">
+                    <MarkdownMessage content={v.content} />
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Mission & Vision ─────────────────────────── */}
+      {activeTab === 'mission' && (
+        <div className="space-y-4">
+          {/* Mission */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-white">Mission Statement</h4>
+            {missionVision?.mission?.current && (
+              <div className="bg-brand-midnight/30 rounded-lg p-3">
+                <p className="text-xs text-brand-silver/60 uppercase tracking-wider mb-1">Current</p>
+                <p className="text-sm text-brand-silver italic">{missionVision.mission.current}</p>
+              </div>
+            )}
+            {missionVision?.mission?.recommended && (
+              <div className="bg-brand-electric/10 rounded-lg p-3 border border-brand-electric/20">
+                <p className="text-xs text-brand-silver/60 uppercase tracking-wider mb-1">Recommended</p>
+                <p className="text-sm text-white">{missionVision.mission.recommended}</p>
+              </div>
+            )}
+            {(missionVision?.mission_scores || missionVision?.mission?.scores) && (() => {
+              const scores = missionVision?.mission_scores ?? missionVision?.mission?.scores ?? {};
+              return (
+                <div className="flex gap-4 text-xs text-brand-silver">
+                  {Object.entries(scores).map(([k, v]) => (
+                    <span key={k}>{k.replace(/_/g, ' ')}: <span className={scoreColor(Number(v) * 100)}>{Math.round(Number(v) * 100)}%</span></span>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+          {/* Vision */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-white">Vision Statement</h4>
+            {missionVision?.vision?.current && (
+              <div className="bg-brand-midnight/30 rounded-lg p-3">
+                <p className="text-xs text-brand-silver/60 uppercase tracking-wider mb-1">Current</p>
+                <p className="text-sm text-brand-silver italic">{missionVision.vision.current}</p>
+              </div>
+            )}
+            {missionVision?.vision?.recommended && (
+              <div className="bg-brand-electric/10 rounded-lg p-3 border border-brand-electric/20">
+                <p className="text-xs text-brand-silver/60 uppercase tracking-wider mb-1">Recommended</p>
+                <p className="text-sm text-white">{missionVision.vision.recommended}</p>
+              </div>
+            )}
+            {(missionVision?.vision_scores || missionVision?.vision?.scores) && (() => {
+              const scores = missionVision?.vision_scores ?? missionVision?.vision?.scores ?? {};
+              return (
+                <div className="flex gap-4 text-xs text-brand-silver">
+                  {Object.entries(scores).map(([k, v]) => (
+                    <span key={k}>{k.replace(/_/g, ' ')}: <span className={scoreColor(Number(v) * 100)}>{Math.round(Number(v) * 100)}%</span></span>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ── Tab: Elevator Pitches ─────────────────────────── */}
+      {activeTab === 'pitches' && (
+        <div className="space-y-4">
+          {[
+            { key: 'pitch_15s', label: '15-Second Pitch', data: pitches?.pitch_15s },
+            { key: 'pitch_30s', label: '30-Second Pitch', data: pitches?.pitch_30s },
+            { key: 'pitch_60s', label: '60-Second Pitch', data: pitches?.pitch_60s },
+          ].map(({ key, label, data }) =>
+            data ? (
+              <div key={key} className="bg-brand-midnight/30 rounded-lg p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-brand-electric uppercase tracking-wider">{label}</span>
+                  <div className="flex gap-3 text-xs text-brand-silver">
+                    {data.word_count != null && <span>{data.word_count} words</span>}
+                    {data.memorability_score != null && (
+                      <span>Memorability: <span className={scoreColor(data.memorability_score * 100)}>{Math.round(data.memorability_score * 100)}%</span></span>
+                    )}
+                    {data.clarity_score != null && (
+                      <span>Clarity: <span className={scoreColor(data.clarity_score * 100)}>{Math.round(data.clarity_score * 100)}%</span></span>
+                    )}
+                  </div>
+                </div>
+                {data.content && (
+                  <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                    <p className="text-sm text-white">{data.content}</p>
+                  </div>
+                )}
+              </div>
+            ) : null,
+          )}
+          {!pitches?.pitch_15s && !pitches?.pitch_30s && !pitches?.pitch_60s && (
+            <p className="text-sm text-brand-silver">No elevator pitches generated.</p>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Channel Narratives ───────────────────────── */}
+      {activeTab === 'channels' && (
+        <div className="space-y-4">
+          {channelNarratives?.channel_consistency_score != null && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-brand-silver">Channel Consistency:</span>
+              <div className="flex-1 max-w-48 h-2 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${scoreBg(channelNarratives.channel_consistency_score * 100)}`}
+                  style={{ width: `${Math.round(channelNarratives.channel_consistency_score * 100)}%` }}
+                />
+              </div>
+              <span className={`text-sm font-bold ${scoreColor(channelNarratives.channel_consistency_score * 100)}`}>
+                {Math.round(channelNarratives.channel_consistency_score * 100)}%
+              </span>
+            </div>
+          )}
+          {[
+            { key: 'website_about', label: 'Website About', data: channelNarratives?.website_about },
+            { key: 'social_bio', label: 'Social Media Bio', data: channelNarratives?.social_bio },
+            { key: 'investor', label: 'Investor Narrative', data: channelNarratives?.investor },
+            { key: 'press_boilerplate', label: 'Press Boilerplate', data: channelNarratives?.press_boilerplate },
+          ].map(({ key, label, data }) =>
+            data ? (
+              <div key={key} className="bg-brand-midnight/30 rounded-lg p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-brand-electric uppercase tracking-wider">{label}</span>
+                  <div className="flex gap-3 text-xs text-brand-silver">
+                    {data.tone && <span>Tone: {data.tone}</span>}
+                    {data.word_count != null && <span>{data.word_count} words</span>}
+                  </div>
+                </div>
+                {data.content && (
+                  <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                    <MarkdownMessage content={data.content} />
+                  </div>
+                )}
+              </div>
+            ) : null,
+          )}
+
+          {/* Sub-brand stories */}
+          {subbrandStories && subbrandStories.length > 0 && (
+            <div className="space-y-3 mt-4">
+              <h4 className="text-sm font-semibold text-white">Sub-Brand Story Variations</h4>
+              {subbrandStories.map((sb, i) => (
+                <div key={i} className="bg-brand-midnight/30 rounded-lg p-3 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-brand-electric">{sb.sub_brand ?? `Sub-brand ${i + 1}`}</span>
+                    {sb.relationship_to_parent && (
+                      <span className="text-[10px] text-brand-silver bg-white/5 px-1.5 py-0.5 rounded">{sb.relationship_to_parent}</span>
+                    )}
+                  </div>
+                  {sb.narrative_snippet && <p className="text-sm text-white">{sb.narrative_snippet}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Style Guide ──────────────────────────────── */}
+      {activeTab === 'guide' && (
+        <div className="space-y-4">
+          {!storyStyleGuide ? (
+            <p className="text-sm text-brand-silver">No story style guide available.</p>
+          ) : (
+            <>
+              {storyStyleGuide.narrative_principles && storyStyleGuide.narrative_principles.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-brand-silver mb-2">Narrative Principles</p>
+                  <ul className="space-y-1">
+                    {storyStyleGuide.narrative_principles.map((p, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-white">
+                        <span className="text-brand-electric mt-0.5">&#9672;</span>
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {storyStyleGuide.approved_themes && storyStyleGuide.approved_themes.length > 0 && (
+                  <div className="bg-green-400/5 rounded-lg p-3 border border-green-400/20">
+                    <p className="text-xs font-medium text-green-400 mb-2">Approved Themes</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {storyStyleGuide.approved_themes.map((t, i) => (
+                        <span key={i} className="text-xs bg-green-400/10 text-green-400 px-2 py-0.5 rounded">{t}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {storyStyleGuide.forbidden_themes && storyStyleGuide.forbidden_themes.length > 0 && (
+                  <div className="bg-red-400/5 rounded-lg p-3 border border-red-400/20">
+                    <p className="text-xs font-medium text-red-400 mb-2">Forbidden Themes</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {storyStyleGuide.forbidden_themes.map((t, i) => (
+                        <span key={i} className="text-xs bg-red-400/10 text-red-400 px-2 py-0.5 rounded">{t}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {storyStyleGuide.tone_guidelines && Object.keys(storyStyleGuide.tone_guidelines).length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-brand-silver mb-2">Tone Guidelines</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {Object.entries(storyStyleGuide.tone_guidelines).map(([k, v]) => (
+                      <div key={k} className="bg-brand-midnight/30 rounded-lg p-3">
+                        <p className="text-xs text-brand-electric capitalize">{k.replace(/_/g, ' ')}</p>
+                        <p className="text-sm text-white mt-1">{v}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {storyStyleGuide.story_examples && storyStyleGuide.story_examples.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-brand-silver mb-2">Story Examples</p>
+                  {storyStyleGuide.story_examples.map((ex, i) => (
+                    <div key={i} className="bg-brand-midnight/30 rounded-lg p-3 mb-2">
+                      {ex.context && <p className="text-xs text-brand-electric mb-1">{ex.context}</p>}
+                      {ex.example && <p className="text-sm text-white italic">&ldquo;{ex.example}&rdquo;</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Findings & Recommendations */}
+          {findings && findings.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-brand-silver mb-1">Findings</p>
+              <ul className="space-y-1">
+                {findings.map((f, i) => (
+                  <li key={i} className="text-sm text-brand-silver">&#8226; {f}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {recommendations && recommendations.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-brand-silver mb-1">Recommendations</p>
+              <ul className="space-y-1">
+                {recommendations.map((r, i) => (
+                  <li key={i} className="text-sm text-brand-silver">&#8226; {r}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BrandNamingSection({
   nameCandidates,
   shortlistedNames,
@@ -5565,6 +6040,12 @@ export default function ResultDashboard({
     resultData.name_candidates != null ||
     resultData.naming_brief != null;
 
+  // ── Detect brand story data ──────────────────────────────────
+  const hasBrandStory =
+    resultData.origin_story != null ||
+    resultData.narrative_package != null ||
+    resultData.mission_vision != null;
+
   // ── Detect voice of customer data ───────────────────────────────
   const hasVoiceOfCustomer =
     resultData.voc_health_score != null ||
@@ -5774,6 +6255,17 @@ export default function ResultDashboard({
     'availability_results',
     'scoring_summary',
     'bpv_context_used',
+    // Brand Story & Narrative keys
+    'origin_story',
+    'mission_vision',
+    'pitches',
+    'channel_narratives',
+    'story_style_guide',
+    'subbrand_stories',
+    'narrative_package',
+    'wf2_strategy_summary',
+    'nta_context_used',
+    'gcs_uri',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),
@@ -5986,6 +6478,22 @@ export default function ResultDashboard({
         />
       )}
 
+      {/* ── Brand Story & Narrative Dashboard ──────────────────────── */}
+      {hasBrandStory && (
+        <BrandStorySection
+          originStory={resultData.origin_story as BSAOriginStory | undefined}
+          missionVision={resultData.mission_vision as BSAMissionVision | undefined}
+          pitches={resultData.pitches as BSAPitches | undefined}
+          channelNarratives={resultData.channel_narratives as BSAChannelNarratives | undefined}
+          storyStyleGuide={resultData.story_style_guide as BSAStoryStyleGuide | undefined}
+          subbrandStories={resultData.subbrand_stories as BSASubBrandStory[] | undefined}
+          narrativePackage={resultData.narrative_package as BSANarrativePackage | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.brand_story ?? resultData.confidence_score) as number | undefined}
+          findings={findings}
+          recommendations={recommendations}
+        />
+      )}
+
       {hasBrandPositioning && (
         <BrandPositioningSection
           recommendedPositioning={resultData.recommended_positioning as BPAPositioningStatement | undefined}
@@ -6002,7 +6510,7 @@ export default function ResultDashboard({
       )}
 
       {/* Key findings — filter out raw JSON blobs (internal agent state) */}
-      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && findings && findings.length > 0 && (() => {
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && !hasBrandStory && findings && findings.length > 0 && (() => {
         const filtered = findings.filter((f) => {
           if (typeof f !== 'string') return false;
           const trimmed = f.trim();
@@ -6034,7 +6542,7 @@ export default function ResultDashboard({
       })()}
 
       {/* Recommendations */}
-      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && recommendations && recommendations.length > 0 && (
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && !hasBrandStory && recommendations && recommendations.length > 0 && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations

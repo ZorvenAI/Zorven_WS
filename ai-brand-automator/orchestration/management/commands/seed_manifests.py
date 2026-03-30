@@ -1002,12 +1002,14 @@ class Command(BaseCommand):
             "name": "Brand Strategy & Positioning",
             "description": (
                 "Full WF2 brand strategy pipeline: positioning, architecture, "
-                "personality & values, and naming & tagline. Generates "
-                "positioning statements, value proposition canvas, perceptual "
-                "maps, brand hierarchy tree, Aaker 5D personality profile, "
-                "archetype selection, values hierarchy, voice matrix, brand "
-                "name candidates with availability checking, taglines, and "
-                "naming brief. Requires completed WF1 Brand Discovery pipeline."
+                "personality & values, naming & tagline, and brand story. "
+                "Generates positioning statements, value proposition canvas, "
+                "perceptual maps, brand hierarchy tree, Aaker 5D personality "
+                "profile, archetype selection, values hierarchy, voice matrix, "
+                "brand name candidates with availability checking, taglines, "
+                "naming brief, origin stories, mission/vision, elevator pitches, "
+                "channel narratives, and story style guide. "
+                "Requires completed WF1 Brand Discovery pipeline."
             ),
             "manifest_data": {
                 "nodes": [
@@ -1061,6 +1063,17 @@ class Command(BaseCommand):
                         },
                     },
                     {
+                        "id": "brand_story",
+                        "type": "external",
+                        "url": ("http://brand-story-agent-svc" ":8035/v1/execute"),
+                        "config": {
+                            "require_wf1_context": True,
+                            "require_bpa_context": True,
+                            "require_bpv_context": True,
+                            "require_nta_context": True,
+                        },
+                    },
+                    {
                         "id": "manager",
                         "type": "internal",
                         "handler": "ManagerNode",
@@ -1071,7 +1084,8 @@ class Command(BaseCommand):
                     ["brand_positioning", "brand_architecture"],
                     ["brand_architecture", "brand_personality"],
                     ["brand_personality", "brand_naming"],
-                    ["brand_naming", "manager"],
+                    ["brand_naming", "brand_story"],
+                    ["brand_story", "manager"],
                 ],
                 "global_config": {
                     "model": "claude-sonnet-4-20250514",
@@ -1205,6 +1219,52 @@ class Command(BaseCommand):
                 "edges": [
                     ["intent_router", "brand_naming"],
                     ["brand_naming", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.4,
+                },
+            },
+        },
+        # ── WF2: Brand Story & Narrative (standalone BSA) ──
+        {
+            "pipeline_id": "brand-strategy-story",
+            "name": "Brand Strategy: Story & Narrative",
+            "description": (
+                "Generate brand narratives: origin story (3 lengths), "
+                "mission/vision statements, elevator pitches (15s/30s/60s), "
+                "channel narratives (website/social/investor/press), story "
+                "style guide, and sub-brand story variations. Requires "
+                "completed WF1 Brand Discovery, WF2 Brand Positioning, "
+                "WF2 Brand Personality, and WF2 Brand Naming pipelines."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "brand_story",
+                        "type": "external",
+                        "url": ("http://brand-story-agent-svc" ":8035/v1/execute"),
+                        "config": {
+                            "require_wf1_context": True,
+                            "require_bpa_context": True,
+                            "require_bpv_context": True,
+                            "require_nta_context": True,
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "brand_story"],
+                    ["brand_story", "manager"],
                 ],
                 "global_config": {
                     "model": "claude-sonnet-4-20250514",

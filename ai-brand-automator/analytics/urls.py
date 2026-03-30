@@ -11,6 +11,7 @@ from analytics.views import (
     CoverageView,
     DistributionView,
     MetricsListView,
+    NTAContextView,
     ScorecardView,
     TrendsView,
     WF1ContextView,
@@ -46,4 +47,5 @@ urlpatterns = [
         BrandPersonalitySyncView.as_view(),
         name="analytics-brand-personality-sync",
     ),
+    path("nta-context/", NTAContextView.as_view(), name="analytics-nta-context"),
 ]
