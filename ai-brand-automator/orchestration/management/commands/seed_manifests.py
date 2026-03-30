@@ -1296,8 +1296,7 @@ class Command(BaseCommand):
                         "id": "campaign_architecture",
                         "type": "external",
                         "url": (
-                            "http://campaign-architecture-agent-svc"
-                            ":8041/v1/execute"
+                            "http://campaign-architecture-agent-svc" ":8041/v1/execute"
                         ),
                         "config": {
                             "require_wf1_context": True,
