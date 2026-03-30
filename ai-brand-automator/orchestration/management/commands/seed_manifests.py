@@ -1248,9 +1248,7 @@ class Command(BaseCommand):
                     {
                         "id": "brand_story",
                         "type": "external",
-                        "url": (
-                            "http://brand-story-agent-svc" ":8035/v1/execute"
-                        ),
+                        "url": ("http://brand-story-agent-svc" ":8035/v1/execute"),
                         "config": {
                             "require_wf1_context": True,
                             "require_bpa_context": True,

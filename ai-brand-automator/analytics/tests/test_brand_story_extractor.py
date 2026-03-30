@@ -130,9 +130,7 @@ class TestBrandStoryExtractor:
         job = _mock_job(_full_bsa_result())
         metrics = self.extractor.extract(job)
 
-        res = next(
-            m for m in metrics if m.metric_name == "story_emotional_resonance"
-        )
+        res = next(m for m in metrics if m.metric_name == "story_emotional_resonance")
         # Medium version (index 1): 0.84 * 100 = 84.0
         assert res.metric_value == 84.0
 

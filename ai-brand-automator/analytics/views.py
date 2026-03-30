@@ -1032,9 +1032,7 @@ class NTAContextView(APIView):
                         "shortlisted_names": cached.get("shortlisted_names", []),
                         "taglines": cached.get("taglines", []),
                         "naming_brief": cached.get("naming_brief", {}),
-                        "availability_results": cached.get(
-                            "availability_results", {}
-                        ),
+                        "availability_results": cached.get("availability_results", {}),
                         "confidence_score": cached.get("confidence_score", 0.0),
                         "nta_completed_at": None,
                         "nta_job_id": None,
