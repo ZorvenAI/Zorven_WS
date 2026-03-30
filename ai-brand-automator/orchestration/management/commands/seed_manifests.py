@@ -1002,11 +1002,12 @@ class Command(BaseCommand):
             "name": "Brand Strategy & Positioning",
             "description": (
                 "Full WF2 brand strategy pipeline: positioning, architecture, "
-                "and personality & values. Generates positioning statements, "
-                "value proposition canvas, perceptual maps, brand hierarchy "
-                "tree, naming conventions, Aaker 5D personality profile, "
-                "archetype selection, values hierarchy, and voice matrix. "
-                "Requires completed WF1 Brand Discovery pipeline."
+                "personality & values, and naming & tagline. Generates "
+                "positioning statements, value proposition canvas, perceptual "
+                "maps, brand hierarchy tree, Aaker 5D personality profile, "
+                "archetype selection, values hierarchy, voice matrix, brand "
+                "name candidates with availability checking, taglines, and "
+                "naming brief. Requires completed WF1 Brand Discovery pipeline."
             ),
             "manifest_data": {
                 "nodes": [
@@ -1050,6 +1051,16 @@ class Command(BaseCommand):
                         },
                     },
                     {
+                        "id": "brand_naming",
+                        "type": "external",
+                        "url": ("http://brand-naming-agent-svc" ":8034/v1/execute"),
+                        "config": {
+                            "require_wf1_context": True,
+                            "require_bpa_context": True,
+                            "require_bpv_context": True,
+                        },
+                    },
+                    {
                         "id": "manager",
                         "type": "internal",
                         "handler": "ManagerNode",
@@ -1059,7 +1070,8 @@ class Command(BaseCommand):
                     ["intent_router", "brand_positioning"],
                     ["brand_positioning", "brand_architecture"],
                     ["brand_architecture", "brand_personality"],
-                    ["brand_personality", "manager"],
+                    ["brand_personality", "brand_naming"],
+                    ["brand_naming", "manager"],
                 ],
                 "global_config": {
                     "model": "claude-sonnet-4-20250514",
