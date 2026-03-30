@@ -817,7 +817,8 @@ METRIC_DEFINITIONS = [
         "higher_is_better": True,
         "chart_color": "#8B5CF6",
         "display_order": 501,
-        "description": "How well the origin story follows the brand archetype narrative arc",
+        "description": "How well the origin story follows the brand "
+        "archetype narrative arc",
         "source_pipelines": ["brand-strategy-story"],
     },
     {
