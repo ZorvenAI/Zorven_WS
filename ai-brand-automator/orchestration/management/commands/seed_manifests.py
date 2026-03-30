@@ -1157,6 +1157,50 @@ class Command(BaseCommand):
                 },
             },
         },
+        {
+            "pipeline_id": "brand-strategy-naming",
+            "name": "Brand Strategy: Naming & Tagline",
+            "description": (
+                "Generate brand name candidates with multi-dimensional "
+                "scoring, availability checking (domain/social/trademark), "
+                "tagline synthesis, and naming brief. Requires completed "
+                "WF1 Brand Discovery, WF2 Brand Positioning, and WF2 "
+                "Brand Personality pipelines."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "brand_naming",
+                        "type": "external",
+                        "url": (
+                            "http://brand-naming-agent-svc" ":8034/v1/execute"
+                        ),
+                        "config": {
+                            "require_wf1_context": True,
+                            "require_bpa_context": True,
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "brand_naming"],
+                    ["brand_naming", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.4,
+                },
+            },
+        },
     ]
 
     def handle(self, *args, **options):

@@ -20,6 +20,7 @@ _VOICE_OF_CUSTOMER_NODES = {"voice_of_customer"}
 _BRAND_POSITIONING_NODES = {"brand_positioning"}
 _BRAND_ARCHITECTURE_NODES = {"brand_architecture"}
 _BRAND_PERSONALITY_NODES = {"brand_personality"}
+_BRAND_NAMING_NODES = {"brand_naming"}
 
 
 def _source_label(source: dict) -> str:
@@ -96,6 +97,9 @@ class ManagerNode(BaseNode):
 
         # Extract brand personality data
         brand_personality_data = self._extract_brand_personality(outputs)
+
+        # Extract brand naming data
+        brand_naming_data = self._extract_brand_naming(outputs)
 
         result_data: dict[str, Any] = {
             "summary": (
@@ -424,6 +428,57 @@ class ManagerNode(BaseNode):
                     result_data["sources"] = existing_sources
                 else:
                     result_data["sources"] = bpv_sources
+
+        # Promote brand naming & tagline fields to top-level result_data
+        if brand_naming_data:
+            for key in (
+                "name_candidates",
+                "shortlisted_names",
+                "taglines",
+                "naming_brief",
+                "availability_results",
+                "scoring_summary",
+                "wf1_context_used",
+                "bpa_context_used",
+                "bpv_context_used",
+                "baa_context_used",
+                "execution_time_ms",
+            ):
+                value = brand_naming_data.get(key)
+                if value is not None:
+                    result_data[key] = value
+            nta_conf = brand_naming_data.get("confidence_score")
+            if nta_conf is not None:
+                confidence_scores["brand_naming"] = nta_conf
+            # Build richer summary from NTA data
+            candidates = brand_naming_data.get("name_candidates", [])
+            candidates_count = len(candidates)
+            top_name = ""
+            if candidates and isinstance(candidates[0], dict):
+                top_name = candidates[0].get("name", "")
+            if top_name:
+                result_data["summary"] = (
+                    f"Brand naming complete. {candidates_count} candidates generated. "
+                    f"Top recommendation: **{top_name}**. "
+                    f"Confidence: {nta_conf or 0:.0%}"
+                )
+            # Merge NTA sources with existing
+            nta_sources = brand_naming_data.get("sources", [])
+            if nta_sources:
+                existing_sources = result_data.get("sources", [])
+                if isinstance(existing_sources, list):
+                    existing_urls = {
+                        s.get("url") for s in existing_sources if isinstance(s, dict)
+                    }
+                    for src in nta_sources:
+                        if (
+                            isinstance(src, dict)
+                            and src.get("url") not in existing_urls
+                        ):
+                            existing_sources.append(src)
+                    result_data["sources"] = existing_sources
+                else:
+                    result_data["sources"] = nta_sources
 
         # Store per-agent confidence scores and compute average
         if confidence_scores:
@@ -838,6 +893,23 @@ class ManagerNode(BaseNode):
         for node_id, output in outputs.items():
             if isinstance(output, dict):
                 if "aaker_profile" in output and "archetype" in output:
+                    return output
+        return None
+
+    @staticmethod
+    def _extract_brand_naming(
+        outputs: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Extract brand naming data from any node output.
+
+        Looks for outputs containing name_candidates AND naming_brief keys,
+        which are produced by brand-naming-agent-svc.
+        Accepts empty dicts (error/prerequisite-failure responses)
+        so the frontend can display the error findings.
+        """
+        for node_id, output in outputs.items():
+            if isinstance(output, dict):
+                if "name_candidates" in output and "naming_brief" in output:
                     return output
         return None
 

@@ -350,6 +350,22 @@ NODE_CATALOG: list[dict[str, Any]] = [
         "output_key": "brand_personality",
         "config": {"require_wf1_context": True, "require_bpa_context": True},
     },
+    {
+        "id": "brand_naming",
+        "type": "external",
+        "url": f"{settings.BRAND_NAMING_AGENT_URL}/v1/execute",
+        "description": (
+            "Brand naming & tagline agent: generates 7-15 name candidates "
+            "with multi-dimensional scoring (linguistic, memorability, "
+            "availability, strategy alignment), checks domain/social/trademark "
+            "availability, synthesizes taglines for shortlisted names, and "
+            "produces a naming brief. Requires WF1 + BPA + BPV. Use when the "
+            "prompt asks about brand naming, taglines, slogans, name "
+            "candidates, or naming strategy."
+        ),
+        "output_key": "brand_naming",
+        "config": {"require_wf1_context": True, "require_bpa_context": True},
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.
