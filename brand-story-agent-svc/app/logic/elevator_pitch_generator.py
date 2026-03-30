@@ -27,9 +27,7 @@ class ElevatorPitchGenerator:
         naming = wf2_strategy.get("naming", {})
         positioning = wf2_strategy.get("positioning", {})
 
-        brand_name = naming.get(
-            "recommended_name", company.get("name", "the brand")
-        )
+        brand_name = naming.get("recommended_name", company.get("name", "the brand"))
         tagline = naming.get("recommended_tagline", "")
         value_prop = positioning.get("value_proposition", "")
 

@@ -51,7 +51,9 @@ class SubBrandStoryVariation:
                 )
 
         if hierarchy:
-            parts.append(f"\nFull hierarchy: {json.dumps(hierarchy, default=str)[:1500]}")
+            parts.append(
+                f"\nFull hierarchy: {json.dumps(hierarchy, default=str)[:1500]}"
+            )
 
         parts.append(
             "\nFor each sub-brand, output: brand_context_id, brand_name, "

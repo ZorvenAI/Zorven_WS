@@ -108,9 +108,7 @@ class TestBSAExecutor:
         mock_redis_manager.cache_result.assert_awaited_once()
 
     async def test_execute_handles_analyzer_error(self, executor):
-        executor._analyzer.analyze = AsyncMock(
-            side_effect=Exception("LLM call failed")
-        )
+        executor._analyzer.analyze = AsyncMock(side_effect=Exception("LLM call failed"))
         result = await executor.execute(
             prompt="Create brand story",
             tenant_id="test-tenant",

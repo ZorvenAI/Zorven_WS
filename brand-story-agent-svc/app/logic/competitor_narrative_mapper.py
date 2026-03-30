@@ -24,23 +24,33 @@ class CompetitorNarrativeMapper:
             themes = self._extract_themes(comp)
             narrative_themes_used.update(themes)
 
-            competitor_archetypes.append({
-                "competitor": name,
-                "archetype": archetype,
-                "narrative_themes": themes,
-                "messaging_tone": comp.get("messaging_tone", ""),
-                "tagline": comp.get("tagline", ""),
-            })
+            competitor_archetypes.append(
+                {
+                    "competitor": name,
+                    "archetype": archetype,
+                    "narrative_themes": themes,
+                    "messaging_tone": comp.get("messaging_tone", ""),
+                    "tagline": comp.get("tagline", ""),
+                }
+            )
 
         # Identify white space (archetypes/themes NOT used by competitors)
         all_archetypes = {
-            "hero", "sage", "explorer", "creator", "ruler", "magician",
-            "lover", "caregiver", "jester", "everyman", "innocent", "outlaw",
+            "hero",
+            "sage",
+            "explorer",
+            "creator",
+            "ruler",
+            "magician",
+            "lover",
+            "caregiver",
+            "jester",
+            "everyman",
+            "innocent",
+            "outlaw",
         }
         used_archetypes = {
-            c["archetype"].lower()
-            for c in competitor_archetypes
-            if c["archetype"]
+            c["archetype"].lower() for c in competitor_archetypes if c["archetype"]
         }
         available_archetypes = all_archetypes - used_archetypes
 
@@ -93,9 +103,7 @@ class CompetitorNarrativeMapper:
         """Extract narrative themes from competitor data."""
         themes = []
         description = (
-            competitor.get("description", "")
-            + " "
-            + competitor.get("tagline", "")
+            competitor.get("description", "") + " " + competitor.get("tagline", "")
         ).lower()
 
         theme_keywords = {
@@ -121,9 +129,17 @@ class CompetitorNarrativeMapper:
         opportunities = []
 
         all_themes = {
-            "innovation", "sustainability", "community", "empowerment",
-            "simplicity", "trust", "premium", "authenticity", "heritage",
-            "purpose", "transformation",
+            "innovation",
+            "sustainability",
+            "community",
+            "empowerment",
+            "simplicity",
+            "trust",
+            "premium",
+            "authenticity",
+            "heritage",
+            "purpose",
+            "transformation",
         }
         unused = all_themes - themes_used
         if unused:
@@ -135,6 +151,7 @@ class CompetitorNarrativeMapper:
             archetypes = [c["archetype"] for c in competitors if c["archetype"]]
             if archetypes:
                 from collections import Counter
+
                 most_common = Counter(archetypes).most_common(1)[0]
                 opportunities.append(
                     f"Most competitors use '{most_common[0]}' archetype — "

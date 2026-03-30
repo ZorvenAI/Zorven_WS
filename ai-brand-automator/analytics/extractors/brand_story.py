@@ -41,9 +41,12 @@ class BrandStoryExtractor(BaseExtractor):
                             )
                         )
 
-        # Mission/Vision scores
+        # Mission/Vision scores (handle both nested and flat paths)
         mv = bsa.get("mission_vision", {})
-        mission_scores = mv.get("mission_scores", {})
+        mission_obj = mv.get("mission", {})
+        mission_scores = (
+            mission_obj.get("scores", {}) if isinstance(mission_obj, dict) else {}
+        ) or mv.get("mission_scores", {})
         if isinstance(mission_scores, dict):
             clarity = mission_scores.get("clarity")
             if clarity is not None:
@@ -68,7 +71,10 @@ class BrandStoryExtractor(BaseExtractor):
                     )
                 )
 
-        vision_scores = mv.get("vision_scores", {})
+        vision_obj = mv.get("vision", {})
+        vision_scores = (
+            vision_obj.get("scores", {}) if isinstance(vision_obj, dict) else {}
+        ) or mv.get("vision_scores", {})
         if isinstance(vision_scores, dict):
             inspiration = vision_scores.get("inspiration")
             if inspiration is not None:

@@ -14,9 +14,7 @@ logger = logging.getLogger(__name__)
 class BSAContextLoader:
     """Loads WF1, BPA, BPV, NTA, and Company context from Django backend."""
 
-    async def load_all(
-        self, tenant_id: str
-    ) -> dict[str, Any]:
+    async def load_all(self, tenant_id: str) -> dict[str, Any]:
         """Load all contexts in parallel."""
         wf1, bpa, bpv, nta, company = await asyncio.gather(
             self.load_wf1(tenant_id),
@@ -74,9 +72,7 @@ class BSAContextLoader:
             "Company",
         )
 
-    async def _get(
-        self, url: str, tenant_id: str, label: str
-    ) -> dict[str, Any] | None:
+    async def _get(self, url: str, tenant_id: str, label: str) -> dict[str, Any] | None:
         """Generic GET with service-token auth."""
         try:
             async with httpx.AsyncClient(timeout=10) as client:

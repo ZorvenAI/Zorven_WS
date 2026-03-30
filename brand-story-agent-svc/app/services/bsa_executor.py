@@ -77,14 +77,16 @@ class BSAExecutor:
         await self._events.emit(EventType.SESSION_STARTED, tenant_id, job_id)
 
         try:
-            # Check cache
-            prompt_hash = RedisManager.hash_prompt(prompt)
+            # Check cache (hash prompt + context for uniqueness)
+            prompt_hash = RedisManager.hash_inputs(
+                prompt,
+                input_context=input_context,
+                config=config,
+            )
             cached = await self._redis.get_cached_result(tenant_id, prompt_hash)
             if cached:
                 logger.info("Cache hit for tenant %s", tenant_id)
-                await self._events.emit(
-                    EventType.CACHE_HIT, tenant_id, job_id
-                )
+                await self._events.emit(EventType.CACHE_HIT, tenant_id, job_id)
                 return cached
 
             # Load contexts in parallel
@@ -97,10 +99,30 @@ class BSAExecutor:
 
             # Emit context events
             for label, ctx, loaded_evt, missing_evt in [
-                ("WF1", wf1_context, EventType.WF1_CONTEXT_LOADED, EventType.WF1_CONTEXT_MISSING),
-                ("BPA", bpa_context, EventType.BPA_CONTEXT_LOADED, EventType.BPA_CONTEXT_MISSING),
-                ("BPV", bpv_context, EventType.BPV_CONTEXT_LOADED, EventType.BPV_CONTEXT_MISSING),
-                ("NTA", nta_context, EventType.NTA_CONTEXT_LOADED, EventType.NTA_CONTEXT_MISSING),
+                (
+                    "WF1",
+                    wf1_context,
+                    EventType.WF1_CONTEXT_LOADED,
+                    EventType.WF1_CONTEXT_MISSING,
+                ),
+                (
+                    "BPA",
+                    bpa_context,
+                    EventType.BPA_CONTEXT_LOADED,
+                    EventType.BPA_CONTEXT_MISSING,
+                ),
+                (
+                    "BPV",
+                    bpv_context,
+                    EventType.BPV_CONTEXT_LOADED,
+                    EventType.BPV_CONTEXT_MISSING,
+                ),
+                (
+                    "NTA",
+                    nta_context,
+                    EventType.NTA_CONTEXT_LOADED,
+                    EventType.NTA_CONTEXT_MISSING,
+                ),
             ]:
                 if ctx:
                     await self._events.emit(loaded_evt, tenant_id, job_id)
@@ -110,27 +132,21 @@ class BSAExecutor:
             # Check for BAA context in previous_outputs
             baa_context = previous_outputs.get("brand_architecture")
             if baa_context:
-                await self._events.emit(
-                    EventType.BAA_CONTEXT_LOADED, tenant_id, job_id
-                )
+                await self._events.emit(EventType.BAA_CONTEXT_LOADED, tenant_id, job_id)
             else:
                 await self._events.emit(
                     EventType.BAA_CONTEXT_MISSING, tenant_id, job_id
                 )
 
             # Prerequisite check: require WF1 + BPA + BPV + NTA
-            has_wf1 = bool(wf1_context) or any(
-                k in previous_outputs for k in _WF1_KEYS
-            )
+            has_wf1 = bool(wf1_context) or any(k in previous_outputs for k in _WF1_KEYS)
             has_bpa = bool(bpa_context) or bool(
                 previous_outputs.get("brand_positioning")
             )
             has_bpv = bool(bpv_context) or bool(
                 previous_outputs.get("brand_personality")
             )
-            has_nta = bool(nta_context) or bool(
-                previous_outputs.get("brand_naming")
-            )
+            has_nta = bool(nta_context) or bool(previous_outputs.get("brand_naming"))
 
             if not has_wf1 or not has_bpa or not has_bpv or not has_nta:
                 missing = []
@@ -182,9 +198,7 @@ class BSAExecutor:
             )
 
             # GCS persist
-            gcs_uri = await self._gcs.upload_narrative(
-                tenant_id, job_id, result
-            )
+            gcs_uri = await self._gcs.upload_narrative(tenant_id, job_id, result)
             if gcs_uri:
                 result["gcs_uri"] = gcs_uri
                 await self._events.emit(
@@ -194,9 +208,7 @@ class BSAExecutor:
                     {"gcs_uri": gcs_uri},
                 )
             else:
-                await self._events.emit(
-                    EventType.GCS_UPLOAD_FAILED, tenant_id, job_id
-                )
+                await self._events.emit(EventType.GCS_UPLOAD_FAILED, tenant_id, job_id)
 
             # Cache result
             await self._redis.cache_result(tenant_id, prompt_hash, result)

@@ -3,7 +3,12 @@
 import logging
 from typing import Any
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
+
+# 7-day TTL for narrative persistence (aligned with design doc)
+_DEFAULT_TTL = 7 * 24 * 3600
 
 
 class StoryPersister:
@@ -20,15 +25,17 @@ class StoryPersister:
         narrative_data: dict[str, Any],
     ) -> dict[str, Any]:
         """Persist narrative data to available backends."""
-        results = {"persisted_to": ["redis"], "version": 1}
+        results: dict[str, Any] = {"persisted_to": [], "version": 1}
 
-        # 1. Redis cache (always)
+        # 1. Redis cache (when available)
         if self._redis:
+            ttl = getattr(settings, "STORY_PERSIST_TTL", _DEFAULT_TTL)
             await self._redis.set_json(
                 f"bsa:{tenant_id}:parent",
                 narrative_data,
-                ttl=86400,
+                ttl=ttl,
             )
+            results["persisted_to"].append("redis")
             logger.info("Narrative persisted to Redis for tenant %s", tenant_id)
 
         # 2. GCS upload (when configured)

@@ -29,7 +29,7 @@ CHANNELS = [
         "notes": "Emphasize market opportunity, traction, and vision. Business-focused",
     },
     {
-        "id": "press",
+        "id": "press_boilerplate",
         "name": "Press Boilerplate",
         "tone": "journalistic and factual",
         "length": "100-150 words",
@@ -64,7 +64,7 @@ class ChannelNarrativeAdapter:
 
         parts.append(
             "Output 'channel_narratives' as an object with keys: "
-            "website_about, social_bio, investor, press. "
+            "website_about, social_bio, investor, press_boilerplate. "
             "Each has: channel, content, tone, word_count. "
             "Also include 'channel_consistency_score' (0-1) "
             "measuring voice consistency across all channels."

@@ -175,9 +175,7 @@ def mock_context_loader():
     mock.load_bpa = AsyncMock(
         return_value={"recommended_positioning": {"statement": "Test"}}
     )
-    mock.load_bpv = AsyncMock(
-        return_value={"archetype": {"primary": {"name": "Hero"}}}
-    )
+    mock.load_bpv = AsyncMock(return_value={"archetype": {"primary": {"name": "Hero"}}})
     mock.load_nta = AsyncMock(
         return_value={"naming_brief": {"recommended_name": "TestBrand"}}
     )

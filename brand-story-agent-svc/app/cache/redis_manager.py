@@ -67,16 +67,12 @@ class RedisManager:
         except Exception as exc:
             logger.warning("Redis cache_result error: %s", exc)
 
-    async def set_json(
-        self, key: str, data: dict[str, Any], ttl: int = 86400
-    ):
+    async def set_json(self, key: str, data: dict[str, Any], ttl: int = 86400):
         """Set a JSON value with TTL."""
         if not self._redis:
             return
         try:
-            await self._redis.set(
-                key, json.dumps(data, default=str), ex=ttl
-            )
+            await self._redis.set(key, json.dumps(data, default=str), ex=ttl)
         except Exception as exc:
             logger.warning("Redis set_json error: %s", exc)
 
@@ -108,9 +104,7 @@ class RedisManager:
 
     # ── Story registry ──
 
-    async def save_story(
-        self, tenant_id: str, story_data: dict[str, Any]
-    ):
+    async def save_story(self, tenant_id: str, story_data: dict[str, Any]):
         """Save story results to registry (no TTL)."""
         if not self._redis:
             return
@@ -120,9 +114,7 @@ class RedisManager:
         except Exception as exc:
             logger.warning("Redis save_story error: %s", exc)
 
-    async def get_story(
-        self, tenant_id: str
-    ) -> dict[str, Any] | None:
+    async def get_story(self, tenant_id: str) -> dict[str, Any] | None:
         """Get story results from registry."""
         if not self._redis:
             return None
@@ -138,3 +130,9 @@ class RedisManager:
     def hash_prompt(prompt: str) -> str:
         """Generate MD5 hash of prompt for cache key."""
         return hashlib.md5(prompt.encode()).hexdigest()
+
+    @staticmethod
+    def hash_inputs(prompt: str, **context: Any) -> str:
+        """Generate MD5 hash of prompt + context for cache key."""
+        payload = json.dumps({"prompt": prompt, **context}, sort_keys=True, default=str)
+        return hashlib.md5(payload.encode()).hexdigest()

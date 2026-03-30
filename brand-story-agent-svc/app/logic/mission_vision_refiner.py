@@ -26,7 +26,7 @@ class MissionVisionRefiner:
 
         if existing_mission:
             parts.append(
-                f"Existing mission: \"{existing_mission}\"\n"
+                f'Existing mission: "{existing_mission}"\n'
                 f"Refine this mission to align with the new positioning. "
                 f"Preserve the core intent while strengthening strategic alignment."
             )
@@ -41,7 +41,7 @@ class MissionVisionRefiner:
 
         if existing_vision:
             parts.append(
-                f"Existing vision: \"{existing_vision}\"\n"
+                f'Existing vision: "{existing_vision}"\n'
                 f"Refine to align with strategic direction."
             )
         else:

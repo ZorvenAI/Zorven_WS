@@ -67,9 +67,7 @@ class WF2StrategyContextLoader:
         if not nta:
             return {}
         return {
-            "recommended_name": nta.get("naming_brief", {}).get(
-                "recommended_name", ""
-            ),
+            "recommended_name": nta.get("naming_brief", {}).get("recommended_name", ""),
             "recommended_tagline": nta.get("naming_brief", {}).get(
                 "recommended_tagline", ""
             ),

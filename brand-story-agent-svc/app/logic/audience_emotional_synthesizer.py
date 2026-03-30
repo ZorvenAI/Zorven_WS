@@ -24,7 +24,11 @@ class AudienceEmotionalSynthesizer:
         raw_archetype = bpv_context.get("archetype", "")
         if isinstance(raw_archetype, dict):
             primary = raw_archetype.get("primary", "")
-            archetype = primary.get("name", str(primary)) if isinstance(primary, dict) else str(primary)
+            archetype = (
+                primary.get("name", str(primary))
+                if isinstance(primary, dict)
+                else str(primary)
+            )
         else:
             archetype = str(raw_archetype)
         values = bpv_context.get("brand_values", [])
@@ -34,11 +38,13 @@ class AudienceEmotionalSynthesizer:
             "tension": {
                 "pain_points": pain_points[:5],
                 "negative_emotions": [
-                    d for d in emotional_drivers
+                    d
+                    for d in emotional_drivers
                     if isinstance(d, dict) and d.get("valence") == "negative"
                 ][:3],
                 "customer_language": [
-                    p for p in language_patterns
+                    p
+                    for p in language_patterns
                     if isinstance(p, dict) and p.get("context") == "frustration"
                 ][:3],
             },
@@ -46,14 +52,16 @@ class AudienceEmotionalSynthesizer:
                 "brand_promise": _archetype_promise(archetype),
                 "values_bridge": values[:5],
                 "emotional_shift": [
-                    d for d in emotional_drivers
+                    d
+                    for d in emotional_drivers
                     if isinstance(d, dict) and d.get("valence") == "positive"
                 ][:3],
             },
             "resolution": {
                 "aspirations": aspirations[:5],
                 "success_language": [
-                    p for p in language_patterns
+                    p
+                    for p in language_patterns
                     if isinstance(p, dict) and p.get("context") == "satisfaction"
                 ][:3],
                 "sentiment_target": sentiment.get("target_sentiment", "positive"),

@@ -47,7 +47,9 @@ class CulturalNarrativeScanner:
             "fading_narratives": fading_narratives[:3],
             "cultural_shifts": [
                 {
-                    "shift": s.get("description", str(s)) if isinstance(s, dict) else str(s),
+                    "shift": (
+                        s.get("description", str(s)) if isinstance(s, dict) else str(s)
+                    ),
                     "narrative_implication": "Adapt brand story to reflect this cultural shift",
                 }
                 for s in cultural_shifts[:3]

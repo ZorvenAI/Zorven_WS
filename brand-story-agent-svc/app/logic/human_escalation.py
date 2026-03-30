@@ -21,9 +21,7 @@ class HumanEscalation:
         reasons = []
 
         if confidence < threshold:
-            reasons.append(
-                f"Confidence {confidence:.2f} below threshold {threshold}"
-            )
+            reasons.append(f"Confidence {confidence:.2f} below threshold {threshold}")
 
         issues = validation_issues.get("issues", [])
         if len(issues) > 3:

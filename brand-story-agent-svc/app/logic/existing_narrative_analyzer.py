@@ -33,46 +33,56 @@ class ExistingNarrativeAnalyzer:
 
         # Mission alignment check
         if existing["mission"] and target_positioning:
-            gaps.append({
-                "element": "mission",
-                "existing": existing["mission"],
-                "target": target_positioning,
-                "action": "refine",
-                "note": "Evaluate mission alignment with new positioning",
-            })
+            gaps.append(
+                {
+                    "element": "mission",
+                    "existing": existing["mission"],
+                    "target": target_positioning,
+                    "action": "refine",
+                    "note": "Evaluate mission alignment with new positioning",
+                }
+            )
         elif not existing["mission"]:
-            gaps.append({
-                "element": "mission",
-                "existing": "",
-                "target": target_positioning,
-                "action": "create",
-                "note": "No existing mission — generate fresh from positioning",
-            })
+            gaps.append(
+                {
+                    "element": "mission",
+                    "existing": "",
+                    "target": target_positioning,
+                    "action": "create",
+                    "note": "No existing mission — generate fresh from positioning",
+                }
+            )
 
         # Vision gap
         if not existing["vision"]:
-            gaps.append({
-                "element": "vision",
-                "existing": "",
-                "target": "",
-                "action": "create",
-                "note": "No existing vision statement",
-            })
+            gaps.append(
+                {
+                    "element": "vision",
+                    "existing": "",
+                    "target": "",
+                    "action": "create",
+                    "note": "No existing vision statement",
+                }
+            )
 
         # Founding story
         if existing["founding_story"]:
-            alignments.append({
-                "element": "founding_story",
-                "note": "Existing founding story available for origin story crafting",
-            })
+            alignments.append(
+                {
+                    "element": "founding_story",
+                    "note": "Existing founding story available for origin story crafting",
+                }
+            )
         else:
-            gaps.append({
-                "element": "founding_story",
-                "existing": "",
-                "target": "",
-                "action": "create",
-                "note": "No founding story — will craft from company context",
-            })
+            gaps.append(
+                {
+                    "element": "founding_story",
+                    "existing": "",
+                    "target": "",
+                    "action": "create",
+                    "note": "No founding story — will craft from company context",
+                }
+            )
 
         # Values alignment
         existing_values = set(
@@ -80,16 +90,17 @@ class ExistingNarrativeAnalyzer:
             for v in existing["values"]
         )
         target_values_set = set(
-            v.lower() if isinstance(v, str) else str(v).lower()
-            for v in target_values
+            v.lower() if isinstance(v, str) else str(v).lower() for v in target_values
         )
         if existing_values and target_values_set:
             overlap = existing_values & target_values_set
             if overlap:
-                alignments.append({
-                    "element": "values",
-                    "note": f"Values alignment: {', '.join(overlap)}",
-                })
+                alignments.append(
+                    {
+                        "element": "values",
+                        "note": f"Values alignment: {', '.join(overlap)}",
+                    }
+                )
 
         result = {
             "existing_narrative": existing,

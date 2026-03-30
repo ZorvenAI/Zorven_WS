@@ -82,7 +82,8 @@ async def story(
         prompt=payload.input_prompt,
         input_context=payload.input_context,
         tenant_context=(
-            payload.tenant_context if isinstance(payload.tenant_context, dict)
+            payload.tenant_context
+            if isinstance(payload.tenant_context, dict)
             else payload.tenant_context.model_dump()
         ),
         config=payload.config,

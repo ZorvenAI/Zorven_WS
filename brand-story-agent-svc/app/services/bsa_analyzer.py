@@ -138,14 +138,20 @@ class BSAAnalyzer:
 
         origin_system = self._origin_story.build_system_prompt()
         origin_user = self._origin_story.build_user_prompt(
-            prompt, context, wf2_strategy, audience_emotional,
-            existing_narrative, competitor_narrative,
+            prompt,
+            context,
+            wf2_strategy,
+            audience_emotional,
+            existing_narrative,
+            competitor_narrative,
         )
         mission_section = self._mission_vision.build_prompt_section(
-            context, wf2_strategy,
+            context,
+            wf2_strategy,
         )
         pitch_section = self._pitch_generator.build_prompt_section(
-            context, wf2_strategy,
+            context,
+            wf2_strategy,
         )
 
         # Combine into single generation prompt
@@ -192,10 +198,14 @@ class BSAAnalyzer:
         )
 
         channel_section = self._channel_adapter.build_prompt_section(
-            context, origin_story, mission_vision,
+            context,
+            origin_story,
+            mission_vision,
         )
         style_section = self._style_guide.build_prompt_section(
-            context, origin_story, mission_vision,
+            context,
+            origin_story,
+            mission_vision,
         )
         subbrand_section = self._subbrand.build_prompt_section(
             context.get("baa", {}),
@@ -251,7 +261,10 @@ class BSAAnalyzer:
         )
 
         validation_issues = self._validate_narratives(
-            origin_story, mission_vision, pitches, channel_narratives,
+            origin_story,
+            mission_vision,
+            pitches,
+            channel_narratives,
         )
         if validation_issues:
             findings.extend(validation_issues)

@@ -24,9 +24,7 @@ class ExecuteRequest(BaseModel):
 
     input_prompt: str = ""
     input_context: dict[str, Any] = Field(default_factory=dict)
-    tenant_context: TenantContext | dict[str, Any] = Field(
-        default_factory=dict
-    )
+    tenant_context: TenantContext | dict[str, Any] = Field(default_factory=dict)
     config: dict[str, Any] = Field(default_factory=dict)
     previous_outputs: dict[str, Any] = Field(default_factory=dict)
 
