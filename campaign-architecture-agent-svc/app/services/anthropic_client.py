@@ -57,7 +57,14 @@ class AnthropicClient:
             end = text.rfind("}") + 1
             if start >= 0 and end > start:
                 parsed = json.loads(text[start:end])
-                return _ensure_dict(parsed)
+                result = _ensure_dict(parsed)
+                logger.info(
+                    "Extracted JSON keys: %s (type=%s)",
+                    list(result.keys())[:10],
+                    type(parsed).__name__,
+                )
+                return result
+            logger.warning("No JSON object found in response")
             return {"raw_response": text}
         except Exception as exc:
             logger.error("Claude API error: %s", exc)

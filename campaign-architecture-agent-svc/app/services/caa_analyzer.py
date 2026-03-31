@@ -305,6 +305,21 @@ class CAAAnalyzer:
         if escalation["should_escalate"]:
             findings.extend([f"ESCALATION: {r}" for r in escalation["reasons"]])
 
+        # Log key data for debugging
+        logger.info(
+            "Call 1 keys: %s, Call 2 keys: %s",
+            list(call1_result.keys())[:10],
+            list(call2_result.keys())[:10],
+        )
+        bp = call2_result.get("blueprint", {})
+        logger.info(
+            "Blueprint type=%s, has_name=%s, ad_sets=%d, funnel_stages=%d",
+            type(bp).__name__,
+            bool(bp.get("campaign_name") if isinstance(bp, dict) else False),
+            len(bp.get("ad_sets", []) if isinstance(bp, dict) else []),
+            len(funnel_map.get("stages", []) if isinstance(funnel_map, dict) else []),
+        )
+
         # Assemble result
         result = {
             "query": prompt,
