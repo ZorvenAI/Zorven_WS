@@ -65,6 +65,8 @@ class AnthropicClient:
                 )
                 return result
             logger.warning("No JSON object found in response")
+                return _ensure_dict(parsed)
+
             return {"raw_response": text}
         except Exception as exc:
             logger.error("Claude API error: %s", exc)
