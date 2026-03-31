@@ -47,6 +47,11 @@ class ExternalWrapper(BaseNode):
             "previous_outputs": state.get("node_outputs", {}),
         }
 
+        logger.info(
+            "Calling external service: node=%s url=%s",
+            self.node_id,
+            self.url,
+        )
         try:
             async with httpx.AsyncClient(timeout=settings.AGENT_TIMEOUT) as client:
                 response = await client.post(
@@ -57,15 +62,21 @@ class ExternalWrapper(BaseNode):
                         "X-Service-Token": settings.SERVICE_TOKEN,
                     },
                 )
+                logger.info(
+                    "External service response: node=%s status=%d",
+                    self.node_id,
+                    response.status_code,
+                )
                 response.raise_for_status()
                 result = response.json()
 
         except httpx.HTTPError as exc:
-            logger.warning(
-                "External service %s unreachable for node %s: %s",
+            logger.error(
+                "External service %s unreachable for node %s: %s (type=%s)",
                 self.url,
                 self.node_id,
                 str(exc),
+                type(exc).__name__,
             )
             result = {
                 "error": True,

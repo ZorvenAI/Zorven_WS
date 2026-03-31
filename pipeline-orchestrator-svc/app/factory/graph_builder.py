@@ -154,7 +154,15 @@ class GraphBuilder:
                     raise GraphBuildError(
                         f"External node '{node_id}' missing 'url' field"
                     )
+                original_url = url
                 url = GraphBuilder._translate_url(url)
+                logger.info(
+                    "External node %s: url=%s (original=%s, translated=%s)",
+                    node_id,
+                    url,
+                    original_url,
+                    url != original_url,
+                )
                 handler_instance = ExternalWrapper(
                     url=url, node_id=node_id, config=merged_config
                 )
