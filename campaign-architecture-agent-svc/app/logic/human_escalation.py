@@ -39,6 +39,8 @@ class HumanEscalation:
 
         # Budget sanity
         blueprint = result.get("blueprint", {})
+        if not isinstance(blueprint, dict):
+            blueprint = {}
         daily_budget = blueprint.get("daily_budget", 0)
         if daily_budget > 0:
             if daily_budget < settings.MIN_DAILY_BUDGET:
@@ -62,6 +64,8 @@ class HumanEscalation:
 
         # KPI realism check
         kpi_targets = result.get("kpi_targets", {})
+        if not isinstance(kpi_targets, dict):
+            kpi_targets = {}
         if kpi_targets and benchmarks:
             bm = benchmarks.get("benchmarks", {})
             per_funnel = kpi_targets.get("targets", {})
