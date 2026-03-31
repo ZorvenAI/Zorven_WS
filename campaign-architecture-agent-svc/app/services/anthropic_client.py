@@ -9,17 +9,6 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-def _ensure_dict(value: Any) -> dict[str, Any]:
-    """Ensure parsed JSON is a dict, not a list or scalar."""
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, list) and len(value) == 1 and isinstance(value[0], dict):
-        return value[0]
-    if isinstance(value, list):
-        return {"items": value}
-    return {"raw_response": value}
-
-
 class AnthropicClient:
     """Wrapper around anthropic.AsyncAnthropic."""
 
@@ -48,16 +37,14 @@ class AnthropicClient:
                 response.usage.input_tokens,
                 response.usage.output_tokens,
             )
-            parsed = json.loads(text)
-            return _ensure_dict(parsed)
+            return json.loads(text)
         except json.JSONDecodeError:
             logger.warning("Claude returned non-JSON, attempting extraction")
             text = response.content[0].text
             start = text.find("{")
             end = text.rfind("}") + 1
             if start >= 0 and end > start:
-                parsed = json.loads(text[start:end])
-                return _ensure_dict(parsed)
+                return json.loads(text[start:end])
             return {"raw_response": text}
         except Exception as exc:
             logger.error("Claude API error: %s", exc)

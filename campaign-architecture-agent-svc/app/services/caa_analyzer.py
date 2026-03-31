@@ -202,17 +202,10 @@ class CAAAnalyzer:
                 logger.error("Claude call 1 failed: %s", exc)
                 call1_result = {}
 
-        # Plan guardrails on call 1 output — defensive type checks
-        # Claude may return unexpected types (list vs dict)
+        # Plan guardrails on call 1 output
         funnel_map = call1_result.get("funnel_map", {})
-        if not isinstance(funnel_map, dict):
-            funnel_map = {}
         targeting_specs = call1_result.get("targeting_specs", [])
-        if not isinstance(targeting_specs, list):
-            targeting_specs = [targeting_specs] if targeting_specs else []
         kpi_targets = call1_result.get("kpi_targets", {})
-        if not isinstance(kpi_targets, dict):
-            kpi_targets = {}
 
         guardrail_warnings = []
         budget_alloc = self._plan_guards.check_budget_allocation(funnel_map)
@@ -269,8 +262,6 @@ class CAAAnalyzer:
         logger.info("Phase 4: Validation")
 
         blueprint = call2_result.get("blueprint", {})
-        if not isinstance(blueprint, dict):
-            blueprint = {}
         meta_check = self._output_guards.check_meta_api_schema(blueprint)
         budget_cap_check = self._output_guards.check_budget_cap(blueprint)
 
@@ -279,8 +270,6 @@ class CAAAnalyzer:
 
         # Test sample size guard
         test_plan = call2_result.get("test_plan", {})
-        if not isinstance(test_plan, dict):
-            test_plan = {}
         test_check = self._plan_guards.check_test_sample_size(test_plan, budget)
         if not test_check["valid"]:
             guardrail_warnings.extend(test_check.get("issues", []))

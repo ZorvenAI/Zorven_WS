@@ -170,12 +170,7 @@ class CAAContextLoader:
                 )
             if resp.status_code == 200:
                 logger.info("%s context loaded for tenant %s", label, tenant_id)
-                data = resp.json()
-                # Ensure context is always a dict (some endpoints may
-                # return a list; take first element if so)
-                if isinstance(data, list):
-                    return data[0] if data and isinstance(data[0], dict) else None
-                return data
+                return resp.json()
             elif resp.status_code == 404:
                 logger.info("No %s data for tenant %s", label, tenant_id)
                 return None
