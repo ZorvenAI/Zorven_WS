@@ -37,6 +37,10 @@ _SERVICE_URL_MAP: dict[str, str] = {
     "brand-positioning-agent-svc:8031": settings.BRAND_POSITIONING_AGENT_URL,
     "brand-architecture-agent-svc:8032": settings.BRAND_ARCHITECTURE_AGENT_URL,
     "brand-personality-agent-svc:8033": settings.BRAND_PERSONALITY_AGENT_URL,
+    "voc-agent-svc:8025": settings.VOC_AGENT_URL,
+    "brand-naming-agent-svc:8034": settings.BRAND_NAMING_AGENT_URL,
+    "brand-story-agent-svc:8035": settings.BRAND_STORY_AGENT_URL,
+    "campaign-architecture-agent-svc:8041": settings.CAMPAIGN_ARCHITECTURE_AGENT_URL,
 }
 
 
