@@ -78,16 +78,18 @@ class ExternalWrapper(BaseNode):
                 str(exc),
                 type(exc).__name__,
             )
+            error_detail = f"{type(exc).__name__}: {exc}"
             result = {
                 "error": True,
                 "status": "service_unavailable",
                 "message": (
                     f"The {self.node_id} service is currently unavailable. "
-                    f"Could not connect to {self.url}."
+                    f"Could not connect to {self.url}. "
+                    f"Error: {error_detail}"
                 ),
                 "findings": [
-                    f"The {self.node_id} service could not be reached. "
-                    f"This pipeline step was skipped."
+                    f"The {self.node_id} service could not be reached at "
+                    f"{self.url}. Error: {error_detail}"
                 ],
                 "recommendations": [
                     f"The {self.node_id} service may be down or misconfigured. "
