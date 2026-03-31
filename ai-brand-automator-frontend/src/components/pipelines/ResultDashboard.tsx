@@ -6161,7 +6161,7 @@ function CampaignArchitectureSection({
               {blueprint.campaign_name && (
                 <div className="p-3 rounded-lg bg-white/5">
                   <div className="text-xs text-brand-silver/60 mb-1">Campaign</div>
-                  <div className="text-sm text-white font-medium">{blueprint.campaign_name}</div>
+                  <div className="text-sm text-white font-medium break-all">{blueprint.campaign_name}</div>
                 </div>
               )}
               {blueprint.campaign_objective && (
