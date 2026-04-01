@@ -2,10 +2,12 @@
 
 Orchestrates async image generation for all prompts from Claude call 1.
 Calls image_gen_client for 3 aspect ratios per prompt, uploads to GCS,
-tracks costs and failures.
+tracks costs and failures. Generates thumbnails for callback responses.
 """
 
 import asyncio
+import base64
+import io
 import logging
 import time
 from typing import Any
@@ -181,6 +183,9 @@ class ImageGenerator:
                     content_type="image/png",
                 )
 
+                # Generate thumbnail for callback response (~10-20KB)
+                thumbnail_uri = _make_thumbnail(gen_result.image_data)
+
                 cost = gen_result.cost_usd
                 provider = gen_result.provider
 
@@ -189,6 +194,7 @@ class ImageGenerator:
                     "variant_id": variant_id,
                     "aspect_ratio": aspect_ratio,
                     "gcs_url": gcs_url or "",
+                    "thumbnail_url": thumbnail_uri,
                     "prompt_used": prompt_text,
                     "provider": provider,
                     "cost_usd": cost,
@@ -208,3 +214,21 @@ class ImageGenerator:
                     exc,
                 )
                 return None
+
+
+def _make_thumbnail(image_data: bytes, max_size: int = 200) -> str:
+    """Resize image to thumbnail and return as data URI (~10-20KB JPEG)."""
+    try:
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(image_data))
+        img.thumbnail((max_size, max_size), Image.LANCZOS)
+        if img.mode == "RGBA":
+            img = img.convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=70)
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        return f"data:image/jpeg;base64,{b64}"
+    except Exception as exc:
+        logger.warning("Thumbnail generation failed: %s", exc)
+        return ""

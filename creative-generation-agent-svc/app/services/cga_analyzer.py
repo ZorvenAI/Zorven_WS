@@ -332,9 +332,10 @@ class CGAAnalyzer:
         )
 
         # Build context with all generated assets
-        # Strip data URIs from images for LLM — Claude needs metadata, not pixels
+        # Strip data/thumbnail URIs from images for LLM — only metadata needed
+        _STRIP_KEYS = {"gcs_url", "thumbnail_url", "image_generated"}
         images_for_llm = [
-            {k: v for k, v in img.items() if k != "gcs_url"}
+            {k: v for k, v in img.items() if k not in _STRIP_KEYS}
             for img in generated_images
         ]
         call3_user = (
@@ -354,7 +355,7 @@ class CGAAnalyzer:
         call3_result = await self._llm.generate_json(call3_system, call3_user)
 
         compliance_results = call3_result.get("compliance_results", [])
-        creative_units = call3_result.get("creative_units", [])
+        creative_units = call3_result.get("creative_units", []) or call3_result.get("ad_units", [])
         ad_set_packages = call3_result.get("ad_set_packages", [])
         creative_quality_score = call3_result.get(
             "creative_quality_score", 0.0
@@ -388,26 +389,19 @@ class CGAAnalyzer:
         )
 
         # ── Phase 4: Validation ──
-        # Strip data URIs from response — callback has 1MB limit and a single
-        # 925KB image is ~1.2MB base64. Keep metadata only; GCS URLs pass through.
+        # Replace full-size data URIs with thumbnails for callback (1MB limit).
+        # Full images are ~1.2MB base64 each; thumbnails are ~10-20KB.
         response_images = []
-        stripped_count = 0
         for img in generated_images:
             url = img.get("gcs_url", "")
+            thumb = img.get("thumbnail_url", "")
             if url.startswith("data:"):
-                stripped_count += 1
+                # Swap full image for thumbnail in gcs_url so frontend renders it
                 response_images.append(
-                    {**img, "gcs_url": "", "image_generated": True}
+                    {**img, "gcs_url": thumb or "", "image_generated": True}
                 )
             else:
                 response_images.append(img)
-        if stripped_count > 0:
-            findings.append(
-                f"{stripped_count} images generated successfully but GCS not "
-                "configured — image data excluded from response to stay within "
-                "callback size limits. Configure CGA_GCS_BUCKET_NAME to persist "
-                "and display generated images."
-            )
 
         result = {
             "query": prompt,

@@ -6066,6 +6066,8 @@ interface CGAGeneratedImage {
   variant_id?: string;
   aspect_ratio?: string;
   gcs_url?: string;
+  thumbnail_url?: string;
+  image_generated?: boolean;
   prompt_used?: string;
   provider?: string;
   cost_usd?: number;
@@ -6198,6 +6200,7 @@ function CreativeGenerationSection({
   recommendations?: string[];
 }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'gallery' | 'copy' | 'compliance' | 'units'>('overview');
+  const [zoomedImage, setZoomedImage] = useState<CGAGeneratedImage | null>(null);
 
   const tabs = [
     { key: 'overview' as const, label: 'Overview' },
@@ -6336,39 +6339,84 @@ function CreativeGenerationSection({
                 Generated Images ({allImages.length})
               </h5>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {allImages.map((img, i) => (
-                  <div key={i} className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
-                    {img.gcs_url && (img.gcs_url.startsWith('data:') || img.gcs_url.startsWith('http')) ? (
-                      <div className="h-40 bg-black/20 flex items-center justify-center overflow-hidden">
-                        <img
-                          src={img.gcs_url}
-                          alt={`${img.ad_set_name} ${img.aspect_ratio}`}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-40 bg-gradient-to-br from-brand-electric/10 to-violet-500/10 flex items-center justify-center">
-                        <span className="text-xs text-brand-silver/40">{img.gcs_url ? 'GCS' : 'Placeholder'} · {img.aspect_ratio ?? '1:1'}</span>
-                      </div>
-                    )}
-                    <div className="p-2 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-white">{img.ad_set_name}</span>
-                        <span className="text-[10px] text-brand-silver/40">{img.variant_id} / {img.aspect_ratio}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] text-brand-silver/40">
-                        <span>{img.provider ?? 'nano_banana_2'}</span>
-                        {img.cost_usd != null && <span>${img.cost_usd.toFixed(3)}</span>}
-                      </div>
-                      {img.prompt_used && (
-                        <p className="text-[10px] text-brand-silver/30 line-clamp-2">{img.prompt_used}</p>
+                {allImages.map((img, i) => {
+                  const imgSrc = img.gcs_url || img.thumbnail_url || '';
+                  const hasImage = imgSrc && (imgSrc.startsWith('data:') || imgSrc.startsWith('http'));
+                  return (
+                    <div key={i} className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
+                      {hasImage ? (
+                        <button
+                          type="button"
+                          onClick={() => setZoomedImage(img)}
+                          className="w-full h-40 bg-black/20 flex items-center justify-center overflow-hidden cursor-zoom-in"
+                        >
+                          <img
+                            src={imgSrc}
+                            alt={`${img.ad_set_name} ${img.aspect_ratio}`}
+                            className="h-full w-full object-cover"
+                          />
+                        </button>
+                      ) : (
+                        <div className="h-40 bg-gradient-to-br from-brand-electric/10 to-violet-500/10 flex items-center justify-center">
+                          <span className="text-xs text-brand-silver/40">
+                            {img.image_generated ? 'Generated (configure GCS to display)' : 'Placeholder'} · {img.aspect_ratio ?? '1:1'}
+                          </span>
+                        </div>
                       )}
+                      <div className="p-2 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-white">{img.ad_set_name}</span>
+                          <span className="text-[10px] text-brand-silver/40">{img.variant_id} / {img.aspect_ratio}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-brand-silver/40">
+                          <span>{img.provider ?? 'nano_banana_2'}</span>
+                          {img.cost_usd != null && <span>${img.cost_usd.toFixed(3)}</span>}
+                        </div>
+                        {img.prompt_used && (
+                          <p className="text-[10px] text-brand-silver/30 line-clamp-2">{img.prompt_used}</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
+
+          {/* Zoom modal */}
+          {zoomedImage && (() => {
+            const zoomSrc = zoomedImage.gcs_url || zoomedImage.thumbnail_url || '';
+            return (
+              <div
+                className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 cursor-zoom-out"
+                onClick={() => setZoomedImage(null)}
+              >
+                <div className="relative max-w-4xl max-h-[90vh] w-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => setZoomedImage(null)}
+                    className="absolute -top-8 right-0 text-white/60 hover:text-white text-sm"
+                  >
+                    Close
+                  </button>
+                  {zoomSrc && (
+                    <img
+                      src={zoomSrc}
+                      alt={`${zoomedImage.ad_set_name} ${zoomedImage.aspect_ratio}`}
+                      className="max-h-[80vh] max-w-full object-contain rounded-lg"
+                    />
+                  )}
+                  <div className="mt-3 text-center space-y-1">
+                    <p className="text-sm font-medium text-white">{zoomedImage.ad_set_name} — {zoomedImage.variant_id}</p>
+                    <p className="text-xs text-brand-silver/60">{zoomedImage.aspect_ratio} · {zoomedImage.provider ?? 'nano_banana_2'}</p>
+                    {zoomedImage.prompt_used && (
+                      <p className="text-xs text-brand-silver/40 max-w-lg">{zoomedImage.prompt_used}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
