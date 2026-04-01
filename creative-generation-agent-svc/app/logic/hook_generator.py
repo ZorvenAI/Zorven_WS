@@ -63,9 +63,7 @@ _FUNNEL_HOOK_STRATEGIES: dict[str, dict[str, Any]] = {
 class HookGenerator:
     """Builds prompt section for ad hook generation."""
 
-    def build_prompt_section(
-        self, creative_context: dict[str, Any]
-    ) -> str:
+    def build_prompt_section(self, creative_context: dict[str, Any]) -> str:
         """Build a prompt section for Claude call 2.
 
         Instructs Claude to generate 3-5 hook variants per
@@ -93,9 +91,7 @@ class HookGenerator:
         # Brand voice context
         if voice_matrix:
             section += "### Brand Voice\n"
-            section += (
-                f"Voice matrix: {json.dumps(voice_matrix, default=str)[:500]}\n"
-            )
+            section += f"Voice matrix: {json.dumps(voice_matrix, default=str)[:500]}\n"
             section += (
                 "All hooks must align with this voice. Adapt tone "
                 "by funnel stage while maintaining brand consistency.\n\n"

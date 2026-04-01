@@ -118,9 +118,7 @@ class PlanGuardrails:
         issues.extend(self._check_copy_lengths(copy_result))
 
         # PG-10: A/B variant count
-        issues.extend(
-            self._check_variant_counts(copy_result, blueprint)
-        )
+        issues.extend(self._check_variant_counts(copy_result, blueprint))
 
         if issues:
             logger.warning(
@@ -131,9 +129,7 @@ class PlanGuardrails:
 
         return issues
 
-    def _check_copy_lengths(
-        self, copy_result: dict[str, Any]
-    ) -> list[str]:
+    def _check_copy_lengths(self, copy_result: dict[str, Any]) -> list[str]:
         """PG-08: Validate copy lengths against Meta limits."""
         issues: list[str] = []
 
@@ -235,9 +231,7 @@ class OutputGuardrails:
 
         return issues
 
-    def _check_compliance(
-        self, result: dict[str, Any]
-    ) -> list[str]:
+    def _check_compliance(self, result: dict[str, Any]) -> list[str]:
         """OG-04: Flag any compliance violations in the package."""
         issues: list[str] = []
 
@@ -245,16 +239,11 @@ class OutputGuardrails:
             ad_set = pkg.get("ad_set_name", "unknown")
             compliance = pkg.get("compliance_results", [])
 
-            violations = [
-                c
-                for c in compliance
-                if c.get("status") == "fail"
-            ]
+            violations = [c for c in compliance if c.get("status") == "fail"]
             if violations:
                 for v in violations:
                     violation_rules = [
-                        viol.get("rule", "unknown")
-                        for viol in v.get("violations", [])
+                        viol.get("rule", "unknown") for viol in v.get("violations", [])
                     ]
                     issues.append(
                         f"OG-04: Compliance violation in '{ad_set}' "
@@ -264,9 +253,7 @@ class OutputGuardrails:
 
         return issues
 
-    def _check_minimum_package(
-        self, result: dict[str, Any]
-    ) -> list[str]:
+    def _check_minimum_package(self, result: dict[str, Any]) -> list[str]:
         """OG-07: Verify minimum creative package per ad set.
 
         Each audience x funnel must have >= 1 image, >= 1 copy variant,
@@ -276,9 +263,7 @@ class OutputGuardrails:
 
         packages = result.get("ad_set_packages", [])
         if not packages:
-            issues.append(
-                "OG-07: No ad set packages in creative output"
-            )
+            issues.append("OG-07: No ad set packages in creative output")
             return issues
 
         for pkg in packages:
@@ -286,37 +271,38 @@ class OutputGuardrails:
 
             images = pkg.get("images", [])
             if len(images) < 1:
-                issues.append(
-                    f"OG-07: '{ad_set}' has no images — minimum 1 required"
-                )
+                issues.append(f"OG-07: '{ad_set}' has no images — minimum 1 required")
 
             copy_variants = pkg.get("primary_copy", [])
-            total_copy = sum(
-                len(c.get("variants", []))
-                for c in copy_variants
-            ) if isinstance(copy_variants, list) else 0
+            total_copy = (
+                sum(len(c.get("variants", [])) for c in copy_variants)
+                if isinstance(copy_variants, list)
+                else 0
+            )
             # Handle case where primary_copy is a flat list of variants
             if isinstance(copy_variants, list) and copy_variants:
-                if isinstance(copy_variants[0], dict) and "variants" not in copy_variants[0]:
+                if (
+                    isinstance(copy_variants[0], dict)
+                    and "variants" not in copy_variants[0]
+                ):
                     total_copy = len(copy_variants)
             if total_copy < 1:
                 issues.append(
-                    f"OG-07: '{ad_set}' has no copy variants — "
-                    f"minimum 1 required"
+                    f"OG-07: '{ad_set}' has no copy variants — " f"minimum 1 required"
                 )
 
             ctas = pkg.get("ctas", [])
-            total_ctas = sum(
-                len(c.get("cta_variants", []))
-                for c in ctas
-            ) if isinstance(ctas, list) else 0
+            total_ctas = (
+                sum(len(c.get("cta_variants", [])) for c in ctas)
+                if isinstance(ctas, list)
+                else 0
+            )
             if isinstance(ctas, list) and ctas:
                 if isinstance(ctas[0], dict) and "cta_variants" not in ctas[0]:
                     total_ctas = len(ctas)
             if total_ctas < 1:
                 issues.append(
-                    f"OG-07: '{ad_set}' has no CTA variants — "
-                    f"minimum 1 required"
+                    f"OG-07: '{ad_set}' has no CTA variants — " f"minimum 1 required"
                 )
 
         return issues

@@ -133,7 +133,9 @@ class CGAAnalyzer:
 
         # ── Phase 1: Research + Image Generation ──
         await self._events.emit(
-            EventType.CREATIVE_PROFILING_STARTED, tenant_id, job_id,
+            EventType.CREATIVE_PROFILING_STARTED,
+            tenant_id,
+            job_id,
             {"phase": "research_and_image_gen"},
         )
 
@@ -192,7 +194,9 @@ class CGAAnalyzer:
         sources.extend(call1_result.get("sources", []))
 
         await self._events.emit(
-            EventType.CREATIVE_PROFILING_COMPLETED, tenant_id, job_id,
+            EventType.CREATIVE_PROFILING_COMPLETED,
+            tenant_id,
+            job_id,
             {
                 "profiles_count": len(creative_profiles),
                 "image_prompts_count": len(image_prompts),
@@ -207,7 +211,9 @@ class CGAAnalyzer:
 
         if image_prompts and self._image_gen:
             await self._events.emit(
-                EventType.IMAGE_GENERATION_STARTED, tenant_id, job_id,
+                EventType.IMAGE_GENERATION_STARTED,
+                tenant_id,
+                job_id,
                 {"prompts_count": len(image_prompts)},
             )
 
@@ -231,7 +237,9 @@ class CGAAnalyzer:
                     )
 
                 await self._events.emit(
-                    EventType.IMAGE_GENERATION_COMPLETED, tenant_id, job_id,
+                    EventType.IMAGE_GENERATION_COMPLETED,
+                    tenant_id,
+                    job_id,
                     {
                         "total_images": total_images,
                         "failed_count": failed_count,
@@ -246,7 +254,9 @@ class CGAAnalyzer:
                     "Creative package will contain copy only."
                 )
                 await self._events.emit(
-                    EventType.IMAGE_GENERATION_FAILED, tenant_id, job_id,
+                    EventType.IMAGE_GENERATION_FAILED,
+                    tenant_id,
+                    job_id,
                     {"error": str(exc)},
                 )
         elif not image_prompts:
@@ -258,19 +268,17 @@ class CGAAnalyzer:
 
         # ── Phase 2: Copy Generation (Claude call 2) ──
         await self._events.emit(
-            EventType.COPY_GENERATION_STARTED, tenant_id, job_id,
+            EventType.COPY_GENERATION_STARTED,
+            tenant_id,
+            job_id,
             {"phase": "copy_generation"},
         )
 
-        hook_section = self._hook_generator.build_prompt_section(
-            creative_context
-        )
+        hook_section = self._hook_generator.build_prompt_section(creative_context)
         copy_section = self._primary_copy_generator.build_prompt_section(
             creative_context
         )
-        cta_section = self._cta_generator.build_prompt_section(
-            creative_context
-        )
+        cta_section = self._cta_generator.build_prompt_section(creative_context)
 
         call2_system = (
             "You are an expert Meta Ads copywriter writing in the brand voice. "
@@ -295,14 +303,14 @@ class CGAAnalyzer:
         recommendations.extend(call2_result.get("recommendations", []))
 
         # Plan guardrails (PG-08, PG-10)
-        plan_issues = self._plan_guardrails.check(
-            call2_result, caa_context or {}
-        )
+        plan_issues = self._plan_guardrails.check(call2_result, caa_context or {})
         if plan_issues:
             findings.extend(plan_issues)
 
         await self._events.emit(
-            EventType.COPY_GENERATION_COMPLETED, tenant_id, job_id,
+            EventType.COPY_GENERATION_COMPLETED,
+            tenant_id,
+            job_id,
             {
                 "hooks_count": len(hooks),
                 "copy_sets_count": len(primary_copy),
@@ -351,20 +359,22 @@ class CGAAnalyzer:
         compliance_results = call3_result.get("compliance_results", [])
         creative_units = call3_result.get("creative_units", [])
         ad_set_packages = call3_result.get("ad_set_packages", [])
-        creative_quality_score = call3_result.get(
-            "creative_quality_score", 0.0
-        )
+        creative_quality_score = call3_result.get("creative_quality_score", 0.0)
         confidence = call3_result.get("confidence_score", 0.0)
         findings.extend(call3_result.get("findings", []))
         recommendations.extend(call3_result.get("recommendations", []))
         sources.extend(call3_result.get("sources", []))
 
         await self._events.emit(
-            EventType.COMPLIANCE_CHECK_COMPLETED, tenant_id, job_id,
+            EventType.COMPLIANCE_CHECK_COMPLETED,
+            tenant_id,
+            job_id,
             {"compliance_results_count": len(compliance_results)},
         )
         await self._events.emit(
-            EventType.ASSEMBLY_COMPLETED, tenant_id, job_id,
+            EventType.ASSEMBLY_COMPLETED,
+            tenant_id,
+            job_id,
             {
                 "creative_units_count": len(creative_units),
                 "ad_set_packages_count": len(ad_set_packages),
@@ -374,13 +384,9 @@ class CGAAnalyzer:
         # Calculate compliance pass rate
         total_checks = len(compliance_results)
         passed_checks = sum(
-            1
-            for c in compliance_results
-            if c.get("status") in ("pass", "warning")
+            1 for c in compliance_results if c.get("status") in ("pass", "warning")
         )
-        compliance_pass_rate = (
-            passed_checks / total_checks if total_checks > 0 else 1.0
-        )
+        compliance_pass_rate = passed_checks / total_checks if total_checks > 0 else 1.0
 
         # ── Phase 4: Validation ──
         result = {
@@ -441,7 +447,9 @@ class CGAAnalyzer:
 
         if gcs_uri:
             await self._events.emit(
-                EventType.GCS_UPLOAD_COMPLETED, tenant_id, job_id,
+                EventType.GCS_UPLOAD_COMPLETED,
+                tenant_id,
+                job_id,
                 {"gcs_uri": gcs_uri},
             )
 
@@ -455,7 +463,9 @@ class CGAAnalyzer:
                 f"{'; '.join(escalation.get('reasons', []))}"
             )
             await self._events.emit(
-                EventType.ESCALATION_TRIGGERED, tenant_id, job_id,
+                EventType.ESCALATION_TRIGGERED,
+                tenant_id,
+                job_id,
                 escalation,
             )
 
@@ -463,7 +473,9 @@ class CGAAnalyzer:
         result["execution_time_ms"] = elapsed_ms
 
         await self._events.emit(
-            EventType.SESSION_COMPLETED, tenant_id, job_id,
+            EventType.SESSION_COMPLETED,
+            tenant_id,
+            job_id,
             {
                 "execution_time_ms": elapsed_ms,
                 "total_images": total_images,
@@ -514,9 +526,7 @@ class CGAAnalyzer:
             "compliance_pass_rate": 0.0,
             "creative_quality_score": 0.0,
             "confidence_score": 0.0,
-            "findings": [
-                "LLM unavailable — creative generation requires Claude"
-            ],
+            "findings": ["LLM unavailable — creative generation requires Claude"],
             "recommendations": [],
             "sources": [],
             "caa_context_used": caa_used,

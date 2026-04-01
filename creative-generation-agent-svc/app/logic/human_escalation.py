@@ -48,8 +48,7 @@ class HumanEscalation:
         total_images = result.get("total_images_generated", 0)
         if total_images == 0:
             reasons.append(
-                "No images were generated — image generation "
-                "completely failed"
+                "No images were generated — image generation " "completely failed"
             )
 
         # 3. Compliance violations > 20%
@@ -91,9 +90,7 @@ class HumanEscalation:
             "reasons": reasons,
         }
 
-    def _calc_coherence_average(
-        self, result: dict[str, Any]
-    ) -> float | None:
+    def _calc_coherence_average(self, result: dict[str, Any]) -> float | None:
         """Calculate average image-copy coherence across all units.
 
         Args:

@@ -114,9 +114,7 @@ class GCSClient:
             logger.warning("GCS package upload failed: %s", exc)
             return ""
 
-    async def download_package(
-        self, package_path: str
-    ) -> dict[str, Any] | None:
+    async def download_package(self, package_path: str) -> dict[str, Any] | None:
         """Download a creative package from GCS."""
         if not self._ensure_client():
             return None

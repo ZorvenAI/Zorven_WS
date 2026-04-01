@@ -30,9 +30,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Initialize and teardown all dependencies."""
     setup_logging()
-    logger.info(
-        "Starting Creative Generation Agent service on port %d", settings.PORT
-    )
+    logger.info("Starting Creative Generation Agent service on port %d", settings.PORT)
 
     # 1. Redis
     redis_manager = RedisManager()

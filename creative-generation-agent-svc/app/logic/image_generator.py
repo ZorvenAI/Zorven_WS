@@ -91,8 +91,7 @@ class ImageGenerator:
                 total_cost += result.get("cost_usd", 0.0)
 
         logger.info(
-            "Image generation complete: %d succeeded, %d failed, "
-            "total cost $%.4f",
+            "Image generation complete: %d succeeded, %d failed, " "total cost $%.4f",
             len(generated_images),
             failed_count,
             total_cost,
@@ -134,9 +133,7 @@ class ImageGenerator:
         prompt_text = prompt_spec.get("prompt_text", "")
 
         if not prompt_text:
-            logger.warning(
-                "Empty prompt for %s/%s, skipping", ad_set_name, variant_id
-            )
+            logger.warning("Empty prompt for %s/%s, skipping", ad_set_name, variant_id)
             return None
 
         async with semaphore:
@@ -157,9 +154,7 @@ class ImageGenerator:
                     aspect_ratio=aspect_ratio,
                 )
 
-                generation_time_ms = int(
-                    (time.monotonic() - start_ms) * 1000
-                )
+                generation_time_ms = int((time.monotonic() - start_ms) * 1000)
 
                 if not gen_result or not gen_result.image_data:
                     logger.warning(
@@ -196,9 +191,7 @@ class ImageGenerator:
                 }
 
             except Exception as exc:
-                generation_time_ms = int(
-                    (time.monotonic() - start_ms) * 1000
-                )
+                generation_time_ms = int((time.monotonic() - start_ms) * 1000)
                 logger.error(
                     "Image generation failed for %s/%s/%s after %dms: %s",
                     ad_set_name,

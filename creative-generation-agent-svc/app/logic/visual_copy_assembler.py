@@ -119,9 +119,7 @@ class VisualCopyAssembler:
             section += f"#### {i}. {ad_set_name}\n"
             section += f"- **Funnel**: {funnel.upper()}\n"
             if placements:
-                section += (
-                    f"- **Target placements**: {', '.join(placements)}\n"
-                )
+                section += f"- **Target placements**: {', '.join(placements)}\n"
             section += (
                 "- Match image mood with copy tone\n"
                 "- Use 1:1 images for feed, 9:16 for stories/reels, "

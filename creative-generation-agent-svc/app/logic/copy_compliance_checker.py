@@ -114,9 +114,7 @@ _META_AD_POLICIES: list[dict[str, str]] = [
 class CopyComplianceChecker:
     """Builds prompt section for Meta Advertising Standards compliance."""
 
-    def build_prompt_section(
-        self, creative_context: dict[str, Any]
-    ) -> str:
+    def build_prompt_section(self, creative_context: dict[str, Any]) -> str:
         """Build a prompt section for Claude call 3.
 
         Instructs Claude to check all generated copy against Meta
@@ -206,9 +204,7 @@ class CopyComplianceChecker:
 
         return section
 
-    def _industry_matches(
-        self, industry: str, category: str
-    ) -> bool:
+    def _industry_matches(self, industry: str, category: str) -> bool:
         """Check if industry matches a compliance category.
 
         Args:

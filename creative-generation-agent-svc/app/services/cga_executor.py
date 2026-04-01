@@ -103,31 +103,23 @@ class CGAExecutor:
 
             # Emit context events
             if caa_context:
-                await self._events.emit(
-                    EventType.CAA_CONTEXT_LOADED, tenant_id, job_id
-                )
+                await self._events.emit(EventType.CAA_CONTEXT_LOADED, tenant_id, job_id)
             else:
                 await self._events.emit(
                     EventType.CAA_CONTEXT_MISSING, tenant_id, job_id
                 )
 
             if wf1_context:
-                await self._events.emit(
-                    EventType.WF1_CONTEXT_LOADED, tenant_id, job_id
-                )
+                await self._events.emit(EventType.WF1_CONTEXT_LOADED, tenant_id, job_id)
             else:
                 await self._events.emit(
                     EventType.WF1_CONTEXT_MISSING, tenant_id, job_id
                 )
 
             if bpv_context:
-                await self._events.emit(
-                    EventType.WF2_CONTEXT_LOADED, tenant_id, job_id
-                )
+                await self._events.emit(EventType.WF2_CONTEXT_LOADED, tenant_id, job_id)
             elif bpa_context or nta_context:
-                await self._events.emit(
-                    EventType.WF2_CONTEXT_LOADED, tenant_id, job_id
-                )
+                await self._events.emit(EventType.WF2_CONTEXT_LOADED, tenant_id, job_id)
             else:
                 await self._events.emit(
                     EventType.WF2_CONTEXT_MISSING, tenant_id, job_id
@@ -146,18 +138,14 @@ class CGAExecutor:
             has_caa = bool(caa_context) or bool(
                 previous_outputs.get("campaign_architecture")
             )
-            has_wf1 = bool(wf1_context) or any(
-                k in previous_outputs for k in _WF1_KEYS
-            )
+            has_wf1 = bool(wf1_context) or any(k in previous_outputs for k in _WF1_KEYS)
             has_bpa = bool(bpa_context) or bool(
                 previous_outputs.get("brand_positioning")
             )
             has_bpv = bool(bpv_context) or bool(
                 previous_outputs.get("brand_personality")
             )
-            has_nta = bool(nta_context) or bool(
-                previous_outputs.get("brand_naming")
-            )
+            has_nta = bool(nta_context) or bool(previous_outputs.get("brand_naming"))
             has_company = bool(company_context)
 
             missing = []

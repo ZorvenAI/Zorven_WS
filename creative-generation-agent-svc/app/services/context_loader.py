@@ -40,9 +40,7 @@ class CGAContextLoader:
 
         wf1, bpa, bpv, nta, bsa, company, caa_api = results
 
-        caa = caa_from_prev or (
-            caa_api if not isinstance(caa_api, Exception) else None
-        )
+        caa = caa_from_prev or (caa_api if not isinstance(caa_api, Exception) else None)
 
         return {
             "caa": caa,
@@ -129,9 +127,7 @@ class CGAContextLoader:
             "CAA",
         )
 
-    async def _get(
-        self, url: str, tenant_id: str, label: str
-    ) -> dict[str, Any] | None:
+    async def _get(self, url: str, tenant_id: str, label: str) -> dict[str, Any] | None:
         """Generic GET with service-token auth."""
         try:
             async with httpx.AsyncClient(timeout=10) as client:
