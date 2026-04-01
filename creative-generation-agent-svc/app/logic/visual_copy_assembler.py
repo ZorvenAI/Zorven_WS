@@ -91,10 +91,16 @@ class VisualCopyAssembler:
             for ad_set, images in images_by_adset.items():
                 section += f"**{ad_set}**: {len(images)} images\n"
                 for img in images:
+                    # Use short ref — never embed data URIs in LLM prompts
+                    url = img.get("gcs_url", "pending")
+                    if url.startswith("data:"):
+                        url = f"[generated:{img.get('variant_id', '')}_{img.get('aspect_ratio', '').replace(':', 'x')}]"
+                    elif len(url) > 120:
+                        url = url[:120] + "..."
                     section += (
                         f"  - `{img.get('variant_id', '')}` "
                         f"({img.get('aspect_ratio', '')}) → "
-                        f"`{img.get('gcs_url', 'pending')}`\n"
+                        f"`{url}`\n"
                     )
             section += "\n"
 

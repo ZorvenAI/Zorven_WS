@@ -332,11 +332,16 @@ class CGAAnalyzer:
         )
 
         # Build context with all generated assets
+        # Strip data URIs from images for LLM — Claude needs metadata, not pixels
+        images_for_llm = [
+            {k: v for k, v in img.items() if k != "gcs_url"}
+            for img in generated_images
+        ]
         call3_user = (
             f"## Generated Hooks\n{_fmt(hooks)}\n\n"
             f"## Generated Primary Copy\n{_fmt(primary_copy)}\n\n"
             f"## Generated CTAs\n{_fmt(ctas)}\n\n"
-            f"## Generated Images\n{_fmt(generated_images)}\n\n"
+            f"## Generated Images\n{_fmt(images_for_llm)}\n\n"
             f"## Image Generation Stats\n"
             f"- Total images: {total_images}\n"
             f"- Image gen cost: ${image_gen_cost:.4f}\n"
@@ -383,6 +388,27 @@ class CGAAnalyzer:
         )
 
         # ── Phase 4: Validation ──
+        # Strip data URIs from response — callback has 1MB limit and a single
+        # 925KB image is ~1.2MB base64. Keep metadata only; GCS URLs pass through.
+        response_images = []
+        stripped_count = 0
+        for img in generated_images:
+            url = img.get("gcs_url", "")
+            if url.startswith("data:"):
+                stripped_count += 1
+                response_images.append(
+                    {**img, "gcs_url": "", "image_generated": True}
+                )
+            else:
+                response_images.append(img)
+        if stripped_count > 0:
+            findings.append(
+                f"{stripped_count} images generated successfully but GCS not "
+                "configured — image data excluded from response to stay within "
+                "callback size limits. Configure CGA_GCS_BUCKET_NAME to persist "
+                "and display generated images."
+            )
+
         result = {
             "query": prompt,
             "creative_package": {
@@ -399,7 +425,7 @@ class CGAAnalyzer:
             },
             "ad_set_packages": ad_set_packages,
             "ad_units": creative_units,
-            "generated_images": generated_images,
+            "generated_images": response_images,
             "hooks": hooks,
             "copy_variants": primary_copy,
             "ctas": ctas,
