@@ -108,6 +108,9 @@ class ManagerNode(BaseNode):
         # Extract campaign architecture data
         campaign_arch_data = self._extract_campaign_architecture(outputs)
 
+        # Extract creative generation data
+        creative_gen_data = self._extract_creative_generation(outputs)
+
         result_data: dict[str, Any] = {
             "summary": (
                 f"Pipeline analysis completed. "
@@ -557,6 +560,49 @@ class ManagerNode(BaseNode):
             caa_gcs = campaign_arch_data.get("gcs_uri", "")
             if caa_gcs:
                 result_data["gcs_uri"] = caa_gcs
+
+        # Promote creative generation fields to top-level result_data
+        if creative_gen_data:
+            for key in (
+                "creative_package",
+                "ad_set_packages",
+                "ad_units",
+                "generated_images",
+                "hooks",
+                "copy_variants",
+                "ctas",
+                "compliance_results",
+                "creative_profiles",
+                "total_images_generated",
+                "total_images_refined",
+                "image_gen_cost_usd",
+                "compliance_pass_rate",
+                "creative_quality_score",
+                "image_gen_failed",
+                "execution_time_ms",
+            ):
+                value = creative_gen_data.get(key)
+                if value is not None:
+                    result_data[key] = value
+            cga_conf = creative_gen_data.get("confidence_score")
+            if cga_conf is not None:
+                confidence_scores["creative_generation"] = cga_conf
+            # Context usage flags
+            for ctx_key in (
+                "caa_context_used",
+                "wf1_context_used",
+                "bpa_context_used",
+                "bpv_context_used",
+                "nta_context_used",
+                "bsa_context_used",
+                "company_context_used",
+            ):
+                ctx_val = creative_gen_data.get(ctx_key)
+                if ctx_val is not None:
+                    result_data[ctx_key] = ctx_val
+            cga_gcs = creative_gen_data.get("gcs_uri", "")
+            if cga_gcs:
+                result_data["gcs_uri"] = cga_gcs
 
         # Store per-agent confidence scores and compute average
         if confidence_scores:
@@ -1035,6 +1081,26 @@ class ManagerNode(BaseNode):
                     "blueprint" in output
                     or "funnel_map" in output
                     or "targeting_specs" in output
+                ):
+                    return output
+        return None
+
+    @staticmethod
+    def _extract_creative_generation(
+        outputs: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Extract creative generation data from any node output.
+
+        Looks for outputs containing creative_package OR ad_units OR
+        generated_images keys, which are produced by
+        creative-generation-agent-svc.
+        """
+        for node_id, output in outputs.items():
+            if isinstance(output, dict):
+                if (
+                    "creative_package" in output
+                    or "ad_units" in output
+                    or "generated_images" in output
                 ):
                     return output
         return None

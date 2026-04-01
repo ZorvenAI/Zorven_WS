@@ -1320,6 +1320,54 @@ class Command(BaseCommand):
                 },
             },
         },
+        # ── WF3: Meta Creative Generation (standalone CGA) ──
+        {
+            "pipeline_id": "meta-creative-generation",
+            "name": "Meta Ads: Creative Generation",
+            "description": (
+                "Generate complete ad creative packages for Meta Ads: "
+                "AI-generated images (Nano Banana 2), funnel-specific "
+                "ad copy (hooks, primary text, CTAs), Meta Advertising "
+                "Standards compliance, visual-copy assemblies. Second "
+                "agent in WF3 Meta Ads workflow. Requires CAA blueprint "
+                "+ WF1 + WF2 + Company."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "creative_generation",
+                        "type": "external",
+                        "url": (
+                            "http://creative-generation-agent-svc" ":8042/v1/execute"
+                        ),
+                        "config": {
+                            "require_campaign_blueprint": True,
+                            "require_wf1_context": True,
+                            "require_wf2_context": True,
+                            "require_company_context": True,
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "creative_generation"],
+                    ["creative_generation", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.4,
+                },
+            },
+        },
     ]
 
     def handle(self, *args, **options):

@@ -68,6 +68,7 @@ class TestNodeCatalog:
             "brand_naming",
             "brand_story",
             "campaign_architecture",
+            "creative_generation",
         }
         assert expected == ids
 

@@ -408,6 +408,25 @@ NODE_CATALOG: list[dict[str, Any]] = [
             "require_company_context": True,
         },
     },
+    {
+        "id": "creative_generation",
+        "type": "external",
+        "url": f"{settings.CREATIVE_GENERATION_AGENT_URL}/v1/execute",
+        "description": (
+            "Creative generation agent: produces complete ad creative packages "
+            "for Meta Ads — AI-generated images (Nano Banana 2), funnel-specific "
+            "ad copy (hooks, primary text, CTAs), Meta Advertising Standards "
+            "compliance checking, visual-copy assemblies. Second agent in WF3 "
+            "Meta Ads workflow. Requires CAA blueprint + WF1 + WF2 + Company."
+        ),
+        "output_key": "creative_generation",
+        "config": {
+            "require_campaign_blueprint": True,
+            "require_wf1_context": True,
+            "require_wf2_context": True,
+            "require_company_context": True,
+        },
+    },
     # ──────────────────────────────────────────────────────────
     # TO ADD A NEW AGENT: Simply append an entry here.
     # The PipelineComposer will automatically pick it up.
@@ -565,6 +584,15 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
             "Meta Ads campaign architecture: campaign blueprint, funnel-objective "
             "mapping, audience targeting, placement/budget strategy, A/B test "
             "plan, KPI targets, creative briefs. First WF3 agent."
+        ),
+    },
+    {
+        "id": "meta-creative-generation",
+        "description": (
+            "Creative asset generation: AI-generated ad images (Nano Banana 2), "
+            "funnel-specific ad copy (hooks, body, CTAs), Meta Advertising "
+            "Standards compliance, visual-copy assemblies. Second agent in "
+            "WF3 Meta Ads workflow. Requires CAA blueprint + WF1 + WF2 + Company."
         ),
     },
 ]
