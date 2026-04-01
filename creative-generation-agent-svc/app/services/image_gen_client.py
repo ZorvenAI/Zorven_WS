@@ -21,9 +21,9 @@ _COST_PER_IMAGE_USD = 0.065
 
 # Supported aspect ratios for Meta Ads
 ASPECT_RATIOS = {
-    "1:1": "1:1",      # Feed (1080×1080)
-    "9:16": "9:16",    # Stories/Reels (1080×1920)
-    "16:9": "16:9",    # Audience Network (1200×628 approx)
+    "1:1": "1:1",  # Feed (1080×1080)
+    "9:16": "9:16",  # Stories/Reels (1080×1920)
+    "16:9": "16:9",  # Audience Network (1200×628 approx)
 }
 
 
@@ -82,9 +82,7 @@ class ImageGenAdapter(ABC):
     """Abstract base for image generation providers."""
 
     @abstractmethod
-    async def generate(
-        self, prompt: str, aspect_ratio: str = "1:1"
-    ) -> GeneratedImage:
+    async def generate(self, prompt: str, aspect_ratio: str = "1:1") -> GeneratedImage:
         """Generate a single image from a text prompt."""
 
     @abstractmethod
@@ -124,10 +122,13 @@ class NanoBanana2Adapter(ImageGenAdapter):
     def is_available(self) -> bool:
         return self._client is not None and self._circuit.can_attempt()
 
-    async def generate(
-        self, prompt: str, aspect_ratio: str = "1:1"
-    ) -> GeneratedImage:
-        """Generate image via Nano Banana 2."""
+    async def generate(self, prompt: str, aspect_ratio: str = "1:1") -> GeneratedImage:
+        """Generate image via Nano Banana 2.
+
+        Uses the dedicated generate_images API (Imagen 3) if the model
+        name contains 'imagen', otherwise falls back to generate_content
+        with responseModalities=["IMAGE"] (Gemini Flash).
+        """
         if not self._client:
             raise RuntimeError("Nano Banana 2 client not initialized")
         if not self._circuit.can_attempt():
@@ -137,32 +138,22 @@ class NanoBanana2Adapter(ImageGenAdapter):
 
         start_ms = int(time.time() * 1000)
         last_exc: Exception | None = None
+        model = settings.IMAGE_GEN_MODEL
+        use_imagen_api = "imagen" in model.lower()
 
         for attempt in range(settings.MAX_IMAGE_GEN_RETRIES):
             try:
-                response = await asyncio.to_thread(
-                    self._client.models.generate_content,
-                    model=settings.IMAGE_GEN_MODEL,
-                    contents=[prompt],
-                    config=types.GenerateContentConfig(
-                        response_modalities=["TEXT", "IMAGE"],
-                        image_generation_config=types.ImageGenerationConfig(
-                            aspect_ratio=ASPECT_RATIOS.get(aspect_ratio, "1:1"),
-                        ),
-                    ),
-                )
-
-                image_data = b""
-                text_desc = ""
-
-                for part in response.candidates[0].content.parts:
-                    if hasattr(part, "inline_data") and part.inline_data:
-                        image_data = base64.b64decode(part.inline_data.data)
-                    elif hasattr(part, "text") and part.text:
-                        text_desc = part.text
+                if use_imagen_api:
+                    image_data, text_desc = await self._generate_imagen(
+                        prompt, aspect_ratio, types
+                    )
+                else:
+                    image_data, text_desc = await self._generate_gemini(
+                        prompt, aspect_ratio, types
+                    )
 
                 if not image_data:
-                    raise ValueError("No image data in Nano Banana 2 response")
+                    raise ValueError("No image data in response")
 
                 elapsed_ms = int(time.time() * 1000) - start_ms
                 self._circuit.record_success()
@@ -203,6 +194,55 @@ class NanoBanana2Adapter(ImageGenAdapter):
             f"{settings.MAX_IMAGE_GEN_RETRIES} retries: {last_exc}"
         )
 
+    async def _generate_imagen(
+        self, prompt: str, aspect_ratio: str, types: Any
+    ) -> tuple[bytes, str]:
+        """Generate via dedicated Imagen API (generate_images)."""
+        response = await asyncio.to_thread(
+            self._client.models.generate_images,
+            model=settings.IMAGE_GEN_MODEL,
+            prompt=prompt,
+            config=types.GenerateImagesConfig(
+                numberOfImages=1,
+                aspectRatio=ASPECT_RATIOS.get(aspect_ratio, "1:1"),
+            ),
+        )
+        if response.generated_images and len(response.generated_images) > 0:
+            img = response.generated_images[0]
+            image_data = img.image.image_bytes
+            return image_data, ""
+        return b"", ""
+
+    async def _generate_gemini(
+        self, prompt: str, aspect_ratio: str, types: Any
+    ) -> tuple[bytes, str]:
+        """Generate via Gemini generate_content with IMAGE modality."""
+        ratio_str = ASPECT_RATIOS.get(aspect_ratio, "1:1")
+        enhanced_prompt = (
+            f"Generate a high-quality {ratio_str} aspect ratio "
+            f"advertising image: {prompt}"
+        )
+        response = await asyncio.to_thread(
+            self._client.models.generate_content,
+            model=settings.IMAGE_GEN_MODEL,
+            contents=[enhanced_prompt],
+            config=types.GenerateContentConfig(
+                responseModalities=["IMAGE", "TEXT"],
+            ),
+        )
+        image_data = b""
+        text_desc = ""
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, "inline_data") and part.inline_data:
+                raw = part.inline_data.data
+                if isinstance(raw, str):
+                    image_data = base64.b64decode(raw)
+                else:
+                    image_data = raw
+            elif hasattr(part, "text") and part.text:
+                text_desc = part.text
+        return image_data, text_desc
+
 
 class StubAdapter(ImageGenAdapter):
     """Stub adapter that returns placeholder URLs (no real image gen)."""
@@ -210,18 +250,14 @@ class StubAdapter(ImageGenAdapter):
     def is_available(self) -> bool:
         return True
 
-    async def generate(
-        self, prompt: str, aspect_ratio: str = "1:1"
-    ) -> GeneratedImage:
+    async def generate(self, prompt: str, aspect_ratio: str = "1:1") -> GeneratedImage:
         """Return a placeholder image."""
         logger.info(
             "Stub image generation: ratio=%s, prompt=%s...",
             aspect_ratio,
             prompt[:80],
         )
-        placeholder = (
-            b"\x89PNG\r\n\x1a\n"  # PNG magic bytes (minimal stub)
-        )
+        placeholder = b"\x89PNG\r\n\x1a\n"  # PNG magic bytes (minimal stub)
         return GeneratedImage(
             image_data=placeholder,
             prompt_used=prompt,
@@ -239,9 +275,7 @@ def create_image_gen_client() -> ImageGenAdapter:
         adapter = NanoBanana2Adapter()
         if adapter.is_available():
             return adapter
-        logger.warning(
-            "Nano Banana 2 init failed, falling back to stub adapter"
-        )
+        logger.warning("Nano Banana 2 init failed, falling back to stub adapter")
     else:
         logger.info("No GOOGLE_API_KEY configured, using stub image adapter")
     return StubAdapter()

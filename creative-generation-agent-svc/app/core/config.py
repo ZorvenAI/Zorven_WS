@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # Nano Banana 2 image generation (google-genai)
     GOOGLE_API_KEY: str = ""
-    IMAGE_GEN_MODEL: str = "gemini-3.1-flash-image-preview"
+    IMAGE_GEN_MODEL: str = "imagen-3.0-generate-002"
     DEFAULT_IMAGES_PER_ADSET: int = 3
     MAX_IMAGE_GEN_RETRIES: int = 3
 
