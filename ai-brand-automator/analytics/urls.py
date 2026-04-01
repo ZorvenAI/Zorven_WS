@@ -3,9 +3,11 @@ from django.urls import path
 from analytics.views import (
     BPAContextView,
     BPVContextView,
+    BSAContextView,
     BrandContextOptionsView,
     BrandContextSyncView,
     BrandPersonalitySyncView,
+    CAAContextView,
     CompanyContextView,
     ComparisonView,
     CoverageView,
@@ -48,4 +50,6 @@ urlpatterns = [
         name="analytics-brand-personality-sync",
     ),
     path("nta-context/", NTAContextView.as_view(), name="analytics-nta-context"),
+    path("bsa-context/", BSAContextView.as_view(), name="analytics-bsa-context"),
+    path("caa-context/", CAAContextView.as_view(), name="analytics-caa-context"),
 ]
