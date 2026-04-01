@@ -1,6 +1,7 @@
 """GCS client for creative asset persistence."""
 
 import asyncio
+import base64
 import json
 import logging
 from datetime import datetime, timezone
@@ -71,7 +72,10 @@ class GCSClient:
     ) -> str:
         """Upload image bytes to GCS. Returns GCS URI or empty string."""
         if not self._ensure_client():
-            logger.info("GCS not configured, skipping image upload")
+            logger.info("GCS not configured, returning data URI")
+            if image_data and len(image_data) > 8:
+                b64 = base64.b64encode(image_data).decode("ascii")
+                return f"data:{content_type};base64,{b64}"
             return ""
         try:
             path = f"cga/{tenant_id}/{job_id}/images/{filename}"
@@ -114,9 +118,7 @@ class GCSClient:
             logger.warning("GCS package upload failed: %s", exc)
             return ""
 
-    async def download_package(
-        self, package_path: str
-    ) -> dict[str, Any] | None:
+    async def download_package(self, package_path: str) -> dict[str, Any] | None:
         """Download a creative package from GCS."""
         if not self._ensure_client():
             return None

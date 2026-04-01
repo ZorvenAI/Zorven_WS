@@ -6338,13 +6338,17 @@ function CreativeGenerationSection({
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {allImages.map((img, i) => (
                   <div key={i} className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
-                    {img.gcs_url ? (
-                      <div className="h-40 bg-gradient-to-br from-brand-electric/10 to-violet-500/10 flex items-center justify-center">
-                        <span className="text-xs text-brand-silver/40">{img.aspect_ratio ?? '1:1'}</span>
+                    {img.gcs_url && (img.gcs_url.startsWith('data:') || img.gcs_url.startsWith('http')) ? (
+                      <div className="h-40 bg-black/20 flex items-center justify-center overflow-hidden">
+                        <img
+                          src={img.gcs_url}
+                          alt={`${img.ad_set_name} ${img.aspect_ratio}`}
+                          className="h-full w-full object-cover"
+                        />
                       </div>
                     ) : (
-                      <div className="h-40 bg-white/5 flex items-center justify-center">
-                        <span className="text-xs text-brand-silver/30">Placeholder</span>
+                      <div className="h-40 bg-gradient-to-br from-brand-electric/10 to-violet-500/10 flex items-center justify-center">
+                        <span className="text-xs text-brand-silver/40">{img.gcs_url ? 'GCS' : 'Placeholder'} · {img.aspect_ratio ?? '1:1'}</span>
                       </div>
                     )}
                     <div className="p-2 space-y-1">
