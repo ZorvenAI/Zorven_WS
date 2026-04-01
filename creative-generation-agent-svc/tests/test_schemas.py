@@ -80,7 +80,7 @@ class TestGeneratedImage:
     def test_generated_image_model(self):
         img = GeneratedImage(
             ad_set_name="fleet-managers-tofu",
-            variant_id=1,
+            variant_id="v1",
             aspect_ratio="1:1",
             gcs_url="gs://bucket/img.png",
             prompt_used="Professional fleet charging station",
@@ -89,7 +89,7 @@ class TestGeneratedImage:
             generation_time_ms=3200,
         )
         assert img.ad_set_name == "fleet-managers-tofu"
-        assert img.variant_id == 1
+        assert img.variant_id == "v1"
         assert img.aspect_ratio == "1:1"
         assert img.provider == "nano_banana_2"
         assert img.cost_usd == 0.065
@@ -97,22 +97,22 @@ class TestGeneratedImage:
 
 
 class TestHookVariant:
-    """Test HookVariant scroll_stop_score bounds."""
+    """Test HookVariant scroll_stop_power bounds."""
 
     def test_hook_variant_score_bounds(self):
-        """scroll_stop_score must be between 0 and 100."""
+        """scroll_stop_power must be between 0 and 100."""
         hook = HookVariant(
             ad_set_name="test-tofu",
             hook_text="Did you know your fleet is losing $10k/month?",
             funnel_stage="tofu",
             hook_type="pain_point",
-            scroll_stop_score=85.5,
+            scroll_stop_power=85.5,
             char_count=48,
         )
-        assert hook.scroll_stop_score == 85.5
+        assert hook.scroll_stop_power == 85.5
 
         with pytest.raises(Exception):
-            HookVariant(scroll_stop_score=-1)
+            HookVariant(scroll_stop_power=-1)
 
         with pytest.raises(Exception):
-            HookVariant(scroll_stop_score=101)
+            HookVariant(scroll_stop_power=101)

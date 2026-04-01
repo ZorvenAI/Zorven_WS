@@ -68,7 +68,16 @@ class CreativeContextLoader:
             return []
 
         briefs: list[dict[str, Any]] = []
-        ad_sets = caa_context.get("ad_sets", [])
+
+        # Prefer explicit creative_briefs, else unwrap blueprint.ad_sets,
+        # else fall back to top-level ad_sets.
+        ad_sets = caa_context.get("creative_briefs", [])
+        if not ad_sets:
+            blueprint = caa_context.get("blueprint", {})
+            if isinstance(blueprint, dict):
+                ad_sets = blueprint.get("ad_sets", [])
+        if not ad_sets:
+            ad_sets = caa_context.get("ad_sets", [])
 
         for ad_set in ad_sets:
             brief: dict[str, Any] = {
@@ -98,10 +107,18 @@ class CreativeContextLoader:
         visual: dict[str, Any] = {}
 
         if bpv_context:
-            visual["archetype"] = bpv_context.get("archetype", "")
+            archetype_raw = bpv_context.get("archetype", "")
+            # Normalize archetype to a string for prompt embedding
+            if isinstance(archetype_raw, dict):
+                archetype_raw = archetype_raw.get(
+                    "primary", archetype_raw
+                )
+                if isinstance(archetype_raw, dict):
+                    archetype_raw = archetype_raw.get("name", "")
+            visual["archetype"] = archetype_raw
             visual["mood"] = bpv_context.get(
                 "tone_spectrum", {}
-            ).get("primary_mood", bpv_context.get("archetype", ""))
+            ).get("primary_mood", str(archetype_raw))
             visual["aaker_dimensions"] = bpv_context.get(
                 "aaker_dimensions", {}
             )

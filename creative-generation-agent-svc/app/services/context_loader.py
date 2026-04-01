@@ -63,6 +63,7 @@ class CGAContextLoader:
         for node_id, output in previous_outputs.items():
             if isinstance(output, dict) and (
                 "blueprint" in output
+                or "campaign_blueprint" in output
                 or "funnel_map" in output
                 or "creative_briefs" in output
             ):

@@ -149,7 +149,7 @@ class CGAAnalyzer:
         )
 
         # SKL-CGA-03: Creative learnings
-        learnings = self._learnings_loader.extract(previous_outputs or {})
+        learnings = self._learnings_loader.load(previous_outputs or {})
 
         # Input guardrails (IG-08, IG-09)
         input_issues = self._input_guardrails.check(caa_context, company_context)
@@ -177,7 +177,7 @@ class CGAAnalyzer:
             f"{profiler_section}\n\n"
             f"{image_prompt_section}"
         )
-        if learnings.get("has_learnings"):
+        if learnings.get("available"):
             call1_user += (
                 f"\n\n## Creative Learnings from Prior Campaigns\n"
                 f"{json.dumps(learnings, default=str)[:2000]}\n"

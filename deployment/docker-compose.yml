@@ -1493,7 +1493,7 @@ services:
       dockerfile: Dockerfile
     container_name: ai-brand-automator-creative-generation
     environment:
-      - CGA_REDIS_URL=redis://redis:6379/22
+      - CGA_REDIS_URL=redis://redis:6379/22  # DB index 22 (--databases 23 = DBs 0-22)
       - CGA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - CGA_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - CGA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}

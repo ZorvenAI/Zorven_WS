@@ -36,7 +36,7 @@ class GeneratedImage(BaseModel):
     """A single AI-generated image."""
 
     ad_set_name: str = ""
-    variant_id: int = 0
+    variant_id: str = ""
     aspect_ratio: str = ""  # "1:1", "9:16", "16:9"
     gcs_url: str = ""
     prompt_used: str = ""
@@ -52,7 +52,7 @@ class HookVariant(BaseModel):
     hook_text: str = ""
     funnel_stage: str = ""  # "tofu", "mofu", "bofu"
     hook_type: str = ""  # "curiosity", "emotional", "pain_point", etc.
-    scroll_stop_score: float = Field(0.0, ge=0, le=100)
+    scroll_stop_power: float = Field(0.0, ge=0, le=100)
     char_count: int = 0
 
 

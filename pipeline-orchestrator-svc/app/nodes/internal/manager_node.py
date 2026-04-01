@@ -561,18 +561,13 @@ class ManagerNode(BaseNode):
             if caa_gcs:
                 result_data["gcs_uri"] = caa_gcs
 
-        # Promote creative generation fields to top-level result_data
+        # Promote creative generation lightweight fields to top-level
+        # result_data. Full payloads (creative_package, ad_set_packages,
+        # ad_units, generated_images, hooks, copy_variants, ctas,
+        # compliance_results, creative_profiles) stay in node_results to
+        # avoid duplicating large data and risking the 1 MB callback limit.
         if creative_gen_data:
             for key in (
-                "creative_package",
-                "ad_set_packages",
-                "ad_units",
-                "generated_images",
-                "hooks",
-                "copy_variants",
-                "ctas",
-                "compliance_results",
-                "creative_profiles",
                 "total_images_generated",
                 "total_images_refined",
                 "image_gen_cost_usd",

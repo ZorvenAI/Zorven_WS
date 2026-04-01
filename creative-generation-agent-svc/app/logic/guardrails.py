@@ -49,12 +49,22 @@ class InputGuardrails:
                 "creative without campaign architecture"
             )
         else:
-            ad_sets = caa_context.get("ad_sets", [])
-            if not ad_sets:
+            # Some callers pass the full CAA result object where the
+            # blueprint (and ad_sets) live under the "blueprint" key.
+            # Normalize to the blueprint dict for validation.
+            blueprint = caa_context.get("blueprint", caa_context)
+            if not isinstance(blueprint, dict):
                 issues.append(
-                    "IG-08: CAA blueprint has no ad_sets — need at least "
-                    "one audience x funnel combination"
+                    "IG-08: CAA blueprint structure is invalid — expected "
+                    "a dict with ad_sets"
                 )
+            else:
+                ad_sets = blueprint.get("ad_sets", [])
+                if not ad_sets:
+                    issues.append(
+                        "IG-08: CAA blueprint has no ad_sets — need at "
+                        "least one audience x funnel combination"
+                    )
 
         # IG-09: Company model
         if not company_context:
@@ -168,9 +178,12 @@ class PlanGuardrails:
         """PG-10: A/B variant count matches blueprint specification."""
         issues: list[str] = []
 
-        # Build expected variant counts from blueprint
+        # Build expected variant counts from blueprint — unwrap if needed
+        bp = blueprint.get("blueprint", blueprint)
+        if not isinstance(bp, dict):
+            bp = blueprint
         expected: dict[str, int] = {}
-        for ad_set in blueprint.get("ad_sets", []):
+        for ad_set in bp.get("ad_sets", []):
             name = ad_set.get("name", "")
             count = ad_set.get("variant_count", 3)
             if name:
