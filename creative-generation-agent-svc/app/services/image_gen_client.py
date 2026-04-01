@@ -227,12 +227,19 @@ class NanoBanana2Adapter(ImageGenAdapter):
             model=settings.IMAGE_GEN_MODEL,
             contents=[enhanced_prompt],
             config=types.GenerateContentConfig(
-                responseModalities=["IMAGE", "TEXT"],
+                response_modalities=["IMAGE", "TEXT"],
             ),
         )
         image_data = b""
         text_desc = ""
-        for part in response.candidates[0].content.parts:
+        if not response.candidates:
+            logger.warning("Gemini image gen: no candidates in response")
+            return b"", ""
+        parts = response.candidates[0].content.parts
+        if not parts:
+            logger.warning("Gemini image gen: no parts in response")
+            return b"", ""
+        for part in parts:
             if hasattr(part, "inline_data") and part.inline_data:
                 raw = part.inline_data.data
                 if isinstance(raw, str):

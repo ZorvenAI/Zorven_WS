@@ -116,7 +116,7 @@ All use `CGA_` prefix. Key settings:
 - `CGA_REDIS_URL` — Redis DB 22
 - `CGA_ANTHROPIC_API_KEY` — Claude Sonnet 4 (copy gen)
 - `CGA_GOOGLE_API_KEY` — Nano Banana 2 image gen (empty = stub mode)
-- `CGA_IMAGE_GEN_MODEL` — `gemini-2.0-flash-preview-image-generation`
+- `CGA_IMAGE_GEN_MODEL` — `gemini-2.5-flash-image`
 - `CGA_SERVICE_TOKEN` — X-Service-Token auth
 - `CGA_BACKEND_URL` — Django backend for context loading
 - `CGA_BACKEND_SERVICE_TOKEN` — Token for context API calls
