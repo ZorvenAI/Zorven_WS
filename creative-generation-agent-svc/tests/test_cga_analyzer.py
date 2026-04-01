@@ -40,6 +40,30 @@ class TestCAContextUnwrapping:
         assert len(ctx["creative_briefs"]) == 1
         assert ctx["creative_briefs"][0]["ad_set_name"] == "fleet-tofu"
 
+    def test_creative_briefs_caa_style_keys(self):
+        """CAA-style keys (ad_set_name, persona_name) should be preferred."""
+        loader = CreativeContextLoader()
+        caa = {
+            "creative_briefs": [
+                {
+                    "ad_set_name": "fleet-managers-tofu",
+                    "persona_name": "Fleet Manager",
+                    "funnel_stage": "tofu",
+                },
+            ],
+        }
+        ctx = loader.build_context(
+            caa_context=caa,
+            wf1_context=None,
+            bpa_context=None,
+            bpv_context=None,
+            nta_context=None,
+            bsa_context=None,
+            company_context=None,
+        )
+        assert ctx["creative_briefs"][0]["ad_set_name"] == "fleet-managers-tofu"
+        assert ctx["creative_briefs"][0]["persona"] == "Fleet Manager"
+
     def test_creative_briefs_from_top_level_ad_sets(self):
         """Top-level ad_sets (no blueprint wrapper) should also work."""
         loader = CreativeContextLoader()

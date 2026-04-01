@@ -7121,11 +7121,16 @@ export default function ResultDashboard({
     resultData.targeting_specs != null;
 
   // ── Detect creative generation data ───────────────────────────
+  // CGA large payloads live inside node_results.creative_generation
+  // (manager node only promotes lightweight stats to top-level)
+  const cgaNodeData = (resultData.node_results as Record<string, Record<string, unknown>> | undefined)?.creative_generation;
   const hasCreativeGeneration =
+    cgaNodeData?.creative_package != null ||
+    cgaNodeData?.ad_units != null ||
+    cgaNodeData?.copy_variants != null ||
+    cgaNodeData?.generated_images != null ||
     resultData.creative_package != null ||
-    resultData.ad_units != null ||
-    resultData.copy_variants != null ||
-    resultData.generated_images != null;
+    resultData.ad_units != null;
 
   // ── Extract well-known keys ──────────────────────────────────────
   const summary = resultData.summary as string | undefined;
@@ -7634,22 +7639,22 @@ export default function ResultDashboard({
 
       {hasCreativeGeneration && (
         <CreativeGenerationSection
-          creativePackage={resultData.creative_package as CGACreativePackage | undefined}
-          adSetPackages={resultData.ad_set_packages as CGAAdSetPackage[] | undefined}
-          adUnits={resultData.ad_units as CGACreativeUnit[] | undefined}
-          generatedImages={resultData.generated_images as CGAGeneratedImage[] | undefined}
-          hooks={resultData.hooks as CGAHookVariant[] | undefined}
-          copyVariants={resultData.copy_variants as CGACopySet[] | undefined}
-          ctas={resultData.ctas as CGACTASet[] | undefined}
-          complianceResults={resultData.compliance_results as CGAComplianceResult[] | undefined}
-          totalImagesGenerated={resultData.total_images_generated as number | undefined}
-          imageGenCostUsd={resultData.image_gen_cost_usd as number | undefined}
-          compliancePassRate={resultData.compliance_pass_rate as number | undefined}
-          creativeQualityScore={resultData.creative_quality_score as number | undefined}
-          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.creative_generation ?? resultData.confidence_score) as number | undefined}
-          imageGenFailed={resultData.image_gen_failed as boolean | undefined}
-          findings={findings}
-          recommendations={recommendations}
+          creativePackage={(cgaNodeData?.creative_package ?? resultData.creative_package) as CGACreativePackage | undefined}
+          adSetPackages={(cgaNodeData?.ad_set_packages ?? resultData.ad_set_packages) as CGAAdSetPackage[] | undefined}
+          adUnits={(cgaNodeData?.ad_units ?? resultData.ad_units) as CGACreativeUnit[] | undefined}
+          generatedImages={(cgaNodeData?.generated_images ?? resultData.generated_images) as CGAGeneratedImage[] | undefined}
+          hooks={(cgaNodeData?.hooks ?? resultData.hooks) as CGAHookVariant[] | undefined}
+          copyVariants={(cgaNodeData?.copy_variants ?? resultData.copy_variants) as CGACopySet[] | undefined}
+          ctas={(cgaNodeData?.ctas ?? resultData.ctas) as CGACTASet[] | undefined}
+          complianceResults={(cgaNodeData?.compliance_results ?? resultData.compliance_results) as CGAComplianceResult[] | undefined}
+          totalImagesGenerated={(cgaNodeData?.total_images_generated ?? resultData.total_images_generated) as number | undefined}
+          imageGenCostUsd={(cgaNodeData?.image_gen_cost_usd ?? resultData.image_gen_cost_usd) as number | undefined}
+          compliancePassRate={(cgaNodeData?.compliance_pass_rate ?? resultData.compliance_pass_rate) as number | undefined}
+          creativeQualityScore={(cgaNodeData?.creative_quality_score ?? resultData.creative_quality_score) as number | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.creative_generation ?? (cgaNodeData?.confidence_score ?? resultData.confidence_score)) as number | undefined}
+          imageGenFailed={(cgaNodeData?.image_gen_failed ?? resultData.image_gen_failed) as boolean | undefined}
+          findings={(cgaNodeData?.findings as string[] | undefined) ?? findings}
+          recommendations={(cgaNodeData?.recommendations as string[] | undefined) ?? recommendations}
         />
       )}
 

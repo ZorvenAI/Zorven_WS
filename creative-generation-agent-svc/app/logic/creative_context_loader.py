@@ -81,11 +81,15 @@ class CreativeContextLoader:
 
         for ad_set in ad_sets:
             brief: dict[str, Any] = {
-                "ad_set_name": ad_set.get("name", ""),
-                "persona": ad_set.get("persona", ad_set.get("targeting", {}).get("persona", "")),
-                "funnel_stage": ad_set.get(
-                    "funnel_stage", ad_set.get("stage", "")
-                ),
+                # Prefer CAA-style keys, fall back to blueprint-style keys
+                "ad_set_name": ad_set.get("ad_set_name") or ad_set.get("name", ""),
+                "persona": ad_set.get("persona")
+                or ad_set.get("persona_name")
+                or ad_set.get("targeting", {}).get("persona")
+                or ad_set.get("targeting", {}).get("persona_name", ""),
+                "funnel_stage": ad_set.get("funnel_stage")
+                or ad_set.get("stage")
+                or ad_set.get("funnel_stage_name", ""),
                 "messaging_theme": ad_set.get("messaging_theme", ""),
                 "variant_count": ad_set.get("variant_count", 3),
                 "placements": ad_set.get("placements", []),
@@ -110,23 +114,17 @@ class CreativeContextLoader:
             archetype_raw = bpv_context.get("archetype", "")
             # Normalize archetype to a string for prompt embedding
             if isinstance(archetype_raw, dict):
-                archetype_raw = archetype_raw.get(
-                    "primary", archetype_raw
-                )
+                archetype_raw = archetype_raw.get("primary", archetype_raw)
                 if isinstance(archetype_raw, dict):
                     archetype_raw = archetype_raw.get("name", "")
             visual["archetype"] = archetype_raw
-            visual["mood"] = bpv_context.get(
-                "tone_spectrum", {}
-            ).get("primary_mood", str(archetype_raw))
-            visual["aaker_dimensions"] = bpv_context.get(
-                "aaker_dimensions", {}
+            visual["mood"] = bpv_context.get("tone_spectrum", {}).get(
+                "primary_mood", str(archetype_raw)
             )
+            visual["aaker_dimensions"] = bpv_context.get("aaker_dimensions", {})
 
         if company_context:
-            visual["color_palette_desc"] = company_context.get(
-                "color_palette_desc", ""
-            )
+            visual["color_palette_desc"] = company_context.get("color_palette_desc", "")
             visual["logo_url"] = company_context.get("logo_url", "")
             visual["industry"] = company_context.get("industry", "")
 
@@ -156,13 +154,9 @@ class CreativeContextLoader:
                 bpa_context.get("unique_value_proposition", ""),
             ),
             "key_benefit": bpa_context.get("key_benefit", ""),
-            "positioning_statement": bpa_context.get(
-                "positioning_statement", ""
-            ),
+            "positioning_statement": bpa_context.get("positioning_statement", ""),
             "differentiators": bpa_context.get("differentiators", []),
-            "competitive_advantage": bpa_context.get(
-                "competitive_advantage", ""
-            ),
+            "competitive_advantage": bpa_context.get("competitive_advantage", ""),
         }
 
     def _extract_name_tagline(
@@ -185,24 +179,16 @@ class CreativeContextLoader:
             "tagline_variants": nta_context.get("taglines", []),
         }
 
-    def _extract_story_arcs(
-        self, bsa_context: dict[str, Any] | None
-    ) -> dict[str, Any]:
+    def _extract_story_arcs(self, bsa_context: dict[str, Any] | None) -> dict[str, Any]:
         """Extract brand story arcs from BSA output."""
         if not bsa_context:
             return {}
         return {
             "origin_story": bsa_context.get("origin_story", {}),
-            "mission": bsa_context.get("mission_vision", {}).get(
-                "mission", {}
-            ),
-            "vision": bsa_context.get("mission_vision", {}).get(
-                "vision", {}
-            ),
+            "mission": bsa_context.get("mission_vision", {}).get("mission", {}),
+            "vision": bsa_context.get("mission_vision", {}).get("vision", {}),
             "pitches": bsa_context.get("pitches", {}),
-            "channel_narratives": bsa_context.get(
-                "channel_narratives", {}
-            ),
+            "channel_narratives": bsa_context.get("channel_narratives", {}),
         }
 
     def _extract_audience_personas(
