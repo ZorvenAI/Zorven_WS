@@ -478,6 +478,23 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("ad", 1),
         ("copy", 1),
     ],
+    "meta-ads-full": [
+        ("full meta ads", 3),
+        ("meta ads campaign", 3),
+        ("complete ad campaign", 3),
+        ("campaign and creative", 3),
+        ("launch meta ads", 3),
+        ("run facebook ads", 3),
+        ("full ad pipeline", 3),
+        ("meta ads workflow", 3),
+        ("end to end ads", 3),
+        ("build and launch ads", 3),
+        ("campaign with creatives", 2),
+        ("ads end to end", 2),
+        ("full campaign", 2),
+        ("campaign pipeline", 2),
+        ("meta advertising", 2),
+    ],
 }
 
 

@@ -595,6 +595,16 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
             "WF3 Meta Ads workflow. Requires CAA blueprint + WF1 + WF2 + Company."
         ),
     },
+    {
+        "id": "meta-ads-full",
+        "description": (
+            "Full Meta Ads pipeline: campaign architecture (blueprint, funnel "
+            "mapping, audience targeting, placement/budget, A/B testing, creative "
+            "briefs) then creative generation (AI ad images, ad copy with "
+            "hooks/body/CTAs, Meta compliance, visual-copy assemblies). "
+            "Chains CAA → CGA. Requires WF1 + WF2 + Company."
+        ),
+    },
 ]
 
 # ── Few-shot examples for Tier 1 ──

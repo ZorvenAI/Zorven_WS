@@ -1368,6 +1368,72 @@ class Command(BaseCommand):
                 },
             },
         },
+        # ── WF3: Meta Ads Full Pipeline (CAA → CGA) ──
+        {
+            "pipeline_id": "meta-ads-full",
+            "name": "Meta Ads: Full Campaign",
+            "description": (
+                "Full WF3 Meta Ads pipeline: campaign architecture "
+                "(blueprint, funnel mapping, audience targeting, "
+                "placement/budget strategy, A/B test plan, creative "
+                "briefs) followed by creative generation (AI-generated "
+                "ad images, funnel-specific ad copy with hooks/primary "
+                "text/CTAs, Meta Advertising Standards compliance, "
+                "visual-copy assemblies). Chains CAA → CGA. "
+                "Requires completed WF1 Brand Discovery and WF2 Brand "
+                "Strategy pipelines."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "campaign_architecture",
+                        "type": "external",
+                        "url": (
+                            "http://campaign-architecture-agent-svc"
+                            ":8041/v1/execute"
+                        ),
+                        "config": {
+                            "require_wf1_context": True,
+                            "require_bpa_context": True,
+                            "require_company_context": True,
+                        },
+                    },
+                    {
+                        "id": "creative_generation",
+                        "type": "external",
+                        "url": (
+                            "http://creative-generation-agent-svc"
+                            ":8042/v1/execute"
+                        ),
+                        "config": {
+                            "require_campaign_blueprint": True,
+                            "require_wf1_context": True,
+                            "require_wf2_context": True,
+                            "require_company_context": True,
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "campaign_architecture"],
+                    ["campaign_architecture", "creative_generation"],
+                    ["creative_generation", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.4,
+                },
+            },
+        },
     ]
 
     def handle(self, *args, **options):
