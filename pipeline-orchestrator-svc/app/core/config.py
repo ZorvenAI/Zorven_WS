@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     BRAND_NAMING_AGENT_URL: str = "http://brand-naming-agent-svc:8034"
     BRAND_STORY_AGENT_URL: str = "http://brand-story-agent-svc:8035"
     CAMPAIGN_ARCHITECTURE_AGENT_URL: str = "http://campaign-architecture-agent-svc:8041"
+    CREATIVE_GENERATION_AGENT_URL: str = "http://creative-generation-agent-svc:8042"
 
 
 settings = Settings()

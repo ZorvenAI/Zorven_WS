@@ -311,7 +311,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ai-brand-automator-redis
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 22
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 23
     ports:
       - "6379:6379"
     volumes:
@@ -1475,6 +1475,45 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8041/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Creative Generation Agent — WF3 ad creative generation (port 8042)
+  # Powered by Claude Sonnet 4 + Nano Banana 2 (Gemini image gen).
+  # Requires CAA blueprint + WF1 + WF2 + Company context.
+  # ==========================================================================
+  creative-generation-agent-svc:
+    build:
+      context: ../creative-generation-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-creative-generation
+    environment:
+      - CGA_REDIS_URL=redis://redis:6379/22  # DB index 22 (--databases 23 = DBs 0-22)
+      - CGA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CGA_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - CGA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - CGA_BACKEND_URL=http://backend:8001
+      - CGA_BACKEND_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - CGA_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - CGA_GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
+      - CGA_GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}
+      - CGA_GCS_CREDENTIALS_JSON=${GCS_CREDENTIALS_JSON:-}
+      - CGA_LOG_LEVEL=INFO
+      - CGA_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+    expose:
+      - "8042"
+    ports:
+      - "8042:8042"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8042/health"]
       interval: 10s
       timeout: 5s
       retries: 3

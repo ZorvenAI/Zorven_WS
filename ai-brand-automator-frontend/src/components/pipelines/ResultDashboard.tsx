@@ -6060,6 +6060,537 @@ interface CAACreativeBrief {
   visual_direction?: string;
 }
 
+// ── Creative Generation (CGA) Types ──────────────────────────────
+interface CGAGeneratedImage {
+  ad_set_name?: string;
+  variant_id?: string;
+  aspect_ratio?: string;
+  gcs_url?: string;
+  prompt_used?: string;
+  provider?: string;
+  cost_usd?: number;
+  generation_time_ms?: number;
+}
+
+interface CGAHookVariant {
+  ad_set_name?: string;
+  hooks?: Array<{
+    hook_text?: string;
+    hook_pattern?: string;
+    scroll_stop_power?: number;
+    char_count?: number;
+    rationale?: string;
+  }>;
+}
+
+interface CGACopySet {
+  ad_set_name?: string;
+  variants?: Array<{
+    variant_id?: string;
+    short?: { text?: string; char_count?: number };
+    medium?: { text?: string; char_count?: number };
+    long?: { text?: string; char_count?: number };
+    emotional_appeal?: string;
+    key_message?: string;
+  }>;
+}
+
+interface CGACTASet {
+  ad_set_name?: string;
+  cta_variants?: Array<{
+    cta_button?: string;
+    cta_text?: string;
+    urgency_score?: number;
+    clarity_score?: number;
+    rationale?: string;
+  }>;
+}
+
+interface CGAComplianceResult {
+  ad_set_name?: string;
+  variant_id?: string;
+  copy_type?: string;
+  copy_text?: string;
+  status?: string;
+  violations?: Array<{
+    rule?: string;
+    severity?: string;
+    description?: string;
+    suggested_fix?: string;
+  }>;
+}
+
+interface CGACreativeUnit {
+  ad_set_name?: string;
+  unit_id?: string;
+  image_variant_id?: string;
+  image_aspect_ratio?: string;
+  image_gcs_url?: string;
+  headline?: string;
+  primary_text?: string;
+  copy_length?: string;
+  cta_button?: string;
+  cta_text?: string;
+  ad_format?: string;
+  target_placement?: string;
+  image_copy_coherence?: number;
+  coherence_rationale?: string;
+}
+
+interface CGAAdSetPackage {
+  ad_set_name?: string;
+  persona?: string;
+  funnel_stage?: string;
+  images?: CGAGeneratedImage[];
+  hooks?: CGAHookVariant[];
+  primary_copy?: CGACopySet[];
+  ctas?: CGACTASet[];
+  creative_units?: CGACreativeUnit[];
+  compliance_results?: CGAComplianceResult[];
+  ad_set_quality_score?: number;
+}
+
+interface CGACreativePackage {
+  campaign_id?: string;
+  brand_name?: string;
+  total_images_generated?: number;
+  total_images_refined?: number;
+  image_gen_cost_usd?: number;
+  compliance_pass_rate?: number;
+  creative_quality_score?: number;
+  confidence_score?: number;
+}
+
+// ── Creative Generation Section Component ─────────────────────────
+function CreativeGenerationSection({
+  creativePackage,
+  adSetPackages,
+  adUnits,
+  generatedImages,
+  hooks,
+  copyVariants,
+  ctas,
+  complianceResults,
+  totalImagesGenerated,
+  imageGenCostUsd,
+  compliancePassRate,
+  creativeQualityScore,
+  confidenceScore,
+  imageGenFailed,
+  findings,
+  recommendations,
+}: {
+  creativePackage?: CGACreativePackage;
+  adSetPackages?: CGAAdSetPackage[];
+  adUnits?: CGACreativeUnit[];
+  generatedImages?: CGAGeneratedImage[];
+  hooks?: CGAHookVariant[];
+  copyVariants?: CGACopySet[];
+  ctas?: CGACTASet[];
+  complianceResults?: CGAComplianceResult[];
+  totalImagesGenerated?: number;
+  imageGenCostUsd?: number;
+  compliancePassRate?: number;
+  creativeQualityScore?: number;
+  confidenceScore?: number;
+  imageGenFailed?: boolean;
+  findings?: string[];
+  recommendations?: string[];
+}) {
+  const [activeTab, setActiveTab] = useState<'overview' | 'gallery' | 'copy' | 'compliance' | 'units'>('overview');
+
+  const tabs = [
+    { key: 'overview' as const, label: 'Overview' },
+    { key: 'gallery' as const, label: 'Creative Gallery' },
+    { key: 'copy' as const, label: 'Ad Copy' },
+    { key: 'compliance' as const, label: 'Compliance' },
+    { key: 'units' as const, label: 'Ad Units' },
+  ];
+
+  const imgCount = totalImagesGenerated ?? creativePackage?.total_images_generated ?? 0;
+  const cost = imageGenCostUsd ?? creativePackage?.image_gen_cost_usd ?? 0;
+  const passRate = compliancePassRate ?? creativePackage?.compliance_pass_rate ?? 0;
+  const quality = creativeQualityScore ?? creativePackage?.creative_quality_score ?? 0;
+  const confidence = confidenceScore ?? creativePackage?.confidence_score ?? 0;
+  const allUnits = adUnits ?? [];
+  const allImages = generatedImages ?? [];
+  const allHooks = hooks ?? [];
+  const allCopy = copyVariants ?? [];
+  const allCtas = ctas ?? [];
+  const allCompliance = complianceResults ?? [];
+  const packages = adSetPackages ?? [];
+
+  return (
+    <section className="space-y-4">
+      <h4 className="font-heading text-sm font-semibold text-white flex items-center gap-2">
+        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-electric/20 text-brand-electric text-xs font-bold">
+          CG
+        </span>
+        Creative Generation
+        {confidence > 0 && (
+          <span className="ml-2 text-xs font-normal text-brand-silver/60">
+            Confidence: {(confidence * 100).toFixed(0)}%
+          </span>
+        )}
+      </h4>
+
+      {imageGenFailed && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-xs text-amber-400">
+          Image generation failed — creative package contains copy only.
+        </div>
+      )}
+
+      {/* Tab bar */}
+      <div className="flex gap-1 bg-white/5 rounded-lg p-1">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              activeTab === tab.key
+                ? 'bg-brand-electric/20 text-brand-electric'
+                : 'text-brand-silver/60 hover:text-white'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Overview Tab */}
+      {activeTab === 'overview' && (
+        <div className="space-y-4">
+          {/* KPI Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {[
+              { label: 'Images Generated', value: imgCount.toString(), color: 'text-brand-electric' },
+              { label: 'Image Cost', value: `$${cost.toFixed(2)}`, color: 'text-emerald-400' },
+              { label: 'Compliance Rate', value: `${(passRate * 100).toFixed(0)}%`, color: passRate >= 0.9 ? 'text-emerald-400' : passRate >= 0.7 ? 'text-amber-400' : 'text-red-400' },
+              { label: 'Creative Quality', value: `${(quality * 100).toFixed(0)}%`, color: 'text-brand-electric' },
+              { label: 'Ad Units', value: allUnits.length.toString(), color: 'text-violet-400' },
+            ].map((kpi, i) => (
+              <div key={i} className="bg-white/5 rounded-lg p-3 border border-white/10">
+                <div className="text-[10px] font-medium text-brand-silver/50 uppercase tracking-wider">{kpi.label}</div>
+                <div className={`text-lg font-bold ${kpi.color}`}>{kpi.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Ad Set Packages summary */}
+          {packages.length > 0 && (
+            <div>
+              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                Ad Set Packages ({packages.length})
+              </h5>
+              <div className="space-y-2">
+                {packages.map((pkg, i) => (
+                  <div key={i} className="bg-white/5 rounded-lg p-3 border border-white/10 flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-medium text-white">{pkg.ad_set_name ?? `Ad Set ${i + 1}`}</span>
+                      <span className="ml-2 text-xs text-brand-silver/50">{pkg.funnel_stage?.toUpperCase()}</span>
+                      {pkg.persona && <span className="ml-2 text-xs text-brand-silver/40">— {pkg.persona}</span>}
+                    </div>
+                    {pkg.ad_set_quality_score != null && (
+                      <span className="text-xs font-bold text-brand-electric">
+                        {(pkg.ad_set_quality_score * 100).toFixed(0)}% quality
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Findings + Recommendations */}
+          {findings && findings.length > 0 && (
+            <div>
+              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Key Findings</h5>
+              <ul className="space-y-1">
+                {findings.filter((f) => typeof f === 'string' && f.trim()).map((f, i) => (
+                  <li key={i} className="text-xs text-brand-silver/80 pl-3 border-l-2 border-brand-electric/30">{f}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {recommendations && recommendations.length > 0 && (
+            <div>
+              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Recommendations</h5>
+              <ul className="space-y-1">
+                {recommendations.filter((r) => typeof r === 'string' && r.trim()).map((r, i) => (
+                  <li key={i} className="text-xs text-brand-silver/80 pl-3 border-l-2 border-emerald-500/30">{r}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Gallery Tab */}
+      {activeTab === 'gallery' && (
+        <div className="space-y-4">
+          {allImages.length === 0 ? (
+            <p className="text-xs text-brand-silver/50">No images generated.</p>
+          ) : (
+            <div>
+              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+                Generated Images ({allImages.length})
+              </h5>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {allImages.map((img, i) => (
+                  <div key={i} className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
+                    {img.gcs_url ? (
+                      <div className="h-40 bg-gradient-to-br from-brand-electric/10 to-violet-500/10 flex items-center justify-center">
+                        <span className="text-xs text-brand-silver/40">{img.aspect_ratio ?? '1:1'}</span>
+                      </div>
+                    ) : (
+                      <div className="h-40 bg-white/5 flex items-center justify-center">
+                        <span className="text-xs text-brand-silver/30">Placeholder</span>
+                      </div>
+                    )}
+                    <div className="p-2 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-white">{img.ad_set_name}</span>
+                        <span className="text-[10px] text-brand-silver/40">{img.variant_id} / {img.aspect_ratio}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-brand-silver/40">
+                        <span>{img.provider ?? 'nano_banana_2'}</span>
+                        {img.cost_usd != null && <span>${img.cost_usd.toFixed(3)}</span>}
+                      </div>
+                      {img.prompt_used && (
+                        <p className="text-[10px] text-brand-silver/30 line-clamp-2">{img.prompt_used}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Copy Tab */}
+      {activeTab === 'copy' && (
+        <div className="space-y-4">
+          {/* Hooks */}
+          {allHooks.length > 0 && (
+            <div>
+              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Hooks</h5>
+              <div className="space-y-3">
+                {allHooks.map((hookSet, i) => (
+                  <div key={i} className="bg-white/5 rounded-lg p-3 border border-white/10">
+                    <h6 className="text-xs font-bold text-white mb-2">{hookSet.ad_set_name ?? `Ad Set ${i + 1}`}</h6>
+                    <div className="space-y-1.5">
+                      {hookSet.hooks?.map((h, j) => (
+                        <div key={j} className="flex items-start justify-between gap-2">
+                          <span className="text-xs text-brand-silver/80 flex-1">&ldquo;{h.hook_text}&rdquo;</span>
+                          {h.scroll_stop_power != null && (
+                            <span className="text-[10px] font-bold text-brand-electric whitespace-nowrap">
+                              {h.scroll_stop_power}/100
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Primary Copy */}
+          {allCopy.length > 0 && (
+            <div>
+              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">Primary Copy</h5>
+              <div className="space-y-3">
+                {allCopy.map((copySet, i) => (
+                  <div key={i} className="bg-white/5 rounded-lg p-3 border border-white/10">
+                    <h6 className="text-xs font-bold text-white mb-2">{copySet.ad_set_name ?? `Ad Set ${i + 1}`}</h6>
+                    <div className="space-y-2">
+                      {copySet.variants?.map((v, j) => (
+                        <div key={j} className="space-y-1 border-l-2 border-brand-electric/20 pl-2">
+                          <span className="text-[10px] font-medium text-brand-electric">{v.variant_id}</span>
+                          {v.short?.text && (
+                            <div className="text-xs text-brand-silver/70">
+                              <span className="text-[10px] text-brand-silver/40 mr-1">Short:</span>
+                              {v.short.text}
+                            </div>
+                          )}
+                          {v.medium?.text && (
+                            <div className="text-xs text-brand-silver/70">
+                              <span className="text-[10px] text-brand-silver/40 mr-1">Medium:</span>
+                              {v.medium.text}
+                            </div>
+                          )}
+                          {v.long?.text && (
+                            <div className="text-xs text-brand-silver/70">
+                              <span className="text-[10px] text-brand-silver/40 mr-1">Long:</span>
+                              <span className="line-clamp-3">{v.long.text}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* CTAs */}
+          {allCtas.length > 0 && (
+            <div>
+              <h5 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">CTAs</h5>
+              <div className="space-y-3">
+                {allCtas.map((ctaSet, i) => (
+                  <div key={i} className="bg-white/5 rounded-lg p-3 border border-white/10">
+                    <h6 className="text-xs font-bold text-white mb-2">{ctaSet.ad_set_name ?? `Ad Set ${i + 1}`}</h6>
+                    <div className="space-y-1.5">
+                      {ctaSet.cta_variants?.map((c, j) => (
+                        <div key={j} className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="bg-brand-electric/20 text-brand-electric text-[10px] font-bold px-1.5 py-0.5 rounded">
+                              {c.cta_button}
+                            </span>
+                            <span className="text-xs text-brand-silver/80">{c.cta_text}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-brand-silver/40">
+                            {c.urgency_score != null && <span>Urgency: {c.urgency_score}</span>}
+                            {c.clarity_score != null && <span>Clarity: {c.clarity_score}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Compliance Tab */}
+      {activeTab === 'compliance' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="text-xs font-medium text-brand-silver/60">Overall Pass Rate:</span>
+            <span className={`text-sm font-bold ${passRate >= 0.9 ? 'text-emerald-400' : passRate >= 0.7 ? 'text-amber-400' : 'text-red-400'}`}>
+              {(passRate * 100).toFixed(0)}%
+            </span>
+          </div>
+          {allCompliance.length === 0 ? (
+            <p className="text-xs text-brand-silver/50">No compliance results available.</p>
+          ) : (
+            <div className="space-y-2">
+              {allCompliance.map((c, i) => (
+                <div
+                  key={i}
+                  className={`rounded-lg p-3 border ${
+                    c.status === 'pass'
+                      ? 'bg-emerald-500/5 border-emerald-500/20'
+                      : c.status === 'warning'
+                      ? 'bg-amber-500/5 border-amber-500/20'
+                      : 'bg-red-500/5 border-red-500/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-white">{c.ad_set_name} — {c.copy_type}</span>
+                    <span className={`text-[10px] font-bold uppercase ${
+                      c.status === 'pass' ? 'text-emerald-400' : c.status === 'warning' ? 'text-amber-400' : 'text-red-400'
+                    }`}>
+                      {c.status}
+                    </span>
+                  </div>
+                  {c.copy_text && (
+                    <p className="text-[10px] text-brand-silver/50 line-clamp-1 mb-1">&ldquo;{c.copy_text}&rdquo;</p>
+                  )}
+                  {c.violations && c.violations.length > 0 && (
+                    <div className="space-y-1 mt-1">
+                      {c.violations.map((v, j) => (
+                        <div key={j} className="text-[10px] text-brand-silver/60">
+                          <span className="font-medium text-red-400">{v.rule}</span>: {v.description}
+                          {v.suggested_fix && <span className="text-emerald-400 ml-1">Fix: {v.suggested_fix}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Ad Units Tab */}
+      {activeTab === 'units' && (
+        <div className="space-y-4">
+          {allUnits.length === 0 ? (
+            <p className="text-xs text-brand-silver/50">No assembled ad units.</p>
+          ) : (
+            <div className="space-y-3">
+              {allUnits.map((unit, i) => (
+                <div key={i} className="bg-white/5 rounded-lg p-3 border border-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-white">{unit.ad_set_name}</span>
+                      <span className="text-[10px] text-brand-silver/40">{unit.unit_id}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {unit.ad_format && (
+                        <span className="bg-violet-500/20 text-violet-400 text-[10px] px-1.5 py-0.5 rounded">
+                          {unit.ad_format}
+                        </span>
+                      )}
+                      {unit.image_copy_coherence != null && (
+                        <span className={`text-[10px] font-bold ${
+                          unit.image_copy_coherence >= 80 ? 'text-emerald-400' : unit.image_copy_coherence >= 60 ? 'text-amber-400' : 'text-red-400'
+                        }`}>
+                          Coherence: {unit.image_copy_coherence}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      {unit.headline && (
+                        <div>
+                          <span className="text-[10px] text-brand-silver/40">Headline:</span>
+                          <p className="text-xs text-white font-medium">{unit.headline}</p>
+                        </div>
+                      )}
+                      {unit.primary_text && (
+                        <div>
+                          <span className="text-[10px] text-brand-silver/40">Body ({unit.copy_length}):</span>
+                          <p className="text-xs text-brand-silver/70 line-clamp-3">{unit.primary_text}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      {unit.cta_button && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-brand-silver/40">CTA:</span>
+                          <span className="bg-brand-electric/20 text-brand-electric text-[10px] font-bold px-1.5 py-0.5 rounded">
+                            {unit.cta_button}
+                          </span>
+                          {unit.cta_text && <span className="text-xs text-brand-silver/60">{unit.cta_text}</span>}
+                        </div>
+                      )}
+                      {unit.image_variant_id && (
+                        <div className="text-[10px] text-brand-silver/40">
+                          Image: {unit.image_variant_id} ({unit.image_aspect_ratio}) — {unit.target_placement}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function CampaignArchitectureSection({
   blueprint,
   funnelMap,
@@ -6589,6 +7120,13 @@ export default function ResultDashboard({
     resultData.funnel_map != null ||
     resultData.targeting_specs != null;
 
+  // ── Detect creative generation data ───────────────────────────
+  const hasCreativeGeneration =
+    resultData.creative_package != null ||
+    resultData.ad_units != null ||
+    resultData.copy_variants != null ||
+    resultData.generated_images != null;
+
   // ── Extract well-known keys ──────────────────────────────────────
   const summary = resultData.summary as string | undefined;
   const findings = resultData.findings as string[] | undefined;
@@ -6814,6 +7352,25 @@ export default function ResultDashboard({
     'tavily_benchmarks_used',
     'odoo_data_used',
     'rag_learnings_used',
+    // Creative Generation keys
+    'creative_package',
+    'ad_set_packages',
+    'ad_units',
+    'generated_images',
+    'hooks',
+    'copy_variants',
+    'ctas',
+    'compliance_results',
+    'creative_profiles',
+    'total_images_generated',
+    'total_images_refined',
+    'image_gen_cost_usd',
+    'compliance_pass_rate',
+    'creative_quality_score',
+    'image_gen_failed',
+    'caa_context_used',
+    'bsa_context_used',
+    'baa_context_used',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),
@@ -7075,8 +7632,29 @@ export default function ResultDashboard({
         />
       )}
 
+      {hasCreativeGeneration && (
+        <CreativeGenerationSection
+          creativePackage={resultData.creative_package as CGACreativePackage | undefined}
+          adSetPackages={resultData.ad_set_packages as CGAAdSetPackage[] | undefined}
+          adUnits={resultData.ad_units as CGACreativeUnit[] | undefined}
+          generatedImages={resultData.generated_images as CGAGeneratedImage[] | undefined}
+          hooks={resultData.hooks as CGAHookVariant[] | undefined}
+          copyVariants={resultData.copy_variants as CGACopySet[] | undefined}
+          ctas={resultData.ctas as CGACTASet[] | undefined}
+          complianceResults={resultData.compliance_results as CGAComplianceResult[] | undefined}
+          totalImagesGenerated={resultData.total_images_generated as number | undefined}
+          imageGenCostUsd={resultData.image_gen_cost_usd as number | undefined}
+          compliancePassRate={resultData.compliance_pass_rate as number | undefined}
+          creativeQualityScore={resultData.creative_quality_score as number | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.creative_generation ?? resultData.confidence_score) as number | undefined}
+          imageGenFailed={resultData.image_gen_failed as boolean | undefined}
+          findings={findings}
+          recommendations={recommendations}
+        />
+      )}
+
       {/* Key findings — filter out raw JSON blobs (internal agent state) */}
-      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && !hasBrandStory && !hasCampaignArchitecture && findings && findings.length > 0 && (() => {
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && !hasBrandStory && !hasCampaignArchitecture && !hasCreativeGeneration && findings && findings.length > 0 && (() => {
         const filtered = findings.filter((f) => {
           if (typeof f !== 'string') return false;
           const trimmed = f.trim();
@@ -7108,7 +7686,7 @@ export default function ResultDashboard({
       })()}
 
       {/* Recommendations */}
-      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && !hasBrandStory && !hasCampaignArchitecture && recommendations && recommendations.length > 0 && (
+      {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandPositioning && !hasBrandArchitecture && !hasBrandPersonality && !hasBrandStory && !hasCampaignArchitecture && !hasCreativeGeneration && recommendations && recommendations.length > 0 && (
         <section>
           <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Recommendations

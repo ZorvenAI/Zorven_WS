@@ -461,6 +461,23 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("launch campaign", 1),
         ("run ads", 1),
     ],
+    "meta-creative-generation": [
+        ("ad creative", 3),
+        ("generate ad images", 3),
+        ("ad copy", 3),
+        ("campaign creative", 3),
+        ("ad design", 3),
+        ("creative generation", 3),
+        ("ad images", 2),
+        ("hooks and copy", 2),
+        ("cta variants", 2),
+        ("visual brief", 2),
+        ("carousel", 2),
+        ("ad headline", 2),
+        ("creative", 1),
+        ("ad", 1),
+        ("copy", 1),
+    ],
 }
 
 
