@@ -69,6 +69,8 @@ class ImagePromptBuilder:
         briefs = creative_context.get("creative_briefs", [])
         visual = creative_context.get("brand_visual", {})
         company = creative_context.get("company", {})
+        positioning = creative_context.get("positioning", {})
+        name_tagline = creative_context.get("name_tagline", {})
 
         archetype = visual.get("archetype", "")
         color_palette = visual.get(
@@ -78,22 +80,50 @@ class ImagePromptBuilder:
         industry = visual.get(
             "industry", company.get("industry", "")
         )
+        brand_name = name_tagline.get("brand_name", "") or company.get("name", "")
+        tagline = name_tagline.get("tagline", "")
+        description = company.get("description", "")
+        products = company.get("products", [])
+        uvp = positioning.get("uvp", "")
 
         section = "## AI Image Prompt Generation Task\n\n"
         section += (
             "Generate detailed AI image generation prompts for each "
             "audience x funnel combination. These prompts will be fed "
-            "to an AI image generator (Nano Banana 2).\n\n"
+            "to an AI image generator.\n\n"
         )
 
-        # Brand visual identity context
-        section += "### Brand Visual Identity\n"
+        # Brand identity — CRITICAL for relevant image generation
+        section += "### Brand Identity\n"
+        if brand_name:
+            section += f"- **Brand name**: {brand_name}\n"
+        if tagline:
+            section += f"- **Tagline**: {tagline}\n"
+        if description:
+            section += f"- **Description**: {description}\n"
+        if industry:
+            section += f"- **Industry**: {industry}\n"
+        if products:
+            product_list = ", ".join(str(p) for p in products[:10])
+            section += f"- **Products/Services**: {product_list}\n"
+        if uvp:
+            section += f"- **Value proposition**: {uvp}\n"
+        section += "\n"
+
+        section += (
+            "**IMPORTANT**: All generated image prompts MUST be directly "
+            "relevant to the brand above. Images should clearly represent "
+            "the brand's products, services, or the lifestyle associated "
+            "with the brand. Do NOT generate generic stock-photo-style "
+            "images. Every image should be usable as a brand asset.\n\n"
+        )
+
+        # Brand visual style
+        section += "### Brand Visual Style\n"
         if archetype:
             section += f"- **Archetype**: {archetype}\n"
         if color_palette:
             section += f"- **Color palette**: {color_palette}\n"
-        if industry:
-            section += f"- **Industry**: {industry}\n"
         logo_url = visual.get("logo_url", "")
         if logo_url:
             section += f"- **Logo reference**: {logo_url}\n"

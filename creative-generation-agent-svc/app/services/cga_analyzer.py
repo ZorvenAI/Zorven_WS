@@ -164,11 +164,28 @@ class CGAAnalyzer:
             creative_context
         )
 
+        # Build brand summary for system prompt
+        brand_name = creative_context.get("name_tagline", {}).get(
+            "brand_name", ""
+        ) or creative_context.get("company", {}).get("name", "")
+        brand_desc = creative_context.get("company", {}).get("description", "")
+        brand_industry = creative_context.get("company", {}).get("industry", "")
+
         call1_system = (
-            "You are a creative director for Meta Ads campaigns. "
-            "Given brand context, audience personas, and campaign architecture, "
-            "generate creative profiles for each audience x funnel combination "
-            "and detailed AI image generation prompts.\n\n"
+            "You are a creative director for Meta Ads campaigns"
+        )
+        if brand_name:
+            call1_system += f" for {brand_name}"
+            if brand_industry:
+                call1_system += f", a {brand_industry} brand"
+        call1_system += (
+            ". Given brand context, audience personas, and campaign "
+            "architecture, generate creative profiles for each audience x "
+            "funnel combination and detailed AI image generation prompts.\n\n"
+            "CRITICAL: Every image prompt MUST be specific to this brand and "
+            "its products/services. The images will be used as actual brand "
+            "assets for social media and ad campaigns. Generic stock imagery "
+            "is unacceptable.\n\n"
             "Respond with a JSON object containing: creative_profiles, "
             "image_prompts, findings, recommendations, sources."
         )

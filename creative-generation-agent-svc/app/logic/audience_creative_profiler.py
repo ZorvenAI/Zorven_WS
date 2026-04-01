@@ -152,12 +152,25 @@ class AudienceCreativeProfiler:
         """
         briefs = creative_context.get("creative_briefs", [])
         visual = creative_context.get("brand_visual", {})
+        company = creative_context.get("company", {})
+        name_tagline = creative_context.get("name_tagline", {})
         archetype = visual.get("archetype", "")
+
+        brand_name = name_tagline.get("brand_name", "") or company.get("name", "")
+        description = company.get("description", "")
+        industry = visual.get("industry", company.get("industry", ""))
 
         # Resolve archetype mood
         mood = ARCHETYPE_VISUAL_MOODS.get(archetype, _DEFAULT_MOOD)
 
         section = "## Audience Creative Profiling\n\n"
+        if brand_name:
+            section += f"Brand: **{brand_name}**"
+            if industry:
+                section += f" ({industry})"
+            section += "\n"
+        if description:
+            section += f"About: {description[:300]}\n"
         section += (
             f"Brand archetype: **{archetype or 'Not specified'}**\n"
             f"Visual style: {mood['visual_style']}\n"
