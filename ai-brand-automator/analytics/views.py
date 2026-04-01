@@ -1246,9 +1246,7 @@ class CAAContextView(APIView):
                 "placement_budget": caa.get("placement_budget", {}),
                 "test_plan": caa.get("test_plan", {}),
                 "kpi_targets": caa.get("kpi_targets", {}),
-                "performance_projections": caa.get(
-                    "performance_projections", {}
-                ),
+                "performance_projections": caa.get("performance_projections", {}),
                 "risk_assessment": caa.get("risk_assessment", {}),
                 "creative_briefs": caa.get("creative_briefs", []),
                 "special_ad_category": caa.get("special_ad_category", ""),
