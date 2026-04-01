@@ -134,5 +134,7 @@ class RedisManager:
     @staticmethod
     def hash_inputs(prompt: str, **context: Any) -> str:
         """Generate MD5 hash of prompt + context for cache key."""
-        payload = json.dumps({"prompt": prompt, **context}, sort_keys=True, default=str)
+        payload = json.dumps(
+            {"prompt": prompt, **context}, sort_keys=True, default=str
+        )
         return hashlib.md5(payload.encode()).hexdigest()

@@ -79,7 +79,9 @@ _FUNNEL_CTA_MAPPING: dict[str, dict[str, Any]] = {
 class CTAGenerator:
     """Builds prompt section for CTA generation."""
 
-    def build_prompt_section(self, creative_context: dict[str, Any]) -> str:
+    def build_prompt_section(
+        self, creative_context: dict[str, Any]
+    ) -> str:
         """Build a prompt section for Claude call 2.
 
         Instructs Claude to generate 2-3 CTA variants per
@@ -103,7 +105,10 @@ class CTAGenerator:
 
         # Available CTA buttons
         section += "### Available Meta CTA Buttons\n"
-        section += "You MUST use one of these exact enum values for " "`cta_button`:\n"
+        section += (
+            "You MUST use one of these exact enum values for "
+            "`cta_button`:\n"
+        )
         for cta in META_CTA_BUTTONS:
             section += f"- `{cta}`\n"
         section += "\n"
@@ -131,16 +136,22 @@ class CTAGenerator:
             persona = brief.get("persona", "General audience")
             funnel = brief.get("funnel_stage", "tofu").lower()
 
-            mapping = _FUNNEL_CTA_MAPPING.get(funnel, _FUNNEL_CTA_MAPPING["tofu"])
+            mapping = _FUNNEL_CTA_MAPPING.get(
+                funnel, _FUNNEL_CTA_MAPPING["tofu"]
+            )
 
             section += f"#### {i}. {ad_set_name}\n"
             section += f"- **Persona**: {persona}\n"
             section += f"- **Funnel**: {funnel.upper()}\n"
             section += f"- **Rationale**: {mapping['rationale']}\n"
             section += (
-                f"- **Recommended buttons**: " f"{', '.join(mapping['recommended'])}\n"
+                f"- **Recommended buttons**: "
+                f"{', '.join(mapping['recommended'])}\n"
             )
-            section += f"- **Also valid**: " f"{', '.join(mapping['also_valid'])}\n"
+            section += (
+                f"- **Also valid**: "
+                f"{', '.join(mapping['also_valid'])}\n"
+            )
             section += "\n"
 
         # Output format

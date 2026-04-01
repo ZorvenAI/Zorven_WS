@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 class CreativeLearningsLoader:
     """Extract creative performance learnings from prior pipeline runs."""
 
-    def load(self, previous_outputs: dict[str, Any] | None) -> dict[str, Any]:
+    def load(
+        self, previous_outputs: dict[str, Any] | None
+    ) -> dict[str, Any]:
         """Extract creative performance learnings from previous outputs.
 
         Looks for image style winners, hook pattern winners, copy length
@@ -30,9 +32,15 @@ class CreativeLearningsLoader:
             logger.info("No previous outputs — first campaign, empty learnings")
             return self._empty_learnings()
 
-        image_style_winners = self._extract_image_learnings(previous_outputs)
-        hook_pattern_winners = self._extract_hook_learnings(previous_outputs)
-        copy_length_insights = self._extract_copy_length_learnings(previous_outputs)
+        image_style_winners = self._extract_image_learnings(
+            previous_outputs
+        )
+        hook_pattern_winners = self._extract_hook_learnings(
+            previous_outputs
+        )
+        copy_length_insights = self._extract_copy_length_learnings(
+            previous_outputs
+        )
         cta_performance = self._extract_cta_learnings(previous_outputs)
 
         has_learnings = bool(
@@ -72,7 +80,9 @@ class CreativeLearningsLoader:
             "cta_performance": {},
         }
 
-    def _extract_image_learnings(self, outputs: dict[str, Any]) -> list[dict[str, Any]]:
+    def _extract_image_learnings(
+        self, outputs: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Extract winning image styles from prior creative results."""
         winners: list[dict[str, Any]] = []
 
@@ -90,7 +100,9 @@ class CreativeLearningsLoader:
                             "style": unit.get("image_style", ""),
                             "funnel_stage": unit.get("funnel_stage", ""),
                             "ctr": ctr,
-                            "prompt_keywords": unit.get("prompt_keywords", []),
+                            "prompt_keywords": unit.get(
+                                "prompt_keywords", []
+                            ),
                         }
                     )
 
@@ -98,7 +110,9 @@ class CreativeLearningsLoader:
         winners.sort(key=lambda w: w.get("ctr", 0), reverse=True)
         return winners[:10]
 
-    def _extract_hook_learnings(self, outputs: dict[str, Any]) -> list[dict[str, Any]]:
+    def _extract_hook_learnings(
+        self, outputs: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Extract winning hook patterns from prior results."""
         winners: list[dict[str, Any]] = []
 
@@ -110,7 +124,9 @@ class CreativeLearningsLoader:
         for pkg in packages:
             for unit in pkg.get("creative_units", []):
                 hook = unit.get("hook", "")
-                scroll_stop = unit.get("performance", {}).get("scroll_stop_rate", 0)
+                scroll_stop = unit.get("performance", {}).get(
+                    "scroll_stop_rate", 0
+                )
                 if hook and scroll_stop > 0:
                     winners.append(
                         {
@@ -120,10 +136,14 @@ class CreativeLearningsLoader:
                         }
                     )
 
-        winners.sort(key=lambda w: w.get("scroll_stop_rate", 0), reverse=True)
+        winners.sort(
+            key=lambda w: w.get("scroll_stop_rate", 0), reverse=True
+        )
         return winners[:10]
 
-    def _extract_copy_length_learnings(self, outputs: dict[str, Any]) -> dict[str, Any]:
+    def _extract_copy_length_learnings(
+        self, outputs: dict[str, Any]
+    ) -> dict[str, Any]:
         """Extract copy length performance insights."""
         insights: dict[str, Any] = {}
 
@@ -136,16 +156,22 @@ class CreativeLearningsLoader:
             funnel = pkg.get("funnel_stage", "unknown")
             for unit in pkg.get("creative_units", []):
                 length_label = unit.get("copy_length", "")
-                engagement = unit.get("performance", {}).get("engagement_rate", 0)
+                engagement = unit.get("performance", {}).get(
+                    "engagement_rate", 0
+                )
                 if length_label and engagement > 0:
                     if funnel not in insights:
                         insights[funnel] = {}
                     current = insights[funnel].get(length_label, 0)
-                    insights[funnel][length_label] = max(current, engagement)
+                    insights[funnel][length_label] = max(
+                        current, engagement
+                    )
 
         return insights
 
-    def _extract_cta_learnings(self, outputs: dict[str, Any]) -> dict[str, Any]:
+    def _extract_cta_learnings(
+        self, outputs: dict[str, Any]
+    ) -> dict[str, Any]:
         """Extract CTA button performance data."""
         performance: dict[str, Any] = {}
 
@@ -157,9 +183,13 @@ class CreativeLearningsLoader:
         for pkg in packages:
             for unit in pkg.get("creative_units", []):
                 cta = unit.get("cta_button", "")
-                conv_rate = unit.get("performance", {}).get("conversion_rate", 0)
+                conv_rate = unit.get("performance", {}).get(
+                    "conversion_rate", 0
+                )
                 if cta and conv_rate > 0:
-                    current = performance.get(cta, {}).get("avg_conversion_rate", 0)
+                    current = performance.get(cta, {}).get(
+                        "avg_conversion_rate", 0
+                    )
                     performance[cta] = {
                         "avg_conversion_rate": max(current, conv_rate),
                         "funnel_stage": unit.get("funnel_stage", ""),

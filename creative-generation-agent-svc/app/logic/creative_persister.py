@@ -56,19 +56,26 @@ class CreativePersister:
                     {
                         "job_id": job_id,
                         "campaign_id": result.get("campaign_id", ""),
-                        "total_images": result.get("total_images_generated", 0),
-                        "confidence_score": result.get("confidence_score", 0.0),
+                        "total_images": result.get(
+                            "total_images_generated", 0
+                        ),
+                        "confidence_score": result.get(
+                            "confidence_score", 0.0
+                        ),
                     },
                     ttl=_DEFAULT_TTL,
                 )
 
                 logger.info(
-                    "Creative package persisted to Redis for tenant %s, " "job %s",
+                    "Creative package persisted to Redis for tenant %s, "
+                    "job %s",
                     tenant_id,
                     job_id,
                 )
             except Exception as exc:
-                logger.warning("Redis persist failed (fail-open): %s", exc)
+                logger.warning(
+                    "Redis persist failed (fail-open): %s", exc
+                )
 
         # 2. GCS upload (when configured)
         if gcs_client:
@@ -79,10 +86,16 @@ class CreativePersister:
                     package_data=result,
                 )
                 if gcs_uri:
-                    logger.info("Creative package persisted to GCS: %s", gcs_uri)
+                    logger.info(
+                        "Creative package persisted to GCS: %s", gcs_uri
+                    )
                 else:
-                    logger.warning("GCS upload returned empty URI for job %s", job_id)
+                    logger.warning(
+                        "GCS upload returned empty URI for job %s", job_id
+                    )
             except Exception as exc:
-                logger.warning("GCS persist failed (fail-open): %s", exc)
+                logger.warning(
+                    "GCS persist failed (fail-open): %s", exc
+                )
 
         return gcs_uri

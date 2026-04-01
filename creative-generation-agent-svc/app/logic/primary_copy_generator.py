@@ -39,7 +39,9 @@ _FUNNEL_COPY_STRATEGIES: dict[str, dict[str, str]] = {
             "Paint the aspirational picture. Focus on emotional "
             "connection and brand world-building. Do NOT sell directly."
         ),
-        "structure": ("Hook -> Aspirational vision -> Brand connection -> Soft CTA"),
+        "structure": (
+            "Hook -> Aspirational vision -> Brand connection -> Soft CTA"
+        ),
     },
     "mofu": {
         "approach": "feature-benefit, social proof, educational",
@@ -49,7 +51,9 @@ _FUNNEL_COPY_STRATEGIES: dict[str, dict[str, str]] = {
             "markers (numbers, credentials, testimonials). "
             "Position as the solution."
         ),
-        "structure": ("Pain point -> Solution -> Proof point -> Value CTA"),
+        "structure": (
+            "Pain point -> Solution -> Proof point -> Value CTA"
+        ),
     },
     "bofu": {
         "approach": "ROI-focused, testimonial-driven, offer-centric",
@@ -58,7 +62,9 @@ _FUNNEL_COPY_STRATEGIES: dict[str, dict[str, str]] = {
             "offers with terms. Include risk reversal (guarantees, "
             "trials). Create urgency without false scarcity."
         ),
-        "structure": ("Proof/Offer -> Specifics -> Risk reversal -> Urgent CTA"),
+        "structure": (
+            "Proof/Offer -> Specifics -> Risk reversal -> Urgent CTA"
+        ),
     },
     "retention": {
         "approach": "exclusive, appreciative, upsell-focused",
@@ -67,7 +73,9 @@ _FUNNEL_COPY_STRATEGIES: dict[str, dict[str, str]] = {
             "value or early access. Highlight new features or "
             "complementary products. Celebrate milestones."
         ),
-        "structure": ("Recognition -> Exclusive value -> Next step -> Loyalty CTA"),
+        "structure": (
+            "Recognition -> Exclusive value -> Next step -> Loyalty CTA"
+        ),
     },
 }
 
@@ -75,7 +83,9 @@ _FUNNEL_COPY_STRATEGIES: dict[str, dict[str, str]] = {
 class PrimaryCopyGenerator:
     """Builds prompt section for primary ad copy generation."""
 
-    def build_prompt_section(self, creative_context: dict[str, Any]) -> str:
+    def build_prompt_section(
+        self, creative_context: dict[str, Any]
+    ) -> str:
         """Build a prompt section for Claude call 2.
 
         Instructs Claude to generate 2-3 primary copy variants per
@@ -156,7 +166,8 @@ class PrimaryCopyGenerator:
             if content:
                 section += f"15s pitch: {content}\n"
             section += (
-                "Use these story elements as seeds for TOFU " "aspirational copy.\n\n"
+                "Use these story elements as seeds for TOFU "
+                "aspirational copy.\n\n"
             )
 
         # Per-brief copy instructions
@@ -167,7 +178,9 @@ class PrimaryCopyGenerator:
             )
             return section
 
-        section += f"### Copy Required ({len(briefs)} ad sets)\n\n"
+        section += (
+            f"### Copy Required ({len(briefs)} ad sets)\n\n"
+        )
 
         for i, brief in enumerate(briefs, 1):
             ad_set_name = brief.get("ad_set_name", f"Ad Set {i}")

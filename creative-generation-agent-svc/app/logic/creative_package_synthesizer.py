@@ -14,7 +14,9 @@ logger = logging.getLogger(__name__)
 class CreativePackageSynthesizer:
     """Builds capstone prompt section for creative package assembly."""
 
-    def build_prompt_section(self, creative_context: dict[str, Any]) -> str:
+    def build_prompt_section(
+        self, creative_context: dict[str, Any]
+    ) -> str:
         """Build capstone prompt section for Claude call 3.
 
         Instructs Claude to assemble the full CampaignCreativePackage
@@ -39,7 +41,9 @@ class CreativePackageSynthesizer:
 
         # Package requirements
         section += "### Package Requirements\n\n"
-        section += f"- **Ad sets to package**: {len(briefs)}\n"
+        section += (
+            f"- **Ad sets to package**: {len(briefs)}\n"
+        )
         if brand_name:
             section += f"- **Brand**: {brand_name}\n"
         section += (

@@ -21,9 +21,9 @@ _COST_PER_IMAGE_USD = 0.065
 
 # Supported aspect ratios for Meta Ads
 ASPECT_RATIOS = {
-    "1:1": "1:1",  # Feed (1080×1080)
-    "9:16": "9:16",  # Stories/Reels (1080×1920)
-    "16:9": "16:9",  # Audience Network (1200×628 approx)
+    "1:1": "1:1",      # Feed (1080×1080)
+    "9:16": "9:16",    # Stories/Reels (1080×1920)
+    "16:9": "16:9",    # Audience Network (1200×628 approx)
 }
 
 
@@ -82,7 +82,9 @@ class ImageGenAdapter(ABC):
     """Abstract base for image generation providers."""
 
     @abstractmethod
-    async def generate(self, prompt: str, aspect_ratio: str = "1:1") -> GeneratedImage:
+    async def generate(
+        self, prompt: str, aspect_ratio: str = "1:1"
+    ) -> GeneratedImage:
         """Generate a single image from a text prompt."""
 
     @abstractmethod
@@ -122,7 +124,9 @@ class NanoBanana2Adapter(ImageGenAdapter):
     def is_available(self) -> bool:
         return self._client is not None and self._circuit.can_attempt()
 
-    async def generate(self, prompt: str, aspect_ratio: str = "1:1") -> GeneratedImage:
+    async def generate(
+        self, prompt: str, aspect_ratio: str = "1:1"
+    ) -> GeneratedImage:
         """Generate image via Nano Banana 2."""
         if not self._client:
             raise RuntimeError("Nano Banana 2 client not initialized")
@@ -206,14 +210,18 @@ class StubAdapter(ImageGenAdapter):
     def is_available(self) -> bool:
         return True
 
-    async def generate(self, prompt: str, aspect_ratio: str = "1:1") -> GeneratedImage:
+    async def generate(
+        self, prompt: str, aspect_ratio: str = "1:1"
+    ) -> GeneratedImage:
         """Return a placeholder image."""
         logger.info(
             "Stub image generation: ratio=%s, prompt=%s...",
             aspect_ratio,
             prompt[:80],
         )
-        placeholder = b"\x89PNG\r\n\x1a\n"  # PNG magic bytes (minimal stub)
+        placeholder = (
+            b"\x89PNG\r\n\x1a\n"  # PNG magic bytes (minimal stub)
+        )
         return GeneratedImage(
             image_data=placeholder,
             prompt_used=prompt,
@@ -231,7 +239,9 @@ def create_image_gen_client() -> ImageGenAdapter:
         adapter = NanoBanana2Adapter()
         if adapter.is_available():
             return adapter
-        logger.warning("Nano Banana 2 init failed, falling back to stub adapter")
+        logger.warning(
+            "Nano Banana 2 init failed, falling back to stub adapter"
+        )
     else:
         logger.info("No GOOGLE_API_KEY configured, using stub image adapter")
     return StubAdapter()

@@ -52,7 +52,9 @@ _FUNNEL_SUBJECT_GUIDANCE: dict[str, str] = {
 class ImagePromptBuilder:
     """Builds prompt section for AI image generation instructions."""
 
-    def build_prompt_section(self, creative_context: dict[str, Any]) -> str:
+    def build_prompt_section(
+        self, creative_context: dict[str, Any]
+    ) -> str:
         """Build a prompt section for Claude call 1.
 
         Instructs Claude to generate detailed AI image prompts for each
@@ -73,7 +75,9 @@ class ImagePromptBuilder:
             "color_palette_desc",
             company.get("color_palette_desc", ""),
         )
-        industry = visual.get("industry", company.get("industry", ""))
+        industry = visual.get(
+            "industry", company.get("industry", "")
+        )
 
         section = "## AI Image Prompt Generation Task\n\n"
         section += (
@@ -97,7 +101,9 @@ class ImagePromptBuilder:
 
         # Composition guidance per aspect ratio
         section += "### Aspect Ratio Compositions\n"
-        section += "Each prompt must be generated for 3 aspect ratios:\n"
+        section += (
+            "Each prompt must be generated for 3 aspect ratios:\n"
+        )
         for ratio, guidance in _COMPOSITION_GUIDANCE.items():
             section += f"- **{ratio}**: {guidance}\n"
         section += "\n"

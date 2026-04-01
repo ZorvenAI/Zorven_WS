@@ -56,18 +56,14 @@ class AnthropicClient:
             start = text.find("{")
             end = text.rfind("}") + 1
             if start >= 0 and end > start:
-                try:
-                    parsed = json.loads(text[start:end])
-                    result = _ensure_dict(parsed)
-                    logger.info(
-                        "Extracted JSON keys: %s (type=%s)",
-                        list(result.keys())[:10],
-                        type(parsed).__name__,
-                    )
-                    return result
-                except (json.JSONDecodeError, ValueError):
-                    logger.warning("JSON extraction parse failed, returning raw")
-                    return {"raw_response": text}
+                parsed = json.loads(text[start:end])
+                result = _ensure_dict(parsed)
+                logger.info(
+                    "Extracted JSON keys: %s (type=%s)",
+                    list(result.keys())[:10],
+                    type(parsed).__name__,
+                )
+                return result
             logger.warning("No JSON object found in response")
             return {"raw_response": text}
         except Exception as exc:

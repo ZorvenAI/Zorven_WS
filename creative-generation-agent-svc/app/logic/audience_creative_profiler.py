@@ -135,7 +135,9 @@ _FUNNEL_CREATIVE: dict[str, dict[str, str]] = {
 class AudienceCreativeProfiler:
     """Builds prompt section mapping audience x funnel to creative direction."""
 
-    def build_prompt_section(self, creative_context: dict[str, Any]) -> str:
+    def build_prompt_section(
+        self, creative_context: dict[str, Any]
+    ) -> str:
         """Build a prompt section for Claude call 1.
 
         For each audience x funnel combination in creative_briefs,
@@ -182,7 +184,9 @@ class AudienceCreativeProfiler:
             theme = brief.get("messaging_theme", "")
             placements = brief.get("placements", [])
 
-            funnel_dir = _FUNNEL_CREATIVE.get(funnel, _FUNNEL_CREATIVE["tofu"])
+            funnel_dir = _FUNNEL_CREATIVE.get(
+                funnel, _FUNNEL_CREATIVE["tofu"]
+            )
 
             section += f"### {i}. {ad_set_name}\n"
             section += f"- **Persona**: {persona}\n"
@@ -190,15 +194,23 @@ class AudienceCreativeProfiler:
             if theme:
                 section += f"- **Messaging theme**: {theme}\n"
             if placements:
-                section += f"- **Placements**: {', '.join(placements)}\n"
+                section += (
+                    f"- **Placements**: {', '.join(placements)}\n"
+                )
             section += f"- **Creative goal**: {funnel_dir['goal']}\n"
             section += (
                 f"- **Visual style**: {mood['visual_style']} — "
                 f"{funnel_dir['image_focus']}\n"
             )
-            section += f"- **Image subjects**: {mood['image_subjects']}\n"
-            section += f"- **Emotional tone**: {mood['emotional_tone']}\n"
-            section += f"- **Color emphasis**: {mood['color_emphasis']}\n"
+            section += (
+                f"- **Image subjects**: {mood['image_subjects']}\n"
+            )
+            section += (
+                f"- **Emotional tone**: {mood['emotional_tone']}\n"
+            )
+            section += (
+                f"- **Color emphasis**: {mood['color_emphasis']}\n"
+            )
             section += (
                 f"- **Copy approach**: {mood['copy_approach']} — "
                 f"{funnel_dir['copy_focus']}\n"
