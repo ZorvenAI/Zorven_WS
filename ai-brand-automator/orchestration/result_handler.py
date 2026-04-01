@@ -78,9 +78,21 @@ def handle_pipeline_result(
                 job.completed_at = timezone.now()
                 update_fields.append("completed_at")
 
-        # Update result_data
+        # Update result_data — merge node_results progressively so that
+        # per-level progress callbacks accumulate rather than overwrite
+        # each other's data (each level only sends its own node_results).
         if result_data is not None:
-            job.result_data = result_data
+            existing = job.result_data or {}
+            incoming_nodes = result_data.get("node_results", {})
+            existing_nodes = existing.get("node_results", {})
+
+            if incoming_nodes and existing_nodes:
+                # Deep-merge node_results: incoming overwrites per-key
+                merged_nodes = {**existing_nodes, **incoming_nodes}
+                merged = {**existing, **result_data, "node_results": merged_nodes}
+                job.result_data = merged
+            else:
+                job.result_data = result_data
             update_fields.append("result_data")
 
         # Update error_message

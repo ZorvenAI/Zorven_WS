@@ -286,16 +286,16 @@ class TestCallbackSerializer:
         )
 
     def test_callback_serializer_rejects_oversized_progress(self):
-        """Rejects progress JSON exceeding 1 MB."""
-        oversized = {"data": "x" * (1024 * 1024 + 1)}
+        """Rejects progress JSON exceeding 5 MB."""
+        oversized = {"data": "x" * (5 * 1024 * 1024 + 1)}
         data = {"progress": oversized}
         serializer = CallbackSerializer(data=data)
         assert not serializer.is_valid()
         assert "progress" in serializer.errors
 
     def test_callback_serializer_rejects_oversized_result_data(self):
-        """Rejects result_data JSON exceeding 1 MB."""
-        oversized = {"data": "x" * (1024 * 1024 + 1)}
+        """Rejects result_data JSON exceeding 5 MB."""
+        oversized = {"data": "x" * (5 * 1024 * 1024 + 1)}
         data = {"result_data": oversized}
         serializer = CallbackSerializer(data=data)
         assert not serializer.is_valid()

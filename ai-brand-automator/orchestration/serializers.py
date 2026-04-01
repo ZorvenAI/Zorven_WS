@@ -265,8 +265,11 @@ class AnalysisJobSerializer(serializers.ModelSerializer):
 class CallbackSerializer(serializers.Serializer):
     """Validates callback payload from pipeline-orchestrator-svc."""
 
-    # Maximum allowed size for JSON fields (1 MB)
-    MAX_JSON_SIZE = 1024 * 1024
+    # Maximum allowed size for JSON fields (5 MB).
+    # CGA creative packages include image thumbnails (~15 KB each) and
+    # full copy/compliance/ad-unit payloads that can exceed 1 MB when
+    # combined with other agents' outputs in the final manager callback.
+    MAX_JSON_SIZE = 5 * 1024 * 1024
 
     status = serializers.ChoiceField(
         choices=AnalysisJob.Status.choices,
