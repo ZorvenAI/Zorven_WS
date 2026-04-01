@@ -1066,6 +1066,200 @@ class NTAContextView(APIView):
         )
 
 
+class BSAContextView(APIView):
+    """GET /api/v1/analytics/bsa-context/ — Latest BSA brand story result.
+
+    Used by WF3 agents (CGA, etc.) to consume BSA story arcs.
+    Authenticated via X-Service-Token.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        # Service-token auth
+        service_token = request.headers.get("X-Service-Token", "")
+        expected_token = getattr(
+            django_settings,
+            "ORCHESTRATOR_SERVICE_TOKEN",
+            "dev-service-token",
+        )
+        if service_token != expected_token:
+            return Response(
+                {"error": "Invalid service token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        tenant = None
+        tenant_id = request.headers.get("X-Tenant-ID", "")
+        if tenant_id:
+            from tenants.models import Tenant
+
+            try:
+                tenant = Tenant.objects.get(pk=tenant_id)
+            except (Tenant.DoesNotExist, ValueError):
+                pass
+        if not tenant:
+            tenant = _get_tenant(request)
+
+        if not tenant:
+            return Response(
+                {"error": "Tenant required"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        from orchestration.models import AnalysisJob
+
+        # Find latest completed BSA job
+        job = (
+            AnalysisJob.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True),
+                status=AnalysisJob.Status.COMPLETED,
+                manifest__pipeline_id="brand-strategy-story",
+            )
+            .select_related("manifest")
+            .order_by("-completed_at")
+            .first()
+        )
+
+        # Fallback: any job with brand_story node results
+        if not job:
+            candidates = AnalysisJob.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True),
+                status=AnalysisJob.Status.COMPLETED,
+            ).order_by("-completed_at")[:20]
+            for candidate in candidates:
+                nr = (candidate.result_data or {}).get("node_results", {})
+                if "brand_story" in nr:
+                    job = candidate
+                    break
+
+        if not job:
+            return Response(
+                {"error": "No BSA data"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        result_data = job.result_data or {}
+        node_results = result_data.get("node_results", {})
+        bsa = node_results.get("brand_story", {})
+
+        return Response(
+            {
+                "origin_story": bsa.get("origin_story", {}),
+                "mission_vision": bsa.get("mission_vision", {}),
+                "pitches": bsa.get("pitches", {}),
+                "channel_narratives": bsa.get("channel_narratives", {}),
+                "story_style_guide": bsa.get("story_style_guide", {}),
+                "subbrand_stories": bsa.get("subbrand_stories", []),
+                "narrative_package": bsa.get("narrative_package", {}),
+                "confidence_score": bsa.get("confidence_score", 0.0),
+                "bsa_completed_at": (
+                    job.completed_at.isoformat() if job.completed_at else None
+                ),
+                "bsa_job_id": str(job.job_id),
+            }
+        )
+
+
+class CAAContextView(APIView):
+    """GET /api/v1/analytics/caa-context/ — Latest CAA campaign architecture.
+
+    Used by WF3 agents (CGA, etc.) to consume CAA campaign blueprint.
+    Authenticated via X-Service-Token.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        # Service-token auth
+        service_token = request.headers.get("X-Service-Token", "")
+        expected_token = getattr(
+            django_settings,
+            "ORCHESTRATOR_SERVICE_TOKEN",
+            "dev-service-token",
+        )
+        if service_token != expected_token:
+            return Response(
+                {"error": "Invalid service token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        tenant = None
+        tenant_id = request.headers.get("X-Tenant-ID", "")
+        if tenant_id:
+            from tenants.models import Tenant
+
+            try:
+                tenant = Tenant.objects.get(pk=tenant_id)
+            except (Tenant.DoesNotExist, ValueError):
+                pass
+        if not tenant:
+            tenant = _get_tenant(request)
+
+        if not tenant:
+            return Response(
+                {"error": "Tenant required"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        from orchestration.models import AnalysisJob
+
+        # Find latest completed CAA job
+        job = (
+            AnalysisJob.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True),
+                status=AnalysisJob.Status.COMPLETED,
+                manifest__pipeline_id="meta-campaign-architecture",
+            )
+            .select_related("manifest")
+            .order_by("-completed_at")
+            .first()
+        )
+
+        # Fallback: any job with campaign_architecture node results
+        if not job:
+            candidates = AnalysisJob.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True),
+                status=AnalysisJob.Status.COMPLETED,
+            ).order_by("-completed_at")[:20]
+            for candidate in candidates:
+                nr = (candidate.result_data or {}).get("node_results", {})
+                if "campaign_architecture" in nr:
+                    job = candidate
+                    break
+
+        if not job:
+            return Response(
+                {"error": "No CAA data"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        result_data = job.result_data or {}
+        node_results = result_data.get("node_results", {})
+        caa = node_results.get("campaign_architecture", {})
+
+        return Response(
+            {
+                "blueprint": caa.get("blueprint", {}),
+                "funnel_map": caa.get("funnel_map", {}),
+                "targeting_specs": caa.get("targeting_specs", []),
+                "placement_budget": caa.get("placement_budget", {}),
+                "test_plan": caa.get("test_plan", {}),
+                "kpi_targets": caa.get("kpi_targets", {}),
+                "performance_projections": caa.get("performance_projections", {}),
+                "risk_assessment": caa.get("risk_assessment", {}),
+                "creative_briefs": caa.get("creative_briefs", []),
+                "special_ad_category": caa.get("special_ad_category", ""),
+                "meta_api_compatible": caa.get("meta_api_compatible", False),
+                "confidence_score": caa.get("confidence_score", 0.0),
+                "caa_completed_at": (
+                    job.completed_at.isoformat() if job.completed_at else None
+                ),
+                "caa_job_id": str(job.job_id),
+            }
+        )
+
+
 class BrandPersonalitySyncView(APIView):
     """POST /api/v1/analytics/brand-personality-sync/
 
