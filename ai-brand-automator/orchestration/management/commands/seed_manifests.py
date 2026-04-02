@@ -1396,10 +1396,7 @@ class Command(BaseCommand):
                     {
                         "id": "campaign_architecture",
                         "type": "external",
-                        "url": (
-                            "http://campaign-architecture-agent-svc"
-                            ":8041/v1/execute"
-                        ),
+                        "url": "http://campaign-architecture-agent-svc:8041/v1/execute",
                         "config": {
                             "require_wf1_context": True,
                             "require_bpa_context": True,
@@ -1409,10 +1406,7 @@ class Command(BaseCommand):
                     {
                         "id": "creative_generation",
                         "type": "external",
-                        "url": (
-                            "http://creative-generation-agent-svc"
-                            ":8042/v1/execute"
-                        ),
+                        "url": "http://creative-generation-agent-svc:8042/v1/execute",
                         "config": {
                             "require_campaign_blueprint": True,
                             "require_wf1_context": True,
@@ -1423,10 +1417,7 @@ class Command(BaseCommand):
                     {
                         "id": "ad_publishing",
                         "type": "external",
-                        "url": (
-                            "http://ad-publishing-agent-svc"
-                            ":8043/v1/execute"
-                        ),
+                        "url": "http://ad-publishing-agent-svc:8043/v1/execute",
                         "config": {
                             "require_campaign_blueprint": True,
                             "require_creative_packages": True,
@@ -1476,10 +1467,7 @@ class Command(BaseCommand):
                     {
                         "id": "ad_publishing",
                         "type": "external",
-                        "url": (
-                            "http://ad-publishing-agent-svc"
-                            ":8043/v1/execute"
-                        ),
+                        "url": "http://ad-publishing-agent-svc:8043/v1/execute",
                         "config": {
                             "require_campaign_blueprint": True,
                             "require_creative_packages": True,

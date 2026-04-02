@@ -93,7 +93,11 @@ class AdPublishingExtractor(BaseExtractor):
 
         # Targeting audience size
         audience_size = adpub.get("targeting_audience_size")
-        if audience_size and isinstance(audience_size, (int, float)) and audience_size > 0:
+        if (
+            audience_size
+            and isinstance(audience_size, (int, float))
+            and audience_size > 0
+        ):
             metrics.append(
                 self._make_metric(
                     job,
