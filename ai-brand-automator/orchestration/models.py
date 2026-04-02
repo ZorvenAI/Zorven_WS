@@ -101,6 +101,7 @@ class AnalysisJob(models.Model):
         RUNNING = "running", "Running"
         COMPLETED = "completed", "Completed"
         FAILED = "failed", "Failed"
+        AWAITING_APPROVAL = "awaiting_approval", "Awaiting Approval"
 
     job_id = models.UUIDField(
         default=uuid.uuid4,

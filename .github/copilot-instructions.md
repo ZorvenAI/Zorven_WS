@@ -15,7 +15,7 @@ AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand buil
 | AI | Google Gemini 2.0 Flash (`GeminiAIService` singleton), Anthropic Claude (brand equity) |
 | Database | PostgreSQL (Neon) with `django-tenants` (schema-based multi-tenancy) |
 | Gateway | Kong (DB-less): JWT auth, CORS, rate limiting |
-| Microservices | FastAPI, Pydantic v2, Uvicorn (8 services, direct sequential execution) |
+| Microservices | FastAPI, Pydantic v2, Uvicorn (22 services, direct sequential execution) |
 | Queue | Celery + Redis (beat scheduler, `orchestration` queue), Apache Kafka (event streaming) |
 | Storage | Google Cloud Storage (2 buckets: raw + curated) |
 | Payments | Stripe (Basic $29 / Pro $79 / Enterprise $199) |
@@ -34,7 +34,21 @@ content-agent-service/        → FastAPI — SEO/AEO/GEO blog authoring (port 8
 social-agent-service/         → FastAPI — social media promotion (port 8060)
 rag-uploader-agent-service/   → FastAPI — RAG document archival (port 8070)
 brand-equity-calculator-svc/  → FastAPI — public brand equity calc, Anthropic Claude (port 8090)
+market-research-agent-svc/    → FastAPI — Market sizing, TAM/SAM/SOM (port 8021)
+competitor-intel-agent-svc/   → FastAPI — Competitor profiling, SWOT (port 8022)
+audience-persona-agent-svc/   → FastAPI — Audience persona profiling (port 8023)
+trend-cultural-agent-svc/     → FastAPI — Trend monitoring, cultural insights (port 8024)
+voc-agent-svc/                → FastAPI — Voice of Customer analysis (port 8025)
+brand-positioning-agent-svc/  → FastAPI — WF2 brand positioning (port 8031)
+brand-architecture-agent-svc/ → FastAPI — WF2 brand architecture (port 8032)
+brand-personality-agent-svc/  → FastAPI — WF2 brand personality (port 8033)
+brand-naming-agent-svc/       → FastAPI — WF2 naming & tagline (port 8034)
+brand-story-agent-svc/        → FastAPI — WF2 brand story & narrative (port 8035)
+campaign-architecture-agent-svc/ → FastAPI — WF3 campaign architecture (port 8041)
+creative-generation-agent-svc/ → FastAPI — WF3 creative generation (port 8042)
+ad-publishing-agent-svc/      → FastAPI — WF3 ad publishing, Meta Ads API, human approval gate (port 8043)
 odoo-mcp-server-svc/          → FastAPI — Odoo ERP MCP bridge, RBAC + 101 tools (port 8095)
+odoo-worker-agent-svc/        → FastAPI — Multi-persona Odoo worker (port 8100)
 vendor/odoo/community/        → Git submodule — Odoo Community Edition 19.0
 deployment/                   → Docker Compose, Kong config, Railway/k8s manifests
 docs/                         → Architecture docs, plans, guides
@@ -201,7 +215,7 @@ const poll = async () => {
 | Orchestrator main | `pipeline-orchestrator-svc/app/main.py` |
 | Orchestrator job executor | `pipeline-orchestrator-svc/app/services/job_executor.py` |
 | Skill loader + router | `pipeline-orchestrator-svc/app/skills/` |
-| Skill definitions (41 .md files) | `pipeline-orchestrator-svc/skills/` |
+| Skill definitions (155 .md files) | `pipeline-orchestrator-svc/skills/` |
 | Pipeline composer (auto-detect) | `pipeline-orchestrator-svc/app/nodes/internal/pipeline_composer.py` |
 | Discovery executor | `discovery-agent-svc/app/services/discovery_executor.py` |
 | Intelligence executor | `intelligence-agent-svc/app/services/intelligence_executor.py` |
@@ -222,7 +236,7 @@ const poll = async () => {
 ```bash
 # Backend
 cd ai-brand-automator && source ../.venv/bin/activate
-python manage.py runserver 0.0.0.0:8000
+python manage.py runserver 0.0.0.0:8001
 
 # Frontend
 cd ai-brand-automator-frontend && npm run dev

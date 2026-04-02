@@ -311,7 +311,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ai-brand-automator-redis
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 23
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 24
     ports:
       - "6379:6379"
     volumes:
@@ -1514,6 +1514,46 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8042/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Ad Publishing Agent — WF3 Meta Ads publishing (port 8043)
+  # Powered by Claude Sonnet 4 + Meta Marketing API v21.0.
+  # SAFETY-CRITICAL: Only agent that spends real money. Mandatory human gate.
+  # Requires CAA blueprint + CGA creative packages + Meta credentials.
+  # ==========================================================================
+  ad-publishing-agent-svc:
+    build:
+      context: ../ad-publishing-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-ad-publishing
+    environment:
+      - ADPUB_REDIS_URL=redis://redis:6379/23
+      - ADPUB_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ADPUB_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - ADPUB_BACKEND_URL=http://backend:8001
+      - ADPUB_BACKEND_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - ADPUB_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - ADPUB_META_ADS_SANDBOX_MODE=true
+      - ADPUB_GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
+      - ADPUB_GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}
+      - ADPUB_GCS_CREDENTIALS_JSON=${GCS_CREDENTIALS_JSON:-}
+      - ADPUB_LOG_LEVEL=INFO
+      - ADPUB_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+    expose:
+      - "8043"
+    ports:
+      - "8043:8043"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8043/health"]
       interval: 10s
       timeout: 5s
       retries: 3

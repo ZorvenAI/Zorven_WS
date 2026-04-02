@@ -71,6 +71,12 @@ def handle_pipeline_result(
             job.status = status
             update_fields.append("status")
 
+            if status == AnalysisJob.Status.AWAITING_APPROVAL:
+                logger.info(
+                    "Job %s entering awaiting_approval (human gate)",
+                    job_id,
+                )
+
             if status in (
                 AnalysisJob.Status.COMPLETED,
                 AnalysisJob.Status.FAILED,
