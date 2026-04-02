@@ -9,6 +9,7 @@ from analytics.extractors.brand_story import BrandStoryExtractor
 from analytics.extractors.campaign_architecture import CampaignArchitectureExtractor
 from analytics.extractors.content_social import ContentSocialExtractor
 from analytics.extractors.creative_generation import CreativeGenerationExtractor
+from analytics.extractors.ad_publishing import AdPublishingExtractor
 
 # Pipeline ID → Extractor mapping
 # Covers all pipeline IDs from seed_manifests.py
@@ -53,6 +54,9 @@ PIPELINE_EXTRACTORS = {
     "meta-campaign-architecture": CampaignArchitectureExtractor(),
     # Creative generation (WF3)
     "meta-creative-generation": CreativeGenerationExtractor(),
+    # Ad publishing (WF3)
+    "meta-ad-publishing": AdPublishingExtractor(),
+    "meta-ads-full": AdPublishingExtractor(),
     # General chat — uses brand discovery extractor to grab any
     # agent results that were composed dynamically
     "general-chat": BrandDiscoveryExtractor(),
@@ -68,6 +72,16 @@ def detect_extractor_from_result(result_data: dict):
         return None
 
     node_results = result_data.get("node_results", {})
+
+    # Check for ad publishing outputs (WF3, downstream of CGA)
+    has_apa = bool(
+        node_results.get("ad_publishing")
+        or result_data.get("published_campaign")
+        or result_data.get("approval_request_id")
+    )
+
+    if has_apa:
+        return AdPublishingExtractor()
 
     # Check for creative generation outputs (WF3, downstream of CAA)
     has_cga = bool(

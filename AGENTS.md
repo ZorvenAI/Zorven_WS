@@ -1,6 +1,6 @@
 # Project Guidelines
 
-- Monorepo: Django core API (`ai-brand-automator/`), Next.js frontend (`ai-brand-automator-frontend/`), 10 FastAPI microservices, and an Odoo Community submodule (`vendor/odoo/community/`).
+- Monorepo: Django core API (`ai-brand-automator/`), Next.js frontend (`ai-brand-automator-frontend/`), 22 FastAPI microservices, and an Odoo Community submodule (`vendor/odoo/community/`).
 - Read first: `ARCHITECTURE.md`, `.github/copilot-instructions.md`, `CLAUDE.md`, and service-local `CLAUDE.md` before edits.
 - Prefer the closest instruction file to your target code (service-local guidance wins).
 - Do not modify without explicit request: `docs/LICENSE.md`, `credentials/`, `deployment/config/kong/`, `.github/workflows/ci-cd.yml`, `ai-brand-automator/db.sqlite3`, `vendor/`.
@@ -18,13 +18,13 @@
 - Request flow: Next.js -> Kong -> Django API.
 - Orchestration flow: Django dispatch -> `pipeline-orchestrator-svc` (direct sequential execution) -> agent services -> Django callback.
 - The orchestrator executes nodes sequentially via topological sort — **not** through LangGraph's `ainvoke`/`astream`. LangGraph is a dependency but not used at runtime.
-- Dynamic skill loading: `pipeline-orchestrator-svc/skills/` contains 41 `.md` skill files (15 general + 26 Odoo-specific) resolved per-node at execution time.
+- Dynamic skill loading: `pipeline-orchestrator-svc/skills/` contains 155 `.md` skill files (28 general + 12 brand-positioning + 12 brand-architecture + 12 brand-personality + 14 brand-naming + 14 brand-story + 12 campaign-architecture + 12 creative-generation + 12 ad-publishing + 27 Odoo-specific) resolved per-node at execution time.
 - Callback updates in `orchestration/views.py` must use `transaction.atomic()` + `select_for_update()`.
 - Chat supports auto-detect pipelines; Pipeline UI supports manifest-driven pipelines.
 - `brand-equity-calculator-svc` (port 8090) is **public/unauthenticated** and uses Anthropic Claude (not Gemini).
 - `odoo-mcp-server-svc` (port 8095) bridges Odoo ERP via MCP protocol — RBAC engine with 16 YAML role definitions, 101 tools across 14 categories.
 - Onboarding is a 5-step wizard: Company Info → Brand Voice → Target Audience → Asset Upload → Review. On completion, a PDF of all onboarding data is generated via `fpdf2` and fed into the RAG pipeline.
-- Redis DB allocation: 0=Django/Celery, 1=Orchestrator, 2=Discovery, 3=Intelligence, 4=Titling, 5=Content, 6=Social, 7=RAG Uploader, 8=Brand Equity, 9=Odoo MCP.
+- Redis DB allocation: 0=Django/Celery, 1=Orchestrator, 2=Discovery, 3=Intelligence, 4=Titling, 5=Content, 6=Social, 7=RAG Uploader, 8=Brand Equity, 9=Odoo MCP, 10=Odoo Worker, 11=Market Research, 12=Competitor Intel, 13=Audience Persona, 14=Trend Cultural, 15=VoC Agent, 16=Brand Positioning, 17=Brand Architecture, 18=Brand Personality, 19=Brand Naming, 20=Brand Story, 21=Campaign Architecture, 22=Creative Generation, 23=Ad Publishing (requires `databases 24` in redis.conf).
 
 ## Build and Test
 

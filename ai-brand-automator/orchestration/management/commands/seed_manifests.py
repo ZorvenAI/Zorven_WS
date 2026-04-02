@@ -1368,7 +1368,7 @@ class Command(BaseCommand):
                 },
             },
         },
-        # ── WF3: Meta Ads Full Pipeline (CAA → CGA) ──
+        # ── WF3: Meta Ads Full Pipeline (CAA → CGA → APA) ──
         {
             "pipeline_id": "meta-ads-full",
             "name": "Meta Ads: Full Campaign",
@@ -1376,10 +1376,13 @@ class Command(BaseCommand):
                 "Full WF3 Meta Ads pipeline: campaign architecture "
                 "(blueprint, funnel mapping, audience targeting, "
                 "placement/budget strategy, A/B test plan, creative "
-                "briefs) followed by creative generation (AI-generated "
-                "ad images, funnel-specific ad copy with hooks/primary "
-                "text/CTAs, Meta Advertising Standards compliance, "
-                "visual-copy assemblies). Chains CAA → CGA. "
+                "briefs) → creative generation (AI-generated ad images, "
+                "funnel-specific ad copy with hooks/primary text/CTAs, "
+                "Meta Advertising Standards compliance, visual-copy "
+                "assemblies) → ad publishing (Meta Ads API campaign "
+                "creation, targeting translation, creative upload, "
+                "human approval gate, publish + verify). "
+                "Chains CAA → CGA → APA. "
                 "Requires completed WF1 Brand Discovery and WF2 Brand "
                 "Strategy pipelines."
             ),
@@ -1418,6 +1421,20 @@ class Command(BaseCommand):
                         },
                     },
                     {
+                        "id": "ad_publishing",
+                        "type": "external",
+                        "url": (
+                            "http://ad-publishing-agent-svc"
+                            ":8043/v1/execute"
+                        ),
+                        "config": {
+                            "require_campaign_blueprint": True,
+                            "require_creative_packages": True,
+                            "require_meta_credentials": True,
+                            "sandbox_mode_default": True,
+                        },
+                    },
+                    {
                         "id": "manager",
                         "type": "internal",
                         "handler": "ManagerNode",
@@ -1426,11 +1443,63 @@ class Command(BaseCommand):
                 "edges": [
                     ["intent_router", "campaign_architecture"],
                     ["campaign_architecture", "creative_generation"],
-                    ["creative_generation", "manager"],
+                    ["creative_generation", "ad_publishing"],
+                    ["ad_publishing", "manager"],
                 ],
                 "global_config": {
                     "model": "claude-sonnet-4-20250514",
                     "temperature": 0.4,
+                },
+            },
+        },
+        # ── WF3: Standalone Ad Publishing ──
+        {
+            "pipeline_id": "meta-ad-publishing",
+            "name": "Meta Ads: Ad Publishing",
+            "description": (
+                "Standalone ad publishing pipeline: translates approved "
+                "creative packages and campaign blueprints into live "
+                "Meta Ads API objects. Creates campaigns (PAUSED), "
+                "translates persona targeting via Claude, uploads "
+                "creatives, assembles ads, generates previews, then "
+                "pauses for mandatory human approval. On approval, "
+                "publishes and verifies. Requires completed CAA and "
+                "CGA pipelines in previous_outputs."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "ad_publishing",
+                        "type": "external",
+                        "url": (
+                            "http://ad-publishing-agent-svc"
+                            ":8043/v1/execute"
+                        ),
+                        "config": {
+                            "require_campaign_blueprint": True,
+                            "require_creative_packages": True,
+                            "require_meta_credentials": True,
+                            "sandbox_mode_default": True,
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "ad_publishing"],
+                    ["ad_publishing", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.3,
                 },
             },
         },
