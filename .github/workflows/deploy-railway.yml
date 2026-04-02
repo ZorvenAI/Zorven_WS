@@ -39,6 +39,7 @@ jobs:
       brand-story-changed: ${{ steps.changes.outputs.brand-story }}
       campaign-architecture-changed: ${{ steps.changes.outputs.campaign-architecture }}
       creative-generation-changed: ${{ steps.changes.outputs.creative-generation }}
+      ad-publishing-changed: ${{ steps.changes.outputs.ad-publishing }}
       audience-persona-changed: ${{ steps.changes.outputs.audience-persona }}
       trend-cultural-changed: ${{ steps.changes.outputs.trend-cultural }}
       voc-agent-changed: ${{ steps.changes.outputs.voc-agent }}
@@ -74,6 +75,7 @@ jobs:
             echo "brand-story=true" >> "$GITHUB_OUTPUT"
             echo "campaign-architecture=true" >> "$GITHUB_OUTPUT"
             echo "creative-generation=true" >> "$GITHUB_OUTPUT"
+            echo "ad-publishing=true" >> "$GITHUB_OUTPUT"
             echo "audience-persona=true" >> "$GITHUB_OUTPUT"
             echo "trend-cultural=true" >> "$GITHUB_OUTPUT"
             echo "voc-agent=true" >> "$GITHUB_OUTPUT"
@@ -211,6 +213,13 @@ jobs:
             echo "creative-generation=true" >> "$GITHUB_OUTPUT"
           else
             echo "creative-generation=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check if ad-publishing-agent-svc changed
+          if git diff --name-only HEAD~1 | grep -qE '^ad-publishing-agent-svc/'; then
+            echo "ad-publishing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ad-publishing=false" >> "$GITHUB_OUTPUT"
           fi
 
           # Check if audience-persona-agent-svc changed
@@ -1055,6 +1064,45 @@ jobs:
           fi
 
   # ==========================================================================
+  # Deploy Ad Publishing Agent to Railway
+  # ==========================================================================
+  deploy-ad-publishing-agent:
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks]
+    if: always() && (needs.pre-deploy-checks.outputs.ad-publishing-changed == 'true' || github.event_name == 'workflow_dispatch')
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Ad Publishing Agent
+        run: |
+          if [ -n "${{ secrets.RAILWAY_AD_PUBLISHING_SERVICE }}" ]; then
+            railway up --service ${{ secrets.RAILWAY_AD_PUBLISHING_SERVICE }} --detach
+          else
+            echo "RAILWAY_AD_PUBLISHING_SERVICE not set, skipping ad-publishing deployment"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for ad-publishing-agent deployment to complete..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          ADPUB_URL="${{ secrets.RAILWAY_AD_PUBLISHING_URL }}"
+          if [ -n "$ADPUB_URL" ]; then
+            curl -f "${ADPUB_URL}/health" || echo "Health check failed - deployment may still be in progress"
+          else
+            echo "RAILWAY_AD_PUBLISHING_URL not set, skipping health check"
+          fi
+
+  # ==========================================================================
   # Deploy Audience Persona Agent to Railway
   # ==========================================================================
   deploy-audience-persona-agent:
@@ -1176,7 +1224,7 @@ jobs:
   # ==========================================================================
   notify:
     runs-on: ubuntu-latest
-    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent, deploy-chat-titling, deploy-content-agent, deploy-social-agent, deploy-rag-uploader, deploy-odoo-mcp-server, deploy-odoo-worker-agent, deploy-market-research-agent, deploy-competitor-intel-agent, deploy-brand-positioning-agent, deploy-brand-architecture-agent, deploy-brand-personality-agent, deploy-brand-story-agent, deploy-campaign-architecture-agent, deploy-creative-generation-agent, deploy-audience-persona-agent, deploy-trend-cultural-agent, deploy-voc-agent]
+    needs: [deploy-backend, deploy-frontend, deploy-celery-worker, deploy-celery-beat, deploy-mcp-server, deploy-orchestrator, deploy-discovery-agent, deploy-intelligence-agent, deploy-chat-titling, deploy-content-agent, deploy-social-agent, deploy-rag-uploader, deploy-odoo-mcp-server, deploy-odoo-worker-agent, deploy-market-research-agent, deploy-competitor-intel-agent, deploy-brand-positioning-agent, deploy-brand-architecture-agent, deploy-brand-personality-agent, deploy-brand-story-agent, deploy-campaign-architecture-agent, deploy-creative-generation-agent, deploy-ad-publishing-agent, deploy-audience-persona-agent, deploy-trend-cultural-agent, deploy-voc-agent]
     if: always()
 
     steps:
@@ -1208,6 +1256,7 @@ jobs:
           echo "| Brand Story Agent | ${{ needs.deploy-brand-story-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Campaign Architecture Agent | ${{ needs.deploy-campaign-architecture-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Creative Generation Agent | ${{ needs.deploy-creative-generation-agent.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Ad Publishing Agent | ${{ needs.deploy-ad-publishing-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Audience Persona Agent | ${{ needs.deploy-audience-persona-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Trend Cultural Agent | ${{ needs.deploy-trend-cultural-agent.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| VoC Agent | ${{ needs.deploy-voc-agent.result }} |" >> $GITHUB_STEP_SUMMARY
