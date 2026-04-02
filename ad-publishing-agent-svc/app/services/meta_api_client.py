@@ -219,6 +219,7 @@ class MetaApiClient:
         cta_type: str,
         link_url: str,
         description: str = "",
+        page_id: str = "",
     ) -> str:
         """Create a Meta Ad Creative.
 
@@ -235,7 +236,7 @@ class MetaApiClient:
             params = {
                 AdCreative.Field.name: name,
                 AdCreative.Field.object_story_spec: {
-                    "page_id": "",  # Set per-tenant at call site
+                    "page_id": page_id,
                     "link_data": {
                         "image_hash": image_hash,
                         "link": link_url,

@@ -64,7 +64,7 @@ Send the final result callback to the Django backend via `PATCH {callback_url}`:
 - `progress`: final progress state with all nodes completed
 
 ### 5. Emit Kafka Audit Event
-Publish to `apa-publishing-audit-topic`:
+Publish to `apa33-publishing-audit-topic`:
 - Event type: `campaign_published`
 - Full publication record for compliance audit
 - Include the approval chain (who approved, when, double-confirm status)

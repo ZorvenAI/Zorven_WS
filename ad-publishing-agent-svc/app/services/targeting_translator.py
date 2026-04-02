@@ -174,9 +174,13 @@ class TargetingTranslator:
             gender_map = {"male": 1, "female": 2}
             genders = demographics.get("genders", [])
             if genders:
-                targeting["genders"] = [
-                    gender_map.get(g.lower(), 0) for g in genders if g
+                mapped = [
+                    gender_map[g.lower()]
+                    for g in genders
+                    if g and g.lower() in gender_map
                 ]
+                if mapped:
+                    targeting["genders"] = mapped
 
         # Map interests as estimated
         for interest in persona.get("interests", []):
@@ -216,7 +220,15 @@ class TargetingTranslator:
         categories: list[str],
     ) -> dict[str, Any]:
         """Remove restricted targeting for Special Ad Categories."""
-        restricted = {"HOUSING", "CREDIT", "EMPLOYMENT"}
+        restricted = {
+            "HOUSING", "CREDIT", "EMPLOYMENT",
+            "EMPLOYMENT_OPPORTUNITY",
+            "HOUSING_OPPORTUNITY",
+            "CREDIT_OPPORTUNITY",
+            "SPECIAL_AD_CATEGORY_HOUSING",
+            "SPECIAL_AD_CATEGORY_CREDIT",
+            "SPECIAL_AD_CATEGORY_EMPLOYMENT",
+        }
         if set(categories) & restricted:
             targeting.pop("age_min", None)
             targeting.pop("age_max", None)

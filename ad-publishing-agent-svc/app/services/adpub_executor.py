@@ -135,8 +135,9 @@ class AdPubExecutor:
 
         # Store preparation for resume_after_approval
         if self._redis:
-            await self._redis.cache_result(
-                f"adpub:prep:{approval_request['request_id']}",
+            await self._redis.store_preparation(
+                approval_request["request_id"],
+                tenant_id,
                 preparation,
             )
 
@@ -178,8 +179,8 @@ class AdPubExecutor:
         # Retrieve stored preparation data
         preparation = None
         if self._redis:
-            preparation = await self._redis.get_cached_result(
-                f"adpub:prep:{approval_request_id}"
+            preparation = await self._redis.get_preparation(
+                approval_request_id, tenant_id
             )
         if not preparation:
             return self._error_result(

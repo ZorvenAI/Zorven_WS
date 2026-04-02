@@ -72,7 +72,7 @@ class ApprovalManager:
 
         if self._redis:
             await self._redis.store_approval_request(
-                tenant_id, request_id, request
+                request_id, tenant_id, request
             )
         else:
             self._memory_store[request_id] = request
@@ -224,7 +224,7 @@ class ApprovalManager:
         """Get an approval request by ID."""
         if self._redis:
             return await self._redis.get_approval_request(
-                tenant_id, request_id
+                request_id, tenant_id
             )
         return self._memory_store.get(request_id)
 
@@ -244,7 +244,7 @@ class ApprovalManager:
         """Persist updated approval request."""
         if self._redis:
             await self._redis.update_approval_request(
-                tenant_id, request_id, data
+                request_id, tenant_id, data
             )
         else:
             self._memory_store[request_id] = data

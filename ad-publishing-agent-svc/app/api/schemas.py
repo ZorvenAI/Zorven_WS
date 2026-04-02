@@ -43,6 +43,8 @@ class ApprovalRequest(BaseModel):
     approved_ad_sets: list[str] | None = None
     feedback: str = ""
     production_confirmed: bool = False
+    approved_by: str = ""
+    user_role: str = "VIEWER"
 
 
 # ------------------------------------------------------------------

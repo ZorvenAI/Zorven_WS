@@ -105,15 +105,30 @@ async def approve(
             "error": "Service not fully initialized",
         }
 
-    # Process the approval decision
+    # Resolve tenant_id: prefer header, fall back to approval record
+    tenant_id = x_tenant_id
+    if not tenant_id:
+        req_data = await approval_mgr.get_approval_request(
+            payload.approval_request_id, ""
+        )
+        if req_data:
+            tenant_id = req_data.get("tenant_id", "")
+
+    if not tenant_id:
+        return {
+            "status": "error",
+            "error": "tenant_id required (X-Tenant-ID header or approval record)",
+        }
+
+    # Process the approval decision — user identity from payload
     approval_result = await approval_mgr.process_approval(
         request_id=payload.approval_request_id,
-        tenant_id=x_tenant_id,
+        tenant_id=tenant_id,
         decision=payload.decision,
         approved_ad_sets=payload.approved_ad_sets,
         feedback=payload.feedback,
-        approved_by="",  # Will come from auth context
-        user_role="ADMIN",  # Will come from auth context
+        approved_by=payload.approved_by,
+        user_role=payload.user_role,
         production_confirmed=payload.production_confirmed,
     )
 
@@ -121,14 +136,14 @@ async def approve(
     if approval_result.get("status") in ("approved", "partial"):
         # Retrieve job_id from the approval request
         req_data = await approval_mgr.get_approval_request(
-            payload.approval_request_id, x_tenant_id
+            payload.approval_request_id, tenant_id
         )
         job_id = req_data.get("job_id", "") if req_data else ""
 
         publish_result = await executor.resume_after_approval(
             approval_request_id=payload.approval_request_id,
             approval_result=approval_result,
-            tenant_id=x_tenant_id,
+            tenant_id=tenant_id,
             job_id=job_id,
         )
         return publish_result

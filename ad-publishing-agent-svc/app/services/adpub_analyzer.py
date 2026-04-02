@@ -141,6 +141,7 @@ class AdPubAnalyzer:
                         unit,
                         image_result["hash"],
                         company,
+                        page_id=creds.get("page_id", ""),
                     )
                     creatives.append({
                         "creative_id": creative_id,
@@ -171,6 +172,8 @@ class AdPubAnalyzer:
             "campaign_id": campaign_id,
             "campaign_name": bp["campaign_name"],
             "objective": bp.get("objective", ""),
+            "ad_account_id": ad_account_id,
+            "page_id": creds.get("page_id", ""),
             "ad_sets": ad_sets,
             "creatives": creatives,
             "previews": previews,
@@ -195,6 +198,7 @@ class AdPubAnalyzer:
         """
         start = time.time()
         campaign_id = preparation["campaign_id"]
+        ad_account_id = preparation.get("ad_account_id", "")
         approved_sets = approval_result.get("approved_ad_sets")
 
         # Phase 6: Create Ads + Activate Campaign
@@ -212,6 +216,7 @@ class AdPubAnalyzer:
                 creative["ad_set_id"],
                 creative["creative_id"],
                 creative,
+                ad_account_id=ad_account_id,
             )
             ad_ids.append(ad_id)
             if creative["ad_set_id"] not in ad_set_ids:
@@ -244,18 +249,25 @@ class AdPubAnalyzer:
 
         return {
             "status": "published" if output_check["all_valid"] else "partial",
-            "campaign_id": campaign_id,
-            "campaign_name": preparation.get("campaign_name", ""),
-            "campaign_status": "ACTIVE",
-            "ad_set_ids": ad_set_ids,
-            "ad_ids": ad_ids,
-            "creative_ids": creative_ids,
-            "spend_daily_usd": preparation.get("total_daily_budget_usd", 0),
-            "total_reach": sum(
+            "published_campaign": {
+                "campaign_id": campaign_id,
+                "campaign_name": preparation.get("campaign_name", ""),
+                "campaign_status": "ACTIVE",
+                "ad_sets": [
+                    {"ad_set_id": sid} for sid in ad_set_ids
+                ],
+                "ads": [{"ad_id": aid} for aid in ad_ids],
+                "creative_ids": creative_ids,
+            },
+            "daily_spend_committed_usd": preparation.get(
+                "total_daily_budget_usd", 0
+            ),
+            "targeting_audience_size": sum(
                 t.get("estimated_reach", 0)
                 for t in preparation.get("targeting_results", [])
             ),
-            "sandbox": preparation.get("sandbox_mode", True),
+            "sandbox_mode": preparation.get("sandbox_mode", True),
+            "approval_status": approval_result.get("status", "approved"),
             "verification": output_check,
             "approval_result": approval_result,
             "publishing_time_ms": elapsed_ms,
@@ -348,9 +360,16 @@ class AdPubAnalyzer:
                 "cannot upload image"
             )
         try:
+            # Download image bytes from GCS or use pre-fetched bytes
+            image_bytes = ad_unit.get("image_bytes", b"")
+            if not image_bytes:
+                image_url = ad_unit.get("image_url", "")
+                if image_url:
+                    image_bytes = await self._download_image(image_url)
+
             result = await self._meta.upload_image(
                 ad_account_id=ad_account_id,
-                image_bytes=b"",  # GCS download handled in executor
+                image_bytes=image_bytes,
                 name=ad_unit.get("image_url", "image.jpg"),
             )
             breaker.record_success()
@@ -363,12 +382,27 @@ class AdPubAnalyzer:
                 )
             raise
 
+    @staticmethod
+    async def _download_image(url: str) -> bytes:
+        """Download image bytes from a GCS signed URL or HTTP URL."""
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                return resp.content
+        except Exception as exc:
+            logger.warning("Failed to download image from %s: %s", url, exc)
+            return b""
+
     async def _create_creative(
         self,
         ad_account_id: str,
         ad_unit: dict[str, Any],
         image_hash: str,
         company: dict[str, Any],
+        page_id: str = "",
     ) -> str:
         creative_id = await self._meta.create_ad_creative(
             ad_account_id=ad_account_id,
@@ -378,6 +412,7 @@ class AdPubAnalyzer:
             body=ad_unit.get("primary_text", ""),
             cta_type=ad_unit.get("cta", "LEARN_MORE"),
             link_url=ad_unit.get("link_url", company.get("website", "")),
+            page_id=page_id,
         )
         return creative_id
 
@@ -386,6 +421,7 @@ class AdPubAnalyzer:
         ad_set_id: str,
         creative_id: str,
         creative_info: dict[str, Any],
+        ad_account_id: str = "",
     ) -> str:
         breaker = get_breaker("meta_ad")
         if breaker.is_open:
@@ -394,9 +430,8 @@ class AdPubAnalyzer:
                 "cannot create ad"
             )
         try:
-            # Extract ad_account_id from existing context
             ad_id = await self._meta.create_ad(
-                ad_account_id="",  # Inherited from API session
+                ad_account_id=ad_account_id,
                 ad_set_id=ad_set_id,
                 creative_id=creative_id,
                 name=(
