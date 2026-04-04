@@ -44,7 +44,7 @@ export default function AiAssistantPage() {
   const phase: Phase = (() => {
     if (!activeJobId) return 'input';
     if (!job) return 'running'; // still loading
-    if (job.status === 'completed') return 'completed';
+    if (job.status === 'completed' || job.status === 'awaiting_approval') return 'completed';
     if (job.status === 'failed') return 'failed';
     return 'running';
   })();
@@ -285,6 +285,7 @@ export default function AiAssistantPage() {
                 manifestName={job.manifest_name}
                 jobId={job.job_id}
                 jobStatus={job.status}
+                onApprovalComplete={handleReset}
               />
             )}
           </div>
