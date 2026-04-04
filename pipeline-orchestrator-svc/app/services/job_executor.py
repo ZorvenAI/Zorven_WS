@@ -415,14 +415,34 @@ class JobExecutor:
                                 if "result_data" in result:
                                     result_data = result["result_data"]
 
-                    # Mark all nodes in this level as done
+                    # Check if any node requires human approval BEFORE
+                    # marking as done, so progress shows the correct state.
+                    awaiting_node = None
+                    for nid in level_nodes:
+                        node_out = state["node_outputs"].get(nid)
+                        if (
+                            isinstance(node_out, dict)
+                            and node_out.get("status") == "awaiting_approval"
+                        ):
+                            awaiting_node = nid
+                            break
+
+                    # Mark all nodes in this level as done (or
+                    # awaiting_approval for the gated node).
                     completed_at = self._now_iso()
                     for nid in level_nodes:
-                        state["progress"][nid] = {
-                            "status": "done",
-                            "started_at": started_at,
-                            "completed_at": completed_at,
-                        }
+                        if nid == awaiting_node:
+                            state["progress"][nid] = {
+                                "status": "awaiting_approval",
+                                "started_at": started_at,
+                                "completed_at": completed_at,
+                            }
+                        else:
+                            state["progress"][nid] = {
+                                "status": "done",
+                                "started_at": started_at,
+                                "completed_at": completed_at,
+                            }
                     executed_node_count += len(level_nodes)
 
                     for nid in level_nodes:
@@ -447,35 +467,28 @@ class JobExecutor:
                     if result_data:
                         partial_result_data.update(result_data)
 
+                    # If a node requires human approval, send the
+                    # awaiting_approval callback and pause the pipeline.
+                    if awaiting_node:
+                        logger.info(
+                            "Job %s: node %s requires human approval "
+                            "— pausing pipeline",
+                            job_id,
+                            awaiting_node,
+                        )
+                        await self.callback.send_awaiting_approval(
+                            callback_url,
+                            result_data=partial_result_data,
+                            progress=copy.deepcopy(state["progress"]),
+                        )
+                        return
+
                     # Send per-level progress callback with partial results
                     await self.callback.send_progress(
                         callback_url,
                         copy.deepcopy(state["progress"]),
                         result_data=partial_result_data,
                     )
-
-                    # Check if any node in this level returned
-                    # status="awaiting_approval" (human approval gate).
-                    # If so, pause the pipeline and send an
-                    # awaiting_approval callback to Django.
-                    for nid in level_nodes:
-                        node_out = state["node_outputs"].get(nid)
-                        if (
-                            isinstance(node_out, dict)
-                            and node_out.get("status") == "awaiting_approval"
-                        ):
-                            logger.info(
-                                "Job %s: node %s requires human approval "
-                                "— pausing pipeline",
-                                job_id,
-                                nid,
-                            )
-                            await self.callback.send_awaiting_approval(
-                                callback_url,
-                                result_data=partial_result_data,
-                                progress=copy.deepcopy(state["progress"]),
-                            )
-                            return
 
             except Exception as exc:
                 logger.error(

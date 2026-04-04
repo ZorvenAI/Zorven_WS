@@ -52,7 +52,9 @@ export async function listJobs(): Promise<AnalysisJob[]> {
 }
 
 export async function getJob(jobId: string): Promise<AnalysisJob> {
-  const res = await apiClient.get(`${BASE}/jobs/${jobId}/`);
+  const res = await apiClient.request(`${BASE}/jobs/${jobId}/`, {
+    cache: 'no-store',
+  });
   return parseOrThrow<AnalysisJob>(res);
 }
 
