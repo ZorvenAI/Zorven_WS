@@ -63,21 +63,29 @@ def cga_completed_job(db, cga_tenant, cga_manifest):
         result_data={
             "node_results": {
                 "creative_generation": {
-                    "creative_packages": [
+                    "creative_package": {
+                        "campaign_id": "camp_123",
+                        "brand_name": "TestBrand",
+                    },
+                    "ad_set_packages": [
                         {
                             "ad_set_name": "TOFU - Test",
-                            "ad_units": [
+                            "persona": "Tech Enthusiast",
+                            "funnel_stage": "TOFU",
+                            "creative_units": [
                                 {
-                                    "image_url": "gs://bucket/img.jpg",
+                                    "gcs_url": "gs://bucket/img.jpg",
                                     "headline": "Test",
                                 }
                             ],
                         }
                     ],
-                    "approval_status": "approved",
-                    "gallery": [{"url": "https://example.com/img.jpg"}],
-                    "ad_units": [{"headline": "Test"}],
+                    "ad_units": [
+                        {"gcs_url": "gs://bucket/img.jpg", "headline": "Test"}
+                    ],
+                    "generated_images": [{"gcs_url": "gs://bucket/img.jpg"}],
                     "confidence_score": 0.92,
+                    "compliance_pass_rate": 0.85,
                 }
             }
         },
@@ -184,9 +192,9 @@ class TestCGAContextViewResponse:
         assert resp.status_code == 200
         data = resp.json()
         assert "creative_packages" in data
-        assert "approval_status" in data
-        assert "gallery" in data
+        assert "ad_set_packages" in data
         assert "ad_units" in data
+        assert "creative_package" in data
         assert "confidence_score" in data
         assert "cga_completed_at" in data
         assert "cga_job_id" in data
@@ -194,8 +202,10 @@ class TestCGAContextViewResponse:
     def test_response_data(self, service_client, cga_tenant, cga_completed_job):
         resp = self._get(service_client, cga_tenant.id)
         data = resp.json()
+        # creative_packages mapped from ad_set_packages
         assert len(data["creative_packages"]) == 1
-        assert data["approval_status"] == "approved"
+        assert data["creative_packages"][0]["ad_set_name"] == "TOFU - Test"
+        assert len(data["creative_packages"][0]["ad_units"]) == 1
         assert data["confidence_score"] == 0.92
         assert data["cga_job_id"] == str(cga_completed_job.job_id)
 

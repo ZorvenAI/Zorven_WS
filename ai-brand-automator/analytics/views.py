@@ -1345,13 +1345,45 @@ class CGAContextView(APIView):
         node_results = result_data.get("node_results", {})
         cga = node_results.get("creative_generation", {})
 
+        # Map CGA output to ad-publishing expected format.
+        # CGA stores per-ad-set packages in "ad_set_packages", each
+        # containing "creative_units" (assembled image+copy+CTA).
+        # Ad publishing expects "creative_packages" — a list of dicts
+        # with "ad_set_name" and "ad_units" (image_url, headline, etc.).
+        ad_set_packages = cga.get("ad_set_packages", [])
+        creative_units = cga.get("ad_units", [])
+
+        # Build creative_packages from ad_set_packages
+        creative_packages = []
+        for pkg in ad_set_packages:
+            units = pkg.get("creative_units", [])
+            creative_packages.append(
+                {
+                    "ad_set_name": pkg.get("ad_set_name", ""),
+                    "persona": pkg.get("persona", ""),
+                    "funnel_stage": pkg.get("funnel_stage", ""),
+                    "ad_units": units,
+                }
+            )
+
+        # Fallback: if no ad_set_packages, build from top-level ad_units
+        if not creative_packages and creative_units:
+            creative_packages.append(
+                {
+                    "ad_set_name": "Default",
+                    "ad_units": creative_units,
+                }
+            )
+
         return Response(
             {
-                "creative_packages": cga.get("creative_packages", []),
-                "approval_status": cga.get("approval_status", ""),
-                "gallery": cga.get("gallery", []),
-                "ad_units": cga.get("ad_units", []),
+                "creative_packages": creative_packages,
+                "ad_set_packages": ad_set_packages,
+                "ad_units": creative_units,
+                "creative_package": cga.get("creative_package", {}),
+                "generated_images": cga.get("generated_images", []),
                 "confidence_score": cga.get("confidence_score", 0.0),
+                "compliance_pass_rate": cga.get("compliance_pass_rate", 0.0),
                 "cga_completed_at": (
                     job.completed_at.isoformat() if job.completed_at else None
                 ),

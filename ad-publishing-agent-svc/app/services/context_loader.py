@@ -46,7 +46,7 @@ class AdPubContextLoader:
 
         # 2. Creative packages from CGA (Agent 3.2) — MUST be approved
         cga_output = previous_outputs.get("creative_generation", {})
-        creative_packages = cga_output.get("creative_packages", [])
+        creative_packages = self._extract_creative_packages(cga_output)
         approval_status = cga_output.get("approval_status", "")
 
         # 3. Persona profiles from WF1 APA
@@ -162,11 +162,8 @@ class AdPubContextLoader:
                     )
                     if resp.status_code == 200:
                         cga_data = resp.json()
-                        context["creative_packages"] = cga_data.get(
-                            "creative_packages", []
-                        )
-                        context["creative_approval_status"] = cga_data.get(
-                            "approval_status", ""
+                        context["creative_packages"] = self._extract_creative_packages(
+                            cga_data
                         )
                         logger.info(
                             "CGA packages fetched from backend: %d packages",
@@ -243,6 +240,49 @@ class AdPubContextLoader:
             "special_ad_categories": _get("special_ad_categories", []),
         }
 
+    @staticmethod
+    def _extract_creative_packages(cga_output: dict[str, Any]) -> list[dict]:
+        """Extract creative packages from CGA output.
+
+        CGA stores per-ad-set packages in "ad_set_packages", each with
+        "creative_units" (assembled image+copy+CTA). This method maps
+        them to the ad-publishing expected format: a list of dicts with
+        "ad_set_name" and "ad_units".
+
+        Also handles the already-mapped "creative_packages" key returned
+        by the cga-context Django endpoint.
+        """
+        if not cga_output:
+            return []
+
+        # Already mapped (from cga-context endpoint)
+        creative_packages = cga_output.get("creative_packages", [])
+        if creative_packages:
+            return creative_packages
+
+        # Map from raw CGA output (pipeline chaining)
+        ad_set_packages = cga_output.get("ad_set_packages", [])
+        if ad_set_packages:
+            packages = []
+            for pkg in ad_set_packages:
+                units = pkg.get("creative_units", [])
+                packages.append(
+                    {
+                        "ad_set_name": pkg.get("ad_set_name", ""),
+                        "persona": pkg.get("persona", ""),
+                        "funnel_stage": pkg.get("funnel_stage", ""),
+                        "ad_units": units,
+                    }
+                )
+            return packages
+
+        # Fallback: top-level ad_units
+        ad_units = cga_output.get("ad_units", [])
+        if ad_units:
+            return [{"ad_set_name": "Default", "ad_units": ad_units}]
+
+        return []
+
     def validate(self, context: dict[str, Any]) -> list[str]:
         """Validate that all required prerequisites are present.
 
@@ -277,10 +317,12 @@ class AdPubContextLoader:
             if not ad_units:
                 errors.append(f"Creative package [{i}] has no ad units")
             for j, unit in enumerate(ad_units):
-                if not unit.get("image_url"):
-                    errors.append(
-                        f"Creative package [{i}] ad unit [{j}] " "has no image_url"
-                    )
+                # CGA uses gcs_url; ad-publishing uses image_url
+                has_image = (
+                    unit.get("image_url") or unit.get("gcs_url") or unit.get("image")
+                )
+                if not has_image:
+                    errors.append(f"Creative package [{i}] ad unit [{j}] has no image")
 
         # Meta credentials (only required in production mode)
         if not context.get("sandbox_mode", True):
