@@ -154,9 +154,7 @@ class AdPubContextLoader:
         async with httpx.AsyncClient(timeout=30) as client:
             # Fetch CAA blueprint if missing
             if context.get("_needs_caa_fetch"):
-                caa_url = (
-                    f"{settings.backend_url}/api/v1/analytics/caa-context/"
-                )
+                caa_url = f"{settings.backend_url}/api/v1/analytics/caa-context/"
                 try:
                     logger.info("Fetching CAA context from: %s", caa_url)
                     resp = await client.get(caa_url, headers=headers)
@@ -164,12 +162,8 @@ class AdPubContextLoader:
                         caa_data = resp.json()
                         context["blueprint"] = self._extract_blueprint(caa_data)
                         bp_name = context["blueprint"].get("campaign_name", "?")
-                        logger.info(
-                            "CAA blueprint fetched from backend: %s", bp_name
-                        )
-                        diagnostics.append(
-                            f"CAA fetch OK: campaign={bp_name}"
-                        )
+                        logger.info("CAA blueprint fetched from backend: %s", bp_name)
+                        diagnostics.append(f"CAA fetch OK: campaign={bp_name}")
                     else:
                         body = resp.text[:300]
                         msg = (
@@ -188,16 +182,14 @@ class AdPubContextLoader:
 
             # Fetch CGA creative packages if missing
             if context.get("_needs_cga_fetch"):
-                cga_url = (
-                    f"{settings.backend_url}/api/v1/analytics/cga-context/"
-                )
+                cga_url = f"{settings.backend_url}/api/v1/analytics/cga-context/"
                 try:
                     logger.info("Fetching CGA context from: %s", cga_url)
                     resp = await client.get(cga_url, headers=headers)
                     if resp.status_code == 200:
                         cga_data = resp.json()
-                        context["creative_packages"] = (
-                            self._extract_creative_packages(cga_data)
+                        context["creative_packages"] = self._extract_creative_packages(
+                            cga_data
                         )
                         pkg_count = len(context["creative_packages"])
                         cga_job = cga_data.get("cga_job_id", "?")
@@ -379,10 +371,14 @@ class AdPubContextLoader:
     def _extract_creative_packages(cga_output: dict[str, Any]) -> list[dict]:
         """Extract creative packages from CGA output.
 
-        CGA stores per-ad-set packages in "ad_set_packages", each with
-        "creative_units" (assembled image+copy+CTA). This method maps
-        them to the ad-publishing expected format: a list of dicts with
-        "ad_set_name" and "ad_units".
+        CGA stores per-ad-set metadata in "ad_set_packages", but the
+        actual ad copy + image references live in the top-level
+        "ad_units" array (grouped by ad_set_name) and "generated_images".
+
+        This method:
+        1. Groups top-level ad_units by ad_set_name
+        2. Enriches each unit with the real image URL from generated_images
+        3. Merges with ad_set_packages metadata (persona, funnel_stage)
 
         Also handles the already-mapped "creative_packages" key returned
         by the cga-context Django endpoint.
@@ -395,26 +391,69 @@ class AdPubContextLoader:
         if creative_packages:
             return creative_packages
 
-        # Map from raw CGA output (pipeline chaining)
+        # Build image lookup from generated_images:
+        # key = (ad_set_name, variant_id) -> best image URL
+        generated_images = cga_output.get("generated_images", [])
+        image_lookup: dict[tuple[str, str], dict[str, Any]] = {}
+        for img in generated_images:
+            key = (
+                img.get("ad_set_name", ""),
+                img.get("variant_id", ""),
+            )
+            image_lookup[key] = img
+
+        # Group top-level ad_units by ad_set_name (these have actual
+        # headlines, primary_text, cta_text, and image_variant_id).
+        top_ad_units = cga_output.get("ad_units", [])
+        units_by_set: dict[str, list[dict[str, Any]]] = {}
+        for unit in top_ad_units:
+            set_name = unit.get("ad_set_name", "Default")
+            enriched = dict(unit)
+
+            # Resolve image URL from generated_images
+            variant_id = unit.get("image_variant_id", "")
+            img_data = image_lookup.get((set_name, variant_id))
+            if img_data:
+                # Prefer thumbnail_url (smaller), fall back to gcs_url
+                resolved_url = (
+                    img_data.get("thumbnail_url") or img_data.get("gcs_url") or ""
+                )
+                if resolved_url:
+                    enriched["image_url"] = resolved_url
+                enriched["image_generated"] = img_data.get("image_generated", True)
+
+            units_by_set.setdefault(set_name, []).append(enriched)
+
+        # Merge with ad_set_packages metadata
         ad_set_packages = cga_output.get("ad_set_packages", [])
-        if ad_set_packages:
-            packages = []
+        if ad_set_packages or units_by_set:
+            # Build a metadata lookup from ad_set_packages
+            pkg_meta: dict[str, dict[str, Any]] = {}
             for pkg in ad_set_packages:
-                units = pkg.get("creative_units", [])
+                name = pkg.get("ad_set_name", "")
+                pkg_meta[name] = pkg
+
+            # Use the union of ad_set_package names and units_by_set keys
+            all_set_names = list(
+                dict.fromkeys(
+                    [p.get("ad_set_name", "") for p in ad_set_packages]
+                    + list(units_by_set.keys())
+                )
+            )
+
+            packages = []
+            for set_name in all_set_names:
+                meta = pkg_meta.get(set_name, {})
+                units = units_by_set.get(set_name, [])
                 packages.append(
                     {
-                        "ad_set_name": pkg.get("ad_set_name", ""),
-                        "persona": pkg.get("persona", ""),
-                        "funnel_stage": pkg.get("funnel_stage", ""),
+                        "ad_set_name": set_name,
+                        "persona": meta.get("persona", ""),
+                        "funnel_stage": meta.get("funnel_stage", ""),
                         "ad_units": units,
                     }
                 )
             return packages
-
-        # Fallback: top-level ad_units
-        ad_units = cga_output.get("ad_units", [])
-        if ad_units:
-            return [{"ad_set_name": "Default", "ad_units": ad_units}]
 
         return []
 
@@ -431,14 +470,10 @@ class AdPubContextLoader:
         # Only include in errors if they indicate failures.
         diagnostics = context.pop("_backend_diagnostics", [])
         diag_failures = [
-            d
-            for d in diagnostics
-            if "error" in d.lower() or "failed" in d.lower()
+            d for d in diagnostics if "error" in d.lower() or "failed" in d.lower()
         ]
         if diag_failures:
-            errors.append(
-                "Backend enrichment errors: " + " | ".join(diag_failures)
-            )
+            errors.append("Backend enrichment errors: " + " | ".join(diag_failures))
         # Store all diagnostics for informational inclusion in response
         if diagnostics:
             context["_diagnostics_info"] = diagnostics
@@ -485,9 +520,7 @@ class AdPubContextLoader:
                     or unit.get("image_generated")
                 )
                 if not has_image and not sandbox:
-                    errors.append(
-                        f"Creative package [{i}] ad unit [{j}] has no image"
-                    )
+                    errors.append(f"Creative package [{i}] ad unit [{j}] has no image")
                 elif not has_image:
                     missing_image_count += 1
         if missing_image_count > 0 and sandbox:

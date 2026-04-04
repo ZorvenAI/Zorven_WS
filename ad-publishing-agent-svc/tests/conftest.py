@@ -86,7 +86,11 @@ def mock_anthropic():
 def sample_creative_package():
     """Sample CGA creative package (previous_outputs).
 
-    Uses actual CGA output format: ad_set_packages with creative_units.
+    Uses actual CGA output format:
+    - ad_set_packages: metadata (persona, funnel_stage) + creative_units
+      (assembly metadata with unit_id + coherence scores)
+    - ad_units: top-level array with actual ad copy + image references
+    - generated_images: actual image URLs (GCS/thumbnails)
     """
     return {
         "creative_generation": {
@@ -102,24 +106,33 @@ def sample_creative_package():
                     "funnel_stage": "TOFU",
                     "creative_units": [
                         {
-                            "variant_label": "A",
-                            "gcs_url": "gs://bucket/img1.jpg",
-                            "headline": "Discover Innovation",
-                            "primary_text": "Transform your workflow today.",
-                            "cta": "LEARN_MORE",
-                            "link_url": "https://example.com",
+                            "unit_id": "unit_01",
+                            "image_copy_coherence": 85,
                         }
                     ],
                 }
             ],
             "ad_units": [
                 {
+                    "ad_set_name": "TOFU - Tech Enthusiasts",
+                    "unit_id": "unit_01",
                     "variant_label": "A",
-                    "gcs_url": "gs://bucket/img1.jpg",
                     "headline": "Discover Innovation",
                     "primary_text": "Transform your workflow today.",
                     "cta": "LEARN_MORE",
+                    "cta_text": "Learn More",
                     "link_url": "https://example.com",
+                    "image_gcs_url": "[generated:v1_1x1]",
+                    "image_variant_id": "v1",
+                }
+            ],
+            "generated_images": [
+                {
+                    "ad_set_name": "TOFU - Tech Enthusiasts",
+                    "variant_id": "v1",
+                    "gcs_url": "gs://bucket/img1.jpg",
+                    "thumbnail_url": "gs://bucket/thumb1.jpg",
+                    "image_generated": True,
                 }
             ],
             "confidence_score": 0.85,
