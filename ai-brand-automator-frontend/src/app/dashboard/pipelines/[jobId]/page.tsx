@@ -262,6 +262,7 @@ export default function JobDetailPage({ params }: PageProps) {
                     manifestName={job.manifest_name}
                     jobId={job.job_id}
                     jobStatus={job.status}
+                    onApprovalComplete={refresh}
                   />
                 )}
               </div>

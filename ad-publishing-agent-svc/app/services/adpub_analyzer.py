@@ -165,6 +165,9 @@ class AdPubAnalyzer:
                             "ad_set_id": ad_set_id,
                             "ad_set_name": ad_set_name,
                             "image_hash": image_result["hash"],
+                            "image_url": (
+                                image_result.get("url") or unit.get("image_url", "")
+                            ),
                             "headline": unit.get("headline", ""),
                             "primary_text": unit.get("primary_text", ""),
                             "cta": unit.get("cta", "LEARN_MORE"),
