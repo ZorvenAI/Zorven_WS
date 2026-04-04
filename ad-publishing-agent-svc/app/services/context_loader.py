@@ -162,8 +162,8 @@ class AdPubContextLoader:
                     )
                     if resp.status_code == 200:
                         cga_data = resp.json()
-                        context["creative_packages"] = self._extract_creative_packages(
-                            cga_data
+                        context["creative_packages"] = (
+                            self._extract_creative_packages(cga_data)
                         )
                         logger.info(
                             "CGA packages fetched from backend: %d packages",
@@ -322,7 +322,9 @@ class AdPubContextLoader:
                     unit.get("image_url") or unit.get("gcs_url") or unit.get("image")
                 )
                 if not has_image:
-                    errors.append(f"Creative package [{i}] ad unit [{j}] has no image")
+                    errors.append(
+                        f"Creative package [{i}] ad unit [{j}] has no image"
+                    )
 
         # Meta credentials (only required in production mode)
         if not context.get("sandbox_mode", True):
