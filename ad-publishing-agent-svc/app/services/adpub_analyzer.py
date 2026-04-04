@@ -159,15 +159,22 @@ class AdPubAnalyzer:
                         company,
                         page_id=creds.get("page_id", ""),
                     )
+                    # Prefer the original CGA image URL (real GCS/CDN)
+                    # over the Meta upload URL (stub in sandbox mode).
+                    upload_url = image_result.get("url", "")
+                    original_url = unit.get("image_url", "")
+                    resolved_url = (
+                        original_url
+                        if original_url and upload_url.startswith("https://stub/")
+                        else (upload_url or original_url)
+                    )
                     creatives.append(
                         {
                             "creative_id": creative_id,
                             "ad_set_id": ad_set_id,
                             "ad_set_name": ad_set_name,
                             "image_hash": image_result["hash"],
-                            "image_url": (
-                                image_result.get("url") or unit.get("image_url", "")
-                            ),
+                            "image_url": resolved_url,
                             "headline": unit.get("headline", ""),
                             "primary_text": unit.get("primary_text", ""),
                             "description": unit.get("description", ""),
