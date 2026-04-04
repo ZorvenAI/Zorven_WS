@@ -454,7 +454,12 @@ class AdPubContextLoader:
                 "(Agent 3.2) first"
             )
 
-        # Validate each package has ad_units with images
+        # Validate each package has ad_units with images.
+        # In sandbox mode, missing images are warnings (CGA may strip
+        # data URIs when GCS isn't configured). In production mode,
+        # images are required for Meta upload.
+        sandbox = context.get("sandbox_mode", True)
+        missing_image_count = 0
         for i, pkg in enumerate(packages):
             ad_units = pkg.get("ad_units", [])
             if not ad_units:
@@ -462,12 +467,22 @@ class AdPubContextLoader:
             for j, unit in enumerate(ad_units):
                 # CGA uses gcs_url; ad-publishing uses image_url
                 has_image = (
-                    unit.get("image_url") or unit.get("gcs_url") or unit.get("image")
+                    unit.get("image_url")
+                    or unit.get("gcs_url")
+                    or unit.get("image")
+                    or unit.get("image_generated")
                 )
-                if not has_image:
+                if not has_image and not sandbox:
                     errors.append(
                         f"Creative package [{i}] ad unit [{j}] has no image"
                     )
+                elif not has_image:
+                    missing_image_count += 1
+        if missing_image_count > 0 and sandbox:
+            logger.warning(
+                "%d ad units missing images (sandbox mode — proceeding)",
+                missing_image_count,
+            )
 
         # Meta credentials (only required in production mode)
         if not context.get("sandbox_mode", True):
