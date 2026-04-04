@@ -7211,7 +7211,6 @@ export default function ResultDashboard({
   if (hasAdPublishing && approvalRequestId && isAwaitingApproval && jobId) {
     const previewData = (adPubData?.preview_data ?? resultData.preview_data ?? {}) as Record<string, unknown>;
     const sandboxMode = (adPubData?.sandbox_mode ?? resultData.sandbox_mode ?? true) as boolean;
-    const isProduction = (adPubData?.is_production ?? resultData.is_production ?? false) as boolean;
     const planWarnings = (adPubData?.plan_warnings ?? resultData.plan_warnings ?? []) as string[];
     return (
       <div className="glass-card p-6 space-y-6">
@@ -7239,7 +7238,6 @@ export default function ResultDashboard({
           jobId={jobId}
           approvalRequestId={approvalRequestId}
           previewData={previewData}
-          isProduction={isProduction}
           sandboxMode={sandboxMode}
           planWarnings={planWarnings}
           onApprovalComplete={onApprovalComplete}

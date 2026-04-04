@@ -430,7 +430,11 @@ class AdPubContextLoader:
         # Extract backend diagnostics — store as info, not errors.
         # Only include in errors if they indicate failures.
         diagnostics = context.pop("_backend_diagnostics", [])
-        diag_failures = [d for d in diagnostics if "error" in d.lower() or "failed" in d.lower()]
+        diag_failures = [
+            d
+            for d in diagnostics
+            if "error" in d.lower() or "failed" in d.lower()
+        ]
         if diag_failures:
             errors.append(
                 "Backend enrichment errors: " + " | ".join(diag_failures)

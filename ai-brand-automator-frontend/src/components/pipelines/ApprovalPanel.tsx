@@ -58,7 +58,6 @@ interface ApprovalPanelProps {
   jobId: string;
   approvalRequestId: string;
   previewData: PreviewData;
-  isProduction: boolean;
   sandboxMode: boolean;
   planWarnings?: string[];
   onApprovalComplete?: () => void;
@@ -68,7 +67,6 @@ export default function ApprovalPanel({
   jobId,
   approvalRequestId,
   previewData,
-  isProduction,
   sandboxMode,
   planWarnings,
   onApprovalComplete,
