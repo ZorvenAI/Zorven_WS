@@ -39,6 +39,9 @@ export function usePollingJob(
   const [isLoading, setIsLoading] = useState(!!jobId);
   const [error, setError] = useState<string | null>(null);
 
+  // Incrementing this restarts the polling loop (e.g. after approval).
+  const [pollEpoch, setPollEpoch] = useState(0);
+
   // Track current jobId to avoid stale closures.
   const jobIdRef = useRef(jobId);
   jobIdRef.current = jobId;
@@ -62,6 +65,13 @@ export function usePollingJob(
       }
     }
   }, []);
+
+  // refresh: fetch full job AND restart polling so status changes
+  // (e.g. awaiting_approval → completed) are picked up automatically.
+  const refresh = useCallback(() => {
+    fetchFull();
+    setPollEpoch((e) => e + 1);
+  }, [fetchFull]);
 
   // Initial fetch + polling loop using setTimeout to prevent overlapping fetches.
   useEffect(() => {
@@ -89,10 +99,20 @@ export function usePollingJob(
         setError(null);
         setIsLoading(false);
 
-        // On terminal state, fetch full job detail and stop polling
-        if (qs.status === 'completed' || qs.status === 'failed' || qs.status === 'awaiting_approval') {
+        // On hard-terminal state (completed/failed), fetch full and stop.
+        // awaiting_approval is also terminal for the pipeline, but we
+        // keep fetching full so the page picks up result_data.
+        if (qs.status === 'completed' || qs.status === 'failed') {
           await fetchFull();
           return; // stop polling
+        }
+
+        // For awaiting_approval, fetch full job (to get result_data)
+        // then stop polling — it will restart via refresh() after
+        // the user approves/rejects.
+        if (qs.status === 'awaiting_approval') {
+          await fetchFull();
+          return; // stop polling — restart via refresh()
         }
 
         // Schedule next poll
@@ -122,7 +142,7 @@ export function usePollingJob(
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [jobId, intervalMs, fetchFull]);
+  }, [jobId, intervalMs, fetchFull, pollEpoch]);
 
-  return { job, quickStatus, isLoading, error, refresh: fetchFull };
+  return { job, quickStatus, isLoading, error, refresh };
 }
