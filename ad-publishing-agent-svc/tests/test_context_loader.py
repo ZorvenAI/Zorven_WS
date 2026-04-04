@@ -212,9 +212,7 @@ class TestExtractBlueprint:
                 ],
             },
             "funnel_map": {
-                "stages": [
-                    {"stage": "mofu", "meta_objective": "OUTCOME_TRAFFIC"}
-                ]
+                "stages": [{"stage": "mofu", "meta_objective": "OUTCOME_TRAFFIC"}]
             },
             "special_ad_category": "",
         }
@@ -241,9 +239,7 @@ class TestExtractBlueprint:
                     }
                 ],
             },
-            "funnel_map": {
-                "stages": [{"stage": "bofu", "budget_pct": 100}]
-            },
+            "funnel_map": {"stages": [{"stage": "bofu", "budget_pct": 100}]},
             "special_ad_category": "HOUSING",
         }
         result = AdPubContextLoader._extract_blueprint(caa)
@@ -315,81 +311,89 @@ class TestExtractCreativePackages:
         assert len(result) == 1
         assert result[0]["ad_set_name"] == "TOFU"
 
-    def test_from_ad_set_packages(self):
-        """Raw CGA output format (pipeline chaining)."""
+    def test_from_ad_set_packages_with_ad_units(self):
+        """Raw CGA output: merges ad_set_packages metadata with top-level
+        ad_units grouped by ad_set_name, enriched with generated_images."""
         cga = {
             "ad_set_packages": [
                 {
                     "ad_set_name": "TOFU - Tech",
                     "persona": "Tech Enthusiast",
                     "funnel_stage": "TOFU",
-                    "creative_units": [
-                        {"gcs_url": "gs://bucket/img.jpg", "headline": "Test"}
-                    ],
+                    "creative_units": [{"unit_id": "u1", "image_copy_coherence": 85}],
                 }
-            ]
+            ],
+            "ad_units": [
+                {
+                    "ad_set_name": "TOFU - Tech",
+                    "headline": "Test",
+                    "primary_text": "Copy",
+                    "image_variant_id": "v1",
+                }
+            ],
+            "generated_images": [
+                {
+                    "ad_set_name": "TOFU - Tech",
+                    "variant_id": "v1",
+                    "gcs_url": "gs://bucket/img.jpg",
+                    "thumbnail_url": "gs://bucket/thumb.jpg",
+                    "image_generated": True,
+                }
+            ],
         }
         result = AdPubContextLoader._extract_creative_packages(cga)
         assert len(result) == 1
         assert result[0]["ad_set_name"] == "TOFU - Tech"
         assert result[0]["persona"] == "Tech Enthusiast"
         assert len(result[0]["ad_units"]) == 1
+        unit = result[0]["ad_units"][0]
+        assert unit["headline"] == "Test"
+        assert unit["image_url"] == "gs://bucket/thumb.jpg"
+        assert unit["image_generated"] is True
 
-    def test_fallback_to_top_level_ad_units(self):
-        """Fallback when neither creative_packages nor ad_set_packages exist."""
-        cga = {"ad_units": [{"gcs_url": "gs://bucket/img.jpg", "headline": "Fallback"}]}
-        result = AdPubContextLoader._extract_creative_packages(cga)
-        assert len(result) == 1
-        assert result[0]["ad_set_name"] == "Default"
-        assert len(result[0]["ad_units"]) == 1
-
-    def test_no_creative_data(self):
-        cga = {"confidence_score": 0.5, "findings": []}
-        assert AdPubContextLoader._extract_creative_packages(cga) == []
-
-
-class TestExtractCreativePackages:
-    def test_empty_input(self):
-        assert AdPubContextLoader._extract_creative_packages({}) == []
-
-    def test_from_creative_packages_key(self):
-        """Already-mapped format (from cga-context endpoint)."""
+    def test_ad_set_packages_without_ad_units(self):
+        """When only ad_set_packages exist (no top-level ad_units),
+        packages still created but with empty ad_units."""
         cga = {
-            "creative_packages": [
-                {"ad_set_name": "TOFU", "ad_units": [{"image_url": "x"}]}
+            "ad_set_packages": [
+                {
+                    "ad_set_name": "TOFU",
+                    "persona": "Buyer",
+                    "funnel_stage": "TOFU",
+                    "creative_units": [{"unit_id": "u1"}],
+                }
             ]
         }
         result = AdPubContextLoader._extract_creative_packages(cga)
         assert len(result) == 1
         assert result[0]["ad_set_name"] == "TOFU"
-
-    def test_from_ad_set_packages(self):
-        """Raw CGA output format (pipeline chaining)."""
-        cga = {
-            "ad_set_packages": [
-                {
-                    "ad_set_name": "TOFU - Tech",
-                    "persona": "Tech Enthusiast",
-                    "funnel_stage": "TOFU",
-                    "creative_units": [
-                        {"gcs_url": "gs://bucket/img.jpg", "headline": "Test"}
-                    ],
-                }
-            ]
-        }
-        result = AdPubContextLoader._extract_creative_packages(cga)
-        assert len(result) == 1
-        assert result[0]["ad_set_name"] == "TOFU - Tech"
-        assert result[0]["persona"] == "Tech Enthusiast"
-        assert len(result[0]["ad_units"]) == 1
+        assert result[0]["persona"] == "Buyer"
+        assert result[0]["ad_units"] == []
 
     def test_fallback_to_top_level_ad_units(self):
-        """Fallback when neither creative_packages nor ad_set_packages exist."""
-        cga = {"ad_units": [{"gcs_url": "gs://bucket/img.jpg", "headline": "Fallback"}]}
+        """When only top-level ad_units exist (no ad_set_packages),
+        they are grouped under a single package."""
+        cga = {
+            "ad_units": [
+                {
+                    "ad_set_name": "Default",
+                    "headline": "Fallback",
+                    "image_variant_id": "v1",
+                }
+            ],
+            "generated_images": [
+                {
+                    "ad_set_name": "Default",
+                    "variant_id": "v1",
+                    "gcs_url": "gs://bucket/img.jpg",
+                }
+            ],
+        }
         result = AdPubContextLoader._extract_creative_packages(cga)
         assert len(result) == 1
         assert result[0]["ad_set_name"] == "Default"
         assert len(result[0]["ad_units"]) == 1
+        assert result[0]["ad_units"][0]["image_url"] == "gs://bucket/img.jpg"
 
     def test_no_creative_data(self):
         cga = {"confidence_score": 0.5, "findings": []}
