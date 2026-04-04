@@ -204,6 +204,22 @@ class CallbackClient:
             },
         )
 
+    async def send_awaiting_approval(
+        self,
+        callback_url: str,
+        result_data: dict[str, Any],
+        progress: dict[str, Any],
+    ) -> bool:
+        """Send an awaiting_approval callback (human gate paused the pipeline)."""
+        return await self._patch(
+            callback_url,
+            {
+                "status": "awaiting_approval",
+                "progress": progress,
+                "result_data": result_data,
+            },
+        )
+
     async def send_resolved_manifest(
         self,
         callback_url: str,

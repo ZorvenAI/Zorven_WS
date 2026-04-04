@@ -385,9 +385,7 @@ class JobExecutor:
                         # If any node failed, abort the pipeline
                         if failed_nodes:
                             # Mark remaining future nodes as failed
-                            remaining_start = (
-                                executed_node_count + len(level_nodes)
-                            )
+                            remaining_start = executed_node_count + len(level_nodes)
                             for remaining_id in flat_sorted[remaining_start:]:
                                 if (
                                     state["progress"]
@@ -455,6 +453,29 @@ class JobExecutor:
                         copy.deepcopy(state["progress"]),
                         result_data=partial_result_data,
                     )
+
+                    # Check if any node in this level returned
+                    # status="awaiting_approval" (human approval gate).
+                    # If so, pause the pipeline and send an
+                    # awaiting_approval callback to Django.
+                    for nid in level_nodes:
+                        node_out = state["node_outputs"].get(nid)
+                        if (
+                            isinstance(node_out, dict)
+                            and node_out.get("status") == "awaiting_approval"
+                        ):
+                            logger.info(
+                                "Job %s: node %s requires human approval "
+                                "— pausing pipeline",
+                                job_id,
+                                nid,
+                            )
+                            await self.callback.send_awaiting_approval(
+                                callback_url,
+                                result_data=partial_result_data,
+                                progress=copy.deepcopy(state["progress"]),
+                            )
+                            return
 
             except Exception as exc:
                 logger.error(
