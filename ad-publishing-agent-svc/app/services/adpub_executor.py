@@ -95,8 +95,7 @@ class AdPubExecutor:
             all_errors = []
             if diagnostics_info:
                 all_errors.append(
-                    "Backend enrichment diagnostics: "
-                    + " | ".join(diagnostics_info)
+                    "Backend enrichment diagnostics: " + " | ".join(diagnostics_info)
                 )
             all_errors.extend(validation_errors)
             return self._error_result(
@@ -118,9 +117,7 @@ class AdPubExecutor:
             max_campaign_budget_usd=self._max_budget,
         )
         if plan_check["errors"]:
-            return self._error_result(
-                "plan_guardrail", plan_check["errors"], start
-            )
+            return self._error_result("plan_guardrail", plan_check["errors"], start)
 
         # 4. Run phases 1-4 (campaign + targeting + creatives + previews)
         try:
@@ -131,17 +128,34 @@ class AdPubExecutor:
             )
         except Exception as exc:
             logger.error("Preparation failed: %s", exc, exc_info=True)
-            return self._error_result(
-                "preparation_failed", [str(exc)], start
-            )
+            return self._error_result("preparation_failed", [str(exc)], start)
 
         # 5. Create approval request (MANDATORY — HARDCODED)
+        # Nest previews (creatives) into their respective ad_sets
+        # so the frontend ApprovalPanel can render them inline.
+        previews_by_adset: dict[str, list[dict]] = {}
+        for preview in preparation.get("previews", []):
+            key = preview.get("ad_set_name", "")
+            previews_by_adset.setdefault(key, []).append(preview)
+
+        enriched_ad_sets = []
+        for ad_set in preparation["ad_sets"]:
+            name = ad_set.get("ad_set_name", "")
+            creatives = previews_by_adset.get(name, [])
+            enriched_ad_sets.append(
+                {
+                    **ad_set,
+                    "creatives": creatives,
+                    "creative_count": len(creatives),
+                }
+            )
+
         preview_data = {
             "campaign_name": preparation["campaign_name"],
             "objective": preparation["objective"],
             "total_daily_budget_usd": preparation["total_daily_budget_usd"],
             "duration_days": preparation["duration_days"],
-            "ad_sets": preparation["ad_sets"],
+            "ad_sets": enriched_ad_sets,
             "previews": preparation["previews"],
             "sandbox_mode": preparation["sandbox_mode"],
         }

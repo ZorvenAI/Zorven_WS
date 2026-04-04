@@ -46,7 +46,21 @@ class AdPubContextLoader:
 
         # 2. Creative packages from CGA (Agent 3.2) — MUST be approved
         cga_output = previous_outputs.get("creative_generation", {})
+        logger.info(
+            "CGA output keys: %s, ad_set_packages=%d, ad_units=%d, "
+            "generated_images=%d, creative_packages=%d",
+            list(cga_output.keys()) if cga_output else [],
+            len(cga_output.get("ad_set_packages", [])),
+            len(cga_output.get("ad_units", [])),
+            len(cga_output.get("generated_images", [])),
+            len(cga_output.get("creative_packages", [])),
+        )
         creative_packages = self._extract_creative_packages(cga_output)
+        logger.info(
+            "Extracted creative_packages: count=%d, " "ad_unit_counts=%s",
+            len(creative_packages),
+            [len(p.get("ad_units", [])) for p in creative_packages],
+        )
         approval_status = cga_output.get("approval_status", "")
 
         # 3. Persona profiles from WF1 APA
