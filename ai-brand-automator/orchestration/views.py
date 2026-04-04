@@ -465,7 +465,7 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             )
         elif decision in ("approve_all", "approve_selected"):
             publish_status = result.get("status", "")
-            if publish_status in ("published", "completed"):
+            if publish_status in ("published", "completed", "partial"):
                 job.status = AnalysisJob.Status.COMPLETED
                 job.completed_at = timezone.now()
                 # Merge publish result into existing result_data
