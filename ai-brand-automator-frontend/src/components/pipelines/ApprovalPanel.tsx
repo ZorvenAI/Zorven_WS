@@ -566,9 +566,20 @@ function AdPreviewModal({
                 </p>
               )}
             </div>
-            <span className="shrink-0 px-3 py-1.5 rounded-md bg-brand-electric/20 text-brand-electric text-xs font-semibold whitespace-nowrap">
-              {ctaLabel}
-            </span>
+            {creative.link_url ? (
+              <a
+                href={creative.link_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 px-3 py-1.5 rounded-md bg-brand-electric/20 text-brand-electric hover:bg-brand-electric/30 text-xs font-semibold whitespace-nowrap transition-colors"
+              >
+                {ctaLabel}
+              </a>
+            ) : (
+              <span className="shrink-0 px-3 py-1.5 rounded-md bg-brand-electric/20 text-brand-electric text-xs font-semibold whitespace-nowrap">
+                {ctaLabel}
+              </span>
+            )}
           </div>
         </div>
 
