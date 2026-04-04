@@ -348,6 +348,54 @@ class TestExtractCreativePackages:
         assert AdPubContextLoader._extract_creative_packages(cga) == []
 
 
+class TestExtractCreativePackages:
+    def test_empty_input(self):
+        assert AdPubContextLoader._extract_creative_packages({}) == []
+
+    def test_from_creative_packages_key(self):
+        """Already-mapped format (from cga-context endpoint)."""
+        cga = {
+            "creative_packages": [
+                {"ad_set_name": "TOFU", "ad_units": [{"image_url": "x"}]}
+            ]
+        }
+        result = AdPubContextLoader._extract_creative_packages(cga)
+        assert len(result) == 1
+        assert result[0]["ad_set_name"] == "TOFU"
+
+    def test_from_ad_set_packages(self):
+        """Raw CGA output format (pipeline chaining)."""
+        cga = {
+            "ad_set_packages": [
+                {
+                    "ad_set_name": "TOFU - Tech",
+                    "persona": "Tech Enthusiast",
+                    "funnel_stage": "TOFU",
+                    "creative_units": [
+                        {"gcs_url": "gs://bucket/img.jpg", "headline": "Test"}
+                    ],
+                }
+            ]
+        }
+        result = AdPubContextLoader._extract_creative_packages(cga)
+        assert len(result) == 1
+        assert result[0]["ad_set_name"] == "TOFU - Tech"
+        assert result[0]["persona"] == "Tech Enthusiast"
+        assert len(result[0]["ad_units"]) == 1
+
+    def test_fallback_to_top_level_ad_units(self):
+        """Fallback when neither creative_packages nor ad_set_packages exist."""
+        cga = {"ad_units": [{"gcs_url": "gs://bucket/img.jpg", "headline": "Fallback"}]}
+        result = AdPubContextLoader._extract_creative_packages(cga)
+        assert len(result) == 1
+        assert result[0]["ad_set_name"] == "Default"
+        assert len(result[0]["ad_units"]) == 1
+
+    def test_no_creative_data(self):
+        cga = {"confidence_score": 0.5, "findings": []}
+        assert AdPubContextLoader._extract_creative_packages(cga) == []
+
+
 class TestValidate:
     def setup_method(self):
         self.loader = AdPubContextLoader()

@@ -1209,12 +1209,15 @@ class CAAContextView(APIView):
         # prerequisites.
         job = None
 
-        # Primary: standalone CAA pipeline
+        # Primary: standalone CAA or full-pipeline jobs that include CAA
         caa_jobs = (
             AnalysisJob.objects.filter(
                 Q(tenant=tenant) | Q(tenant__isnull=True),
                 status=AnalysisJob.Status.COMPLETED,
-                manifest__pipeline_id="meta-campaign-architecture",
+                manifest__pipeline_id__in=[
+                    "meta-campaign-architecture",
+                    "meta-ads-full",
+                ],
             )
             .select_related("manifest")
             .order_by("-completed_at")[:10]
@@ -1227,12 +1230,14 @@ class CAAContextView(APIView):
                 job = candidate
                 break
 
-        # Fallback: any job with non-empty campaign_architecture results
+        # Fallback: any job with non-empty campaign_architecture results.
+        # Use a larger window since ad-publishing-only jobs can flood
+        # the recent completions list.
         if not job:
             candidates = AnalysisJob.objects.filter(
                 Q(tenant=tenant) | Q(tenant__isnull=True),
                 status=AnalysisJob.Status.COMPLETED,
-            ).order_by("-completed_at")[:20]
+            ).order_by("-completed_at")[:50]
             for candidate in candidates:
                 nr = (candidate.result_data or {}).get("node_results", {})
                 caa_node = nr.get("campaign_architecture", {})
@@ -1336,12 +1341,15 @@ class CGAContextView(APIView):
         # were missing — skip those.
         job = None
 
-        # Primary: standalone CGA pipeline
+        # Primary: standalone CGA or full-pipeline jobs that include CGA
         cga_jobs = (
             AnalysisJob.objects.filter(
                 Q(tenant=tenant) | Q(tenant__isnull=True),
                 status=AnalysisJob.Status.COMPLETED,
-                manifest__pipeline_id="meta-creative-generation",
+                manifest__pipeline_id__in=[
+                    "meta-creative-generation",
+                    "meta-ads-full",
+                ],
             )
             .select_related("manifest")
             .order_by("-completed_at")[:10]
@@ -1351,42 +1359,23 @@ class CGAContextView(APIView):
             cga_node = nr.get("creative_generation", {})
             pkgs = cga_node.get("ad_set_packages", [])
             units = cga_node.get("ad_units", [])
-            logger.info(
-                "CGAContextView: candidate job=%s manifest=%s "
-                "has_cga_node=%s pkgs=%d units=%d nr_keys=%s",
-                candidate.job_id,
-                candidate.manifest.pipeline_id if candidate.manifest else "none",
-                "creative_generation" in nr,
-                len(pkgs) if isinstance(pkgs, list) else -1,
-                len(units) if isinstance(units, list) else -1,
-                list(nr.keys())[:10],
-            )
             if pkgs or units:
                 job = candidate
                 break
 
-        # Fallback: any job with non-empty creative_generation results
+        # Fallback: any job with non-empty creative_generation results.
+        # Use a larger window since ad-publishing-only jobs can flood
+        # the recent completions list.
         if not job:
             candidates = AnalysisJob.objects.filter(
                 Q(tenant=tenant) | Q(tenant__isnull=True),
                 status=AnalysisJob.Status.COMPLETED,
-            ).order_by("-completed_at")[:20]
+            ).order_by("-completed_at")[:50]
             for candidate in candidates:
                 nr = (candidate.result_data or {}).get("node_results", {})
                 cga_node = nr.get("creative_generation", {})
                 pkgs = cga_node.get("ad_set_packages", [])
                 units = cga_node.get("ad_units", [])
-                logger.info(
-                    "CGAContextView fallback: candidate job=%s "
-                    "has_cga_node=%s pkgs=%d units=%d nr_keys=%s "
-                    "cga_keys=%s",
-                    candidate.job_id,
-                    "creative_generation" in nr,
-                    len(pkgs) if isinstance(pkgs, list) else -1,
-                    len(units) if isinstance(units, list) else -1,
-                    list(nr.keys())[:10],
-                    list(cga_node.keys())[:15] if cga_node else [],
-                )
                 if pkgs or units:
                     job = candidate
                     break
@@ -1402,40 +1391,82 @@ class CGAContextView(APIView):
         cga = node_results.get("creative_generation", {})
 
         # Map CGA output to ad-publishing expected format.
-        # CGA stores per-ad-set packages in "ad_set_packages", each
-        # containing "creative_units" (assembled image+copy+CTA).
-        # Ad publishing expects "creative_packages" — a list of dicts
-        # with "ad_set_name" and "ad_units" (image_url, headline, etc.).
+        #
+        # CGA output has three relevant lists:
+        # 1. ad_set_packages[*].creative_units — only unit_id + coherence
+        #    score (minimal, NOT usable for publishing)
+        # 2. ad_units[] — top-level assembled units with full ad copy
+        #    (headline, primary_text, cta, placement, image_gcs_url)
+        # 3. generated_images[] — actual images with gcs_url/thumbnail_url
+        #
+        # Strategy: use ad_set_packages for package metadata (persona,
+        # funnel_stage), use top-level ad_units grouped by ad_set_name
+        # for the actual publishable content, and enrich with image data
+        # from generated_images.
         ad_set_packages = cga.get("ad_set_packages", [])
-        creative_units = cga.get("ad_units", [])
+        top_level_units = cga.get("ad_units", [])
+        generated_images = cga.get("generated_images", [])
 
-        # Build creative_packages from ad_set_packages
+        # Build image lookup: (ad_set_name, variant_id) → best image
+        image_lookup: dict[tuple[str, str], dict] = {}
+        for img in generated_images:
+            key = (img.get("ad_set_name", ""), img.get("variant_id", ""))
+            # Prefer images with thumbnails or real GCS URLs
+            if key not in image_lookup or img.get("thumbnail_url"):
+                image_lookup[key] = img
+
+        # Group top-level ad_units by ad_set_name
+        units_by_adset: dict[str, list[dict]] = {}
+        for unit in top_level_units:
+            adset = unit.get("ad_set_name", "Default")
+            enriched = dict(unit)
+            # Enrich with image data if the unit references a variant
+            variant_id = unit.get("image_variant_id", "")
+            img_data = image_lookup.get((adset, variant_id), {})
+            if img_data:
+                # Use thumbnail for display, mark as generated
+                enriched["image_url"] = (
+                    img_data.get("thumbnail_url")
+                    or img_data.get("gcs_url", "")
+                )
+                enriched["image_generated"] = img_data.get(
+                    "image_generated", True
+                )
+            units_by_adset.setdefault(adset, []).append(enriched)
+
+        # Build creative_packages from ad_set_packages metadata +
+        # grouped top-level units
         creative_packages = []
         for pkg in ad_set_packages:
-            units = pkg.get("creative_units", [])
+            adset_name = pkg.get("ad_set_name", "")
+            units = units_by_adset.get(adset_name, [])
+            # Fallback: use creative_units if no top-level units match
+            if not units:
+                units = pkg.get("creative_units", [])
             creative_packages.append(
                 {
-                    "ad_set_name": pkg.get("ad_set_name", ""),
+                    "ad_set_name": adset_name,
                     "persona": pkg.get("persona", ""),
                     "funnel_stage": pkg.get("funnel_stage", ""),
                     "ad_units": units,
                 }
             )
 
-        # Fallback: if no ad_set_packages, build from top-level ad_units
-        if not creative_packages and creative_units:
-            creative_packages.append(
-                {
-                    "ad_set_name": "Default",
-                    "ad_units": creative_units,
-                }
-            )
+        # If no ad_set_packages, build from top-level ad_units directly
+        if not creative_packages and top_level_units:
+            for adset_name, units in units_by_adset.items():
+                creative_packages.append(
+                    {
+                        "ad_set_name": adset_name,
+                        "ad_units": units,
+                    }
+                )
 
         return Response(
             {
                 "creative_packages": creative_packages,
                 "ad_set_packages": ad_set_packages,
-                "ad_units": creative_units,
+                "ad_units": top_level_units,
                 "creative_package": cga.get("creative_package", {}),
                 "generated_images": cga.get("generated_images", []),
                 "confidence_score": cga.get("confidence_score", 0.0),
