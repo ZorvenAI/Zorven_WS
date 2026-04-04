@@ -1260,6 +1260,98 @@ class CAAContextView(APIView):
         )
 
 
+class CGAContextView(APIView):
+    """GET /api/v1/analytics/cga-context/ — Latest CGA creative packages.
+
+    Used by WF3 agents (Ad Publishing, etc.) to consume CGA creative output.
+    Authenticated via X-Service-Token.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        # Service-token auth
+        service_token = request.headers.get("X-Service-Token", "")
+        expected_token = getattr(
+            django_settings,
+            "ORCHESTRATOR_SERVICE_TOKEN",
+            "dev-service-token",
+        )
+        if service_token != expected_token:
+            return Response(
+                {"error": "Invalid service token"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        tenant = None
+        tenant_id = request.headers.get("X-Tenant-ID", "")
+        if tenant_id:
+            from tenants.models import Tenant
+
+            try:
+                tenant = Tenant.objects.get(pk=tenant_id)
+            except (Tenant.DoesNotExist, ValueError):
+                pass
+        if not tenant:
+            tenant = _get_tenant(request)
+
+        if not tenant:
+            return Response(
+                {"error": "Tenant required"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        from orchestration.models import AnalysisJob
+
+        # Find latest completed CGA job
+        job = (
+            AnalysisJob.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True),
+                status=AnalysisJob.Status.COMPLETED,
+                manifest__pipeline_id="meta-creative-generation",
+            )
+            .select_related("manifest")
+            .order_by("-completed_at")
+            .first()
+        )
+
+        # Fallback: any job with creative_generation node results
+        if not job:
+            candidates = AnalysisJob.objects.filter(
+                Q(tenant=tenant) | Q(tenant__isnull=True),
+                status=AnalysisJob.Status.COMPLETED,
+            ).order_by("-completed_at")[:20]
+            for candidate in candidates:
+                nr = (candidate.result_data or {}).get("node_results", {})
+                if "creative_generation" in nr:
+                    job = candidate
+                    break
+
+        if not job:
+            return Response(
+                {"error": "No CGA data"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        result_data = job.result_data or {}
+        node_results = result_data.get("node_results", {})
+        cga = node_results.get("creative_generation", {})
+
+        return Response(
+            {
+                "creative_packages": cga.get("creative_packages", []),
+                "approval_status": cga.get("approval_status", ""),
+                "gallery": cga.get("gallery", []),
+                "ad_units": cga.get("ad_units", []),
+                "confidence_score": cga.get("confidence_score", 0.0),
+                "cga_completed_at": (
+                    job.completed_at.isoformat() if job.completed_at else None
+                ),
+                "cga_job_id": str(job.job_id),
+            }
+        )
+
+
 class BrandPersonalitySyncView(APIView):
     """POST /api/v1/analytics/brand-personality-sync/
 
