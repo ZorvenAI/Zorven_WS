@@ -73,16 +73,32 @@ def cga_completed_job(db, cga_tenant, cga_manifest):
                             "funnel_stage": "TOFU",
                             "creative_units": [
                                 {
-                                    "gcs_url": "gs://bucket/img.jpg",
-                                    "headline": "Test",
+                                    "unit_id": "unit_01",
+                                    "image_copy_coherence": 85,
                                 }
                             ],
                         }
                     ],
                     "ad_units": [
-                        {"gcs_url": "gs://bucket/img.jpg", "headline": "Test"}
+                        {
+                            "ad_set_name": "TOFU - Test",
+                            "unit_id": "unit_01",
+                            "headline": "Test",
+                            "primary_text": "Test copy",
+                            "cta_text": "Learn More",
+                            "image_gcs_url": "[generated:v1_1x1]",
+                            "image_variant_id": "v1",
+                        }
                     ],
-                    "generated_images": [{"gcs_url": "gs://bucket/img.jpg"}],
+                    "generated_images": [
+                        {
+                            "ad_set_name": "TOFU - Test",
+                            "variant_id": "v1",
+                            "gcs_url": "gs://bucket/img.jpg",
+                            "thumbnail_url": "gs://bucket/thumb.jpg",
+                            "image_generated": True,
+                        }
+                    ],
                     "confidence_score": 0.92,
                     "compliance_pass_rate": 0.85,
                 }
@@ -219,10 +235,18 @@ class TestCGAContextViewResponse:
     ):
         resp = self._get(service_client, cga_tenant.id, settings)
         data = resp.json()
-        # creative_packages mapped from ad_set_packages
+        # creative_packages built from ad_set_packages metadata +
+        # top-level ad_units grouped by ad_set_name
         assert len(data["creative_packages"]) == 1
-        assert data["creative_packages"][0]["ad_set_name"] == "TOFU - Test"
-        assert len(data["creative_packages"][0]["ad_units"]) == 1
+        pkg = data["creative_packages"][0]
+        assert pkg["ad_set_name"] == "TOFU - Test"
+        assert pkg["persona"] == "Tech Enthusiast"
+        assert len(pkg["ad_units"]) == 1
+        # Ad unit enriched with image from generated_images
+        unit = pkg["ad_units"][0]
+        assert unit["headline"] == "Test"
+        assert unit["image_url"] == "gs://bucket/thumb.jpg"
+        assert unit["image_generated"] is True
         assert data["confidence_score"] == 0.92
         assert data["cga_job_id"] == str(cga_completed_job.job_id)
 
