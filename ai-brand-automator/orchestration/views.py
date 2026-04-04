@@ -468,15 +468,31 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             if publish_status in ("published", "completed", "partial"):
                 job.status = AnalysisJob.Status.COMPLETED
                 job.completed_at = timezone.now()
-                # Merge publish result into existing result_data
+                # Merge publish result into node_results.ad_publishing
+                # so the frontend finds it in the expected location.
                 existing = job.result_data or {}
+                node_results = existing.get("node_results", {})
+                ad_pub_node = node_results.get("ad_publishing", {})
+                if isinstance(ad_pub_node, dict):
+                    ad_pub_node["publish_result"] = result
+                    ad_pub_node["status"] = "completed"
+                else:
+                    ad_pub_node = {"publish_result": result, "status": "completed"}
+                node_results["ad_publishing"] = ad_pub_node
+                existing["node_results"] = node_results
                 existing["publish_result"] = result
                 job.result_data = existing
+                # Mark ad_publishing node as done in progress
+                progress = job.progress or {}
+                if "ad_publishing" in progress:
+                    progress["ad_publishing"]["status"] = "done"
+                    job.progress = progress
                 job.save(
                     update_fields=[
                         "status",
                         "completed_at",
                         "result_data",
+                        "progress",
                         "updated_at",
                     ]
                 )
