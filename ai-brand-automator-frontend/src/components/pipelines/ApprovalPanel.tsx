@@ -2,7 +2,7 @@
  * ApprovalPanel — renders ad-publishing preview data with approve/reject controls.
  *
  * Shown when a job is in `awaiting_approval` status. Displays campaign overview,
- * ad set breakdown, creative previews, and action buttons.
+ * ad set breakdown, creative previews with full-ad modal, and action buttons.
  */
 
 'use client';
@@ -20,8 +20,26 @@ import {
   Loader2,
   ChevronDown,
   ChevronUp,
+  X,
+  ExternalLink,
+  Maximize2,
 } from 'lucide-react';
 import { approveJob } from '@/lib/orchestration';
+
+interface CreativePreview {
+  headline?: string;
+  body?: string;
+  primary_text?: string;
+  cta_type?: string;
+  cta?: string;
+  image_url?: string;
+  image_hash?: string;
+  preview_html?: string;
+  variant_label?: string;
+  link_url?: string;
+  description?: string;
+  ad_set_name?: string;
+}
 
 interface AdSetPreview {
   ad_set_name?: string;
@@ -32,15 +50,7 @@ interface AdSetPreview {
   daily_budget_cents?: number;
   targeting_summary?: string;
   creative_count?: number;
-  creatives?: Array<{
-    headline?: string;
-    body?: string;
-    primary_text?: string;
-    cta_type?: string;
-    image_url?: string;
-    image_hash?: string;
-    preview_html?: string;
-  }>;
+  creatives?: CreativePreview[];
 }
 
 interface PreviewData {
@@ -77,6 +87,11 @@ export default function ApprovalPanel({
   const [expandedAdSets, setExpandedAdSets] = useState<Set<number>>(new Set([0]));
   const [feedback, setFeedback] = useState('');
   const [productionConfirmed, setProductionConfirmed] = useState(false);
+  const [selectedCreative, setSelectedCreative] = useState<{
+    creative: CreativePreview;
+    adSetName: string;
+    campaignName: string;
+  } | null>(null);
 
   const adSets = previewData.ad_sets ?? [];
   const totalBudget = previewData.total_daily_budget_usd ?? 0;
@@ -265,20 +280,35 @@ export default function ApprovalPanel({
                     </p>
                   )}
                   {creatives.length > 0 && (
-                    <div className="grid grid-cols-1 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {creatives.map((creative, cIdx) => (
-                        <div
+                        <button
                           key={cIdx}
-                          className="flex gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/5"
+                          type="button"
+                          onClick={() =>
+                            setSelectedCreative({
+                              creative,
+                              adSetName: name,
+                              campaignName: previewData.campaign_name ?? 'Campaign',
+                            })
+                          }
+                          className="group flex gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/5 hover:border-brand-electric/30 hover:bg-white/[0.06] transition-all text-left cursor-pointer"
                         >
-                          {creative.image_url && (
-                            <div className="w-16 h-16 rounded-md overflow-hidden shrink-0 bg-white/5">
+                          {creative.image_url ? (
+                            <div className="w-20 h-20 rounded-md overflow-hidden shrink-0 bg-white/5 relative">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={creative.image_url}
                                 alt={creative.headline ?? 'Ad creative'}
                                 className="w-full h-full object-cover"
                               />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                                <Maximize2 className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="w-20 h-20 rounded-md shrink-0 bg-white/5 flex items-center justify-center">
+                              <Image className="w-6 h-6 text-brand-silver/20" />
                             </div>
                           )}
                           <div className="flex-1 min-w-0 space-y-1">
@@ -292,13 +322,18 @@ export default function ApprovalPanel({
                                 {creative.body ?? creative.primary_text}
                               </p>
                             )}
-                            {creative.cta_type && (
-                              <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-brand-electric/10 text-brand-electric/70">
-                                {creative.cta_type.replace(/_/g, ' ')}
+                            <div className="flex items-center gap-2">
+                              {(creative.cta_type ?? creative.cta) && (
+                                <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-brand-electric/10 text-brand-electric/70">
+                                  {(creative.cta_type ?? creative.cta ?? '').replace(/_/g, ' ')}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-brand-electric/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                                <Eye className="w-3 h-3" /> Preview
                               </span>
-                            )}
+                            </div>
                           </div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}
@@ -379,6 +414,16 @@ export default function ApprovalPanel({
           Reject
         </button>
       </div>
+
+      {/* Full Ad Preview Modal */}
+      {selectedCreative && (
+        <AdPreviewModal
+          creative={selectedCreative.creative}
+          adSetName={selectedCreative.adSetName}
+          campaignName={selectedCreative.campaignName}
+          onClose={() => setSelectedCreative(null)}
+        />
+      )}
     </div>
   );
 }
@@ -401,6 +446,198 @@ function Stat({
         <p className="text-[10px] text-brand-silver/40">{label}</p>
         <p className="text-xs text-brand-silver font-medium truncate">{value}</p>
       </div>
+    </div>
+  );
+}
+
+/* ── Full Ad Preview Modal ── */
+
+function AdPreviewModal({
+  creative,
+  adSetName,
+  campaignName,
+  onClose,
+}: {
+  creative: CreativePreview;
+  adSetName: string;
+  campaignName: string;
+  onClose: () => void;
+}) {
+  const ctaLabel = (creative.cta_type ?? creative.cta ?? 'LEARN_MORE').replace(/_/g, ' ');
+  const bodyText = creative.body ?? creative.primary_text ?? '';
+  const linkDomain = creative.link_url
+    ? (() => {
+        try { return new URL(creative.link_url).hostname; }
+        catch { return creative.link_url; }
+      })()
+    : undefined;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+
+      {/* Modal */}
+      <div
+        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-brand-midnight shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 z-10 p-1.5 rounded-full bg-black/50 hover:bg-black/70 text-white/70 hover:text-white transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        {/* Header — context info */}
+        <div className="px-5 pt-4 pb-3 border-b border-white/5">
+          <p className="text-[11px] text-brand-silver/40 uppercase tracking-wider">Ad Preview</p>
+          <p className="text-sm font-medium text-white mt-0.5">{campaignName}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-[11px] text-brand-silver/50">{adSetName}</span>
+            {creative.variant_label && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-electric/15 text-brand-electric/80">
+                {creative.variant_label}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Simulated Meta ad post */}
+        <div className="mx-4 my-4 rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
+          {/* Page header (simulated) */}
+          <div className="flex items-center gap-2.5 px-4 pt-3 pb-2">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-electric/30 to-violet-500/30 flex items-center justify-center">
+              <span className="text-xs font-bold text-white">
+                {(campaignName || 'A')[0].toUpperCase()}
+              </span>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">{campaignName}</p>
+              <p className="text-[10px] text-brand-silver/40">Sponsored</p>
+            </div>
+          </div>
+
+          {/* Primary text (body copy) */}
+          {bodyText && (
+            <div className="px-4 pb-3">
+              <p className="text-sm text-brand-silver leading-relaxed whitespace-pre-wrap">
+                {bodyText}
+              </p>
+            </div>
+          )}
+
+          {/* Ad image — full width */}
+          {creative.image_url ? (
+            <div className="w-full aspect-square bg-white/5 relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={creative.image_url}
+                alt={creative.headline ?? 'Ad creative'}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="w-full aspect-square bg-white/5 flex items-center justify-center">
+              <Image className="w-16 h-16 text-brand-silver/15" />
+            </div>
+          )}
+
+          {/* Link preview bar + CTA */}
+          <div className="flex items-center justify-between px-4 py-3 bg-white/[0.04] border-t border-white/5">
+            <div className="min-w-0 flex-1 mr-3">
+              {linkDomain && (
+                <p className="text-[10px] text-brand-silver/40 uppercase tracking-wide truncate">
+                  {linkDomain}
+                </p>
+              )}
+              {creative.headline && (
+                <p className="text-sm font-semibold text-white truncate mt-0.5">
+                  {creative.headline}
+                </p>
+              )}
+              {creative.description && (
+                <p className="text-xs text-brand-silver/50 truncate">
+                  {creative.description}
+                </p>
+              )}
+            </div>
+            <span className="shrink-0 px-3 py-1.5 rounded-md bg-brand-electric/20 text-brand-electric text-xs font-semibold whitespace-nowrap">
+              {ctaLabel}
+            </span>
+          </div>
+        </div>
+
+        {/* Detail fields */}
+        <div className="px-5 pb-5 space-y-3">
+          <h4 className="text-xs font-semibold text-brand-silver/50 uppercase tracking-wider">
+            Creative Details
+          </h4>
+          <div className="grid grid-cols-1 gap-2">
+            {creative.headline && (
+              <DetailRow label="Headline" value={creative.headline} />
+            )}
+            {bodyText && (
+              <DetailRow label="Primary Text" value={bodyText} />
+            )}
+            <DetailRow label="Call to Action" value={ctaLabel} />
+            {creative.variant_label && (
+              <DetailRow label="Variant" value={creative.variant_label} />
+            )}
+            {creative.link_url && (
+              <DetailRow label="Destination URL" value={creative.link_url} isUrl />
+            )}
+            {creative.image_hash && (
+              <DetailRow label="Image Hash" value={creative.image_hash} />
+            )}
+          </div>
+
+          {/* Open image in new tab */}
+          {creative.image_url && (
+            <a
+              href={creative.image_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-brand-electric/70 hover:text-brand-electric transition-colors mt-2"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Open full image in new tab
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  isUrl,
+}: {
+  label: string;
+  value: string;
+  isUrl?: boolean;
+}) {
+  return (
+    <div className="rounded-lg bg-white/[0.03] px-3 py-2">
+      <p className="text-[10px] text-brand-silver/40 mb-0.5">{label}</p>
+      {isUrl ? (
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-brand-electric/80 hover:text-brand-electric break-all"
+        >
+          {value}
+        </a>
+      ) : (
+        <p className="text-xs text-brand-silver whitespace-pre-wrap">{value}</p>
+      )}
     </div>
   );
 }

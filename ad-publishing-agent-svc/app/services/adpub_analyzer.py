@@ -170,7 +170,11 @@ class AdPubAnalyzer:
                             ),
                             "headline": unit.get("headline", ""),
                             "primary_text": unit.get("primary_text", ""),
+                            "description": unit.get("description", ""),
                             "cta": unit.get("cta", "LEARN_MORE"),
+                            "link_url": unit.get(
+                                "link_url", company.get("website", "")
+                            ),
                             "variant_label": unit.get("variant_label", ""),
                         }
                     )
