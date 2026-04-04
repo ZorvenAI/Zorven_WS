@@ -299,17 +299,18 @@ class AdPubContextLoader:
                         "has no image_url"
                     )
 
-        # Meta credentials
-        creds = context.get("meta_credentials", {})
-        if not creds.get("access_token"):
-            errors.append(
-                "Meta access_token missing: configure Meta Business "
-                "Manager credentials"
-            )
-        if not creds.get("ad_account_id"):
-            errors.append(
-                "Meta ad_account_id missing: configure Meta Business "
-                "Manager credentials"
-            )
+        # Meta credentials (only required in production mode)
+        if not context.get("sandbox_mode", True):
+            creds = context.get("meta_credentials", {})
+            if not creds.get("access_token"):
+                errors.append(
+                    "Meta access_token missing: configure Meta Business "
+                    "Manager credentials"
+                )
+            if not creds.get("ad_account_id"):
+                errors.append(
+                    "Meta ad_account_id missing: configure Meta Business "
+                    "Manager credentials"
+                )
 
         return errors
