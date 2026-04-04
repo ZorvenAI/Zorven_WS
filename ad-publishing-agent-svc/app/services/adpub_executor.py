@@ -65,13 +65,18 @@ class AdPubExecutor:
         """
         start = time.time()
 
-        # 1. Load context
+        # 1. Load context from previous_outputs (pipeline chaining)
         context = self._context_loader.load(
             previous_outputs=previous_outputs,
             input_context=input_context,
             tenant_context=tenant_context,
             config=config,
         )
+
+        # 1b. If CAA/CGA data missing, fetch from Django backend
+        #     (standalone execution — agents ran as separate pipelines)
+        if context.get("_needs_caa_fetch") or context.get("_needs_cga_fetch"):
+            context = await self._context_loader.enrich_from_backend(context)
 
         # 2. Input guardrails
         validation_errors = self._context_loader.validate(context)

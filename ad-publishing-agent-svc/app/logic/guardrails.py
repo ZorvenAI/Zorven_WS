@@ -53,18 +53,19 @@ class InputGuardrails:
                 "IG-09: Blueprint has no funnel stages."
             )
 
-        # IG-10: Meta credentials check
-        creds = context.get("meta_credentials", {})
-        if not creds.get("access_token"):
-            errors.append(
-                "IG-10: Meta access_token missing. "
-                "Configure Meta Business Manager credentials."
-            )
-        if not creds.get("ad_account_id"):
-            errors.append(
-                "IG-10: Meta ad_account_id missing. "
-                "Configure Meta Business Manager credentials."
-            )
+        # IG-10: Meta credentials check (only in production mode)
+        if not context.get("sandbox_mode", True):
+            creds = context.get("meta_credentials", {})
+            if not creds.get("access_token"):
+                errors.append(
+                    "IG-10: Meta access_token missing. "
+                    "Configure Meta Business Manager credentials."
+                )
+            if not creds.get("ad_account_id"):
+                errors.append(
+                    "IG-10: Meta ad_account_id missing. "
+                    "Configure Meta Business Manager credentials."
+                )
 
         # IG-11: Daily spend cap pre-check
         total_budget = bp.get("total_budget_usd", 0)

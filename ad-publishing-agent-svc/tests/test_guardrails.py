@@ -50,9 +50,25 @@ class TestInputGuardrails:
             "creative_packages": [{"ad_units": [{"image_url": "x"}]}],
             "blueprint": {"campaign_name": "X", "funnel_stages": [{}]},
             "meta_credentials": {},
+            "sandbox_mode": False,
         }
         errors = self.guard.check(context)
         assert any("IG-10" in e for e in errors)
+
+    def test_sandbox_mode_skips_credential_check(self):
+        context = {
+            "creative_packages": [{"ad_units": [{"image_url": "x"}]}],
+            "blueprint": {
+                "campaign_name": "X",
+                "funnel_stages": [{}],
+                "total_budget_usd": 100,
+                "duration_days": 30,
+            },
+            "meta_credentials": {},
+            "sandbox_mode": True,
+        }
+        errors = self.guard.check(context)
+        assert not any("IG-10" in e for e in errors)
 
     def test_spend_cap_exceeded(self):
         context = {

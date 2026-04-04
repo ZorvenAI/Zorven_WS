@@ -8,6 +8,7 @@ from analytics.views import (
     BrandContextSyncView,
     BrandPersonalitySyncView,
     CAAContextView,
+    CGAContextView,
     CompanyContextView,
     ComparisonView,
     CoverageView,
@@ -52,4 +53,5 @@ urlpatterns = [
     path("nta-context/", NTAContextView.as_view(), name="analytics-nta-context"),
     path("bsa-context/", BSAContextView.as_view(), name="analytics-bsa-context"),
     path("caa-context/", CAAContextView.as_view(), name="analytics-caa-context"),
+    path("cga-context/", CGAContextView.as_view(), name="analytics-cga-context"),
 ]
