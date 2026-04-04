@@ -133,7 +133,7 @@ export default function JobDetailPage({ params }: PageProps) {
   }, [job, refresh]);
 
   const isTerminal =
-    job?.status === 'completed' || job?.status === 'failed';
+    job?.status === 'completed' || job?.status === 'failed' || job?.status === 'awaiting_approval';
   const canCancelJob =
     canEdit &&
     job &&
@@ -241,8 +241,8 @@ export default function JobDetailPage({ params }: PageProps) {
               </div>
             )}
 
-            {/* Completed: show graph summary + results */}
-            {job.status === 'completed' && (
+            {/* Completed or awaiting approval: show graph summary + results */}
+            {(job.status === 'completed' || job.status === 'awaiting_approval') && (
               <div className="space-y-6">
                 {manifestData ? (
                   <PipelineGraph
@@ -260,6 +260,8 @@ export default function JobDetailPage({ params }: PageProps) {
                   <ResultDashboard
                     resultData={job.result_data}
                     manifestName={job.manifest_name}
+                    jobId={job.job_id}
+                    jobStatus={job.status}
                   />
                 )}
               </div>

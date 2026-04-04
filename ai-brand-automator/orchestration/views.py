@@ -62,6 +62,7 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         "retrieve": [IsAuthenticated, IsTenantViewer],
         "create": [IsAuthenticated, IsTenantEditor],
         "cancel": [IsAuthenticated, IsTenantEditor],
+        "approve": [IsAuthenticated, IsTenantEditor],
         "callback": [],  # Service-to-service auth handled in action
     }
 
@@ -194,7 +195,7 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         """
         # ── Try Redis cache for terminal jobs only ──
         cached = cache.get(f"job:status:{job_id}")
-        if cached and cached.get("status") in ("completed", "failed"):
+        if cached and cached.get("status") in ("completed", "failed", "awaiting_approval"):
             cached.setdefault("current_node", None)
             cached.setdefault("progress_percent", 0)
             cached.setdefault("last_thought", None)
@@ -229,12 +230,16 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             data["progress_percent"] = 100
         elif job.status == AnalysisJob.Status.FAILED:
             data["error_message"] = job.error_message
+        elif job.status == AnalysisJob.Status.AWAITING_APPROVAL:
+            data["manifest_name"] = job.manifest.name if job.manifest else None
+            data["progress_percent"] = 100
 
         # Cache terminal states for 1 hour; skip caching in-flight
         # jobs — the DB is the source of truth during execution.
         is_terminal = job.status in (
             AnalysisJob.Status.COMPLETED,
             AnalysisJob.Status.FAILED,
+            AnalysisJob.Status.AWAITING_APPROVAL,
         )
         if is_terminal:
             try:
@@ -301,6 +306,96 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             AnalysisJobSerializer(job).data,
             status=status.HTTP_200_OK,
         )
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve(self, request, job_id=None):
+        """Proxy human approval decision to the ad-publishing agent.
+
+        The frontend cannot call the ad-publishing service directly
+        (service-to-service auth). This endpoint forwards the approval
+        decision and returns the result.
+        """
+        job = self.get_object()
+
+        if job.status != AnalysisJob.Status.AWAITING_APPROVAL:
+            return Response(
+                {"error": f"Job is not awaiting approval (status: {job.status})"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Extract approval fields from request
+        approval_request_id = request.data.get("approval_request_id", "")
+        decision = request.data.get("decision", "")
+        if decision not in ("approve_all", "approve_selected", "reject"):
+            return Response(
+                {"error": "decision must be approve_all, approve_selected, or reject"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Build payload for ad-publishing agent
+        tenant = getattr(request, "tenant", None)
+        tenant_id = str(tenant.id) if tenant else ""
+        payload = {
+            "approval_request_id": approval_request_id,
+            "decision": decision,
+            "approved_ad_sets": request.data.get("approved_ad_sets"),
+            "feedback": request.data.get("feedback", ""),
+            "production_confirmed": request.data.get("production_confirmed", False),
+            "approved_by": request.user.email if request.user else "",
+            "user_role": request.data.get("user_role", "ADMIN"),
+        }
+
+        # Forward to ad-publishing agent
+        adpub_url = decouple_config(
+            "AD_PUBLISHING_AGENT_URL",
+            default="http://localhost:8043",
+        )
+        adpub_token = decouple_config(
+            "AD_PUBLISHING_SERVICE_TOKEN",
+            default="dev-service-token",
+        )
+
+        try:
+            import requests as http_requests
+
+            resp = http_requests.post(
+                f"{adpub_url}/v1/approve",
+                json=payload,
+                headers={
+                    "X-Service-Token": adpub_token,
+                    "X-Tenant-ID": tenant_id,
+                    "Content-Type": "application/json",
+                },
+                timeout=60,
+            )
+            result = resp.json()
+        except Exception as exc:
+            logger.error("Failed to proxy approval for job %s: %s", job_id, exc)
+            return Response(
+                {"error": f"Failed to reach ad-publishing service: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        # If rejected, update job status
+        if decision == "reject":
+            job.status = AnalysisJob.Status.FAILED
+            job.error_message = "Rejected by user"
+            job.completed_at = timezone.now()
+            job.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
+            # Invalidate quick-status cache
+            cache.delete(f"job:status:{job_id}")
+
+        # If approved, the ad-publishing agent will callback with
+        # completed/failed status — clear the awaiting_approval cache
+        # so polling picks up the new state.
+        if decision in ("approve_all", "approve_selected"):
+            cache.delete(f"job:status:{job_id}")
+
+        logger.info(
+            "Job %s approval proxied: decision=%s, result_status=%s",
+            job_id, decision, result.get("status", "unknown"),
+        )
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class PipelineManifestViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):

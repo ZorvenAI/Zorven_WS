@@ -58,6 +58,8 @@ function JobStatusIcon({ status }: { status: string }) {
       return <XCircle className="w-3.5 h-3.5 text-red-400" />;
     case 'queued':
       return <Clock className="w-3.5 h-3.5 text-amber-400" />;
+    case 'awaiting_approval':
+      return <AlertCircle className="w-3.5 h-3.5 text-amber-400" />;
     default:
       return null;
   }
@@ -96,7 +98,7 @@ export default function ResultsInspector({
   const jobStatus = quickStatus?.status;
   if (jobStatus !== prevStatus) {
     setPrevStatus(jobStatus);
-    if (jobStatus === 'completed' || jobStatus === 'failed') {
+    if (jobStatus === 'completed' || jobStatus === 'failed' || jobStatus === 'awaiting_approval') {
       setActiveTab('results');
       // Fetch full job on terminal status
       if (activeJobId && fetchedTerminalJobId !== activeJobId) {
@@ -265,7 +267,7 @@ function ResultsTab({
     );
   }
 
-  // Completed/failed job with full result data
+  // Completed/failed/awaiting_approval job with full result data
   if (job?.result_data) {
     const ts = job.completed_at ?? job.updated_at;
     return (
@@ -274,6 +276,8 @@ function ResultsTab({
         <ResultDashboard
           resultData={job.result_data}
           manifestName={job.manifest_name}
+          jobId={job.job_id}
+          jobStatus={job.status}
         />
       </div>
     );
@@ -290,6 +294,7 @@ function ResultsTab({
         <ResultDashboard
           resultData={quickStatus.result_data}
           manifestName={quickStatus.manifest_name}
+          jobStatus={quickStatus.status}
         />
         {quickStatus.status === 'running' && (
           <div className="flex items-center gap-2 mt-3 px-2 py-1.5 text-xs text-brand-electric/60">

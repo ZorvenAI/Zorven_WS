@@ -90,7 +90,7 @@ export function usePollingJob(
         setIsLoading(false);
 
         // On terminal state, fetch full job detail and stop polling
-        if (qs.status === 'completed' || qs.status === 'failed') {
+        if (qs.status === 'completed' || qs.status === 'failed' || qs.status === 'awaiting_approval') {
           await fetchFull();
           return; // stop polling
         }

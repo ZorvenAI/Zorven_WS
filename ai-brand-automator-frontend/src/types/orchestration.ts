@@ -42,7 +42,7 @@ export interface PipelineManifestListItem {
 
 // ── Analysis Job ──
 
-export type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
+export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'awaiting_approval';
 
 export interface AnalysisJob {
   id: number;

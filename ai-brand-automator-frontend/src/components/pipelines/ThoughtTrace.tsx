@@ -9,7 +9,7 @@
 
 'use client';
 
-import type { AgentProgress } from '@/types/orchestration';
+import type { AgentProgress, JobStatus } from '@/types/orchestration';
 import {
   CheckCircle2,
   Circle,
@@ -21,7 +21,7 @@ import {
 interface ThoughtTraceProps {
   progress: Record<string, AgentProgress>;
   /** Current overall job status. */
-  jobStatus: 'queued' | 'running' | 'completed' | 'failed';
+  jobStatus: JobStatus;
   /** Latest AI reasoning snippet from agent trace events. */
   lastThought?: string | null;
   /** Server-provided progress percent (overrides local calc when present). */
