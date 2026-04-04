@@ -141,7 +141,7 @@ class AdPubContextLoader:
             "Enriching from backend: tenant_id=%s, backend_url=%s, "
             "needs_caa=%s, needs_cga=%s",
             tenant_id,
-            settings.BACKEND_URL,
+            settings.backend_url,
             context.get("_needs_caa_fetch"),
             context.get("_needs_cga_fetch"),
         )
@@ -155,7 +155,7 @@ class AdPubContextLoader:
             # Fetch CAA blueprint if missing
             if context.get("_needs_caa_fetch"):
                 caa_url = (
-                    f"{settings.BACKEND_URL}/api/v1/analytics/caa-context/"
+                    f"{settings.backend_url}/api/v1/analytics/caa-context/"
                 )
                 try:
                     logger.info("Fetching CAA context from: %s", caa_url)
@@ -189,7 +189,7 @@ class AdPubContextLoader:
             # Fetch CGA creative packages if missing
             if context.get("_needs_cga_fetch"):
                 cga_url = (
-                    f"{settings.BACKEND_URL}/api/v1/analytics/cga-context/"
+                    f"{settings.backend_url}/api/v1/analytics/cga-context/"
                 )
                 try:
                     logger.info("Fetching CGA context from: %s", cga_url)
@@ -227,7 +227,7 @@ class AdPubContextLoader:
             if not context.get("persona_profiles"):
                 try:
                     resp = await client.get(
-                        f"{settings.BACKEND_URL}/api/v1/analytics/wf1-context/",
+                        f"{settings.backend_url}/api/v1/analytics/wf1-context/",
                         headers=headers,
                     )
                     if resp.status_code == 200:
