@@ -1209,12 +1209,15 @@ class CAAContextView(APIView):
         # prerequisites.
         job = None
 
-        # Primary: standalone CAA pipeline
+        # Primary: standalone CAA or full-pipeline jobs that include CAA
         caa_jobs = (
             AnalysisJob.objects.filter(
                 Q(tenant=tenant) | Q(tenant__isnull=True),
                 status=AnalysisJob.Status.COMPLETED,
-                manifest__pipeline_id="meta-campaign-architecture",
+                manifest__pipeline_id__in=[
+                    "meta-campaign-architecture",
+                    "meta-ads-full",
+                ],
             )
             .select_related("manifest")
             .order_by("-completed_at")[:10]
@@ -1227,12 +1230,14 @@ class CAAContextView(APIView):
                 job = candidate
                 break
 
-        # Fallback: any job with non-empty campaign_architecture results
+        # Fallback: any job with non-empty campaign_architecture results.
+        # Use a larger window since ad-publishing-only jobs can flood
+        # the recent completions list.
         if not job:
             candidates = AnalysisJob.objects.filter(
                 Q(tenant=tenant) | Q(tenant__isnull=True),
                 status=AnalysisJob.Status.COMPLETED,
-            ).order_by("-completed_at")[:20]
+            ).order_by("-completed_at")[:50]
             for candidate in candidates:
                 nr = (candidate.result_data or {}).get("node_results", {})
                 caa_node = nr.get("campaign_architecture", {})
@@ -1336,12 +1341,15 @@ class CGAContextView(APIView):
         # were missing — skip those.
         job = None
 
-        # Primary: standalone CGA pipeline
+        # Primary: standalone CGA or full-pipeline jobs that include CGA
         cga_jobs = (
             AnalysisJob.objects.filter(
                 Q(tenant=tenant) | Q(tenant__isnull=True),
                 status=AnalysisJob.Status.COMPLETED,
-                manifest__pipeline_id="meta-creative-generation",
+                manifest__pipeline_id__in=[
+                    "meta-creative-generation",
+                    "meta-ads-full",
+                ],
             )
             .select_related("manifest")
             .order_by("-completed_at")[:10]
@@ -1351,42 +1359,23 @@ class CGAContextView(APIView):
             cga_node = nr.get("creative_generation", {})
             pkgs = cga_node.get("ad_set_packages", [])
             units = cga_node.get("ad_units", [])
-            logger.info(
-                "CGAContextView: candidate job=%s manifest=%s "
-                "has_cga_node=%s pkgs=%d units=%d nr_keys=%s",
-                candidate.job_id,
-                candidate.manifest.pipeline_id if candidate.manifest else "none",
-                "creative_generation" in nr,
-                len(pkgs) if isinstance(pkgs, list) else -1,
-                len(units) if isinstance(units, list) else -1,
-                list(nr.keys())[:10],
-            )
             if pkgs or units:
                 job = candidate
                 break
 
-        # Fallback: any job with non-empty creative_generation results
+        # Fallback: any job with non-empty creative_generation results.
+        # Use a larger window since ad-publishing-only jobs can flood
+        # the recent completions list.
         if not job:
             candidates = AnalysisJob.objects.filter(
                 Q(tenant=tenant) | Q(tenant__isnull=True),
                 status=AnalysisJob.Status.COMPLETED,
-            ).order_by("-completed_at")[:20]
+            ).order_by("-completed_at")[:50]
             for candidate in candidates:
                 nr = (candidate.result_data or {}).get("node_results", {})
                 cga_node = nr.get("creative_generation", {})
                 pkgs = cga_node.get("ad_set_packages", [])
                 units = cga_node.get("ad_units", [])
-                logger.info(
-                    "CGAContextView fallback: candidate job=%s "
-                    "has_cga_node=%s pkgs=%d units=%d nr_keys=%s "
-                    "cga_keys=%s",
-                    candidate.job_id,
-                    "creative_generation" in nr,
-                    len(pkgs) if isinstance(pkgs, list) else -1,
-                    len(units) if isinstance(units, list) else -1,
-                    list(nr.keys())[:10],
-                    list(cga_node.keys())[:15] if cga_node else [],
-                )
                 if pkgs or units:
                     job = candidate
                     break
