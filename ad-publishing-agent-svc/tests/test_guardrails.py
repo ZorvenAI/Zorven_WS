@@ -84,6 +84,21 @@ class TestInputGuardrails:
         errors = self.guard.check(context, daily_spend_cap_usd=500.0)
         assert any("IG-11" in e for e in errors)
 
+    def test_gcs_url_accepted_as_image(self):
+        """CGA uses gcs_url instead of image_url — should pass validation."""
+        context = {
+            "creative_packages": [{"ad_units": [{"gcs_url": "gs://bucket/img.jpg"}]}],
+            "blueprint": {
+                "campaign_name": "X",
+                "funnel_stages": [{}],
+                "total_budget_usd": 100,
+                "duration_days": 30,
+            },
+            "company": {},
+        }
+        errors = self.guard.check(context)
+        assert not any("IG-08" in e and "image" in e for e in errors)
+
     def test_housing_industry_missing_category(self):
         context = {
             "creative_packages": [{"ad_units": [{"image_url": "x"}]}],

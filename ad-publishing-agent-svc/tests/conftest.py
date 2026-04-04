@@ -84,16 +84,26 @@ def mock_anthropic():
 
 @pytest.fixture
 def sample_creative_package():
-    """Sample CGA creative package (previous_outputs)."""
+    """Sample CGA creative package (previous_outputs).
+
+    Uses actual CGA output format: ad_set_packages with creative_units.
+    """
     return {
         "creative_generation": {
-            "creative_packages": [
+            "creative_package": {
+                "campaign_id": "",
+                "brand_name": "TestBrand",
+                "total_images_generated": 1,
+            },
+            "ad_set_packages": [
                 {
                     "ad_set_name": "TOFU - Tech Enthusiasts",
-                    "ad_units": [
+                    "persona": "Tech Enthusiasts",
+                    "funnel_stage": "TOFU",
+                    "creative_units": [
                         {
                             "variant_label": "A",
-                            "image_url": "gs://bucket/img1.jpg",
+                            "gcs_url": "gs://bucket/img1.jpg",
                             "headline": "Discover Innovation",
                             "primary_text": "Transform your workflow today.",
                             "cta": "LEARN_MORE",
@@ -102,7 +112,17 @@ def sample_creative_package():
                     ],
                 }
             ],
-            "approval_status": "approved",
+            "ad_units": [
+                {
+                    "variant_label": "A",
+                    "gcs_url": "gs://bucket/img1.jpg",
+                    "headline": "Discover Innovation",
+                    "primary_text": "Transform your workflow today.",
+                    "cta": "LEARN_MORE",
+                    "link_url": "https://example.com",
+                }
+            ],
+            "confidence_score": 0.85,
         }
     }
 

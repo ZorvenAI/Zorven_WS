@@ -32,14 +32,14 @@ class InputGuardrails:
         for i, pkg in enumerate(packages):
             units = pkg.get("ad_units", [])
             if not units:
-                errors.append(
-                    f"IG-08: Creative package [{i}] has no ad units."
-                )
+                errors.append(f"IG-08: Creative package [{i}] has no ad units.")
             for j, unit in enumerate(units):
-                if not unit.get("image_url"):
-                    errors.append(
-                        f"IG-08: Package [{i}] unit [{j}] missing image_url."
-                    )
+                # CGA uses gcs_url; ad-publishing uses image_url
+                has_image = (
+                    unit.get("image_url") or unit.get("gcs_url") or unit.get("image")
+                )
+                if not has_image:
+                    errors.append(f"IG-08: Package [{i}] unit [{j}] missing image.")
 
         # IG-09: Campaign blueprint validation
         bp = context.get("blueprint", {})
@@ -49,9 +49,7 @@ class InputGuardrails:
                 "Run Campaign Architecture (Agent 3.1) first."
             )
         if not bp.get("funnel_stages"):
-            errors.append(
-                "IG-09: Blueprint has no funnel stages."
-            )
+            errors.append("IG-09: Blueprint has no funnel stages.")
 
         # IG-10: Meta credentials check (only in production mode)
         if not context.get("sandbox_mode", True):
@@ -194,9 +192,7 @@ class OutputGuardrails:
         # OG-03: Campaign status
         campaign_status = published_entities.get("campaign_status", "")
         if campaign_status and campaign_status not in ("ACTIVE", "PAUSED"):
-            errors.append(
-                f"OG-03: Unexpected campaign status: {campaign_status}"
-            )
+            errors.append(f"OG-03: Unexpected campaign status: {campaign_status}")
 
         return {
             "all_valid": len(errors) == 0,
