@@ -129,31 +129,71 @@ def sample_creative_package():
 
 @pytest.fixture
 def sample_campaign_blueprint():
-    """Sample CAA campaign blueprint (previous_outputs)."""
+    """Sample CAA campaign blueprint (previous_outputs).
+
+    Uses actual CAA output format: blueprint with ad_sets + funnel_map.
+    """
     return {
         "campaign_architecture": {
-            "campaign_name": "Q2 2026 Brand Awareness",
-            "objective": "OUTCOME_AWARENESS",
-            "total_budget_usd": 1000.0,
-            "duration_days": 30,
-            "funnel_stages": [
-                {
-                    "stage": "TOFU",
-                    "budget_pct": 0.5,
-                    "audiences": [
-                        {
-                            "name": "Tech Enthusiasts",
+            "blueprint": {
+                "campaign_name": "Q2 2026 Brand Awareness",
+                "campaign_objective": "OUTCOME_AWARENESS",
+                "daily_budget": 33.33,
+                "buying_type": "AUCTION",
+                "bid_strategy": "LOWEST_COST",
+                "cbo_enabled": True,
+                "ad_sets": [
+                    {
+                        "name": "TOFU - Tech Enthusiasts",
+                        "funnel_stage": "tofu",
+                        "objective": "OUTCOME_AWARENESS",
+                        "targeting": {
+                            "ad_set_name": "TOFU - Tech Enthusiasts",
+                            "funnel_stage": "tofu",
                             "demographics": {
                                 "age_min": 25,
                                 "age_max": 54,
                                 "genders": ["male", "female"],
-                                "countries": ["US"],
+                                "locations": ["US"],
                             },
                             "interests": ["technology", "software"],
-                        }
-                    ],
-                    "placements": ["FACEBOOK_FEED", "INSTAGRAM_FEED"],
+                            "behaviors": [],
+                            "custom_audiences": [],
+                            "lookalike_audiences": [],
+                            "exclusions": [],
+                            "estimated_audience_size": 500000,
+                        },
+                        "placements": ["facebook_feed", "instagram_feed"],
+                        "daily_budget": 33.33,
+                        "optimization_goal": "REACH",
+                    }
+                ],
+            },
+            "funnel_map": {
+                "stages": [
+                    {
+                        "stage": "tofu",
+                        "meta_objective": "OUTCOME_AWARENESS",
+                        "budget_pct": 50.0,
+                        "description": "Top-of-funnel awareness",
+                    }
+                ]
+            },
+            "targeting_specs": [
+                {
+                    "ad_set_name": "TOFU - Tech Enthusiasts",
+                    "funnel_stage": "tofu",
+                    "demographics": {
+                        "age_min": 25,
+                        "age_max": 54,
+                        "genders": ["male", "female"],
+                        "locations": ["US"],
+                    },
+                    "interests": ["technology", "software"],
+                    "behaviors": [],
                 }
             ],
+            "special_ad_category": "",
+            "confidence_score": 0.85,
         }
     }

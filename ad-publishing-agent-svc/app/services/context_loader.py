@@ -253,8 +253,20 @@ class AdPubContextLoader:
     def _extract_blueprint(caa_output: dict[str, Any]) -> dict[str, Any]:
         """Extract blueprint fields from CAA output.
 
-        Handles both direct CAA output and the nested 'blueprint' key
-        returned by the caa-context endpoint.
+        Handles both:
+        - Direct CAA node output (pipeline chaining via previous_outputs)
+        - The caa-context Django endpoint response
+
+        CAA output structure:
+          blueprint:
+            campaign_name, campaign_objective, daily_budget,
+            buying_type, bid_strategy, cbo_enabled,
+            ad_sets: [{name, funnel_stage, targeting, placements, ...}]
+          funnel_map:
+            stages: [{stage, meta_objective, budget_pct}]
+          targeting_specs: [...]
+          placement_budget: {per_ad_set: [...]}
+          special_ad_category: str
         """
         if not caa_output:
             return {
@@ -265,27 +277,92 @@ class AdPubContextLoader:
                 "funnel_stages": [],
                 "placements": [],
                 "special_ad_categories": [],
+                "ad_sets": [],
+                "funnel_map": {},
+                "targeting_specs": [],
+                "placement_budget": {},
+                "raw_blueprint": {},
             }
 
-        # The caa-context endpoint nests under 'blueprint'
+        # The caa-context endpoint nests campaign data under 'blueprint'
         bp = caa_output.get("blueprint", caa_output)
 
-        def _get(key: str, default: Any) -> Any:
-            """Return blueprint value, preserving valid falsy values (0, [])."""
-            if key in bp and bp[key] is not None:
-                return bp[key]
-            if key in caa_output and caa_output[key] is not None:
-                return caa_output[key]
+        def _first(*keys: str, default: Any = None) -> Any:
+            """Return first non-None value found across bp and caa_output."""
+            for src in (bp, caa_output):
+                for key in keys:
+                    if key in src and src[key] is not None:
+                        return src[key]
             return default
 
+        # Campaign name
+        campaign_name = _first("campaign_name", default="")
+
+        # Objective: CAA uses "campaign_objective", normalize
+        objective = _first(
+            "campaign_objective", "objective", default="OUTCOME_AWARENESS"
+        )
+
+        # Budget: CAA uses "daily_budget"; also accept "total_budget_usd"
+        daily_budget = _first("daily_budget", "total_budget_usd", default=0)
+
+        # Duration
+        duration_days = _first("duration_days", default=30)
+
+        # Funnel stages: derive from blueprint.ad_sets or funnel_map.stages
+        ad_sets = _first("ad_sets", default=[])
+        funnel_map = caa_output.get("funnel_map", {})
+        funnel_stages_raw = funnel_map.get("stages", [])
+
+        # Build unified funnel_stages list from ad_sets (preferred) or
+        # funnel_map stages
+        funnel_stages = []
+        if ad_sets:
+            for ad_set in ad_sets:
+                funnel_stages.append(ad_set)
+        elif funnel_stages_raw:
+            funnel_stages = funnel_stages_raw
+        else:
+            # Fallback: check for literal "funnel_stages" key
+            funnel_stages = _first("funnel_stages", default=[])
+
+        # Placements: collect from ad_sets or top-level
+        placements = _first("placements", default=[])
+        if not placements and ad_sets:
+            seen = set()
+            for ad_set in ad_sets:
+                for p in ad_set.get("placements", []):
+                    if p not in seen:
+                        seen.add(p)
+                        placements.append(p)
+
+        # Special ad categories: CAA uses singular "special_ad_category"
+        special_ad_categories = _first("special_ad_categories", default=[])
+        if not special_ad_categories:
+            cat = _first("special_ad_category", default="")
+            if cat:
+                special_ad_categories = [cat]
+
+        # Targeting specs (top-level in caa-context response)
+        targeting_specs = caa_output.get("targeting_specs", [])
+
+        # Placement budget (top-level in caa-context response)
+        placement_budget = caa_output.get("placement_budget", {})
+
         return {
-            "campaign_name": _get("campaign_name", ""),
-            "objective": _get("objective", "OUTCOME_AWARENESS"),
-            "total_budget_usd": _get("total_budget_usd", 0),
-            "duration_days": _get("duration_days", 30),
-            "funnel_stages": _get("funnel_stages", []),
-            "placements": _get("placements", []),
-            "special_ad_categories": _get("special_ad_categories", []),
+            "campaign_name": campaign_name,
+            "objective": objective,
+            "total_budget_usd": daily_budget * duration_days,
+            "daily_budget": daily_budget,
+            "duration_days": duration_days,
+            "funnel_stages": funnel_stages,
+            "placements": placements,
+            "special_ad_categories": special_ad_categories,
+            "ad_sets": ad_sets,
+            "funnel_map": funnel_map,
+            "targeting_specs": targeting_specs,
+            "placement_budget": placement_budget,
+            "raw_blueprint": bp,
         }
 
     @staticmethod

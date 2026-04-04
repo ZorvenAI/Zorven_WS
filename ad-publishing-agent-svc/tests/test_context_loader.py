@@ -26,6 +26,7 @@ class TestLoad:
             config={"meta_ads_sandbox_mode": True},
         )
         assert context["blueprint"]["campaign_name"] == "Q2 2026 Brand Awareness"
+        assert len(context["blueprint"]["funnel_stages"]) == 1
         assert len(context["creative_packages"]) == 1
         assert context["sandbox_mode"] is True
         assert context["_needs_caa_fetch"] is False
@@ -192,66 +193,111 @@ class TestExtractBlueprint:
         assert result["objective"] == "OUTCOME_AWARENESS"
         assert result["total_budget_usd"] == 0
         assert result["duration_days"] == 30
+        assert result["funnel_stages"] == []
 
-    def test_direct_caa_output(self):
+    def test_real_caa_output_format(self):
+        """Actual CAA output: blueprint with campaign_objective + ad_sets."""
         caa = {
-            "campaign_name": "Direct",
+            "blueprint": {
+                "campaign_name": "Q2 Campaign",
+                "campaign_objective": "OUTCOME_TRAFFIC",
+                "daily_budget": 50.0,
+                "ad_sets": [
+                    {
+                        "name": "MOFU - Browsers",
+                        "funnel_stage": "mofu",
+                        "placements": ["facebook_feed"],
+                        "daily_budget": 50.0,
+                    }
+                ],
+            },
+            "funnel_map": {
+                "stages": [
+                    {"stage": "mofu", "meta_objective": "OUTCOME_TRAFFIC"}
+                ]
+            },
+            "special_ad_category": "",
+        }
+        result = AdPubContextLoader._extract_blueprint(caa)
+        assert result["campaign_name"] == "Q2 Campaign"
+        assert result["objective"] == "OUTCOME_TRAFFIC"
+        assert result["daily_budget"] == 50.0
+        assert len(result["funnel_stages"]) == 1
+        assert result["funnel_stages"][0]["funnel_stage"] == "mofu"
+        assert result["placements"] == ["facebook_feed"]
+
+    def test_caa_context_endpoint_response(self):
+        """Response from /api/v1/analytics/caa-context/."""
+        caa = {
+            "blueprint": {
+                "campaign_name": "From Endpoint",
+                "campaign_objective": "OUTCOME_CONVERSIONS",
+                "daily_budget": 100.0,
+                "ad_sets": [
+                    {
+                        "name": "BOFU - Buyers",
+                        "funnel_stage": "bofu",
+                        "placements": ["instagram_feed"],
+                    }
+                ],
+            },
+            "funnel_map": {
+                "stages": [{"stage": "bofu", "budget_pct": 100}]
+            },
+            "special_ad_category": "HOUSING",
+        }
+        result = AdPubContextLoader._extract_blueprint(caa)
+        assert result["campaign_name"] == "From Endpoint"
+        assert result["special_ad_categories"] == ["HOUSING"]
+        assert len(result["funnel_stages"]) == 1
+
+    def test_funnel_map_fallback(self):
+        """When blueprint has no ad_sets, fall back to funnel_map.stages."""
+        caa = {
+            "blueprint": {
+                "campaign_name": "Map Only",
+                "campaign_objective": "OUTCOME_AWARENESS",
+                "daily_budget": 30.0,
+            },
+            "funnel_map": {
+                "stages": [
+                    {"stage": "tofu", "meta_objective": "OUTCOME_AWARENESS"},
+                    {"stage": "mofu", "meta_objective": "OUTCOME_TRAFFIC"},
+                ]
+            },
+        }
+        result = AdPubContextLoader._extract_blueprint(caa)
+        assert len(result["funnel_stages"]) == 2
+
+    def test_preserves_zero_budget(self):
+        """Falsy values like 0 should be preserved, not treated as missing."""
+        caa = {
+            "blueprint": {
+                "campaign_name": "Zero Budget Test",
+                "daily_budget": 0,
+                "ad_sets": [],
+            },
+        }
+        result = AdPubContextLoader._extract_blueprint(caa)
+        assert result["daily_budget"] == 0
+        assert result["funnel_stages"] == []
+
+    def test_legacy_format_backward_compatible(self):
+        """Legacy format with funnel_stages and objective still works."""
+        caa = {
+            "campaign_name": "Legacy",
             "objective": "OUTCOME_TRAFFIC",
             "total_budget_usd": 2000,
             "duration_days": 7,
             "funnel_stages": [{"stage": "MOFU"}],
             "placements": ["FACEBOOK_FEED"],
-            "special_ad_categories": [],
+            "special_ad_categories": ["CREDIT"],
         }
         result = AdPubContextLoader._extract_blueprint(caa)
-        assert result["campaign_name"] == "Direct"
+        assert result["campaign_name"] == "Legacy"
         assert result["objective"] == "OUTCOME_TRAFFIC"
-
-    def test_nested_blueprint_key(self):
-        caa = {
-            "blueprint": {
-                "campaign_name": "Nested",
-                "objective": "OUTCOME_CONVERSIONS",
-                "total_budget_usd": 3000,
-                "duration_days": 14,
-                "funnel_stages": [],
-                "placements": [],
-                "special_ad_categories": ["HOUSING"],
-            }
-        }
-        result = AdPubContextLoader._extract_blueprint(caa)
-        assert result["campaign_name"] == "Nested"
-        assert result["special_ad_categories"] == ["HOUSING"]
-
-    def test_preserves_zero_budget(self):
-        """Falsy values like 0 should be preserved, not treated as missing."""
-        caa = {
-            "campaign_name": "Zero Budget Test",
-            "total_budget_usd": 0,
-            "duration_days": 0,
-            "funnel_stages": [],
-            "placements": [],
-            "special_ad_categories": [],
-        }
-        result = AdPubContextLoader._extract_blueprint(caa)
-        assert result["total_budget_usd"] == 0
-        assert result["duration_days"] == 0
-        assert result["funnel_stages"] == []
-
-    def test_preserves_empty_list(self):
-        """Empty lists should be preserved, not fall through to defaults."""
-        caa = {
-            "blueprint": {
-                "campaign_name": "Test",
-                "funnel_stages": [],
-                "placements": [],
-                "special_ad_categories": [],
-            },
-            "funnel_stages": [{"stage": "TOFU"}],  # outer fallback
-        }
-        result = AdPubContextLoader._extract_blueprint(caa)
-        # Should use blueprint's empty list, NOT fall through to outer
-        assert result["funnel_stages"] == []
+        assert len(result["funnel_stages"]) == 1
+        assert result["special_ad_categories"] == ["CREDIT"]
 
 
 class TestExtractCreativePackages:
@@ -308,7 +354,10 @@ class TestValidate:
 
     def test_valid_context(self):
         context = {
-            "blueprint": {"campaign_name": "X", "funnel_stages": [{}]},
+            "blueprint": {
+                "campaign_name": "X",
+                "funnel_stages": [{"funnel_stage": "tofu"}],
+            },
             "creative_packages": [{"ad_units": [{"image_url": "gs://x"}]}],
             "sandbox_mode": True,
         }
@@ -316,7 +365,10 @@ class TestValidate:
 
     def test_sandbox_skips_credential_check(self):
         context = {
-            "blueprint": {"campaign_name": "X", "funnel_stages": [{}]},
+            "blueprint": {
+                "campaign_name": "X",
+                "funnel_stages": [{"funnel_stage": "tofu"}],
+            },
             "creative_packages": [{"ad_units": [{"image_url": "gs://x"}]}],
             "sandbox_mode": True,
             "meta_credentials": {},
@@ -326,7 +378,10 @@ class TestValidate:
 
     def test_production_requires_credentials(self):
         context = {
-            "blueprint": {"campaign_name": "X", "funnel_stages": [{}]},
+            "blueprint": {
+                "campaign_name": "X",
+                "funnel_stages": [{"funnel_stage": "tofu"}],
+            },
             "creative_packages": [{"ad_units": [{"image_url": "gs://x"}]}],
             "sandbox_mode": False,
             "meta_credentials": {},
@@ -334,3 +389,17 @@ class TestValidate:
         errors = self.loader.validate(context)
         assert any("access_token" in e for e in errors)
         assert any("ad_account_id" in e for e in errors)
+
+    def test_diagnostics_included_in_errors(self):
+        """Backend fetch diagnostics are surfaced in validation errors."""
+        context = {
+            "blueprint": {"campaign_name": "", "funnel_stages": []},
+            "creative_packages": [],
+            "sandbox_mode": True,
+            "_backend_diagnostics": [
+                "CAA fetch failed: HTTP 404 from http://x/caa-context/"
+            ],
+        }
+        errors = self.loader.validate(context)
+        assert any("Backend enrichment diagnostics" in e for e in errors)
+        assert any("HTTP 404" in e for e in errors)
