@@ -1425,13 +1425,10 @@ class CGAContextView(APIView):
             img_data = image_lookup.get((adset, variant_id), {})
             if img_data:
                 # Use thumbnail for display, mark as generated
-                enriched["image_url"] = (
-                    img_data.get("thumbnail_url")
-                    or img_data.get("gcs_url", "")
+                enriched["image_url"] = img_data.get("thumbnail_url") or img_data.get(
+                    "gcs_url", ""
                 )
-                enriched["image_generated"] = img_data.get(
-                    "image_generated", True
-                )
+                enriched["image_generated"] = img_data.get("image_generated", True)
             units_by_adset.setdefault(adset, []).append(enriched)
 
         # Build creative_packages from ad_set_packages metadata +

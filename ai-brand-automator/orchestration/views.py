@@ -195,7 +195,11 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         """
         # ── Try Redis cache for terminal jobs only ──
         cached = cache.get(f"job:status:{job_id}")
-        if cached and cached.get("status") in ("completed", "failed", "awaiting_approval"):
+        if cached and cached.get("status") in (
+            "completed",
+            "failed",
+            "awaiting_approval",
+        ):
             cached.setdefault("current_node", None)
             cached.setdefault("progress_percent", 0)
             cached.setdefault("last_thought", None)
@@ -417,8 +421,7 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
         if not resp.ok:
             logger.error(
-                "Ad-publishing service returned error for job %s: "
-                "status=%s body=%r",
+                "Ad-publishing service returned error for job %s: " "status=%s body=%r",
                 job_id,
                 resp.status_code,
                 resp.text[:500],
@@ -480,9 +483,7 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 )
             elif publish_status in ("failed", "error"):
                 job.status = AnalysisJob.Status.FAILED
-                job.error_message = result.get(
-                    "error", "Publishing failed"
-                )
+                job.error_message = result.get("error", "Publishing failed")
                 job.completed_at = timezone.now()
                 job.save(
                     update_fields=[
