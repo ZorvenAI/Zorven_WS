@@ -11,9 +11,7 @@ Covers:
 import uuid
 
 import pytest
-from unittest.mock import patch
 
-from django.conf import settings as django_settings
 from django.db import connection
 from rest_framework.test import APIClient
 

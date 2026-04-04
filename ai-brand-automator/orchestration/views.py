@@ -320,7 +320,6 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         decision and returns the result.
         """
         from brand_automator.validators import sanitize_text_input
-        from tenants.models import Membership
 
         job = self.get_object()
 
