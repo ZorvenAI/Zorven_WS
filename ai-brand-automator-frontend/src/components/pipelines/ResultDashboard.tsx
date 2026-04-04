@@ -16,12 +16,16 @@ import {
   ClipboardCopy,
   Download,
   Check,
+  CheckCircle2,
   ExternalLink,
   Loader2,
   BookmarkPlus,
   BookmarkCheck,
   AlertCircle,
   LayoutDashboard,
+  Users,
+  Image,
+  DollarSign,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { linkFromChat } from '@/lib/workspace';
@@ -7198,6 +7202,7 @@ export default function ResultDashboard({
   const hasAdPublishing =
     adPubData?.approval_request_id != null ||
     adPubData?.preview_data != null;
+  const publishResult = resultData.publish_result as Record<string, unknown> | undefined;
 
   // ── Extract well-known keys ──────────────────────────────────────
   const summary = resultData.summary as string | undefined;
@@ -7252,6 +7257,146 @@ export default function ResultDashboard({
                 <li key={i} className="text-xs text-brand-silver/70 flex items-start gap-2">
                   <span className="text-emerald-400 mt-0.5">&#8226;</span>
                   <span>{r}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    );
+  }
+
+  // ── Completed ad-publishing: show published campaign summary ────
+  if (hasAdPublishing && publishResult && jobStatus === 'completed') {
+    const pubCampaign = publishResult.published_campaign as Record<string, unknown> | undefined;
+    const pubStatus = (publishResult.status ?? 'published') as string;
+    const isPublished = pubStatus === 'published' || pubStatus === 'partial';
+    const dailySpend = publishResult.daily_spend_committed_usd as number | undefined;
+    const audienceSize = publishResult.targeting_audience_size as number | undefined;
+    const isSandbox = (publishResult.sandbox_mode ?? adPubData?.sandbox_mode ?? true) as boolean;
+    const previewData = (adPubData?.preview_data ?? resultData.preview_data) as Record<string, unknown> | undefined;
+    const adSets = (previewData?.ad_sets ?? pubCampaign?.ad_sets ?? []) as Array<Record<string, unknown>>;
+    const adCount = ((pubCampaign?.ads ?? []) as Array<unknown>).length;
+    const creativeCount = ((pubCampaign?.creative_ids ?? []) as Array<unknown>).length;
+
+    return (
+      <div className="glass-card p-6 space-y-6">
+        {/* Status banner */}
+        <div className={`flex items-center gap-3 p-4 rounded-xl border ${
+          isPublished
+            ? 'border-emerald-500/30 bg-emerald-500/10'
+            : 'border-amber-500/30 bg-amber-500/10'
+        }`}>
+          <CheckCircle2 className={`w-6 h-6 shrink-0 ${isPublished ? 'text-emerald-400' : 'text-amber-400'}`} />
+          <div>
+            <p className={`text-sm font-medium ${isPublished ? 'text-emerald-300' : 'text-amber-300'}`}>
+              {isSandbox ? 'Campaign Published (Sandbox)' : 'Campaign Published & Live'}
+            </p>
+            <p className="text-xs text-brand-silver/50 mt-0.5">
+              {isSandbox
+                ? 'Campaign was published in sandbox mode — no real ads are running.'
+                : 'Ads are now live on Meta. Monitor performance in Meta Ads Manager.'}
+            </p>
+          </div>
+        </div>
+
+        {/* Campaign overview */}
+        <div>
+          <h3 className="text-sm font-heading font-semibold text-white mb-3">
+            {(pubCampaign?.campaign_name as string) ?? (previewData?.campaign_name as string) ?? 'Published Campaign'}
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03]">
+              <Users className="w-4 h-4 text-brand-electric/60" />
+              <div>
+                <p className="text-[10px] text-brand-silver/40">Ad Sets</p>
+                <p className="text-xs text-brand-silver font-medium">{adSets.length}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03]">
+              <Image className="w-4 h-4 text-brand-electric/60" />
+              <div>
+                <p className="text-[10px] text-brand-silver/40">Ads</p>
+                <p className="text-xs text-brand-silver font-medium">{adCount}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03]">
+              <Image className="w-4 h-4 text-brand-electric/60" />
+              <div>
+                <p className="text-[10px] text-brand-silver/40">Creatives</p>
+                <p className="text-xs text-brand-silver font-medium">{creativeCount}</p>
+              </div>
+            </div>
+            {dailySpend != null && (
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03]">
+                <DollarSign className="w-4 h-4 text-brand-electric/60" />
+                <div>
+                  <p className="text-[10px] text-brand-silver/40">Daily Budget</p>
+                  <p className="text-xs text-brand-silver font-medium">${dailySpend.toFixed(2)}</p>
+                </div>
+              </div>
+            )}
+          </div>
+          {audienceSize != null && audienceSize > 0 && (
+            <p className="text-[11px] text-brand-silver/40 mt-2">
+              Estimated audience reach: {audienceSize.toLocaleString()}
+            </p>
+          )}
+        </div>
+
+        {/* Published entity IDs */}
+        {pubCampaign && (
+          <div className="space-y-2">
+            <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider">
+              Published Entities
+            </h4>
+            <div className="space-y-1.5">
+              {(pubCampaign.campaign_id as string) && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-brand-silver/40 w-24 shrink-0">Campaign</span>
+                  <code className="text-brand-silver/70 bg-white/[0.03] px-2 py-0.5 rounded text-[11px]">
+                    {pubCampaign.campaign_id as string}
+                  </code>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                    (pubCampaign.campaign_status as string) === 'ACTIVE'
+                      ? 'bg-emerald-500/15 text-emerald-400'
+                      : 'bg-amber-500/15 text-amber-400'
+                  }`}>
+                    {pubCampaign.campaign_status as string}
+                  </span>
+                </div>
+              )}
+              {((pubCampaign.ad_sets ?? []) as Array<Record<string, unknown>>).map((adSet, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className="text-brand-silver/40 w-24 shrink-0">Ad Set {i + 1}</span>
+                  <code className="text-brand-silver/70 bg-white/[0.03] px-2 py-0.5 rounded text-[11px]">
+                    {adSet.ad_set_id as string}
+                  </code>
+                </div>
+              ))}
+              {((pubCampaign.ads ?? []) as Array<Record<string, unknown>>).map((ad, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className="text-brand-silver/40 w-24 shrink-0">Ad {i + 1}</span>
+                  <code className="text-brand-silver/70 bg-white/[0.03] px-2 py-0.5 rounded text-[11px]">
+                    {ad.ad_id as string}
+                  </code>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Findings from the original execution */}
+        {findings && findings.length > 0 && (
+          <section>
+            <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+              Key Findings
+            </h4>
+            <ul className="space-y-1">
+              {findings.map((f, i) => (
+                <li key={i} className="text-xs text-brand-silver/70 flex items-start gap-2">
+                  <span className="text-brand-electric mt-0.5">&#8226;</span>
+                  <span>{f}</span>
                 </li>
               ))}
             </ul>
@@ -7506,6 +7651,7 @@ export default function ResultDashboard({
     'is_production',
     'plan_warnings',
     'preparation_time_ms',
+    'publish_result',
     'status',
   ]);
   const otherEntries = Object.entries(resultData).filter(
