@@ -1269,6 +1269,9 @@ class CGAContextView(APIView):
 
     permission_classes = [AllowAny]
 
+    # Default dev token that ships in settings.py — reject in production
+    _DEV_TOKEN = "dev-service-token"
+
     def get(self, request):
         # Service-token auth
         service_token = request.headers.get("X-Service-Token", "")
@@ -1277,9 +1280,13 @@ class CGAContextView(APIView):
             "ORCHESTRATOR_SERVICE_TOKEN",
             "",
         )
-        if not expected_token:
+        if not expected_token or (
+            expected_token == self._DEV_TOKEN
+            and not getattr(django_settings, "DEBUG", False)
+        ):
             logger.error(
-                "CGAContextView misconfigured: " "ORCHESTRATOR_SERVICE_TOKEN is not set"
+                "CGAContextView misconfigured: "
+                "ORCHESTRATOR_SERVICE_TOKEN is not set or using default"
             )
             return Response(
                 {"error": "Service authentication is not configured"},
