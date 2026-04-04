@@ -120,11 +120,31 @@ class AdPubContextLoader:
 
         Called when previous_outputs didn't contain CAA or CGA data
         (standalone pipeline execution).
+
+        Stores diagnostic messages in context["_backend_diagnostics"]
+        so validation errors can surface them to the user.
         """
+        diagnostics: list[str] = []
         tenant_id = context.get("_tenant_id", "")
+
         if not tenant_id:
-            logger.warning("No tenant_id — cannot fetch from backend")
+            msg = (
+                "Backend enrichment skipped: no tenant_id in tenant_context. "
+                "Ensure the pipeline dispatch includes tenant_context.tenant_id."
+            )
+            logger.warning(msg)
+            diagnostics.append(msg)
+            context["_backend_diagnostics"] = diagnostics
             return context
+
+        logger.info(
+            "Enriching from backend: tenant_id=%s, backend_url=%s, "
+            "needs_caa=%s, needs_cga=%s",
+            tenant_id,
+            settings.backend_url,
+            context.get("_needs_caa_fetch"),
+            context.get("_needs_cga_fetch"),
+        )
 
         headers = {
             "X-Service-Token": settings.BACKEND_SERVICE_TOKEN,
@@ -134,53 +154,90 @@ class AdPubContextLoader:
         async with httpx.AsyncClient(timeout=30) as client:
             # Fetch CAA blueprint if missing
             if context.get("_needs_caa_fetch"):
+                caa_url = (
+                    f"{settings.backend_url}/api/v1/analytics/caa-context/"
+                )
                 try:
-                    resp = await client.get(
-                        f"{settings.BACKEND_URL}/api/v1/analytics/caa-context/",
-                        headers=headers,
-                    )
+                    logger.info("Fetching CAA context from: %s", caa_url)
+                    resp = await client.get(caa_url, headers=headers)
                     if resp.status_code == 200:
                         caa_data = resp.json()
                         context["blueprint"] = self._extract_blueprint(caa_data)
+                        bp_name = context["blueprint"].get("campaign_name", "?")
                         logger.info(
-                            "CAA blueprint fetched from backend: %s",
-                            context["blueprint"].get("campaign_name", "?"),
+                            "CAA blueprint fetched from backend: %s", bp_name
+                        )
+                        diagnostics.append(
+                            f"CAA fetch OK: campaign={bp_name}"
                         )
                     else:
-                        logger.warning(
-                            "CAA context fetch failed: HTTP %d", resp.status_code
+                        body = resp.text[:300]
+                        msg = (
+                            f"CAA fetch failed: HTTP {resp.status_code} "
+                            f"from {caa_url} (tenant={tenant_id}) — {body}"
                         )
+                        logger.warning(msg)
+                        diagnostics.append(msg)
                 except Exception as exc:
-                    logger.warning("CAA context fetch error: %s", exc)
+                    msg = (
+                        f"CAA fetch error: {exc} "
+                        f"(url={caa_url}, tenant={tenant_id})"
+                    )
+                    logger.error(msg)
+                    diagnostics.append(msg)
 
             # Fetch CGA creative packages if missing
             if context.get("_needs_cga_fetch"):
+                cga_url = (
+                    f"{settings.backend_url}/api/v1/analytics/cga-context/"
+                )
                 try:
-                    resp = await client.get(
-                        f"{settings.BACKEND_URL}/api/v1/analytics/cga-context/",
-                        headers=headers,
-                    )
+                    logger.info("Fetching CGA context from: %s", cga_url)
+                    resp = await client.get(cga_url, headers=headers)
                     if resp.status_code == 200:
                         cga_data = resp.json()
                         context["creative_packages"] = (
                             self._extract_creative_packages(cga_data)
                         )
+                        pkg_count = len(context["creative_packages"])
+                        cga_job = cga_data.get("cga_job_id", "?")
+                        raw_pkgs = len(cga_data.get("ad_set_packages", []))
+                        raw_units = len(cga_data.get("ad_units", []))
                         logger.info(
-                            "CGA packages fetched from backend: %d packages",
-                            len(context["creative_packages"]),
+                            "CGA packages fetched: %d packages "
+                            "(raw: %d ad_set_packages, %d ad_units, "
+                            "job=%s)",
+                            pkg_count,
+                            raw_pkgs,
+                            raw_units,
+                            cga_job,
+                        )
+                        diagnostics.append(
+                            f"CGA fetch OK: {pkg_count} packages "
+                            f"(job={cga_job}, raw_pkgs={raw_pkgs}, "
+                            f"raw_units={raw_units})"
                         )
                     else:
-                        logger.warning(
-                            "CGA context fetch failed: HTTP %d", resp.status_code
+                        body = resp.text[:300]
+                        msg = (
+                            f"CGA fetch failed: HTTP {resp.status_code} "
+                            f"from {cga_url} (tenant={tenant_id}) — {body}"
                         )
+                        logger.warning(msg)
+                        diagnostics.append(msg)
                 except Exception as exc:
-                    logger.warning("CGA context fetch error: %s", exc)
+                    msg = (
+                        f"CGA fetch error: {exc} "
+                        f"(url={cga_url}, tenant={tenant_id})"
+                    )
+                    logger.error(msg)
+                    diagnostics.append(msg)
 
             # Fetch WF1 personas if still empty
             if not context.get("persona_profiles"):
                 try:
                     resp = await client.get(
-                        f"{settings.BACKEND_URL}/api/v1/analytics/wf1-context/",
+                        f"{settings.backend_url}/api/v1/analytics/wf1-context/",
                         headers=headers,
                     )
                     if resp.status_code == 200:
@@ -198,6 +255,7 @@ class AdPubContextLoader:
         # Clean up internal flags
         context.pop("_needs_caa_fetch", None)
         context.pop("_needs_cga_fetch", None)
+        context["_backend_diagnostics"] = diagnostics
 
         return context
 
@@ -205,8 +263,20 @@ class AdPubContextLoader:
     def _extract_blueprint(caa_output: dict[str, Any]) -> dict[str, Any]:
         """Extract blueprint fields from CAA output.
 
-        Handles both direct CAA output and the nested 'blueprint' key
-        returned by the caa-context endpoint.
+        Handles both:
+        - Direct CAA node output (pipeline chaining via previous_outputs)
+        - The caa-context Django endpoint response
+
+        CAA output structure:
+          blueprint:
+            campaign_name, campaign_objective, daily_budget,
+            buying_type, bid_strategy, cbo_enabled,
+            ad_sets: [{name, funnel_stage, targeting, placements, ...}]
+          funnel_map:
+            stages: [{stage, meta_objective, budget_pct}]
+          targeting_specs: [...]
+          placement_budget: {per_ad_set: [...]}
+          special_ad_category: str
         """
         if not caa_output:
             return {
@@ -217,27 +287,92 @@ class AdPubContextLoader:
                 "funnel_stages": [],
                 "placements": [],
                 "special_ad_categories": [],
+                "ad_sets": [],
+                "funnel_map": {},
+                "targeting_specs": [],
+                "placement_budget": {},
+                "raw_blueprint": {},
             }
 
-        # The caa-context endpoint nests under 'blueprint'
+        # The caa-context endpoint nests campaign data under 'blueprint'
         bp = caa_output.get("blueprint", caa_output)
 
-        def _get(key: str, default: Any) -> Any:
-            """Return blueprint value, preserving valid falsy values (0, [])."""
-            if key in bp and bp[key] is not None:
-                return bp[key]
-            if key in caa_output and caa_output[key] is not None:
-                return caa_output[key]
+        def _first(*keys: str, default: Any = None) -> Any:
+            """Return first non-None value found across bp and caa_output."""
+            for src in (bp, caa_output):
+                for key in keys:
+                    if key in src and src[key] is not None:
+                        return src[key]
             return default
 
+        # Campaign name
+        campaign_name = _first("campaign_name", default="")
+
+        # Objective: CAA uses "campaign_objective", normalize
+        objective = _first(
+            "campaign_objective", "objective", default="OUTCOME_AWARENESS"
+        )
+
+        # Budget: CAA uses "daily_budget"; also accept "total_budget_usd"
+        daily_budget = _first("daily_budget", "total_budget_usd", default=0)
+
+        # Duration
+        duration_days = _first("duration_days", default=30)
+
+        # Funnel stages: derive from blueprint.ad_sets or funnel_map.stages
+        ad_sets = _first("ad_sets", default=[])
+        funnel_map = caa_output.get("funnel_map", {})
+        funnel_stages_raw = funnel_map.get("stages", [])
+
+        # Build unified funnel_stages list from ad_sets (preferred) or
+        # funnel_map stages
+        funnel_stages = []
+        if ad_sets:
+            for ad_set in ad_sets:
+                funnel_stages.append(ad_set)
+        elif funnel_stages_raw:
+            funnel_stages = funnel_stages_raw
+        else:
+            # Fallback: check for literal "funnel_stages" key
+            funnel_stages = _first("funnel_stages", default=[])
+
+        # Placements: collect from ad_sets or top-level
+        placements = _first("placements", default=[])
+        if not placements and ad_sets:
+            seen = set()
+            for ad_set in ad_sets:
+                for p in ad_set.get("placements", []):
+                    if p not in seen:
+                        seen.add(p)
+                        placements.append(p)
+
+        # Special ad categories: CAA uses singular "special_ad_category"
+        special_ad_categories = _first("special_ad_categories", default=[])
+        if not special_ad_categories:
+            cat = _first("special_ad_category", default="")
+            if cat:
+                special_ad_categories = [cat]
+
+        # Targeting specs (top-level in caa-context response)
+        targeting_specs = caa_output.get("targeting_specs", [])
+
+        # Placement budget (top-level in caa-context response)
+        placement_budget = caa_output.get("placement_budget", {})
+
         return {
-            "campaign_name": _get("campaign_name", ""),
-            "objective": _get("objective", "OUTCOME_AWARENESS"),
-            "total_budget_usd": _get("total_budget_usd", 0),
-            "duration_days": _get("duration_days", 30),
-            "funnel_stages": _get("funnel_stages", []),
-            "placements": _get("placements", []),
-            "special_ad_categories": _get("special_ad_categories", []),
+            "campaign_name": campaign_name,
+            "objective": objective,
+            "total_budget_usd": daily_budget * duration_days,
+            "daily_budget": daily_budget,
+            "duration_days": duration_days,
+            "funnel_stages": funnel_stages,
+            "placements": placements,
+            "special_ad_categories": special_ad_categories,
+            "ad_sets": ad_sets,
+            "funnel_map": funnel_map,
+            "targeting_specs": targeting_specs,
+            "placement_budget": placement_budget,
+            "raw_blueprint": bp,
         }
 
     @staticmethod
@@ -287,8 +422,16 @@ class AdPubContextLoader:
         """Validate that all required prerequisites are present.
 
         Returns a list of error messages (empty = valid).
+        Includes backend fetch diagnostics if enrichment was attempted.
         """
         errors = []
+
+        # Surface backend fetch diagnostics so failures are visible
+        diagnostics = context.pop("_backend_diagnostics", [])
+        if diagnostics:
+            errors.append(
+                "Backend enrichment diagnostics: " + " | ".join(diagnostics)
+            )
 
         # Campaign blueprint
         bp = context.get("blueprint", {})

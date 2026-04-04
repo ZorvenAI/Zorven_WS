@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     BACKEND_URL: str = "http://localhost:8001"
     BACKEND_SERVICE_TOKEN: str = "dev-service-token"
 
+    @property
+    def backend_url(self) -> str:
+        """BACKEND_URL with whitespace stripped."""
+        return self.BACKEND_URL.strip().rstrip("/")
+
     # Kafka (optional)
     KAFKA_BOOTSTRAP_SERVERS: str = ""
     KAFKA_CONSUMERS_ENABLED: bool = False
