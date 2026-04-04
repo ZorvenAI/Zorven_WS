@@ -65,6 +65,15 @@ class AdPubExecutor:
         """
         start = time.time()
 
+        logger.info(
+            "Execute called: tenant_id=%s, job_id=%s, "
+            "previous_outputs_keys=%s, config_keys=%s",
+            tenant_id,
+            job_id,
+            list(previous_outputs.keys()) if previous_outputs else [],
+            list(config.keys()) if config else [],
+        )
+
         # 1. Load context from previous_outputs (pipeline chaining)
         context = self._context_loader.load(
             previous_outputs=previous_outputs,

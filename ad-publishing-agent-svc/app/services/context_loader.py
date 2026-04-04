@@ -126,6 +126,15 @@ class AdPubContextLoader:
             logger.warning("No tenant_id — cannot fetch from backend")
             return context
 
+        logger.info(
+            "Enriching from backend: tenant_id=%s, backend_url=%s, "
+            "needs_caa=%s, needs_cga=%s",
+            tenant_id,
+            settings.BACKEND_URL,
+            context.get("_needs_caa_fetch"),
+            context.get("_needs_cga_fetch"),
+        )
+
         headers = {
             "X-Service-Token": settings.BACKEND_SERVICE_TOKEN,
             "X-Tenant-ID": str(tenant_id),
@@ -134,11 +143,12 @@ class AdPubContextLoader:
         async with httpx.AsyncClient(timeout=30) as client:
             # Fetch CAA blueprint if missing
             if context.get("_needs_caa_fetch"):
+                caa_url = (
+                    f"{settings.BACKEND_URL}/api/v1/analytics/caa-context/"
+                )
                 try:
-                    resp = await client.get(
-                        f"{settings.BACKEND_URL}/api/v1/analytics/caa-context/",
-                        headers=headers,
-                    )
+                    logger.info("Fetching CAA context from: %s", caa_url)
+                    resp = await client.get(caa_url, headers=headers)
                     if resp.status_code == 200:
                         caa_data = resp.json()
                         context["blueprint"] = self._extract_blueprint(caa_data)
@@ -148,18 +158,23 @@ class AdPubContextLoader:
                         )
                     else:
                         logger.warning(
-                            "CAA context fetch failed: HTTP %d", resp.status_code
+                            "CAA context fetch failed: HTTP %d — %s",
+                            resp.status_code,
+                            resp.text[:500],
                         )
                 except Exception as exc:
-                    logger.warning("CAA context fetch error: %s", exc)
+                    logger.error(
+                        "CAA context fetch error (url=%s): %s", caa_url, exc
+                    )
 
             # Fetch CGA creative packages if missing
             if context.get("_needs_cga_fetch"):
+                cga_url = (
+                    f"{settings.BACKEND_URL}/api/v1/analytics/cga-context/"
+                )
                 try:
-                    resp = await client.get(
-                        f"{settings.BACKEND_URL}/api/v1/analytics/cga-context/",
-                        headers=headers,
-                    )
+                    logger.info("Fetching CGA context from: %s", cga_url)
+                    resp = await client.get(cga_url, headers=headers)
                     if resp.status_code == 200:
                         cga_data = resp.json()
                         context["creative_packages"] = (
@@ -171,10 +186,14 @@ class AdPubContextLoader:
                         )
                     else:
                         logger.warning(
-                            "CGA context fetch failed: HTTP %d", resp.status_code
+                            "CGA context fetch failed: HTTP %d — %s",
+                            resp.status_code,
+                            resp.text[:500],
                         )
                 except Exception as exc:
-                    logger.warning("CGA context fetch error: %s", exc)
+                    logger.error(
+                        "CGA context fetch error (url=%s): %s", cga_url, exc
+                    )
 
             # Fetch WF1 personas if still empty
             if not context.get("persona_profiles"):
