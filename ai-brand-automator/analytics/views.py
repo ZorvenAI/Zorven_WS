@@ -1275,8 +1275,16 @@ class CGAContextView(APIView):
         expected_token = getattr(
             django_settings,
             "ORCHESTRATOR_SERVICE_TOKEN",
-            "dev-service-token",
+            "",
         )
+        if not expected_token:
+            logger.error(
+                "CGAContextView misconfigured: " "ORCHESTRATOR_SERVICE_TOKEN is not set"
+            )
+            return Response(
+                {"error": "Service authentication is not configured"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
         if service_token != expected_token:
             return Response(
                 {"error": "Invalid service token"},

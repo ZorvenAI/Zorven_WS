@@ -74,8 +74,7 @@ class AdPubContextLoader:
                 or cfg.get("meta_ad_account_id", "")
             ),
             "page_id": (
-                tenant_ctx.get("meta_page_id", "")
-                or cfg.get("meta_page_id", "")
+                tenant_ctx.get("meta_page_id", "") or cfg.get("meta_page_id", "")
             ),
             "business_id": (
                 tenant_ctx.get("meta_business_id", "")
@@ -226,35 +225,22 @@ class AdPubContextLoader:
         # The caa-context endpoint nests under 'blueprint'
         bp = caa_output.get("blueprint", caa_output)
 
+        def _get(key: str, default: Any) -> Any:
+            """Return blueprint value, preserving valid falsy values (0, [])."""
+            if key in bp and bp[key] is not None:
+                return bp[key]
+            if key in caa_output and caa_output[key] is not None:
+                return caa_output[key]
+            return default
+
         return {
-            "campaign_name": (
-                bp.get("campaign_name", "")
-                or caa_output.get("campaign_name", "")
-            ),
-            "objective": (
-                bp.get("objective", "")
-                or caa_output.get("objective", "OUTCOME_AWARENESS")
-            ),
-            "total_budget_usd": (
-                bp.get("total_budget_usd", 0)
-                or caa_output.get("total_budget_usd", 0)
-            ),
-            "duration_days": (
-                bp.get("duration_days", 30)
-                or caa_output.get("duration_days", 30)
-            ),
-            "funnel_stages": (
-                bp.get("funnel_stages", [])
-                or caa_output.get("funnel_stages", [])
-            ),
-            "placements": (
-                bp.get("placements", [])
-                or caa_output.get("placements", [])
-            ),
-            "special_ad_categories": (
-                bp.get("special_ad_categories", [])
-                or caa_output.get("special_ad_categories", [])
-            ),
+            "campaign_name": _get("campaign_name", ""),
+            "objective": _get("objective", "OUTCOME_AWARENESS"),
+            "total_budget_usd": _get("total_budget_usd", 0),
+            "duration_days": _get("duration_days", 30),
+            "funnel_stages": _get("funnel_stages", []),
+            "placements": _get("placements", []),
+            "special_ad_categories": _get("special_ad_categories", []),
         }
 
     def validate(self, context: dict[str, Any]) -> list[str]:
@@ -289,14 +275,11 @@ class AdPubContextLoader:
         for i, pkg in enumerate(packages):
             ad_units = pkg.get("ad_units", [])
             if not ad_units:
-                errors.append(
-                    f"Creative package [{i}] has no ad units"
-                )
+                errors.append(f"Creative package [{i}] has no ad units")
             for j, unit in enumerate(ad_units):
                 if not unit.get("image_url"):
                     errors.append(
-                        f"Creative package [{i}] ad unit [{j}] "
-                        "has no image_url"
+                        f"Creative package [{i}] ad unit [{j}] " "has no image_url"
                     )
 
         # Meta credentials (only required in production mode)
