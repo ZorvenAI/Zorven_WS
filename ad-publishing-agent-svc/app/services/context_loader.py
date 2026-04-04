@@ -120,10 +120,21 @@ class AdPubContextLoader:
 
         Called when previous_outputs didn't contain CAA or CGA data
         (standalone pipeline execution).
+
+        Stores diagnostic messages in context["_backend_diagnostics"]
+        so validation errors can surface them to the user.
         """
+        diagnostics: list[str] = []
         tenant_id = context.get("_tenant_id", "")
+
         if not tenant_id:
-            logger.warning("No tenant_id — cannot fetch from backend")
+            msg = (
+                "Backend enrichment skipped: no tenant_id in tenant_context. "
+                "Ensure the pipeline dispatch includes tenant_context.tenant_id."
+            )
+            logger.warning(msg)
+            diagnostics.append(msg)
+            context["_backend_diagnostics"] = diagnostics
             return context
 
         logger.info(
@@ -152,20 +163,28 @@ class AdPubContextLoader:
                     if resp.status_code == 200:
                         caa_data = resp.json()
                         context["blueprint"] = self._extract_blueprint(caa_data)
+                        bp_name = context["blueprint"].get("campaign_name", "?")
                         logger.info(
-                            "CAA blueprint fetched from backend: %s",
-                            context["blueprint"].get("campaign_name", "?"),
+                            "CAA blueprint fetched from backend: %s", bp_name
+                        )
+                        diagnostics.append(
+                            f"CAA fetch OK: campaign={bp_name}"
                         )
                     else:
-                        logger.warning(
-                            "CAA context fetch failed: HTTP %d — %s",
-                            resp.status_code,
-                            resp.text[:500],
+                        body = resp.text[:300]
+                        msg = (
+                            f"CAA fetch failed: HTTP {resp.status_code} "
+                            f"from {caa_url} (tenant={tenant_id}) — {body}"
                         )
+                        logger.warning(msg)
+                        diagnostics.append(msg)
                 except Exception as exc:
-                    logger.error(
-                        "CAA context fetch error (url=%s): %s", caa_url, exc
+                    msg = (
+                        f"CAA fetch error: {exc} "
+                        f"(url={caa_url}, tenant={tenant_id})"
                     )
+                    logger.error(msg)
+                    diagnostics.append(msg)
 
             # Fetch CGA creative packages if missing
             if context.get("_needs_cga_fetch"):
@@ -180,20 +199,29 @@ class AdPubContextLoader:
                         context["creative_packages"] = (
                             self._extract_creative_packages(cga_data)
                         )
+                        pkg_count = len(context["creative_packages"])
                         logger.info(
                             "CGA packages fetched from backend: %d packages",
-                            len(context["creative_packages"]),
+                            pkg_count,
+                        )
+                        diagnostics.append(
+                            f"CGA fetch OK: {pkg_count} packages"
                         )
                     else:
-                        logger.warning(
-                            "CGA context fetch failed: HTTP %d — %s",
-                            resp.status_code,
-                            resp.text[:500],
+                        body = resp.text[:300]
+                        msg = (
+                            f"CGA fetch failed: HTTP {resp.status_code} "
+                            f"from {cga_url} (tenant={tenant_id}) — {body}"
                         )
+                        logger.warning(msg)
+                        diagnostics.append(msg)
                 except Exception as exc:
-                    logger.error(
-                        "CGA context fetch error (url=%s): %s", cga_url, exc
+                    msg = (
+                        f"CGA fetch error: {exc} "
+                        f"(url={cga_url}, tenant={tenant_id})"
                     )
+                    logger.error(msg)
+                    diagnostics.append(msg)
 
             # Fetch WF1 personas if still empty
             if not context.get("persona_profiles"):
@@ -217,6 +245,7 @@ class AdPubContextLoader:
         # Clean up internal flags
         context.pop("_needs_caa_fetch", None)
         context.pop("_needs_cga_fetch", None)
+        context["_backend_diagnostics"] = diagnostics
 
         return context
 
@@ -306,8 +335,16 @@ class AdPubContextLoader:
         """Validate that all required prerequisites are present.
 
         Returns a list of error messages (empty = valid).
+        Includes backend fetch diagnostics if enrichment was attempted.
         """
         errors = []
+
+        # Surface backend fetch diagnostics so failures are visible
+        diagnostics = context.pop("_backend_diagnostics", [])
+        if diagnostics:
+            errors.append(
+                "Backend enrichment diagnostics: " + " | ".join(diagnostics)
+            )
 
         # Campaign blueprint
         bp = context.get("blueprint", {})
