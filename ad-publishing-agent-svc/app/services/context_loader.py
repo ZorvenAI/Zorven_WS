@@ -200,12 +200,22 @@ class AdPubContextLoader:
                             self._extract_creative_packages(cga_data)
                         )
                         pkg_count = len(context["creative_packages"])
+                        cga_job = cga_data.get("cga_job_id", "?")
+                        raw_pkgs = len(cga_data.get("ad_set_packages", []))
+                        raw_units = len(cga_data.get("ad_units", []))
                         logger.info(
-                            "CGA packages fetched from backend: %d packages",
+                            "CGA packages fetched: %d packages "
+                            "(raw: %d ad_set_packages, %d ad_units, "
+                            "job=%s)",
                             pkg_count,
+                            raw_pkgs,
+                            raw_units,
+                            cga_job,
                         )
                         diagnostics.append(
-                            f"CGA fetch OK: {pkg_count} packages"
+                            f"CGA fetch OK: {pkg_count} packages "
+                            f"(job={cga_job}, raw_pkgs={raw_pkgs}, "
+                            f"raw_units={raw_units})"
                         )
                     else:
                         body = resp.text[:300]
