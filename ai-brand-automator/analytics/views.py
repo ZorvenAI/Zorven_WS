@@ -1349,7 +1349,19 @@ class CGAContextView(APIView):
         for candidate in cga_jobs:
             nr = (candidate.result_data or {}).get("node_results", {})
             cga_node = nr.get("creative_generation", {})
-            if cga_node.get("ad_set_packages") or cga_node.get("ad_units"):
+            pkgs = cga_node.get("ad_set_packages", [])
+            units = cga_node.get("ad_units", [])
+            logger.info(
+                "CGAContextView: candidate job=%s manifest=%s "
+                "has_cga_node=%s pkgs=%d units=%d nr_keys=%s",
+                candidate.job_id,
+                candidate.manifest.pipeline_id if candidate.manifest else "none",
+                "creative_generation" in nr,
+                len(pkgs) if isinstance(pkgs, list) else -1,
+                len(units) if isinstance(units, list) else -1,
+                list(nr.keys())[:10],
+            )
+            if pkgs or units:
                 job = candidate
                 break
 
@@ -1362,9 +1374,20 @@ class CGAContextView(APIView):
             for candidate in candidates:
                 nr = (candidate.result_data or {}).get("node_results", {})
                 cga_node = nr.get("creative_generation", {})
-                if cga_node.get("ad_set_packages") or cga_node.get(
-                    "ad_units"
-                ):
+                pkgs = cga_node.get("ad_set_packages", [])
+                units = cga_node.get("ad_units", [])
+                logger.info(
+                    "CGAContextView fallback: candidate job=%s "
+                    "has_cga_node=%s pkgs=%d units=%d nr_keys=%s "
+                    "cga_keys=%s",
+                    candidate.job_id,
+                    "creative_generation" in nr,
+                    len(pkgs) if isinstance(pkgs, list) else -1,
+                    len(units) if isinstance(units, list) else -1,
+                    list(nr.keys())[:10],
+                    list(cga_node.keys())[:15] if cga_node else [],
+                )
+                if pkgs or units:
                     job = candidate
                     break
 
