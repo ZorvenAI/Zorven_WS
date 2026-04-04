@@ -471,10 +471,12 @@ class AdPubContextLoader:
             if not ad_units:
                 errors.append(f"Creative package [{i}] has no ad units")
             for j, unit in enumerate(ad_units):
-                # CGA uses gcs_url; ad-publishing uses image_url
+                # CGA uses gcs_url/image_gcs_url; cga-context enriches
+                # with image_url and image_generated from generated_images
                 has_image = (
                     unit.get("image_url")
                     or unit.get("gcs_url")
+                    or unit.get("image_gcs_url")
                     or unit.get("image")
                     or unit.get("image_generated")
                 )
