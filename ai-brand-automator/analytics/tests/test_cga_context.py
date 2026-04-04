@@ -229,4 +229,4 @@ class TestCGAContextViewResponse:
     def test_no_cga_data_returns_404(self, service_client, cga_tenant, settings):
         resp = self._get(service_client, cga_tenant.id, settings)
         assert resp.status_code == 404
-        assert resp.json()["error"] == "No CGA data"
+        assert resp.json()["error"] == "No CGA data with creative packages"

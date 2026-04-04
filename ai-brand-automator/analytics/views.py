@@ -1204,19 +1204,30 @@ class CAAContextView(APIView):
 
         from orchestration.models import AnalysisJob
 
-        # Find latest completed CAA job
-        job = (
+        # Find latest completed CAA job with actual blueprint data.
+        # Skip jobs where CAA returned empty results due to missing
+        # prerequisites.
+        job = None
+
+        # Primary: standalone CAA pipeline
+        caa_jobs = (
             AnalysisJob.objects.filter(
                 Q(tenant=tenant) | Q(tenant__isnull=True),
                 status=AnalysisJob.Status.COMPLETED,
                 manifest__pipeline_id="meta-campaign-architecture",
             )
             .select_related("manifest")
-            .order_by("-completed_at")
-            .first()
+            .order_by("-completed_at")[:10]
         )
+        for candidate in caa_jobs:
+            nr = (candidate.result_data or {}).get("node_results", {})
+            caa_node = nr.get("campaign_architecture", {})
+            bp = caa_node.get("blueprint", caa_node)
+            if bp.get("campaign_name") or bp.get("ad_sets"):
+                job = candidate
+                break
 
-        # Fallback: any job with campaign_architecture node results
+        # Fallback: any job with non-empty campaign_architecture results
         if not job:
             candidates = AnalysisJob.objects.filter(
                 Q(tenant=tenant) | Q(tenant__isnull=True),
@@ -1224,13 +1235,15 @@ class CAAContextView(APIView):
             ).order_by("-completed_at")[:20]
             for candidate in candidates:
                 nr = (candidate.result_data or {}).get("node_results", {})
-                if "campaign_architecture" in nr:
+                caa_node = nr.get("campaign_architecture", {})
+                bp = caa_node.get("blueprint", caa_node)
+                if bp.get("campaign_name") or bp.get("ad_sets"):
                     job = candidate
                     break
 
         if not job:
             return Response(
-                {"error": "No CAA data"},
+                {"error": "No CAA data with campaign blueprint"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -1318,19 +1331,29 @@ class CGAContextView(APIView):
 
         from orchestration.models import AnalysisJob
 
-        # Find latest completed CGA job
-        job = (
+        # Find latest completed CGA job with actual creative data.
+        # A CGA job may complete with empty packages if prerequisites
+        # were missing — skip those.
+        job = None
+
+        # Primary: standalone CGA pipeline
+        cga_jobs = (
             AnalysisJob.objects.filter(
                 Q(tenant=tenant) | Q(tenant__isnull=True),
                 status=AnalysisJob.Status.COMPLETED,
                 manifest__pipeline_id="meta-creative-generation",
             )
             .select_related("manifest")
-            .order_by("-completed_at")
-            .first()
+            .order_by("-completed_at")[:10]
         )
+        for candidate in cga_jobs:
+            nr = (candidate.result_data or {}).get("node_results", {})
+            cga_node = nr.get("creative_generation", {})
+            if cga_node.get("ad_set_packages") or cga_node.get("ad_units"):
+                job = candidate
+                break
 
-        # Fallback: any job with creative_generation node results
+        # Fallback: any job with non-empty creative_generation results
         if not job:
             candidates = AnalysisJob.objects.filter(
                 Q(tenant=tenant) | Q(tenant__isnull=True),
@@ -1338,13 +1361,16 @@ class CGAContextView(APIView):
             ).order_by("-completed_at")[:20]
             for candidate in candidates:
                 nr = (candidate.result_data or {}).get("node_results", {})
-                if "creative_generation" in nr:
+                cga_node = nr.get("creative_generation", {})
+                if cga_node.get("ad_set_packages") or cga_node.get(
+                    "ad_units"
+                ):
                     job = candidate
                     break
 
         if not job:
             return Response(
-                {"error": "No CGA data"},
+                {"error": "No CGA data with creative packages"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
