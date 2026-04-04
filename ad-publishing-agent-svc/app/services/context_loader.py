@@ -422,16 +422,22 @@ class AdPubContextLoader:
         """Validate that all required prerequisites are present.
 
         Returns a list of error messages (empty = valid).
-        Includes backend fetch diagnostics if enrichment was attempted.
+        Backend fetch diagnostics are stored in context["_diagnostics_info"]
+        for inclusion in successful responses too.
         """
         errors = []
 
-        # Surface backend fetch diagnostics so failures are visible
+        # Extract backend diagnostics — store as info, not errors.
+        # Only include in errors if they indicate failures.
         diagnostics = context.pop("_backend_diagnostics", [])
-        if diagnostics:
+        diag_failures = [d for d in diagnostics if "error" in d.lower() or "failed" in d.lower()]
+        if diag_failures:
             errors.append(
-                "Backend enrichment diagnostics: " + " | ".join(diagnostics)
+                "Backend enrichment errors: " + " | ".join(diag_failures)
             )
+        # Store all diagnostics for informational inclusion in response
+        if diagnostics:
+            context["_diagnostics_info"] = diagnostics
 
         # Campaign blueprint
         bp = context.get("blueprint", {})
