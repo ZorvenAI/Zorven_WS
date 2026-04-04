@@ -89,10 +89,19 @@ class AdPubExecutor:
 
         # 2. Input guardrails
         validation_errors = self._context_loader.validate(context)
+        diagnostics_info = context.pop("_diagnostics_info", [])
         if validation_errors:
+            # Prepend diagnostics so user sees fetch context alongside errors
+            all_errors = []
+            if diagnostics_info:
+                all_errors.append(
+                    "Backend enrichment diagnostics: "
+                    + " | ".join(diagnostics_info)
+                )
+            all_errors.extend(validation_errors)
             return self._error_result(
                 "prerequisite_missing",
-                validation_errors,
+                all_errors,
                 start,
             )
 

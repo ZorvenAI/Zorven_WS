@@ -54,6 +54,7 @@ const STATUS_STYLES: Record<JobStatus, string> = {
   running: 'bg-brand-electric/20 text-brand-electric',
   completed: 'bg-emerald-400/20 text-emerald-300',
   failed: 'bg-red-400/20 text-red-300',
+  awaiting_approval: 'bg-amber-500/20 text-amber-400',
 };
 
 function StatusDot({ status }: { status: JobStatus | null }) {

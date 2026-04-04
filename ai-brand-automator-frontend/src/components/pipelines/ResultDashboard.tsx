@@ -26,6 +26,7 @@ import {
 import { apiClient } from '@/lib/api';
 import { linkFromChat } from '@/lib/workspace';
 import BrandEquityDashboard from './BrandEquityDashboard';
+import ApprovalPanel from './ApprovalPanel';
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage';
 
 interface ResultDashboardProps {
@@ -36,6 +37,10 @@ interface ResultDashboardProps {
   jobId?: string | null;
   /** Chat session ID — required together with jobId for Save to Workspace. */
   chatSessionId?: string | null;
+  /** Current job status — used to show approval UI for awaiting_approval. */
+  jobStatus?: string | null;
+  /** Called when approval action completes (approve/reject). */
+  onApprovalComplete?: () => void;
 }
 
 interface PublishResultEntry {
@@ -7088,6 +7093,8 @@ export default function ResultDashboard({
   manifestName,
   jobId,
   chatSessionId,
+  jobStatus,
+  onApprovalComplete,
 }: ResultDashboardProps) {
   // Route to specialized dashboard for Brand Equity / ISO pipelines.
   // Detect by manifest name OR by result_data shape (chat pipelines
@@ -7103,6 +7110,7 @@ export default function ResultDashboard({
   if (isBrandEquityByName || isBrandEquityByContent) {
     return <BrandEquityDashboard resultData={resultData} />;
   }
+
 
   // ── Detect market research data ──────────────────────────────────
   const hasMarketResearch =
@@ -7184,11 +7192,74 @@ export default function ResultDashboard({
     resultData.creative_package != null ||
     resultData.ad_units != null;
 
+  // ── Detect ad-publishing / approval data ────────────────────────
+  const adPubNodeData = (resultData.node_results as Record<string, Record<string, unknown>> | undefined)?.ad_publishing;
+  const adPubData = adPubNodeData ?? resultData;
+  const hasAdPublishing =
+    adPubData?.approval_request_id != null ||
+    adPubData?.preview_data != null;
+
   // ── Extract well-known keys ──────────────────────────────────────
   const summary = resultData.summary as string | undefined;
   const findings = resultData.findings as string[] | undefined;
   const recommendations = resultData.recommendations as string[] | undefined;
   const score = resultData.score as number | undefined;
+
+  // ── Route to approval panel for ad-publishing awaiting_approval ──
+  const approvalRequestId = (adPubData?.approval_request_id ?? resultData.approval_request_id) as string | undefined;
+  const isAwaitingApproval = jobStatus === 'awaiting_approval' || (resultData.status as string) === 'awaiting_approval';
+  if (hasAdPublishing && approvalRequestId && isAwaitingApproval && jobId) {
+    const previewData = (adPubData?.preview_data ?? resultData.preview_data ?? {}) as Record<string, unknown>;
+    const sandboxMode = (adPubData?.sandbox_mode ?? resultData.sandbox_mode ?? true) as boolean;
+    const planWarnings = (adPubData?.plan_warnings ?? resultData.plan_warnings ?? []) as string[];
+    return (
+      <div className="glass-card p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-heading font-semibold text-white">
+            Campaign Approval
+          </h3>
+        </div>
+        {findings && findings.length > 0 && (
+          <section>
+            <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+              Key Findings
+            </h4>
+            <ul className="space-y-1">
+              {findings.map((f, i) => (
+                <li key={i} className="text-xs text-brand-silver/70 flex items-start gap-2">
+                  <span className="text-brand-electric mt-0.5">&#8226;</span>
+                  <span>{f}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        <ApprovalPanel
+          jobId={jobId}
+          approvalRequestId={approvalRequestId}
+          previewData={previewData}
+          sandboxMode={sandboxMode}
+          planWarnings={planWarnings}
+          onApprovalComplete={onApprovalComplete}
+        />
+        {recommendations && recommendations.length > 0 && (
+          <section>
+            <h4 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
+              Recommendations
+            </h4>
+            <ul className="space-y-1">
+              {recommendations.map((r, i) => (
+                <li key={i} className="text-xs text-brand-silver/70 flex items-start gap-2">
+                  <span className="text-emerald-400 mt-0.5">&#8226;</span>
+                  <span>{r}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    );
+  }
 
   // ── Extract blog + social + odoo from node_results ────────────────
   const nodeResults = resultData.node_results as
@@ -7428,6 +7499,14 @@ export default function ResultDashboard({
     'caa_context_used',
     'bsa_context_used',
     'baa_context_used',
+    // Ad Publishing keys
+    'approval_request_id',
+    'preview_data',
+    'sandbox_mode',
+    'is_production',
+    'plan_warnings',
+    'preparation_time_ms',
+    'status',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),

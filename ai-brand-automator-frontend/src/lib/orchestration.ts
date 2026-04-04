@@ -76,6 +76,25 @@ export async function getJobQuickStatus(jobId: string): Promise<QuickStatus> {
   return parseOrThrow<QuickStatus>(res);
 }
 
+// ── Approval ──
+
+export interface ApprovalPayload {
+  approval_request_id: string;
+  decision: 'approve_all' | 'approve_selected' | 'reject';
+  approved_ad_sets?: string[];
+  feedback?: string;
+  production_confirmed?: boolean;
+  user_role?: string;
+}
+
+export async function approveJob(
+  jobId: string,
+  data: ApprovalPayload,
+): Promise<Record<string, unknown>> {
+  const res = await apiClient.post(`${BASE}/jobs/${jobId}/approve/`, data);
+  return parseOrThrow<Record<string, unknown>>(res);
+}
+
 // ── Manifests ──
 
 export async function listManifests(): Promise<PipelineManifestListItem[]> {

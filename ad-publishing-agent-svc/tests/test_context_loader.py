@@ -438,8 +438,8 @@ class TestValidate:
         assert any("access_token" in e for e in errors)
         assert any("ad_account_id" in e for e in errors)
 
-    def test_diagnostics_included_in_errors(self):
-        """Backend fetch diagnostics are surfaced in validation errors."""
+    def test_failure_diagnostics_included_in_errors(self):
+        """Backend fetch failures are surfaced in validation errors."""
         context = {
             "blueprint": {"campaign_name": "", "funnel_stages": []},
             "creative_packages": [],
@@ -449,5 +449,26 @@ class TestValidate:
             ],
         }
         errors = self.loader.validate(context)
-        assert any("Backend enrichment diagnostics" in e for e in errors)
+        assert any("Backend enrichment errors" in e for e in errors)
         assert any("HTTP 404" in e for e in errors)
+
+    def test_success_diagnostics_not_in_errors(self):
+        """Successful fetch diagnostics are stored as info, not errors."""
+        context = {
+            "blueprint": {
+                "campaign_name": "X",
+                "funnel_stages": [{"funnel_stage": "tofu"}],
+            },
+            "creative_packages": [{"ad_units": [{"gcs_url": "gs://x"}]}],
+            "sandbox_mode": True,
+            "_backend_diagnostics": [
+                "CAA fetch OK: campaign=X",
+                "CGA fetch OK: 1 packages",
+            ],
+        }
+        errors = self.loader.validate(context)
+        assert errors == []
+        assert context["_diagnostics_info"] == [
+            "CAA fetch OK: campaign=X",
+            "CGA fetch OK: 1 packages",
+        ]

@@ -283,6 +283,8 @@ export default function AiAssistantPage() {
               <ResultDashboard
                 resultData={job.result_data}
                 manifestName={job.manifest_name}
+                jobId={job.job_id}
+                jobStatus={job.status}
               />
             )}
           </div>

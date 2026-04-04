@@ -66,7 +66,7 @@ class MetaApiClient:
         Returns dict with token_valid, account_status, permissions,
         spending_limit, all_passed.
         """
-        if self._api is None:
+        if self._api is None or self.sandbox_mode:
             return self._stub_account_validation()
 
         def _validate():
@@ -114,7 +114,7 @@ class MetaApiClient:
 
         Returns the campaign_id string.
         """
-        if self._api is None:
+        if self._api is None or self.sandbox_mode:
             return self._stub_id("campaign")
 
         def _create():
@@ -153,7 +153,7 @@ class MetaApiClient:
 
         Returns the ad_set_id string.
         """
-        if self._api is None:
+        if self._api is None or self.sandbox_mode:
             return self._stub_id("adset")
 
         def _create():
@@ -190,7 +190,7 @@ class MetaApiClient:
 
         Returns dict with ``hash`` and ``url``.
         """
-        if self._api is None:
+        if self._api is None or self.sandbox_mode:
             return {"hash": f"stub_hash_{name}", "url": f"https://stub/{name}"}
 
         def _upload():
@@ -225,7 +225,7 @@ class MetaApiClient:
 
         Returns the creative_id string.
         """
-        if self._api is None:
+        if self._api is None or self.sandbox_mode:
             return self._stub_id("creative")
 
         def _create():
@@ -266,7 +266,7 @@ class MetaApiClient:
 
         Returns the ad_id string.
         """
-        if self._api is None:
+        if self._api is None or self.sandbox_mode:
             return self._stub_id("ad")
 
         def _create():
@@ -292,7 +292,7 @@ class MetaApiClient:
 
         Returns True on success.
         """
-        if self._api is None:
+        if self._api is None or self.sandbox_mode:
             return True
 
         def _update():
@@ -308,7 +308,7 @@ class MetaApiClient:
         self, ad_set_id: str, status: str
     ) -> bool:
         """Update ad set status."""
-        if self._api is None:
+        if self._api is None or self.sandbox_mode:
             return True
 
         def _update():
@@ -329,7 +329,7 @@ class MetaApiClient:
 
         Returns preview HTML/iframe string.
         """
-        if self._api is None:
+        if self._api is None or self.sandbox_mode:
             return f"<div>Preview for creative {creative_id}</div>"
 
         def _preview():

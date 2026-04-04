@@ -62,6 +62,7 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         "retrieve": [IsAuthenticated, IsTenantViewer],
         "create": [IsAuthenticated, IsTenantEditor],
         "cancel": [IsAuthenticated, IsTenantEditor],
+        "approve": [IsAuthenticated, IsTenantEditor],
         "callback": [],  # Service-to-service auth handled in action
     }
 
@@ -194,7 +195,11 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         """
         # ── Try Redis cache for terminal jobs only ──
         cached = cache.get(f"job:status:{job_id}")
-        if cached and cached.get("status") in ("completed", "failed"):
+        if cached and cached.get("status") in (
+            "completed",
+            "failed",
+            "awaiting_approval",
+        ):
             cached.setdefault("current_node", None)
             cached.setdefault("progress_percent", 0)
             cached.setdefault("last_thought", None)
@@ -229,12 +234,16 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             data["progress_percent"] = 100
         elif job.status == AnalysisJob.Status.FAILED:
             data["error_message"] = job.error_message
+        elif job.status == AnalysisJob.Status.AWAITING_APPROVAL:
+            data["manifest_name"] = job.manifest.name if job.manifest else None
+            data["progress_percent"] = 100
 
         # Cache terminal states for 1 hour; skip caching in-flight
         # jobs — the DB is the source of truth during execution.
         is_terminal = job.status in (
             AnalysisJob.Status.COMPLETED,
             AnalysisJob.Status.FAILED,
+            AnalysisJob.Status.AWAITING_APPROVAL,
         )
         if is_terminal:
             try:
@@ -301,6 +310,199 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             AnalysisJobSerializer(job).data,
             status=status.HTTP_200_OK,
         )
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve(self, request, job_id=None):
+        """Proxy human approval decision to the ad-publishing agent.
+
+        The frontend cannot call the ad-publishing service directly
+        (service-to-service auth). This endpoint forwards the approval
+        decision and returns the result.
+        """
+        from brand_automator.validators import sanitize_text_input
+
+        job = self.get_object()
+
+        if job.status != AnalysisJob.Status.AWAITING_APPROVAL:
+            return Response(
+                {"error": f"Job is not awaiting approval (status: {job.status})"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate approval_request_id
+        approval_request_id = str(
+            request.data.get("approval_request_id", "") or ""
+        ).strip()
+        if not approval_request_id:
+            return Response(
+                {"error": "approval_request_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        decision = request.data.get("decision", "")
+        if decision not in ("approve_all", "approve_selected", "reject"):
+            return Response(
+                {"error": "decision must be approve_all, approve_selected, or reject"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate approved_ad_sets for approve_selected
+        approved_ad_sets = request.data.get("approved_ad_sets")
+        if decision == "approve_selected":
+            if not isinstance(approved_ad_sets, list) or not approved_ad_sets:
+                return Response(
+                    {
+                        "error": (
+                            "approved_ad_sets must be a non-empty list when "
+                            "decision is approve_selected"
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            approved_ad_sets = None
+
+        # Sanitize feedback and derive user_role server-side
+        feedback = sanitize_text_input(
+            request.data.get("feedback", ""), max_length=2000
+        )
+        tenant = getattr(request, "tenant", None)
+        tenant_id = str(tenant.id) if tenant else ""
+        user_role = "VIEWER"
+        if tenant and request.user:
+            role = tenant.get_user_role(request.user)
+            user_role = role.upper() if role else "VIEWER"
+
+        payload = {
+            "approval_request_id": approval_request_id,
+            "decision": decision,
+            "approved_ad_sets": approved_ad_sets,
+            "feedback": feedback,
+            "production_confirmed": bool(
+                request.data.get("production_confirmed", False)
+            ),
+            "approved_by": request.user.email if request.user else "",
+            "user_role": user_role,
+        }
+
+        # Forward to ad-publishing agent
+        adpub_url = decouple_config(
+            "AD_PUBLISHING_AGENT_URL",
+            default="http://localhost:8043",
+        )
+        adpub_token = decouple_config(
+            "AD_PUBLISHING_SERVICE_TOKEN",
+            default="dev-service-token",
+        )
+
+        import requests as http_requests
+
+        try:
+            resp = http_requests.post(
+                f"{adpub_url}/v1/approve",
+                json=payload,
+                headers={
+                    "X-Service-Token": adpub_token,
+                    "X-Tenant-ID": tenant_id,
+                    "Content-Type": "application/json",
+                },
+                timeout=60,
+            )
+        except http_requests.RequestException:
+            logger.exception(
+                "Failed to reach ad-publishing service for job %s",
+                job_id,
+            )
+            return Response(
+                {"error": "Failed to reach ad-publishing service."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        if not resp.ok:
+            logger.error(
+                "Ad-publishing service returned error for job %s: " "status=%s body=%r",
+                job_id,
+                resp.status_code,
+                resp.text[:500],
+            )
+            response_status = (
+                resp.status_code
+                if 400 <= resp.status_code < 500
+                else status.HTTP_502_BAD_GATEWAY
+            )
+            return Response(
+                {"error": "Ad-publishing service returned an error."},
+                status=response_status,
+            )
+
+        try:
+            result = resp.json()
+        except ValueError:
+            logger.error(
+                "Ad-publishing service returned non-JSON response "
+                "for job %s: status=%s body=%r",
+                job_id,
+                resp.status_code,
+                resp.text[:500],
+            )
+            return Response(
+                {"error": "Invalid response from ad-publishing service."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        # Persist outcome on the job so it doesn't stay awaiting_approval
+        if decision == "reject":
+            job.status = AnalysisJob.Status.FAILED
+            job.error_message = "Rejected by user"
+            job.completed_at = timezone.now()
+            job.save(
+                update_fields=[
+                    "status",
+                    "error_message",
+                    "completed_at",
+                    "updated_at",
+                ]
+            )
+        elif decision in ("approve_all", "approve_selected"):
+            publish_status = result.get("status", "")
+            if publish_status in ("published", "completed"):
+                job.status = AnalysisJob.Status.COMPLETED
+                job.completed_at = timezone.now()
+                # Merge publish result into existing result_data
+                existing = job.result_data or {}
+                existing["publish_result"] = result
+                job.result_data = existing
+                job.save(
+                    update_fields=[
+                        "status",
+                        "completed_at",
+                        "result_data",
+                        "updated_at",
+                    ]
+                )
+            elif publish_status in ("failed", "error"):
+                job.status = AnalysisJob.Status.FAILED
+                job.error_message = result.get("error", "Publishing failed")
+                job.completed_at = timezone.now()
+                job.save(
+                    update_fields=[
+                        "status",
+                        "error_message",
+                        "completed_at",
+                        "updated_at",
+                    ]
+                )
+
+        # Invalidate quick-status cache so polling picks up new state
+        cache.delete(f"job:status:{job_id}")
+
+        logger.info(
+            "Job %s approval proxied: decision=%s, result_status=%s",
+            job_id,
+            decision,
+            result.get("status", "unknown"),
+        )
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class PipelineManifestViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):

@@ -58,13 +58,14 @@ function PipelineInlineCard({ jobId, chatSessionId }: { jobId: string; chatSessi
           />
         </div>
       )}
-      {effectiveStatus === 'completed' && (job.result_data || quickStatus?.result_data) && (
+      {(effectiveStatus === 'completed' || effectiveStatus === 'awaiting_approval') && (job.result_data || quickStatus?.result_data) && (
         <div className="p-3">
           <ResultDashboard
             resultData={job.result_data ?? quickStatus?.result_data ?? {}}
             manifestName={job.manifest_name ?? quickStatus?.manifest_name}
             jobId={jobId}
             chatSessionId={chatSessionId}
+            jobStatus={effectiveStatus}
           />
         </div>
       )}
