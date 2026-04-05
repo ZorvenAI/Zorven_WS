@@ -84,7 +84,7 @@ const STATUS_BORDER: Record<string, string> = {
   running: 'border-brand-electric animate-pulse',
   done: 'border-emerald-400',
   failed: 'border-red-400',
-  awaiting_approval: 'border-amber-400 animate-pulse',
+  awaiting_approval: 'border-amber-400',
 };
 
 const STATUS_ICON: Record<string, React.ReactNode> = {

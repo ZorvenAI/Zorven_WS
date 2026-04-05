@@ -12,7 +12,7 @@
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, XCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Clock, XCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenantRole } from '@/hooks/useTenantRole';
 import { usePollingJob } from '@/hooks/usePollingJob';
@@ -69,6 +69,13 @@ function diffProgress(
         nodeId,
         message: 'Completed',
         level: 'success',
+      });
+    } else if (nextStatus === 'awaiting_approval') {
+      entries.push({
+        timestamp: now,
+        nodeId,
+        message: 'Awaiting approval',
+        level: 'info',
       });
     } else if (nextStatus === 'failed') {
       entries.push({
@@ -256,15 +263,29 @@ export default function JobDetailPage({ params }: PageProps) {
                   />
                 )}
                 {logEntries.length > 0 && <LogConsole entries={logEntries} />}
-                {job.result_data && (
+                {(job.result_data || quickStatus?.result_data) ? (
                   <ResultDashboard
-                    resultData={job.result_data}
+                    resultData={job.result_data ?? quickStatus?.result_data ?? {}}
                     manifestName={job.manifest_name}
                     jobId={job.job_id}
                     jobStatus={job.status}
                     onApprovalComplete={refresh}
                   />
-                )}
+                ) : job.status === 'awaiting_approval' ? (
+                  <div className="glass-card p-6 border-amber-400/30">
+                    <div className="flex items-center gap-3">
+                      <Clock className="w-5 h-5 text-amber-400" />
+                      <div>
+                        <h3 className="text-sm font-heading font-semibold text-white">
+                          Awaiting Your Approval
+                        </h3>
+                        <p className="text-xs text-brand-silver/60 mt-1">
+                          The campaign has been prepared and is ready for your review. Loading approval details…
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
 
