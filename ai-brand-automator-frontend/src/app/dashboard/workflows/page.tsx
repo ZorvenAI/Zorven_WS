@@ -219,7 +219,7 @@ function WorkflowsPageInner() {
   // is the guaranteed fallback. WS events update state directly via
   // handleWSEvent and will naturally be more recent than polled data.
 
-  const { quickStatus: pollingStatus } = usePollingJob(
+  const { quickStatus: pollingStatus, refresh: refreshJob } = usePollingJob(
     activeJobId,
     { intervalMs: 3000 },
   );
@@ -928,6 +928,7 @@ function WorkflowsPageInner() {
               quickStatus={effectiveQuickStatus ?? null}
               selectedNodeData={selectedNodeData}
               workflowDetail={selectedDetail}
+              onApprovalComplete={refreshJob}
             />
           ) : undefined
         }

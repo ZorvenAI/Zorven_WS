@@ -42,6 +42,8 @@ interface ResultsInspectorProps {
   selectedNodeData?: AgentNodeData | null;
   /** Active workflow detail (shown in Properties when no node selected). */
   workflowDetail?: UserWorkflowDetail | null;
+  /** Called after the user approves/rejects — restarts polling. */
+  onApprovalComplete?: () => void;
 }
 
 type TabId = 'results' | 'logs' | 'properties' | 'history';
@@ -73,6 +75,7 @@ export default function ResultsInspector({
   quickStatus,
   selectedNodeData,
   workflowDetail,
+  onApprovalComplete,
 }: ResultsInspectorProps) {
   const [activeTab, setActiveTab] = useState<TabId>('results');
   const [job, setJob] = useState<AnalysisJob | null>(null);
@@ -100,8 +103,12 @@ export default function ResultsInspector({
     setPrevStatus(jobStatus);
     if (jobStatus === 'completed' || jobStatus === 'failed' || jobStatus === 'awaiting_approval') {
       setActiveTab('results');
-      // Fetch full job on terminal status
-      if (activeJobId && fetchedTerminalJobId !== activeJobId) {
+      // Fetch full job on every terminal status change (e.g.
+      // awaiting_approval → completed after user approves).
+      // Reset fetchedTerminalJobId so the guard allows re-fetch.
+      const needsFetch =
+        activeJobId && (fetchedTerminalJobId !== activeJobId || jobStatus !== prevStatus);
+      if (needsFetch) {
         setFetchedTerminalJobId(activeJobId);
         setIsLoadingJob(true);
         getJob(activeJobId)
@@ -208,7 +215,7 @@ export default function ResultsInspector({
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'results' && (
-          <ResultsTab job={job} quickStatus={quickStatus} isLoading={isLoadingJob} />
+          <ResultsTab job={job} quickStatus={quickStatus} isLoading={isLoadingJob} onApprovalComplete={onApprovalComplete} />
         )}
         {activeTab === 'logs' && <LogConsole entries={logEntries} />}
         {activeTab === 'properties' && (
@@ -254,10 +261,12 @@ function ResultsTab({
   job,
   quickStatus,
   isLoading,
+  onApprovalComplete,
 }: {
   job: AnalysisJob | null;
   quickStatus: QuickStatus | null;
   isLoading: boolean;
+  onApprovalComplete?: () => void;
 }) {
   if (isLoading) {
     return (
@@ -278,6 +287,7 @@ function ResultsTab({
           manifestName={job.manifest_name}
           jobId={job.job_id}
           jobStatus={job.status}
+          onApprovalComplete={onApprovalComplete}
         />
       </div>
     );
@@ -295,6 +305,7 @@ function ResultsTab({
           resultData={quickStatus.result_data}
           manifestName={quickStatus.manifest_name}
           jobStatus={quickStatus.status}
+          onApprovalComplete={onApprovalComplete}
         />
         {quickStatus.status === 'running' && (
           <div className="flex items-center gap-2 mt-3 px-2 py-1.5 text-xs text-brand-electric/60">
