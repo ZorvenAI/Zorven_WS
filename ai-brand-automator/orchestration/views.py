@@ -451,8 +451,19 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             )
 
         # Persist outcome on the job so it doesn't stay awaiting_approval
+        from orchestration.result_handler import (
+            _update_redis_cache,
+            _release_session_lock,
+            _save_final_chat_message,
+            _update_workflow_snapshot,
+            _broadcast_to_workspace,
+        )
+
+        new_status = None
+
         if decision == "reject":
-            job.status = AnalysisJob.Status.FAILED
+            new_status = AnalysisJob.Status.FAILED
+            job.status = new_status
             job.error_message = "Rejected by user"
             job.completed_at = timezone.now()
             job.save(
@@ -466,7 +477,8 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         elif decision in ("approve_all", "approve_selected"):
             publish_status = result.get("status", "")
             if publish_status in ("published", "completed", "partial"):
-                job.status = AnalysisJob.Status.COMPLETED
+                new_status = AnalysisJob.Status.COMPLETED
+                job.status = new_status
                 job.completed_at = timezone.now()
                 # Merge publish result into node_results.ad_publishing
                 # so the frontend finds it in the expected location.
@@ -482,11 +494,18 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 existing["node_results"] = node_results
                 existing["publish_result"] = result
                 job.result_data = existing
-                # Mark ad_publishing node as done in progress
+                # Mark ALL remaining pipeline nodes as done so the
+                # pipeline graph shows complete (e.g. manager node).
                 progress = job.progress or {}
-                if "ad_publishing" in progress:
-                    progress["ad_publishing"]["status"] = "done"
-                    job.progress = progress
+                completed_at = timezone.now().isoformat()
+                for node_id, node_info in progress.items():
+                    if isinstance(node_info, dict) and node_info.get("status") in (
+                        "pending",
+                        "awaiting_approval",
+                    ):
+                        node_info["status"] = "done"
+                        node_info.setdefault("completed_at", completed_at)
+                job.progress = progress
                 job.save(
                     update_fields=[
                         "status",
@@ -497,7 +516,8 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                     ]
                 )
             elif publish_status in ("failed", "error"):
-                job.status = AnalysisJob.Status.FAILED
+                new_status = AnalysisJob.Status.FAILED
+                job.status = new_status
                 job.error_message = result.get("error", "Publishing failed")
                 job.completed_at = timezone.now()
                 job.save(
@@ -509,8 +529,27 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                     ]
                 )
 
-        # Invalidate quick-status cache so polling picks up new state
-        cache.delete(f"job:status:{job_id}")
+        # Update Redis cache and run post-completion handlers
+        # (same as handle_pipeline_result does for normal completions)
+        _update_redis_cache(job)
+        _broadcast_to_workspace(job, new_status)
+        if new_status in (
+            AnalysisJob.Status.COMPLETED,
+            AnalysisJob.Status.FAILED,
+        ):
+            _release_session_lock(job)
+            if new_status == AnalysisJob.Status.COMPLETED:
+                _save_final_chat_message(job)
+                _update_workflow_snapshot(job)
+                try:
+                    from analytics.tasks import extract_metrics_task
+
+                    extract_metrics_task.delay(job.id)
+                except Exception:
+                    logger.exception(
+                        "Failed to dispatch analytics for job %s",
+                        job.job_id,
+                    )
 
         logger.info(
             "Job %s approval proxied: decision=%s, result_status=%s",
