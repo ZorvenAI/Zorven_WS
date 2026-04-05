@@ -264,7 +264,8 @@ class AnalysisJobViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         done = sum(
             1
             for v in progress.values()
-            if isinstance(v, dict) and v.get("status") in ("done", "failed")
+            if isinstance(v, dict)
+            and v.get("status") in ("done", "failed", "awaiting_approval")
         )
         return int((done / total) * 100) if total else 0
 

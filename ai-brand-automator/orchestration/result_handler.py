@@ -195,7 +195,8 @@ def _update_redis_cache(job):
         done = sum(
             1
             for v in progress.values()
-            if isinstance(v, dict) and v.get("status") in ("done", "failed")
+            if isinstance(v, dict)
+            and v.get("status") in ("done", "failed", "awaiting_approval")
         )
         percent = int((done / total) * 100) if total else 0
 
@@ -264,7 +265,8 @@ def _broadcast_to_workspace(job, status):
         done = sum(
             1
             for v in progress.values()
-            if isinstance(v, dict) and v.get("status") in ("done", "failed")
+            if isinstance(v, dict)
+            and v.get("status") in ("done", "failed", "awaiting_approval")
         )
         percent = int((done / total) * 100) if total else 0
 

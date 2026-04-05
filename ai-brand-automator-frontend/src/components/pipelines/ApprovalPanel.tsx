@@ -130,7 +130,7 @@ export default function ApprovalPanel({
 
   // Already submitted
   if (result) {
-    const isApproved = result.status === 'published' || result.status === 'approved';
+    const isApproved = result.status === 'published' || result.status === 'approved' || result.status === 'partial' || result.status === 'completed';
     return (
       <div className="space-y-4">
         <div className={`flex items-center gap-3 p-4 rounded-xl border ${

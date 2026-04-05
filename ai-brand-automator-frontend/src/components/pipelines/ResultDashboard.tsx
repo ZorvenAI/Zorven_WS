@@ -7199,10 +7199,11 @@ export default function ResultDashboard({
   // ── Detect ad-publishing / approval data ────────────────────────
   const adPubNodeData = (resultData.node_results as Record<string, Record<string, unknown>> | undefined)?.ad_publishing;
   const adPubData = adPubNodeData ?? resultData;
+  const publishResult = (resultData.publish_result ?? adPubData?.publish_result) as Record<string, unknown> | undefined;
   const hasAdPublishing =
     adPubData?.approval_request_id != null ||
-    adPubData?.preview_data != null;
-  const publishResult = resultData.publish_result as Record<string, unknown> | undefined;
+    adPubData?.preview_data != null ||
+    publishResult != null;
 
   // ── Extract well-known keys ──────────────────────────────────────
   const summary = resultData.summary as string | undefined;

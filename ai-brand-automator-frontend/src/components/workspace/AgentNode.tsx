@@ -12,6 +12,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import {
   CheckCircle2,
   Circle,
+  Clock,
   Loader2,
   XCircle,
   Info,
@@ -48,7 +49,7 @@ export interface AgentNodeData {
   url?: string;
   handler?: string;
   health?: AgentHealth;
-  status?: 'pending' | 'running' | 'done' | 'failed';
+  status?: 'pending' | 'running' | 'done' | 'failed' | 'awaiting_approval';
   icon?: string;
   [key: string]: unknown;
 }
@@ -83,6 +84,7 @@ const STATUS_BORDER: Record<string, string> = {
   running: 'border-brand-electric animate-pulse',
   done: 'border-emerald-400',
   failed: 'border-red-400',
+  awaiting_approval: 'border-amber-400 animate-pulse',
 };
 
 const STATUS_ICON: Record<string, React.ReactNode> = {
@@ -90,6 +92,7 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
   running: <Loader2 className="w-3.5 h-3.5 text-brand-electric animate-spin" />,
   done: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />,
   failed: <XCircle className="w-3.5 h-3.5 text-red-400" />,
+  awaiting_approval: <Clock className="w-3.5 h-3.5 text-amber-400" />,
 };
 
 // ── Health badge ──

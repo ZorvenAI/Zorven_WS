@@ -24,6 +24,7 @@ import '@xyflow/react/dist/style.css';
 import {
   CheckCircle2,
   Circle,
+  Clock,
   Loader2,
   XCircle,
 } from 'lucide-react';
@@ -117,6 +118,7 @@ const STATUS_BORDER: Record<NodeStatus, string> = {
   running: 'border-brand-electric animate-pulse',
   done: 'border-emerald-400',
   failed: 'border-red-400',
+  awaiting_approval: 'border-amber-400 animate-pulse',
 };
 
 const STATUS_ICON: Record<NodeStatus, React.ReactNode> = {
@@ -124,6 +126,7 @@ const STATUS_ICON: Record<NodeStatus, React.ReactNode> = {
   running: <Loader2 className="w-4 h-4 text-brand-electric animate-spin" />,
   done: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,
   failed: <XCircle className="w-4 h-4 text-red-400" />,
+  awaiting_approval: <Clock className="w-4 h-4 text-amber-400" />,
 };
 
 const STATUS_LABEL: Record<NodeStatus, string> = {
@@ -131,6 +134,7 @@ const STATUS_LABEL: Record<NodeStatus, string> = {
   running: 'Running\u2026',
   done: 'Done',
   failed: 'Failed',
+  awaiting_approval: 'Awaiting Approval',
 };
 
 // ── Custom Node Component ──

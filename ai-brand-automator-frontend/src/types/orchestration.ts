@@ -8,7 +8,7 @@
 // ── Agent-level progress reported by pipeline-orchestrator-svc ──
 
 export interface AgentProgress {
-  status: 'pending' | 'running' | 'done' | 'failed';
+  status: 'pending' | 'running' | 'done' | 'failed' | 'awaiting_approval';
   output?: Record<string, unknown>;
   started_at?: string;
   completed_at?: string;

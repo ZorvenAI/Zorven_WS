@@ -13,6 +13,7 @@ import type { AgentProgress, JobStatus } from '@/types/orchestration';
 import {
   CheckCircle2,
   Circle,
+  Clock,
   Loader2,
   XCircle,
   GitBranch,
@@ -33,6 +34,7 @@ const STATUS_ICON: Record<AgentProgress['status'], React.ReactNode> = {
   running: <Loader2 className="w-5 h-5 text-brand-electric animate-spin" />,
   done: <CheckCircle2 className="w-5 h-5 text-emerald-400" />,
   failed: <XCircle className="w-5 h-5 text-red-400" />,
+  awaiting_approval: <Clock className="w-5 h-5 text-amber-400" />,
 };
 
 const STATUS_LABEL: Record<AgentProgress['status'], string> = {
@@ -40,6 +42,7 @@ const STATUS_LABEL: Record<AgentProgress['status'], string> = {
   running: 'Running…',
   done: 'Done',
   failed: 'Failed',
+  awaiting_approval: 'Awaiting Approval',
 };
 
 function humanLabel(nodeId: string): string {
@@ -52,7 +55,7 @@ function calcPercent(progress: Record<string, AgentProgress>): number {
   const entries = Object.values(progress);
   if (entries.length === 0) return 0;
   const done = entries.filter(
-    (p) => p.status === 'done' || p.status === 'failed',
+    (p) => p.status === 'done' || p.status === 'failed' || p.status === 'awaiting_approval',
   ).length;
   return Math.round((done / entries.length) * 100);
 }
