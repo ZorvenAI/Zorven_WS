@@ -26,6 +26,11 @@ import {
   Users,
   Image,
   DollarSign,
+  ChevronDown,
+  ChevronRight,
+  Target,
+  Megaphone,
+  Layers,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { linkFromChat } from '@/lib/workspace';
@@ -7092,6 +7097,162 @@ function CampaignArchitectureSection({
   );
 }
 
+// ── Campaign Structure — collapsible hierarchy for published ad campaigns ──
+
+function CampaignStructure({
+  pubCampaign,
+  adSets,
+  adCount,
+}: {
+  pubCampaign: Record<string, unknown>;
+  adSets: Array<Record<string, unknown>>;
+  adCount: number;
+}) {
+  const [expandedAdSet, setExpandedAdSet] = useState<string | null>(null);
+  const [showCampaignId, setShowCampaignId] = useState(false);
+
+  const pubAdSets = (pubCampaign.ad_sets ?? []) as Array<Record<string, unknown>>;
+  const pubAds = (pubCampaign.ads ?? []) as Array<Record<string, unknown>>;
+  const adsPerAdSet = pubAdSets.length > 0 ? Math.ceil(pubAds.length / pubAdSets.length) : pubAds.length;
+
+  return (
+    <div className="space-y-3">
+      <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider">
+        Campaign Structure
+      </h4>
+
+      {/* Campaign row */}
+      <div className="rounded-lg border border-brand-silver/20 bg-white/[0.03] overflow-hidden">
+        <button
+          onClick={() => setShowCampaignId(!showCampaignId)}
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/[0.03] transition-colors text-left"
+        >
+          <Megaphone className="w-4 h-4 text-brand-electric shrink-0" />
+          <span className="text-xs font-medium text-brand-silver flex-1 truncate">
+            {(pubCampaign.campaign_name as string) ?? 'Campaign'}
+          </span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${
+            (pubCampaign.campaign_status as string) === 'ACTIVE'
+              ? 'bg-emerald-500/15 text-emerald-400'
+              : 'bg-amber-500/15 text-amber-400'
+          }`}>
+            {pubCampaign.campaign_status as string}
+          </span>
+          {showCampaignId ? (
+            <ChevronDown className="w-3.5 h-3.5 text-brand-silver/40 shrink-0" />
+          ) : (
+            <ChevronRight className="w-3.5 h-3.5 text-brand-silver/40 shrink-0" />
+          )}
+        </button>
+        {showCampaignId && (
+          <div className="px-3 pb-2.5 pt-0">
+            <code className="text-[10px] text-brand-silver/50 bg-white/[0.03] px-2 py-0.5 rounded block truncate">
+              ID: {pubCampaign.campaign_id as string}
+            </code>
+          </div>
+        )}
+      </div>
+
+      {/* Ad Sets — each expandable to show its details */}
+      <div className="space-y-1.5 ml-4 border-l border-brand-silver/10 pl-3">
+        {adSets.map((adSet, i) => {
+          const adSetKey = `adset-${i}`;
+          const isExpanded = expandedAdSet === adSetKey;
+          const adSetName = (adSet.ad_set_name as string) ?? `Ad Set ${i + 1}`;
+          const persona = adSet.persona as string | undefined;
+          const funnelStage = adSet.funnel_stage as string | undefined;
+          const dailyBudget = adSet.daily_budget_usd as number | undefined;
+          const targetingSummary = adSet.targeting_summary as string | undefined;
+          const creatives = (adSet.creatives ?? []) as Array<Record<string, unknown>>;
+          const pubAdSetId = pubAdSets[i]?.ad_set_id as string | undefined;
+
+          return (
+            <div key={adSetKey} className="rounded-lg border border-brand-silver/10 bg-white/[0.02] overflow-hidden">
+              <button
+                onClick={() => setExpandedAdSet(isExpanded ? null : adSetKey)}
+                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/[0.03] transition-colors text-left"
+              >
+                <Target className="w-3.5 h-3.5 text-amber-400/70 shrink-0" />
+                <span className="text-[11px] font-medium text-brand-silver flex-1 truncate">
+                  {adSetName}
+                </span>
+                {funnelStage && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-brand-electric/10 text-brand-electric/70 shrink-0">
+                    {funnelStage}
+                  </span>
+                )}
+                <span className="text-[10px] text-brand-silver/40 shrink-0">
+                  {creatives.length > 0 ? `${creatives.length} ads` : `~${adsPerAdSet} ads`}
+                </span>
+                {isExpanded ? (
+                  <ChevronDown className="w-3 h-3 text-brand-silver/40 shrink-0" />
+                ) : (
+                  <ChevronRight className="w-3 h-3 text-brand-silver/40 shrink-0" />
+                )}
+              </button>
+
+              {isExpanded && (
+                <div className="px-3 pb-2.5 space-y-2 border-t border-brand-silver/5">
+                  {/* Persona + targeting */}
+                  {persona && (
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <Users className="w-3 h-3 text-brand-silver/40" />
+                      <span className="text-[10px] text-brand-silver/60">
+                        {persona}
+                      </span>
+                    </div>
+                  )}
+                  {targetingSummary && (
+                    <p className="text-[10px] text-brand-silver/50 leading-relaxed">
+                      {targetingSummary}
+                    </p>
+                  )}
+                  {/* Budget */}
+                  {dailyBudget != null && (
+                    <div className="flex items-center gap-1.5">
+                      <DollarSign className="w-3 h-3 text-brand-silver/40" />
+                      <span className="text-[10px] text-brand-silver/60">
+                        ${dailyBudget.toFixed(2)}/day
+                      </span>
+                    </div>
+                  )}
+                  {/* Creatives */}
+                  {creatives.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-brand-silver/40 font-medium">Creatives:</span>
+                      {creatives.map((creative, ci) => (
+                        <div key={ci} className="flex items-center gap-1.5 ml-2">
+                          <Layers className="w-2.5 h-2.5 text-brand-silver/30" />
+                          <span className="text-[10px] text-brand-silver/50 truncate">
+                            {(creative.headline as string) ?? (creative.primary_text as string)?.slice(0, 60) ?? `Creative ${ci + 1}`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Meta Ad Set ID */}
+                  {pubAdSetId && (
+                    <code className="text-[9px] text-brand-silver/40 bg-white/[0.03] px-1.5 py-0.5 rounded block truncate mt-1">
+                      ID: {pubAdSetId}
+                    </code>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Summary footer */}
+      <div className="flex items-center gap-4 pt-1 text-[10px] text-brand-silver/40">
+        <span>{adSets.length} ad sets</span>
+        <span>{adCount} ads</span>
+        <span>{((pubCampaign.creative_ids ?? []) as Array<unknown>).length} creatives</span>
+      </div>
+    </div>
+  );
+}
+
 export default function ResultDashboard({
   resultData,
   manifestName,
@@ -7345,46 +7506,13 @@ export default function ResultDashboard({
           )}
         </div>
 
-        {/* Published entity IDs */}
+        {/* Campaign Structure — hierarchical breakdown */}
         {pubCampaign && (
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-brand-silver/60 uppercase tracking-wider">
-              Published Entities
-            </h4>
-            <div className="space-y-1.5">
-              {(pubCampaign.campaign_id as string) && (
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-brand-silver/40 w-24 shrink-0">Campaign</span>
-                  <code className="text-brand-silver/70 bg-white/[0.03] px-2 py-0.5 rounded text-[11px]">
-                    {pubCampaign.campaign_id as string}
-                  </code>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                    (pubCampaign.campaign_status as string) === 'ACTIVE'
-                      ? 'bg-emerald-500/15 text-emerald-400'
-                      : 'bg-amber-500/15 text-amber-400'
-                  }`}>
-                    {pubCampaign.campaign_status as string}
-                  </span>
-                </div>
-              )}
-              {((pubCampaign.ad_sets ?? []) as Array<Record<string, unknown>>).map((adSet, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs">
-                  <span className="text-brand-silver/40 w-24 shrink-0">Ad Set {i + 1}</span>
-                  <code className="text-brand-silver/70 bg-white/[0.03] px-2 py-0.5 rounded text-[11px]">
-                    {adSet.ad_set_id as string}
-                  </code>
-                </div>
-              ))}
-              {((pubCampaign.ads ?? []) as Array<Record<string, unknown>>).map((ad, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs">
-                  <span className="text-brand-silver/40 w-24 shrink-0">Ad {i + 1}</span>
-                  <code className="text-brand-silver/70 bg-white/[0.03] px-2 py-0.5 rounded text-[11px]">
-                    {ad.ad_id as string}
-                  </code>
-                </div>
-              ))}
-            </div>
-          </div>
+          <CampaignStructure
+            pubCampaign={pubCampaign}
+            adSets={adSets}
+            adCount={adCount}
+          />
         )}
 
         {/* Findings from the original execution */}
