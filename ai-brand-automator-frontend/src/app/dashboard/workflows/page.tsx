@@ -814,7 +814,8 @@ function WorkflowsPageInner() {
       <WorkspaceLayout
         forceRightOpen={
           effectiveQuickStatus?.status === 'completed' ||
-          effectiveQuickStatus?.status === 'failed'
+          effectiveQuickStatus?.status === 'failed' ||
+          effectiveQuickStatus?.status === 'awaiting_approval'
         }
         leftPanel={
           <WorkflowSidebar

@@ -245,7 +245,7 @@ export default function JobDetailPage({ params }: PageProps) {
               </div>
             )}
 
-            {/* Awaiting approval: 3-column (graph + log + approval panel) */}
+            {/* Awaiting approval: 3 separate columns (graph | log | approval) */}
             {isAwaitingApproval && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
                 <div className="lg:col-span-1">
@@ -260,13 +260,11 @@ export default function JobDetailPage({ params }: PageProps) {
                       jobStatus={job.status}
                     />
                   )}
-                  {logEntries.length > 0 && (
-                    <div className="mt-6">
-                      <LogConsole entries={logEntries} />
-                    </div>
-                  )}
                 </div>
-                <div className="lg:col-span-2">
+                <div className="lg:col-span-1">
+                  <LogConsole entries={logEntries} />
+                </div>
+                <div className="lg:col-span-1">
                   {approvalResultData ? (
                     <ResultDashboard
                       resultData={approvalResultData}
