@@ -139,12 +139,10 @@ export default function JobDetailPage({ params }: PageProps) {
     }
   }, [job, refresh]);
 
-  const isTerminal =
-    job?.status === 'completed' || job?.status === 'failed' || job?.status === 'awaiting_approval';
-  const canCancelJob =
-    canEdit &&
-    job &&
-    (job.status === 'queued' || job.status === 'running');
+  const isInFlight =
+    job?.status === 'queued' || job?.status === 'running';
+  const isAwaitingApproval = job?.status === 'awaiting_approval';
+  const canCancelJob = canEdit && job && isInFlight;
 
   return (
     <div className="min-h-screen bg-brand-midnight">
@@ -221,8 +219,12 @@ export default function JobDetailPage({ params }: PageProps) {
               )}
             </div>
 
-            {/* 2-column layout: Graph/Stepper (left) + Log Console (right) */}
-            {!isTerminal && (
+            {/* 2-column layout: Graph (left) + right panel */}
+            {/* Shown during in-flight (running/queued) AND awaiting_approval.
+                When awaiting_approval, the right panel switches from log to
+                the approval/results panel so the user sees the approval UI
+                appear without a jarring layout change. */}
+            {(isInFlight || isAwaitingApproval) && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
                 {/* Pipeline visualization — 2/3 width */}
                 <div className="lg:col-span-2">
@@ -233,23 +235,49 @@ export default function JobDetailPage({ params }: PageProps) {
                     />
                   ) : (
                     <ThoughtTrace
-                      progress={quickStatus?.progress ?? job.progress}
+                      progress={isInFlight ? (quickStatus?.progress ?? job.progress) : job.progress}
                       jobStatus={job.status}
-                      lastThought={quickStatus?.last_thought}
-                      progressPercent={quickStatus?.progress_percent}
+                      lastThought={isInFlight ? quickStatus?.last_thought : undefined}
+                      progressPercent={isInFlight ? quickStatus?.progress_percent : undefined}
                     />
                   )}
                 </div>
 
-                {/* Log console — 1/3 width */}
+                {/* Right panel — 1/3 width */}
                 <div className="lg:col-span-1">
-                  <LogConsole entries={logEntries} />
+                  {isAwaitingApproval ? (
+                    (job.result_data || quickStatus?.result_data) ? (
+                      <ResultDashboard
+                        resultData={job.result_data ?? quickStatus?.result_data ?? {}}
+                        manifestName={job.manifest_name}
+                        jobId={job.job_id}
+                        jobStatus={job.status}
+                        onApprovalComplete={refresh}
+                      />
+                    ) : (
+                      <div className="glass-card p-6 border-amber-400/30">
+                        <div className="flex items-center gap-3">
+                          <Clock className="w-5 h-5 text-amber-400" />
+                          <div>
+                            <h3 className="text-sm font-heading font-semibold text-white">
+                              Awaiting Your Approval
+                            </h3>
+                            <p className="text-xs text-brand-silver/60 mt-1">
+                              The campaign is ready for review. Loading approval details…
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  ) : (
+                    <LogConsole entries={logEntries} />
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Completed or awaiting approval: show graph summary + results */}
-            {(job.status === 'completed' || job.status === 'awaiting_approval') && (
+            {/* Completed: full-width graph summary + results */}
+            {job.status === 'completed' && (
               <div className="space-y-6">
                 {manifestData ? (
                   <PipelineGraph
@@ -263,29 +291,15 @@ export default function JobDetailPage({ params }: PageProps) {
                   />
                 )}
                 {logEntries.length > 0 && <LogConsole entries={logEntries} />}
-                {(job.result_data || quickStatus?.result_data) ? (
+                {job.result_data && (
                   <ResultDashboard
-                    resultData={job.result_data ?? quickStatus?.result_data ?? {}}
+                    resultData={job.result_data}
                     manifestName={job.manifest_name}
                     jobId={job.job_id}
                     jobStatus={job.status}
                     onApprovalComplete={refresh}
                   />
-                ) : job.status === 'awaiting_approval' ? (
-                  <div className="glass-card p-6 border-amber-400/30">
-                    <div className="flex items-center gap-3">
-                      <Clock className="w-5 h-5 text-amber-400" />
-                      <div>
-                        <h3 className="text-sm font-heading font-semibold text-white">
-                          Awaiting Your Approval
-                        </h3>
-                        <p className="text-xs text-brand-silver/60 mt-1">
-                          The campaign has been prepared and is ready for your review. Loading approval details…
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
+                )}
               </div>
             )}
 
