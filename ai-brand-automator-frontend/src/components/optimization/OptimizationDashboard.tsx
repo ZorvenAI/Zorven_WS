@@ -254,7 +254,47 @@ export default function OptimizationDashboard() {
       </div>
 
       {/* Recent actions */}
-      <RecentActionsList actions={actions} />
+      <RecentActionsList
+        actions={
+          selectedCampaign
+            ? [
+                {
+                  id: 0,
+                  campaign: 0,
+                  campaign_name: selectedCampaign.campaign_name,
+                  recommendation: null,
+                  action_id: `launch-${selectedCampaign.campaign_id}`,
+                  action_type: 'ACTIVATE',
+                  entity_type: 'campaign',
+                  entity_id:
+                    selectedCampaign.meta_campaign_id ||
+                    selectedCampaign.campaign_id,
+                  old_value: {},
+                  new_value: {
+                    status: 'active',
+                    daily_budget_usd: selectedCampaign.daily_budget_usd,
+                    ad_sets: selectedCampaign.ad_sets?.length ?? 0,
+                    ads: selectedCampaign.ads?.length ?? 0,
+                  },
+                  mode: 'manual',
+                  rationale: `Campaign "${selectedCampaign.campaign_name}" launched via Ad Publishing${
+                    selectedCampaign.sandbox_mode ? ' (sandbox)' : ''
+                  }. Daily budget $${Number(
+                    selectedCampaign.daily_budget_usd ?? 0
+                  ).toFixed(2)}, ${selectedCampaign.ad_sets?.length ?? 0} ad set(s), ${selectedCampaign.ads?.length ?? 0} ad(s).`,
+                  guardrails_applied: [],
+                  meta_api_response: {},
+                  verified: true,
+                  verification_result: {},
+                  executed_at:
+                    selectedCampaign.start_date ||
+                    selectedCampaign.created_at,
+                } as unknown as OptimizationAction,
+                ...actions,
+              ]
+            : actions
+        }
+      />
     </div>
   );
 }
