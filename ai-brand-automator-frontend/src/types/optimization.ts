@@ -30,15 +30,16 @@ export interface CampaignRegistry {
   objective: string;
   status: 'active' | 'paused' | 'completed' | 'archived';
   optimization_mode: 'manual' | 'autonomous';
-  target_cpa_usd: number | null;
-  target_roas: number | null;
-  daily_budget_usd: number;
-  lifetime_budget_usd: number | null;
+  // Django DecimalField is serialized as a string over the wire
+  target_cpa_usd: number | string | null;
+  target_roas: number | string | null;
+  daily_budget_usd: number | string;
+  lifetime_budget_usd: number | string | null;
   ad_sets: AdSetEntry[];
   ads: AdEntry[];
   start_date: string;
   end_date: string | null;
-  guardrail_config: Record<string, unknown>;
+  guardrail_config: Record<string, unknown> | null;
   source_job_id: string | null;
   brand_context_id: string;
   sandbox_mode: boolean;

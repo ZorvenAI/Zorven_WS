@@ -133,22 +133,22 @@ export default function OptimizationSettings({
           <div className="flex items-center gap-2 text-xs">
             <DollarSign className="w-3.5 h-3.5 text-brand-silver/40" />
             <span className="text-brand-silver">
-              Daily: ${campaign.daily_budget_usd.toFixed(2)}
+              Daily: ${Number(campaign.daily_budget_usd ?? 0).toFixed(2)}
             </span>
           </div>
-          {campaign.target_cpa_usd && (
+          {campaign.target_cpa_usd != null && (
             <div className="flex items-center gap-2 text-xs">
               <Target className="w-3.5 h-3.5 text-brand-silver/40" />
               <span className="text-brand-silver">
-                Target CPA: ${campaign.target_cpa_usd.toFixed(2)}
+                Target CPA: ${Number(campaign.target_cpa_usd).toFixed(2)}
               </span>
             </div>
           )}
-          {campaign.target_roas && (
+          {campaign.target_roas != null && (
             <div className="flex items-center gap-2 text-xs">
               <Target className="w-3.5 h-3.5 text-brand-silver/40" />
               <span className="text-brand-silver">
-                Target ROAS: {campaign.target_roas.toFixed(1)}x
+                Target ROAS: {Number(campaign.target_roas).toFixed(1)}x
               </span>
             </div>
           )}
