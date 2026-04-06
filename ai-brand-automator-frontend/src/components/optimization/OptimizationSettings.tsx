@@ -39,7 +39,7 @@ export default function OptimizationSettings({
     }
   };
 
-  const guardrailEntries = Object.entries(campaign.guardrail_config);
+  const guardrailEntries = Object.entries(campaign.guardrail_config ?? {});
 
   return (
     <div className="glass-card p-6 space-y-5">

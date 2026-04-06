@@ -80,7 +80,7 @@ function formatTimeRemaining(expiresAt: string): string {
 }
 
 function formatValues(values: Record<string, unknown>): string[] {
-  return Object.entries(values).map(([key, val]) => {
+  return Object.entries(values ?? {}).map(([key, val]) => {
     const label = key
       .replace(/_/g, ' ')
       .replace(/\b\w/g, (c) => c.toUpperCase());
@@ -175,7 +175,7 @@ export default function RecommendationCard({
             Projected Impact
           </p>
           <div className="flex flex-wrap gap-2">
-            {Object.entries(rec.projected_impact).map(([key, val]) => (
+            {Object.entries(rec.projected_impact ?? {}).map(([key, val]) => (
               <span
                 key={key}
                 className="text-xs bg-white/5 rounded px-2 py-1 text-brand-silver"
