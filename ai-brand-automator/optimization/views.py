@@ -251,6 +251,66 @@ class CampaignRegistryViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=True, methods=["post"], url_path="trigger-tick")
+    def trigger_tick(self, request, campaign_id=None):
+        """Manually trigger a COA optimization tick for this campaign.
+
+        Proxies to the campaign-optimization-agent-svc /v1/tick/trigger
+        endpoint using the service token. Used by the Optimization
+        Dashboard "Trigger Optimization Now" button so users do not have
+        to wait for the next scheduled Celery beat tick.
+        """
+        import httpx
+
+        campaign = self.get_object()
+
+        coa_url = getattr(settings, "COA_SERVICE_URL", "http://localhost:8044")
+        coa_token = getattr(settings, "COA_SERVICE_TOKEN", "")
+
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.post(
+                    f"{coa_url}/v1/tick/trigger",
+                    headers={
+                        "X-Service-Token": coa_token,
+                        "X-Tenant-ID": str(getattr(request.tenant, "id", "")),
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "campaign_id": str(campaign.campaign_id),
+                        "campaign_age_min_days": 0,
+                        "campaign_age_max_days": 9999,
+                    },
+                )
+                resp.raise_for_status()
+                return Response(
+                    {
+                        "triggered": True,
+                        "campaign_id": str(campaign.campaign_id),
+                        "coa_response": resp.json() if resp.content else {},
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "COA trigger failed (HTTP %d): %s",
+                exc.response.status_code,
+                exc.response.text[:500],
+            )
+            return Response(
+                {
+                    "triggered": False,
+                    "error": f"COA returned HTTP {exc.response.status_code}",
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        except Exception as exc:
+            logger.error("COA trigger failed: %s", exc)
+            return Response(
+                {"triggered": False, "error": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
     @action(detail=True, methods=["get"], url_path="actions")
     def actions(self, request, campaign_id=None):
         """List executed optimization actions for audit."""

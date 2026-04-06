@@ -92,6 +92,22 @@ export async function fetchActions(
   return Array.isArray(data) ? data : data.results ?? [];
 }
 
+export async function triggerOptimizationTick(
+  campaignId: string
+): Promise<{ triggered: boolean; coa_response?: unknown; error?: string }> {
+  const response = await apiClient.post(
+    `${BASE}/campaigns/${campaignId}/trigger-tick/`,
+    {}
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      body.error || `Failed to trigger tick (HTTP ${response.status})`
+    );
+  }
+  return response.json();
+}
+
 export async function updateCampaignSettings(
   campaignId: string,
   settings: CampaignSettings

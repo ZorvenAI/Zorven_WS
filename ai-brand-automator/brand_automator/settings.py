@@ -1002,6 +1002,11 @@ ORCHESTRATOR_SERVICE_TOKEN = config(
 ORCHESTRATOR_CALLBACK_TOKEN = config(
     "ORCHESTRATOR_CALLBACK_TOKEN", default="dev-callback-token"
 )
+# Continuous Optimization Agent (COA) — used to proxy manual tick triggers
+COA_SERVICE_URL = config("COA_SERVICE_URL", default="http://localhost:8044")
+COA_SERVICE_TOKEN = config(
+    "COA_SERVICE_TOKEN", default="dev-service-token"
+)
 # HTTP timeout (seconds) when dispatching jobs to the orchestrator
 ORCHESTRATOR_TIMEOUT = config("ORCHESTRATOR_TIMEOUT", default=30, cast=int)
 # Backend URL for orchestrator callbacks (used to build callback_url in dispatch)
