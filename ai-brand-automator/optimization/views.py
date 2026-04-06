@@ -396,6 +396,73 @@ def optimization_tick_callback(request):
     )
 
 
+def _verify_service_or_callback_token(request) -> bool:
+    """Accept either X-Service-Token or X-Callback-Token for s2s auth."""
+    service_token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    callback_token = request.META.get("HTTP_X_CALLBACK_TOKEN", "")
+    expected_service = getattr(settings, "ORCHESTRATOR_SERVICE_TOKEN", "")
+    expected_callback = getattr(settings, "ORCHESTRATOR_CALLBACK_TOKEN", "")
+    return bool(
+        (expected_service and service_token == expected_service)
+        or (expected_callback and callback_token == expected_callback)
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def list_active_campaigns_internal(request):
+    """
+    Service-to-service campaign listing endpoint for the Continuous
+    Optimization Agent (COA-3.4). Returns active campaigns with the
+    fields COA needs for tick processing.
+
+    Authenticated via X-Service-Token (or X-Callback-Token).
+    Filtering: ?status=active&tenant_id=<uuid>
+    """
+    if not _verify_service_or_callback_token(request):
+        return Response(
+            {"error": "Invalid token"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    qs = CampaignRegistry.objects.select_related("company", "tenant")
+    status_filter = request.query_params.get("status", "active")
+    if status_filter and status_filter != "all":
+        qs = qs.filter(status=status_filter)
+    tenant_id = request.query_params.get("tenant_id", "")
+    if tenant_id:
+        qs = qs.filter(tenant_id=tenant_id)
+
+    results = []
+    for c in qs:
+        results.append(
+            {
+                "campaign_id": str(c.campaign_id),
+                "tenant_id": str(c.tenant_id) if c.tenant_id else "",
+                "meta_campaign_id": c.meta_campaign_id,
+                "meta_ad_account_id": c.meta_ad_account_id,
+                "campaign_name": c.campaign_name,
+                "objective": c.objective,
+                "status": c.status,
+                "optimization_mode": c.optimization_mode,
+                "daily_budget": float(c.daily_budget_usd or 0),
+                "target_cpa_usd": float(c.target_cpa_usd)
+                if c.target_cpa_usd is not None
+                else None,
+                "target_roas": float(c.target_roas)
+                if c.target_roas is not None
+                else None,
+                "ad_sets": c.ad_sets,
+                "ads": c.ads,
+                "sandbox_mode": c.sandbox_mode,
+                "active_ad_set_count": len(c.ad_sets or []),
+                "created_at": c.created_at.isoformat() if c.created_at else "",
+            }
+        )
+
+    return Response({"results": results}, status=status.HTTP_200_OK)
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register_campaign(request):
@@ -423,16 +490,7 @@ def register_campaign(request):
             "optimization_mode": "manual"
         }
     """
-    # Accept either X-Service-Token or X-Callback-Token (different
-    # service-to-service callers may use different conventions).
-    service_token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
-    callback_token = request.META.get("HTTP_X_CALLBACK_TOKEN", "")
-    expected_service = getattr(settings, "ORCHESTRATOR_SERVICE_TOKEN", "")
-    expected_callback = getattr(settings, "ORCHESTRATOR_CALLBACK_TOKEN", "")
-    valid = (expected_service and service_token == expected_service) or (
-        expected_callback and callback_token == expected_callback
-    )
-    if not valid:
+    if not _verify_service_or_callback_token(request):
         logger.warning("Invalid token for campaign registration")
         return Response(
             {"error": "Invalid token"},

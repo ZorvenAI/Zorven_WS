@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     # Django backend (campaign discovery + callbacks)
     BACKEND_URL: str = "http://localhost:8001"
     BACKEND_SERVICE_TOKEN: str = "dev-service-token"
+    # Callback token for endpoints authenticated via X-Callback-Token
+    # (e.g. /api/v1/optimization/callback/tick-result/). Should match
+    # Django's ORCHESTRATOR_CALLBACK_TOKEN.
+    CALLBACK_TOKEN: str = "dev-callback-token"
 
     @property
     def backend_url(self) -> str:

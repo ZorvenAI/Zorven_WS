@@ -1,9 +1,12 @@
-"""HTTP client for callbacks to Django backend.
+"""HTTP client for service-to-service callbacks to the Django backend.
 
-Methods:
-- post_tick_result: POST tick results to Django
-- update_campaign_status: PATCH campaign registry
-- update_recommendation_status: PATCH recommendation status
+All endpoints used here are authenticated by service tokens (no JWT):
+- /api/v1/optimization/callback/tick-result/  →  X-Callback-Token
+- /api/v1/optimization/register/              →  X-Service-Token (or X-Callback-Token)
+
+DRF ViewSet endpoints (e.g. /campaigns/{id}/, /recommendations/{id}/) require
+JWT auth and MUST NOT be called from this client. Recommendation/action/entity
+updates are bundled into the tick-result callback payload instead.
 """
 
 import logging
@@ -23,10 +26,24 @@ class CallbackClient:
 
     def __init__(self):
         self._base_url = settings.backend_url
-        self._headers = {
+
+    def _service_headers(self, tenant_id: str = "") -> dict[str, str]:
+        headers = {
             "X-Service-Token": settings.BACKEND_SERVICE_TOKEN,
             "Content-Type": "application/json",
         }
+        if tenant_id:
+            headers["X-Tenant-ID"] = tenant_id
+        return headers
+
+    def _callback_headers(self, tenant_id: str = "") -> dict[str, str]:
+        headers = {
+            "X-Callback-Token": settings.CALLBACK_TOKEN,
+            "Content-Type": "application/json",
+        }
+        if tenant_id:
+            headers["X-Tenant-ID"] = tenant_id
+        return headers
 
     async def post_tick_result(
         self,
@@ -36,28 +53,34 @@ class CallbackClient:
     ) -> dict[str, Any]:
         """POST tick results to Django callback endpoint.
 
-        Args:
-            tenant_id: Tenant identifier.
-            campaign_id: Campaign identifier.
-            tick_results: Full tick results payload.
-
-        Returns:
-            Response data from Django, or error dict.
+        Payload is flattened to match TickResultCallbackSerializer:
+        tick_id, tenant_id, campaign_id, mode, performance, recommendations,
+        actions, entity_updates are top-level fields.
         """
-        url = (
-            f"{self._base_url}/api/v1/optimization"
-            f"/callback/tick-result/"
-        )
-        headers = {**self._headers, "X-Tenant-ID": tenant_id}
-        payload = {
+        url = f"{self._base_url}/api/v1/optimization/callback/tick-result/"
+
+        payload: dict[str, Any] = {
             "tenant_id": tenant_id,
             "campaign_id": campaign_id,
-            "tick_results": tick_results,
+            "tick_id": tick_results.get("tick_id", ""),
+            "mode": tick_results.get("mode", "manual"),
+            "campaigns_processed": tick_results.get("campaigns_processed", 0),
+            "recommendations_generated": tick_results.get(
+                "recommendations_generated", 0
+            ),
+            "auto_actions_executed": tick_results.get("auto_actions_executed", 0),
+            "performance": tick_results.get("performance", {}),
+            "recommendations": tick_results.get("recommendations", []),
+            "actions": tick_results.get("actions", []),
+            "entity_updates": tick_results.get("entity_updates", {}),
         }
+
         try:
             async with httpx.AsyncClient(timeout=TIMEOUT) as client:
                 response = await client.post(
-                    url, json=payload, headers=headers
+                    url,
+                    json=payload,
+                    headers=self._callback_headers(tenant_id),
                 )
                 response.raise_for_status()
                 return response.json()
@@ -72,88 +95,58 @@ class CallbackClient:
             logger.error("Tick result callback failed: %s", exc)
             return {"error": str(exc)}
 
-    async def update_campaign_status(
+    async def register_campaign_for_optimization(
         self,
-        campaign_id: str,
-        status: str,
+        tenant_id: str,
+        campaign_id: str = "",
+        meta_campaign_id: str = "",
+        campaign_name: str = "",
+        meta_ad_account_id: str = "",
+        objective: str = "",
+        daily_budget_usd: float = 0.0,
         ad_sets: list[dict[str, Any]] | None = None,
         ads: list[dict[str, Any]] | None = None,
+        sandbox_mode: bool = True,
+        optimization_mode: str = "manual",
+        source_job_id: str = "",
+        company_id: int | None = None,
     ) -> dict[str, Any]:
-        """PATCH campaign registry in Django.
+        """Register a published campaign for continuous optimization.
 
-        Args:
-            campaign_id: Campaign identifier.
-            status: New campaign status.
-            ad_sets: Updated ad set data.
-            ads: Updated ad data.
-
-        Returns:
-            Response data from Django, or error dict.
+        Calls the service-auth endpoint POST /api/v1/optimization/register/.
         """
-        url = (
-            f"{self._base_url}/api/v1/optimization"
-            f"/campaigns/{campaign_id}/"
-        )
-        payload: dict[str, Any] = {"status": status}
-        if ad_sets is not None:
-            payload["ad_sets"] = ad_sets
-        if ads is not None:
-            payload["ads"] = ads
+        url = f"{self._base_url}/api/v1/optimization/register/"
+        payload: dict[str, Any] = {
+            "tenant_id": tenant_id,
+            "company_id": company_id,
+            "meta_campaign_id": meta_campaign_id or campaign_id,
+            "meta_ad_account_id": meta_ad_account_id,
+            "campaign_name": campaign_name,
+            "objective": objective,
+            "status": "active",
+            "optimization_mode": optimization_mode,
+            "daily_budget_usd": daily_budget_usd,
+            "ad_sets": ad_sets or [],
+            "ads": ads or [],
+            "source_job_id": source_job_id or None,
+            "sandbox_mode": sandbox_mode,
+        }
         try:
             async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-                response = await client.patch(
-                    url, json=payload, headers=self._headers
+                response = await client.post(
+                    url,
+                    json=payload,
+                    headers=self._service_headers(tenant_id),
                 )
                 response.raise_for_status()
                 return response.json()
         except httpx.HTTPStatusError as exc:
             logger.error(
-                "Campaign status update failed (HTTP %d): %s",
+                "Campaign registration failed (HTTP %d): %s",
                 exc.response.status_code,
                 exc.response.text[:500],
             )
             return {"error": str(exc), "status_code": exc.response.status_code}
         except Exception as exc:
-            logger.error("Campaign status update failed: %s", exc)
-            return {"error": str(exc)}
-
-    async def update_recommendation_status(
-        self,
-        recommendation_id: str,
-        status: str,
-        execution_result: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """PATCH recommendation status in Django.
-
-        Args:
-            recommendation_id: Recommendation identifier.
-            status: New recommendation status.
-            execution_result: Execution result data.
-
-        Returns:
-            Response data from Django, or error dict.
-        """
-        url = (
-            f"{self._base_url}/api/v1/optimization"
-            f"/recommendations/{recommendation_id}/"
-        )
-        payload: dict[str, Any] = {"status": status}
-        if execution_result is not None:
-            payload["execution_result"] = execution_result
-        try:
-            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-                response = await client.patch(
-                    url, json=payload, headers=self._headers
-                )
-                response.raise_for_status()
-                return response.json()
-        except httpx.HTTPStatusError as exc:
-            logger.error(
-                "Recommendation status update failed (HTTP %d): %s",
-                exc.response.status_code,
-                exc.response.text[:500],
-            )
-            return {"error": str(exc), "status_code": exc.response.status_code}
-        except Exception as exc:
-            logger.error("Recommendation status update failed: %s", exc)
+            logger.error("Campaign registration failed: %s", exc)
             return {"error": str(exc)}
