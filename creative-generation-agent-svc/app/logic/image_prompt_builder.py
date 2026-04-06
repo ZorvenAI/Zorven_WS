@@ -154,6 +154,8 @@ class ImagePromptBuilder:
         )
 
         personas = creative_context.get("audience_personas", [])
+        if not isinstance(personas, list):
+            personas = []
         persona_map: dict[str, dict[str, Any]] = {}
         for p in personas:
             if isinstance(p, dict):

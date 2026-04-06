@@ -2,6 +2,7 @@
 
 import logging
 import time
+import traceback
 import uuid
 from typing import Any
 
@@ -224,10 +225,20 @@ class CGAExecutor:
 
         except Exception as exc:
             logger.error("CGA analysis failed: %s", exc, exc_info=True)
+            tb = traceback.extract_tb(exc.__traceback__)
+            last = tb[-1] if tb else None
+            location = (
+                f"{last.filename.split('/')[-1]}:{last.lineno} in {last.name}"
+                if last
+                else "unknown"
+            )
             result = _empty_result(
                 prompt,
                 start_time,
-                findings=[f"Analysis failed: {exc}"],
+                findings=[
+                    f"Analysis failed: {type(exc).__name__}: {exc} "
+                    f"(at {location})"
+                ],
             )
 
         finally:
