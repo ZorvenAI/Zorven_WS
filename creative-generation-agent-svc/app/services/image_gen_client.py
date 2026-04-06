@@ -222,22 +222,62 @@ class NanoBanana2Adapter(ImageGenAdapter):
             f"Generate a high-quality {ratio_str} aspect ratio "
             f"advertising image: {prompt}"
         )
-        response = await asyncio.to_thread(
-            self._client.models.generate_content,
-            model=settings.IMAGE_GEN_MODEL,
-            contents=[enhanced_prompt],
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"],
-            ),
+        logger.info(
+            "Gemini image gen: calling generate_content model=%s ratio=%s "
+            "prompt_len=%d",
+            settings.IMAGE_GEN_MODEL,
+            ratio_str,
+            len(enhanced_prompt),
         )
+        try:
+            response = await asyncio.to_thread(
+                self._client.models.generate_content,
+                model=settings.IMAGE_GEN_MODEL,
+                contents=[enhanced_prompt],
+                config=types.GenerateContentConfig(
+                    response_modalities=["IMAGE", "TEXT"],
+                ),
+            )
+        except Exception as exc:
+            logger.error(
+                "Gemini image gen: generate_content raised %s: %s",
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
+            raise
         image_data = b""
         text_desc = ""
+        # Surface prompt feedback / safety blocks if present
+        prompt_feedback = getattr(response, "prompt_feedback", None)
+        if prompt_feedback:
+            logger.warning(
+                "Gemini image gen: prompt_feedback=%s", prompt_feedback
+            )
         if not response.candidates:
-            logger.warning("Gemini image gen: no candidates in response")
+            logger.warning(
+                "Gemini image gen: no candidates in response "
+                "(prompt_feedback=%s)",
+                prompt_feedback,
+            )
             return b"", ""
-        parts = response.candidates[0].content.parts
+        candidate = response.candidates[0]
+        finish_reason = getattr(candidate, "finish_reason", None)
+        safety_ratings = getattr(candidate, "safety_ratings", None)
+        if finish_reason and str(finish_reason) not in ("FinishReason.STOP", "STOP", "1"):
+            logger.warning(
+                "Gemini image gen: non-STOP finish_reason=%s safety=%s",
+                finish_reason,
+                safety_ratings,
+            )
+        parts = candidate.content.parts if candidate.content else None
         if not parts:
-            logger.warning("Gemini image gen: no parts in response")
+            logger.warning(
+                "Gemini image gen: no parts in response "
+                "(finish_reason=%s safety=%s)",
+                finish_reason,
+                safety_ratings,
+            )
             return b"", ""
         for part in parts:
             if hasattr(part, "inline_data") and part.inline_data:

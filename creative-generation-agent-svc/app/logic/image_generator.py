@@ -82,11 +82,19 @@ class ImageGenerator:
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        failure_reasons: list[str] = []
         for result in results:
             if isinstance(result, Exception):
-                logger.warning("Image generation task failed: %s", result)
+                logger.warning(
+                    "Image generation task failed: %s: %s",
+                    type(result).__name__,
+                    result,
+                    exc_info=result,
+                )
+                failure_reasons.append(f"{type(result).__name__}: {result}")
                 failed_count += 1
             elif result is None:
+                failure_reasons.append("returned None (no image data)")
                 failed_count += 1
             else:
                 generated_images.append(result)
@@ -105,6 +113,7 @@ class ImageGenerator:
             "total_images": len(generated_images),
             "total_cost_usd": round(total_cost, 4),
             "failed_count": failed_count,
+            "failure_reasons": failure_reasons[:10],
         }
 
     async def _generate_single(
