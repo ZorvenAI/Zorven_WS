@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Activity } from 'lucide-react';
+import { Activity, Zap } from 'lucide-react';
 import type {
   CampaignRegistry,
   OptimizationRecommendation,
@@ -11,6 +11,7 @@ import {
   fetchCampaigns,
   fetchRecommendations,
   fetchActions,
+  triggerOptimizationTick,
 } from '@/lib/optimization';
 import CampaignSelector from './CampaignSelector';
 import CampaignMetricsCard from './CampaignMetricsCard';
@@ -32,6 +33,8 @@ export default function OptimizationDashboard() {
   const [actions, setActions] = useState<OptimizationAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [triggering, setTriggering] = useState(false);
+  const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedCampaign = campaigns.find(
@@ -115,6 +118,26 @@ export default function OptimizationDashboard() {
     loadCampaigns();
   };
 
+  const handleTriggerTick = async () => {
+    if (!selectedCampaignId || triggering) return;
+    setTriggering(true);
+    setTriggerMessage(null);
+    try {
+      await triggerOptimizationTick(selectedCampaignId);
+      setTriggerMessage('Optimization tick triggered. Refreshing...');
+      setTimeout(() => {
+        loadCampaignData();
+        setTriggerMessage(null);
+      }, 3000);
+    } catch (err) {
+      setTriggerMessage(
+        err instanceof Error ? err.message : 'Failed to trigger tick'
+      );
+    } finally {
+      setTriggering(false);
+    }
+  };
+
   const handleSettingsUpdate = (updatedCampaign: CampaignRegistry) => {
     setCampaigns((prev) =>
       prev.map((c) =>
@@ -155,6 +178,31 @@ export default function OptimizationDashboard() {
         onChange={handleCampaignChange}
         loading={loading}
       />
+
+      {/* Trigger tick button */}
+      {selectedCampaign && (
+        <div className="flex items-center justify-between glass-card p-4">
+          <div>
+            <p className="text-sm text-white font-medium">
+              Manual Optimization
+            </p>
+            <p className="text-xs text-brand-silver">
+              Run an optimization tick now instead of waiting for the next scheduled run.
+            </p>
+            {triggerMessage && (
+              <p className="text-xs text-brand-electric mt-1">{triggerMessage}</p>
+            )}
+          </div>
+          <button
+            onClick={handleTriggerTick}
+            disabled={triggering}
+            className="btn-primary flex items-center gap-2 disabled:opacity-50"
+          >
+            <Zap className="h-4 w-4" />
+            {triggering ? 'Triggering...' : 'Trigger Optimization Now'}
+          </button>
+        </div>
+      )}
 
       {/* Metrics cards */}
       {selectedCampaign && (
