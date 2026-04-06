@@ -2,7 +2,10 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "rag_index/Dockerfile"
+    "dockerfilePath": "rag_index/Dockerfile",
+    "watchPatterns": [
+      "ai-brand-automator/rag_index/**"
+    ]
   },
   "deploy": {
     "startCommand": "python manage.py runserver 0.0.0.0:$PORT",

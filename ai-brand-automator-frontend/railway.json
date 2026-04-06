@@ -5,7 +5,10 @@
     "dockerfilePath": "Dockerfile",
     "buildArgs": {
       "NEXT_PUBLIC_API_URL": "https://previsionws-production.up.railway.app"
-    }
+    },
+    "watchPatterns": [
+      "ai-brand-automator-frontend/**"
+    ]
   },
   "deploy": {
     "restartPolicyType": "ON_FAILURE",
