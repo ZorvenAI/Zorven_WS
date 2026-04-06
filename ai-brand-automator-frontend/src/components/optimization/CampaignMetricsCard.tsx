@@ -26,27 +26,32 @@ export default function CampaignMetricsCard({
 }: CampaignMetricsCardProps) {
   const iconCls = 'w-5 h-5';
 
+  // Django serializes DecimalField as strings — coerce defensively.
+  const toNum = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = typeof v === 'number' ? v : Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const cpa = toNum(campaign.target_cpa_usd);
+  const roas = toNum(campaign.target_roas);
+  const daily = toNum(campaign.daily_budget_usd) ?? 0;
+  const lifetime = toNum(campaign.lifetime_budget_usd);
+  const ageDays = toNum(campaign.age_days) ?? 0;
+
   const metrics: MetricCardData[] = [
     {
       label: 'CPA',
-      value: campaign.target_cpa_usd
-        ? `$${campaign.target_cpa_usd.toFixed(2)}`
-        : '--',
-      target: campaign.target_cpa_usd
-        ? `Target: $${campaign.target_cpa_usd.toFixed(2)}`
-        : null,
+      value: cpa !== null ? `$${cpa.toFixed(2)}` : '--',
+      target: cpa !== null ? `Target: $${cpa.toFixed(2)}` : null,
       icon: <DollarSign className={iconCls} />,
       status: 'neutral',
       progress: null,
     },
     {
       label: 'ROAS',
-      value: campaign.target_roas
-        ? `${campaign.target_roas.toFixed(1)}x`
-        : '--',
-      target: campaign.target_roas
-        ? `Target: ${campaign.target_roas.toFixed(1)}x`
-        : null,
+      value: roas !== null ? `${roas.toFixed(1)}x` : '--',
+      target: roas !== null ? `Target: ${roas.toFixed(1)}x` : null,
       icon: <TrendingUp className={iconCls} />,
       status: 'neutral',
       progress: null,
@@ -61,19 +66,17 @@ export default function CampaignMetricsCard({
     },
     {
       label: 'Daily Spend',
-      value: `$${campaign.daily_budget_usd.toFixed(2)}`,
-      target: campaign.lifetime_budget_usd
-        ? `Lifetime: $${campaign.lifetime_budget_usd.toFixed(0)}`
-        : `Daily budget`,
+      value: `$${daily.toFixed(2)}`,
+      target:
+        lifetime !== null
+          ? `Lifetime: $${lifetime.toFixed(0)}`
+          : `Daily budget`,
       icon: <Wallet className={iconCls} />,
       status: 'neutral',
-      progress: campaign.lifetime_budget_usd
-        ? Math.min(
-            (campaign.daily_budget_usd * campaign.age_days) /
-              campaign.lifetime_budget_usd,
-            1
-          ) * 100
-        : null,
+      progress:
+        lifetime && lifetime > 0
+          ? Math.min((daily * ageDays) / lifetime, 1) * 100
+          : null,
     },
   ];
 
