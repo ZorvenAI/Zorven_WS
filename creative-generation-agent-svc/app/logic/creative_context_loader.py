@@ -79,7 +79,14 @@ class CreativeContextLoader:
         if not ad_sets:
             ad_sets = caa_context.get("ad_sets", [])
 
+        # Defensive: upstream CAA may return a malformed blueprint where
+        # ad_sets is an int, dict, or other non-iterable. Coerce to list.
+        if not isinstance(ad_sets, list):
+            ad_sets = []
+
         for ad_set in ad_sets:
+            if not isinstance(ad_set, dict):
+                continue
             brief: dict[str, Any] = {
                 # Prefer CAA-style keys, fall back to blueprint-style keys
                 "ad_set_name": ad_set.get("ad_set_name") or ad_set.get("name", ""),
