@@ -34,7 +34,11 @@ export default function OptimizationDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState(false);
-  const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
+  const [triggerResult, setTriggerResult] = useState<{
+    kind: 'info' | 'skipped' | 'completed' | 'error';
+    title: string;
+    reasons?: string[];
+  } | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedCampaign = campaigns.find(
@@ -121,40 +125,39 @@ export default function OptimizationDashboard() {
   const handleTriggerTick = async () => {
     if (!selectedCampaignId || triggering) return;
     setTriggering(true);
-    setTriggerMessage(null);
+    setTriggerResult(null);
     try {
       const result = await triggerOptimizationTick(selectedCampaignId);
-      const coa = (result?.coa_response ?? {}) as {
-        status?: string;
-        campaigns_processed?: number;
-        recommendations_generated?: number;
-        actions_executed?: number;
-        campaign_results?: Array<{
-          campaign_id?: string;
-          status?: string;
-          reasons?: string[];
-        }>;
-      };
+      const coa = result?.coa_response ?? {};
       const results = coa.campaign_results ?? [];
-      const mine = results.find((r) => r.campaign_id === selectedCampaignId);
+      const mine =
+        results.find((r) => r.campaign_id === selectedCampaignId) ??
+        results[0];
       if (mine?.status === 'skipped') {
-        setTriggerMessage(
-          `Skipped: ${(mine.reasons ?? []).join('; ') || 'no reason given'}`
-        );
+        setTriggerResult({
+          kind: 'skipped',
+          title: 'Campaign skipped by guardrails',
+          reasons: (mine.reasons ?? []).filter(Boolean),
+        });
       } else if (coa.status === 'pending') {
-        setTriggerMessage('Tick is running in the background...');
+        setTriggerResult({
+          kind: 'info',
+          title: 'Tick is running in the background...',
+        });
       } else {
-        setTriggerMessage(
-          `Tick completed: ${coa.recommendations_generated ?? 0} recommendations, ${coa.actions_executed ?? 0} actions`
-        );
+        setTriggerResult({
+          kind: 'completed',
+          title: `Tick completed: ${coa.recommendations_generated ?? 0} recommendations, ${coa.actions_executed ?? 0} actions`,
+        });
       }
       setTimeout(() => {
         loadCampaignData();
       }, 2000);
     } catch (err) {
-      setTriggerMessage(
-        err instanceof Error ? err.message : 'Failed to trigger tick'
-      );
+      setTriggerResult({
+        kind: 'error',
+        title: err instanceof Error ? err.message : 'Failed to trigger tick',
+      });
     } finally {
       setTriggering(false);
     }
@@ -203,26 +206,49 @@ export default function OptimizationDashboard() {
 
       {/* Trigger tick button */}
       {selectedCampaign && (
-        <div className="flex items-center justify-between glass-card p-4">
-          <div>
-            <p className="text-sm text-white font-medium">
-              Manual Optimization
-            </p>
-            <p className="text-xs text-brand-silver">
-              Run an optimization tick now instead of waiting for the next scheduled run.
-            </p>
-            {triggerMessage && (
-              <p className="text-xs text-brand-electric mt-1">{triggerMessage}</p>
-            )}
+        <div className="glass-card p-4 space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-white font-medium">
+                Manual Optimization
+              </p>
+              <p className="text-xs text-brand-silver">
+                Run an optimization tick now instead of waiting for the next scheduled run.
+              </p>
+            </div>
+            <button
+              onClick={handleTriggerTick}
+              disabled={triggering}
+              className="btn-primary flex items-center gap-2 disabled:opacity-50"
+            >
+              <Zap className="h-4 w-4" />
+              {triggering ? 'Triggering...' : 'Trigger Optimization Now'}
+            </button>
           </div>
-          <button
-            onClick={handleTriggerTick}
-            disabled={triggering}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50"
-          >
-            <Zap className="h-4 w-4" />
-            {triggering ? 'Triggering...' : 'Trigger Optimization Now'}
-          </button>
+          {triggerResult && (
+            <div
+              className={`rounded-md border p-3 text-xs ${
+                triggerResult.kind === 'skipped'
+                  ? 'border-amber-400/30 bg-amber-400/10 text-amber-200'
+                  : triggerResult.kind === 'completed'
+                  ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
+                  : triggerResult.kind === 'error'
+                  ? 'border-red-400/30 bg-red-400/10 text-red-200'
+                  : 'border-brand-electric/30 bg-brand-electric/10 text-brand-electric'
+              }`}
+            >
+              <p className="font-medium">{triggerResult.title}</p>
+              {triggerResult.reasons && triggerResult.reasons.length > 0 && (
+                <ul className="mt-2 list-disc list-inside space-y-1 text-amber-100/90">
+                  {triggerResult.reasons.map((r, i) => (
+                    <li key={i} className="break-words">
+                      {r}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
       )}
 
