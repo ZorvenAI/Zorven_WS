@@ -187,13 +187,13 @@ export default function OptimizationSettings({
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white/5 rounded-lg p-3 text-center">
             <p className="text-lg font-heading font-bold text-white">
-              {campaign.ad_sets.length}
+              {campaign.ad_sets?.length ?? 0}
             </p>
             <p className="text-xs text-brand-silver/60">Ad Sets</p>
           </div>
           <div className="bg-white/5 rounded-lg p-3 text-center">
             <p className="text-lg font-heading font-bold text-white">
-              {campaign.ads.length}
+              {campaign.ads?.length ?? 0}
             </p>
             <p className="text-xs text-brand-silver/60">Ads</p>
           </div>
