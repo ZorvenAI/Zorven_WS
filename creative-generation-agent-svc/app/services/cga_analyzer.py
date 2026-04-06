@@ -242,9 +242,29 @@ class CGAAnalyzer:
                 failed_count = gen_result.get("failed_count", 0)
 
                 if failed_count > 0:
+                    failure_reasons = gen_result.get("failure_reasons", [])
+                    reasons_str = (
+                        "; ".join(failure_reasons)
+                        if failure_reasons
+                        else "see logs"
+                    )
                     findings.append(
                         f"Image generation: {failed_count} images failed "
-                        f"out of {total_images + failed_count} attempted"
+                        f"out of {total_images + failed_count} attempted. "
+                        f"Reasons: {reasons_str}"
+                    )
+                if total_images == 0 and failed_count > 0:
+                    image_gen_failed = True
+                    first_reason = (
+                        gen_result.get("failure_reasons", ["unknown"])[0]
+                        if gen_result.get("failure_reasons")
+                        else "unknown"
+                    )
+                    findings.append(
+                        f"CRITICAL: Image generation produced 0 images "
+                        f"({failed_count} attempts failed). "
+                        f"First reason: {first_reason}. "
+                        "Creative package will contain copy only."
                     )
 
                 await self._events.emit(
@@ -257,9 +277,15 @@ class CGAAnalyzer:
                 )
             except Exception as exc:
                 image_gen_failed = True
-                logger.error("Image generation failed entirely: %s", exc)
+                logger.error(
+                    "Image generation failed entirely: %s: %s",
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
+                )
                 findings.append(
-                    f"Image generation failed: {exc}. "
+                    f"CRITICAL: Image generation failed entirely. "
+                    f"{type(exc).__name__}: {exc}. "
                     "Creative package will contain copy only."
                 )
                 await self._events.emit(

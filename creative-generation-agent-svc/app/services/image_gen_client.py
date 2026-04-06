@@ -19,6 +19,26 @@ logger = logging.getLogger(__name__)
 # Nano Banana 2 cost estimate per image
 _COST_PER_IMAGE_USD = 0.065
 
+# google-genai uses both enum names ("STOP") and string-formatted enum reprs
+# ("FinishReason.STOP"). Some SDK versions also serialize enums as their
+# integer value, where 1 == STOP per the proto definition.
+_STOP_FINISH_REASON_TOKENS = frozenset(
+    {"STOP", "FINISH_REASON_STOP", "FinishReason.STOP", "1"}
+)
+
+
+def _is_stop_finish_reason(finish_reason: Any) -> bool:
+    """True if the Gemini finish_reason represents a normal STOP.
+
+    Tolerates enum, string, or integer representations across google-genai
+    SDK versions. Falls back to .name attribute when present.
+    """
+    name = getattr(finish_reason, "name", None)
+    if name:
+        return name == "STOP"
+    return str(finish_reason) in _STOP_FINISH_REASON_TOKENS
+
+
 # Supported aspect ratios for Meta Ads
 ASPECT_RATIOS = {
     "1:1": "1:1",  # Feed (1080×1080)
@@ -222,22 +242,64 @@ class NanoBanana2Adapter(ImageGenAdapter):
             f"Generate a high-quality {ratio_str} aspect ratio "
             f"advertising image: {prompt}"
         )
-        response = await asyncio.to_thread(
-            self._client.models.generate_content,
-            model=settings.IMAGE_GEN_MODEL,
-            contents=[enhanced_prompt],
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"],
-            ),
+        logger.info(
+            "Gemini image gen: calling generate_content model=%s ratio=%s "
+            "prompt_len=%d",
+            settings.IMAGE_GEN_MODEL,
+            ratio_str,
+            len(enhanced_prompt),
         )
+        try:
+            response = await asyncio.to_thread(
+                self._client.models.generate_content,
+                model=settings.IMAGE_GEN_MODEL,
+                contents=[enhanced_prompt],
+                config=types.GenerateContentConfig(
+                    response_modalities=["IMAGE", "TEXT"],
+                ),
+            )
+        except Exception as exc:
+            logger.error(
+                "Gemini image gen: generate_content raised %s: %s",
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
+            raise
         image_data = b""
         text_desc = ""
+        # Surface prompt feedback / safety blocks if present
+        prompt_feedback = getattr(response, "prompt_feedback", None)
+        if prompt_feedback:
+            logger.warning(
+                "Gemini image gen: prompt_feedback=%s", prompt_feedback
+            )
         if not response.candidates:
-            logger.warning("Gemini image gen: no candidates in response")
+            logger.warning(
+                "Gemini image gen: no candidates in response "
+                "(prompt_feedback=%s)",
+                prompt_feedback,
+            )
             return b"", ""
-        parts = response.candidates[0].content.parts
+        candidate = response.candidates[0]
+        finish_reason = getattr(candidate, "finish_reason", None)
+        safety_ratings = getattr(candidate, "safety_ratings", None)
+        if finish_reason is not None and not _is_stop_finish_reason(
+            finish_reason
+        ):
+            logger.warning(
+                "Gemini image gen: non-STOP finish_reason=%s safety=%s",
+                finish_reason,
+                safety_ratings,
+            )
+        parts = candidate.content.parts if candidate.content else None
         if not parts:
-            logger.warning("Gemini image gen: no parts in response")
+            logger.warning(
+                "Gemini image gen: no parts in response "
+                "(finish_reason=%s safety=%s)",
+                finish_reason,
+                safety_ratings,
+            )
             return b"", ""
         for part in parts:
             if hasattr(part, "inline_data") and part.inline_data:
