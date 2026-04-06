@@ -1368,7 +1368,9 @@ class Command(BaseCommand):
                 },
             },
         },
-        # ── WF3: Meta Ads Full Pipeline (CAA → CGA → APA → COA) ──
+        # ── WF3: Meta Ads Full Pipeline (CAA → CGA → APA) ──
+        # Note: COA (3.4) is NOT in this chain. APA registers the
+        # campaign with COA after human approval + successful publish.
         {
             "pipeline_id": "meta-ads-full",
             "name": "Meta Ads: Full Campaign",
@@ -1381,11 +1383,10 @@ class Command(BaseCommand):
                 "Meta Advertising Standards compliance, visual-copy "
                 "assemblies) → ad publishing (Meta Ads API campaign "
                 "creation, targeting translation, creative upload, "
-                "human approval gate, publish + verify) → continuous "
-                "optimization (register campaign for ongoing performance "
-                "monitoring, adaptive scheduling, budget reallocation, "
-                "creative fatigue detection, CPA/ROAS/CTR analysis). "
-                "Chains CAA → CGA → APA → COA. "
+                "human approval gate, publish + verify). After approval "
+                "the campaign is automatically registered with the "
+                "Continuous Optimization Agent (COA-3.4) for ongoing "
+                "performance monitoring. Chains CAA → CGA → APA. "
                 "Requires completed WF1 Brand Discovery and WF2 Brand "
                 "Strategy pipelines."
             ),
@@ -1429,15 +1430,6 @@ class Command(BaseCommand):
                         },
                     },
                     {
-                        "id": "campaign_optimization",
-                        "type": "external",
-                        "url": "http://campaign-optimization-agent-svc:8044/v1/execute",
-                        "config": {
-                            "optimization_mode": "manual",
-                            "sandbox_mode": True,
-                        },
-                    },
-                    {
                         "id": "manager",
                         "type": "internal",
                         "handler": "ManagerNode",
@@ -1447,8 +1439,7 @@ class Command(BaseCommand):
                     ["intent_router", "campaign_architecture"],
                     ["campaign_architecture", "creative_generation"],
                     ["creative_generation", "ad_publishing"],
-                    ["ad_publishing", "campaign_optimization"],
-                    ["campaign_optimization", "manager"],
+                    ["ad_publishing", "manager"],
                 ],
                 "global_config": {
                     "model": "claude-sonnet-4-20250514",

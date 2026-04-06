@@ -394,3 +394,129 @@ def optimization_tick_callback(request):
         },
         status=status.HTTP_200_OK,
     )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def register_campaign(request):
+    """
+    Service-to-service registration endpoint for the Ad Publishing Agent
+    (APA-3.3) to register a freshly published Meta campaign for continuous
+    optimization (COA-3.4). Authenticates via X-Callback-Token.
+
+    Expected payload:
+        {
+            "tenant_id": "<uuid or empty>",
+            "company_id": <int or null>,
+            "meta_campaign_id": "...",
+            "meta_ad_account_id": "...",
+            "campaign_name": "...",
+            "objective": "...",
+            "daily_budget_usd": 50.0,
+            "lifetime_budget_usd": null,
+            "target_cpa_usd": null,
+            "target_roas": null,
+            "ad_sets": [...],
+            "ads": [...],
+            "source_job_id": "<uuid or null>",
+            "sandbox_mode": true,
+            "optimization_mode": "manual"
+        }
+    """
+    # Accept either X-Service-Token or X-Callback-Token (different
+    # service-to-service callers may use different conventions).
+    service_token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    callback_token = request.META.get("HTTP_X_CALLBACK_TOKEN", "")
+    expected_service = getattr(settings, "ORCHESTRATOR_SERVICE_TOKEN", "")
+    expected_callback = getattr(settings, "ORCHESTRATOR_CALLBACK_TOKEN", "")
+    valid = (expected_service and service_token == expected_service) or (
+        expected_callback and callback_token == expected_callback
+    )
+    if not valid:
+        logger.warning("Invalid token for campaign registration")
+        return Response(
+            {"error": "Invalid token"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    data = request.data or {}
+    meta_campaign_id = data.get("meta_campaign_id", "")
+    if not meta_campaign_id:
+        return Response(
+            {"error": "meta_campaign_id required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Resolve tenant
+    tenant = None
+    tenant_id = data.get("tenant_id") or ""
+    if tenant_id:
+        try:
+            from tenants.models import Tenant
+
+            tenant = Tenant.objects.filter(id=tenant_id).first()
+        except Exception:
+            tenant = None
+
+    # Resolve company
+    company = None
+    company_id = data.get("company_id")
+    if company_id:
+        try:
+            from onboarding.models import Company
+
+            company = Company.objects.filter(id=company_id).first()
+        except Exception:
+            company = None
+
+    defaults = {
+        "tenant": tenant,
+        "company": company,
+        "meta_ad_account_id": data.get("meta_ad_account_id", ""),
+        "campaign_name": data.get("campaign_name", "Unnamed Campaign"),
+        "objective": data.get("objective", ""),
+        "status": data.get("status", "active"),
+        "optimization_mode": data.get("optimization_mode", "manual"),
+        "target_cpa_usd": data.get("target_cpa_usd"),
+        "target_roas": data.get("target_roas"),
+        "daily_budget_usd": data.get("daily_budget_usd") or 0,
+        "lifetime_budget_usd": data.get("lifetime_budget_usd"),
+        "ad_sets": data.get("ad_sets", []),
+        "ads": data.get("ads", []),
+        "start_date": data.get("start_date", timezone.now()),
+        "source_job_id": data.get("source_job_id") or None,
+        "brand_context_id": data.get("brand_context_id", ""),
+        "sandbox_mode": data.get("sandbox_mode", True),
+    }
+
+    try:
+        campaign, created = CampaignRegistry.objects.update_or_create(
+            tenant=tenant,
+            meta_campaign_id=meta_campaign_id,
+            defaults=defaults,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to register campaign meta_campaign_id=%s", meta_campaign_id
+        )
+        return Response(
+            {"error": "Failed to register campaign"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    logger.info(
+        "Campaign registered for optimization: meta=%s internal=%s created=%s",
+        meta_campaign_id,
+        campaign.campaign_id,
+        created,
+    )
+
+    return Response(
+        {
+            "status": "ok",
+            "created": created,
+            "campaign_id": str(campaign.campaign_id),
+            "meta_campaign_id": meta_campaign_id,
+        },
+        status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+    )
