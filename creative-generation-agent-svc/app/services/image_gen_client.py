@@ -19,6 +19,26 @@ logger = logging.getLogger(__name__)
 # Nano Banana 2 cost estimate per image
 _COST_PER_IMAGE_USD = 0.065
 
+# google-genai uses both enum names ("STOP") and string-formatted enum reprs
+# ("FinishReason.STOP"). Some SDK versions also serialize enums as their
+# integer value, where 1 == STOP per the proto definition.
+_STOP_FINISH_REASON_TOKENS = frozenset(
+    {"STOP", "FINISH_REASON_STOP", "FinishReason.STOP", "1"}
+)
+
+
+def _is_stop_finish_reason(finish_reason: Any) -> bool:
+    """True if the Gemini finish_reason represents a normal STOP.
+
+    Tolerates enum, string, or integer representations across google-genai
+    SDK versions. Falls back to .name attribute when present.
+    """
+    name = getattr(finish_reason, "name", None)
+    if name:
+        return name == "STOP"
+    return str(finish_reason) in _STOP_FINISH_REASON_TOKENS
+
+
 # Supported aspect ratios for Meta Ads
 ASPECT_RATIOS = {
     "1:1": "1:1",  # Feed (1080×1080)
@@ -264,7 +284,9 @@ class NanoBanana2Adapter(ImageGenAdapter):
         candidate = response.candidates[0]
         finish_reason = getattr(candidate, "finish_reason", None)
         safety_ratings = getattr(candidate, "safety_ratings", None)
-        if finish_reason and str(finish_reason) not in ("FinishReason.STOP", "STOP", "1"):
+        if finish_reason is not None and not _is_stop_finish_reason(
+            finish_reason
+        ):
             logger.warning(
                 "Gemini image gen: non-STOP finish_reason=%s safety=%s",
                 finish_reason,

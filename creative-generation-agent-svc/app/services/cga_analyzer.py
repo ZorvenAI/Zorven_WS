@@ -255,6 +255,17 @@ class CGAAnalyzer:
                     )
                 if total_images == 0 and failed_count > 0:
                     image_gen_failed = True
+                    first_reason = (
+                        gen_result.get("failure_reasons", ["unknown"])[0]
+                        if gen_result.get("failure_reasons")
+                        else "unknown"
+                    )
+                    findings.append(
+                        f"CRITICAL: Image generation produced 0 images "
+                        f"({failed_count} attempts failed). "
+                        f"First reason: {first_reason}. "
+                        "Creative package will contain copy only."
+                    )
 
                 await self._events.emit(
                     EventType.IMAGE_GENERATION_COMPLETED, tenant_id, job_id,
