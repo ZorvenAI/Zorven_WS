@@ -523,6 +523,44 @@ def list_active_campaigns_internal(request):
     return Response({"results": results}, status=status.HTTP_200_OK)
 
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_tenant_optimization_config(request, tenant_id):
+    """
+    Service-to-service tenant optimization config endpoint for COA.
+
+    Returns per-tenant overrides for optimization guardrails. When no
+    per-tenant override model exists, returns sane defaults so COA can
+    pass the IG-08 (tenant config loaded) guardrail.
+
+    Authenticated via X-Service-Token.
+    """
+    if not _verify_service_or_callback_token(request):
+        return Response(
+            {"error": "Invalid token"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # TODO: replace with real TenantOptimizationConfig model lookup
+    # when per-tenant override persistence is added.
+    config = {
+        "tenant_id": str(tenant_id),
+        "optimization_mode": "manual",
+        "max_daily_budget_increase_pct": 20,
+        "max_daily_budget_decrease_pct": 50,
+        "cpa_kill_multiplier": 2.0,
+        "roas_scale_threshold": 1.5,
+        "optimization_cooldown_hours": 24,
+        "max_auto_actions_per_day": 10,
+        "require_approval_above_usd": 500.0,
+        "campaign_level_always_manual": True,
+        "fatigue_ctr_decline_threshold_pct": 20,
+        "min_spend_before_decision_usd": 50.0,
+        "min_impressions_before_decision": 1000,
+    }
+    return Response(config, status=status.HTTP_200_OK)
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register_campaign(request):

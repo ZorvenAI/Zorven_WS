@@ -123,12 +123,34 @@ export default function OptimizationDashboard() {
     setTriggering(true);
     setTriggerMessage(null);
     try {
-      await triggerOptimizationTick(selectedCampaignId);
-      setTriggerMessage('Optimization tick triggered. Refreshing...');
+      const result = await triggerOptimizationTick(selectedCampaignId);
+      const coa = (result?.coa_response ?? {}) as {
+        status?: string;
+        campaigns_processed?: number;
+        recommendations_generated?: number;
+        actions_executed?: number;
+        campaign_results?: Array<{
+          campaign_id?: string;
+          status?: string;
+          reasons?: string[];
+        }>;
+      };
+      const results = coa.campaign_results ?? [];
+      const mine = results.find((r) => r.campaign_id === selectedCampaignId);
+      if (mine?.status === 'skipped') {
+        setTriggerMessage(
+          `Skipped: ${(mine.reasons ?? []).join('; ') || 'no reason given'}`
+        );
+      } else if (coa.status === 'pending') {
+        setTriggerMessage('Tick is running in the background...');
+      } else {
+        setTriggerMessage(
+          `Tick completed: ${coa.recommendations_generated ?? 0} recommendations, ${coa.actions_executed ?? 0} actions`
+        );
+      }
       setTimeout(() => {
         loadCampaignData();
-        setTriggerMessage(null);
-      }, 3000);
+      }, 2000);
     } catch (err) {
       setTriggerMessage(
         err instanceof Error ? err.message : 'Failed to trigger tick'

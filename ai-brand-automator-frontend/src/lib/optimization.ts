@@ -169,7 +169,23 @@ export async function fetchActions(
 
 export async function triggerOptimizationTick(
   campaignId: string
-): Promise<{ triggered: boolean; coa_response?: unknown; error?: string }> {
+): Promise<{
+  triggered: boolean;
+  coa_response?: {
+    tick_id?: string;
+    status?: string;
+    campaigns_processed?: number;
+    recommendations_generated?: number;
+    actions_executed?: number;
+    campaign_results?: Array<{
+      campaign_id?: string;
+      status?: string;
+      reasons?: string[];
+    }>;
+    elapsed_ms?: number;
+  };
+  error?: string;
+}> {
   const response = await apiClient.post(
     `${BASE}/campaigns/${campaignId}/trigger-tick/`,
     {}

@@ -336,8 +336,17 @@ async def trigger_tick(
     request: Request,
     payload: TriggerTickRequest | None = None,
     _token: str = Depends(verify_service_token),
-) -> TickStatusResponse:
-    """Manually trigger an optimization tick (for testing)."""
+) -> dict:
+    """Manually trigger an optimization tick.
+
+    Synchronously waits up to 15s for the Celery task to finish (ticks
+    typically complete in <1s). Returns the full tick result including
+    per-campaign skip reasons so callers can display them immediately.
+    If the task does not finish in time, returns a pending status with
+    the task id.
+    """
+    import asyncio
+
     try:
         from app.tasks import run_optimization_tick
 
@@ -348,12 +357,42 @@ async def trigger_tick(
             campaign_age_min_days=age_min,
             campaign_age_max_days=age_max,
         )
-        return TickStatusResponse(
-            tick_id=task.id,
-            campaigns_processed=0,
-            recommendations_generated=0,
-            actions_executed=0,
-        )
+
+        # Wait up to 15s for result without blocking event loop
+        for _ in range(30):  # 30 * 0.5s = 15s
+            if task.ready():
+                break
+            await asyncio.sleep(0.5)
+
+        if task.ready():
+            try:
+                result = task.get(timeout=1)
+                return {
+                    "tick_id": result.get("tick_id", task.id),
+                    "status": "completed",
+                    "campaigns_processed": result.get(
+                        "campaigns_processed", 0
+                    ),
+                    "recommendations_generated": result.get(
+                        "recommendations_generated", 0
+                    ),
+                    "actions_executed": result.get("actions_executed", 0),
+                    "campaign_results": result.get("campaign_results", []),
+                    "elapsed_ms": result.get("elapsed_ms", 0),
+                }
+            except Exception as exc:
+                logger.error("Failed to retrieve task result: %s", exc)
+                return {
+                    "tick_id": task.id,
+                    "status": "error",
+                    "error": str(exc),
+                }
+
+        return {
+            "tick_id": task.id,
+            "status": "pending",
+            "message": "Tick is still running in the background",
+        }
     except Exception as exc:
         logger.error("Failed to trigger tick: %s", exc)
-        return TickStatusResponse(tick_id="error")
+        return {"tick_id": "error", "status": "error", "error": str(exc)}
