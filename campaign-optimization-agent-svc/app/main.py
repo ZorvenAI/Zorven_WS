@@ -130,6 +130,7 @@ async def lifespan(app: FastAPI):
     app.state.executor = executor
     app.state.analyzer = analyzer
     app.state.reporter = reporter
+    app.state.callback_client = callback_client
 
     logger.info("Campaign Optimization Agent service ready")
 

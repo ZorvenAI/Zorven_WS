@@ -68,9 +68,11 @@ class CampaignDiscovery:
         Returns:
             List of ActiveCampaign objects matching the age range.
         """
+        # Service-auth internal endpoint (X-Service-Token).
+        # The DRF /campaigns/ ViewSet requires JWT and is not used here.
         url = (
             f"{self._base_url}/api/v1/optimization"
-            f"/campaigns/?status=active"
+            f"/internal/campaigns/?status=active"
         )
         try:
             async with httpx.AsyncClient(timeout=TIMEOUT) as client:

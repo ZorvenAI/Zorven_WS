@@ -84,6 +84,7 @@ export default function OptimizationDashboard() {
   // Load detail data when campaign changes
   useEffect(() => {
     if (selectedCampaignId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadCampaignData();
     }
   }, [selectedCampaignId, loadCampaignData]);

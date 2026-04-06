@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     CampaignRegistryViewSet,
+    list_active_campaigns_internal,
     optimization_tick_callback,
     register_campaign,
 )
@@ -23,5 +24,10 @@ urlpatterns = [
         "register/",
         register_campaign,
         name="optimization-register-campaign",
+    ),
+    path(
+        "internal/campaigns/",
+        list_active_campaigns_internal,
+        name="optimization-internal-list-campaigns",
     ),
 ]

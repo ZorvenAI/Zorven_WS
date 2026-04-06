@@ -39,22 +39,19 @@ class OptimizationPersister:
             tick_results: Full tick results payload including
                 analysis, recommendations, execution results.
         """
-        # 1. Update campaign registry (entity changes)
+        # 1. Bundle entity updates into the tick callback payload so the
+        #    Django service-auth endpoint can apply them in a single call.
         entity_changes = tick_results.get("entity_changes", [])
-        if entity_changes:
-            try:
-                await self._callback.update_campaign_status(
-                    campaign_id=campaign_id,
-                    status=tick_results.get("campaign_status", "active"),
-                    ad_sets=tick_results.get("ad_set_updates"),
-                    ads=tick_results.get("ad_updates"),
-                )
-            except Exception as exc:
-                logger.error(
-                    "Failed to update campaign registry: %s", exc
-                )
+        if entity_changes and "entity_updates" not in tick_results:
+            tick_results["entity_updates"] = {
+                "status": tick_results.get("campaign_status", "active"),
+                "ad_sets": tick_results.get("ad_set_updates", []),
+                "ads": tick_results.get("ad_updates", []),
+            }
 
-        # 2. Write optimization history via callback to Django
+        # 2. Write optimization history via callback to Django.
+        #    Recommendations + actions + entity_updates all flow through
+        #    /optimization/callback/tick-result/ (X-Callback-Token auth).
         try:
             result = await self._callback.post_tick_result(
                 tenant_id=tenant_id,
@@ -93,26 +90,10 @@ class OptimizationPersister:
                     "Failed to update performance cache: %s", exc
                 )
 
-        # 4. Update recommendation statuses
+        # 4. Recommendation status updates are included in the tick
+        #    callback payload (recommendations[].status) — Django persists
+        #    them inside optimization_tick_callback. No separate PATCH.
         recommendations = tick_results.get("recommendations", [])
-        for rec in recommendations:
-            rec_id = rec.get("recommendation_id", "")
-            status = rec.get("status", "pending")
-            if rec_id and status != "pending":
-                try:
-                    await self._callback.update_recommendation_status(
-                        recommendation_id=rec_id,
-                        status=status,
-                        execution_result=rec.get(
-                            "execution_result"
-                        ),
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "Failed to update recommendation %s: %s",
-                        rec_id,
-                        exc,
-                    )
 
         logger.info(
             "Persisted tick results for campaign %s "

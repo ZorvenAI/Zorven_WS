@@ -2,7 +2,7 @@
  * TypeScript types for the Continuous Optimization Agent feature.
  *
  * Maps to the DRF serializers in
- * ai-brand-automator/continuous_optimization/serializers.py
+ * ai-brand-automator/optimization/serializers.py
  */
 
 export interface AdSetEntry {
