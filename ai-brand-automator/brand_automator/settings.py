@@ -110,6 +110,7 @@ SHARED_APPS = [
     "orchestration",  # Pipeline orchestration (core-api-service)
     "workspace",  # Workflow management workspace
     "analytics",  # Workflow analytics layer
+    "optimization",  # Campaign optimization (COA-3.4 background service)
 ]
 
 TENANT_APPS = [

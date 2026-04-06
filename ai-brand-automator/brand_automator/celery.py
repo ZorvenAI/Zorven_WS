@@ -36,6 +36,8 @@ app.conf.task_routes = {
     "kafka_service.tasks.*": {"queue": "low_priority"},
     # Analytics extraction on orchestration queue
     "analytics.tasks.*": {"queue": "orchestration"},
+    # Optimization tasks on orchestration queue
+    "optimization.tasks.*": {"queue": "orchestration"},
 }
 
 

@@ -1368,7 +1368,7 @@ class Command(BaseCommand):
                 },
             },
         },
-        # ── WF3: Meta Ads Full Pipeline (CAA → CGA → APA) ──
+        # ── WF3: Meta Ads Full Pipeline (CAA → CGA → APA → COA) ──
         {
             "pipeline_id": "meta-ads-full",
             "name": "Meta Ads: Full Campaign",
@@ -1381,8 +1381,11 @@ class Command(BaseCommand):
                 "Meta Advertising Standards compliance, visual-copy "
                 "assemblies) → ad publishing (Meta Ads API campaign "
                 "creation, targeting translation, creative upload, "
-                "human approval gate, publish + verify). "
-                "Chains CAA → CGA → APA. "
+                "human approval gate, publish + verify) → continuous "
+                "optimization (register campaign for ongoing performance "
+                "monitoring, adaptive scheduling, budget reallocation, "
+                "creative fatigue detection, CPA/ROAS/CTR analysis). "
+                "Chains CAA → CGA → APA → COA. "
                 "Requires completed WF1 Brand Discovery and WF2 Brand "
                 "Strategy pipelines."
             ),
@@ -1426,6 +1429,15 @@ class Command(BaseCommand):
                         },
                     },
                     {
+                        "id": "campaign_optimization",
+                        "type": "external",
+                        "url": "http://campaign-optimization-agent-svc:8044/v1/execute",
+                        "config": {
+                            "optimization_mode": "manual",
+                            "sandbox_mode": True,
+                        },
+                    },
+                    {
                         "id": "manager",
                         "type": "internal",
                         "handler": "ManagerNode",
@@ -1435,7 +1447,8 @@ class Command(BaseCommand):
                     ["intent_router", "campaign_architecture"],
                     ["campaign_architecture", "creative_generation"],
                     ["creative_generation", "ad_publishing"],
-                    ["ad_publishing", "manager"],
+                    ["ad_publishing", "campaign_optimization"],
+                    ["campaign_optimization", "manager"],
                 ],
                 "global_config": {
                     "model": "claude-sonnet-4-20250514",
