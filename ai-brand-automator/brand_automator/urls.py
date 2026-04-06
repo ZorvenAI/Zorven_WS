@@ -89,6 +89,8 @@ urlpatterns = [
                 path("workspace/", include("workspace.urls")),
                 # Workflow Analytics
                 path("analytics/", include("analytics.urls")),
+                # Campaign Optimization (COA-3.4)
+                path("optimization/", include("optimization.urls")),
             ]
         ),
     ),

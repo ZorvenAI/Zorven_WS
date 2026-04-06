@@ -10,6 +10,9 @@ from analytics.extractors.campaign_architecture import CampaignArchitectureExtra
 from analytics.extractors.content_social import ContentSocialExtractor
 from analytics.extractors.creative_generation import CreativeGenerationExtractor
 from analytics.extractors.ad_publishing import AdPublishingExtractor
+from analytics.extractors.continuous_optimization import (
+    ContinuousOptimizationExtractor,
+)
 
 # Pipeline ID → Extractor mapping
 # Covers all pipeline IDs from seed_manifests.py
@@ -72,6 +75,16 @@ def detect_extractor_from_result(result_data: dict):
         return None
 
     node_results = result_data.get("node_results", {})
+
+    # Check for continuous optimization outputs (COA-3.4)
+    has_coa = bool(
+        node_results.get("continuous_optimization")
+        or result_data.get("continuous_optimization")
+        or result_data.get("optimization_tick_id")
+    )
+
+    if has_coa:
+        return ContinuousOptimizationExtractor()
 
     # Check for ad publishing outputs (WF3, downstream of CGA)
     has_apa = bool(

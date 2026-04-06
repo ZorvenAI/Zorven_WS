@@ -311,7 +311,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ai-brand-automator-redis
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 24
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 25
     ports:
       - "6379:6379"
     volumes:
@@ -1554,6 +1554,44 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8043/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- Campaign Optimization Agent (COA-3.4) ---
+  campaign-optimization-agent-svc:
+    build:
+      context: ../campaign-optimization-agent-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-campaign-optimization
+    environment:
+      - COA_REDIS_URL=redis://redis:6379/24
+      - COA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - COA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - COA_BACKEND_URL=http://backend:8001
+      - COA_BACKEND_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - COA_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
+      - COA_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - COA_META_ADS_SANDBOX_MODE=true
+      - COA_CELERY_BROKER_URL=redis://redis:6379/24
+      - COA_LOG_LEVEL=INFO
+      - COA_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+    expose:
+      - "8044"
+    ports:
+      - "8044:8044"
+    command: >
+      sh -c "celery -A app.celery_app beat --loglevel=info &
+             celery -A app.celery_app worker --loglevel=info &
+             uvicorn app.main:app --host 0.0.0.0 --port 8044"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8044/health"]
       interval: 10s
       timeout: 5s
       retries: 3

@@ -13,6 +13,7 @@ import {
   Workflow,
   Bot,
   BarChart3,
+  Activity,
   Users,
   CreditCard,
   PanelLeftClose,
@@ -134,6 +135,7 @@ export function Navigation({ children }: { children: React.ReactNode }) {
       ? [{ href: '/dashboard/ai-assistant', label: 'AI Assistant', icon: <Bot className={iconCls} />, active: pathname?.startsWith('/dashboard/ai-assistant') ?? false }]
       : []),
     { href: '/dashboard/analysis', label: 'Reports', icon: <BarChart3 className={iconCls} />, active: pathname?.startsWith('/dashboard/analysis') ?? false },
+    { href: '/optimization', label: 'Optimization', icon: <Activity className={iconCls} />, active: pathname?.startsWith('/optimization') ?? false },
     ...(canTeam
       ? [{ href: '/dashboard/team', label: 'Team', icon: <Users className={iconCls} />, active: pathname === '/dashboard/team' }]
       : []),

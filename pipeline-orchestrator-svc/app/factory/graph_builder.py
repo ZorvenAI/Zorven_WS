@@ -43,6 +43,7 @@ _SERVICE_URL_MAP: dict[str, str] = {
     "campaign-architecture-agent-svc:8041": settings.CAMPAIGN_ARCHITECTURE_AGENT_URL,
     "creative-generation-agent-svc:8042": settings.CREATIVE_GENERATION_AGENT_URL,
     "ad-publishing-agent-svc:8043": settings.AD_PUBLISHING_AGENT_URL,
+    "campaign-optimization-agent-svc:8044": settings.CAMPAIGN_OPTIMIZATION_AGENT_URL,
 }
 
 

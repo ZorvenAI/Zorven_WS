@@ -278,6 +278,19 @@ class AdPubAnalyzer:
         # Clear rollback tracker on success
         if output_check["all_valid"]:
             self._rollback.clear()
+            # Best-effort: register the published campaign with the
+            # Continuous Optimization Agent (COA-3.4) via Django backend.
+            try:
+                await self._register_for_optimization(
+                    tenant_id=tenant_id,
+                    job_id=job_id,
+                    preparation=preparation,
+                    meta_campaign_id=campaign_id,
+                    ad_set_ids=ad_set_ids,
+                    ad_ids=ad_ids,
+                )
+            except Exception as exc:
+                logger.warning("COA registration failed (non-fatal): %s", exc)
 
         return {
             "status": "published" if output_check["all_valid"] else "partial",
@@ -304,6 +317,72 @@ class AdPubAnalyzer:
     async def rollback(self, reason: str) -> dict[str, Any]:
         """Rollback all tracked entities (on failure)."""
         return await self._rollback.rollback_all(self._meta, reason)
+
+    async def _register_for_optimization(
+        self,
+        tenant_id: str,
+        job_id: str,
+        preparation: dict[str, Any],
+        meta_campaign_id: str,
+        ad_set_ids: list[str],
+        ad_ids: list[str],
+    ) -> None:
+        """POST a registration payload to the Django optimization endpoint
+        so the Continuous Optimization Agent (COA-3.4) can pick up the
+        campaign on its next tick.
+
+        Best-effort — caller catches and logs failures.
+        """
+        from app.core.config import settings
+
+        backend_url = settings.backend_url
+        if not backend_url:
+            logger.info("BACKEND_URL not set — skipping COA registration")
+            return
+
+        blueprint = preparation.get("blueprint", {}) or {}
+        company = preparation.get("company", {}) or {}
+
+        payload = {
+            "tenant_id": tenant_id,
+            "company_id": company.get("id"),
+            "meta_campaign_id": meta_campaign_id,
+            "meta_ad_account_id": preparation.get("ad_account_id", ""),
+            "campaign_name": preparation.get("campaign_name", ""),
+            "objective": blueprint.get("objective", ""),
+            "status": "active",
+            "optimization_mode": "manual",
+            "target_cpa_usd": blueprint.get("target_cpa_usd"),
+            "target_roas": blueprint.get("target_roas"),
+            "daily_budget_usd": preparation.get("total_daily_budget_usd", 0),
+            "lifetime_budget_usd": blueprint.get("lifetime_budget_usd"),
+            "ad_sets": [{"id": sid} for sid in ad_set_ids],
+            "ads": [{"id": aid} for aid in ad_ids],
+            "source_job_id": job_id or None,
+            "sandbox_mode": preparation.get("sandbox_mode", True),
+        }
+
+        url = f"{backend_url}/api/v1/optimization/register/"
+        headers = {
+            "X-Service-Token": settings.BACKEND_SERVICE_TOKEN,
+            "Content-Type": "application/json",
+        }
+
+        import httpx
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            if resp.status_code >= 400:
+                logger.warning(
+                    "COA registration returned %s: %s",
+                    resp.status_code,
+                    resp.text[:300],
+                )
+            else:
+                logger.info(
+                    "COA registration succeeded for meta_campaign_id=%s",
+                    meta_campaign_id,
+                )
 
     # ------------------------------------------------------------------
     # Private helpers with circuit breaker integration

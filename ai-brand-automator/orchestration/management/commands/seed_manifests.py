@@ -1369,6 +1369,8 @@ class Command(BaseCommand):
             },
         },
         # ── WF3: Meta Ads Full Pipeline (CAA → CGA → APA) ──
+        # Note: COA (3.4) is NOT in this chain. APA registers the
+        # campaign with COA after human approval + successful publish.
         {
             "pipeline_id": "meta-ads-full",
             "name": "Meta Ads: Full Campaign",
@@ -1381,8 +1383,10 @@ class Command(BaseCommand):
                 "Meta Advertising Standards compliance, visual-copy "
                 "assemblies) → ad publishing (Meta Ads API campaign "
                 "creation, targeting translation, creative upload, "
-                "human approval gate, publish + verify). "
-                "Chains CAA → CGA → APA. "
+                "human approval gate, publish + verify). After approval "
+                "the campaign is automatically registered with the "
+                "Continuous Optimization Agent (COA-3.4) for ongoing "
+                "performance monitoring. Chains CAA → CGA → APA. "
                 "Requires completed WF1 Brand Discovery and WF2 Brand "
                 "Strategy pipelines."
             ),
