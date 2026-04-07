@@ -22,7 +22,8 @@ def adjust_confidence(
 
     Heuristics (Phase 3, intentionally simple):
     - +10 if there are >= 5 recent recommendations (rich evidence)
-    - -15 if the campaign has < 7 days of history
+    - -5 if the campaign is not currently ``active`` or ``completed``
+      (e.g. ``paused`` / ``draft``) — treated as a stale-context penalty
     - cap at [0, 100]
     """
     delta = 0

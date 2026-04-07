@@ -83,7 +83,7 @@ class IntelligenceExtractor:
             learnings=scored,
             contradictions=contradictions,
             auto_reruns_triggered=0,
-            rag_writes=len(scored),
+            rag_writes=0,
         )
 
         # Persist + dispatch follow-ups (fail-open).
@@ -113,6 +113,37 @@ class IntelligenceExtractor:
             "learnings": [le.model_dump() for le in report.learnings],
         }
         await self._django.ingest_intelligence_report(tenant_id, ingest_payload)
+
+        # Post each learning to Django as a RAG document. This is what
+        # `rag_writes` actually counts; we only increment on success so the
+        # field reflects what made it into the per-tenant Vertex AI store.
+        rag_writes = 0
+        for learning in report.learnings:
+            rag_payload = {
+                "tenant_id": tenant_id or "",
+                "learning_id": learning.learning_id,
+                "content": (
+                    f"{learning.headline}\n\n"
+                    f"Category: {learning.category}\n"
+                    f"Impact: {learning.impact}\n"
+                    f"Confidence: {learning.confidence}\n"
+                    f"Target: {learning.target_workflow}/{learning.target_agent}\n"
+                ),
+                "metadata": {
+                    "category": learning.category,
+                    "impact": learning.impact,
+                    "confidence": learning.confidence,
+                    "target_workflow": learning.target_workflow,
+                    "target_agent": learning.target_agent,
+                    "intelligence_id": report.intelligence_id,
+                    "campaign_id": report.campaign_id,
+                    **(learning.detail or {}),
+                },
+            }
+            ok = await self._django.ingest_rag_learning(tenant_id, rag_payload)
+            if ok:
+                rag_writes += 1
+        report.rag_writes = rag_writes
 
         # Auto-trigger only when explicitly enabled.
         if report.mode != "auto_trigger":

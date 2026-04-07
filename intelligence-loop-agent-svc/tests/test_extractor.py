@@ -121,6 +121,8 @@ def test_detect_contradictions_flags_wf2_against_existing_strategy(campaign_ctx)
 async def test_extractor_with_mocked_claude(campaign_ctx):
     django = DjangoClient()
     django.get_campaign_context = AsyncMock(return_value=campaign_ctx)
+    django.ingest_intelligence_report = AsyncMock(return_value={"ok": True})
+    django.ingest_rag_learning = AsyncMock(return_value={"ok": True})
 
     claude = AnthropicClient(api_key=None)
     # Force enabled with a mocked complete_json

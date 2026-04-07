@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 It consumes COA optimization learnings, CAA blueprints, CGA creative packages, and Meta Insights performance data, then extracts strategic learnings as RAG documents and (optionally) dispatches re-run requests back into WF1/WF2/WF3 — always with human approval for WF2.
 
-Phase 2 status: **skeleton only** — the extractor is a stub. Phase 3 will replace it with the real Anthropic-powered logic.
+Phase 3 status: **shipped** — the extractor calls Claude Sonnet 4 (with a deterministic mock fallback when no API key is configured), runs scoring + contradiction detection, and persists results + RAG documents through Django ingest endpoints. Auto-trigger (Phase 4) is gated by `ILA_DEFAULT_MODE=auto_trigger` and the `ILA_MIN_CONFIDENCE_AUTO_TRIGGER` threshold; WF2 always routes through human approval.
 
 ## Build, Run, Test
 

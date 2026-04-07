@@ -94,6 +94,30 @@ class DjangoClient:
             logger.warning("Django wf2-request exception (fail-open): %s", exc)
             return None
 
+    async def ingest_rag_learning(
+        self, tenant_id: str | None, payload: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        url = (
+            f"{settings.backend_url}/api/v1/intelligence-loop/"
+            f"ingest/rag-learning/"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.post(
+                    url, json=payload, headers=self._headers(tenant_id)
+                )
+                if resp.status_code >= 400:
+                    logger.warning(
+                        "Django rag-learning ingest failed status=%s body=%s",
+                        resp.status_code,
+                        resp.text[:300],
+                    )
+                    return None
+                return resp.json()
+        except Exception as exc:
+            logger.warning("Django rag-learning exception (fail-open): %s", exc)
+            return None
+
     async def ingest_intelligence_report(
         self, tenant_id: str | None, report: dict[str, Any]
     ) -> dict[str, Any] | None:

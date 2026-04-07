@@ -88,7 +88,7 @@ WF1_AGENT_TO_PIPELINE = {
     "CIA": "competitor-intelligence",
     "MRA": "market-research",
     "TCIA": "trend-cultural-insights",
-    "VOCA": "voice-of-customer",
+    "VOC": "voice-of-customer",
 }
 
 # WF2 agent code → pipeline_id.
@@ -117,12 +117,11 @@ def _dispatch_rerun(*, tenant, user, pipeline_id, learning, note=""):
     """
     from orchestration.services import OrchestratorDispatcher
 
-    try:
-        manifest = PipelineManifest.objects.filter(
-            pipeline_id=pipeline_id
-        ).order_by("-version").first()
-    except PipelineManifest.DoesNotExist:
-        manifest = None
+    manifest = (
+        PipelineManifest.objects.filter(pipeline_id=pipeline_id)
+        .order_by("-version")
+        .first()
+    )
 
     if not manifest:
         logger.error(
@@ -133,7 +132,7 @@ def _dispatch_rerun(*, tenant, user, pipeline_id, learning, note=""):
 
     job = AnalysisJob.objects.create(
         tenant=tenant,
-        user=user,
+        created_by=user,
         manifest=manifest,
         input_prompt=(
             f"ILA-triggered re-run for learning '{learning.headline}'. "
@@ -448,10 +447,14 @@ def trigger_extraction(request):
     payload = serializer.validated_data
 
     tenant = getattr(request, "tenant", None)
+    campaign_qs = CampaignRegistry.objects.all()
+    if tenant is not None:
+        campaign_qs = campaign_qs.filter(
+            Q(tenant=tenant) | Q(tenant__isnull=True)
+        )
     campaign = get_object_or_404(
-        CampaignRegistry,
+        campaign_qs,
         campaign_id=payload["campaign_id"],
-        **({"tenant": tenant} if tenant else {}),
     )
 
     ila_url = getattr(
@@ -461,12 +464,16 @@ def trigger_extraction(request):
 
     try:
         resp = requests.post(
-            f"{ila_url.rstrip('/')}/v1/trigger",
+            f"{ila_url.rstrip('/')}/v1/execute",
             json={
+                "job_id": str(uuid.uuid4()),
                 "tenant_id": str(tenant.id) if tenant else "",
-                "campaign_id": str(campaign.campaign_id),
-                "mode": payload["mode"],
-                "trigger_source": "manual",
+                "state": {"campaign_id": str(campaign.campaign_id)},
+                "context": {
+                    "campaign_id": str(campaign.campaign_id),
+                    "trigger_source": "manual",
+                },
+                "config": {"default_mode": payload["mode"]},
             },
             headers={"X-Service-Token": ila_token},
             timeout=10,
@@ -635,10 +642,11 @@ def auto_trigger_rerun(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    normalized_target_agent = (learning.target_agent or "").upper()
     if learning.target_workflow == "WF1":
-        pipeline_id = WF1_AGENT_TO_PIPELINE.get(learning.target_agent)
+        pipeline_id = WF1_AGENT_TO_PIPELINE.get(normalized_target_agent)
     else:
-        pipeline_id = WF3_AGENT_TO_PIPELINE.get(learning.target_agent)
+        pipeline_id = WF3_AGENT_TO_PIPELINE.get(normalized_target_agent)
 
     if not pipeline_id:
         return Response(

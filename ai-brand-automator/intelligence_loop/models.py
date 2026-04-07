@@ -292,4 +292,4 @@ class LearningDocument(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"LearningDocument(learning={self.learning_id})"
+        return f"LearningDocument(learning={self.learning.learning_id})"

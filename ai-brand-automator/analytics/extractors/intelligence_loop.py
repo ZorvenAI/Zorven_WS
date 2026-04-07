@@ -26,11 +26,18 @@ class IntelligenceLoopExtractor(BaseExtractor):
         node_results = result.get("node_results", {}) or {}
 
         # Try the pipeline-node payload first; fall back to top-level.
-        ila = node_results.get("campaign_intelligence")
-        if not ila:
-            ila = result if result.get("intelligence_report") else {}
-        if not isinstance(ila, dict):
+        # In both shapes the ILA service returns an ExecuteResponse with
+        # the actual report nested under ``intelligence_report``.
+        envelope = node_results.get("campaign_intelligence")
+        if not envelope:
+            envelope = result if result.get("intelligence_report") else {}
+        if not isinstance(envelope, dict):
             return []
+
+        ila = envelope.get("intelligence_report")
+        if not isinstance(ila, dict):
+            # Backward-compat: some callers may pass the report directly.
+            ila = envelope
 
         learnings = ila.get("scored_learnings") or ila.get("learnings") or []
         if not isinstance(learnings, list):
