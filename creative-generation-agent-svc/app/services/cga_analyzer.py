@@ -425,7 +425,7 @@ class CGAAnalyzer:
         passed_checks = sum(
             1
             for c in compliance_results
-            if c.get("status") in ("pass", "warning")
+            if isinstance(c, dict) and c.get("status") in ("pass", "warning")
         )
         compliance_pass_rate = (
             passed_checks / total_checks if total_checks > 0 else 1.0

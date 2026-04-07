@@ -248,7 +248,7 @@ class OutputGuardrails:
             violations = [
                 c
                 for c in compliance
-                if c.get("status") == "fail"
+                if isinstance(c, dict) and c.get("status") == "fail"
             ]
             if violations:
                 for v in violations:
