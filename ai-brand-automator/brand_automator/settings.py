@@ -111,6 +111,7 @@ SHARED_APPS = [
     "workspace",  # Workflow management workspace
     "analytics",  # Workflow analytics layer
     "optimization",  # Campaign optimization (COA-3.4 background service)
+    "intelligence_loop",  # Intelligence Loop Agent (ILA, WF3.5)
 ]
 
 TENANT_APPS = [
@@ -991,6 +992,12 @@ CELERY_BEAT_SCHEDULE["reconcile-analytics-rollups"] = {
     "schedule": crontab(hour=2, minute=0),
 }
 
+# ILA: expire stale WF2 approval requests hourly
+CELERY_BEAT_SCHEDULE["expire-ila-wf2-requests"] = {
+    "task": "intelligence_loop.tasks.expire_pending_wf2_requests",
+    "schedule": 3600.0,
+}
+
 # --- Pipeline Orchestration Settings ---
 # URL of the external pipeline-orchestrator-svc (LangGraph)
 ORCHESTRATOR_URL = config("ORCHESTRATOR_URL", default="http://localhost:8010")
@@ -1007,6 +1014,12 @@ COA_SERVICE_URL = config("COA_SERVICE_URL", default="http://localhost:8044")
 COA_SERVICE_TOKEN = config(
     "COA_SERVICE_TOKEN", default="dev-service-token"
 )
+# Intelligence Loop Agent (ILA, WF3.5) — used to proxy manual triggers and
+# to authenticate ILA → Django ingest endpoints via X-Service-Token.
+ILA_SERVICE_URL = config(
+    "ILA_SERVICE_URL", default="http://intelligence-loop-agent-svc:8045"
+)
+ILA_SERVICE_TOKEN = config("ILA_SERVICE_TOKEN", default="dev-service-token")
 # HTTP timeout (seconds) when dispatching jobs to the orchestrator
 ORCHESTRATOR_TIMEOUT = config("ORCHESTRATOR_TIMEOUT", default=30, cast=int)
 # Backend URL for orchestrator callbacks (used to build callback_url in dispatch)

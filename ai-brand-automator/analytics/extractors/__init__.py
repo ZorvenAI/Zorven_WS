@@ -13,6 +13,7 @@ from analytics.extractors.ad_publishing import AdPublishingExtractor
 from analytics.extractors.continuous_optimization import (
     ContinuousOptimizationExtractor,
 )
+from analytics.extractors.intelligence_loop import IntelligenceLoopExtractor
 
 # Pipeline ID → Extractor mapping
 # Covers all pipeline IDs from seed_manifests.py
@@ -60,6 +61,8 @@ PIPELINE_EXTRACTORS = {
     # Ad publishing (WF3)
     "meta-ad-publishing": AdPublishingExtractor(),
     "meta-ads-full": AdPublishingExtractor(),
+    # Intelligence Loop (WF3.5)
+    "meta-campaign-intelligence": IntelligenceLoopExtractor(),
     # General chat — uses brand discovery extractor to grab any
     # agent results that were composed dynamically
     "general-chat": BrandDiscoveryExtractor(),
@@ -75,6 +78,16 @@ def detect_extractor_from_result(result_data: dict):
         return None
 
     node_results = result_data.get("node_results", {})
+
+    # Check for intelligence loop outputs (ILA-3.5) — must run before COA
+    # since ILA is downstream of COA and may share some keys.
+    has_ila = bool(
+        node_results.get("campaign_intelligence")
+        or result_data.get("intelligence_report")
+        or result_data.get("scored_learnings")
+    )
+    if has_ila:
+        return IntelligenceLoopExtractor()
 
     # Check for continuous optimization outputs (COA-3.4)
     has_coa = bool(

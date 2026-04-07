@@ -38,6 +38,8 @@ app.conf.task_routes = {
     "analytics.tasks.*": {"queue": "orchestration"},
     # Optimization tasks on orchestration queue
     "optimization.tasks.*": {"queue": "orchestration"},
+    # Intelligence Loop tasks on orchestration queue
+    "intelligence_loop.tasks.*": {"queue": "orchestration"},
 }
 
 

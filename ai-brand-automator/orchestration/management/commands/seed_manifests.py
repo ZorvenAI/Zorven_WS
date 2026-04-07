@@ -1495,6 +1495,51 @@ class Command(BaseCommand):
                 },
             },
         },
+        {
+            "pipeline_id": "meta-campaign-intelligence",
+            "name": "Meta Ads: Campaign Intelligence Extraction",
+            "description": (
+                "Extract strategic learnings from campaign performance "
+                "across audience, messaging, creative, funnel, and "
+                "competitive dimensions. Writes learnings to RAG for "
+                "passive feedback into all future agent sessions and "
+                "optionally triggers WF1/WF2 re-runs."
+            ),
+            "manifest_data": {
+                "nodes": [
+                    {
+                        "id": "intent_router",
+                        "type": "internal",
+                        "handler": "RouterNode",
+                    },
+                    {
+                        "id": "campaign_intelligence",
+                        "type": "external",
+                        "url": (
+                            "http://intelligence-loop-agent-svc:8045"
+                            "/v1/execute"
+                        ),
+                        "config": {
+                            "timeout": 300,
+                            "default_mode": "store_only",
+                        },
+                    },
+                    {
+                        "id": "manager",
+                        "type": "internal",
+                        "handler": "ManagerNode",
+                    },
+                ],
+                "edges": [
+                    ["intent_router", "campaign_intelligence"],
+                    ["campaign_intelligence", "manager"],
+                ],
+                "global_config": {
+                    "model": "claude-sonnet-4-20250514",
+                    "temperature": 0.2,
+                },
+            },
+        },
     ]
 
     def handle(self, *args, **options):

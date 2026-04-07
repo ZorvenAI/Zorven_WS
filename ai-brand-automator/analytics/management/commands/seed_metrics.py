@@ -1325,6 +1325,98 @@ METRIC_DEFINITIONS = [
         "description": "Number of ads flagged for creative fatigue",
         "source_pipelines": [],
     },
+    # Intelligence Loop Agent (ILA, WF3.5) — six metrics per design §12.1
+    {
+        "metric_name": "learnings_extracted",
+        "display_name": "Learnings Extracted",
+        "category": "intelligence_loop",
+        "unit": "count",
+        "value_range_min": 0,
+        "value_range_max": 1000,
+        "higher_is_better": True,
+        "chart_color": "#A855F7",
+        "display_order": 1,
+        "description": (
+            "Total strategic learnings produced by ILA across the five "
+            "categories (audience, messaging, creative, funnel, competitive)."
+        ),
+        "source_pipelines": ["meta-campaign-intelligence"],
+    },
+    {
+        "metric_name": "high_confidence_learnings",
+        "display_name": "High-Confidence Learnings",
+        "category": "intelligence_loop",
+        "unit": "count",
+        "value_range_min": 0,
+        "value_range_max": 1000,
+        "higher_is_better": True,
+        "chart_color": "#22D3EE",
+        "display_order": 2,
+        "description": "Learnings with final confidence ≥ 85%.",
+        "source_pipelines": ["meta-campaign-intelligence"],
+    },
+    {
+        "metric_name": "high_impact_learnings",
+        "display_name": "High-Impact Learnings",
+        "category": "intelligence_loop",
+        "unit": "count",
+        "value_range_min": 0,
+        "value_range_max": 1000,
+        "higher_is_better": True,
+        "chart_color": "#10B981",
+        "display_order": 3,
+        "description": "Learnings flagged with HIGH strategic impact.",
+        "source_pipelines": ["meta-campaign-intelligence"],
+    },
+    {
+        "metric_name": "auto_reruns_triggered",
+        "display_name": "Auto Re-runs Triggered",
+        "category": "intelligence_loop",
+        "unit": "count",
+        "value_range_min": 0,
+        "value_range_max": 1000,
+        "higher_is_better": None,
+        "chart_color": "#F59E0B",
+        "display_order": 4,
+        "description": (
+            "WF1 re-runs ILA dispatched automatically (auto_trigger mode "
+            "only). WF2 re-runs always require human approval."
+        ),
+        "source_pipelines": ["meta-campaign-intelligence"],
+    },
+    {
+        "metric_name": "contradictions_detected",
+        "display_name": "Contradictions Detected",
+        "category": "intelligence_loop",
+        "unit": "count",
+        "value_range_min": 0,
+        "value_range_max": 1000,
+        "higher_is_better": False,
+        "chart_color": "#EF4444",
+        "display_order": 5,
+        "description": (
+            "Number of new learnings that contradict prior RAG-stored "
+            "learnings (PG-06 guardrail). Both are kept; contradictions "
+            "are escalated for review."
+        ),
+        "source_pipelines": ["meta-campaign-intelligence"],
+    },
+    {
+        "metric_name": "rag_documents_written",
+        "display_name": "RAG Documents Written",
+        "category": "intelligence_loop",
+        "unit": "count",
+        "value_range_min": 0,
+        "value_range_max": 1000,
+        "higher_is_better": True,
+        "chart_color": "#0EA5E9",
+        "display_order": 6,
+        "description": (
+            "Learning documents successfully written to the per-tenant "
+            "Vertex AI RAG store (passive feedback loop)."
+        ),
+        "source_pipelines": ["meta-campaign-intelligence"],
+    },
 ]
 
 

@@ -1,17 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Brain } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import OptimizationDashboard from '@/components/optimization/OptimizationDashboard';
+import IntelligenceFeed from '@/components/intelligence/IntelligenceFeed';
+import WF2ApprovalQueue from '@/components/intelligence/WF2ApprovalQueue';
 
-export default function OptimizationPage() {
+export default function IntelligencePage() {
   useAuth();
 
   const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHasMounted(true);
   }, []);
 
@@ -37,22 +37,22 @@ export default function OptimizationPage() {
           </Link>
           <div className="flex-1">
             <h1 className="text-3xl font-heading font-bold text-white">
-              Optimization Command Center
+              Intelligence Loop
             </h1>
             <p className="text-sm text-brand-silver mt-1">
-              Monitor, review, and control continuous campaign optimization
+              Cross-workflow learnings extracted from campaign optimization
             </p>
           </div>
-          <Link
-            href="/intelligence"
-            className="inline-flex items-center gap-1.5 text-sm text-brand-electric hover:text-white transition-colors px-3 py-1.5 rounded border border-brand-electric/40 hover:border-white/40"
-          >
-            <Brain className="h-4 w-4" />
-            Intelligence Loop
-          </Link>
         </div>
 
-        <OptimizationDashboard />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <IntelligenceFeed />
+          </div>
+          <div className="lg:col-span-1">
+            <WF2ApprovalQueue />
+          </div>
+        </div>
       </div>
     </div>
   );
