@@ -25,6 +25,7 @@ SYNCABLE_MODELS = {
     "ChatMessage": "ai_services.ChatMessage",
     "AIGeneration": "ai_services.AIGeneration",
     "ContentCalendar": "automation.ContentCalendar",
+    "LearningDocument": "intelligence_loop.LearningDocument",
 }
 
 # Document ID prefixes for upsert idempotency
@@ -34,6 +35,7 @@ _DOC_ID_PREFIXES = {
     "ChatMessage": "chat-msg",
     "AIGeneration": "ai-gen",
     "ContentCalendar": "content-cal",
+    "LearningDocument": "ila-learning",
 }
 
 # Maximum text length for extracted_text (Vertex AI limit)
@@ -253,6 +255,29 @@ class DbSyncService:
                 "created_at": _iso(post, "created_at"),
             },
             "extracted_text": _truncate("\n\n".join(text_parts)),
+        }
+
+    def _build_learningdocument_doc(self, doc) -> dict[str, Any]:
+        """Build RAG document from an ILA LearningDocument."""
+        learning = doc.learning
+        intelligence = learning.intelligence
+        campaign = getattr(intelligence, "campaign", None)
+        return {
+            "document_type": "campaign_learning",
+            "metadata": {
+                "category": learning.category,
+                "impact": learning.impact,
+                "confidence": learning.confidence,
+                "headline": learning.headline or "",
+                "learning_id": str(learning.learning_id),
+                "intelligence_id": str(intelligence.intelligence_id),
+                "campaign_id": str(campaign.pk) if campaign else "",
+                "brand_context_id": intelligence.brand_context_id or "",
+                "target_workflow": learning.target_workflow,
+                "target_agent": learning.target_agent or "",
+                "created_at": _iso(doc, "created_at"),
+            },
+            "extracted_text": _truncate(doc.content or ""),
         }
 
 

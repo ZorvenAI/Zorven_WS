@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 22 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash and Anthropic Claude. ~3,300+ tests across all components.
+AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 24 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash and Anthropic Claude. ~3,300+ tests across all components.
 
 ## Monorepo Layout
 
@@ -33,6 +33,7 @@ campaign-architecture-agent-svc/ # FastAPI — WF3 campaign architecture, Meta A
 creative-generation-agent-svc/  # FastAPI — WF3 creative generation, AI ad images (Nano Banana 2), ad copy, Meta compliance, Claude Sonnet 4 (port 8042)
 ad-publishing-agent-svc/        # FastAPI — WF3 ad publishing, Meta Ads API, human approval gate, Claude Sonnet 4 (port 8043)
 campaign-optimization-agent-svc/ # FastAPI + Celery Beat — WF3 continuous optimization, Meta Insights/Management API, Claude Sonnet 4 (port 8044)
+intelligence-loop-agent-svc/    # FastAPI — WF3.5 intelligence loop, consumes optimization learnings for RAG feedback (planned, see docs/Brand_Workflow_Agent_Design/Intelligence_Loop_Agent_Design_Document_v1_0.docx)
 odoo-mcp-server-svc/            # FastAPI — Odoo ERP MCP bridge, 101 tools (port 8095)
 odoo-worker-agent-svc/          # FastAPI — Multi-persona Odoo worker, PAOR loop (port 8100)
 vendor/odoo/community/           # Git submodule — Odoo Community Edition 19.0
@@ -244,7 +245,7 @@ Schema-based via `django-tenants`. All models have a nullable `tenant` FK. Most 
 
 ### Redis Database Allocation
 
-DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent, DB 16: Brand Positioning, DB 17: Brand Architecture, DB 18: Brand Personality, DB 19: Brand Naming, DB 20: Brand Story, DB 21: Campaign Architecture, DB 22: Creative Generation, DB 23: Ad Publishing, DB 24: Campaign Optimization (requires `databases 25` in redis.conf)
+DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent, DB 16: Brand Positioning, DB 17: Brand Architecture, DB 18: Brand Personality, DB 19: Brand Naming, DB 20: Brand Story, DB 21: Campaign Architecture, DB 22: Creative Generation, DB 23: Ad Publishing, DB 24: Campaign Optimization (requires `databases 25` in redis.conf — if COA fails with `ERR DB index is out of range`, bump the Redis `databases` setting), DB 25: Intelligence Loop Agent (planned, WF3.5)
 
 ### Microservice Layout Convention
 
@@ -309,6 +310,8 @@ Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `C
 | `agent.optimization.creative_refresh` | Campaign Optimization agent | Creative Generation agent | Creative refresh requests for fatigued ads |
 | `agent.optimization.spend_milestone` | Campaign Optimization agent | Campaign Optimization agent | Spend milestone self-trigger (50%/75%/100%) |
 | `agent.optimization.action_executed` | Campaign Optimization agent | Intelligence Loop (3.5) | Optimization learnings for RAG |
+
+**Manual COA tick trigger**: Besides Celery Beat's scheduled ticks, the Optimization Dashboard exposes a manual trigger button that calls Django's `/api/v1/optimization/trigger-tick/` endpoint, which proxies to COA (`X-Service-Token` auth) and returns synchronous per-campaign results including skip reasons (guardrail failures, campaign age filters, etc.) for immediate UI feedback. COA service URL and service token must be configured on the Django backend (`COA_SERVICE_URL`, `COA_SERVICE_TOKEN`).
 | `analytics-events` | Analytics extraction | — | Metric extraction/rejection audit (conditional via `ANALYTICS_KAFKA_ENABLED`) |
 
 ## Critical Code Patterns
