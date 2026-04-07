@@ -134,3 +134,23 @@ def sync_content_calendar_to_rag(sender, instance, **kwargs):
             instance.pk,
             e,
         )
+
+
+@receiver(post_save, sender="intelligence_loop.LearningDocument")
+def sync_learning_document_to_rag(sender, instance, **kwargs):
+    """Sync ILA LearningDocument to RAG."""
+    from rag_index.tasks.db_sync_tasks import sync_model_to_rag
+
+    tenant = getattr(getattr(instance, "learning", None), "tenant", None)
+    tenant_id = str(tenant.id) if tenant else None
+    try:
+        sync_model_to_rag.apply_async(
+            args=["LearningDocument", instance.pk, tenant_id],
+            countdown=2,
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to queue LearningDocument RAG sync for pk=%s: %s",
+            instance.pk,
+            e,
+        )

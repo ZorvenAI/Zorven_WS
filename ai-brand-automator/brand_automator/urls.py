@@ -91,6 +91,11 @@ urlpatterns = [
                 path("analytics/", include("analytics.urls")),
                 # Campaign Optimization (COA-3.4)
                 path("optimization/", include("optimization.urls")),
+                # Intelligence Loop Agent (ILA, WF3.5)
+                path(
+                    "intelligence-loop/",
+                    include("intelligence_loop.urls"),
+                ),
             ]
         ),
     ),
