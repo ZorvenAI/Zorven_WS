@@ -238,18 +238,25 @@ export function OnboardingReview() {
                 <dd className="mt-1 text-sm text-white">{company.mission_statement}</dd>
               </div>
             )}
-            {company.values && company.values.length > 0 && (
-              <div>
-                <dt className="text-sm font-medium text-brand-silver/70">Core Values</dt>
-                <dd className="mt-1">
-                  <ul className="list-disc list-inside text-sm text-white">
-                    {company.values.split(',').map((value, idx) => (
-                      <li key={idx}>{value.trim()}</li>
-                    ))}
-                  </ul>
-                </dd>
-              </div>
-            )}
+            {(() => {
+              const valueItems = (company.values || '')
+                .split(',')
+                .map((v) => v.trim())
+                .filter((v) => v.length > 0);
+              if (valueItems.length === 0) return null;
+              return (
+                <div>
+                  <dt className="text-sm font-medium text-brand-silver/70">Core Values</dt>
+                  <dd className="mt-1">
+                    <ul className="list-disc list-inside text-sm text-white">
+                      {valueItems.map((value, idx) => (
+                        <li key={idx}>{value}</li>
+                      ))}
+                    </ul>
+                  </dd>
+                </div>
+              );
+            })()}
             {company.positioning_statement && (
               <div>
                 <dt className="text-sm font-medium text-brand-silver/70">Positioning Statement</dt>
@@ -359,7 +366,7 @@ export function OnboardingReview() {
 
       {/* Action Buttons */}
       <div className="flex flex-col space-y-4 pt-6">
-        {!company.vision_statement && (
+        {!(company.tagline || company.value_proposition || company.elevator_pitch) && (
           <button
             onClick={handleGenerateBrandStrategy}
             disabled={generating}
