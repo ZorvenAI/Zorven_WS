@@ -38,7 +38,6 @@ export function OnboardingReview() {
   const router = useRouter();
   const [company, setCompany] = useState<CompanyData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [error, setError] = useState('');
 
@@ -67,41 +66,6 @@ export function OnboardingReview() {
       setError('An unexpected error occurred');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleGenerateBrandStrategy = async () => {
-    setGenerating(true);
-    setError('');
-
-    try {
-      const companyId = localStorage.getItem('company_id');
-      if (!companyId) {
-        setError('Company ID not found');
-        setGenerating(false);
-        return;
-      }
-
-      const response = await apiClient.post(
-        `/companies/${companyId}/generate_brand_strategy/`,
-        {}
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        // Update company data with generated strategy
-        setCompany(prev => prev ? { ...prev, ...data } : null);
-        alert('Brand strategy generated successfully! Redirecting to AI Chat...');
-        setTimeout(() => router.push('/chat'), 1500);
-      } else {
-        const errorData = await response.json();
-        setError(errorData.message || 'Failed to generate brand strategy');
-      }
-    } catch (error) {
-      console.error('Error generating brand strategy:', error);
-      setError('An unexpected error occurred');
-    } finally {
-      setGenerating(false);
     }
   };
 
@@ -181,6 +145,12 @@ export function OnboardingReview() {
             <dt className="text-sm font-medium text-brand-silver/70">Description</dt>
             <dd className="mt-1 text-sm text-white">{company.description}</dd>
           </div>
+          {company.target_audience && (
+            <div>
+              <dt className="text-sm font-medium text-brand-silver/70">Target Audience</dt>
+              <dd className="mt-1 text-sm text-white">{company.target_audience}</dd>
+            </div>
+          )}
           {company.core_problem && (
             <div>
               <dt className="text-sm font-medium text-brand-silver/70">Core Problem You Solve</dt>
@@ -366,16 +336,6 @@ export function OnboardingReview() {
 
       {/* Action Buttons */}
       <div className="flex flex-col space-y-4 pt-6">
-        {!(company.tagline || company.value_proposition || company.elevator_pitch) && (
-          <button
-            onClick={handleGenerateBrandStrategy}
-            disabled={generating}
-            className="w-full px-6 py-3 bg-brand-electric text-brand-midnight rounded-lg hover:bg-brand-electric/80 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
-          >
-            {generating ? 'Generating Brand Strategy...' : '✨ Generate Brand Strategy with AI'}
-          </button>
-        )}
-
         <div className="flex justify-between">
           <button
             type="button"
@@ -390,7 +350,7 @@ export function OnboardingReview() {
             disabled={completing}
             className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {completing ? 'Saving & Indexing...' : 'Complete & Start Chatting'}
+            {completing ? 'Submitting...' : 'Submit'}
           </button>
         </div>
       </div>
