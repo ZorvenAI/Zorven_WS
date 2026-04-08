@@ -165,8 +165,23 @@ class ExternalWrapper(BaseNode):
         update: dict[str, Any] = {"node_outputs": node_outputs}
 
         # Propagate result_data from external service responses so the
-        # job executor can accumulate it for the final callback.
-        if isinstance(result, dict) and "result_data" in result:
-            update["result_data"] = result["result_data"]
+        # job executor can accumulate it across every node in the pipeline.
+        #
+        # Two shapes are supported:
+        #   1. The agent explicitly wraps its payload in a ``result_data``
+        #      key — we merge it as-is.
+        #   2. The agent returns its payload flat (CAA/CGA/APA do this) —
+        #      we preserve it under the node_id so downstream nodes cannot
+        #      overwrite earlier agents' outputs.
+        #
+        # Without this, the final pipeline result would only contain the
+        # last agent's output (e.g. ad-publishing) and earlier agents'
+        # outputs (campaign architecture, creative generation) would be
+        # dropped.
+        if isinstance(result, dict):
+            if "result_data" in result and isinstance(result["result_data"], dict):
+                update["result_data"] = result["result_data"]
+            elif not result.get("error"):
+                update["result_data"] = {self.node_id: result}
 
         return update

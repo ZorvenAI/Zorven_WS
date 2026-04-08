@@ -353,7 +353,14 @@ class JobExecutor:
                                     node_result["node_outputs"]
                                 )
                             if "result_data" in node_result:
-                                result_data = node_result["result_data"]
+                                incoming = node_result["result_data"]
+                                if isinstance(incoming, dict):
+                                    if isinstance(result_data, dict):
+                                        result_data.update(incoming)
+                                    else:
+                                        result_data = dict(incoming)
+                                else:
+                                    result_data = incoming
                     else:
                         # Parallel execution via asyncio.gather
                         tasks = [handlers[nid](state) for nid in level_nodes]
@@ -413,7 +420,14 @@ class JobExecutor:
                                 if "node_outputs" in result:
                                     state["node_outputs"].update(result["node_outputs"])
                                 if "result_data" in result:
-                                    result_data = result["result_data"]
+                                    incoming = result["result_data"]
+                                    if isinstance(incoming, dict):
+                                        if isinstance(result_data, dict):
+                                            result_data.update(incoming)
+                                        else:
+                                            result_data = dict(incoming)
+                                    else:
+                                        result_data = incoming
 
                     # Check if any node requires human approval BEFORE
                     # marking as done, so progress shows the correct state.
