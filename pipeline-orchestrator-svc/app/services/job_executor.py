@@ -42,6 +42,32 @@ class JobExecutor:
         """Close the underlying callback HTTP client."""
         await self.callback.close()
 
+    @staticmethod
+    def _merge_result_data(existing: Any, incoming: Any) -> Any:
+        """
+        Merge ``incoming`` result_data into ``existing`` result_data.
+
+        Dicts are deep-merged one level (``node_payloads`` dicts are
+        merged key-by-key so multiple external agents can contribute
+        without overwriting each other). Non-dict ``incoming`` values
+        replace ``existing`` entirely, matching the previous behavior.
+        """
+        if not isinstance(incoming, dict):
+            return incoming
+        if not isinstance(existing, dict):
+            return dict(incoming)
+
+        for key, value in incoming.items():
+            if (
+                key == "node_payloads"
+                and isinstance(value, dict)
+                and isinstance(existing.get(key), dict)
+            ):
+                existing[key].update(value)
+            else:
+                existing[key] = value
+        return existing
+
     async def execute(self, request: DispatchRequest) -> None:
         """
         Execute a pipeline job end-to-end.
@@ -353,7 +379,9 @@ class JobExecutor:
                                     node_result["node_outputs"]
                                 )
                             if "result_data" in node_result:
-                                result_data = node_result["result_data"]
+                                result_data = self._merge_result_data(
+                                    result_data, node_result["result_data"]
+                                )
                     else:
                         # Parallel execution via asyncio.gather
                         tasks = [handlers[nid](state) for nid in level_nodes]
@@ -413,7 +441,9 @@ class JobExecutor:
                                 if "node_outputs" in result:
                                     state["node_outputs"].update(result["node_outputs"])
                                 if "result_data" in result:
-                                    result_data = result["result_data"]
+                                    result_data = self._merge_result_data(
+                                        result_data, result["result_data"]
+                                    )
 
                     # Check if any node requires human approval BEFORE
                     # marking as done, so progress shows the correct state.
@@ -454,8 +484,14 @@ class JobExecutor:
                             len(levels),
                         )
 
-                    # Build partial result_data with only this level's outputs
-                    # to avoid exceeding the 1 MB CallbackSerializer limit
+                    # Build partial result_data with ONLY this level's outputs
+                    # to avoid exceeding the 1 MB CallbackSerializer limit.
+                    # We intentionally do NOT merge the accumulated result_data
+                    # into progress callbacks — external agents can return
+                    # large payloads (creative generation, ad publishing) and
+                    # sending them on every level inflates callbacks and
+                    # duplicates data that ManagerNode will already include
+                    # in the final completed callback.
                     level_outputs = {
                         nid: state["node_outputs"][nid]
                         for nid in level_nodes
@@ -464,8 +500,6 @@ class JobExecutor:
                     partial_result_data: dict[str, Any] = {
                         "node_results": level_outputs,
                     }
-                    if result_data:
-                        partial_result_data.update(result_data)
 
                     # If a node requires human approval, send the
                     # awaiting_approval callback and pause the pipeline.
@@ -516,13 +550,21 @@ class JobExecutor:
                         "completed_at": self._now_iso(),
                     }
 
-            # Use accumulated result_data or fall back to default
+            # Use accumulated result_data or fall back to default.
+            # Also backfill default summary/findings/recommendations when an
+            # accumulated result_data exists but lacks these top-level keys
+            # (e.g. pipelines without a ManagerNode where only external
+            # agents contributed per-node payloads).
             if result_data is None:
                 result_data = {
                     "summary": "Pipeline completed successfully.",
                     "findings": ["Analysis completed."],
                     "recommendations": [],
                 }
+            elif isinstance(result_data, dict):
+                result_data.setdefault("summary", "Pipeline completed successfully.")
+                result_data.setdefault("findings", ["Analysis completed."])
+                result_data.setdefault("recommendations", [])
 
             # Check for cancel one last time
             if await self._is_cancelled(job_id):

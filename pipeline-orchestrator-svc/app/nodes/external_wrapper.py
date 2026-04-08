@@ -165,8 +165,46 @@ class ExternalWrapper(BaseNode):
         update: dict[str, Any] = {"node_outputs": node_outputs}
 
         # Propagate result_data from external service responses so the
-        # job executor can accumulate it for the final callback.
-        if isinstance(result, dict) and "result_data" in result:
-            update["result_data"] = result["result_data"]
+        # job executor can accumulate it across every node in the pipeline.
+        #
+        # Two shapes are supported:
+        #   1. The agent explicitly wraps its payload in a ``result_data``
+        #      key — we merge that dict as-is into accumulated result_data.
+        #   2. The agent returns its payload flat (CAA/CGA/APA do this) —
+        #      we namespace it under ``result_data["node_payloads"][node_id]``
+        #      so downstream nodes cannot overwrite earlier agents' outputs
+        #      and so the propagated data does not collide with ManagerNode's
+        #      top-level keys (summary, findings, node_results, etc.).
+        #
+        # Without this, the final pipeline result would only contain the
+        # last agent's output (e.g. ad-publishing) and earlier agents'
+        # outputs (campaign architecture, creative generation) would be
+        # dropped.
+        if isinstance(result, dict) and not self._is_error_payload(result):
+            if "result_data" in result and isinstance(result["result_data"], dict):
+                update["result_data"] = result["result_data"]
+            else:
+                update["result_data"] = {"node_payloads": {self.node_id: result}}
 
         return update
+
+    @staticmethod
+    def _is_error_payload(result: dict) -> bool:
+        """
+        Decide whether an agent response represents a failure and should
+        NOT be propagated into accumulated result_data.
+
+        Services use a few different shapes to signal failure:
+          - ``error: True`` (our stub fallback when the service is down).
+          - ``status: "failed" | "error"`` (e.g. ad-publishing-agent-svc).
+          - A non-empty ``errors`` list at the top level.
+        """
+        if result.get("error"):
+            return True
+        status = result.get("status")
+        if isinstance(status, str) and status.lower() in {"failed", "error"}:
+            return True
+        errors = result.get("errors")
+        if isinstance(errors, list) and errors:
+            return True
+        return False
