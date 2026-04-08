@@ -9,7 +9,7 @@ interface CompanyData {
   name: string;
   industry: string;
   description: string;
-  target_audience: string;
+  target_audience?: string;
   core_problem?: string;
   website?: string;
   address?: string;
