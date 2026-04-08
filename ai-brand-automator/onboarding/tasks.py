@@ -596,12 +596,25 @@ def batch_export_companies_for_rag(
 
 def _build_asset_summary_prompt(asset, company) -> str:
     """Prompt for a short description of what a brand asset likely contains."""
+    from brand_automator.validators import sanitize_ai_prompt
+
+    def _clean(value, default=""):
+        raw = value if value else default
+        if not raw:
+            return ""
+        try:
+            return sanitize_ai_prompt(str(raw))
+        except Exception:  # pragma: no cover — defensive
+            return str(raw)
+
     location = ""
     if company and getattr(company, "has_local_scope", False):
-        location = f" at {company.formatted_address}"
-    industry = (company.industry or "unspecified") if company else "unspecified"
-    brand_name = (company.name or "the brand") if company else "the brand"
-    description = (company.description or "") if company else ""
+        location = f" at {_clean(company.formatted_address)}"
+    industry = _clean(getattr(company, "industry", ""), "unspecified")
+    brand_name = _clean(getattr(company, "name", ""), "the brand")
+    description = _clean(getattr(company, "description", ""))
+    file_name = _clean(getattr(asset, "file_name", ""))
+    file_type = _clean(getattr(asset, "file_type", ""))
 
     return (
         "You are describing a file that was uploaded to a brand's onboarding. "
@@ -612,8 +625,8 @@ def _build_asset_summary_prompt(asset, company) -> str:
         f"Brand: {brand_name}\n"
         f"Industry: {industry}{location}\n"
         f"Brand description: {description}\n"
-        f"File name: {asset.file_name}\n"
-        f"File type: {asset.file_type}\n\n"
+        f"File name: {file_name}\n"
+        f"File type: {file_type}\n\n"
         "Respond with ONLY the one-sentence description — no preamble, no "
         "quotes, no trailing notes."
     )

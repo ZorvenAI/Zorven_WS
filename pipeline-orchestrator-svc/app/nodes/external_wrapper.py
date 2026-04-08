@@ -28,9 +28,7 @@ class ExternalWrapper(BaseNode):
         self.url = url
         self.node_id = node_id
 
-    def _apply_brand_context_preamble(
-        self, input_prompt: str, tenant_ctx: Any
-    ) -> str:
+    def _apply_brand_context_preamble(self, input_prompt: str, tenant_ctx: Any) -> str:
         """
         Guarantee the BRAND CONTEXT preamble is present on the prompt sent
         to the downstream agent, even if an upstream node rewrote
@@ -57,13 +55,24 @@ class ExternalWrapper(BaseNode):
         if mode == "off":
             return input_prompt
 
-        if input_prompt and "BRAND CONTEXT" in input_prompt:
+        brand_context_headers = (
+            "BRAND CONTEXT",
+            "# BRAND CONTEXT",
+            "## BRAND CONTEXT",
+            "### BRAND CONTEXT",
+        )
+        stripped_input_prompt = input_prompt.lstrip() if input_prompt else ""
+        if stripped_input_prompt.startswith(brand_context_headers):
             return input_prompt
 
+        full_preamble = tenant_ctx.get("brand_context_preamble") or ""
+        compact_preamble = tenant_ctx.get("brand_context_preamble_compact") or ""
+
         if mode == "compact":
-            preamble = tenant_ctx.get("brand_context_preamble_compact") or ""
+            # Fall back to full preamble if compact variant is missing.
+            preamble = compact_preamble or full_preamble
         else:
-            preamble = tenant_ctx.get("brand_context_preamble") or ""
+            preamble = full_preamble
 
         if not preamble:
             return input_prompt

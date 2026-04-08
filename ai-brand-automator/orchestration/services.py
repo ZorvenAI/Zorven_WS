@@ -12,6 +12,8 @@ from decouple import config
 from django.conf import settings
 from django.utils import timezone
 
+from brand_automator.validators import sanitize_ai_prompt
+
 logger = logging.getLogger(__name__)
 
 
@@ -202,7 +204,16 @@ class OrchestratorDispatcher:
                 input_context.setdefault("brand_location", loc.get("formatted", ""))
                 input_context.setdefault("brand_location_parts", loc.get("parts", {}))
 
-            if preamble_full and "BRAND CONTEXT" not in input_prompt:
+            brand_context_headers = (
+                "=" * 70,
+                "BRAND CONTEXT",
+                "# BRAND CONTEXT",
+                "## BRAND CONTEXT",
+                "### BRAND CONTEXT",
+            )
+            stripped_prompt = (input_prompt or "").lstrip()
+            already_prefixed = stripped_prompt.startswith(brand_context_headers)
+            if preamble_full and not already_prefixed:
                 input_prompt = preamble_full + input_prompt
 
         payload = {
@@ -254,6 +265,15 @@ class OrchestratorDispatcher:
         if company is None:
             return None, None, None
 
+        def _clean(value):
+            """Sanitize user-controlled field before embedding in LLM prompt."""
+            if not value:
+                return ""
+            try:
+                return sanitize_ai_prompt(str(value))
+            except Exception:  # pragma: no cover — defensive
+                return str(value)
+
         # Uploaded brand assets — include metadata + (LLM-generated)
         # summary when present. Contents live in the tenant RAG data
         # store and agents retrieve them on-demand using
@@ -261,10 +281,10 @@ class OrchestratorDispatcher:
         try:
             assets = [
                 {
-                    "file_name": a.file_name,
-                    "file_type": a.file_type,
-                    "status": a.pipeline_status,
-                    "summary": a.summary or "",
+                    "file_name": _clean(a.file_name),
+                    "file_type": a.file_type or "",
+                    "status": a.pipeline_status or "",
+                    "summary": _clean(a.summary),
                 }
                 for a in company.assets.all().only(
                     "file_name", "file_type", "pipeline_status", "summary"
@@ -274,40 +294,40 @@ class OrchestratorDispatcher:
             assets = []
 
         has_local = bool(getattr(company, "has_local_scope", False))
-        formatted_location = company.formatted_address if has_local else ""
+        formatted_location = _clean(company.formatted_address) if has_local else ""
 
         structured = {
-            "name": company.name or "",
-            "industry": company.industry or "",
-            "description": company.description or "",
-            "core_problem": company.core_problem or "",
+            "name": _clean(company.name),
+            "industry": _clean(company.industry),
+            "description": _clean(company.description),
+            "core_problem": _clean(company.core_problem),
             "website": company.website or "",
             "location": {
                 "formatted": formatted_location,
                 "parts": {
-                    "address": company.address or "",
-                    "city": company.city or "",
-                    "state_province": company.state_province or "",
-                    "postal_code": company.postal_code or "",
-                    "country": company.country or "",
+                    "address": _clean(company.address),
+                    "city": _clean(company.city),
+                    "state_province": _clean(company.state_province),
+                    "postal_code": _clean(company.postal_code),
+                    "country": _clean(company.country),
                 },
                 "is_local_single_location": has_local,
             },
             "target_audience": {
-                "summary": company.target_audience or "",
-                "demographics": company.demographics or "",
-                "psychographics": company.psychographics or "",
-                "pain_points": company.pain_points or "",
-                "desired_outcomes": company.desired_outcomes or "",
+                "summary": _clean(company.target_audience),
+                "demographics": _clean(company.demographics),
+                "psychographics": _clean(company.psychographics),
+                "pain_points": _clean(company.pain_points),
+                "desired_outcomes": _clean(company.desired_outcomes),
             },
-            "brand_voice": company.brand_voice or "",
-            "vision_statement": company.vision_statement or "",
-            "mission_statement": company.mission_statement or "",
-            "values": company.values or "",
-            "positioning_statement": company.positioning_statement or "",
-            "tagline": company.tagline or "",
-            "value_proposition": company.value_proposition or "",
-            "elevator_pitch": company.elevator_pitch or "",
+            "brand_voice": _clean(company.brand_voice),
+            "vision_statement": _clean(company.vision_statement),
+            "mission_statement": _clean(company.mission_statement),
+            "values": _clean(company.values),
+            "positioning_statement": _clean(company.positioning_statement),
+            "tagline": _clean(company.tagline),
+            "value_proposition": _clean(company.value_proposition),
+            "elevator_pitch": _clean(company.elevator_pitch),
             "assets": assets,
         }
 
@@ -331,11 +351,11 @@ class OrchestratorDispatcher:
             if value:
                 lines.append(f"- {label}: {value}")
 
-        _add("Brand name", company.name)
-        _add("Industry", company.industry)
-        _add("Description", company.description)
-        _add("Core problem solved", company.core_problem)
-        _add("Website", company.website)
+        _add("Brand name", structured["name"])
+        _add("Industry", structured["industry"])
+        _add("Description", structured["description"])
+        _add("Core problem solved", structured["core_problem"])
+        _add("Website", structured["website"])
 
         if has_local and formatted_location:
             lines.append(f"- Physical location: {formatted_location}")
@@ -352,24 +372,23 @@ class OrchestratorDispatcher:
 
         # Target audience — preserve each field separately so the LLM
         # cannot collapse them into a generic "everyone" default.
+        ta = structured["target_audience"]
         ta_any = False
-        if company.target_audience:
-            lines.append(f"- Target audience (primary): {company.target_audience}")
+        if ta["summary"]:
+            lines.append(f"- Target audience (primary): {ta['summary']}")
             ta_any = True
-        if company.demographics:
-            lines.append(f"- Target audience — demographics: {company.demographics}")
+        if ta["demographics"]:
+            lines.append(f"- Target audience — demographics: {ta['demographics']}")
             ta_any = True
-        if company.psychographics:
+        if ta["psychographics"]:
+            lines.append(f"- Target audience — psychographics: {ta['psychographics']}")
+            ta_any = True
+        if ta["pain_points"]:
+            lines.append(f"- Target audience — pain points: {ta['pain_points']}")
+            ta_any = True
+        if ta["desired_outcomes"]:
             lines.append(
-                f"- Target audience — psychographics: {company.psychographics}"
-            )
-            ta_any = True
-        if company.pain_points:
-            lines.append(f"- Target audience — pain points: {company.pain_points}")
-            ta_any = True
-        if company.desired_outcomes:
-            lines.append(
-                f"- Target audience — desired outcomes: {company.desired_outcomes}"
+                f"- Target audience — desired outcomes: {ta['desired_outcomes']}"
             )
             ta_any = True
         if ta_any:
@@ -379,14 +398,14 @@ class OrchestratorDispatcher:
                 "demographic unless the task explicitly asks you to."
             )
 
-        _add("Brand voice", company.brand_voice)
-        _add("Positioning statement", company.positioning_statement)
-        _add("Value proposition", company.value_proposition)
-        _add("Tagline", company.tagline)
-        _add("Vision", company.vision_statement)
-        _add("Mission", company.mission_statement)
-        _add("Core values", company.values)
-        _add("Elevator pitch", company.elevator_pitch)
+        _add("Brand voice", structured["brand_voice"])
+        _add("Positioning statement", structured["positioning_statement"])
+        _add("Value proposition", structured["value_proposition"])
+        _add("Tagline", structured["tagline"])
+        _add("Vision", structured["vision_statement"])
+        _add("Mission", structured["mission_statement"])
+        _add("Core values", structured["values"])
+        _add("Elevator pitch", structured["elevator_pitch"])
 
         if assets:
             lines.append("")
@@ -432,10 +451,10 @@ class OrchestratorDispatcher:
         clines = [
             "BRAND CONTEXT (authoritative — do not override):",
         ]
-        if company.name:
-            clines.append(f"- Brand: {company.name}")
-        if company.industry:
-            clines.append(f"- Industry: {company.industry}")
+        if structured["name"]:
+            clines.append(f"- Brand: {structured['name']}")
+        if structured["industry"]:
+            clines.append(f"- Industry: {structured['industry']}")
         if has_local and formatted_location:
             clines.append(
                 f"- LOCAL SINGLE LOCATION: {formatted_location}. "
@@ -443,16 +462,14 @@ class OrchestratorDispatcher:
                 "exclusively to the city / neighborhood around this "
                 "address. Do NOT expand to national/regional/global."
             )
-        if company.target_audience:
-            clines.append(
-                f"- Target audience (use verbatim): {company.target_audience}"
-            )
-        if company.brand_voice:
-            clines.append(f"- Voice: {company.brand_voice}")
-        if company.positioning_statement:
-            clines.append(f"- Positioning: {company.positioning_statement}")
-        if company.value_proposition:
-            clines.append(f"- Value proposition: {company.value_proposition}")
+        if ta["summary"]:
+            clines.append(f"- Target audience (use verbatim): {ta['summary']}")
+        if structured["brand_voice"]:
+            clines.append(f"- Voice: {structured['brand_voice']}")
+        if structured["positioning_statement"]:
+            clines.append(f"- Positioning: {structured['positioning_statement']}")
+        if structured["value_proposition"]:
+            clines.append(f"- Value proposition: {structured['value_proposition']}")
         if assets:
             summarized = [a for a in assets if a.get("summary")]
             if summarized:
