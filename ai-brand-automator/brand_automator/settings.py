@@ -1011,9 +1011,7 @@ ORCHESTRATOR_CALLBACK_TOKEN = config(
 )
 # Continuous Optimization Agent (COA) — used to proxy manual tick triggers
 COA_SERVICE_URL = config("COA_SERVICE_URL", default="http://localhost:8044")
-COA_SERVICE_TOKEN = config(
-    "COA_SERVICE_TOKEN", default="dev-service-token"
-)
+COA_SERVICE_TOKEN = config("COA_SERVICE_TOKEN", default="dev-service-token")
 # Intelligence Loop Agent (ILA, WF3.5) — used to proxy manual triggers and
 # to authenticate ILA → Django ingest endpoints via X-Service-Token.
 ILA_SERVICE_URL = config(

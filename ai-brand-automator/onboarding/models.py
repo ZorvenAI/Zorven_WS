@@ -32,6 +32,20 @@ class Company(models.Model):
         help_text="Company website URL (optional)",
     )
 
+    # Physical location — used to scope research/campaigns to a local area
+    # (e.g. a single-location restaurant). Threaded into pipeline dispatch
+    # by the orchestrator so WF1/WF2/WF3 limit their scope accordingly.
+    address = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Street address of the physical location",
+    )
+    city = models.CharField(max_length=100, blank=True, default="")
+    state_province = models.CharField(max_length=100, blank=True, default="")
+    postal_code = models.CharField(max_length=20, blank=True, default="")
+    country = models.CharField(max_length=100, blank=True, default="")
+
     # Target audience details (added in 0004 migration)
     demographics = models.TextField(
         blank=True, help_text="Demographic characteristics of target audience"
@@ -105,6 +119,23 @@ class Company(models.Model):
     def __str__(self):
         return f"{self.name} ({self.tenant.name})"
 
+    @property
+    def formatted_address(self):
+        """Single-line human-readable address, or empty string if unset."""
+        parts = [
+            self.address,
+            self.city,
+            self.state_province,
+            self.postal_code,
+            self.country,
+        ]
+        return ", ".join(p for p in parts if p)
+
+    @property
+    def has_local_scope(self):
+        """True when enough location data is present to scope pipelines locally."""
+        return bool(self.city or self.address)
+
 
 class BrandAsset(models.Model):
     """
@@ -170,6 +201,17 @@ class BrandAsset(models.Model):
         null=True,
         blank=True,
         help_text="Trace ID for tracking through the pipeline",
+    )
+
+    # Short LLM-generated description of what this asset contains. Populated
+    # asynchronously after ingestion completes (see onboarding.tasks.
+    # generate_brand_asset_summary). Injected into the orchestrator's
+    # BRAND CONTEXT preamble so agents know what each uploaded file is
+    # about without needing to retrieve it from RAG first.
+    summary = models.TextField(
+        blank=True,
+        default="",
+        help_text="Short LLM-generated description of the asset's contents",
     )
 
     class Meta:

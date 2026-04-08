@@ -130,7 +130,11 @@ class ContinuousOptimizationExtractor(BaseExtractor):
                 )
 
             spend_today = perf.get("spend_today")
-            if spend_today and isinstance(spend_today, (int, float)) and spend_today > 0:
+            if (
+                spend_today
+                and isinstance(spend_today, (int, float))
+                and spend_today > 0
+            ):
                 metrics.append(
                     self._make_metric(
                         job,
