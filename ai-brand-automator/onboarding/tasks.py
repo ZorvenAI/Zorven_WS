@@ -587,3 +587,127 @@ def batch_export_companies_for_rag(
 
     logger.info("Queued %d companies for RAG export (tenant_id=%s)", count, tenant_id)
     return {"status": "success", "queued_count": count, "tenant_id": tenant_id}
+
+
+# ---------------------------------------------------------------------------
+# Brand asset summarization — feeds the orchestrator's BRAND CONTEXT preamble
+# ---------------------------------------------------------------------------
+
+
+def _build_asset_summary_prompt(asset, company) -> str:
+    """Prompt for a short description of what a brand asset likely contains."""
+    location = ""
+    if company and getattr(company, "has_local_scope", False):
+        location = f" at {company.formatted_address}"
+    industry = (company.industry or "unspecified") if company else "unspecified"
+    brand_name = (company.name or "the brand") if company else "the brand"
+    description = (company.description or "") if company else ""
+
+    return (
+        "You are describing a file that was uploaded to a brand's onboarding. "
+        "Produce a SINGLE SENTENCE (max 25 words) describing what this file "
+        "most likely contains and how downstream marketing agents should use "
+        "it. Be specific to the brand's industry — do not give a generic "
+        "description. Do not speculate beyond what the filename suggests.\n\n"
+        f"Brand: {brand_name}\n"
+        f"Industry: {industry}{location}\n"
+        f"Brand description: {description}\n"
+        f"File name: {asset.file_name}\n"
+        f"File type: {asset.file_type}\n\n"
+        "Respond with ONLY the one-sentence description — no preamble, no "
+        "quotes, no trailing notes."
+    )
+
+
+@shared_task(
+    bind=True,
+    name="onboarding.tasks.generate_brand_asset_summary",
+    max_retries=2,
+    default_retry_delay=30,
+)
+def generate_brand_asset_summary(self, asset_id: int, tenant_id: str = "") -> dict:
+    """
+    Generate a short LLM description of a BrandAsset and store it on
+    ``BrandAsset.summary``. This summary is injected into the orchestrator's
+    BRAND CONTEXT preamble so every downstream agent knows what each file
+    is about without needing to retrieve it from RAG first.
+
+    This is a "fast tier" summary — it uses only the file metadata plus
+    the tenant's company context (industry, description, location). It
+    does NOT fetch file contents from GCS. A future enhancement can add
+    actual content extraction (PDF text, image vision) for higher-fidelity
+    summaries.
+
+    Idempotent: returns early if ``summary`` is already populated.
+    No-op when Gemini is not configured.
+    """
+    from onboarding.models import BrandAsset
+    from brand_automator.tenant_utils import (
+        parse_tenant_pk,
+        ensure_public_db_connection,
+    )
+
+    try:
+        ensure_public_db_connection()
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("ensure_public_db_connection failed: %s", exc)
+
+    tenant_pk = parse_tenant_pk(tenant_id) if tenant_id else None
+    qs = BrandAsset.objects.select_related("company", "company__tenant")
+    if tenant_pk is not None:
+        qs = qs.filter(tenant_id=tenant_pk)
+
+    try:
+        asset = qs.get(pk=asset_id)
+    except BrandAsset.DoesNotExist:
+        logger.warning(
+            "generate_brand_asset_summary: asset %s not found (tenant=%s)",
+            asset_id,
+            tenant_id,
+        )
+        return {"status": "not_found", "asset_id": asset_id}
+
+    if asset.summary:
+        return {
+            "status": "already_summarized",
+            "asset_id": asset_id,
+            "summary": asset.summary,
+        }
+
+    try:
+        from ai_services.services import GeminiAIService
+
+        gemini = GeminiAIService()
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("GeminiAIService unavailable: %s", exc)
+        return {"status": "llm_unavailable", "asset_id": asset_id}
+
+    if getattr(gemini, "model", None) is None:
+        logger.info(
+            "generate_brand_asset_summary: Gemini not configured, skipping " "asset %s",
+            asset_id,
+        )
+        return {"status": "llm_unavailable", "asset_id": asset_id}
+
+    prompt = _build_asset_summary_prompt(asset, asset.company)
+
+    try:
+        response = gemini.model.generate_content(prompt)
+        text = (getattr(response, "text", "") or "").strip()
+    except Exception as exc:
+        logger.warning("Gemini summary failed for asset %s: %s", asset_id, exc)
+        try:
+            raise self.retry(exc=exc)
+        except self.MaxRetriesExceededError:
+            return {"status": "failed", "asset_id": asset_id, "error": str(exc)}
+
+    # Trim to a sane length — preamble token budget matters.
+    if len(text) > 400:
+        text = text[:400].rsplit(" ", 1)[0] + "…"
+
+    if not text:
+        return {"status": "empty", "asset_id": asset_id}
+
+    BrandAsset.objects.filter(pk=asset_id).update(summary=text)
+    logger.info("Generated summary for asset %s: %s", asset_id, text[:80])
+    return {"status": "success", "asset_id": asset_id, "summary": text}

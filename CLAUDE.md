@@ -33,7 +33,7 @@ campaign-architecture-agent-svc/ # FastAPI — WF3 campaign architecture, Meta A
 creative-generation-agent-svc/  # FastAPI — WF3 creative generation, AI ad images (Nano Banana 2), ad copy, Meta compliance, Claude Sonnet 4 (port 8042)
 ad-publishing-agent-svc/        # FastAPI — WF3 ad publishing, Meta Ads API, human approval gate, Claude Sonnet 4 (port 8043)
 campaign-optimization-agent-svc/ # FastAPI + Celery Beat — WF3 continuous optimization, Meta Insights/Management API, Claude Sonnet 4 (port 8044)
-intelligence-loop-agent-svc/    # FastAPI — WF3.5 intelligence loop, consumes optimization learnings for RAG feedback (planned, see docs/Brand_Workflow_Agent_Design/Intelligence_Loop_Agent_Design_Document_v1_0.docx)
+intelligence-loop-agent-svc/    # FastAPI — WF3.5 intelligence loop, consumes optimization learnings, extracts campaign insights, feeds RAG (port 8045)
 odoo-mcp-server-svc/            # FastAPI — Odoo ERP MCP bridge, 101 tools (port 8095)
 odoo-worker-agent-svc/          # FastAPI — Multi-persona Odoo worker, PAOR loop (port 8100)
 vendor/odoo/community/           # Git submodule — Odoo Community Edition 19.0
@@ -43,7 +43,7 @@ scripts/                         # E2E test scripts, GitHub issue automation
 tests/integration/               # Cross-service integration tests (3 phases)
 ```
 
-Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service, brand-equity-calculator-svc, odoo-mcp-server-svc, market-research-agent-svc, competitor-intel-agent-svc, audience-persona-agent-svc, trend-cultural-agent-svc, voc-agent-svc, odoo-worker-agent-svc, brand-positioning-agent-svc, brand-architecture-agent-svc, brand-personality-agent-svc, brand-naming-agent-svc, brand-story-agent-svc, campaign-architecture-agent-svc, creative-generation-agent-svc, ad-publishing-agent-svc, campaign-optimization-agent-svc. Missing: rag-uploader-agent-service.
+Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service, brand-equity-calculator-svc, odoo-mcp-server-svc, market-research-agent-svc, competitor-intel-agent-svc, audience-persona-agent-svc, trend-cultural-agent-svc, voc-agent-svc, odoo-worker-agent-svc, brand-positioning-agent-svc, brand-architecture-agent-svc, brand-personality-agent-svc, brand-naming-agent-svc, brand-story-agent-svc, campaign-architecture-agent-svc, creative-generation-agent-svc, ad-publishing-agent-svc, campaign-optimization-agent-svc, intelligence-loop-agent-svc. Missing: rag-uploader-agent-service.
 
 ## Build, Run, and Test Commands
 
@@ -245,7 +245,7 @@ Schema-based via `django-tenants`. All models have a nullable `tenant` FK. Most 
 
 ### Redis Database Allocation
 
-DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent, DB 16: Brand Positioning, DB 17: Brand Architecture, DB 18: Brand Personality, DB 19: Brand Naming, DB 20: Brand Story, DB 21: Campaign Architecture, DB 22: Creative Generation, DB 23: Ad Publishing, DB 24: Campaign Optimization (requires `databases 25` in redis.conf — if COA fails with `ERR DB index is out of range`, bump the Redis `databases` setting), DB 25: Intelligence Loop Agent (planned, WF3.5)
+DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent, DB 16: Brand Positioning, DB 17: Brand Architecture, DB 18: Brand Personality, DB 19: Brand Naming, DB 20: Brand Story, DB 21: Campaign Architecture, DB 22: Creative Generation, DB 23: Ad Publishing, DB 24: Campaign Optimization (requires `databases 25` in redis.conf — if COA fails with `ERR DB index is out of range`, bump the Redis `databases` setting), DB 25: Intelligence Loop Agent (WF3.5)
 
 ### Microservice Layout Convention
 
@@ -261,7 +261,7 @@ All agent microservices follow this structure:
 └── main.py       # FastAPI application with lifespan management
 ```
 
-Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `CONTENT_`, `SOCIAL_`, `TITLING_`, `RAG_UPLOADER_`, `BRAND_EQUITY_`, `ODOO_MCP_`, `APA_`, `TCIA_`, `VOCA_`, `ODOO_WORKER_`, `BPA_`, `BAA_`, `BPV_`, `NTA_`, `BSA_`, `CAA_`, `CGA_`, `ADPUB_`, `COA_`).
+Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `CONTENT_`, `SOCIAL_`, `TITLING_`, `RAG_UPLOADER_`, `BRAND_EQUITY_`, `ODOO_MCP_`, `APA_`, `TCIA_`, `VOCA_`, `ODOO_WORKER_`, `BPA_`, `BAA_`, `BPV_`, `NTA_`, `BSA_`, `CAA_`, `CGA_`, `ADPUB_`, `COA_`, `ILA_`).
 
 ### Kafka Topics
 
@@ -309,7 +309,7 @@ Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `C
 | `coa-optimization-events-topic` | Campaign Optimization agent | — | Optimization lifecycle events |
 | `agent.optimization.creative_refresh` | Campaign Optimization agent | Creative Generation agent | Creative refresh requests for fatigued ads |
 | `agent.optimization.spend_milestone` | Campaign Optimization agent | Campaign Optimization agent | Spend milestone self-trigger (50%/75%/100%) |
-| `agent.optimization.action_executed` | Campaign Optimization agent | Intelligence Loop (3.5) | Optimization learnings for RAG |
+| `agent.optimization.action_executed` | Campaign Optimization agent | Intelligence Loop Agent | Optimization learnings consumed by ILA for extraction + RAG ingestion |
 
 **Manual COA tick trigger**: Besides Celery Beat's scheduled ticks, the Optimization Dashboard exposes a manual trigger button that calls Django's `/api/v1/optimization/trigger-tick/` endpoint, which proxies to COA (`X-Service-Token` auth) and returns synchronous per-campaign results including skip reasons (guardrail failures, campaign age filters, etc.) for immediate UI feedback. COA service URL and service token must be configured on the Django backend (`COA_SERVICE_URL`, `COA_SERVICE_TOKEN`).
 | `analytics-events` | Analytics extraction | — | Metric extraction/rejection audit (conditional via `ANALYTICS_KAFKA_ENABLED`) |
@@ -491,6 +491,8 @@ Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `t
 | Frontend orchestration helpers | `ai-brand-automator-frontend/src/lib/orchestration.ts` |
 | Frontend analytics API client | `ai-brand-automator-frontend/src/lib/analytics.ts` |
 | Frontend analytics dashboard | `ai-brand-automator-frontend/src/components/analytics/AnalyticsDashboard.tsx` |
+| Frontend intelligence loop page | `ai-brand-automator-frontend/src/app/intelligence/page.tsx` |
+| ILA Django API (reports + WF2 approval queue) | `ai-brand-automator/intelligence_loop/` (`/api/v1/intelligence-loop/intelligence-reports/`) |
 | Frontend workspace API client | `ai-brand-automator-frontend/src/lib/workspace.ts` |
 | Frontend workflow canvas | `ai-brand-automator-frontend/src/components/workspace/WorkflowCanvas.tsx` |
 | Frontend env config | `ai-brand-automator-frontend/src/lib/env.ts` |

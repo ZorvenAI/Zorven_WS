@@ -262,6 +262,23 @@ def sync_document(
         asset_id = event.metadata.get("asset_id") if event.metadata else None
         if asset_id:
             _update_asset_status(str(asset_id), "indexed", tenant_id=event.tenant_id)
+            # Kick off the LLM summary generation so the orchestrator's
+            # BRAND CONTEXT preamble can describe what this file contains.
+            # Fire-and-forget — summary is best-effort, failure does not
+            # block pipeline completion.
+            try:
+                from onboarding.tasks import generate_brand_asset_summary
+
+                generate_brand_asset_summary.apply_async(
+                    args=[int(asset_id), event.tenant_id],
+                    countdown=2,
+                )
+            except Exception as exc:  # pragma: no cover — defensive
+                logger.warning(
+                    "Failed to enqueue asset summary task for %s: %s",
+                    asset_id,
+                    exc,
+                )
         else:
             logger.warning(f"No asset_id in metadata for event {event.event_id}")
 

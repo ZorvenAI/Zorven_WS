@@ -13,6 +13,11 @@ export function CompanyForm() {
     targetAudience: '',
     coreProblem: '',
     website: '',
+    address: '',
+    city: '',
+    stateProvince: '',
+    postalCode: '',
+    country: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [existingCompanyId, setExistingCompanyId] = useState<number | null>(null);
@@ -36,6 +41,11 @@ export function CompanyForm() {
               targetAudience: company.target_audience || '',
               coreProblem: company.core_problem || '',
               website: company.website || '',
+              address: company.address || '',
+              city: company.city || '',
+              stateProvince: company.state_province || '',
+              postalCode: company.postal_code || '',
+              country: company.country || '',
             });
             // Store company ID for next steps
             localStorage.setItem('company_id', company.id.toString());
@@ -67,6 +77,11 @@ export function CompanyForm() {
         target_audience: formData.targetAudience,
         core_problem: formData.coreProblem,
         website: formData.website,
+        address: formData.address,
+        city: formData.city,
+        state_province: formData.stateProvince,
+        postal_code: formData.postalCode,
+        country: formData.country,
       };
       
       let response;
@@ -196,6 +211,85 @@ export function CompanyForm() {
           className="input-dark mt-1"
           placeholder="https://www.example.com"
         />
+      </div>
+
+      <div className="pt-2">
+        <h3 className="label-dark mb-1">Physical Location</h3>
+        <p className="text-xs text-brand-silver mb-3">
+          If your brand serves a specific local area (e.g. a restaurant, clinic, or
+          single-location store), provide the address below. The research, branding,
+          and ad campaigns will be scoped exclusively to this local area.
+        </p>
+      </div>
+
+      <div>
+        <label htmlFor="address" className="label-dark">
+          Street Address
+        </label>
+        <input
+          type="text"
+          id="address"
+          name="address"
+          value={formData.address}
+          onChange={handleChange}
+          className="input-dark mt-1"
+          placeholder="123 Main Street"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label htmlFor="city" className="label-dark">
+            City
+          </label>
+          <input
+            type="text"
+            id="city"
+            name="city"
+            value={formData.city}
+            onChange={handleChange}
+            className="input-dark mt-1"
+          />
+        </div>
+        <div>
+          <label htmlFor="stateProvince" className="label-dark">
+            State / Province
+          </label>
+          <input
+            type="text"
+            id="stateProvince"
+            name="stateProvince"
+            value={formData.stateProvince}
+            onChange={handleChange}
+            className="input-dark mt-1"
+          />
+        </div>
+        <div>
+          <label htmlFor="postalCode" className="label-dark">
+            Postal Code
+          </label>
+          <input
+            type="text"
+            id="postalCode"
+            name="postalCode"
+            value={formData.postalCode}
+            onChange={handleChange}
+            className="input-dark mt-1"
+          />
+        </div>
+        <div>
+          <label htmlFor="country" className="label-dark">
+            Country
+          </label>
+          <input
+            type="text"
+            id="country"
+            name="country"
+            value={formData.country}
+            onChange={handleChange}
+            className="input-dark mt-1"
+          />
+        </div>
       </div>
 
       <div className="flex justify-end">

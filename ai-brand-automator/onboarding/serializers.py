@@ -20,6 +20,11 @@ class CompanySerializer(serializers.ModelSerializer):
             "desired_outcomes",
             "core_problem",
             "website",
+            "address",
+            "city",
+            "state_province",
+            "postal_code",
+            "country",
             "brand_voice",
             "vision_statement",
             "mission_statement",
@@ -56,6 +61,7 @@ class BrandAssetSerializer(serializers.ModelSerializer):
             "pipeline_status",
             "pipeline_error",
             "pipeline_trace_id",
+            "summary",
         ]
         read_only_fields = [
             "id",
@@ -65,6 +71,7 @@ class BrandAssetSerializer(serializers.ModelSerializer):
             "pipeline_status",
             "pipeline_error",
             "pipeline_trace_id",
+            "summary",
         ]
 
 
@@ -103,6 +110,11 @@ class CompanyCreateSerializer(serializers.ModelSerializer):
             "target_audience",
             "core_problem",
             "website",
+            "address",
+            "city",
+            "state_province",
+            "postal_code",
+            "country",
             "brand_voice",
         ]
         read_only_fields = ["id"]
@@ -126,6 +138,11 @@ class CompanyUpdateSerializer(serializers.ModelSerializer):
             "desired_outcomes",
             "core_problem",
             "website",
+            "address",
+            "city",
+            "state_province",
+            "postal_code",
+            "country",
             "brand_voice",
             "vision_statement",
             "mission_statement",

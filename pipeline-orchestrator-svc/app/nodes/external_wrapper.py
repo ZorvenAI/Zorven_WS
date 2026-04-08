@@ -28,8 +28,56 @@ class ExternalWrapper(BaseNode):
         self.url = url
         self.node_id = node_id
 
+    def _apply_brand_context_preamble(
+        self, input_prompt: str, tenant_ctx: Any
+    ) -> str:
+        """
+        Guarantee the BRAND CONTEXT preamble is present on the prompt sent
+        to the downstream agent, even if an upstream node rewrote
+        ``state["input_prompt"]``.
+
+        Chooses between the full and compact preamble variants based on
+        the node's manifest config key ``brand_context_mode``:
+
+          - ``"full"`` (default): re-apply the full preamble if missing.
+          - ``"compact"``: re-apply the compact preamble if the full one
+            is missing. Drops vision/mission/values/checklist for
+            token-sensitive nodes.
+          - ``"off"``: skip re-application entirely. Use sparingly —
+            only for nodes that genuinely have no brand reasoning (e.g.
+            raw storage/dispatch shims).
+
+        Idempotent: if the prompt already starts with a BRAND CONTEXT
+        block, returns it unchanged regardless of mode.
+        """
+        if not isinstance(tenant_ctx, dict):
+            return input_prompt
+
+        mode = (self.config or {}).get("brand_context_mode", "full")
+        if mode == "off":
+            return input_prompt
+
+        if input_prompt and "BRAND CONTEXT" in input_prompt:
+            return input_prompt
+
+        if mode == "compact":
+            preamble = tenant_ctx.get("brand_context_preamble_compact") or ""
+        else:
+            preamble = tenant_ctx.get("brand_context_preamble") or ""
+
+        if not preamble:
+            return input_prompt
+
+        logger.info(
+            "Re-applying brand_context preamble (mode=%s) on node %s — "
+            "upstream prompt was missing the guardrail.",
+            mode,
+            self.node_id,
+        )
+        return preamble + (input_prompt or "")
+
     async def __call__(self, state: AgentState) -> dict:
-        tenant_ctx = state.get("tenant_context", {})
+        tenant_ctx = state.get("tenant_context", {}) or {}
         tenant_id = (
             tenant_ctx.get("tenant_id", "") if isinstance(tenant_ctx, dict) else ""
         )
@@ -39,8 +87,13 @@ class ExternalWrapper(BaseNode):
         if job_id:
             input_context["job_id"] = job_id
 
+        input_prompt = self._apply_brand_context_preamble(
+            state.get("input_prompt", ""),
+            tenant_ctx,
+        )
+
         payload = {
-            "input_prompt": state.get("input_prompt", ""),
+            "input_prompt": input_prompt,
             "input_context": input_context,
             "tenant_context": tenant_ctx,
             "config": self.config,

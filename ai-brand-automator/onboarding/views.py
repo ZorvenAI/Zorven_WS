@@ -261,6 +261,7 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         _field("Description", company.description)
         _field("Core Problem", company.core_problem)
         _field("Website", company.website)
+        _field("Physical Address", company.formatted_address)
 
         # Target Audience
         _section("Target Audience")
