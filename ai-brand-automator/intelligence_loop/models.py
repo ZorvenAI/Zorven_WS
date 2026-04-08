@@ -51,9 +51,7 @@ class CampaignIntelligence(models.Model):
         db_index=True,
         help_text="ILA run id (orchestrator job_id or internal uuid).",
     )
-    mode = models.CharField(
-        max_length=20, choices=MODE_CHOICES, default="store_only"
-    )
+    mode = models.CharField(max_length=20, choices=MODE_CHOICES, default="store_only")
     trigger_source = models.CharField(
         max_length=32, choices=TRIGGER_SOURCE_CHOICES, default="manual"
     )
@@ -149,9 +147,7 @@ class LearningRecord(models.Model):
         help_text="Target agent code (APA, BPA, BPV, NTA, BSA, CAA, CIA…).",
     )
 
-    status = models.CharField(
-        max_length=16, choices=STATUS_CHOICES, default="new"
-    )
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="new")
     rag_document_id = models.CharField(max_length=128, blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -203,9 +199,7 @@ class WF2RerunRequest(models.Model):
     )
     rationale = models.TextField()
 
-    status = models.CharField(
-        max_length=16, choices=STATUS_CHOICES, default="pending"
-    )
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="pending")
     requested_by = models.CharField(max_length=64, default="ila")
     decided_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

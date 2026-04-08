@@ -46,8 +46,7 @@ class IntelligenceLoopExtractor(BaseExtractor):
         metadata = {
             "brand_context_id": ila.get("brand_context_id")
             or result.get("brand_context_id", "parent"),
-            "intelligence_mode": ila.get("mode")
-            or result.get("mode", "store_only"),
+            "intelligence_mode": ila.get("mode") or result.get("mode", "store_only"),
         }
 
         def _make(name, value):
@@ -63,14 +62,15 @@ class IntelligenceLoopExtractor(BaseExtractor):
 
         high_conf = sum(
             1
-            for l in learnings
-            if isinstance(l, dict)
-            and (l.get("final_confidence") or l.get("confidence") or 0) >= 85
+            for learning in learnings
+            if isinstance(learning, dict)
+            and (learning.get("final_confidence") or learning.get("confidence") or 0)
+            >= 85
         )
         high_impact = sum(
             1
-            for l in learnings
-            if isinstance(l, dict) and l.get("impact") == "HIGH"
+            for learning in learnings
+            if isinstance(learning, dict) and learning.get("impact") == "HIGH"
         )
 
         contradictions = ila.get("contradictions") or []

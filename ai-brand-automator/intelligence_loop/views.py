@@ -31,7 +31,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -186,11 +186,9 @@ class CampaignIntelligenceViewSet(
     }
 
     def get_queryset(self):
-        qs = (
-            CampaignIntelligence.objects
-            .select_related("campaign", "tenant")
-            .prefetch_related("learnings")
-        )
+        qs = CampaignIntelligence.objects.select_related(
+            "campaign", "tenant"
+        ).prefetch_related("learnings")
         qs = _tenant_filter(qs, self.request)
         campaign = self.request.query_params.get("campaign")
         if campaign:
@@ -209,9 +207,7 @@ class CampaignIntelligenceViewSet(
 
 
 def _get_user_learning(request, learning_id):
-    qs = LearningRecord.objects.select_related(
-        "intelligence", "intelligence__campaign"
-    )
+    qs = LearningRecord.objects.select_related("intelligence", "intelligence__campaign")
     qs = _tenant_filter(qs, request)
     return get_object_or_404(qs, learning_id=learning_id)
 
@@ -250,11 +246,7 @@ def apply_learning(request, learning_id):
 
     if not pipeline_id:
         return Response(
-            {
-                "detail": (
-                    f"No pipeline mapping for agent '{learning.target_agent}'."
-                )
-            },
+            {"detail": (f"No pipeline mapping for agent '{learning.target_agent}'.")},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -308,9 +300,7 @@ def save_learning(request, learning_id):
 # ---------------------------------------------------------------------------
 
 
-class WF2RerunRequestViewSet(
-    RoleBasedPermissionMixin, viewsets.ReadOnlyModelViewSet
-):
+class WF2RerunRequestViewSet(RoleBasedPermissionMixin, viewsets.ReadOnlyModelViewSet):
     """List + retrieve pending WF2 re-run approval requests."""
 
     serializer_class = WF2RerunRequestSerializer
@@ -323,9 +313,7 @@ class WF2RerunRequestViewSet(
     }
 
     def get_queryset(self):
-        qs = WF2RerunRequest.objects.select_related(
-            "learning", "decided_by", "tenant"
-        )
+        qs = WF2RerunRequest.objects.select_related("learning", "decided_by", "tenant")
         qs = _tenant_filter(qs, self.request)
         status_filter = self.request.query_params.get("status")
         if status_filter:
@@ -449,9 +437,7 @@ def trigger_extraction(request):
     tenant = getattr(request, "tenant", None)
     campaign_qs = CampaignRegistry.objects.all()
     if tenant is not None:
-        campaign_qs = campaign_qs.filter(
-            Q(tenant=tenant) | Q(tenant__isnull=True)
-        )
+        campaign_qs = campaign_qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
     campaign = get_object_or_404(
         campaign_qs,
         campaign_id=payload["campaign_id"],
@@ -517,9 +503,7 @@ def ingest_intelligence_report(request):
     data = serializer.validated_data
 
     tenant = _resolve_tenant(data.get("tenant_id"))
-    campaign = get_object_or_404(
-        CampaignRegistry, campaign_id=data["campaign_id"]
-    )
+    campaign = get_object_or_404(CampaignRegistry, campaign_id=data["campaign_id"])
 
     with transaction.atomic():
         intel = CampaignIntelligence.objects.create(
@@ -554,7 +538,7 @@ def ingest_intelligence_report(request):
     return Response(
         {
             "intelligence_id": str(intel.intelligence_id),
-            "learnings": [str(l.learning_id) for l in learnings_out],
+            "learnings": [str(learning.learning_id) for learning in learnings_out],
         },
         status=status.HTTP_201_CREATED,
     )
@@ -572,9 +556,7 @@ def ingest_rag_learning(request):
     serializer.is_valid(raise_exception=True)
     data = serializer.validated_data
 
-    learning = get_object_or_404(
-        LearningRecord, learning_id=data["learning_id"]
-    )
+    learning = get_object_or_404(LearningRecord, learning_id=data["learning_id"])
     tenant = _resolve_tenant(data.get("tenant_id")) or learning.tenant
 
     doc, created = LearningDocument.objects.update_or_create(
@@ -599,13 +581,9 @@ def ingest_wf2_request(request):
     serializer.is_valid(raise_exception=True)
     data = serializer.validated_data
 
-    learning = get_object_or_404(
-        LearningRecord, learning_id=data["learning_id"]
-    )
+    learning = get_object_or_404(LearningRecord, learning_id=data["learning_id"])
     tenant = _resolve_tenant(data.get("tenant_id")) or learning.tenant
-    expires_at = timezone.now() + timedelta(
-        hours=int(data.get("expires_in_hours", 72))
-    )
+    expires_at = timezone.now() + timedelta(hours=int(data.get("expires_in_hours", 72)))
 
     req = WF2RerunRequest.objects.create(
         tenant=tenant,
@@ -694,12 +672,9 @@ def campaign_context(request, campaign_id):
 
     campaign = get_object_or_404(CampaignRegistry, campaign_id=campaign_id)
     cutoff = timezone.now() - timedelta(days=30)
-    recs = (
-        OptimizationRecommendation.objects.filter(
-            campaign=campaign, created_at__gte=cutoff
-        )
-        .order_by("-created_at")[:50]
-    )
+    recs = OptimizationRecommendation.objects.filter(
+        campaign=campaign, created_at__gte=cutoff
+    ).order_by("-created_at")[:50]
     company = campaign.company
     company_snippet = {}
     if company:

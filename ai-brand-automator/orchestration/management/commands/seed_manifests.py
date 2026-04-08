@@ -1516,8 +1516,7 @@ class Command(BaseCommand):
                         "id": "campaign_intelligence",
                         "type": "external",
                         "url": (
-                            "http://intelligence-loop-agent-svc:8045"
-                            "/v1/execute"
+                            "http://intelligence-loop-agent-svc:8045" "/v1/execute"
                         ),
                         "config": {
                             "timeout": 300,
