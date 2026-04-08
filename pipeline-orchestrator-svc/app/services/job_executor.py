@@ -530,13 +530,21 @@ class JobExecutor:
                         "completed_at": self._now_iso(),
                     }
 
-            # Use accumulated result_data or fall back to default
+            # Use accumulated result_data or fall back to default.
+            # Also backfill default summary/findings/recommendations when an
+            # accumulated result_data exists but lacks these top-level keys
+            # (e.g. pipelines without a ManagerNode where only external
+            # agents contributed per-node payloads).
             if result_data is None:
                 result_data = {
                     "summary": "Pipeline completed successfully.",
                     "findings": ["Analysis completed."],
                     "recommendations": [],
                 }
+            elif isinstance(result_data, dict):
+                result_data.setdefault("summary", "Pipeline completed successfully.")
+                result_data.setdefault("findings", ["Analysis completed."])
+                result_data.setdefault("recommendations", [])
 
             # Check for cancel one last time
             if await self._is_cancelled(job_id):
