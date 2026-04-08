@@ -12,6 +12,11 @@ interface CompanyData {
   target_audience: string;
   core_problem?: string;
   website?: string;
+  address?: string;
+  city?: string;
+  state_province?: string;
+  postal_code?: string;
+  country?: string;
   demographics?: string;
   psychographics?: string;
   pain_points?: string;
@@ -197,18 +202,67 @@ export function OnboardingReview() {
               </dd>
             </div>
           )}
+          {(company.address || company.city || company.state_province || company.postal_code || company.country) && (
+            <div>
+              <dt className="text-sm font-medium text-brand-silver/70">Physical Location</dt>
+              <dd className="mt-1 text-sm text-white">
+                {[company.address, company.city, company.state_province, company.postal_code, company.country]
+                  .filter(Boolean)
+                  .join(', ')}
+              </dd>
+            </div>
+          )}
         </dl>
       </div>
 
-      {/* Brand Details */}
-      {company.brand_voice && (
+      {/* Brand Details (captured in Step 2) */}
+      {(company.brand_voice || company.vision_statement || company.mission_statement || company.values || company.positioning_statement) && (
         <div className="bg-white/5 border border-white/10 rounded-lg p-6">
           <h2 className="font-heading text-xl font-semibold text-white mb-4">Brand Details</h2>
           <dl className="grid grid-cols-1 gap-4">
-            <div>
-              <dt className="text-sm font-medium text-brand-silver/70">Brand Voice</dt>
-              <dd className="mt-1 text-sm text-white">{company.brand_voice}</dd>
-            </div>
+            {company.brand_voice && (
+              <div>
+                <dt className="text-sm font-medium text-brand-silver/70">Brand Voice</dt>
+                <dd className="mt-1 text-sm text-white">{company.brand_voice}</dd>
+              </div>
+            )}
+            {company.vision_statement && (
+              <div>
+                <dt className="text-sm font-medium text-brand-silver/70">Vision Statement</dt>
+                <dd className="mt-1 text-sm text-white">{company.vision_statement}</dd>
+              </div>
+            )}
+            {company.mission_statement && (
+              <div>
+                <dt className="text-sm font-medium text-brand-silver/70">Mission Statement</dt>
+                <dd className="mt-1 text-sm text-white">{company.mission_statement}</dd>
+              </div>
+            )}
+            {(() => {
+              const valueItems = (company.values || '')
+                .split(',')
+                .map((v) => v.trim())
+                .filter((v) => v.length > 0);
+              if (valueItems.length === 0) return null;
+              return (
+                <div>
+                  <dt className="text-sm font-medium text-brand-silver/70">Core Values</dt>
+                  <dd className="mt-1">
+                    <ul className="list-disc list-inside text-sm text-white">
+                      {valueItems.map((value, idx) => (
+                        <li key={idx}>{value}</li>
+                      ))}
+                    </ul>
+                  </dd>
+                </div>
+              );
+            })()}
+            {company.positioning_statement && (
+              <div>
+                <dt className="text-sm font-medium text-brand-silver/70">Positioning Statement</dt>
+                <dd className="mt-1 text-sm text-white">{company.positioning_statement}</dd>
+              </div>
+            )}
           </dl>
         </div>
       )}
@@ -252,41 +306,11 @@ export function OnboardingReview() {
         </div>
       )}
 
-      {/* Brand Strategy */}
-      {(company.vision_statement || company.mission_statement || company.values || company.positioning_statement || company.tagline || company.value_proposition || company.elevator_pitch) && (
+      {/* AI-Generated Brand Strategy */}
+      {(company.tagline || company.value_proposition || company.elevator_pitch) && (
         <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-          <h2 className="font-heading text-xl font-semibold text-white mb-4">Brand Strategy</h2>
+          <h2 className="font-heading text-xl font-semibold text-white mb-4">AI Brand Strategy</h2>
           <dl className="grid grid-cols-1 gap-4">
-            {company.vision_statement && (
-              <div>
-                <dt className="text-sm font-medium text-brand-silver/70">Vision Statement</dt>
-                <dd className="mt-1 text-sm text-white">{company.vision_statement}</dd>
-              </div>
-            )}
-            {company.mission_statement && (
-              <div>
-                <dt className="text-sm font-medium text-brand-silver/70">Mission Statement</dt>
-                <dd className="mt-1 text-sm text-white">{company.mission_statement}</dd>
-              </div>
-            )}
-            {company.values && company.values.length > 0 && (
-              <div>
-                <dt className="text-sm font-medium text-brand-silver/70">Core Values</dt>
-                <dd className="mt-1">
-                  <ul className="list-disc list-inside text-sm text-white">
-                    {company.values.split(',').map((value, idx) => (
-                      <li key={idx}>{value.trim()}</li>
-                    ))}
-                  </ul>
-                </dd>
-              </div>
-            )}
-            {company.positioning_statement && (
-              <div>
-                <dt className="text-sm font-medium text-brand-silver/70">Positioning Statement</dt>
-                <dd className="mt-1 text-sm text-white">{company.positioning_statement}</dd>
-              </div>
-            )}
             {company.tagline && (
               <div>
                 <dt className="text-sm font-medium text-brand-silver/70">Tagline</dt>
@@ -342,7 +366,7 @@ export function OnboardingReview() {
 
       {/* Action Buttons */}
       <div className="flex flex-col space-y-4 pt-6">
-        {!company.vision_statement && (
+        {!(company.tagline || company.value_proposition || company.elevator_pitch) && (
           <button
             onClick={handleGenerateBrandStrategy}
             disabled={generating}
