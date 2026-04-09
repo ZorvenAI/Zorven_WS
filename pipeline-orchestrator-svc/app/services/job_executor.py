@@ -445,6 +445,88 @@ class JobExecutor:
                                         result_data, result["result_data"]
                                     )
 
+                    # Detect external nodes that returned a failure
+                    # payload (``status`` of ``failed``/``error`` or a
+                    # non-empty ``errors`` list). Without this check the
+                    # orchestrator silently treats a failed agent as
+                    # done and marches on to the next level, so the job
+                    # ends up in ``completed`` with broken downstream
+                    # prerequisites instead of surfacing the real error.
+                    failed_external: list[tuple[str, str]] = []
+                    for nid in level_nodes:
+                        node_out = state["node_outputs"].get(nid)
+                        if not isinstance(node_out, dict):
+                            continue
+                        node_status = node_out.get("status")
+                        errors_list = node_out.get("errors")
+                        is_failed = (
+                            isinstance(node_status, str)
+                            and node_status.lower() in {"failed", "error"}
+                        ) or (isinstance(errors_list, list) and errors_list)
+                        if is_failed:
+                            msgs = []
+                            if isinstance(errors_list, list):
+                                msgs.extend(str(e) for e in errors_list if e)
+                            findings = node_out.get("findings")
+                            if not msgs and isinstance(findings, list):
+                                msgs.extend(str(f) for f in findings if f)
+                            if not msgs:
+                                err = node_out.get("error") or node_out.get("message")
+                                if err:
+                                    msgs.append(str(err))
+                            summary = (
+                                "; ".join(msgs)[:500]
+                                if msgs
+                                else f"status={node_status}"
+                            )
+                            failed_external.append((nid, summary))
+
+                    if failed_external:
+                        completed_at = self._now_iso()
+                        for nid, _ in failed_external:
+                            state["progress"][nid] = {
+                                "status": "failed",
+                                "started_at": started_at,
+                                "completed_at": completed_at,
+                            }
+                        for other_nid in level_nodes:
+                            if other_nid in {n for n, _ in failed_external}:
+                                continue
+                            state["progress"].setdefault(
+                                other_nid,
+                                {
+                                    "status": "done",
+                                    "started_at": started_at,
+                                    "completed_at": completed_at,
+                                },
+                            )
+                        remaining_start = executed_node_count + len(level_nodes)
+                        for remaining_id in flat_sorted[remaining_start:]:
+                            if (
+                                state["progress"]
+                                .get(remaining_id, {})
+                                .get("status")
+                                == "pending"
+                            ):
+                                state["progress"][remaining_id] = {
+                                    "status": "failed",
+                                    "completed_at": completed_at,
+                                }
+                        error_message = "; ".join(
+                            f"{nid}: {msg}" for nid, msg in failed_external
+                        )
+                        logger.error(
+                            "Job %s: external node(s) reported failure — %s",
+                            job_id,
+                            error_message,
+                        )
+                        await self.callback.send_failed(
+                            callback_url,
+                            error_message=error_message,
+                            progress=state["progress"],
+                        )
+                        return
+
                     # Check if any node requires human approval BEFORE
                     # marking as done, so progress shows the correct state.
                     awaiting_node = None
