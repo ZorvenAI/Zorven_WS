@@ -338,9 +338,7 @@ class TestTickCallback:
         assert campaign.last_metrics_update is not None
 
     @override_settings(ORCHESTRATOR_CALLBACK_TOKEN="test-token")
-    def test_callback_missing_perf_preserves_existing_kpis(
-        self, api_client, campaign
-    ):
+    def test_callback_missing_perf_preserves_existing_kpis(self, api_client, campaign):
         from decimal import Decimal
 
         from django.utils import timezone
@@ -375,9 +373,7 @@ class TestTickCallback:
         assert campaign.last_metrics_update == earlier
 
     @override_settings(ORCHESTRATOR_CALLBACK_TOKEN="test-token")
-    def test_callback_partial_perf_only_updates_provided(
-        self, api_client, campaign
-    ):
+    def test_callback_partial_perf_only_updates_provided(self, api_client, campaign):
         from decimal import Decimal
 
         campaign.actual_cpa_usd = Decimal("9.99")
