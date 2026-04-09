@@ -58,9 +58,7 @@ class TickExecutor:
         self._analyzer = PerformanceAnalyzer(llm_client=llm_client)
         self._fatigue_detector = FatigueDetector()
         self._budget_analyzer = BudgetAnalyzer()
-        self._rec_generator = RecommendationGenerator(
-            llm_client=llm_client
-        )
+        self._rec_generator = RecommendationGenerator(llm_client=llm_client)
         self._verifier = OptimizationVerifier()
         self._executor = AutonomousExecutor(
             meta_client=self._meta_client,
@@ -120,16 +118,13 @@ class TickExecutor:
 
         # 2. Process each campaign
         for campaign in campaigns:
-            result = await self._process_campaign(
-                campaign, tick_id
-            )
+            result = await self._process_campaign(campaign, tick_id)
             campaign_results.append(result)
             total_recs += result.get("recommendations_generated", 0)
             total_actions += result.get("actions_executed", 0)
 
         elapsed_ms = int(
-            (datetime.now(timezone.utc) - start_time).total_seconds()
-            * 1000
+            (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
         )
 
         tick_result = {
@@ -143,8 +138,7 @@ class TickExecutor:
         }
 
         logger.info(
-            "Tick %s completed: %d campaigns, %d recs, "
-            "%d actions, %dms",
+            "Tick %s completed: %d campaigns, %d recs, " "%d actions, %dms",
             tick_id,
             len(campaigns),
             total_recs,
@@ -153,6 +147,27 @@ class TickExecutor:
         )
 
         return tick_result
+
+    @staticmethod
+    def _build_performance(insights: Any) -> dict[str, Any]:
+        """Build the `performance` payload consumed by Django's
+        optimization tick callback to update CampaignRegistry.actual_*
+        fields on the /optimization dashboard.
+
+        Meta's Insights API returns CTR as a percent (e.g. 1.23 = 1.23%),
+        which matches the analytics convention on the Django side.
+        CPA is derived: spend / conversions (None when conversions=0).
+        """
+        spend = float(getattr(insights, "spend", 0) or 0)
+        conv = int(getattr(insights, "conversions", 0) or 0)
+        ctr = float(getattr(insights, "ctr", 0) or 0)
+        roas = float(getattr(insights, "purchase_roas", 0) or 0)
+        return {
+            "avg_cpa": round(spend / conv, 2) if conv > 0 else None,
+            "avg_roas": roas if roas > 0 else None,
+            "avg_ctr": ctr if ctr > 0 else None,
+            "spend_today": round(spend, 2),
+        }
 
     async def _process_campaign(
         self,
@@ -164,9 +179,7 @@ class TickExecutor:
         sm.transition(TickState.DISCOVERING, "tick_start")
 
         # Load tenant config
-        tenant_config = await self._discovery.load_tenant_config(
-            campaign.tenant_id
-        )
+        tenant_config = await self._discovery.load_tenant_config(campaign.tenant_id)
 
         # Input guardrails
         campaign_dict = {
@@ -189,9 +202,52 @@ class TickExecutor:
         )
 
         if guard_report.blocked or not guard_report.all_passed:
-            skip_reasons = [
-                f.message for f in guard_report.failures
-            ]
+            skip_reasons = [f.message for f in guard_report.failures]
+            # Hard-skip rules mean we cannot fetch insights (no creds /
+            # invalid campaign / sandbox off with no config). All other
+            # failures (minimum-data, age, cooldown, daily cap) are
+            # "soft" skips — the campaign is valid, it just shouldn't be
+            # optimized this tick. For soft skips we still fetch
+            # insights and post a metrics-only callback so the
+            # /optimization dashboard stays populated.
+            hard_skip_rules = {"IG-01", "IG-02", "IG-07", "IG-08"}
+            is_hard_skip = any(
+                f.rule_id in hard_skip_rules for f in guard_report.failures
+            )
+            if not is_hard_skip:
+                try:
+                    insights = await self._insights_client.fetch_campaign_insights(
+                        ad_account_id=campaign.meta_ad_account_id,
+                        campaign_id=(campaign.meta_campaign_id or campaign.campaign_id),
+                        access_token=campaign.meta_access_token,
+                    )
+                    metrics_only_results = {
+                        "tick_id": tick_id,
+                        "campaign_id": campaign.campaign_id,
+                        "performance": self._build_performance(insights),
+                        "metrics": {
+                            "spend": insights.spend,
+                            "ctr": insights.ctr,
+                            "cpm": insights.cpm,
+                            "frequency": insights.frequency,
+                            "conversions": insights.conversions,
+                            "roas": insights.purchase_roas,
+                        },
+                        "recommendations_generated": 0,
+                        "actions_executed": 0,
+                        "skip_reasons": skip_reasons,
+                    }
+                    await self._persister.persist_tick_results(
+                        tenant_id=campaign.tenant_id,
+                        campaign_id=campaign.campaign_id,
+                        tick_results=metrics_only_results,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Metrics-only callback failed for %s: %s",
+                        campaign.campaign_id,
+                        exc,
+                    )
             sm.transition(TickState.SKIPPED, "; ".join(skip_reasons))
             return {
                 "campaign_id": campaign.campaign_id,
@@ -258,11 +314,7 @@ class TickExecutor:
                 EventType.FATIGUE_DETECTED,
                 tenant_id=campaign.tenant_id,
                 campaign_id=campaign.campaign_id,
-                data={
-                    "fatigued_count": len(
-                        fatigue_report.fatigued_ads
-                    )
-                },
+                data={"fatigued_count": len(fatigue_report.fatigued_ads)},
             )
 
         # Analyze budget
@@ -332,9 +384,7 @@ class TickExecutor:
             config=tenant_config,
         )
 
-        actions_executed = sum(
-            1 for r in execution_results if r.get("executed", False)
-        )
+        actions_executed = sum(1 for r in execution_results if r.get("executed", False))
 
         # Persist results
         sm.transition(TickState.PERSISTING, "execution_complete")
@@ -342,6 +392,7 @@ class TickExecutor:
             "tick_id": tick_id,
             "campaign_id": campaign.campaign_id,
             "overall_health": analysis.overall_health,
+            "performance": self._build_performance(insights),
             "metrics": {
                 "spend": insights.spend,
                 "ctr": insights.ctr,
