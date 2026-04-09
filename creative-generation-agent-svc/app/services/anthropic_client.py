@@ -11,6 +11,52 @@ logger = logging.getLogger(__name__)
 
 _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 
+# Matches a trailing comma before ] or } (valid in JS/Python, invalid in JSON).
+_TRAILING_COMMA_RE = re.compile(r",(\s*[}\]])")
+
+
+def _repair_json(text: str) -> str:
+    """Apply common tolerant-repair transforms to a JSON-ish string.
+
+    Currently strips trailing commas before ``}`` / ``]`` which Claude
+    occasionally emits. Kept conservative — string-aware so we don't
+    touch commas inside string literals.
+    """
+    out: list[str] = []
+    in_str = False
+    esc = False
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if in_str:
+            out.append(ch)
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            i += 1
+            continue
+        if ch == '"':
+            in_str = True
+            out.append(ch)
+            i += 1
+            continue
+        if ch == ",":
+            # Peek ahead for whitespace then } or ]
+            j = i + 1
+            while j < n and text[j] in " \t\r\n":
+                j += 1
+            if j < n and text[j] in "}]":
+                # Skip the comma
+                i += 1
+                continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
 
 def _ensure_dict(value: Any) -> dict[str, Any]:
     """Ensure parsed JSON is a dict, not a list or scalar."""
@@ -118,25 +164,46 @@ class AnthropicClient:
 
             balanced = _find_balanced_json(candidate)
             if balanced:
-                try:
-                    parsed = json.loads(balanced)
-                    result = _ensure_dict(parsed)
-                    logger.info(
-                        "Extracted JSON keys: %s (type=%s)",
-                        list(result.keys())[:10],
-                        type(parsed).__name__,
-                    )
-                    return result
-                except (json.JSONDecodeError, ValueError):
-                    logger.warning(
-                        "Balanced-scan JSON parse failed (len=%d)",
-                        len(balanced),
-                    )
+                for attempt_label, attempt_text in (
+                    ("balanced", balanced),
+                    ("balanced+repair", _repair_json(balanced)),
+                ):
+                    try:
+                        parsed = json.loads(attempt_text)
+                        result = _ensure_dict(parsed)
+                        logger.info(
+                            "Extracted JSON via %s: keys=%s (type=%s)",
+                            attempt_label,
+                            list(result.keys())[:10],
+                            type(parsed).__name__,
+                        )
+                        return result
+                    except (json.JSONDecodeError, ValueError) as exc:
+                        logger.warning(
+                            "%s parse failed at pos=%s msg=%s",
+                            attempt_label,
+                            getattr(exc, "pos", "?"),
+                            str(exc)[:200],
+                        )
+            # Last-ditch: repair the whole candidate
+            try:
+                parsed = json.loads(_repair_json(candidate))
+                result = _ensure_dict(parsed)
+                logger.info(
+                    "Extracted JSON via full-repair: keys=%s",
+                    list(result.keys())[:10],
+                )
+                return result
+            except (json.JSONDecodeError, ValueError):
+                pass
+
             logger.warning(
-                "JSON extraction failed, returning raw (text_len=%d, "
-                "stop_reason=%s)",
+                "JSON extraction failed (text_len=%d, stop_reason=%s). "
+                "Head=%r Tail=%r",
                 len(text),
                 stop_reason,
+                text[:400],
+                text[-400:],
             )
             return {"raw_response": text}
         except Exception as exc:
