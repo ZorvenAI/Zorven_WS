@@ -210,7 +210,13 @@ class TickExecutor:
             # optimized this tick. For soft skips we still fetch
             # insights and post a metrics-only callback so the
             # /optimization dashboard stays populated.
-            hard_skip_rules = {"IG-01", "IG-02", "IG-07", "IG-08"}
+            # In sandbox mode the insights client returns stub data
+            # without calling Meta, so IG-02 (missing Meta credentials)
+            # is not a real blocker — demote it to a soft skip so the
+            # dashboard still gets stubbed KPIs.
+            hard_skip_rules = {"IG-01", "IG-07", "IG-08"}
+            if not settings.META_ADS_SANDBOX_MODE:
+                hard_skip_rules.add("IG-02")
             is_hard_skip = any(
                 f.rule_id in hard_skip_rules for f in guard_report.failures
             )
