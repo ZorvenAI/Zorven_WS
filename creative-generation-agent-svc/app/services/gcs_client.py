@@ -4,10 +4,14 @@ import asyncio
 import base64
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Signed URL validity for images handed off to APA/Meta. 7 days is the
+# max supported by v4 signing and comfortably longer than any WF3 run.
+_SIGNED_URL_TTL = timedelta(days=7)
 
 
 class GCSClient:
@@ -70,7 +74,18 @@ class GCSClient:
         filename: str,
         content_type: str = "image/png",
     ) -> str:
-        """Upload image bytes to GCS. Returns GCS URI or empty string."""
+        """Upload image bytes to GCS and return a fetchable URL.
+
+        Returns:
+            - v4 HTTPS signed URL (7-day TTL) when signing credentials
+              are available — the default path.
+            - Unsigned public HTTPS URL (``blob.public_url``) when
+              signing fails (e.g. ADC / workload identity without a
+              private key). Only resolvable if the bucket is public.
+            - ``data:<content_type>;base64,...`` URI when GCS is not
+              configured at all (stub mode).
+            - Empty string on upload failure or empty input.
+        """
         if not self._ensure_client():
             logger.info("GCS not configured, returning data URI")
             if image_data and len(image_data) > 8:
@@ -85,9 +100,33 @@ class GCSClient:
                 image_data,
                 content_type=content_type,
             )
-            uri = f"gs://{self._bucket_name}/{path}"
-            logger.info("Uploaded image to %s", uri)
-            return uri
+            # Return an HTTPS signed URL so APA / Meta / the frontend can
+            # fetch without needing GCS credentials. gs:// URIs are not
+            # usable by httpx or the Meta Ads image upload endpoint.
+            try:
+                signed_url = await asyncio.to_thread(
+                    blob.generate_signed_url,
+                    version="v4",
+                    expiration=_SIGNED_URL_TTL,
+                    method="GET",
+                )
+                logger.info(
+                    "Uploaded image to gs://%s/%s (signed URL issued)",
+                    self._bucket_name,
+                    path,
+                )
+                return signed_url
+            except Exception as exc:
+                # ADC / workload identity can't sign — fall back to the
+                # public URL (works if the bucket is public). Use
+                # blob.public_url which handles URL-encoding of any
+                # reserved characters in the object name.
+                logger.warning(
+                    "GCS signed URL generation failed (%s); "
+                    "returning unsigned public URL",
+                    exc,
+                )
+                return blob.public_url
         except Exception as exc:
             logger.warning("GCS image upload failed: %s", exc)
             return ""
