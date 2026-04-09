@@ -74,7 +74,18 @@ class GCSClient:
         filename: str,
         content_type: str = "image/png",
     ) -> str:
-        """Upload image bytes to GCS. Returns GCS URI or empty string."""
+        """Upload image bytes to GCS and return a fetchable URL.
+
+        Returns:
+            - v4 HTTPS signed URL (7-day TTL) when signing credentials
+              are available — the default path.
+            - Unsigned public HTTPS URL (``blob.public_url``) when
+              signing fails (e.g. ADC / workload identity without a
+              private key). Only resolvable if the bucket is public.
+            - ``data:<content_type>;base64,...`` URI when GCS is not
+              configured at all (stub mode).
+            - Empty string on upload failure or empty input.
+        """
         if not self._ensure_client():
             logger.info("GCS not configured, returning data URI")
             if image_data and len(image_data) > 8:
@@ -107,16 +118,15 @@ class GCSClient:
                 return signed_url
             except Exception as exc:
                 # ADC / workload identity can't sign — fall back to the
-                # public URL (works if the bucket is public) and log.
+                # public URL (works if the bucket is public). Use
+                # blob.public_url which handles URL-encoding of any
+                # reserved characters in the object name.
                 logger.warning(
                     "GCS signed URL generation failed (%s); "
                     "returning unsigned public URL",
                     exc,
                 )
-                return (
-                    f"https://storage.googleapis.com/"
-                    f"{self._bucket_name}/{path}"
-                )
+                return blob.public_url
         except Exception as exc:
             logger.warning("GCS image upload failed: %s", exc)
             return ""
