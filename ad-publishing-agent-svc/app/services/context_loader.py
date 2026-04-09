@@ -428,10 +428,20 @@ class AdPubContextLoader:
             variant_id = unit.get("image_variant_id", "")
             img_data = image_lookup.get((set_name, variant_id))
             if img_data:
-                # Prefer thumbnail_url (smaller), fall back to gcs_url
-                resolved_url = (
-                    img_data.get("thumbnail_url") or img_data.get("gcs_url") or ""
-                )
+                # Prefer the real GCS/HTTPS URL — thumbnails are base64
+                # data URIs generated in-memory and Meta's image upload
+                # endpoint can't fetch them. Only fall back to the
+                # thumbnail when GCS isn't configured or returned a
+                # data URI itself.
+                gcs_url = img_data.get("gcs_url") or ""
+                thumb = img_data.get("thumbnail_url") or ""
+                if gcs_url and not gcs_url.startswith("data:"):
+                    resolved_url = gcs_url
+                elif thumb and not thumb.startswith("data:"):
+                    resolved_url = thumb
+                else:
+                    # Both are data URIs or empty — prefer gcs_url if any
+                    resolved_url = gcs_url or thumb
                 if resolved_url:
                     enriched["image_url"] = resolved_url
                 enriched["image_generated"] = img_data.get("image_generated", True)
