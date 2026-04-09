@@ -7414,6 +7414,46 @@ export default function ResultDashboard({
             </ul>
           </section>
         )}
+        {/* Upstream WF3 agents (CAA + CGA) — surfaced above the
+            approval panel so reviewers can inspect every agent's
+            output, not just the final ad-publishing payload. */}
+        {hasCampaignArchitecture && (
+          <CampaignArchitectureSection
+            blueprint={(caaNodeData?.blueprint ?? resultData.blueprint) as CAABlueprint | undefined}
+            funnelMap={(caaNodeData?.funnel_map ?? resultData.funnel_map) as CAAFunnelMap | undefined}
+            targetingSpecs={(caaNodeData?.targeting_specs ?? resultData.targeting_specs) as CAATargetingSpec[] | undefined}
+            placementBudget={(caaNodeData?.placement_budget ?? resultData.placement_budget) as Record<string, unknown> | undefined}
+            testPlan={(caaNodeData?.test_plan ?? resultData.test_plan) as CAATestPlan | undefined}
+            kpiTargets={(caaNodeData?.kpi_targets ?? resultData.kpi_targets) as Record<string, Record<string, number>> | undefined}
+            performanceProjections={(caaNodeData?.performance_projections ?? resultData.performance_projections) as CAAPerformanceProjections | undefined}
+            riskAssessment={(caaNodeData?.risk_assessment ?? resultData.risk_assessment) as CAARiskAssessment | undefined}
+            creativeBriefs={(caaNodeData?.creative_briefs ?? resultData.creative_briefs) as CAACreativeBrief[] | undefined}
+            specialAdCategory={(caaNodeData?.special_ad_category ?? resultData.special_ad_category) as string | undefined}
+            confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.campaign_architecture ?? (caaNodeData?.confidence_score ?? resultData.confidence_score)) as number | undefined}
+            findings={(caaNodeData?.findings as string[] | undefined) ?? findings}
+            recommendations={(caaNodeData?.recommendations as string[] | undefined) ?? recommendations}
+          />
+        )}
+        {hasCreativeGeneration && (
+          <CreativeGenerationSection
+            creativePackage={(cgaNodeData?.creative_package ?? resultData.creative_package) as CGACreativePackage | undefined}
+            adSetPackages={(cgaNodeData?.ad_set_packages ?? resultData.ad_set_packages) as CGAAdSetPackage[] | undefined}
+            adUnits={(cgaNodeData?.ad_units ?? resultData.ad_units) as CGACreativeUnit[] | undefined}
+            generatedImages={(cgaNodeData?.generated_images ?? resultData.generated_images) as CGAGeneratedImage[] | undefined}
+            hooks={(cgaNodeData?.hooks ?? resultData.hooks) as CGAHookVariant[] | undefined}
+            copyVariants={(cgaNodeData?.copy_variants ?? resultData.copy_variants) as CGACopySet[] | undefined}
+            ctas={(cgaNodeData?.ctas ?? resultData.ctas) as CGACTASet[] | undefined}
+            complianceResults={(cgaNodeData?.compliance_results ?? resultData.compliance_results) as CGAComplianceResult[] | undefined}
+            totalImagesGenerated={(cgaNodeData?.total_images_generated ?? resultData.total_images_generated) as number | undefined}
+            imageGenCostUsd={(cgaNodeData?.image_gen_cost_usd ?? resultData.image_gen_cost_usd) as number | undefined}
+            compliancePassRate={(cgaNodeData?.compliance_pass_rate ?? resultData.compliance_pass_rate) as number | undefined}
+            creativeQualityScore={(cgaNodeData?.creative_quality_score ?? resultData.creative_quality_score) as number | undefined}
+            confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.creative_generation ?? (cgaNodeData?.confidence_score ?? resultData.confidence_score)) as number | undefined}
+            imageGenFailed={(cgaNodeData?.image_gen_failed ?? resultData.image_gen_failed) as boolean | undefined}
+            findings={(cgaNodeData?.findings as string[] | undefined) ?? findings}
+            recommendations={(cgaNodeData?.recommendations as string[] | undefined) ?? recommendations}
+          />
+        )}
         <ApprovalPanel
           jobId={jobId}
           approvalRequestId={approvalRequestId}
