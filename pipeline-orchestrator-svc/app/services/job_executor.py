@@ -510,9 +510,34 @@ class JobExecutor:
                             job_id,
                             awaiting_node,
                         )
+                        # Surface the gating node's top-level keys
+                        # (approval_request_id, preview_data, sandbox_mode,
+                        # plan_warnings, status) alongside the accumulated
+                        # result_data so Django's callback handler and the
+                        # frontend ResultDashboard can find them without
+                        # digging into node_payloads.
+                        approval_result_data: dict[str, Any] = {}
+                        if isinstance(result_data, dict):
+                            approval_result_data.update(result_data)
+                        gate_output = state["node_outputs"].get(awaiting_node)
+                        if isinstance(gate_output, dict):
+                            for key in (
+                                "status",
+                                "approval_request_id",
+                                "preview_data",
+                                "sandbox_mode",
+                                "plan_warnings",
+                            ):
+                                if key in gate_output:
+                                    approval_result_data[key] = gate_output[key]
+                            payloads = approval_result_data.setdefault(
+                                "node_payloads", {}
+                            )
+                            if isinstance(payloads, dict):
+                                payloads[awaiting_node] = gate_output
                         await self.callback.send_awaiting_approval(
                             callback_url,
-                            result_data=partial_result_data,
+                            result_data=approval_result_data,
                             progress=copy.deepcopy(state["progress"]),
                         )
                         return

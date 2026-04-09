@@ -89,16 +89,23 @@ def handle_pipeline_result(
         # each other's data (each level only sends its own node_results).
         if result_data is not None:
             existing = job.result_data or {}
-            incoming_nodes = result_data.get("node_results", {})
-            existing_nodes = existing.get("node_results", {})
-
-            if incoming_nodes and existing_nodes:
-                # Deep-merge node_results: incoming overwrites per-key
-                merged_nodes = {**existing_nodes, **incoming_nodes}
-                merged = {**existing, **result_data, "node_results": merged_nodes}
-                job.result_data = merged
-            else:
-                job.result_data = result_data
+            merged = {**existing, **result_data}
+            # Deep-merge node_results across per-level progress callbacks.
+            incoming_nodes = result_data.get("node_results") or {}
+            existing_nodes = existing.get("node_results") or {}
+            if incoming_nodes or existing_nodes:
+                merged["node_results"] = {**existing_nodes, **incoming_nodes}
+            # Deep-merge node_payloads so CAA/CGA payloads accumulated on
+            # earlier callbacks aren't dropped when the awaiting_approval
+            # callback arrives carrying only ad_publishing's output.
+            incoming_payloads = result_data.get("node_payloads") or {}
+            existing_payloads = existing.get("node_payloads") or {}
+            if incoming_payloads or existing_payloads:
+                merged["node_payloads"] = {
+                    **existing_payloads,
+                    **incoming_payloads,
+                }
+            job.result_data = merged
             update_fields.append("result_data")
 
         # Update error_message
