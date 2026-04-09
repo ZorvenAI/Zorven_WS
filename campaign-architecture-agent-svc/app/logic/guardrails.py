@@ -119,9 +119,21 @@ class PlanGuardrails:
     """Validate the campaign plan after LLM call 1."""
 
     def check_budget_allocation(self, funnel_map: dict[str, Any]) -> dict[str, Any]:
-        """PG-06: Budget percentages must sum to 100% (±1%)."""
-        stages = funnel_map.get("stages", [])
-        total = sum(s.get("budget_pct", 0) for s in stages)
+        """PG-06: Budget percentages must sum to 100% (±1%).
+
+        Claude call 1 occasionally returns a funnel_map that omits
+        explicit per-stage ``budget_pct`` values (the allocation lives on
+        the blueprint's ad_sets instead). In that case we skip the check
+        rather than fail the whole pipeline — the downstream blueprint
+        synthesis + OG-08 budget cap check still enforce sane totals.
+        """
+        stages = funnel_map.get("stages", []) if isinstance(funnel_map, dict) else []
+        if not isinstance(stages, list) or not stages:
+            return {"valid": True, "note": "No funnel stages to validate"}
+        pcts = [s.get("budget_pct") for s in stages if isinstance(s, dict)]
+        if not any(p is not None for p in pcts):
+            return {"valid": True, "note": "No budget_pct provided on stages"}
+        total = sum(float(p or 0) for p in pcts)
         valid = 99.0 <= total <= 101.0
         if not valid:
             return {

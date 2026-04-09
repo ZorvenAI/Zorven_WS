@@ -104,8 +104,18 @@ class HumanEscalation:
         """
         scores: list[float] = []
 
-        for pkg in result.get("ad_set_packages", []):
-            for unit in pkg.get("creative_units", []):
+        packages = result.get("ad_set_packages", [])
+        if not isinstance(packages, list):
+            packages = []
+        for pkg in packages:
+            if not isinstance(pkg, dict):
+                continue
+            units = pkg.get("creative_units", [])
+            if not isinstance(units, list):
+                continue
+            for unit in units:
+                if not isinstance(unit, dict):
+                    continue
                 coherence = unit.get("image_copy_coherence")
                 if coherence is not None:
                     try:
