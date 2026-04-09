@@ -7795,6 +7795,13 @@ export default function ResultDashboard({
     'preparation_time_ms',
     'publish_result',
     'status',
+    // Orchestrator internals — already consumed above via nodePayloads
+    'node_payloads',
+    'node_results',
+    'node_outputs',
+    // Noise from agent echoes
+    'query',
+    'sources',
   ]);
   const otherEntries = Object.entries(resultData).filter(
     ([k]) => !knownKeys.has(k),
