@@ -395,7 +395,13 @@ class CGAAnalyzer:
             f"{package_section}"
         )
 
-        call3_result = await self._llm.generate_json(call3_system, call3_user)
+        # Call 3 emits the largest payload (compliance_results + creative_units
+        # + ad_set_packages for every audience × funnel). The default 8192
+        # token cap truncates mid-JSON on multi-ad-set campaigns, which used
+        # to surface as empty ad_set_packages downstream. Give it headroom.
+        call3_result = await self._llm.generate_json(
+            call3_system, call3_user, max_tokens=16384
+        )
 
         compliance_results = call3_result.get("compliance_results", [])
         creative_units = call3_result.get("creative_units", []) or call3_result.get("ad_units", [])

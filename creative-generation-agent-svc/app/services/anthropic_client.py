@@ -2,11 +2,14 @@
 
 import json
 import logging
+import re
 from typing import Any
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 
 
 def _ensure_dict(value: Any) -> dict[str, Any]:
@@ -18,6 +21,47 @@ def _ensure_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, list):
         return {"items": value}
     return {"raw_response": value}
+
+
+def _strip_fences(text: str) -> str:
+    """Extract content from a ```json ... ``` code fence if present."""
+    m = _FENCE_RE.search(text)
+    if m:
+        return m.group(1).strip()
+    return text.strip()
+
+
+def _find_balanced_json(text: str) -> str | None:
+    """Find the first balanced JSON object in text via brace scanning.
+
+    Handles strings (with escapes) so braces inside string literals don't
+    confuse the depth counter. Returns the substring or None.
+    """
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
 
 
 class AnthropicClient:
@@ -43,21 +87,39 @@ class AnthropicClient:
                 messages=[{"role": "user", "content": user_prompt}],
             )
             text = response.content[0].text
+            stop_reason = getattr(response, "stop_reason", None)
             logger.debug(
-                "Claude response: %d input, %d output tokens",
+                "Claude response: %d input, %d output tokens, stop_reason=%s",
                 response.usage.input_tokens,
                 response.usage.output_tokens,
+                stop_reason,
             )
-            parsed = json.loads(text)
-            return _ensure_dict(parsed)
-        except json.JSONDecodeError:
-            logger.warning("Claude returned non-JSON, attempting extraction")
-            text = response.content[0].text
-            start = text.find("{")
-            end = text.rfind("}") + 1
-            if start >= 0 and end > start:
+            if stop_reason == "max_tokens":
+                logger.warning(
+                    "Claude response hit max_tokens (%d) — JSON likely "
+                    "truncated. Consider raising max_tokens for this call.",
+                    max_tokens or settings.ANTHROPIC_MAX_TOKENS,
+                )
+            try:
+                return _ensure_dict(json.loads(text))
+            except json.JSONDecodeError:
+                pass
+
+            # Fallback: strip markdown fences and do a brace-balanced scan
+            logger.warning(
+                "Claude returned non-JSON (stop_reason=%s), attempting extraction",
+                stop_reason,
+            )
+            candidate = _strip_fences(text)
+            try:
+                return _ensure_dict(json.loads(candidate))
+            except json.JSONDecodeError:
+                pass
+
+            balanced = _find_balanced_json(candidate)
+            if balanced:
                 try:
-                    parsed = json.loads(text[start:end])
+                    parsed = json.loads(balanced)
                     result = _ensure_dict(parsed)
                     logger.info(
                         "Extracted JSON keys: %s (type=%s)",
@@ -66,9 +128,16 @@ class AnthropicClient:
                     )
                     return result
                 except (json.JSONDecodeError, ValueError):
-                    logger.warning("JSON extraction parse failed, returning raw")
-                    return {"raw_response": text}
-            logger.warning("No JSON object found in response")
+                    logger.warning(
+                        "Balanced-scan JSON parse failed (len=%d)",
+                        len(balanced),
+                    )
+            logger.warning(
+                "JSON extraction failed, returning raw (text_len=%d, "
+                "stop_reason=%s)",
+                len(text),
+                stop_reason,
+            )
             return {"raw_response": text}
         except Exception as exc:
             logger.error("Claude API error: %s", exc)
