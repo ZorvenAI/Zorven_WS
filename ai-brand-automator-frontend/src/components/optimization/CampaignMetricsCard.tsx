@@ -33,32 +33,50 @@ export default function CampaignMetricsCard({
     return Number.isFinite(n) ? n : null;
   };
 
-  const cpa = toNum(campaign.target_cpa_usd);
-  const roas = toNum(campaign.target_roas);
+  const targetCpa = toNum(campaign.target_cpa_usd);
+  const targetRoas = toNum(campaign.target_roas);
+  const actualCpa = toNum(campaign.actual_cpa_usd);
+  const actualRoas = toNum(campaign.actual_roas);
+  const actualCtr = toNum(campaign.actual_ctr);
+  const spendToday = toNum(campaign.actual_spend_today_usd);
   const daily = toNum(campaign.daily_budget_usd) ?? 0;
   const lifetime = toNum(campaign.lifetime_budget_usd);
   const ageDays = toNum(campaign.age_days) ?? 0;
 
+  // CPA is good when actual ≤ target; ROAS is good when actual ≥ target.
+  const cpaStatus: MetricCardData['status'] =
+    actualCpa !== null && targetCpa !== null
+      ? actualCpa <= targetCpa
+        ? 'good'
+        : 'warning'
+      : 'neutral';
+  const roasStatus: MetricCardData['status'] =
+    actualRoas !== null && targetRoas !== null
+      ? actualRoas >= targetRoas
+        ? 'good'
+        : 'warning'
+      : 'neutral';
+
   const metrics: MetricCardData[] = [
     {
       label: 'CPA',
-      value: cpa !== null ? `$${cpa.toFixed(2)}` : '--',
-      target: cpa !== null ? `Target: $${cpa.toFixed(2)}` : null,
+      value: actualCpa !== null ? `$${actualCpa.toFixed(2)}` : '--',
+      target: targetCpa !== null ? `Target: $${targetCpa.toFixed(2)}` : null,
       icon: <DollarSign className={iconCls} />,
-      status: 'neutral',
+      status: cpaStatus,
       progress: null,
     },
     {
       label: 'ROAS',
-      value: roas !== null ? `${roas.toFixed(1)}x` : '--',
-      target: roas !== null ? `Target: ${roas.toFixed(1)}x` : null,
+      value: actualRoas !== null ? `${actualRoas.toFixed(1)}x` : '--',
+      target: targetRoas !== null ? `Target: ${targetRoas.toFixed(1)}x` : null,
       icon: <TrendingUp className={iconCls} />,
-      status: 'neutral',
+      status: roasStatus,
       progress: null,
     },
     {
       label: 'CTR',
-      value: '--',
+      value: actualCtr !== null ? `${(actualCtr * 100).toFixed(2)}%` : '--',
       target: null,
       icon: <MousePointerClick className={iconCls} />,
       status: 'neutral',
@@ -66,11 +84,16 @@ export default function CampaignMetricsCard({
     },
     {
       label: 'Daily Spend',
-      value: `$${daily.toFixed(2)}`,
+      value:
+        spendToday !== null
+          ? `$${spendToday.toFixed(2)}`
+          : `$${daily.toFixed(2)}`,
       target:
-        lifetime !== null
-          ? `Lifetime: $${lifetime.toFixed(0)}`
-          : `Daily budget`,
+        spendToday !== null
+          ? `Budget: $${daily.toFixed(2)}`
+          : lifetime !== null
+            ? `Lifetime: $${lifetime.toFixed(0)}`
+            : `Daily budget`,
       icon: <Wallet className={iconCls} />,
       status: 'neutral',
       progress:
