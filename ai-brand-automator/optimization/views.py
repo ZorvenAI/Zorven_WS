@@ -426,7 +426,8 @@ def optimization_tick_callback(request):
 
     # Update campaign entity tree if provided
     entity_updates = data.get("entity_updates", {})
-    if entity_updates:
+    perf = data.get("performance") or {}
+    if entity_updates or perf:
         update_fields = ["updated_at"]
         if "ad_sets" in entity_updates:
             campaign.ad_sets = entity_updates["ad_sets"]
@@ -437,6 +438,24 @@ def optimization_tick_callback(request):
         if "status" in entity_updates:
             campaign.status = entity_updates["status"]
             update_fields.append("status")
+
+        # Persist latest performance KPIs from COA tick
+        if isinstance(perf, dict) and perf:
+            if perf.get("avg_cpa") is not None:
+                campaign.actual_cpa_usd = perf["avg_cpa"]
+                update_fields.append("actual_cpa_usd")
+            if perf.get("avg_roas") is not None:
+                campaign.actual_roas = perf["avg_roas"]
+                update_fields.append("actual_roas")
+            if perf.get("avg_ctr") is not None:
+                campaign.actual_ctr = perf["avg_ctr"]
+                update_fields.append("actual_ctr")
+            if perf.get("spend_today") is not None:
+                campaign.actual_spend_today_usd = perf["spend_today"]
+                update_fields.append("actual_spend_today_usd")
+            campaign.last_metrics_update = timezone.now()
+            update_fields.append("last_metrics_update")
+
         campaign.save(update_fields=update_fields)
 
     logger.info(

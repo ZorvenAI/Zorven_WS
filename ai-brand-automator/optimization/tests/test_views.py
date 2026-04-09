@@ -305,3 +305,98 @@ class TestTickCallback:
             HTTP_X_CALLBACK_TOKEN="test-token",
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @override_settings(ORCHESTRATOR_CALLBACK_TOKEN="test-token")
+    def test_callback_persists_performance_kpis(self, api_client, campaign):
+        assert campaign.actual_cpa_usd is None
+        assert campaign.last_metrics_update is None
+
+        response = api_client.post(
+            "/api/v1/optimization/callback/tick-result/",
+            {
+                "tick_id": "tick_perf_001",
+                "tenant_id": str(campaign.tenant_id) if campaign.tenant else "",
+                "campaign_id": str(campaign.campaign_id),
+                "mode": "manual",
+                "performance": {
+                    "avg_cpa": 12.34,
+                    "avg_roas": 3.5,
+                    "avg_ctr": 2.75,
+                    "spend_today": 42.0,
+                },
+            },
+            format="json",
+            HTTP_X_CALLBACK_TOKEN="test-token",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        campaign.refresh_from_db()
+        assert float(campaign.actual_cpa_usd) == 12.34
+        assert float(campaign.actual_roas) == 3.5
+        assert float(campaign.actual_ctr) == 2.75
+        assert float(campaign.actual_spend_today_usd) == 42.0
+        assert campaign.last_metrics_update is not None
+
+    @override_settings(ORCHESTRATOR_CALLBACK_TOKEN="test-token")
+    def test_callback_missing_perf_preserves_existing_kpis(self, api_client, campaign):
+        from decimal import Decimal
+
+        from django.utils import timezone
+
+        earlier = timezone.now()
+        campaign.actual_cpa_usd = Decimal("9.99")
+        campaign.actual_roas = Decimal("4.20")
+        campaign.actual_ctr = Decimal("1.50")
+        campaign.actual_spend_today_usd = Decimal("25.00")
+        campaign.last_metrics_update = earlier
+        campaign.save()
+
+        response = api_client.post(
+            "/api/v1/optimization/callback/tick-result/",
+            {
+                "tick_id": "tick_perf_002",
+                "tenant_id": str(campaign.tenant_id) if campaign.tenant else "",
+                "campaign_id": str(campaign.campaign_id),
+                "mode": "manual",
+                # No performance key at all
+            },
+            format="json",
+            HTTP_X_CALLBACK_TOKEN="test-token",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        campaign.refresh_from_db()
+        assert campaign.actual_cpa_usd == Decimal("9.99")
+        assert campaign.actual_roas == Decimal("4.20")
+        assert campaign.actual_ctr == Decimal("1.50")
+        assert campaign.actual_spend_today_usd == Decimal("25.00")
+        assert campaign.last_metrics_update == earlier
+
+    @override_settings(ORCHESTRATOR_CALLBACK_TOKEN="test-token")
+    def test_callback_partial_perf_only_updates_provided(self, api_client, campaign):
+        from decimal import Decimal
+
+        campaign.actual_cpa_usd = Decimal("9.99")
+        campaign.actual_roas = Decimal("4.20")
+        campaign.save()
+
+        response = api_client.post(
+            "/api/v1/optimization/callback/tick-result/",
+            {
+                "tick_id": "tick_perf_003",
+                "tenant_id": str(campaign.tenant_id) if campaign.tenant else "",
+                "campaign_id": str(campaign.campaign_id),
+                "mode": "manual",
+                # Only ctr provided; cpa/roas must not be nulled out.
+                "performance": {"avg_ctr": 3.14, "avg_cpa": None},
+            },
+            format="json",
+            HTTP_X_CALLBACK_TOKEN="test-token",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        campaign.refresh_from_db()
+        assert campaign.actual_cpa_usd == Decimal("9.99")
+        assert campaign.actual_roas == Decimal("4.20")
+        assert float(campaign.actual_ctr) == 3.14
+        assert campaign.last_metrics_update is not None

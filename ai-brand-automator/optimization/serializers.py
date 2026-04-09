@@ -31,6 +31,11 @@ class CampaignRegistrySerializer(serializers.ModelSerializer):
             "target_roas",
             "daily_budget_usd",
             "lifetime_budget_usd",
+            "actual_cpa_usd",
+            "actual_roas",
+            "actual_ctr",
+            "actual_spend_today_usd",
+            "last_metrics_update",
             "ad_sets",
             "ads",
             "start_date",
@@ -51,6 +56,13 @@ class CampaignRegistrySerializer(serializers.ModelSerializer):
             "pending_recommendations_count",
             "created_at",
             "updated_at",
+            # Actual performance KPIs are written exclusively by the COA
+            # tick callback — never via public PATCH.
+            "actual_cpa_usd",
+            "actual_roas",
+            "actual_ctr",
+            "actual_spend_today_usd",
+            "last_metrics_update",
         ]
 
     def get_pending_recommendations_count(self, obj):
@@ -75,6 +87,11 @@ class CampaignRegistryListSerializer(serializers.ModelSerializer):
             "daily_budget_usd",
             "target_cpa_usd",
             "target_roas",
+            "actual_cpa_usd",
+            "actual_roas",
+            "actual_ctr",
+            "actual_spend_today_usd",
+            "last_metrics_update",
             "sandbox_mode",
             "age_days",
             "pending_recommendations_count",

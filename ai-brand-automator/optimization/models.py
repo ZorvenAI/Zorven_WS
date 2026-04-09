@@ -101,6 +101,44 @@ class CampaignRegistry(models.Model):
         help_text="Lifetime budget in USD",
     )
 
+    # Actual performance metrics (populated from COA tick callbacks)
+    actual_cpa_usd = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Latest observed cost per acquisition in USD",
+    )
+    actual_roas = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Latest observed return on ad spend",
+    )
+    actual_ctr = models.DecimalField(
+        max_digits=7,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text=(
+            "Latest observed click-through rate as percentage "
+            "(0.0000-100.0000) to match analytics convention"
+        ),
+    )
+    actual_spend_today_usd = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Spend today in USD (from latest tick)",
+    )
+    last_metrics_update = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of the latest performance metrics update",
+    )
+
     # Meta entity tree (denormalized for fast access)
     ad_sets = models.JSONField(
         default=list,

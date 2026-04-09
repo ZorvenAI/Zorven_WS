@@ -35,6 +35,11 @@ export interface CampaignRegistry {
   target_roas: number | string | null;
   daily_budget_usd: number | string;
   lifetime_budget_usd: number | string | null;
+  actual_cpa_usd: number | string | null;
+  actual_roas: number | string | null;
+  actual_ctr: number | string | null;
+  actual_spend_today_usd: number | string | null;
+  last_metrics_update: string | null;
   ad_sets: AdSetEntry[];
   ads: AdEntry[];
   start_date: string;
