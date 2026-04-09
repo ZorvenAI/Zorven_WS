@@ -25,6 +25,34 @@ from app.services.targeting_translator import TargetingTranslator
 logger = logging.getLogger(__name__)
 
 
+def _extract_kpi_avg(kpi_targets: Any, metric: str) -> float | None:
+    """Average a metric (e.g. ``cpa``, ``roas``) across funnel stages in
+    CAA's nested ``kpi_targets`` structure.
+
+    CAA emits ``kpi_targets = {"targets": {stage: {cpm, ctr, cpc, cpa, roas, ...}}}``.
+    The optimization dashboard stores a single flat target per campaign,
+    so we collapse the per-stage values into a simple mean.
+    """
+    if not isinstance(kpi_targets, dict):
+        return None
+    per_stage = kpi_targets.get("targets")
+    if not isinstance(per_stage, dict):
+        per_stage = kpi_targets
+    values: list[float] = []
+    for stage in per_stage.values():
+        if not isinstance(stage, dict):
+            continue
+        raw = stage.get(metric)
+        try:
+            if raw is not None:
+                values.append(float(raw))
+        except (TypeError, ValueError):
+            continue
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
 class AdPubAnalyzer:
     """Executes the 7-phase ad publishing pipeline."""
 
@@ -352,8 +380,10 @@ class AdPubAnalyzer:
             "objective": blueprint.get("objective", ""),
             "status": "active",
             "optimization_mode": "manual",
-            "target_cpa_usd": blueprint.get("target_cpa_usd"),
-            "target_roas": blueprint.get("target_roas"),
+            "target_cpa_usd": blueprint.get("target_cpa_usd")
+            or _extract_kpi_avg(blueprint.get("kpi_targets"), "cpa"),
+            "target_roas": blueprint.get("target_roas")
+            or _extract_kpi_avg(blueprint.get("kpi_targets"), "roas"),
             "daily_budget_usd": preparation.get("total_daily_budget_usd", 0),
             "lifetime_budget_usd": blueprint.get("lifetime_budget_usd"),
             "ad_sets": [{"id": sid} for sid in ad_set_ids],

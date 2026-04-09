@@ -7339,16 +7339,26 @@ export default function ResultDashboard({
   const wf1AgentCount = [hasMarketResearch, hasCompetitorIntelligence, hasAudiencePersona, hasTrendCultural, hasVoiceOfCustomer].filter(Boolean).length;
   const hasBrandDiscovery = wf1AgentCount >= 2;
 
+  // ── Per-node payloads ───────────────────────────────────────────
+  // Orchestrator namespaces flat agent responses under
+  // result_data.node_payloads.<node_id> to prevent overwrites across
+  // WF3 pipelines. Fall back to legacy node_results, then top-level.
+  const nodePayloads =
+    (resultData.node_payloads as Record<string, Record<string, unknown>> | undefined) ??
+    (resultData.node_results as Record<string, Record<string, unknown>> | undefined);
+  const caaNodeData = nodePayloads?.campaign_architecture;
+
   // ── Detect campaign architecture data ───────────────────────────
   const hasCampaignArchitecture =
+    caaNodeData?.blueprint != null ||
+    caaNodeData?.funnel_map != null ||
+    caaNodeData?.targeting_specs != null ||
     resultData.blueprint != null ||
     resultData.funnel_map != null ||
     resultData.targeting_specs != null;
 
   // ── Detect creative generation data ───────────────────────────
-  // CGA large payloads live inside node_results.creative_generation
-  // (manager node only promotes lightweight stats to top-level)
-  const cgaNodeData = (resultData.node_results as Record<string, Record<string, unknown>> | undefined)?.creative_generation;
+  const cgaNodeData = nodePayloads?.creative_generation;
   const hasCreativeGeneration =
     cgaNodeData?.creative_package != null ||
     cgaNodeData?.ad_units != null ||
@@ -7358,7 +7368,7 @@ export default function ResultDashboard({
     resultData.ad_units != null;
 
   // ── Detect ad-publishing / approval data ────────────────────────
-  const adPubNodeData = (resultData.node_results as Record<string, Record<string, unknown>> | undefined)?.ad_publishing;
+  const adPubNodeData = nodePayloads?.ad_publishing;
   const adPubData = adPubNodeData ?? resultData;
   const publishResult = (resultData.publish_result ?? adPubData?.publish_result) as Record<string, unknown> | undefined;
   const hasAdPublishing =
@@ -8030,19 +8040,19 @@ export default function ResultDashboard({
 
       {hasCampaignArchitecture && (
         <CampaignArchitectureSection
-          blueprint={resultData.blueprint as CAABlueprint | undefined}
-          funnelMap={resultData.funnel_map as CAAFunnelMap | undefined}
-          targetingSpecs={resultData.targeting_specs as CAATargetingSpec[] | undefined}
-          placementBudget={resultData.placement_budget as Record<string, unknown> | undefined}
-          testPlan={resultData.test_plan as CAATestPlan | undefined}
-          kpiTargets={(resultData.kpi_targets as Record<string, Record<string, number>> | undefined)}
-          performanceProjections={resultData.performance_projections as CAAPerformanceProjections | undefined}
-          riskAssessment={resultData.risk_assessment as CAARiskAssessment | undefined}
-          creativeBriefs={resultData.creative_briefs as CAACreativeBrief[] | undefined}
-          specialAdCategory={resultData.special_ad_category as string | undefined}
-          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.campaign_architecture ?? resultData.confidence_score) as number | undefined}
-          findings={findings}
-          recommendations={recommendations}
+          blueprint={(caaNodeData?.blueprint ?? resultData.blueprint) as CAABlueprint | undefined}
+          funnelMap={(caaNodeData?.funnel_map ?? resultData.funnel_map) as CAAFunnelMap | undefined}
+          targetingSpecs={(caaNodeData?.targeting_specs ?? resultData.targeting_specs) as CAATargetingSpec[] | undefined}
+          placementBudget={(caaNodeData?.placement_budget ?? resultData.placement_budget) as Record<string, unknown> | undefined}
+          testPlan={(caaNodeData?.test_plan ?? resultData.test_plan) as CAATestPlan | undefined}
+          kpiTargets={(caaNodeData?.kpi_targets ?? resultData.kpi_targets) as Record<string, Record<string, number>> | undefined}
+          performanceProjections={(caaNodeData?.performance_projections ?? resultData.performance_projections) as CAAPerformanceProjections | undefined}
+          riskAssessment={(caaNodeData?.risk_assessment ?? resultData.risk_assessment) as CAARiskAssessment | undefined}
+          creativeBriefs={(caaNodeData?.creative_briefs ?? resultData.creative_briefs) as CAACreativeBrief[] | undefined}
+          specialAdCategory={(caaNodeData?.special_ad_category ?? resultData.special_ad_category) as string | undefined}
+          confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.campaign_architecture ?? (caaNodeData?.confidence_score ?? resultData.confidence_score)) as number | undefined}
+          findings={(caaNodeData?.findings as string[] | undefined) ?? findings}
+          recommendations={(caaNodeData?.recommendations as string[] | undefined) ?? recommendations}
         />
       )}
 
