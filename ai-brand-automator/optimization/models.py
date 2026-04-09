@@ -117,11 +117,14 @@ class CampaignRegistry(models.Model):
         help_text="Latest observed return on ad spend",
     )
     actual_ctr = models.DecimalField(
-        max_digits=6,
+        max_digits=7,
         decimal_places=4,
         null=True,
         blank=True,
-        help_text="Latest observed click-through rate (0.0-1.0)",
+        help_text=(
+            "Latest observed click-through rate as percentage "
+            "(0.0000-100.0000) to match analytics convention"
+        ),
     )
     actual_spend_today_usd = models.DecimalField(
         max_digits=10,

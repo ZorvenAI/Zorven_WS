@@ -27,8 +27,11 @@ class Migration(migrations.Migration):
             field=models.DecimalField(
                 blank=True,
                 decimal_places=4,
-                help_text="Latest observed click-through rate (0.0-1.0)",
-                max_digits=6,
+                help_text=(
+                    "Latest observed click-through rate as percentage "
+                    "(0.0000-100.0000) to match analytics convention"
+                ),
+                max_digits=7,
                 null=True,
             ),
         ),

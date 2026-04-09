@@ -76,7 +76,7 @@ export default function CampaignMetricsCard({
     },
     {
       label: 'CTR',
-      value: actualCtr !== null ? `${(actualCtr * 100).toFixed(2)}%` : '--',
+      value: actualCtr !== null ? `${actualCtr.toFixed(2)}%` : '--',
       target: null,
       icon: <MousePointerClick className={iconCls} />,
       status: 'neutral',
