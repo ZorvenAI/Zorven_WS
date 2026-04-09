@@ -7384,10 +7384,12 @@ export default function ResultDashboard({
 
   // ── Route to approval panel for ad-publishing awaiting_approval ──
   const approvalRequestId = (adPubData?.approval_request_id ?? resultData.approval_request_id) as string | undefined;
-  const isAwaitingApproval =
-    jobStatus === 'awaiting_approval' ||
-    (resultData.status as string) === 'awaiting_approval' ||
-    (adPubData?.status as string) === 'awaiting_approval';
+  // Only treat the job as awaiting approval when the live job status
+  // says so. The persisted node_payloads still carry the original
+  // gate output (status=awaiting_approval) even after the user
+  // approves, so relying on them would keep the approval panel up
+  // forever once the job flips to completed/failed.
+  const isAwaitingApproval = jobStatus === 'awaiting_approval';
   if (hasAdPublishing && approvalRequestId && isAwaitingApproval && jobId) {
     const previewData = (adPubData?.preview_data ?? resultData.preview_data ?? {}) as Record<string, unknown>;
     const sandboxMode = (adPubData?.sandbox_mode ?? resultData.sandbox_mode ?? true) as boolean;
