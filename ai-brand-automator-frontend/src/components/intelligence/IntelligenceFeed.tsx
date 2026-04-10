@@ -1,14 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, Loader2, RefreshCw, Brain } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, RefreshCw, Brain, Zap } from 'lucide-react';
 import { useTenantRole } from '@/hooks/useTenantRole';
 import {
   fetchIntelligenceReport,
   fetchIntelligenceReports,
+  triggerExtraction,
   type CampaignIntelligenceDetail,
   type CampaignIntelligenceList,
 } from '@/lib/intelligence';
+import { fetchCampaigns } from '@/lib/optimization';
+import type { CampaignRegistry } from '@/types/optimization';
 import LearningCard from './LearningCard';
 
 interface Props {
@@ -23,6 +26,10 @@ export default function IntelligenceFeed({ campaignId }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, CampaignIntelligenceDetail>>({});
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
+  const [campaigns, setCampaigns] = useState<CampaignRegistry[]>([]);
+  const [selectedCampaign, setSelectedCampaign] = useState('');
+  const [triggering, setTriggering] = useState(false);
+  const [triggerMsg, setTriggerMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,6 +48,31 @@ export default function IntelligenceFeed({ campaignId }: Props) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    fetchCampaigns()
+      .then((c) => {
+        setCampaigns(c);
+        if (c.length === 1) setSelectedCampaign(c[0].campaign_id ?? '');
+      })
+      .catch(() => setCampaigns([]));
+  }, []);
+
+  async function handleTrigger() {
+    if (!selectedCampaign) return;
+    setTriggering(true);
+    setTriggerMsg(null);
+    setError(null);
+    try {
+      await triggerExtraction(selectedCampaign);
+      setTriggerMsg('Extraction triggered — results will appear shortly.');
+      setTimeout(() => load(), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to trigger extraction');
+    } finally {
+      setTriggering(false);
+    }
+  }
 
   async function toggle(id: string) {
     if (expanded === id) {
@@ -95,9 +127,47 @@ export default function IntelligenceFeed({ campaignId }: Props) {
         </div>
       )}
 
+      {canEdit && campaigns.length > 0 && (
+        <div className="glass-card p-4 rounded-lg border border-white/5 space-y-3">
+          <p className="text-xs text-brand-silver">
+            Trigger intelligence extraction for a campaign
+          </p>
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedCampaign}
+              onChange={(e) => setSelectedCampaign(e.target.value)}
+              className="flex-1 text-sm bg-white/5 border border-white/10 rounded-md px-3 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-brand-electric"
+            >
+              <option value="">Select a campaign…</option>
+              {campaigns.map((c) => (
+                <option key={c.campaign_id} value={c.campaign_id}>
+                  {c.campaign_name || c.meta_campaign_id || `Campaign ${c.campaign_id}`}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleTrigger}
+              disabled={triggering || !selectedCampaign}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-brand-electric/20 text-brand-electric hover:bg-brand-electric/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {triggering ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Zap className="h-3.5 w-3.5" />
+              )}
+              Trigger Extraction
+            </button>
+          </div>
+          {triggerMsg && (
+            <p className="text-xs text-emerald-400">{triggerMsg}</p>
+          )}
+        </div>
+      )}
+
       {!loading && reports.length === 0 && !error && (
         <div className="glass-card p-6 rounded-lg text-sm text-brand-silver text-center">
-          No intelligence reports yet. Run a campaign optimization to generate learnings.
+          No intelligence reports yet. Trigger an extraction above or run a campaign optimization to generate learnings.
         </div>
       )}
 
