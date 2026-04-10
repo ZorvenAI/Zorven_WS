@@ -210,22 +210,43 @@ class IntelligenceExtractor:
 def _mock_report(campaign_id: str | None) -> tuple[str, list[LearningOut]]:
     """Deterministic fallback used when Claude is unavailable.
 
-    Keeps the orchestrator round-trip and Phase 2/3 tests stable when no
-    API key is present. Phase 4 will gate auto-trigger so mock learnings
-    never fire real re-runs (their confidence stays at 50/LOW).
+    Produces representative learnings across WF1/WF2/WF3 so the full
+    dispatch + WF2 approval flow can be exercised even without a live LLM.
+    Confidence is set above MIN_CONFIDENCE_AUTO_TRIGGER (75) so
+    auto_trigger mode actually creates WF2 requests and fires reruns.
     """
     return (
-        "Mock intelligence report — Anthropic disabled or no context.",
+        "Mock intelligence report — Anthropic unavailable or no campaign context.",
         [
             LearningOut(
                 learning_id=str(uuid.uuid4()),
                 category="creative",
-                headline="Mock learning — replace by configuring ILA_ANTHROPIC_API_KEY",
+                headline="Mock: ad creative fatigue detected — refresh imagery",
                 detail={"source": "mock-extractor", "campaign_id": campaign_id},
-                confidence=50,
-                impact="LOW",
+                confidence=80,
+                impact="MEDIUM",
                 target_workflow="WF3",
                 target_agent="CGA",
-            )
+            ),
+            LearningOut(
+                learning_id=str(uuid.uuid4()),
+                category="audience",
+                headline="Mock: audience segments shifting — re-evaluate personas",
+                detail={"source": "mock-extractor", "campaign_id": campaign_id},
+                confidence=82,
+                impact="HIGH",
+                target_workflow="WF1",
+                target_agent="APA",
+            ),
+            LearningOut(
+                learning_id=str(uuid.uuid4()),
+                category="messaging",
+                headline="Mock: brand positioning underperforming — review strategy",
+                detail={"source": "mock-extractor", "campaign_id": campaign_id},
+                confidence=85,
+                impact="HIGH",
+                target_workflow="WF2",
+                target_agent="BPA",
+            ),
         ],
     )
