@@ -29,7 +29,7 @@ export default function WF2ApprovalQueue() {
       setRequests(data);
     } catch (e) {
       setRequests([]);
-      setError(e instanceof Error ? e.message : 'Failed to load WF2 queue');
+      setError(e instanceof Error ? e.message : 'Failed to load approval queue');
     } finally {
       setLoading(false);
     }
@@ -79,7 +79,7 @@ export default function WF2ApprovalQueue() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-heading font-semibold text-white flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-amber-300" />
-          WF2 Approval Queue
+          Brand Strategy Approval Queue
         </h2>
         <button
           type="button"
@@ -122,7 +122,7 @@ export default function WF2ApprovalQueue() {
 
       {!loading && requests.length === 0 && !error && (
         <div className="glass-card p-6 rounded-lg text-sm text-brand-silver text-center">
-          No pending WF2 approval requests.
+          No pending brand strategy approval requests.
         </div>
       )}
 
