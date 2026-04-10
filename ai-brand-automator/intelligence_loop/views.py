@@ -462,7 +462,7 @@ def trigger_extraction(request):
                 "config": {"default_mode": payload["mode"]},
             },
             headers={"X-Service-Token": ila_token},
-            timeout=10,
+            timeout=60,
         )
     except requests.RequestException as exc:
         logger.error("ILA trigger proxy failed: %s", exc)
