@@ -30,6 +30,7 @@ export default function IntelligenceFeed({ campaignId }: Props) {
   const [selectedCampaign, setSelectedCampaign] = useState('');
   const [triggering, setTriggering] = useState(false);
   const [triggerMsg, setTriggerMsg] = useState<string | null>(null);
+  const [triggerMode, setTriggerMode] = useState<'store_only' | 'auto_trigger'>('store_only');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,8 +65,12 @@ export default function IntelligenceFeed({ campaignId }: Props) {
     setTriggerMsg(null);
     setError(null);
     try {
-      await triggerExtraction(selectedCampaign);
-      setTriggerMsg('Extraction triggered — results will appear shortly.');
+      await triggerExtraction(selectedCampaign, triggerMode);
+      setTriggerMsg(
+        triggerMode === 'auto_trigger'
+          ? 'Extraction triggered with auto-trigger — WF2 approvals may appear shortly.'
+          : 'Extraction triggered — results will appear shortly.'
+      );
       setTimeout(() => load(), 3000);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to trigger extraction');
@@ -132,11 +137,11 @@ export default function IntelligenceFeed({ campaignId }: Props) {
           <p className="text-xs text-brand-silver">
             Trigger intelligence extraction for a campaign
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <select
               value={selectedCampaign}
               onChange={(e) => setSelectedCampaign(e.target.value)}
-              className="flex-1 text-sm bg-white/5 border border-white/10 rounded-md px-3 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-brand-electric"
+              className="flex-1 min-w-[180px] text-sm bg-white/5 border border-white/10 rounded-md px-3 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-brand-electric"
             >
               <option value="">Select a campaign…</option>
               {campaigns.map((c) => (
@@ -144,6 +149,14 @@ export default function IntelligenceFeed({ campaignId }: Props) {
                   {c.campaign_name || c.meta_campaign_id || `Campaign ${c.campaign_id}`}
                 </option>
               ))}
+            </select>
+            <select
+              value={triggerMode}
+              onChange={(e) => setTriggerMode(e.target.value as 'store_only' | 'auto_trigger')}
+              className="text-sm bg-white/5 border border-white/10 rounded-md px-3 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-brand-electric"
+            >
+              <option value="store_only">Store only</option>
+              <option value="auto_trigger">Auto-trigger</option>
             </select>
             <button
               type="button"
