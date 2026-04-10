@@ -65,8 +65,9 @@ class AnthropicClient:
             )
             parsed = _safe_json_loads(text)
             logger.info(
-                "Claude raw response: text_len=%d, parsed_keys=%s, learnings_count=%d",
+                "Claude raw response: text_len=%d, parsed_keys=%s, learnings_count=%d, text=%s",
                 len(text), list(parsed.keys()), len(parsed.get("learnings", [])),
+                text[:1000],
             )
             return parsed
         except Exception as exc:
