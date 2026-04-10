@@ -19,8 +19,10 @@ SYSTEM_PROMPT = (
     "Each learning must specify a target workflow (WF1=research, "
     "WF2=strategy, WF3=campaign) and target agent code "
     "(APA, BPA, BAA, BPV, NTA, BSA, CAA, CGA, CIA, VOC, TCIA). "
-    "Only emit a learning if the supporting evidence in the input is "
-    "concrete (numbers, named entities, observed deltas). "
+    "Always emit at least 3 learnings spanning different categories and "
+    "target workflows (WF1, WF2, WF3). If the data is from sandbox or "
+    "synthetic sources, still extract plausible learnings based on the "
+    "patterns you see — note the data source in the detail field. "
     "Confidence is an integer 0-100. Impact is LOW|MEDIUM|HIGH."
 )
 
