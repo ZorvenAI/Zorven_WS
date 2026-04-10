@@ -104,12 +104,12 @@ export default function WF2ApprovalQueue() {
 
       {dispatched && (
         <div className="glass-card p-3 rounded-lg border border-emerald-500/40 text-sm text-emerald-300 flex items-center justify-between">
-          <span>Pipeline dispatched successfully!</span>
+          <span>Workflow dispatched successfully!</span>
           <Link
-            href={`/pipelines/${dispatched.jobId}`}
+            href="/dashboard/workflows"
             className="inline-flex items-center gap-1 text-brand-electric hover:underline"
           >
-            View pipeline <ExternalLink className="h-3 w-3" />
+            View in Workspace <ExternalLink className="h-3 w-3" />
           </Link>
         </div>
       )}
