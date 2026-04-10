@@ -111,11 +111,13 @@ WF3_AGENT_TO_PIPELINE = {
 def _dispatch_rerun(*, tenant, user, pipeline_id, learning, note=""):
     """
     Create an AnalysisJob for a re-run with ILA learning context, then
-    dispatch via OrchestratorDispatcher.
+    dispatch via OrchestratorDispatcher.  Also creates a UserWorkflow +
+    WorkflowSnapshot so the execution appears in the Workflow Workspace.
 
     Returns the created AnalysisJob (or None on failure).
     """
     from orchestration.services import OrchestratorDispatcher
+    from workspace.models import UserWorkflow, WorkflowSnapshot
 
     manifest = (
         PipelineManifest.objects.filter(pipeline_id=pipeline_id)
@@ -130,14 +132,16 @@ def _dispatch_rerun(*, tenant, user, pipeline_id, learning, note=""):
         )
         return None
 
+    input_prompt = (
+        f"ILA-triggered re-run for learning '{learning.headline}'. "
+        f"{note}".strip()
+    )
+
     job = AnalysisJob.objects.create(
         tenant=tenant,
         created_by=user,
         manifest=manifest,
-        input_prompt=(
-            f"ILA-triggered re-run for learning '{learning.headline}'. "
-            f"{note}".strip()
-        ),
+        input_prompt=input_prompt,
         input_context={
             "pipeline_id": pipeline_id,
             "ila_learning_context": {
@@ -155,6 +159,30 @@ def _dispatch_rerun(*, tenant, user, pipeline_id, learning, note=""):
             "trigger_source": "intelligence_loop",
         },
     )
+
+    # Create a UserWorkflow + WorkflowSnapshot so the execution appears
+    # in the Workflow Workspace with live progress tracking.
+    try:
+        workflow = UserWorkflow.objects.create(
+            name=f"ILA Re-run: {learning.headline[:80]}",
+            description=input_prompt,
+            manifest=manifest,
+            layout_data={},
+            source=UserWorkflow.Source.CREATED,
+            tenant=tenant,
+            created_by=user,
+            last_executed_at=timezone.now(),
+            execution_count=1,
+        )
+        WorkflowSnapshot.objects.create(
+            workflow=workflow,
+            job=job,
+            manifest_snapshot=manifest.manifest_data,
+            layout_snapshot={},
+            tenant=tenant,
+        )
+    except Exception as exc:
+        logger.warning("ILA re-run: failed to create workspace workflow: %s", exc)
 
     dispatched = OrchestratorDispatcher().dispatch(job)
     if not dispatched:
