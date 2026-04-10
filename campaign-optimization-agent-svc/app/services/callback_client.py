@@ -39,6 +39,7 @@ class CallbackClient:
     def _callback_headers(self, tenant_id: str = "") -> dict[str, str]:
         headers = {
             "X-Callback-Token": settings.CALLBACK_TOKEN,
+            "X-Service-Token": settings.BACKEND_SERVICE_TOKEN,
             "Content-Type": "application/json",
         }
         if tenant_id:
