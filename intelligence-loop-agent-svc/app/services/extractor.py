@@ -66,6 +66,10 @@ class IntelligenceExtractor:
 
         # 2. Call Claude (or fall back).
         summary, learnings = await self._call_claude(campaign_ctx)
+        logger.info(
+            "Claude extraction: summary_len=%d, learnings=%d, fallback=%s",
+            len(summary), len(learnings), "yes" if not learnings else "no",
+        )
         if not learnings:
             summary, learnings = _mock_report(campaign_id)
 

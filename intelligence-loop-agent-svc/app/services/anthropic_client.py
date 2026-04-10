@@ -63,7 +63,12 @@ class AnthropicClient:
             text = "".join(
                 block.text for block in msg.content if getattr(block, "text", None)
             )
-            return _safe_json_loads(text)
+            parsed = _safe_json_loads(text)
+            logger.info(
+                "Claude raw response: text_len=%d, parsed_keys=%s, learnings_count=%d",
+                len(text), list(parsed.keys()), len(parsed.get("learnings", [])),
+            )
+            return parsed
         except Exception as exc:
             logger.warning("Anthropic call failed (fail-open): %s", exc)
             return {}
