@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Loader2, RefreshCw, ShieldCheck, X } from 'lucide-react';
+import { Check, ExternalLink, Loader2, RefreshCw, ShieldCheck, X } from 'lucide-react';
+import Link from 'next/link';
 import { useTenantRole } from '@/hooks/useTenantRole';
 import {
   approveWF2Request,
@@ -18,6 +19,7 @@ export default function WF2ApprovalQueue() {
   const [busy, setBusy] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [reason, setReason] = useState('');
+  const [dispatched, setDispatched] = useState<{ requestId: string; jobId: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,8 +47,11 @@ export default function WF2ApprovalQueue() {
     setBusy(id);
     setError(null);
     try {
-      await approveWF2Request(id);
+      const result = await approveWF2Request(id);
       setRequests((prev) => prev.filter((r) => r.request_id !== id));
+      if (result.job_id) {
+        setDispatched({ requestId: id, jobId: result.job_id });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Approval failed');
     } finally {
@@ -94,6 +99,18 @@ export default function WF2ApprovalQueue() {
       {error && (
         <div className="glass-card p-3 rounded-lg border border-rose-500/40 text-sm text-rose-300">
           {error}
+        </div>
+      )}
+
+      {dispatched && (
+        <div className="glass-card p-3 rounded-lg border border-emerald-500/40 text-sm text-emerald-300 flex items-center justify-between">
+          <span>Pipeline dispatched successfully!</span>
+          <Link
+            href={`/pipelines/${dispatched.jobId}`}
+            className="inline-flex items-center gap-1 text-brand-electric hover:underline"
+          >
+            View pipeline <ExternalLink className="h-3 w-3" />
+          </Link>
         </div>
       )}
 
