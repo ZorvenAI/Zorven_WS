@@ -425,12 +425,6 @@ def optimization_tick_callback(request):
     # Update campaign entity tree if provided
     entity_updates = data.get("entity_updates", {})
     perf = data.get("performance") or {}
-    logger.info(
-        "Tick callback debug: campaign=%s perf=%r entity_updates_keys=%s",
-        campaign_id,
-        perf,
-        list(entity_updates.keys()) if entity_updates else "none",
-    )
     if entity_updates or perf:
         update_fields = ["updated_at"]
         if "ad_sets" in entity_updates:
