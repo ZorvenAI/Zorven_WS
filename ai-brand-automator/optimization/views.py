@@ -338,10 +338,8 @@ def optimization_tick_callback(request):
     Authenticates via X-Callback-Token header (service-to-service).
     Receives tick results and persists recommendations/actions to Django models.
     """
-    # Verify callback token
-    token = request.META.get("HTTP_X_CALLBACK_TOKEN", "")
-    expected_token = getattr(settings, "ORCHESTRATOR_CALLBACK_TOKEN", "")
-    if not expected_token or token != expected_token:
+    # Verify service-to-service auth (X-Service-Token or X-Callback-Token)
+    if not _verify_service_or_callback_token(request):
         logger.warning("Invalid callback token for optimization tick")
         return Response(
             {"error": "Invalid callback token"},
