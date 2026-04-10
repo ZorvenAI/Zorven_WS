@@ -146,6 +146,13 @@ class IntelligenceExtractor:
         report.rag_writes = rag_writes
 
         # Auto-trigger only when explicitly enabled.
+        logger.info(
+            "Dispatch check: mode=%s, learnings=%d, targets=%s, confidences=%s",
+            report.mode,
+            len(report.learnings),
+            [le.target_workflow for le in report.learnings],
+            [le.confidence for le in report.learnings],
+        )
         if report.mode != "auto_trigger":
             return
 
@@ -155,6 +162,11 @@ class IntelligenceExtractor:
         triggered = 0
         for learning in report.learnings:
             if learning.confidence < settings.MIN_CONFIDENCE_AUTO_TRIGGER:
+                logger.info(
+                    "Skipping learning %s: confidence %d < threshold %d",
+                    learning.learning_id, learning.confidence,
+                    settings.MIN_CONFIDENCE_AUTO_TRIGGER,
+                )
                 continue
             if learning.target_workflow == "WF2":
                 # WF2 is always behind human approval.
