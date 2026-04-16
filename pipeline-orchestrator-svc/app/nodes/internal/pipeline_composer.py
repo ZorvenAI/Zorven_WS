@@ -676,8 +676,8 @@ Examples of prompt → pipeline compositions:
 - "Design a Meta Ads campaign for our product launch" → [campaign_architecture, manager]
 - "Create campaign architecture and ad creatives for Meta" → [campaign_architecture, creative_generation, manager]
 - "Launch a full Meta Ads pipeline with campaign blueprint and ad creatives" → [campaign_architecture, creative_generation, manager]
-- "Generate ad creatives for our Meta Ads campaign" → [creative_generation, manager]
-- "Create Facebook and Instagram ad creatives" → [creative_generation, manager]
+- "Generate ad creatives for our Meta Ads campaign" → [campaign_architecture, creative_generation, manager]
+- "Create Facebook and Instagram ad creatives" → [campaign_architecture, creative_generation, manager]
 - "Run a complete Meta Ads campaign from blueprint to creatives" → [campaign_architecture, creative_generation, manager]
 """.strip()
 
@@ -825,12 +825,16 @@ def _build_system_prompt(catalog: list[dict]) -> str:
         "brand naming, or brand story requests → use the corresponding "
         "WF2 agent (brand_positioning, brand_architecture, "
         "brand_personality, brand_naming, brand_story). These agents "
-        "can run from chat without prior WF1 data.\n"
+        "work best with WF1 Brand Discovery context; when triggered "
+        "from chat, the tenant's onboarding brand context (injected "
+        "automatically) provides the foundation they need.\n"
         "- For 'full brand strategy' requests → chain all WF2 agents: "
         "[brand_positioning, brand_architecture, brand_personality, "
         "brand_naming, brand_story, manager]\n"
         "- For Meta Ads campaign requests → use campaign_architecture "
-        "and/or creative_generation. For full Meta Ads → "
+        "first. Select creative_generation ONLY after "
+        "campaign_architecture, unless a prior campaign blueprint is "
+        "already present in context. For full Meta Ads → "
         "[campaign_architecture, creative_generation, manager]\n"
         "- Always end with manager\n"
         "- For document/RAG queries use default_agent, for web research "
@@ -890,7 +894,7 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
         "- Brand story, brand narrative, origin story, mission/vision, "
         "elevator pitch → brand-strategy-story\n"
         "- Full brand strategy (positioning + architecture + story) → "
-        "brand-strategy-story\n"
+        "brand-strategy-positioning\n"
         "- Meta Ads campaign architecture, campaign blueprint, funnel mapping, "
         "audience targeting, ad targeting → meta-campaign-architecture\n"
         "- Ad creative generation, ad images, ad copy, creative assets → "
