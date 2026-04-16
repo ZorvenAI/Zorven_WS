@@ -133,8 +133,7 @@ def _dispatch_rerun(*, tenant, user, pipeline_id, learning, note=""):
         return None
 
     input_prompt = (
-        f"ILA-triggered re-run for learning '{learning.headline}'. "
-        f"{note}".strip()
+        f"ILA-triggered re-run for learning '{learning.headline}'. " f"{note}".strip()
     )
 
     job = AnalysisJob.objects.create(
