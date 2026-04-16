@@ -245,7 +245,7 @@ Schema-based via `django-tenants`. All models have a nullable `tenant` FK. Most 
 
 ### Redis Database Allocation
 
-DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent, DB 16: Brand Positioning, DB 17: Brand Architecture, DB 18: Brand Personality, DB 19: Brand Naming, DB 20: Brand Story, DB 21: Campaign Architecture, DB 22: Creative Generation, DB 23: Ad Publishing, DB 24: Campaign Optimization (requires `databases 25` in redis.conf — if COA fails with `ERR DB index is out of range`, bump the Redis `databases` setting), DB 25: Intelligence Loop Agent (WF3.5)
+DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent, DB 16: Brand Positioning, DB 17: Brand Architecture, DB 18: Brand Personality, DB 19: Brand Naming, DB 20: Brand Story, DB 21: Campaign Architecture, DB 22: Creative Generation, DB 23: Ad Publishing, DB 24: Campaign Optimization, DB 25: Intelligence Loop Agent (WF3.5). Requires `databases 26` in redis.conf and `--databases 26` in docker-compose — if a service fails with `ERR DB index is out of range`, bump the Redis `databases` setting. The local docker-compose currently uses `--databases 25`; update it to `26` when enabling the ILA service.
 
 ### Microservice Layout Convention
 
@@ -311,8 +311,9 @@ Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `C
 | `agent.optimization.spend_milestone` | Campaign Optimization agent | Campaign Optimization agent | Spend milestone self-trigger (50%/75%/100%) |
 | `agent.optimization.action_executed` | Campaign Optimization agent | Intelligence Loop Agent | Optimization learnings consumed by ILA for extraction + RAG ingestion |
 
-**Manual COA tick trigger**: Besides Celery Beat's scheduled ticks, the Optimization Dashboard exposes a manual trigger button that calls Django's `/api/v1/optimization/trigger-tick/` endpoint, which proxies to COA (`X-Service-Token` auth) and returns synchronous per-campaign results including skip reasons (guardrail failures, campaign age filters, etc.) for immediate UI feedback. COA service URL and service token must be configured on the Django backend (`COA_SERVICE_URL`, `COA_SERVICE_TOKEN`).
 | `analytics-events` | Analytics extraction | — | Metric extraction/rejection audit (conditional via `ANALYTICS_KAFKA_ENABLED`) |
+
+**Manual COA tick trigger**: Besides Celery Beat's scheduled ticks, the Optimization Dashboard exposes a manual trigger button that calls Django's `/api/v1/optimization/trigger-tick/` endpoint, which proxies to COA (`X-Service-Token` auth) and returns synchronous per-campaign results including skip reasons (guardrail failures, campaign age filters, etc.) for immediate UI feedback. COA service URL and service token must be configured on the Django backend (`COA_SERVICE_URL`, `COA_SERVICE_TOKEN`).
 
 ## Critical Code Patterns
 
