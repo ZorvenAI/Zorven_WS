@@ -669,6 +669,16 @@ Examples of prompt → pipeline compositions:
 - "Create a brand hierarchy with naming conventions" → [brand_architecture, manager]
 - "Build brand positioning and then design the brand architecture" → [brand_positioning, brand_architecture, manager]
 - "Full brand strategy with positioning and architecture" → [brand_positioning, brand_architecture, manager]
+- "Define the brand personality and values for our company" → [brand_personality, manager]
+- "Create brand naming candidates and taglines" → [brand_naming, manager]
+- "Write our brand story and origin narrative" → [brand_story, manager]
+- "Full brand strategy — positioning, architecture, personality, naming, and story" → [brand_positioning, brand_architecture, brand_personality, brand_naming, brand_story, manager]
+- "Design a Meta Ads campaign for our product launch" → [campaign_architecture, manager]
+- "Create campaign architecture and ad creatives for Meta" → [campaign_architecture, creative_generation, manager]
+- "Launch a full Meta Ads pipeline with campaign blueprint and ad creatives" → [campaign_architecture, creative_generation, manager]
+- "Generate ad creatives for our Meta Ads campaign" → [creative_generation, manager]
+- "Create Facebook and Instagram ad creatives" → [creative_generation, manager]
+- "Run a complete Meta Ads campaign from blueprint to creatives" → [campaign_architecture, creative_generation, manager]
 """.strip()
 
 
@@ -811,6 +821,17 @@ def _build_system_prompt(catalog: list[dict]) -> str:
         "[market_research, competitor_intelligence, audience_persona, "
         "trend_cultural, manager]. trend_cultural MUST be included for "
         "any brand discovery request.\n"
+        "- For brand positioning, brand architecture, brand personality, "
+        "brand naming, or brand story requests → use the corresponding "
+        "WF2 agent (brand_positioning, brand_architecture, "
+        "brand_personality, brand_naming, brand_story). These agents "
+        "can run from chat without prior WF1 data.\n"
+        "- For 'full brand strategy' requests → chain all WF2 agents: "
+        "[brand_positioning, brand_architecture, brand_personality, "
+        "brand_naming, brand_story, manager]\n"
+        "- For Meta Ads campaign requests → use campaign_architecture "
+        "and/or creative_generation. For full Meta Ads → "
+        "[campaign_architecture, creative_generation, manager]\n"
         "- Always end with manager\n"
         "- For document/RAG queries use default_agent, for web research "
         "use web_research"
@@ -844,7 +865,7 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
         "- Document queries, RAG, summarize → general-chat\n"
         "- RAG + blog + social → rag-blog-social\n"
         "- RAG + blog (no social) → rag-blog-authoring\n"
-        "- Brand positioning, market analysis → brand-analysis\n"
+        "- Market analysis, general brand analysis → brand-analysis\n"
         "- Market research, market sizing, TAM, SAM, SOM, industry trends, "
         "growth potential, addressable market → market-research\n"
         "- Competitor profiling, SWOT analysis, competitive benchmarking, "
@@ -857,8 +878,25 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
         "audience-persona-discovery\n"
         "- Brand discovery, full brand analysis, comprehensive brand "
         "intelligence → brand-discovery-full\n"
+        "- Brand discovery with voice of customer → brand-discovery-complete\n"
         "- Cultural trends, social media trends, viral content, "
         "generational preferences, emerging slang → trend-cultural-insights\n"
+        "- Voice of customer, customer feedback, NPS, sentiment → "
+        "voice-of-customer\n"
+        "- Brand positioning, positioning strategy, value proposition, "
+        "UVP, differentiation, perceptual mapping → brand-strategy-positioning\n"
+        "- Brand architecture, brand hierarchy, sub-brands, brand structure, "
+        "branded house, house of brands → brand-strategy-architecture\n"
+        "- Brand story, brand narrative, origin story, mission/vision, "
+        "elevator pitch → brand-strategy-story\n"
+        "- Full brand strategy (positioning + architecture + story) → "
+        "brand-strategy-story\n"
+        "- Meta Ads campaign architecture, campaign blueprint, funnel mapping, "
+        "audience targeting, ad targeting → meta-campaign-architecture\n"
+        "- Ad creative generation, ad images, ad copy, creative assets → "
+        "meta-creative-generation\n"
+        "- Full Meta Ads pipeline (campaign + creative), launch Meta Ads → "
+        "meta-ads-full\n"
         "- Odoo ERP tasks, sales orders, inventory, HR, accounting, "
         "email campaigns, mass mailing, email marketing, marketing "
         "campaigns, newsletters → odoo-erp-operations\n"
