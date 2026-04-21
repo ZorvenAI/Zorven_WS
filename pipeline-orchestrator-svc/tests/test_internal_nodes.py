@@ -773,3 +773,48 @@ class TestExpandChain:
             "WF2 test",
         )
         assert result == node_ids
+
+    def test_injects_wf3_chain_when_zero_agents_present(self):
+        """WF3 chain is injected when Gemini picked no meta ads agents."""
+        from app.nodes.internal.pipeline_composer import _expand_chain
+
+        result = _expand_chain(
+            ["web_research", "manager"],
+            ["campaign_architecture", "creative_generation", "ad_publishing"],
+            "WF3 Meta Ads",
+        )
+        assert result == [
+            "campaign_architecture",
+            "creative_generation",
+            "ad_publishing",
+            "web_research",
+            "manager",
+        ]
+
+
+class TestMetaAdsRouting:
+    """Tests for WF3 Meta Ads keyword routing."""
+
+    async def test_meta_ads_campaign_routes_to_full(self):
+        """Generic 'Meta Ads campaign' routes to meta-ads-full."""
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt=("Can you please run the Meta Ads campaign for Pomodoro?")
+            )
+        )
+        assert result["resolved_manifest_id"] == "meta-ads-full"
+
+    async def test_ad_campaign_routes_to_full(self):
+        """Generic 'ad campaign' routes to meta-ads-full."""
+        node = RouterNode()
+        result = await node(_base_state(input_prompt="Run ad campaign for Pomodoro"))
+        assert result["resolved_manifest_id"] == "meta-ads-full"
+
+    async def test_standalone_campaign_architecture(self):
+        """Explicit 'campaign architecture' stays standalone."""
+        node = RouterNode()
+        result = await node(
+            _base_state(input_prompt="Design a Meta Ads campaign architecture")
+        )
+        assert result["resolved_manifest_id"] == "meta-campaign-architecture"

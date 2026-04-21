@@ -1336,6 +1336,8 @@ class PipelineComposer:
                 return "brand-strategy-positioning"
 
         # Rewrite: Meta Ads signals → meta-ads-full (3-agent chain).
+        # Only keep the standalone manifest when the prompt explicitly
+        # asks for just campaign architecture or just creatives.
         _meta_ads_signals = (
             "meta ads",
             "facebook ads",
@@ -1344,13 +1346,18 @@ class PipelineComposer:
             "run meta ads",
             "meta ads campaign",
             "ad campaign",
+            "run ads",
+            "launch ads",
+        )
+        _standalone_meta_signals = (
+            "campaign architecture",
+            "campaign blueprint",
+            "ad creative",
+            "creative generation",
         )
         if any(s in prompt for s in _meta_ads_signals):
-            if manifest_id not in (
-                "meta-ads-full",
-                "meta-campaign-architecture",
-                "meta-creative-generation",
-            ):
+            is_standalone = any(s in prompt for s in _standalone_meta_signals)
+            if not is_standalone and manifest_id != "meta-ads-full":
                 logger.info(
                     "Tier 2 rewrite: %s → meta-ads-full " "(meta ads signal in prompt)",
                     manifest_id,
@@ -1489,6 +1496,8 @@ class PipelineComposer:
             "instagram ads",
             "launch meta ads",
             "run meta ads",
+            "launch ads",
+            "run ads",
             "complete ad campaign",
             "meta ads campaign",
             "end to end ads",
