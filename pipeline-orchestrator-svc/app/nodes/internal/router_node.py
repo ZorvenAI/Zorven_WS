@@ -493,6 +493,7 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("instagram ads", 4),
         ("launch ads", 4),
         ("run ads", 4),
+        ("ad campaign", 4),
         # Strong composite signals (weight 3)
         ("full meta ads", 3),
         ("meta ads campaign", 3),
