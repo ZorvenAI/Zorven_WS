@@ -690,7 +690,12 @@ class TestNeedsRagBoost:
         )
         assert result["resolved_manifest_id"] == "trend-cultural-insights"
 
+
+class TestWorkflowRouting:
+    """Tests for WF1/WF2/WF3 keyword routing defaults."""
+
     async def test_brand_discovery_full_route(self):
+        """Explicit 'full brand discovery' routes to brand-discovery-full."""
         node = RouterNode()
         result = await node(
             _base_state(input_prompt="run a full brand discovery with trend analysis")

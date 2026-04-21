@@ -923,8 +923,11 @@ def _expand_chain(
     """Ensure all agents in *required_chain* are present in *node_ids*.
 
     When the chain is incomplete — even if **zero** chain agents were
-    selected — the missing agents are injected in canonical order
-    (before ``manager``).  This is critical because Gemini sometimes
+    selected — the missing agents are injected and the sequence is
+    rewritten so the full required chain appears first in canonical
+    order.  Any non-chain nodes are shifted after the chain, preserving
+    their relative order, and ``manager`` remains last if it was
+    originally present.  This is critical because Gemini sometimes
     picks unrelated agents despite the prompt clearly matching a
     workflow signal.  Returns the (possibly rewritten) list.
     """
