@@ -503,9 +503,7 @@ class JobExecutor:
                         remaining_start = executed_node_count + len(level_nodes)
                         for remaining_id in flat_sorted[remaining_start:]:
                             if (
-                                state["progress"]
-                                .get(remaining_id, {})
-                                .get("status")
+                                state["progress"].get(remaining_id, {}).get("status")
                                 == "pending"
                             ):
                                 state["progress"][remaining_id] = {
