@@ -937,7 +937,12 @@ class GeminiAIService:
             "full brand strategy",
             "complete brand strategy",
             "brand strategy for",
+            "brand strategy and positioning",
+            "brand strategy and",
             "run brand strategy",
+            "run the brand strategy",
+            "run the brand discovery",
+            "run the brand",
             # WF3 Meta Ads / Campaign phrases
             "run meta ads",
             "create meta ads",
