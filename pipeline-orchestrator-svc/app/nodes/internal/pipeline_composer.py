@@ -922,13 +922,15 @@ def _expand_chain(
 ) -> list[str]:
     """Ensure all agents in *required_chain* are present in *node_ids*.
 
-    If at least one agent from the chain was selected but the chain is
-    incomplete, the missing agents are injected in canonical order
-    (before ``manager``).  Returns the (possibly rewritten) list.
+    When the chain is incomplete — even if **zero** chain agents were
+    selected — the missing agents are injected in canonical order
+    (before ``manager``).  This is critical because Gemini sometimes
+    picks unrelated agents despite the prompt clearly matching a
+    workflow signal.  Returns the (possibly rewritten) list.
     """
     chain_set = set(required_chain)
     present = {nid for nid in node_ids if nid in chain_set}
-    if present and len(present) < len(chain_set):
+    if len(present) < len(chain_set):
         without_manager = [nid for nid in node_ids if nid != "manager"]
         for agent in required_chain:
             if agent not in without_manager:

@@ -706,3 +706,70 @@ class TestNeedsRagBoost:
             )
         )
         assert result["resolved_manifest_id"] == "brand-discovery-complete"
+
+    async def test_brand_strategy_routes_to_positioning(self):
+        """'brand strategy and positioning' routes to brand-strategy-positioning."""
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt=(
+                    "Can you please run the Brand strategy and "
+                    "positioning for Pomodoro?"
+                )
+            )
+        )
+        assert result["resolved_manifest_id"] == "brand-strategy-positioning"
+
+
+class TestExpandChain:
+    """Tests for _expand_chain deterministic rewrite helper."""
+
+    def test_injects_chain_when_zero_agents_present(self):
+        """Chain is injected even when Gemini picked zero chain agents."""
+        from app.nodes.internal.pipeline_composer import _expand_chain
+
+        result = _expand_chain(
+            ["web_research", "manager"],
+            ["brand_positioning", "brand_architecture", "brand_personality"],
+            "WF2 test",
+        )
+        assert result == [
+            "brand_positioning",
+            "brand_architecture",
+            "brand_personality",
+            "web_research",
+            "manager",
+        ]
+
+    def test_expands_partial_chain(self):
+        """Missing agents are added when chain is partially present."""
+        from app.nodes.internal.pipeline_composer import _expand_chain
+
+        result = _expand_chain(
+            ["brand_positioning", "manager"],
+            ["brand_positioning", "brand_architecture", "brand_personality"],
+            "WF2 test",
+        )
+        assert result == [
+            "brand_positioning",
+            "brand_architecture",
+            "brand_personality",
+            "manager",
+        ]
+
+    def test_no_change_when_chain_complete(self):
+        """No change when all chain agents are already present."""
+        from app.nodes.internal.pipeline_composer import _expand_chain
+
+        node_ids = [
+            "brand_positioning",
+            "brand_architecture",
+            "brand_personality",
+            "manager",
+        ]
+        result = _expand_chain(
+            node_ids,
+            ["brand_positioning", "brand_architecture", "brand_personality"],
+            "WF2 test",
+        )
+        assert result == node_ids
