@@ -646,11 +646,11 @@ Examples of prompt → pipeline compositions:
 - "Analyze social media trends and viral content patterns for skincare" → [trend_cultural, manager]
 - "What's trending on TikTok and Instagram for our industry?" → [trend_cultural, manager]
 - "Track generational preferences and emerging slang for our Gen Z audience" → [trend_cultural, manager]
-- "Brand discovery for AI brand building application in Pittsburgh PA" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
-- "Brand discovery for a SaaS startup in healthcare" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
+- "Brand discovery for AI brand building application in Pittsburgh PA" → [market_research, competitor_intelligence, audience_persona, trend_cultural, voice_of_customer, manager]
+- "Brand discovery for a SaaS startup in healthcare" → [market_research, competitor_intelligence, audience_persona, trend_cultural, voice_of_customer, manager]
 - "Run a full brand discovery with market research, competitors, personas, and cultural trends" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
-- "Complete brand analysis including trend insights for a DTC fashion brand" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
-- "Do a brand discovery for our new product line" → [market_research, competitor_intelligence, audience_persona, trend_cultural, manager]
+- "Complete brand analysis including trend insights for a DTC fashion brand" → [market_research, competitor_intelligence, audience_persona, trend_cultural, voice_of_customer, manager]
+- "Do a brand discovery for our new product line" → [market_research, competitor_intelligence, audience_persona, trend_cultural, voice_of_customer, manager]
 - "Analyze the market, competitors, and cultural trends for renewable energy" → [market_research, competitor_intelligence, trend_cultural, manager]
 - "Analyze customer feedback for our brand" → [voice_of_customer, manager]
 - "What are our customers saying about us?" → [voice_of_customer, manager]
@@ -675,10 +675,11 @@ Examples of prompt → pipeline compositions:
 - "Full brand strategy — positioning, architecture, personality, naming, and story" → [brand_positioning, brand_architecture, brand_personality, brand_naming, brand_story, manager]
 - "Design a Meta Ads campaign for our product launch" → [campaign_architecture, manager]
 - "Create campaign architecture and ad creatives for Meta" → [campaign_architecture, creative_generation, manager]
-- "Launch a full Meta Ads pipeline with campaign blueprint and ad creatives" → [campaign_architecture, creative_generation, manager]
+- "Launch a full Meta Ads pipeline with campaign blueprint and ad creatives" → [campaign_architecture, creative_generation, ad_publishing, manager]
 - "Generate ad creatives for our Meta Ads campaign" → [campaign_architecture, creative_generation, manager]
 - "Create Facebook and Instagram ad creatives" → [campaign_architecture, creative_generation, manager]
-- "Run a complete Meta Ads campaign from blueprint to creatives" → [campaign_architecture, creative_generation, manager]
+- "Run a complete Meta Ads campaign from blueprint to publishing" → [campaign_architecture, creative_generation, ad_publishing, manager]
+- "Launch Meta Ads for our product" → [campaign_architecture, creative_generation, ad_publishing, manager]
 """.strip()
 
 
@@ -817,10 +818,11 @@ def _build_system_prompt(catalog: list[dict]) -> str:
         "audience_persona. When combined with market research or "
         "competitor analysis, place audience_persona AFTER those nodes "
         "so it can use their output.\n"
-        "- 'Brand discovery' prompts ALWAYS use the full 4-agent chain: "
-        "[market_research, competitor_intelligence, audience_persona, "
-        "trend_cultural, manager]. trend_cultural MUST be included for "
-        "any brand discovery request.\n"
+        "- 'Brand discovery' prompts default to the COMPLETE 5-agent "
+        "chain: [market_research, competitor_intelligence, "
+        "audience_persona, trend_cultural, voice_of_customer, manager]. "
+        "Only use the 4-agent chain (without voice_of_customer) when "
+        "the user explicitly says 'full brand discovery'.\n"
         "- For brand positioning, brand architecture, brand personality, "
         "brand naming, or brand story requests → use the corresponding "
         "WF2 agent (brand_positioning, brand_architecture, "
@@ -833,9 +835,10 @@ def _build_system_prompt(catalog: list[dict]) -> str:
         "brand_naming, brand_story, manager]\n"
         "- For Meta Ads campaign requests → use campaign_architecture "
         "first. Select creative_generation ONLY after "
-        "campaign_architecture, unless a prior campaign blueprint is "
-        "already present in context. For full Meta Ads → "
-        "[campaign_architecture, creative_generation, manager]\n"
+        "campaign_architecture. For Meta Ads pipeline requests → "
+        "[campaign_architecture, creative_generation, ad_publishing, "
+        "manager]. Only omit ad_publishing when the user explicitly "
+        "asks for just campaign architecture or just creatives.\n"
         "- Always end with manager\n"
         "- For document/RAG queries use default_agent, for web research "
         "use web_research"
@@ -880,9 +883,10 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
         "psychographics, buying journey → audience-persona\n"
         "- Full audience discovery (market + competitors + personas) → "
         "audience-persona-discovery\n"
-        "- Brand discovery, full brand analysis, comprehensive brand "
-        "intelligence → brand-discovery-full\n"
-        "- Brand discovery with voice of customer → brand-discovery-complete\n"
+        "- Brand discovery, brand analysis, comprehensive brand "
+        "intelligence → brand-discovery-complete\n"
+        "- Full brand discovery (explicitly 4-agent, no VoC) → "
+        "brand-discovery-full\n"
         "- Cultural trends, social media trends, viral content, "
         "generational preferences, emerging slang → trend-cultural-insights\n"
         "- Voice of customer, customer feedback, NPS, sentiment → "
@@ -893,14 +897,14 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
         "branded house, house of brands → brand-strategy-architecture\n"
         "- Brand story, brand narrative, origin story, mission/vision, "
         "elevator pitch → brand-strategy-story\n"
-        "- Full brand strategy (positioning + architecture + story) → "
-        "brand-strategy-positioning\n"
+        "- Brand strategy, full brand strategy (positioning + architecture "
+        "+ personality + naming + story) → brand-strategy-positioning\n"
         "- Meta Ads campaign architecture, campaign blueprint, funnel mapping, "
         "audience targeting, ad targeting → meta-campaign-architecture\n"
         "- Ad creative generation, ad images, ad copy, creative assets → "
         "meta-creative-generation\n"
-        "- Full Meta Ads pipeline (campaign + creative), launch Meta Ads → "
-        "meta-ads-full\n"
+        "- Meta Ads pipeline (campaign + creative + publishing), "
+        "launch Meta Ads, run Meta Ads → meta-ads-full\n"
         "- Odoo ERP tasks, sales orders, inventory, HR, accounting, "
         "email campaigns, mass mailing, email marketing, marketing "
         "campaigns, newsletters → odoo-erp-operations\n"
@@ -1312,34 +1316,52 @@ class PipelineComposer:
                     "(prompt contains competitor signals)"
                 )
 
-        # Rule 2: "brand discovery" prompts MUST use the full WF1
-        # 4-agent chain.  Gemini sometimes selects only a subset
-        # (e.g. just audience_persona).  When the prompt contains a
-        # brand-discovery signal, ensure all 4 WF1 agents are present.
-        _discovery_signals = (
-            "brand discovery",
+        # Rule 2: "brand discovery" prompts MUST use the WF1 chain.
+        # Default is the COMPLETE 5-agent chain (with voice_of_customer).
+        # Only use the 4-agent chain when the user explicitly says
+        # "full brand discovery" or "full brand analysis".
+        _WF1_COMPLETE_CHAIN = [
+            "market_research",
+            "competitor_intelligence",
+            "audience_persona",
+            "trend_cultural",
+            "voice_of_customer",
+        ]
+        _WF1_FULL_CHAIN = [
+            "market_research",
+            "competitor_intelligence",
+            "audience_persona",
+            "trend_cultural",
+        ]
+        _discovery_full_signals = (
             "full brand analysis",
             "full brand discovery",
+        )
+        _discovery_signals = (
+            "brand discovery",
             "complete brand analysis",
             "complete brand discovery",
             "brand intelligence",
         )
-        if any(signal in prompt for signal in _discovery_signals):
+        if any(signal in prompt for signal in _discovery_full_signals):
             node_ids = _expand_chain(
                 node_ids,
-                [
-                    "market_research",
-                    "competitor_intelligence",
-                    "audience_persona",
-                    "trend_cultural",
-                ],
-                "WF1 brand discovery",
+                _WF1_FULL_CHAIN,
+                "WF1 brand discovery (full, 4-agent)",
+            )
+        elif any(signal in prompt for signal in _discovery_signals):
+            node_ids = _expand_chain(
+                node_ids,
+                _WF1_COMPLETE_CHAIN,
+                "WF1 brand discovery (complete, 5-agent)",
             )
 
-        # Rule 3: "full brand strategy" prompts MUST use the full WF2
+        # Rule 3: "brand strategy" prompts MUST use the full WF2
         # 5-agent chain.  Gemini may select only brand_positioning or a
-        # partial subset.
+        # partial subset.  Any generic "brand strategy" request defaults
+        # to the complete chain.
         _strategy_signals = (
+            "brand strategy",
             "full brand strategy",
             "complete brand strategy",
             "brand strategy end to end",
@@ -1369,16 +1391,20 @@ class PipelineComposer:
                 "before creative_generation"
             )
 
-        # Rule 5: "full meta ads" / "launch meta ads" prompts MUST
-        # include both campaign_architecture and creative_generation.
+        # Rule 5: Meta Ads prompts MUST include the full WF3 chain.
+        # Default is the COMPLETE 3-agent chain (with ad_publishing).
         _meta_ads_signals = (
-            "full meta ads",
+            "meta ads",
+            "facebook ads",
+            "instagram ads",
             "launch meta ads",
             "run meta ads",
             "complete ad campaign",
             "meta ads campaign",
             "end to end ads",
             "full ad pipeline",
+            "full meta ads",
+            "ad campaign",
         )
         if any(signal in prompt for signal in _meta_ads_signals):
             node_ids = _expand_chain(
@@ -1386,8 +1412,9 @@ class PipelineComposer:
                 [
                     "campaign_architecture",
                     "creative_generation",
+                    "ad_publishing",
                 ],
-                "WF3 Meta Ads",
+                "WF3 Meta Ads (complete, 3-agent)",
             )
 
         # Deduplicate while preserving order
