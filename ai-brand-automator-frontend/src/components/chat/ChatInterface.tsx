@@ -46,7 +46,7 @@ const WELCOME_MESSAGE: Message = {
 
 export function ChatInterface() {
   const { canEdit: canEditFlag } = useTenantRole();
-  const { activeBrand } = useBrandContext();
+  const { activeBrand, refreshBrands } = useBrandContext();
   const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => {
     requestAnimationFrame(() => setHasMounted(true));
@@ -148,6 +148,10 @@ export function ChatInterface() {
           pipelinePollTimerRef.current = null;
           setIsPipelineRunning(false);
           setIsLoading(false);
+          // Refresh brand hierarchy — WF2 (BAA) may have created sub-brands
+          if (qs.status === 'completed') {
+            refreshBrands();
+          }
           return;
         }
       } catch {
@@ -159,7 +163,7 @@ export function ChatInterface() {
 
     // First poll after a short delay (pipeline needs a moment to register)
     pipelinePollTimerRef.current = setTimeout(poll, 2000);
-  }, []);
+  }, [refreshBrands]);
 
   // Cleanup pipeline poll timer on unmount or session change
   useEffect(() => {
