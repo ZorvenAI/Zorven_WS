@@ -823,3 +823,109 @@ class TestMetaAdsRouting:
             _base_state(input_prompt="Design a Meta Ads campaign architecture")
         )
         assert result["resolved_manifest_id"] == "meta-campaign-architecture"
+
+
+class TestDeterministicCompose:
+    """Tests for Tier 2.5 deterministic composition.
+
+    Verifies that known workflow signals produce a _composed_manifest
+    (not a resolved_manifest_id) even when Gemini is unavailable and
+    seed_manifests hasn't been run.
+    """
+
+    def _make_composer(self):
+        from app.nodes.internal.pipeline_composer import PipelineComposer
+
+        return PipelineComposer()
+
+    def test_brand_discovery_composes_5_agent_chain(self):
+        composer = self._make_composer()
+        result = composer._deterministic_compose(
+            _base_state(
+                input_prompt="Can you please run the Brand discovery for Pomodoro?"
+            )
+        )
+        assert result is not None
+        assert "_composed_manifest" in result
+        node_ids = [n["id"] for n in result["_composed_manifest"]["nodes"]]
+        assert node_ids == [
+            "market_research",
+            "competitor_intelligence",
+            "audience_persona",
+            "trend_cultural",
+            "voice_of_customer",
+            "manager",
+        ]
+
+    def test_full_brand_discovery_composes_4_agent_chain(self):
+        composer = self._make_composer()
+        result = composer._deterministic_compose(
+            _base_state(input_prompt="Run a full brand discovery for our startup")
+        )
+        assert result is not None
+        node_ids = [n["id"] for n in result["_composed_manifest"]["nodes"]]
+        assert node_ids == [
+            "market_research",
+            "competitor_intelligence",
+            "audience_persona",
+            "trend_cultural",
+            "manager",
+        ]
+        assert "voice_of_customer" not in node_ids
+
+    def test_brand_strategy_composes_5_agent_chain(self):
+        composer = self._make_composer()
+        result = composer._deterministic_compose(
+            _base_state(input_prompt="Run the brand strategy for Pomodoro")
+        )
+        assert result is not None
+        node_ids = [n["id"] for n in result["_composed_manifest"]["nodes"]]
+        assert node_ids == [
+            "brand_positioning",
+            "brand_architecture",
+            "brand_personality",
+            "brand_naming",
+            "brand_story",
+            "manager",
+        ]
+
+    def test_meta_ads_composes_2_agent_chain(self):
+        composer = self._make_composer()
+        result = composer._deterministic_compose(
+            _base_state(input_prompt="Launch Meta Ads for our product")
+        )
+        assert result is not None
+        node_ids = [n["id"] for n in result["_composed_manifest"]["nodes"]]
+        assert node_ids == [
+            "campaign_architecture",
+            "creative_generation",
+            "manager",
+        ]
+
+    def test_standalone_meta_returns_none(self):
+        """Explicit 'campaign architecture' should NOT trigger deterministic compose."""
+        composer = self._make_composer()
+        result = composer._deterministic_compose(
+            _base_state(input_prompt="Design a Meta Ads campaign architecture")
+        )
+        assert result is None
+
+    def test_unrelated_prompt_returns_none(self):
+        """Non-workflow prompts should fall through to Tier 3."""
+        composer = self._make_composer()
+        result = composer._deterministic_compose(
+            _base_state(input_prompt="Write a blog about Tesla")
+        )
+        assert result is None
+
+    def test_works_without_available_manifests(self):
+        """Deterministic compose works even with empty available_manifests."""
+        composer = self._make_composer()
+        result = composer._deterministic_compose(
+            _base_state(
+                input_prompt="Brand discovery for Pomodoro",
+                available_manifests=[],
+            )
+        )
+        assert result is not None
+        assert "_composed_manifest" in result

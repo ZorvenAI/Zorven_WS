@@ -1,11 +1,12 @@
 """
 PipelineComposer — Dynamic, catalog-driven pipeline composition.
 
-Replaces RouterNode for auto-detect mode. Uses a 3-tier routing chain:
+Replaces RouterNode for auto-detect mode. Uses a 4-tier routing chain:
 
-  Tier 1: Enhanced Gemini dynamic composition (context-enriched + retry)
-  Tier 2: Gemini manifest classification (lightweight LLM picks 1 of 9)
-  Tier 3: Improved keyword matching (stemming, weights, neutral default)
+  Tier 1:   Enhanced Gemini dynamic composition (context-enriched + retry)
+  Tier 2:   Gemini manifest classification (lightweight LLM picks 1 of N)
+  Tier 2.5: Deterministic composition for known workflows (no LLM needed)
+  Tier 3:   Improved keyword matching (stemming, weights, neutral default)
 
 Falls back through the tiers on failure. Adding a new agent requires
 only one dict entry in NODE_CATALOG.
@@ -967,13 +968,14 @@ class PipelineComposer:
     async def compose(self, state: AgentState) -> dict[str, Any]:
         """Compose a pipeline for the given state.
 
-        3-tier fallback chain:
-          Tier 1: Gemini dynamic composition (context-enriched + retry)
-          Tier 2: Gemini manifest classification (picks 1 of 9 pipelines)
-          Tier 3: Keyword matching (stemming + RAG boost)
+        4-tier fallback chain:
+          Tier 1:   Gemini dynamic composition (context-enriched + retry)
+          Tier 2:   Gemini manifest classification (picks 1 of N pipelines)
+          Tier 2.5: Deterministic composition for WF1/WF2/WF3 signals
+          Tier 3:   Keyword matching (stemming + RAG boost)
 
         Returns either:
-            {"_composed_manifest": {...}} — Tier 1 succeeded
+            {"_composed_manifest": {...}} — Tier 1 or 2.5 succeeded
             {"resolved_manifest_id": "..."} — Tier 2 or 3
         """
         # Tier 1: Enhanced Gemini dynamic composition
@@ -1009,6 +1011,13 @@ class PipelineComposer:
                     "Tier 2 failed, falling back to keywords",
                     exc_info=True,
                 )
+
+        # Tier 2.5: Deterministic composition for known workflow signals.
+        # Does NOT depend on Gemini or seeded manifests — composes
+        # directly from NODE_CATALOG when prompt matches a workflow.
+        deterministic = self._deterministic_compose(state)
+        if deterministic:
+            return deterministic
 
         # Tier 3: Keyword matching
         resolved_id = self._keyword_fallback(state)
@@ -1368,6 +1377,109 @@ class PipelineComposer:
                 return "meta-ads-full"
 
         return manifest_id
+
+    # ── Tier 2.5: Deterministic Composition ──
+
+    def _deterministic_compose(self, state: AgentState) -> dict[str, Any] | None:
+        """Match known workflow signals and compose directly from NODE_CATALOG.
+
+        Returns a composed manifest dict when a workflow signal is detected,
+        or None to fall through to Tier 3 keyword matching.  This layer is
+        Gemini-independent and does NOT rely on available_manifests, so it
+        works even when Gemini is rate-limited and seed_manifests hasn't
+        been run.
+        """
+        prompt = (state.get("input_prompt") or "").lower()
+
+        # ── WF1: Brand Discovery ──
+        _discovery_full_signals = ("full brand discovery", "full brand analysis")
+        _discovery_signals = (
+            "brand discovery",
+            "brand intelligence",
+            "complete brand analysis",
+            "complete brand discovery",
+        )
+        if any(s in prompt for s in _discovery_full_signals):
+            node_ids = [
+                "market_research",
+                "competitor_intelligence",
+                "audience_persona",
+                "trend_cultural",
+                "manager",
+            ]
+            logger.info(
+                "Deterministic compose: WF1 full (4-agent) → %s",
+                " → ".join(node_ids),
+            )
+            return {"_composed_manifest": self._build_manifest(node_ids)}
+        if any(s in prompt for s in _discovery_signals):
+            node_ids = [
+                "market_research",
+                "competitor_intelligence",
+                "audience_persona",
+                "trend_cultural",
+                "voice_of_customer",
+                "manager",
+            ]
+            logger.info(
+                "Deterministic compose: WF1 complete (5-agent) → %s",
+                " → ".join(node_ids),
+            )
+            return {"_composed_manifest": self._build_manifest(node_ids)}
+
+        # ── WF2: Brand Strategy ──
+        _strategy_signals = (
+            "brand strategy",
+            "full brand strategy",
+            "complete brand strategy",
+            "brand strategy end to end",
+        )
+        if any(s in prompt for s in _strategy_signals):
+            node_ids = [
+                "brand_positioning",
+                "brand_architecture",
+                "brand_personality",
+                "brand_naming",
+                "brand_story",
+                "manager",
+            ]
+            logger.info(
+                "Deterministic compose: WF2 brand strategy (5-agent) → %s",
+                " → ".join(node_ids),
+            )
+            return {"_composed_manifest": self._build_manifest(node_ids)}
+
+        # ── WF3: Meta Ads ──
+        _meta_ads_signals = (
+            "meta ads",
+            "facebook ads",
+            "instagram ads",
+            "launch ads",
+            "run ads",
+            "launch meta ads",
+            "run meta ads",
+            "ad campaign",
+        )
+        _standalone_meta_signals = (
+            "campaign architecture",
+            "campaign blueprint",
+            "ad creative",
+            "creative generation",
+        )
+        if any(s in prompt for s in _meta_ads_signals):
+            if not any(s in prompt for s in _standalone_meta_signals):
+                node_ids = [
+                    "campaign_architecture",
+                    "creative_generation",
+                    "manager",
+                ]
+                logger.info(
+                    "Deterministic compose: WF3 Meta Ads (2-agent) → %s",
+                    " → ".join(node_ids),
+                )
+                return {"_composed_manifest": self._build_manifest(node_ids)}
+
+        return None
 
     # ── Tier 3: Keyword Fallback ──
 
