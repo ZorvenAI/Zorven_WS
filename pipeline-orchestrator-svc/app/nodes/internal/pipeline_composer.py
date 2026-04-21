@@ -922,13 +922,15 @@ def _expand_chain(
 ) -> list[str]:
     """Ensure all agents in *required_chain* are present in *node_ids*.
 
-    If at least one agent from the chain was selected but the chain is
-    incomplete, the missing agents are injected in canonical order
-    (before ``manager``).  Returns the (possibly rewritten) list.
+    When the chain is incomplete — even if **zero** chain agents were
+    selected — the missing agents are injected in canonical order
+    (before ``manager``).  This is critical because Gemini sometimes
+    picks unrelated agents despite the prompt clearly matching a
+    workflow signal.  Returns the (possibly rewritten) list.
     """
     chain_set = set(required_chain)
     present = {nid for nid in node_ids if nid in chain_set}
-    if present and len(present) < len(chain_set):
+    if len(present) < len(chain_set):
         without_manager = [nid for nid in node_ids if nid != "manager"]
         for agent in required_chain:
             if agent not in without_manager:
@@ -1334,6 +1336,8 @@ class PipelineComposer:
                 return "brand-strategy-positioning"
 
         # Rewrite: Meta Ads signals → meta-ads-full (3-agent chain).
+        # Only keep the standalone manifest when the prompt explicitly
+        # asks for just campaign architecture or just creatives.
         _meta_ads_signals = (
             "meta ads",
             "facebook ads",
@@ -1342,13 +1346,18 @@ class PipelineComposer:
             "run meta ads",
             "meta ads campaign",
             "ad campaign",
+            "run ads",
+            "launch ads",
+        )
+        _standalone_meta_signals = (
+            "campaign architecture",
+            "campaign blueprint",
+            "ad creative",
+            "creative generation",
         )
         if any(s in prompt for s in _meta_ads_signals):
-            if manifest_id not in (
-                "meta-ads-full",
-                "meta-campaign-architecture",
-                "meta-creative-generation",
-            ):
+            is_standalone = any(s in prompt for s in _standalone_meta_signals)
+            if not is_standalone and manifest_id != "meta-ads-full":
                 logger.info(
                     "Tier 2 rewrite: %s → meta-ads-full " "(meta ads signal in prompt)",
                     manifest_id,
@@ -1487,6 +1496,8 @@ class PipelineComposer:
             "instagram ads",
             "launch meta ads",
             "run meta ads",
+            "launch ads",
+            "run ads",
             "complete ad campaign",
             "meta ads campaign",
             "end to end ads",
