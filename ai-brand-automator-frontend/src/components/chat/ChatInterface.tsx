@@ -682,7 +682,7 @@ export function ChatInterface() {
         onDrop={handleDrop}
       >
         {/* Header */}
-        <div className="shrink-0 bg-brand-midnight/80 backdrop-blur border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4">
+        <div className="shrink-0 relative z-20 bg-brand-midnight/80 backdrop-blur border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen((v) => !v)}
