@@ -61,7 +61,7 @@ export default function BrandContextSelector() {
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 min-w-[200px] max-w-[280px] rounded-lg bg-brand-midnight border border-white/10 shadow-xl overflow-hidden">
+        <div className="absolute top-full right-0 mt-1 z-50 min-w-[200px] max-w-[280px] rounded-lg bg-brand-midnight border border-white/10 shadow-xl overflow-hidden">
           {brands.map((brand) => {
             const BIcon = SCOPE_ICONS[brand.brand_scope] ?? Building2;
             const isActive =
@@ -86,7 +86,7 @@ export default function BrandContextSelector() {
                   }`}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate">{brand.name}</div>
+                  <div className="break-words">{brand.name}</div>
                   <div className="text-[10px] text-brand-silver/50">
                     {SCOPE_LABELS[brand.brand_scope] ?? brand.brand_scope}
                   </div>
