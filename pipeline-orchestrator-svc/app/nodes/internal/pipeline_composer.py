@@ -908,6 +908,40 @@ def _build_classify_system_prompt(needs_rag: bool = False) -> str:
     )
 
 
+def _expand_chain(
+    node_ids: list[str],
+    required_chain: list[str],
+    label: str,
+) -> list[str]:
+    """Ensure all agents in *required_chain* are present in *node_ids*.
+
+    If at least one agent from the chain was selected but the chain is
+    incomplete, the missing agents are injected in canonical order
+    (before ``manager``).  Returns the (possibly rewritten) list.
+    """
+    chain_set = set(required_chain)
+    present = {nid for nid in node_ids if nid in chain_set}
+    if present and len(present) < len(chain_set):
+        without_manager = [nid for nid in node_ids if nid != "manager"]
+        for agent in required_chain:
+            if agent not in without_manager:
+                without_manager.append(agent)
+        # Reorder chain agents into canonical order while preserving
+        # non-chain nodes in their original position.
+        non_chain = [nid for nid in without_manager if nid not in chain_set]
+        reordered = list(required_chain) + non_chain
+        if "manager" in node_ids:
+            reordered.append("manager")
+        logger.info(
+            "Rewrite rule applied: expanded incomplete %s to full "
+            "chain %s",
+            label,
+            " → ".join(reordered),
+        )
+        return reordered
+    return node_ids
+
+
 class PipelineComposer:
     """Dynamic pipeline composer using 3-tier routing: Gemini composition,
     LLM classification, and keyword fallback."""
@@ -1251,41 +1285,119 @@ class PipelineComposer:
         Fixes known LLM routing mistakes that can't be reliably prevented
         via system prompt alone.
         """
-        if "gap_analyzer" not in node_ids:
-            return node_ids
-
         prompt = (state.get("input_prompt") or "").lower()
-        competitor_signals = {
-            "competitor",
-            "competitors",
-            "competitive",
-            "swot",
-            "benchmark",
-            "benchmarking",
-            "positioning gap",
-            "competitive landscape",
-            "competitor profiling",
-            "competitive intelligence",
-        }
-        if any(signal in prompt for signal in competitor_signals):
-            rewritten = [
-                "competitor_intelligence" if nid == "gap_analyzer" else nid
-                for nid in node_ids
-            ]
-            # Deduplicate in case both were already present
-            seen: set[str] = set()
-            deduped: list[str] = []
-            for nid in rewritten:
-                if nid not in seen:
-                    seen.add(nid)
-                    deduped.append(nid)
-            logger.info(
-                "Rewrite rule applied: gap_analyzer → competitor_intelligence "
-                "(prompt contains competitor signals)"
-            )
-            return deduped
 
-        return node_ids
+        # Rule 1: gap_analyzer → competitor_intelligence when prompt
+        # contains competitor signals.
+        if "gap_analyzer" in node_ids:
+            competitor_signals = {
+                "competitor",
+                "competitors",
+                "competitive",
+                "swot",
+                "benchmark",
+                "benchmarking",
+                "positioning gap",
+                "competitive landscape",
+                "competitor profiling",
+                "competitive intelligence",
+            }
+            if any(signal in prompt for signal in competitor_signals):
+                node_ids = [
+                    "competitor_intelligence" if nid == "gap_analyzer" else nid
+                    for nid in node_ids
+                ]
+                logger.info(
+                    "Rewrite rule applied: gap_analyzer → competitor_intelligence "
+                    "(prompt contains competitor signals)"
+                )
+
+        # Rule 2: "brand discovery" prompts MUST use the full WF1
+        # 4-agent chain.  Gemini sometimes selects only a subset
+        # (e.g. just audience_persona).  When the prompt contains a
+        # brand-discovery signal, ensure all 4 WF1 agents are present.
+        _discovery_signals = (
+            "brand discovery",
+            "full brand analysis",
+            "full brand discovery",
+            "complete brand analysis",
+            "complete brand discovery",
+            "brand intelligence",
+        )
+        if any(signal in prompt for signal in _discovery_signals):
+            node_ids = _expand_chain(
+                node_ids,
+                [
+                    "market_research",
+                    "competitor_intelligence",
+                    "audience_persona",
+                    "trend_cultural",
+                ],
+                "WF1 brand discovery",
+            )
+
+        # Rule 3: "full brand strategy" prompts MUST use the full WF2
+        # 5-agent chain.  Gemini may select only brand_positioning or a
+        # partial subset.
+        _strategy_signals = (
+            "full brand strategy",
+            "complete brand strategy",
+            "brand strategy end to end",
+            "full strategy",
+        )
+        if any(signal in prompt for signal in _strategy_signals):
+            node_ids = _expand_chain(
+                node_ids,
+                [
+                    "brand_positioning",
+                    "brand_architecture",
+                    "brand_personality",
+                    "brand_naming",
+                    "brand_story",
+                ],
+                "WF2 brand strategy",
+            )
+
+        # Rule 4: creative_generation MUST be preceded by
+        # campaign_architecture.  The CGA agent requires a campaign
+        # blueprint produced by CAA.
+        if "creative_generation" in node_ids and "campaign_architecture" not in node_ids:
+            idx = node_ids.index("creative_generation")
+            node_ids.insert(idx, "campaign_architecture")
+            logger.info(
+                "Rewrite rule applied: injected campaign_architecture "
+                "before creative_generation"
+            )
+
+        # Rule 5: "full meta ads" / "launch meta ads" prompts MUST
+        # include both campaign_architecture and creative_generation.
+        _meta_ads_signals = (
+            "full meta ads",
+            "launch meta ads",
+            "run meta ads",
+            "complete ad campaign",
+            "meta ads campaign",
+            "end to end ads",
+            "full ad pipeline",
+        )
+        if any(signal in prompt for signal in _meta_ads_signals):
+            node_ids = _expand_chain(
+                node_ids,
+                [
+                    "campaign_architecture",
+                    "creative_generation",
+                ],
+                "WF3 Meta Ads",
+            )
+
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for nid in node_ids:
+            if nid not in seen:
+                seen.add(nid)
+                deduped.append(nid)
+        return deduped
 
     def _validate_node_ids(self, raw_ids: list[str]) -> list[str] | None:
         """Validate and sanitize node IDs from Gemini response."""
