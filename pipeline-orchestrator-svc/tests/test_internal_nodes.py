@@ -558,7 +558,10 @@ class TestManagerNode:
         result = await node(state)
         rd = result["result_data"]
         # Trend cultural fields promoted to top level
-        assert rd["trend_report"]["executive_summary"] == "Gen Z sustainability trends rising."
+        assert (
+            rd["trend_report"]["executive_summary"]
+            == "Gen Z sustainability trends rising."
+        )
         assert len(rd["scored_trends"]) == 1
         assert rd["scored_trends"][0]["topic"] == "Sustainable Fashion"
         assert rd["scored_trends"][0]["relevance_score"] == 85
@@ -665,13 +668,13 @@ class TestNeedsRagBoost:
         )
         assert result["resolved_manifest_id"] == "blog-authoring"
 
-    async def test_cultural_trends_routes_to_brand_discovery_full(self):
-        """'cultural trends' is a strong signal for brand-discovery-full."""
+    async def test_cultural_trends_routes_to_trend_cultural(self):
+        """'cultural trends' without 'brand discovery' routes to standalone."""
         node = RouterNode()
         result = await node(
             _base_state(input_prompt="analyze cultural trends for our brand")
         )
-        assert result["resolved_manifest_id"] == "brand-discovery-full"
+        assert result["resolved_manifest_id"] == "trend-cultural-insights"
 
     async def test_trend_cultural_standalone_with_available_manifests(self):
         """When only trend-cultural-insights is available, it is selected."""
@@ -690,8 +693,16 @@ class TestNeedsRagBoost:
     async def test_brand_discovery_full_route(self):
         node = RouterNode()
         result = await node(
-            _base_state(
-                input_prompt="run a full brand discovery with trend analysis"
-            )
+            _base_state(input_prompt="run a full brand discovery with trend analysis")
         )
         assert result["resolved_manifest_id"] == "brand-discovery-full"
+
+    async def test_generic_brand_discovery_routes_to_complete(self):
+        """Generic 'brand discovery' defaults to brand-discovery-complete."""
+        node = RouterNode()
+        result = await node(
+            _base_state(
+                input_prompt="Can you please run the Brand discovery for Pomodoro?"
+            )
+        )
+        assert result["resolved_manifest_id"] == "brand-discovery-complete"

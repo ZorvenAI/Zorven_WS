@@ -190,18 +190,20 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("audience discovery pipeline", 3),
         ("market research and personas", 3),
     ],
-    "brand-discovery-full": [
-        # Strong signals (weight 3)
-        ("trend analysis", 3),
-        ("cultural trends", 3),
-        ("cultural insights", 3),
-        ("brand discovery", 3),
-        ("full brand analysis", 3),
-        ("trend monitoring", 3),
-        ("emerging trends", 3),
-        ("viral trends", 3),
-        ("generational trends", 3),
-        # Moderate signals (weight 2)
+    "brand-discovery-complete": [
+        # Strong signals (weight 4) — default for generic "brand discovery"
+        ("brand discovery", 4),
+        ("complete brand discovery", 4),
+        ("complete brand analysis", 4),
+        ("brand intelligence", 4),
+        # Moderate signals (weight 2) — trend/cultural overlap
+        ("trend analysis", 2),
+        ("cultural trends", 2),
+        ("cultural insights", 2),
+        ("trend monitoring", 2),
+        ("emerging trends", 2),
+        ("viral trends", 2),
+        ("generational trends", 2),
         ("social media trends", 2),
         ("cultural shift", 2),
         ("brand relevance", 2),
@@ -218,6 +220,12 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("viral", 1),
         ("relevance", 1),
         ("zeitgeist", 1),
+    ],
+    "brand-discovery-full": [
+        # Only match explicit "full" brand discovery (weight 10 to
+        # beat brand-discovery-complete's combined score)
+        ("full brand discovery", 10),
+        ("full brand analysis", 10),
     ],
     "trend-cultural-insights": [
         ("cultural trends", 3),
@@ -479,6 +487,13 @@ KEYWORD_MAP: dict[str, list[tuple[str, int]]] = {
         ("copy", 1),
     ],
     "meta-ads-full": [
+        # Generic meta ads signals — weight 4 to beat standalone (weight 3)
+        ("meta ads", 4),
+        ("facebook ads", 4),
+        ("instagram ads", 4),
+        ("launch ads", 4),
+        ("run ads", 4),
+        # Strong composite signals (weight 3)
         ("full meta ads", 3),
         ("meta ads campaign", 3),
         ("complete ad campaign", 3),

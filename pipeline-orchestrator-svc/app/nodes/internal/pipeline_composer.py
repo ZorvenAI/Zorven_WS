@@ -536,20 +536,23 @@ _PIPELINE_DESCRIPTIONS: list[dict[str, str]] = [
         ),
     },
     {
-        "id": "brand-discovery-full",
+        "id": "brand-discovery-complete",
         "description": (
-            "Complete brand discovery workflow: market research, competitor "
-            "intelligence, audience personas, and trend/cultural insights. "
-            "Full 4-agent chain for comprehensive brand intelligence"
+            "DEFAULT brand discovery workflow (5 agents): market research, "
+            "competitor intelligence, audience personas, trend insights, "
+            "AND voice of customer analysis. Use this for any generic "
+            "'brand discovery' request. The most comprehensive brand "
+            "intelligence pipeline available"
         ),
     },
     {
-        "id": "brand-discovery-complete",
+        "id": "brand-discovery-full",
         "description": (
-            "Complete brand discovery workflow with all 5 agents: market "
-            "research, competitor intelligence, audience personas, trend "
-            "insights, AND voice of customer analysis. The most comprehensive "
-            "brand intelligence pipeline available"
+            "Reduced brand discovery workflow (4 agents, NO voice of "
+            "customer): market research, competitor intelligence, audience "
+            "personas, and trend/cultural insights. ONLY select this when "
+            "the user explicitly says 'full brand discovery' or "
+            "'full brand analysis'"
         ),
     },
     {
@@ -937,8 +940,7 @@ def _expand_chain(
         if "manager" in node_ids:
             reordered.append("manager")
         logger.info(
-            "Rewrite rule applied: expanded incomplete %s to full "
-            "chain %s",
+            "Rewrite rule applied: expanded incomplete %s to full " "chain %s",
             label,
             " → ".join(reordered),
         )
@@ -993,25 +995,8 @@ class PipelineComposer:
             try:
                 manifest_id = await self._llm_classify_fallback(state)
                 if manifest_id:
-                    # Apply manifest-level rewrite for known misroutes
-                    if manifest_id == "competitor-audit":
-                        prompt = (state.get("input_prompt") or "").lower()
-                        competitor_signals = {
-                            "competitor",
-                            "competitors",
-                            "competitive",
-                            "swot",
-                            "benchmark",
-                            "benchmarking",
-                            "positioning gap",
-                            "competitive landscape",
-                        }
-                        if any(s in prompt for s in competitor_signals):
-                            logger.info(
-                                "Tier 2 rewrite: competitor-audit → "
-                                "competitor-intelligence"
-                            )
-                            manifest_id = "competitor-intelligence"
+                    # Apply manifest-level rewrites for known misroutes
+                    manifest_id = self._apply_tier2_rewrites(manifest_id, state)
                     logger.info("LLM classify selected: %s", manifest_id)
                     return {"resolved_manifest_id": manifest_id}
             except Exception:
@@ -1272,6 +1257,106 @@ class PipelineComposer:
         logger.warning("LLM classify did not return a select_pipeline call")
         return None
 
+    # ── Tier 2 manifest rewrites ──
+
+    @staticmethod
+    def _apply_tier2_rewrites(manifest_id: str, state: AgentState) -> str:
+        """Deterministic rewrites for Tier 2 manifest classification.
+
+        Corrects known LLM misroutes where Gemini picks a single-agent
+        manifest instead of the intended multi-agent workflow.
+        """
+        prompt = (state.get("input_prompt") or "").lower()
+
+        # Rewrite: competitor-audit → competitor-intelligence
+        if manifest_id == "competitor-audit":
+            competitor_signals = {
+                "competitor",
+                "competitors",
+                "competitive",
+                "swot",
+                "benchmark",
+                "benchmarking",
+                "positioning gap",
+                "competitive landscape",
+            }
+            if any(s in prompt for s in competitor_signals):
+                logger.info(
+                    "Tier 2 rewrite: competitor-audit → " "competitor-intelligence"
+                )
+                return "competitor-intelligence"
+
+        # Rewrite: brand discovery signals → correct manifest variant.
+        # Generic "brand discovery" → brand-discovery-complete (5-agent).
+        # Explicit "full brand discovery" → brand-discovery-full (4-agent).
+        _discovery_signals = (
+            "brand discovery",
+            "brand intelligence",
+            "complete brand analysis",
+            "complete brand discovery",
+        )
+        _discovery_full_signals = (
+            "full brand discovery",
+            "full brand analysis",
+        )
+        if any(s in prompt for s in _discovery_signals):
+            if any(s in prompt for s in _discovery_full_signals):
+                if manifest_id != "brand-discovery-full":
+                    logger.info(
+                        "Tier 2 rewrite: %s → brand-discovery-full "
+                        "(explicit 'full' in prompt)",
+                        manifest_id,
+                    )
+                    return "brand-discovery-full"
+            elif manifest_id != "brand-discovery-complete":
+                logger.info(
+                    "Tier 2 rewrite: %s → brand-discovery-complete "
+                    "(default for generic brand discovery)",
+                    manifest_id,
+                )
+                return "brand-discovery-complete"
+
+        # Rewrite: brand strategy signals → brand-strategy-positioning
+        # (full 5-agent WF2 chain).
+        _strategy_signals = (
+            "brand strategy",
+            "full brand strategy",
+            "complete brand strategy",
+            "brand strategy end to end",
+        )
+        if any(s in prompt for s in _strategy_signals):
+            if manifest_id != "brand-strategy-positioning":
+                logger.info(
+                    "Tier 2 rewrite: %s → brand-strategy-positioning "
+                    "(brand strategy signal in prompt)",
+                    manifest_id,
+                )
+                return "brand-strategy-positioning"
+
+        # Rewrite: Meta Ads signals → meta-ads-full (3-agent chain).
+        _meta_ads_signals = (
+            "meta ads",
+            "facebook ads",
+            "instagram ads",
+            "launch meta ads",
+            "run meta ads",
+            "meta ads campaign",
+            "ad campaign",
+        )
+        if any(s in prompt for s in _meta_ads_signals):
+            if manifest_id not in (
+                "meta-ads-full",
+                "meta-campaign-architecture",
+                "meta-creative-generation",
+            ):
+                logger.info(
+                    "Tier 2 rewrite: %s → meta-ads-full " "(meta ads signal in prompt)",
+                    manifest_id,
+                )
+                return "meta-ads-full"
+
+        return manifest_id
+
     # ── Tier 3: Keyword Fallback ──
 
     @staticmethod
@@ -1383,7 +1468,10 @@ class PipelineComposer:
         # Rule 4: creative_generation MUST be preceded by
         # campaign_architecture.  The CGA agent requires a campaign
         # blueprint produced by CAA.
-        if "creative_generation" in node_ids and "campaign_architecture" not in node_ids:
+        if (
+            "creative_generation" in node_ids
+            and "campaign_architecture" not in node_ids
+        ):
             idx = node_ids.index("creative_generation")
             node_ids.insert(idx, "campaign_architecture")
             logger.info(
