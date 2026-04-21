@@ -3,14 +3,13 @@ PipelineComposer — Dynamic, catalog-driven pipeline composition.
 
 Replaces RouterNode for auto-detect mode. Uses a 4-tier routing chain:
 
-  Tier 1: Gemini dynamic composition (context-enriched + retry)
-  Tier 2: Deterministic composition for known workflows (no LLM needed)
+  Tier 1: Deterministic composition for known workflows (no LLM needed)
+  Tier 2: Gemini dynamic composition (context-enriched + retry)
   Tier 3: Gemini manifest classification (lightweight LLM picks 1 of N)
   Tier 4: Keyword matching (stemming, weights, neutral default)
 
-Tier 2 runs before the LLM classifier so that WF1/WF2/WF3 signals
-always compose directly from NODE_CATALOG, even when seed_manifests
-hasn't been run on Django.
+Tier 1 is checked FIRST so that WF1/WF2/WF3 signals always compose
+directly from NODE_CATALOG with zero LLM dependency.
 
 Falls back through the tiers on failure. Adding a new agent requires
 only one dict entry in NODE_CATALOG.
@@ -973,20 +972,29 @@ class PipelineComposer:
         """Compose a pipeline for the given state.
 
         4-tier fallback chain:
-          Tier 1: Gemini dynamic composition (context-enriched + retry)
-          Tier 2: Deterministic composition for WF1/WF2/WF3 signals
+          Tier 1: Deterministic composition for WF1/WF2/WF3 signals
+          Tier 2: Gemini dynamic composition (context-enriched + retry)
           Tier 3: Gemini manifest classification (picks 1 of N pipelines)
           Tier 4: Keyword matching (stemming + RAG boost)
 
-        Tier 2 runs before the Gemini classifier so that known workflow
-        signals always compose directly from NODE_CATALOG, regardless of
-        whether seed_manifests has been run on Django.
+        Tier 1 is checked FIRST so that known workflow signals (brand
+        discovery, brand strategy, meta ads) always compose directly from
+        NODE_CATALOG with zero LLM dependency.  Non-workflow prompts
+        (blogs, social, Odoo, etc.) fall through to Gemini.
 
         Returns either:
             {"_composed_manifest": {...}} — Tier 1 or 2 succeeded
             {"resolved_manifest_id": "..."} — Tier 3 or 4
         """
-        # Tier 1: Enhanced Gemini dynamic composition
+        # Tier 1: Deterministic composition for known workflow signals.
+        # Checked FIRST — before any Gemini call — so WF1/WF2/WF3
+        # prompts always produce a composed manifest with zero LLM
+        # dependency and zero seed_manifests dependency.
+        deterministic = self._deterministic_compose(state)
+        if deterministic:
+            return deterministic
+
+        # Tier 2: Gemini dynamic composition
         if settings.GOOGLE_API_KEY:
             try:
                 compose_result = await self._gemini_compose(state)
@@ -1001,19 +1009,9 @@ class PipelineComposer:
                     return {"_composed_manifest": manifest}
             except Exception:
                 logger.warning(
-                    "Tier 1 failed, trying deterministic composition",
+                    "Tier 2 failed, trying LLM classification",
                     exc_info=True,
                 )
-
-        # Tier 2: Deterministic composition for known workflow signals.
-        # Does NOT depend on Gemini or seeded manifests — composes
-        # directly from NODE_CATALOG when prompt matches a workflow.
-        # Runs BEFORE Gemini classifier (Tier 3) so that WF1/WF2/WF3
-        # prompts always get a composed manifest even when seed_manifests
-        # hasn't been run on Django.
-        deterministic = self._deterministic_compose(state)
-        if deterministic:
-            return deterministic
 
         # Tier 3: LLM manifest classification
         if settings.GOOGLE_API_KEY:
@@ -1035,7 +1033,7 @@ class PipelineComposer:
         logger.info("Keyword fallback resolved to: %s", resolved_id)
         return {"resolved_manifest_id": resolved_id}
 
-    # ── Tier 1: Gemini Dynamic Composition ──
+    # ── Tier 2: Gemini Dynamic Composition ──
 
     def _enrich_system_prompt(self, state: AgentState) -> str:
         """Append company context, RAG hints, manifest reference, and
@@ -1234,7 +1232,7 @@ class PipelineComposer:
         # Exhausted retries — re-raise so compose() catches it
         raise last_exc  # type: ignore[misc]
 
-    # ── Tier 2: LLM Manifest Classification ──
+    # ── Tier 3: LLM Manifest Classification ──
 
     async def _llm_classify_fallback(self, state: AgentState) -> str | None:
         """Use a lightweight Gemini call to select ONE pipeline_id
@@ -1389,7 +1387,7 @@ class PipelineComposer:
 
         return manifest_id
 
-    # ── Tier 2: Deterministic Composition ──
+    # ── Tier 1: Deterministic Composition ──
 
     def _deterministic_compose(self, state: AgentState) -> dict[str, Any] | None:
         """Match known workflow signals and compose directly from NODE_CATALOG.
