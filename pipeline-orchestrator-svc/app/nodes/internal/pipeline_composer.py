@@ -3,10 +3,14 @@ PipelineComposer — Dynamic, catalog-driven pipeline composition.
 
 Replaces RouterNode for auto-detect mode. Uses a 4-tier routing chain:
 
-  Tier 1:   Enhanced Gemini dynamic composition (context-enriched + retry)
-  Tier 2:   Gemini manifest classification (lightweight LLM picks 1 of N)
-  Tier 2.5: Deterministic composition for known workflows (no LLM needed)
-  Tier 3:   Improved keyword matching (stemming, weights, neutral default)
+  Tier 1: Gemini dynamic composition (context-enriched + retry)
+  Tier 2: Deterministic composition for known workflows (no LLM needed)
+  Tier 3: Gemini manifest classification (lightweight LLM picks 1 of N)
+  Tier 4: Keyword matching (stemming, weights, neutral default)
+
+Tier 2 runs before the LLM classifier so that WF1/WF2/WF3 signals
+always compose directly from NODE_CATALOG, even when seed_manifests
+hasn't been run on Django.
 
 Falls back through the tiers on failure. Adding a new agent requires
 only one dict entry in NODE_CATALOG.
@@ -969,14 +973,18 @@ class PipelineComposer:
         """Compose a pipeline for the given state.
 
         4-tier fallback chain:
-          Tier 1:   Gemini dynamic composition (context-enriched + retry)
-          Tier 2:   Gemini manifest classification (picks 1 of N pipelines)
-          Tier 2.5: Deterministic composition for WF1/WF2/WF3 signals
-          Tier 3:   Keyword matching (stemming + RAG boost)
+          Tier 1: Gemini dynamic composition (context-enriched + retry)
+          Tier 2: Deterministic composition for WF1/WF2/WF3 signals
+          Tier 3: Gemini manifest classification (picks 1 of N pipelines)
+          Tier 4: Keyword matching (stemming + RAG boost)
+
+        Tier 2 runs before the Gemini classifier so that known workflow
+        signals always compose directly from NODE_CATALOG, regardless of
+        whether seed_manifests has been run on Django.
 
         Returns either:
-            {"_composed_manifest": {...}} — Tier 1 or 2.5 succeeded
-            {"resolved_manifest_id": "..."} — Tier 2 or 3
+            {"_composed_manifest": {...}} — Tier 1 or 2 succeeded
+            {"resolved_manifest_id": "..."} — Tier 3 or 4
         """
         # Tier 1: Enhanced Gemini dynamic composition
         if settings.GOOGLE_API_KEY:
@@ -993,11 +1001,21 @@ class PipelineComposer:
                     return {"_composed_manifest": manifest}
             except Exception:
                 logger.warning(
-                    "Tier 1 failed, trying LLM classification",
+                    "Tier 1 failed, trying deterministic composition",
                     exc_info=True,
                 )
 
-        # Tier 2: LLM manifest classification
+        # Tier 2: Deterministic composition for known workflow signals.
+        # Does NOT depend on Gemini or seeded manifests — composes
+        # directly from NODE_CATALOG when prompt matches a workflow.
+        # Runs BEFORE Gemini classifier (Tier 3) so that WF1/WF2/WF3
+        # prompts always get a composed manifest even when seed_manifests
+        # hasn't been run on Django.
+        deterministic = self._deterministic_compose(state)
+        if deterministic:
+            return deterministic
+
+        # Tier 3: LLM manifest classification
         if settings.GOOGLE_API_KEY:
             try:
                 manifest_id = await self._llm_classify_fallback(state)
@@ -1008,18 +1026,11 @@ class PipelineComposer:
                     return {"resolved_manifest_id": manifest_id}
             except Exception:
                 logger.warning(
-                    "Tier 2 failed, falling back to keywords",
+                    "Tier 3 failed, falling back to keywords",
                     exc_info=True,
                 )
 
-        # Tier 2.5: Deterministic composition for known workflow signals.
-        # Does NOT depend on Gemini or seeded manifests — composes
-        # directly from NODE_CATALOG when prompt matches a workflow.
-        deterministic = self._deterministic_compose(state)
-        if deterministic:
-            return deterministic
-
-        # Tier 3: Keyword matching
+        # Tier 4: Keyword matching
         resolved_id = self._keyword_fallback(state)
         logger.info("Keyword fallback resolved to: %s", resolved_id)
         return {"resolved_manifest_id": resolved_id}
@@ -1271,11 +1282,11 @@ class PipelineComposer:
         logger.warning("LLM classify did not return a select_pipeline call")
         return None
 
-    # ── Tier 2 manifest rewrites ──
+    # ── Tier 3 manifest rewrites ──
 
     @staticmethod
     def _apply_tier2_rewrites(manifest_id: str, state: AgentState) -> str:
-        """Deterministic rewrites for Tier 2 manifest classification.
+        """Deterministic rewrites for Tier 3 manifest classification.
 
         Corrects known LLM misroutes where Gemini picks a single-agent
         manifest instead of the intended multi-agent workflow.
@@ -1378,7 +1389,7 @@ class PipelineComposer:
 
         return manifest_id
 
-    # ── Tier 2.5: Deterministic Composition ──
+    # ── Tier 2: Deterministic Composition ──
 
     def _deterministic_compose(self, state: AgentState) -> dict[str, Any] | None:
         """Match known workflow signals and compose directly from NODE_CATALOG.
