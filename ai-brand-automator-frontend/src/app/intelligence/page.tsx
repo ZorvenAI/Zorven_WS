@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
@@ -11,9 +11,14 @@ export default function IntelligencePage() {
   useAuth();
 
   const [hasMounted, setHasMounted] = useState(false);
+  const [approvalRefreshKey, setApprovalRefreshKey] = useState(0);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHasMounted(true);
+  }, []);
+
+  const handleExtractionComplete = useCallback(() => {
+    setApprovalRefreshKey((k) => k + 1);
   }, []);
 
   if (!hasMounted) {
@@ -48,10 +53,10 @@ export default function IntelligencePage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <IntelligenceFeed />
+            <IntelligenceFeed onExtractionComplete={handleExtractionComplete} />
           </div>
           <div className="lg:col-span-1">
-            <WF2ApprovalQueue />
+            <WF2ApprovalQueue refreshKey={approvalRefreshKey} />
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 """
 Seed sample OptimizationRecommendation records for sandbox/demo campaigns.
 
-All seeded recommendations include [SANDBOX] in the rationale so demo users
+All seeded recommendations include [SANDBOX DEMO] in the rationale so demo users
 understand the data is illustrative, not from real Meta Insights.
 
 Usage:
@@ -180,7 +180,10 @@ class Command(BaseCommand):
             )
             return
 
-        campaigns = list(CampaignRegistry.objects.all()[:5])
+        campaigns = list(CampaignRegistry.objects.filter(sandbox_mode=True)[:5])
+        if not campaigns:
+            # Fallback to all campaigns if none are sandbox
+            campaigns = list(CampaignRegistry.objects.all()[:5])
         if not campaigns:
             self.stdout.write(
                 self.style.WARNING("No campaigns found. Nothing to seed.")

@@ -6,6 +6,7 @@ Includes callback endpoint for COA tick results and recommendation approval flow
 """
 
 import logging
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import transaction
@@ -797,59 +798,64 @@ def register_campaign(request):
         )
 
     # Create an ACTIVATE action record for audit trail + dashboard visibility
-    try:
-        OptimizationAction.objects.create(
-            tenant=tenant,
-            campaign=campaign,
-            action_type="ACTIVATE",
-            entity_type="campaign",
-            entity_id=meta_campaign_id,
-            old_value={},
-            new_value={
-                "status": "active",
-                "daily_budget_usd": float(data.get("daily_budget_usd") or 0),
-                "ad_sets": len(data.get("ad_sets") or []),
-                "ads": len(data.get("ads") or []),
-                "sandbox_mode": data.get("sandbox_mode", True),
-            },
-            mode="manual",
-            rationale=(
-                f'Campaign "{defaults["campaign_name"]}" published via '
-                f"Ad Publishing workflow. Daily budget "
-                f'${float(data.get("daily_budget_usd") or 0):.2f}, '
-                f'{len(data.get("ad_sets") or [])} ad set(s), '
-                f'{len(data.get("ads") or [])} ad(s).'
-            ),
-            guardrails_applied=[],
-            meta_api_response={},
-            verified=True,
-            verification_result={"source": "ad_publishing_registration"},
-        )
-    except Exception:
-        logger.warning(
-            "Failed to create ACTIVATE action for campaign %s", campaign.campaign_id
-        )
+    if created:
+        try:
+            OptimizationAction.objects.create(
+                tenant=tenant,
+                campaign=campaign,
+                action_type="ACTIVATE",
+                entity_type="campaign",
+                entity_id=meta_campaign_id,
+                old_value={},
+                new_value={
+                    "status": "active",
+                    "daily_budget_usd": float(data.get("daily_budget_usd") or 0),
+                    "ad_sets": len(data.get("ad_sets") or []),
+                    "ads": len(data.get("ads") or []),
+                    "sandbox_mode": data.get("sandbox_mode", True),
+                },
+                mode="manual",
+                rationale=(
+                    f'Campaign "{defaults["campaign_name"]}" published via '
+                    f"Ad Publishing workflow. Daily budget "
+                    f'${float(data.get("daily_budget_usd") or 0):.2f}, '
+                    f'{len(data.get("ad_sets") or [])} ad set(s), '
+                    f'{len(data.get("ads") or [])} ad(s).'
+                ),
+                guardrails_applied=[],
+                meta_api_response={},
+                verified=True,
+                verification_result={"source": "ad_publishing_registration"},
+            )
+        except Exception:
+            logger.warning(
+                "Failed to create ACTIVATE action for campaign %s",
+                campaign.campaign_id,
+                exc_info=True,
+            )
 
     # Create a baseline PerformanceSnapshot so the trend chart has
     # at least one data point from day one.
-    try:
-        daily_budget = float(data.get("daily_budget_usd") or 0)
-        target_cpa = data.get("target_cpa_usd")
-        target_roas = data.get("target_roas")
-        PerformanceSnapshot.objects.create(
-            tenant=tenant,
-            campaign=campaign,
-            tick_id=f"registration-{campaign.campaign_id}",
-            cpa_usd=float(target_cpa) if target_cpa is not None else None,
-            roas=float(target_roas) if target_roas is not None else None,
-            ctr=None,
-            spend_usd=daily_budget if daily_budget > 0 else None,
-        )
-    except Exception:
-        logger.warning(
-            "Failed to create baseline snapshot for campaign %s",
-            campaign.campaign_id,
-        )
+    if created:
+        try:
+            daily_budget = Decimal(str(data.get("daily_budget_usd") or 0))
+            target_cpa = data.get("target_cpa_usd")
+            target_roas = data.get("target_roas")
+            PerformanceSnapshot.objects.create(
+                tenant=tenant,
+                campaign=campaign,
+                tick_id=f"registration-{campaign.campaign_id}",
+                cpa_usd=(Decimal(str(target_cpa)) if target_cpa is not None else None),
+                roas=(Decimal(str(target_roas)) if target_roas is not None else None),
+                ctr=None,
+                spend_usd=daily_budget if daily_budget > 0 else None,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to create baseline snapshot for campaign %s",
+                campaign.campaign_id,
+                exc_info=True,
+            )
 
     logger.info(
         "Campaign registered for optimization: meta=%s internal=%s created=%s",

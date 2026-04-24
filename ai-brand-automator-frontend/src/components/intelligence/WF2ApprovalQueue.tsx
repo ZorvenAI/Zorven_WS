@@ -11,7 +11,11 @@ import {
   type WF2RerunRequest,
 } from '@/lib/intelligence';
 
-export default function WF2ApprovalQueue() {
+interface WF2ApprovalQueueProps {
+  refreshKey?: number;
+}
+
+export default function WF2ApprovalQueue({ refreshKey }: WF2ApprovalQueueProps) {
   const { isAdmin } = useTenantRole();
   const [requests, setRequests] = useState<WF2RerunRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +42,11 @@ export default function WF2ApprovalQueue() {
   useEffect(() => {
     if (isAdmin) load();
   }, [isAdmin, load]);
+
+  // Auto-refresh when parent bumps refreshKey
+  useEffect(() => {
+    if (isAdmin && refreshKey) load();
+  }, [isAdmin, refreshKey, load]);
 
   if (!isAdmin) {
     return null;

@@ -8,6 +8,8 @@ Usage:
     python manage.py backfill_optimization_data --dry-run
 """
 
+from decimal import Decimal
+
 from django.core.management.base import BaseCommand
 
 from optimization.models import (
@@ -34,15 +36,22 @@ class Command(BaseCommand):
         dry_run = options["dry_run"]
         campaigns = CampaignRegistry.objects.all()
 
+        # Precompute sets to avoid N+1 queries inside the loop.
+        existing_action_ids = set(
+            OptimizationAction.objects.filter(action_type="ACTIVATE").values_list(
+                "campaign_id", flat=True
+            )
+        )
+        existing_snapshot_ids = set(
+            PerformanceSnapshot.objects.values_list("campaign_id", flat=True).distinct()
+        )
+
         actions_created = 0
         snapshots_created = 0
 
         for campaign in campaigns:
             # Check if an ACTIVATE action already exists
-            has_action = OptimizationAction.objects.filter(
-                campaign=campaign,
-                action_type="ACTIVATE",
-            ).exists()
+            has_action = campaign.pk in existing_action_ids
 
             if not has_action:
                 if dry_run:
@@ -82,9 +91,7 @@ class Command(BaseCommand):
                 actions_created += 1
 
             # Check if any PerformanceSnapshot exists
-            has_snapshot = PerformanceSnapshot.objects.filter(
-                campaign=campaign,
-            ).exists()
+            has_snapshot = campaign.pk in existing_snapshot_ids
 
             if not has_snapshot:
                 if dry_run:
@@ -93,17 +100,17 @@ class Command(BaseCommand):
                         f"for {campaign.campaign_name}"
                     )
                 else:
-                    daily_budget = float(campaign.daily_budget_usd or 0)
+                    daily_budget = Decimal(str(campaign.daily_budget_usd or 0))
                     cpa = campaign.actual_cpa_usd or campaign.target_cpa_usd
                     roas = campaign.actual_roas or campaign.target_roas
                     PerformanceSnapshot.objects.create(
                         tenant=campaign.tenant,
                         campaign=campaign,
                         tick_id=f"backfill-{campaign.campaign_id}",
-                        cpa_usd=float(cpa) if cpa is not None else None,
-                        roas=float(roas) if roas is not None else None,
+                        cpa_usd=(Decimal(str(cpa)) if cpa is not None else None),
+                        roas=(Decimal(str(roas)) if roas is not None else None),
                         ctr=(
-                            float(campaign.actual_ctr)
+                            Decimal(str(campaign.actual_ctr))
                             if campaign.actual_ctr is not None
                             else None
                         ),
