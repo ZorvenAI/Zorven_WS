@@ -46,7 +46,7 @@ export default function OptimizationSettings({
     <div className="glass-card p-6 space-y-5">
       <div className="flex items-center gap-2">
         <Settings className="w-4 h-4 text-brand-silver" />
-        <Tooltip text="Configure how the AI optimization engine manages this campaign. Control automation level, review budget settings, and set guardrail boundaries.">
+        <Tooltip tabIndex={0} text="Configure how the AI optimization engine manages this campaign. Control automation level, review budget settings, and set guardrail boundaries.">
           <h3 className="text-sm font-medium text-white cursor-default">
             Optimization Settings
           </h3>
@@ -68,7 +68,7 @@ export default function OptimizationSettings({
 
       {/* Mode Toggle */}
       <div className="space-y-2">
-        <Tooltip text="In Autonomous mode, the AI auto-applies recommendations within guardrail limits. In Manual mode, every recommendation requires your explicit approval before execution.">
+        <Tooltip tabIndex={0} text="In Autonomous mode, the AI auto-applies recommendations within guardrail limits. In Manual mode, every recommendation requires your explicit approval before execution.">
           <p className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider cursor-default">
             Optimization Mode
           </p>
@@ -106,7 +106,7 @@ export default function OptimizationSettings({
 
       {/* Campaign Info */}
       <div className="space-y-3 pt-2 border-t border-white/5">
-        <Tooltip text="Key campaign configuration from Meta Ads including dates, budget allocations, and performance targets.">
+        <Tooltip tabIndex={0} text="Key campaign configuration from Meta Ads including dates, budget allocations, and performance targets.">
           <p className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider cursor-default">
             Campaign Info
           </p>
@@ -167,7 +167,7 @@ export default function OptimizationSettings({
         <div className="space-y-3 pt-2 border-t border-white/5">
           <div className="flex items-center gap-2">
             <Shield className="w-3.5 h-3.5 text-brand-silver/60" />
-            <Tooltip text="Safety limits that constrain AI optimization decisions. Guardrails prevent the optimizer from making changes that exceed these boundaries, even in autonomous mode.">
+            <Tooltip tabIndex={0} text="Safety limits that constrain AI optimization decisions. Guardrails prevent the optimizer from making changes that exceed these boundaries, even in autonomous mode.">
               <p className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider cursor-default">
                 Guardrail Config
               </p>
@@ -194,7 +194,7 @@ export default function OptimizationSettings({
       {/* Ad Sets & Ads count */}
       <div className="pt-2 border-t border-white/5">
         <div className="grid grid-cols-2 gap-3">
-          <Tooltip text="Number of ad sets in this campaign. Ad sets define targeting, budget, and schedule for a group of ads.">
+          <Tooltip tabIndex={0} text="Number of ad sets in this campaign. Ad sets define targeting, budget, and schedule for a group of ads.">
             <div className="bg-white/5 rounded-lg p-3 text-center cursor-default">
               <p className="text-lg font-heading font-bold text-white">
                 {campaign.ad_sets?.length ?? 0}
@@ -202,7 +202,7 @@ export default function OptimizationSettings({
               <p className="text-xs text-brand-silver/60">Ad Sets</p>
             </div>
           </Tooltip>
-          <Tooltip text="Total number of individual ads across all ad sets. Each ad is a creative unit with its own copy, image, and performance metrics.">
+          <Tooltip tabIndex={0} text="Total number of individual ads across all ad sets. Each ad is a creative unit with its own copy, image, and performance metrics.">
             <div className="bg-white/5 rounded-lg p-3 text-center cursor-default">
               <p className="text-lg font-heading font-bold text-white">
                 {campaign.ads?.length ?? 0}

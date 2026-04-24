@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 from django.conf import settings as django_settings
 from django.core.cache import cache
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, F, Max, Min, Q, Sum
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -257,14 +257,48 @@ class TrendsView(APIView):
         # all brand contexts. Per-brand trend data would require rollup
         # partitioning (future enhancement).
 
-        # OG-03: limit data points
-        qs = qs.order_by("period_start")[:MAX_DATA_POINTS]
+        # When no pipeline_id filter is applied, the same metric may have
+        # multiple rollup rows per date (one per pipeline). Aggregate them
+        # into a single data point per period_start so the trend chart
+        # matches the scorecard (which aggregates all snapshots).
+        # Use weighted average (by sample_count) so that pipelines with
+        # more snapshots contribute proportionally — matching the
+        # scorecard's Avg(metric_value) over raw snapshots.
+        if not pipeline_id:
 
-        data = list(
-            qs.values(
-                "period_start", "avg_value", "min_value", "max_value", "sample_count"
+            grouped = (
+                qs.values("period_start")
+                .annotate(
+                    _weighted_sum=Sum(F("avg_value") * F("sample_count")),
+                    sample_count=Sum("sample_count"),
+                    min_value=Min("min_value"),
+                    max_value=Max("max_value"),
+                )
+                .order_by("period_start")[:MAX_DATA_POINTS]
             )
-        )
+            data = []
+            for row in grouped:
+                total = row["sample_count"] or 1
+                data.append(
+                    {
+                        "period_start": row["period_start"],
+                        "avg_value": round(row["_weighted_sum"] / total, 4),
+                        "min_value": row["min_value"],
+                        "max_value": row["max_value"],
+                        "sample_count": row["sample_count"],
+                    }
+                )
+        else:
+            # OG-03: limit data points
+            data = list(
+                qs.order_by("period_start").values(
+                    "period_start",
+                    "avg_value",
+                    "min_value",
+                    "max_value",
+                    "sample_count",
+                )[:MAX_DATA_POINTS]
+            )
 
         serializer = TrendPointSerializer(data, many=True)
         cache.set(ck, serializer.data, CACHE_TTL)
@@ -415,7 +449,7 @@ class DistributionView(APIView):
             metric_name="sentiment_positive_pct",
         )
         pos_qs = _apply_brand_context_filter(pos_qs, brand_ctx)
-        positive = pos_qs.aggregate(avg=Avg("metric_value"))["avg"] or 0
+        pos_agg = pos_qs.aggregate(avg=Avg("metric_value"))["avg"]
 
         neg_qs = MetricSnapshot.objects.filter(
             base_filter,
@@ -423,8 +457,16 @@ class DistributionView(APIView):
             metric_name="sentiment_negative_pct",
         )
         neg_qs = _apply_brand_context_filter(neg_qs, brand_ctx)
-        negative = neg_qs.aggregate(avg=Avg("metric_value"))["avg"] or 0
+        neg_agg = neg_qs.aggregate(avg=Avg("metric_value"))["avg"]
 
+        # If no sentiment snapshots exist at all, return null so the
+        # frontend can hide the gauge instead of showing misleading 100% neutral.
+        if pos_agg is None and neg_agg is None:
+            cache.set(ck, None, CACHE_TTL)
+            return Response(None)
+
+        positive = pos_agg or 0
+        negative = neg_agg or 0
         neutral = max(0, 100 - positive - negative)
 
         data = {

@@ -52,7 +52,7 @@ export default function CampaignSelector({
         {selected && (
           <div className="flex items-center gap-3">
             {/* Status badge */}
-            <Tooltip text="Current campaign delivery status on Meta Ads. Active means ads are running, Paused means delivery is stopped, Completed means the campaign has ended.">
+            <Tooltip tabIndex={0} text="Current campaign delivery status on Meta Ads. Active means ads are running, Paused means delivery is stopped, Completed means the campaign has ended.">
               <span
                 className={`px-2.5 py-1 text-xs font-medium rounded-full ${
                   selected.status === 'active'
@@ -70,7 +70,7 @@ export default function CampaignSelector({
             </Tooltip>
 
             {/* Age badge */}
-            <Tooltip text="Number of days since the campaign started running. Younger campaigns may need more time before optimization patterns emerge.">
+            <Tooltip tabIndex={0} text="Number of days since the campaign started running. Younger campaigns may need more time before optimization patterns emerge.">
               <span className="flex items-center gap-1 text-xs text-brand-silver">
                 <Clock className="w-3.5 h-3.5" />
                 {selected.age_days}d old
@@ -79,7 +79,7 @@ export default function CampaignSelector({
 
             {/* Pending recommendations badge */}
             {selected.pending_recommendations_count > 0 && (
-              <Tooltip text="AI-generated optimization recommendations waiting for your review. Approve or reject each to guide the optimization engine.">
+              <Tooltip tabIndex={0} text="AI-generated optimization recommendations waiting for your review. Approve or reject each to guide the optimization engine.">
                 <span className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-brand-electric/20 text-brand-electric">
                   <Bell className="w-3.5 h-3.5" />
                   {selected.pending_recommendations_count} pending
@@ -89,7 +89,7 @@ export default function CampaignSelector({
 
             {/* Sandbox badge */}
             {selected.sandbox_mode && (
-              <Tooltip text="This campaign is in sandbox mode. All optimization actions are simulated and not applied to real Meta Ads.">
+              <Tooltip tabIndex={0} text="This campaign is in sandbox mode. All optimization actions are simulated and not applied to real Meta Ads.">
                 <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-amber-500/20 text-amber-400">
                   Sandbox
                 </span>

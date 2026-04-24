@@ -66,7 +66,7 @@ export default function AnalyticsDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <Tooltip text="Aggregated KPIs extracted from completed workflow executions. Metrics are computed from pipeline results across discovery, brand strategy, content, and campaign workflows.">
+          <Tooltip tabIndex={0} text="Aggregated KPIs extracted from completed workflow executions. Metrics are computed from pipeline results across discovery, brand strategy, content, and campaign workflows.">
             <h2 className="text-xl font-heading font-semibold text-white cursor-default">
               Workflow Analytics
             </h2>

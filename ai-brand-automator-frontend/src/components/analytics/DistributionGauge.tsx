@@ -146,7 +146,7 @@ export default function DistributionGauge({ range, brandContext }: DistributionG
         className="glass-card p-6 cursor-pointer hover:border-brand-electric/30 hover:bg-white/[0.03] transition-all duration-200"
         onClick={() => setExpanded(true)}
       >
-        <InfoTooltip text="Breakdown of sentiment polarity from Voice of Customer analysis. Shows what percentage of customer feedback is positive, neutral, or negative. Click to expand.">
+        <InfoTooltip tabIndex={0} text="Breakdown of sentiment polarity from Voice of Customer analysis. Shows what percentage of customer feedback is positive, neutral, or negative. Click to expand.">
           <h3 className="text-sm font-medium text-brand-silver mb-4 cursor-default">
             Sentiment Distribution
           </h3>
