@@ -12,7 +12,7 @@ export default function AnalyticsCoverage({ data }: AnalyticsCoverageProps) {
   if (!data || data.total_jobs === 0) return null;
 
   return (
-    <Tooltip text="How many completed workflows had metrics successfully extracted. Excluded workflows may have failed extraction or lacked extractable data.">
+    <Tooltip tabIndex={0} text="How many completed workflows had metrics successfully extracted. Excluded workflows may have failed extraction or lacked extractable data.">
       <div className="flex items-center gap-2 text-xs text-brand-silver">
         <BarChart3 className="h-3.5 w-3.5" />
         <span>

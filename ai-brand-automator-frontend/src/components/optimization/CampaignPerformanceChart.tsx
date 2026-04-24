@@ -59,13 +59,13 @@ export default function CampaignPerformanceChart({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <BarChart3 className="w-4 h-4 text-brand-silver" />
-          <InfoTooltip text="Tracks CPA, CTR, and ROAS over the last 7 days. Each data point is captured during an optimization tick. Use this chart to spot trends, anomalies, and the impact of recent changes.">
+          <InfoTooltip tabIndex={0} text="Tracks CPA, CTR, and ROAS over the last 7 days. Each data point is captured during an optimization tick. Use this chart to spot trends, anomalies, and the impact of recent changes.">
             <h3 className="text-sm font-medium text-white cursor-default">
               7-Day Performance Trend
             </h3>
           </InfoTooltip>
         </div>
-        <InfoTooltip text="Performance data is refreshed each time the optimization engine runs a tick — either on schedule or when manually triggered.">
+        <InfoTooltip tabIndex={0} text="Performance data is refreshed each time the optimization engine runs a tick — either on schedule or when manually triggered.">
           <span className="text-xs text-brand-silver/40 cursor-default">
             Updated every optimization tick
           </span>

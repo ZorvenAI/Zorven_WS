@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 from django.conf import settings as django_settings
 from django.core.cache import cache
-from django.db.models import Avg, Count, Max, Min, Q, Sum
+from django.db.models import Avg, Count, F, Max, Min, Q, Sum
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -265,7 +265,6 @@ class TrendsView(APIView):
         # more snapshots contribute proportionally — matching the
         # scorecard's Avg(metric_value) over raw snapshots.
         if not pipeline_id:
-            from django.db.models import F
 
             grouped = (
                 qs.values("period_start")

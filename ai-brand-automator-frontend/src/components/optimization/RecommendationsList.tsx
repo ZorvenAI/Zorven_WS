@@ -84,7 +84,7 @@ export default function RecommendationsList({
     <div className="glass-card p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <Tooltip text="AI-generated suggestions to improve campaign performance. Each recommendation includes a proposed change, its rationale, and projected impact. Review and approve or reject each one.">
+          <Tooltip tabIndex={0} text="AI-generated suggestions to improve campaign performance. Each recommendation includes a proposed change, its rationale, and projected impact. Review and approve or reject each one.">
             <h3 className="text-sm font-medium text-white cursor-default">
               Recommendations
             </h3>

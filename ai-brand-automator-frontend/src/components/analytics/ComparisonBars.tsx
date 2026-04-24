@@ -124,7 +124,7 @@ export default function ComparisonBars({ range, brandContext }: ComparisonBarsPr
         className="glass-card p-6 cursor-pointer hover:border-brand-electric/30 hover:bg-white/[0.03] transition-all duration-200"
         onClick={() => setExpanded(true)}
       >
-        <InfoTooltip text="Compares average metric values between the current period and the previous equivalent period. Taller cyan bars mean the metric improved versus the prior period. Click to expand.">
+        <InfoTooltip tabIndex={0} text="Compares average metric values between the current period and the previous equivalent period. Taller cyan bars mean the metric improved versus the prior period. Click to expand.">
           <h3 className="text-sm font-medium text-brand-silver mb-4 cursor-default">
             Period Comparison
           </h3>
