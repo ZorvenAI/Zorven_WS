@@ -12,6 +12,7 @@ import ComparisonBars from './ComparisonBars';
 import DistributionGauge from './DistributionGauge';
 import AnalyticsCoverage from './AnalyticsCoverage';
 import BrandContextSelector from '@/components/brand/BrandContextSelector';
+import Tooltip from '@/components/ui/Tooltip';
 
 export default function AnalyticsDashboard() {
   const [range, setRange] = useState<TimeRange>('30d');
@@ -65,20 +66,24 @@ export default function AnalyticsDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-heading font-semibold text-white">
-            Workflow Analytics
-          </h2>
+          <Tooltip text="Aggregated KPIs extracted from completed workflow executions. Metrics are computed from pipeline results across discovery, brand strategy, content, and campaign workflows.">
+            <h2 className="text-xl font-heading font-semibold text-white cursor-default">
+              Workflow Analytics
+            </h2>
+          </Tooltip>
           <AnalyticsCoverage data={coverage} />
         </div>
         <div className="flex items-center gap-3">
           <BrandContextSelector />
           <TimeRangePicker value={range} onChange={setRange} />
-          <a
-            href="/dashboard/analytics"
-            className="text-xs text-brand-electric hover:underline"
-          >
-            View All
-          </a>
+          <Tooltip text="Open the full analytics page with expanded charts, period selectors, and detailed metric breakdowns.">
+            <a
+              href="/dashboard/analytics"
+              className="text-xs text-brand-electric hover:underline"
+            >
+              View All
+            </a>
+          </Tooltip>
         </div>
       </div>
 

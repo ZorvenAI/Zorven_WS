@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { CampaignRegistry } from '@/types/optimization';
 import { updateCampaignSettings } from '@/lib/optimization';
+import Tooltip from './Tooltip';
 
 interface OptimizationSettingsProps {
   campaign: CampaignRegistry;
@@ -45,9 +46,11 @@ export default function OptimizationSettings({
     <div className="glass-card p-6 space-y-5">
       <div className="flex items-center gap-2">
         <Settings className="w-4 h-4 text-brand-silver" />
-        <h3 className="text-sm font-medium text-white">
-          Optimization Settings
-        </h3>
+        <Tooltip text="Configure how the AI optimization engine manages this campaign. Control automation level, review budget settings, and set guardrail boundaries.">
+          <h3 className="text-sm font-medium text-white cursor-default">
+            Optimization Settings
+          </h3>
+        </Tooltip>
       </div>
 
       {/* Sandbox Warning */}
@@ -65,9 +68,11 @@ export default function OptimizationSettings({
 
       {/* Mode Toggle */}
       <div className="space-y-2">
-        <p className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
-          Optimization Mode
-        </p>
+        <Tooltip text="In Autonomous mode, the AI auto-applies recommendations within guardrail limits. In Manual mode, every recommendation requires your explicit approval before execution.">
+          <p className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider cursor-default">
+            Optimization Mode
+          </p>
+        </Tooltip>
         <div className="flex items-center gap-3">
           <button
             onClick={handleModeToggle}
@@ -101,9 +106,11 @@ export default function OptimizationSettings({
 
       {/* Campaign Info */}
       <div className="space-y-3 pt-2 border-t border-white/5">
-        <p className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
-          Campaign Info
-        </p>
+        <Tooltip text="Key campaign configuration from Meta Ads including dates, budget allocations, and performance targets.">
+          <p className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider cursor-default">
+            Campaign Info
+          </p>
+        </Tooltip>
 
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs">
@@ -160,9 +167,11 @@ export default function OptimizationSettings({
         <div className="space-y-3 pt-2 border-t border-white/5">
           <div className="flex items-center gap-2">
             <Shield className="w-3.5 h-3.5 text-brand-silver/60" />
-            <p className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider">
-              Guardrail Config
-            </p>
+            <Tooltip text="Safety limits that constrain AI optimization decisions. Guardrails prevent the optimizer from making changes that exceed these boundaries, even in autonomous mode.">
+              <p className="text-xs font-medium text-brand-silver/60 uppercase tracking-wider cursor-default">
+                Guardrail Config
+              </p>
+            </Tooltip>
           </div>
           <div className="space-y-1.5">
             {guardrailEntries.map(([key, value]) => (
@@ -185,18 +194,22 @@ export default function OptimizationSettings({
       {/* Ad Sets & Ads count */}
       <div className="pt-2 border-t border-white/5">
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white/5 rounded-lg p-3 text-center">
-            <p className="text-lg font-heading font-bold text-white">
-              {campaign.ad_sets?.length ?? 0}
-            </p>
-            <p className="text-xs text-brand-silver/60">Ad Sets</p>
-          </div>
-          <div className="bg-white/5 rounded-lg p-3 text-center">
-            <p className="text-lg font-heading font-bold text-white">
-              {campaign.ads?.length ?? 0}
-            </p>
-            <p className="text-xs text-brand-silver/60">Ads</p>
-          </div>
+          <Tooltip text="Number of ad sets in this campaign. Ad sets define targeting, budget, and schedule for a group of ads.">
+            <div className="bg-white/5 rounded-lg p-3 text-center cursor-default">
+              <p className="text-lg font-heading font-bold text-white">
+                {campaign.ad_sets?.length ?? 0}
+              </p>
+              <p className="text-xs text-brand-silver/60">Ad Sets</p>
+            </div>
+          </Tooltip>
+          <Tooltip text="Total number of individual ads across all ad sets. Each ad is a creative unit with its own copy, image, and performance metrics.">
+            <div className="bg-white/5 rounded-lg p-3 text-center cursor-default">
+              <p className="text-lg font-heading font-bold text-white">
+                {campaign.ads?.length ?? 0}
+              </p>
+              <p className="text-xs text-brand-silver/60">Ads</p>
+            </div>
+          </Tooltip>
         </div>
       </div>
     </div>

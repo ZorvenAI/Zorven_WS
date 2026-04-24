@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { getDistribution } from '@/lib/analytics';
 import type { DistributionData, TimeRange } from '@/types/analytics';
+import InfoTooltip from '@/components/ui/Tooltip';
 
 interface DistributionGaugeProps {
   range: TimeRange;
@@ -145,9 +146,11 @@ export default function DistributionGauge({ range, brandContext }: DistributionG
         className="glass-card p-6 cursor-pointer hover:border-brand-electric/30 hover:bg-white/[0.03] transition-all duration-200"
         onClick={() => setExpanded(true)}
       >
-        <h3 className="text-sm font-medium text-brand-silver mb-4">
-          Sentiment Distribution
-        </h3>
+        <InfoTooltip text="Breakdown of sentiment polarity from Voice of Customer analysis. Shows what percentage of customer feedback is positive, neutral, or negative. Click to expand.">
+          <h3 className="text-sm font-medium text-brand-silver mb-4 cursor-default">
+            Sentiment Distribution
+          </h3>
+        </InfoTooltip>
         <div className="flex items-center justify-center gap-8">
           <DonutGauge data={data} size={130} strokeWidth={12} />
           <SentimentLegend data={data} />

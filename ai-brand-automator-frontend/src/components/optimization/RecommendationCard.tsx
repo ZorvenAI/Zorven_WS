@@ -15,6 +15,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import type { OptimizationRecommendation } from '@/types/optimization';
+import Tooltip from './Tooltip';
 
 interface RecommendationCardProps {
   recommendation: OptimizationRecommendation;
@@ -123,20 +124,24 @@ export default function RecommendationCard({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span
-            className={`px-2 py-0.5 text-xs font-medium rounded-full ${priorityStyle.bg} ${priorityStyle.text}`}
-          >
-            {rec.priority}
-          </span>
-          {rec.expires_at && (
+          <Tooltip text="Priority level set by the AI based on potential impact and urgency. Critical items need immediate attention; Low items are minor optimizations.">
             <span
-              className={`text-xs ${
-                rec.is_expired ? 'text-red-400' : 'text-brand-silver/60'
-              }`}
+              className={`px-2 py-0.5 text-xs font-medium rounded-full ${priorityStyle.bg} ${priorityStyle.text}`}
             >
-              <Clock className="w-3 h-3 inline mr-1" />
-              {formatTimeRemaining(rec.expires_at)}
+              {rec.priority}
             </span>
+          </Tooltip>
+          {rec.expires_at && (
+            <Tooltip text="Recommendations expire after a set window. Once expired, the underlying data may no longer be relevant and the recommendation cannot be approved.">
+              <span
+                className={`text-xs ${
+                  rec.is_expired ? 'text-red-400' : 'text-brand-silver/60'
+                }`}
+              >
+                <Clock className="w-3 h-3 inline mr-1" />
+                {formatTimeRemaining(rec.expires_at)}
+              </span>
+            </Tooltip>
           )}
         </div>
       </div>
@@ -147,9 +152,11 @@ export default function RecommendationCard({
       {/* Current vs Proposed */}
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="bg-white/5 rounded-lg p-3">
-          <p className="text-xs font-medium text-brand-silver/60 mb-1.5 uppercase tracking-wider">
-            Current
-          </p>
+          <Tooltip text="The current values of the settings that the AI is recommending to change.">
+            <p className="text-xs font-medium text-brand-silver/60 mb-1.5 uppercase tracking-wider cursor-default">
+              Current
+            </p>
+          </Tooltip>
           {currentValues.map((v, i) => (
             <p key={i} className="text-xs text-brand-silver">
               {v}
@@ -157,9 +164,11 @@ export default function RecommendationCard({
           ))}
         </div>
         <div className="bg-brand-electric/5 rounded-lg p-3 border border-brand-electric/10">
-          <p className="text-xs font-medium text-brand-electric/60 mb-1.5 uppercase tracking-wider">
-            Proposed
-          </p>
+          <Tooltip text="The new values that the AI recommends applying. Compare these against the current values to assess the change.">
+            <p className="text-xs font-medium text-brand-electric/60 mb-1.5 uppercase tracking-wider cursor-default">
+              Proposed
+            </p>
+          </Tooltip>
           {proposedValues.map((v, i) => (
             <p key={i} className="text-xs text-brand-electric">
               {v}
@@ -171,9 +180,11 @@ export default function RecommendationCard({
       {/* Projected impact */}
       {Object.keys(rec.projected_impact).length > 0 && (
         <div className="bg-white/5 rounded-lg p-3 mb-3">
-          <p className="text-xs font-medium text-brand-silver/60 mb-1.5 uppercase tracking-wider">
-            Projected Impact
-          </p>
+          <Tooltip text="AI-estimated impact if this recommendation is approved. These are projections based on historical data and may vary from actual results.">
+            <p className="text-xs font-medium text-brand-silver/60 mb-1.5 uppercase tracking-wider cursor-default">
+              Projected Impact
+            </p>
+          </Tooltip>
           <div className="flex flex-wrap gap-2">
             {Object.entries(rec.projected_impact ?? {}).map(([key, val]) => (
               <span

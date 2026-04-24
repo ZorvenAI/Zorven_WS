@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { X } from 'lucide-react';
 import type { TrendPoint } from '@/types/analytics';
+import InfoTooltip from '@/components/ui/Tooltip';
 
 interface TrendChartProps {
   data: TrendPoint[];
@@ -116,9 +117,11 @@ export default function TrendChart({
         className="glass-card p-6 cursor-pointer hover:border-brand-electric/30 hover:bg-white/[0.03] transition-all duration-200"
         onClick={() => setExpanded(true)}
       >
-        <h3 className="text-sm font-medium text-brand-silver mb-4">
-          {metricName} Trend
-        </h3>
+        <InfoTooltip text={`Shows how ${metricName} has changed over the selected time range. Each point represents the average value for that period. Click to expand for a larger view.`}>
+          <h3 className="text-sm font-medium text-brand-silver mb-4 cursor-default">
+            {metricName} Trend
+          </h3>
+        </InfoTooltip>
         <TrendAreaChart
           chartData={chartData}
           color={color}
