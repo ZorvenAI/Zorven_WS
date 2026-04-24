@@ -16,6 +16,7 @@ interface MetricCardData {
   label: string;
   value: string;
   target: string | null;
+  tooltip: string;
   icon: React.ReactNode;
   status: 'good' | 'warning' | 'neutral';
   progress: number | null;
@@ -62,6 +63,8 @@ export default function CampaignMetricsCard({
       label: 'CPA',
       value: actualCpa !== null ? `$${actualCpa.toFixed(2)}` : '--',
       target: targetCpa !== null ? `Target: $${targetCpa.toFixed(2)}` : null,
+      tooltip:
+        'Cost Per Acquisition — the average cost to acquire one customer or conversion. Lower is better.',
       icon: <DollarSign className={iconCls} />,
       status: cpaStatus,
       progress: null,
@@ -70,6 +73,8 @@ export default function CampaignMetricsCard({
       label: 'ROAS',
       value: actualRoas !== null ? `${actualRoas.toFixed(1)}x` : '--',
       target: targetRoas !== null ? `Target: ${targetRoas.toFixed(1)}x` : null,
+      tooltip:
+        'Return On Ad Spend — revenue generated per dollar spent on ads. A 3.0x ROAS means $3 revenue for every $1 spent. Higher is better.',
       icon: <TrendingUp className={iconCls} />,
       status: roasStatus,
       progress: null,
@@ -78,6 +83,8 @@ export default function CampaignMetricsCard({
       label: 'CTR',
       value: actualCtr !== null ? `${actualCtr.toFixed(2)}%` : '--',
       target: null,
+      tooltip:
+        'Click-Through Rate — the percentage of people who clicked your ad after seeing it. Higher CTR indicates more engaging ad creative.',
       icon: <MousePointerClick className={iconCls} />,
       status: 'neutral',
       progress: null,
@@ -88,6 +95,8 @@ export default function CampaignMetricsCard({
         spendToday !== null
           ? `$${spendToday.toFixed(2)}`
           : `$${daily.toFixed(2)}`,
+      tooltip:
+        'Daily Spend — how much budget has been spent today. Tracked against your daily and lifetime budget limits.',
       target:
         spendToday !== null
           ? `Budget: $${daily.toFixed(2)}`
@@ -106,7 +115,15 @@ export default function CampaignMetricsCard({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {metrics.map((metric) => (
-        <div key={metric.label} className="glass-card p-4">
+        <div
+          key={metric.label}
+          className="glass-card p-4 group relative cursor-default"
+        >
+          {/* Tooltip */}
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 px-3 py-2 rounded-lg bg-brand-midnight border border-white/10 shadow-lg text-xs text-brand-silver opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 z-50">
+            {metric.tooltip}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-white/10" />
+          </div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-brand-silver uppercase tracking-wider">
               {metric.label}

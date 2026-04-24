@@ -203,7 +203,24 @@ export default function RecommendationCard({
 
       {/* Actions */}
       <div className="flex items-center gap-2 pt-2 border-t border-white/5">
-        {!showRejectInput ? (
+        {rec.status !== 'pending' ? (
+          <span
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg ${
+              rec.status === 'approved' || rec.status === 'executed'
+                ? 'bg-emerald-500/20 text-emerald-400'
+                : rec.status === 'rejected'
+                ? 'bg-red-500/20 text-red-400'
+                : 'bg-white/10 text-brand-silver'
+            }`}
+          >
+            {rec.status === 'approved' || rec.status === 'executed' ? (
+              <Check className="w-3.5 h-3.5" />
+            ) : rec.status === 'rejected' ? (
+              <X className="w-3.5 h-3.5" />
+            ) : null}
+            {rec.status.charAt(0).toUpperCase() + rec.status.slice(1)}
+          </span>
+        ) : !showRejectInput ? (
           <>
             <button
               onClick={() => onApprove(rec.recommendation_id)}
