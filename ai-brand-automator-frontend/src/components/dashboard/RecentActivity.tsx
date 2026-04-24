@@ -7,12 +7,14 @@ interface Activity {
   id: string;
   action: string;
   timestamp: string;
+  rawDate: string;
   type: string;
 }
 
 interface ApiGeneration {
   id: string | number;
   generation_type?: string;
+  content_type?: string;
   created_at: string;
 }
 
@@ -57,58 +59,73 @@ export default function RecentActivity() {
       try {
         // Fetch AI generations (most recent activity)
         const aiGenerationsResponse = await apiClient.get('/ai/generations/');
-        const aiGenerations = await aiGenerationsResponse.json();
-        
+        const aiGenerationsRaw = await aiGenerationsResponse.json();
+
         // Fetch assets
         const assetsResponse = await apiClient.get('/assets/');
-        const assets = await assetsResponse.json();
+        const assetsRaw = await assetsResponse.json();
 
         // Fetch companies
         const companiesResponse = await apiClient.get('/companies/');
-        const companies = await companiesResponse.json();
+        const companiesRaw = await companiesResponse.json();
+
+        // Unwrap paginated responses — DRF returns { results: [...] }
+        const aiGenerations = Array.isArray(aiGenerationsRaw)
+          ? aiGenerationsRaw
+          : aiGenerationsRaw?.results ?? [];
+        const assets = Array.isArray(assetsRaw)
+          ? assetsRaw
+          : assetsRaw?.results ?? [];
+        const companies = Array.isArray(companiesRaw)
+          ? companiesRaw
+          : companiesRaw?.results ?? [];
 
         // Combine and format activities
         const allActivities: Activity[] = [];
 
         // Add AI generations
-        if (aiGenerations && Array.isArray(aiGenerations)) {
+        if (Array.isArray(aiGenerations)) {
           aiGenerations.slice(0, 5).forEach((gen: ApiGeneration) => {
             allActivities.push({
               id: `ai-${gen.id}`,
-              action: `AI generated ${gen.generation_type || 'content'}`,
+              action: `AI generated ${gen.generation_type || gen.content_type || 'content'}`,
               timestamp: formatTimestamp(gen.created_at),
+              rawDate: gen.created_at,
               type: 'ai',
             });
           });
         }
 
         // Add asset uploads
-        if (assets && Array.isArray(assets)) {
+        if (Array.isArray(assets)) {
           assets.slice(0, 3).forEach((asset: ApiAsset) => {
             allActivities.push({
               id: `asset-${asset.id}`,
               action: `Uploaded ${asset.asset_type || 'asset'}: ${asset.file_name || 'file'}`,
               timestamp: formatTimestamp(asset.uploaded_at),
+              rawDate: asset.uploaded_at,
               type: 'upload',
             });
           });
         }
 
         // Add company updates
-        if (companies && Array.isArray(companies)) {
+        if (Array.isArray(companies)) {
           companies.slice(0, 2).forEach((company: ApiCompany) => {
+            const companyDate = company.updated_at || company.created_at;
             allActivities.push({
               id: `company-${company.id}`,
               action: `Updated company profile: ${company.name}`,
-              timestamp: formatTimestamp(company.updated_at || company.created_at),
+              timestamp: formatTimestamp(companyDate),
+              rawDate: companyDate,
               type: 'update',
             });
           });
         }
 
-        // Sort by timestamp (most recent first) and take top 5
+        // Sort by raw ISO date (most recent first) and take top 5
         allActivities.sort((a, b) => {
-          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+          return new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime();
         });
 
         setActivities(allActivities.slice(0, 5));
