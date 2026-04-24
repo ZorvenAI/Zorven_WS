@@ -66,11 +66,19 @@ export function OverviewCards() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const responses = await Promise.all(
-          CARD_CONFIGS.map((cfg) => apiClient.get(cfg.endpoint))
+        // Use allSettled so one failing endpoint doesn't blank all cards
+        const results = await Promise.allSettled(
+          CARD_CONFIGS.map(async (cfg) => {
+            const response = await apiClient.get(cfg.endpoint);
+            if (!response.ok) return 0;
+            const data = await response.json();
+            return extractCount(data);
+          })
         );
-        const dataList = await Promise.all(responses.map((r) => r.json()));
-        const counts = dataList.map(extractCount);
+
+        const counts = results.map((r) =>
+          r.status === 'fulfilled' ? r.value : 0
+        );
 
         setCardStates(
           counts.map((count, i) => ({
@@ -79,9 +87,9 @@ export function OverviewCards() {
             changeType: count > 0 ? ('positive' as const) : ('neutral' as const),
           }))
         );
-        setLoading(false);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
+      } finally {
         setLoading(false);
       }
     };
