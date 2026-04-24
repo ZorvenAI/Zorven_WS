@@ -11,17 +11,7 @@ import {
   Legend,
 } from 'recharts';
 import { BarChart3 } from 'lucide-react';
-
-// Placeholder data for visualization until historical metrics are available
-const PLACEHOLDER_DATA = [
-  { date: 'Day 1', cpa: null, ctr: null, roas: null },
-  { date: 'Day 2', cpa: null, ctr: null, roas: null },
-  { date: 'Day 3', cpa: null, ctr: null, roas: null },
-  { date: 'Day 4', cpa: null, ctr: null, roas: null },
-  { date: 'Day 5', cpa: null, ctr: null, roas: null },
-  { date: 'Day 6', cpa: null, ctr: null, roas: null },
-  { date: 'Day 7', cpa: null, ctr: null, roas: null },
-];
+import type { PerformanceTrendPoint } from '@/lib/optimization';
 
 interface TooltipPayloadEntry {
   color: string;
@@ -50,8 +40,16 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   );
 }
 
-export default function CampaignPerformanceChart() {
-  const hasData = PLACEHOLDER_DATA.some(
+interface CampaignPerformanceChartProps {
+  data: PerformanceTrendPoint[];
+  loading?: boolean;
+}
+
+export default function CampaignPerformanceChart({
+  data,
+  loading,
+}: CampaignPerformanceChartProps) {
+  const hasData = data.length > 0 && data.some(
     (d) => d.cpa !== null || d.ctr !== null || d.roas !== null
   );
 
@@ -69,7 +67,11 @@ export default function CampaignPerformanceChart() {
         </span>
       </div>
 
-      {!hasData ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="w-5 h-5 border-2 border-brand-electric/30 border-t-brand-electric rounded-full animate-spin" />
+        </div>
+      ) : !hasData ? (
         <div className="flex flex-col items-center justify-center py-12">
           <BarChart3 className="h-10 w-10 text-brand-silver/20 mb-3" />
           <p className="text-sm text-brand-silver/60">
@@ -81,7 +83,7 @@ export default function CampaignPerformanceChart() {
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={PLACEHOLDER_DATA}>
+          <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
             <XAxis
               dataKey="date"

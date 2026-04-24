@@ -11,8 +11,12 @@ import {
   fetchCampaigns,
   fetchRecommendations,
   fetchActions,
+  fetchAllActions,
+  fetchAllRecommendations,
+  fetchPerformanceTrend,
   triggerOptimizationTick,
 } from '@/lib/optimization';
+import type { PerformanceTrendPoint } from '@/lib/optimization';
 import CampaignSelector from './CampaignSelector';
 import CampaignMetricsCard from './CampaignMetricsCard';
 import RecommendationsList from './RecommendationsList';
@@ -31,7 +35,9 @@ export default function OptimizationDashboard() {
     OptimizationRecommendation[]
   >([]);
   const [actions, setActions] = useState<OptimizationAction[]>([]);
+  const [trendData, setTrendData] = useState<PerformanceTrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [trendLoading, setTrendLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{
@@ -60,21 +66,47 @@ export default function OptimizationDashboard() {
     }
   }, [selectedCampaignId]);
 
-  // Load campaign detail data
+  // Load campaign detail data (per-campaign + global)
   const loadCampaignData = useCallback(async () => {
     if (!selectedCampaignId) return;
     try {
-      const [recs, acts] = await Promise.all([
+      // Fetch per-campaign recommendations AND global actions/recommendations
+      const [recs, acts, allActs, allRecs] = await Promise.all([
         fetchRecommendations(selectedCampaignId, 'pending'),
         fetchActions(selectedCampaignId),
+        fetchAllActions(),
+        fetchAllRecommendations('pending'),
       ]);
-      setRecommendations(recs);
-      setActions(acts);
+
+      // Use per-campaign recs if available, otherwise show global
+      setRecommendations(recs.length > 0 ? recs : allRecs);
+
+      // Merge per-campaign actions with global actions (deduplicated)
+      const seenIds = new Set(acts.map((a) => a.action_id));
+      const merged = [
+        ...acts,
+        ...allActs.filter((a) => !seenIds.has(a.action_id)),
+      ];
+      setActions(merged);
       setError(null);
     } catch (err) {
       setRecommendations([]);
       setActions([]);
       console.error('Failed to load campaign data:', err);
+    }
+  }, [selectedCampaignId]);
+
+  // Load trend data for the selected campaign
+  const loadTrendData = useCallback(async () => {
+    if (!selectedCampaignId) return;
+    setTrendLoading(true);
+    try {
+      const data = await fetchPerformanceTrend(selectedCampaignId);
+      setTrendData(data);
+    } catch {
+      setTrendData([]);
+    } finally {
+      setTrendLoading(false);
     }
   }, [selectedCampaignId]);
 
@@ -91,10 +123,10 @@ export default function OptimizationDashboard() {
   // Load detail data when campaign changes
   useEffect(() => {
     if (selectedCampaignId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadCampaignData();
+      loadTrendData();
     }
-  }, [selectedCampaignId, loadCampaignData]);
+  }, [selectedCampaignId, loadCampaignData, loadTrendData]);
 
   // Polling with setTimeout (not setInterval)
   useEffect(() => {
@@ -115,6 +147,7 @@ export default function OptimizationDashboard() {
     setSelectedCampaignId(campaignId);
     setRecommendations([]);
     setActions([]);
+    setTrendData([]);
   };
 
   const handleRecommendationUpdate = () => {
@@ -152,6 +185,7 @@ export default function OptimizationDashboard() {
       }
       setTimeout(() => {
         loadCampaignData();
+        loadTrendData();
       }, 2000);
     } catch (err) {
       setTriggerResult({
@@ -170,6 +204,43 @@ export default function OptimizationDashboard() {
       )
     );
   };
+
+  // Build synthetic ACTIVATE entries for all campaigns as baseline actions
+  const syntheticActions: OptimizationAction[] = campaigns.map((c) => ({
+    id: 0,
+    campaign: 0,
+    campaign_name: c.campaign_name,
+    recommendation: null,
+    action_id: `launch-${c.campaign_id}`,
+    action_type: 'ACTIVATE',
+    entity_type: 'campaign',
+    entity_id: c.meta_campaign_id || c.campaign_id,
+    old_value: {},
+    new_value: {
+      status: 'active',
+      daily_budget_usd: c.daily_budget_usd,
+      ad_sets: c.ad_sets?.length ?? 0,
+      ads: c.ads?.length ?? 0,
+    },
+    mode: 'manual' as const,
+    rationale: `Campaign "${c.campaign_name}" launched via Ad Publishing${
+      c.sandbox_mode ? ' (sandbox)' : ''
+    }. Daily budget $${Number(c.daily_budget_usd ?? 0).toFixed(2)}, ${c.ad_sets?.length ?? 0} ad set(s), ${c.ads?.length ?? 0} ad(s).`,
+    guardrails_applied: [],
+    meta_api_response: {},
+    verified: true,
+    verification_result: {},
+    executed_at: c.start_date || c.created_at,
+  })) as unknown as OptimizationAction[];
+
+  // Merge synthetic + real actions, deduplicate by action_id
+  const allActions = [...syntheticActions, ...actions];
+  const seenActionIds = new Set<string>();
+  const deduplicatedActions = allActions.filter((a) => {
+    if (seenActionIds.has(a.action_id)) return false;
+    seenActionIds.add(a.action_id);
+    return true;
+  });
 
   // Empty state
   if (!loading && campaigns.length === 0) {
@@ -258,7 +329,9 @@ export default function OptimizationDashboard() {
       )}
 
       {/* Performance chart */}
-      {selectedCampaign && <CampaignPerformanceChart />}
+      {selectedCampaign && (
+        <CampaignPerformanceChart data={trendData} loading={trendLoading} />
+      )}
 
       {/* Two-column layout: Recommendations + Settings */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -279,48 +352,8 @@ export default function OptimizationDashboard() {
         </div>
       </div>
 
-      {/* Recent actions */}
-      <RecentActionsList
-        actions={
-          selectedCampaign
-            ? [
-                {
-                  id: 0,
-                  campaign: 0,
-                  campaign_name: selectedCampaign.campaign_name,
-                  recommendation: null,
-                  action_id: `launch-${selectedCampaign.campaign_id}`,
-                  action_type: 'ACTIVATE',
-                  entity_type: 'campaign',
-                  entity_id:
-                    selectedCampaign.meta_campaign_id ||
-                    selectedCampaign.campaign_id,
-                  old_value: {},
-                  new_value: {
-                    status: 'active',
-                    daily_budget_usd: selectedCampaign.daily_budget_usd,
-                    ad_sets: selectedCampaign.ad_sets?.length ?? 0,
-                    ads: selectedCampaign.ads?.length ?? 0,
-                  },
-                  mode: 'manual',
-                  rationale: `Campaign "${selectedCampaign.campaign_name}" launched via Ad Publishing${
-                    selectedCampaign.sandbox_mode ? ' (sandbox)' : ''
-                  }. Daily budget $${Number(
-                    selectedCampaign.daily_budget_usd ?? 0
-                  ).toFixed(2)}, ${selectedCampaign.ad_sets?.length ?? 0} ad set(s), ${selectedCampaign.ads?.length ?? 0} ad(s).`,
-                  guardrails_applied: [],
-                  meta_api_response: {},
-                  verified: true,
-                  verification_result: {},
-                  executed_at:
-                    selectedCampaign.start_date ||
-                    selectedCampaign.created_at,
-                } as unknown as OptimizationAction,
-                ...actions,
-              ]
-            : actions
-        }
-      />
+      {/* Recent actions — shows all campaigns */}
+      <RecentActionsList actions={deduplicatedActions} />
     </div>
   );
 }

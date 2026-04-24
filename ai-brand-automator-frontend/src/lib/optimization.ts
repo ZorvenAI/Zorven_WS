@@ -204,6 +204,48 @@ export async function triggerOptimizationTick(
   return response.json();
 }
 
+export interface PerformanceTrendPoint {
+  date: string;
+  cpa: number | null;
+  roas: number | null;
+  ctr: number | null;
+  spend: number | null;
+}
+
+export async function fetchPerformanceTrend(
+  campaignId: string
+): Promise<PerformanceTrendPoint[]> {
+  const response = await apiClient.get(
+    `${BASE}/campaigns/${campaignId}/performance-trend/`
+  );
+  if (!response.ok) return [];
+  const data = await response.json();
+  return Array.isArray(data) ? data : [];
+}
+
+export async function fetchAllActions(): Promise<OptimizationAction[]> {
+  const response = await apiClient.get(`${BASE}/campaigns/all-actions/`);
+  if (!response.ok) return [];
+  const data = await response.json();
+  const list = Array.isArray(data) ? data : data.results ?? [];
+  return list.map(normalizeAction);
+}
+
+export async function fetchAllRecommendations(
+  status?: string
+): Promise<OptimizationRecommendation[]> {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  const qs = params.toString();
+  const response = await apiClient.get(
+    `${BASE}/campaigns/all-recommendations/${qs ? `?${qs}` : ''}`
+  );
+  if (!response.ok) return [];
+  const data = await response.json();
+  const list = Array.isArray(data) ? data : data.results ?? [];
+  return list.map(normalizeRecommendation);
+}
+
 export async function updateCampaignSettings(
   campaignId: string,
   settings: CampaignSettings

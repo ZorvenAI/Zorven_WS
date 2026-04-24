@@ -23,7 +23,12 @@ from tenants.permissions import (
     RoleBasedPermissionMixin,
 )
 
-from .models import CampaignRegistry, OptimizationAction, OptimizationRecommendation
+from .models import (
+    CampaignRegistry,
+    OptimizationAction,
+    OptimizationRecommendation,
+    PerformanceSnapshot,
+)
 from .serializers import (
     ApproveRecommendationSerializer,
     CampaignRegistryListSerializer,
@@ -328,6 +333,60 @@ class CampaignRegistryViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         serializer = OptimizationActionSerializer(actions_qs[:100], many=True)
         return Response(serializer.data)
 
+    @action(detail=True, methods=["get"], url_path="performance-trend")
+    def performance_trend(self, request, campaign_id=None):
+        """Return up to 7 days of performance snapshots for the chart."""
+        campaign = self.get_object()
+        cutoff = timezone.now() - timezone.timedelta(days=7)
+        snapshots = PerformanceSnapshot.objects.filter(
+            campaign=campaign,
+            recorded_at__gte=cutoff,
+        ).order_by("recorded_at")
+
+        data = []
+        for snap in snapshots:
+            data.append(
+                {
+                    "date": snap.recorded_at.strftime("%b %d %H:%M"),
+                    "cpa": float(snap.cpa_usd) if snap.cpa_usd is not None else None,
+                    "roas": float(snap.roas) if snap.roas is not None else None,
+                    "ctr": float(snap.ctr) if snap.ctr is not None else None,
+                    "spend": (
+                        float(snap.spend_usd) if snap.spend_usd is not None else None
+                    ),
+                }
+            )
+        return Response(data)
+
+    @action(detail=False, methods=["get"], url_path="all-actions")
+    def all_actions(self, request):
+        """List recent actions across ALL tenant campaigns."""
+        tenant = getattr(request, "tenant", None)
+        qs = OptimizationAction.objects.select_related("campaign")
+        if tenant:
+            qs = qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+        else:
+            qs = qs.filter(tenant__isnull=True)
+        serializer = OptimizationActionSerializer(qs[:100], many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["get"], url_path="all-recommendations")
+    def all_recommendations(self, request):
+        """List pending recommendations across ALL tenant campaigns."""
+        tenant = getattr(request, "tenant", None)
+        qs = OptimizationRecommendation.objects.select_related("campaign")
+        if tenant:
+            qs = qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+        else:
+            qs = qs.filter(tenant__isnull=True)
+
+        rec_status = request.query_params.get("status", "pending")
+        if rec_status != "all":
+            qs = qs.filter(status=rec_status)
+
+        serializer = OptimizationRecommendationSerializer(qs[:100], many=True)
+        return Response(serializer.data)
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -456,6 +515,23 @@ def optimization_tick_callback(request):
 
         campaign.save(update_fields=update_fields)
 
+    # Save a performance snapshot for the 7-day trend chart
+    if isinstance(perf, dict) and perf:
+        try:
+            PerformanceSnapshot.objects.create(
+                tenant=campaign.tenant,
+                campaign=campaign,
+                tick_id=data["tick_id"],
+                cpa_usd=perf.get("avg_cpa"),
+                roas=perf.get("avg_roas"),
+                ctr=perf.get("avg_ctr"),
+                spend_usd=perf.get("spend_today"),
+            )
+        except Exception:
+            logger.exception(
+                "Failed to save performance snapshot for campaign %s", campaign_id
+            )
+
     logger.info(
         "Optimization tick callback: campaign=%s recs=%d actions=%d",
         campaign_id,
@@ -523,12 +599,12 @@ def list_active_campaigns_internal(request):
                 "status": c.status,
                 "optimization_mode": c.optimization_mode,
                 "daily_budget": float(c.daily_budget_usd or 0),
-                "target_cpa_usd": float(c.target_cpa_usd)
-                if c.target_cpa_usd is not None
-                else None,
-                "target_roas": float(c.target_roas)
-                if c.target_roas is not None
-                else None,
+                "target_cpa_usd": (
+                    float(c.target_cpa_usd) if c.target_cpa_usd is not None else None
+                ),
+                "target_roas": (
+                    float(c.target_roas) if c.target_roas is not None else None
+                ),
                 "ad_sets": c.ad_sets,
                 "ads": c.ads,
                 "sandbox_mode": c.sandbox_mode,
