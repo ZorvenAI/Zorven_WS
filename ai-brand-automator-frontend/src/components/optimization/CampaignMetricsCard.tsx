@@ -117,10 +117,18 @@ export default function CampaignMetricsCard({
       {metrics.map((metric) => (
         <div
           key={metric.label}
+          tabIndex={0}
+          role="group"
+          aria-label={metric.label}
+          aria-describedby={`tooltip-${metric.label}`}
           className="glass-card p-4 group relative cursor-default"
         >
           {/* Tooltip */}
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 px-3 py-2 rounded-lg bg-brand-midnight border border-white/10 shadow-lg text-xs text-brand-silver opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 z-50">
+          <div
+            id={`tooltip-${metric.label}`}
+            role="tooltip"
+            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 px-3 py-2 rounded-lg bg-brand-midnight border border-white/10 shadow-lg text-xs text-brand-silver opacity-0 pointer-events-none group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200 z-50"
+          >
             {metric.tooltip}
             <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-white/10" />
           </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Loader2, RefreshCw, Brain, Zap } from 'lucide-react';
 import { useTenantRole } from '@/hooks/useTenantRole';
 import {
@@ -32,6 +32,7 @@ export default function IntelligenceFeed({ campaignId, onExtractionComplete }: P
   const [triggering, setTriggering] = useState(false);
   const [triggerMsg, setTriggerMsg] = useState<string | null>(null);
   const [triggerMode, setTriggerMode] = useState<'store_only' | 'auto_trigger'>('store_only');
+  const triggerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,6 +51,12 @@ export default function IntelligenceFeed({ campaignId, onExtractionComplete }: P
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    return () => {
+      if (triggerTimerRef.current) clearTimeout(triggerTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     fetchCampaigns()
@@ -72,7 +79,8 @@ export default function IntelligenceFeed({ campaignId, onExtractionComplete }: P
           ? 'Extraction triggered with auto-trigger — WF2 approvals may appear shortly.'
           : 'Extraction triggered — results will appear shortly.'
       );
-      setTimeout(() => {
+      if (triggerTimerRef.current) clearTimeout(triggerTimerRef.current);
+      triggerTimerRef.current = setTimeout(() => {
         load();
         if (triggerMode === 'auto_trigger' && onExtractionComplete) {
           onExtractionComplete();
