@@ -66,34 +66,40 @@ export default function OptimizationDashboard() {
     }
   }, [selectedCampaignId]);
 
-  // Load campaign detail data (per-campaign + global)
+  // Load campaign detail data — each call is independent so failures
+  // are isolated (one failing endpoint doesn't blank out everything).
   const loadCampaignData = useCallback(async () => {
     if (!selectedCampaignId) return;
-    try {
-      // Fetch per-campaign recommendations AND global actions/recommendations
-      const [recs, acts, allActs, allRecs] = await Promise.all([
-        fetchRecommendations(selectedCampaignId, 'pending'),
+
+    // Fetch per-campaign + global data independently
+    const [recsResult, actsResult, allActsResult, allRecsResult] =
+      await Promise.allSettled([
+        fetchRecommendations(selectedCampaignId, 'all'),
         fetchActions(selectedCampaignId),
         fetchAllActions(),
-        fetchAllRecommendations('pending'),
+        fetchAllRecommendations('all'),
       ]);
 
-      // Use per-campaign recs if available, otherwise show global
-      setRecommendations(recs.length > 0 ? recs : allRecs);
+    const recs =
+      recsResult.status === 'fulfilled' ? recsResult.value : [];
+    const acts =
+      actsResult.status === 'fulfilled' ? actsResult.value : [];
+    const allActs =
+      allActsResult.status === 'fulfilled' ? allActsResult.value : [];
+    const allRecs =
+      allRecsResult.status === 'fulfilled' ? allRecsResult.value : [];
 
-      // Merge per-campaign actions with global actions (deduplicated)
-      const seenIds = new Set(acts.map((a) => a.action_id));
-      const merged = [
-        ...acts,
-        ...allActs.filter((a) => !seenIds.has(a.action_id)),
-      ];
-      setActions(merged);
-      setError(null);
-    } catch (err) {
-      setRecommendations([]);
-      setActions([]);
-      console.error('Failed to load campaign data:', err);
-    }
+    // Use per-campaign recs if available, otherwise show global
+    setRecommendations(recs.length > 0 ? recs : allRecs);
+
+    // Merge per-campaign actions with global actions (deduplicated)
+    const seenIds = new Set(acts.map((a) => a.action_id));
+    const merged = [
+      ...acts,
+      ...allActs.filter((a) => !seenIds.has(a.action_id)),
+    ];
+    setActions(merged);
+    setError(null);
   }, [selectedCampaignId]);
 
   // Load trend data for the selected campaign
@@ -242,6 +248,42 @@ export default function OptimizationDashboard() {
     return true;
   });
 
+  // Build trend data from campaign current metrics when no snapshots exist
+  const effectiveTrendData =
+    trendData.length > 0
+      ? trendData
+      : selectedCampaign &&
+        (selectedCampaign.actual_cpa_usd !== null ||
+          selectedCampaign.actual_roas !== null ||
+          selectedCampaign.actual_ctr !== null)
+      ? [
+          {
+            date: selectedCampaign.last_metrics_update
+              ? new Date(selectedCampaign.last_metrics_update).toLocaleDateString(
+                  'en-US',
+                  { month: 'short', day: 'numeric' }
+                )
+              : 'Current',
+            cpa:
+              selectedCampaign.actual_cpa_usd !== null
+                ? Number(selectedCampaign.actual_cpa_usd)
+                : null,
+            roas:
+              selectedCampaign.actual_roas !== null
+                ? Number(selectedCampaign.actual_roas)
+                : null,
+            ctr:
+              selectedCampaign.actual_ctr !== null
+                ? Number(selectedCampaign.actual_ctr)
+                : null,
+            spend:
+              selectedCampaign.actual_spend_today_usd !== null
+                ? Number(selectedCampaign.actual_spend_today_usd)
+                : null,
+          },
+        ]
+      : [];
+
   // Empty state
   if (!loading && campaigns.length === 0) {
     return (
@@ -330,7 +372,10 @@ export default function OptimizationDashboard() {
 
       {/* Performance chart */}
       {selectedCampaign && (
-        <CampaignPerformanceChart data={trendData} loading={trendLoading} />
+        <CampaignPerformanceChart
+          data={effectiveTrendData}
+          loading={trendLoading}
+        />
       )}
 
       {/* Two-column layout: Recommendations + Settings */}

@@ -73,6 +73,9 @@ class CampaignRegistryViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         "reject": [IsAuthenticated, IsTenantEditor],
         "approve_all": [IsAuthenticated, IsTenantAdmin],
         "actions": [IsAuthenticated, IsTenantViewer],
+        "performance_trend": [IsAuthenticated, IsTenantViewer],
+        "all_actions": [IsAuthenticated, IsTenantViewer],
+        "all_recommendations": [IsAuthenticated, IsTenantViewer],
     }
 
     def get_queryset(self):
@@ -335,7 +338,12 @@ class CampaignRegistryViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="performance-trend")
     def performance_trend(self, request, campaign_id=None):
-        """Return up to 7 days of performance snapshots for the chart."""
+        """Return up to 7 days of performance snapshots for the chart.
+
+        Falls back to a single data point from the campaign's current
+        metrics when no PerformanceSnapshot rows exist yet (before the
+        first COA tick).
+        """
         campaign = self.get_object()
         cutoff = timezone.now() - timezone.timedelta(days=7)
         snapshots = PerformanceSnapshot.objects.filter(
@@ -356,6 +364,41 @@ class CampaignRegistryViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                     ),
                 }
             )
+
+        # Fallback: if no snapshots exist but the campaign has current
+        # metrics, return a single data point so the chart isn't empty.
+        if not data and (
+            campaign.actual_cpa_usd is not None
+            or campaign.actual_roas is not None
+            or campaign.actual_ctr is not None
+        ):
+            ts = campaign.last_metrics_update or campaign.created_at
+            data.append(
+                {
+                    "date": ts.strftime("%b %d %H:%M") if ts else "Current",
+                    "cpa": (
+                        float(campaign.actual_cpa_usd)
+                        if campaign.actual_cpa_usd is not None
+                        else None
+                    ),
+                    "roas": (
+                        float(campaign.actual_roas)
+                        if campaign.actual_roas is not None
+                        else None
+                    ),
+                    "ctr": (
+                        float(campaign.actual_ctr)
+                        if campaign.actual_ctr is not None
+                        else None
+                    ),
+                    "spend": (
+                        float(campaign.actual_spend_today_usd)
+                        if campaign.actual_spend_today_usd is not None
+                        else None
+                    ),
+                }
+            )
+
         return Response(data)
 
     @action(detail=False, methods=["get"], url_path="all-actions")

@@ -84,11 +84,13 @@ export default function RecommendationsList({
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-sm font-medium text-white">
-            Pending Recommendations
+            Recommendations
           </h3>
           <p className="text-xs text-brand-silver/60 mt-0.5">
-            {recommendations.length} action
-            {recommendations.length !== 1 ? 's' : ''} awaiting review
+            {recommendations.length} recommendation
+            {recommendations.length !== 1 ? 's' : ''}
+            {recommendations.filter((r) => r.status === 'pending').length > 0 &&
+              ` (${recommendations.filter((r) => r.status === 'pending').length} pending)`}
           </p>
         </div>
         {recommendations.length > 1 && (
