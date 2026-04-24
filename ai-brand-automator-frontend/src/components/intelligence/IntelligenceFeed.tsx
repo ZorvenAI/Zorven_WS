@@ -16,9 +16,10 @@ import LearningCard from './LearningCard';
 
 interface Props {
   campaignId?: string;
+  onExtractionComplete?: () => void;
 }
 
-export default function IntelligenceFeed({ campaignId }: Props) {
+export default function IntelligenceFeed({ campaignId, onExtractionComplete }: Props) {
   const { canEdit } = useTenantRole();
   const [reports, setReports] = useState<CampaignIntelligenceList[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +72,12 @@ export default function IntelligenceFeed({ campaignId }: Props) {
           ? 'Extraction triggered with auto-trigger — WF2 approvals may appear shortly.'
           : 'Extraction triggered — results will appear shortly.'
       );
-      setTimeout(() => load(), 3000);
+      setTimeout(() => {
+        load();
+        if (triggerMode === 'auto_trigger' && onExtractionComplete) {
+          onExtractionComplete();
+        }
+      }, 3000);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to trigger extraction');
     } finally {
