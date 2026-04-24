@@ -62,6 +62,7 @@ export default function RecentActionsList({
             <thead>
               <tr className="text-brand-silver/60 border-b border-white/5">
                 <th className="text-left py-2 font-medium">Date</th>
+                <th className="text-left py-2 font-medium">Campaign</th>
                 <th className="text-left py-2 font-medium">Action</th>
                 <th className="text-left py-2 font-medium">Entity</th>
                 <th className="text-left py-2 font-medium">Mode</th>
@@ -77,6 +78,9 @@ export default function RecentActionsList({
                 >
                   <td className="py-2.5 text-brand-silver whitespace-nowrap">
                     {formatDate(action.executed_at)}
+                  </td>
+                  <td className="py-2.5 text-brand-silver text-xs max-w-[140px] truncate">
+                    {(action as unknown as { campaign_name?: string }).campaign_name ?? '—'}
                   </td>
                   <td className="py-2.5">
                     <span

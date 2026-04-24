@@ -204,6 +204,50 @@ class CampaignRegistry(models.Model):
         return (timezone.now() - self.start_date).days
 
 
+class PerformanceSnapshot(models.Model):
+    """
+    Point-in-time performance metrics captured on each COA tick.
+
+    Provides the 7-day trend data for the optimization dashboard chart.
+    One row per tick per campaign.
+    """
+
+    tenant = models.ForeignKey(
+        "tenants.Tenant",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="performance_snapshots",
+    )
+    campaign = models.ForeignKey(
+        CampaignRegistry,
+        on_delete=models.CASCADE,
+        related_name="performance_snapshots",
+    )
+    tick_id = models.CharField(max_length=255)
+    cpa_usd = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    roas = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    ctr = models.DecimalField(max_digits=7, decimal_places=4, null=True, blank=True)
+    spend_usd = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-recorded_at"]
+        indexes = [
+            models.Index(
+                fields=["campaign", "recorded_at"],
+                name="idx_perf_snap_campaign_ts",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.campaign_id} @ {self.recorded_at}"
+
+
 class OptimizationRecommendation(models.Model):
     """
     COA-generated optimization recommendation for human approval.
