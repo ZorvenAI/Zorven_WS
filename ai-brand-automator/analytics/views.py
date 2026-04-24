@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 from django.conf import settings as django_settings
 from django.core.cache import cache
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, Max, Min, Q, Sum
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -257,14 +257,32 @@ class TrendsView(APIView):
         # all brand contexts. Per-brand trend data would require rollup
         # partitioning (future enhancement).
 
-        # OG-03: limit data points
-        qs = qs.order_by("period_start")[:MAX_DATA_POINTS]
-
-        data = list(
-            qs.values(
-                "period_start", "avg_value", "min_value", "max_value", "sample_count"
+        # When no pipeline_id filter is applied, the same metric may have
+        # multiple rollup rows per date (one per pipeline). Aggregate them
+        # into a single data point per period_start so the trend chart
+        # matches the scorecard (which aggregates all snapshots).
+        if not pipeline_id:
+            data = list(
+                qs.values("period_start")
+                .annotate(
+                    avg_value=Avg("avg_value"),
+                    min_value=Min("min_value"),
+                    max_value=Max("max_value"),
+                    sample_count=Sum("sample_count"),
+                )
+                .order_by("period_start")[:MAX_DATA_POINTS]
             )
-        )
+        else:
+            # OG-03: limit data points
+            data = list(
+                qs.order_by("period_start").values(
+                    "period_start",
+                    "avg_value",
+                    "min_value",
+                    "max_value",
+                    "sample_count",
+                )[:MAX_DATA_POINTS]
+            )
 
         serializer = TrendPointSerializer(data, many=True)
         cache.set(ck, serializer.data, CACHE_TTL)
