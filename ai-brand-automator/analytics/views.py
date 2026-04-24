@@ -261,17 +261,34 @@ class TrendsView(APIView):
         # multiple rollup rows per date (one per pipeline). Aggregate them
         # into a single data point per period_start so the trend chart
         # matches the scorecard (which aggregates all snapshots).
+        # Use weighted average (by sample_count) so that pipelines with
+        # more snapshots contribute proportionally — matching the
+        # scorecard's Avg(metric_value) over raw snapshots.
         if not pipeline_id:
-            data = list(
+            from django.db.models import F
+
+            grouped = (
                 qs.values("period_start")
                 .annotate(
-                    avg_value=Avg("avg_value"),
+                    _weighted_sum=Sum(F("avg_value") * F("sample_count")),
+                    sample_count=Sum("sample_count"),
                     min_value=Min("min_value"),
                     max_value=Max("max_value"),
-                    sample_count=Sum("sample_count"),
                 )
                 .order_by("period_start")[:MAX_DATA_POINTS]
             )
+            data = []
+            for row in grouped:
+                total = row["sample_count"] or 1
+                data.append(
+                    {
+                        "period_start": row["period_start"],
+                        "avg_value": round(row["_weighted_sum"] / total, 4),
+                        "min_value": row["min_value"],
+                        "max_value": row["max_value"],
+                        "sample_count": row["sample_count"],
+                    }
+                )
         else:
             # OG-03: limit data points
             data = list(
