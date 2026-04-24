@@ -46,6 +46,16 @@ class BrandDiscoveryExtractor(BaseExtractor):
     def _extract_voc(self, job, voc: dict) -> list:
         metrics = []
 
+        # Check if VoC had real customer data to analyse.
+        # data_coverage_score == 0 means the agent found nothing to work with;
+        # any metrics it returns are placeholders (0/neutral) and should not be
+        # stored — they would pollute the dashboard with misleading zeros.
+        sentiment = voc.get("sentiment", {}) or {}
+        raw_coverage = self._safe_get(sentiment, "data_coverage_score", default=None)
+        if raw_coverage is None:
+            raw_coverage = self._safe_get(voc, "data_coverage_score", default=None)
+        has_customer_data = raw_coverage is not None and float(raw_coverage) > 0
+
         # VoC health score — top-level key in service response
         health_score = self._safe_get(voc, "voc_health_score")
         if health_score:
@@ -59,10 +69,9 @@ class BrandDiscoveryExtractor(BaseExtractor):
                 )
             )
 
-        # Sentiment percentages — voc.sentiment.overall_sentiment
-        sentiment = voc.get("sentiment", {})
+        # Sentiment percentages — only store when VoC had real data
         overall = sentiment.get("overall_sentiment", {}) if sentiment else {}
-        if overall:
+        if overall and has_customer_data:
             pos = self._safe_get(overall, "positive", default=0)
             neg = self._safe_get(overall, "negative", default=0)
             # Convert from 0-1 ratio to percentage if needed
@@ -91,9 +100,10 @@ class BrandDiscoveryExtractor(BaseExtractor):
                 )
             )
 
-        # NPS — voc.nps_analysis.current_nps.nps_score
+        # NPS — only store when VoC reports nps_available or has real data
         nps_data = voc.get("nps_analysis", {})
         if isinstance(nps_data, dict):
+            nps_available = nps_data.get("nps_available", False)
             nps_score = self._safe_get(
                 nps_data, "current_nps", "nps_score", default=None
             )
@@ -102,7 +112,9 @@ class BrandDiscoveryExtractor(BaseExtractor):
                 nps_score = self._safe_get(
                     nps_data, "proxy_nps", "nps_score", default=None
                 )
-            if nps_score is not None:
+            # Only record NPS when the agent confirms data was available,
+            # or when there is a non-zero score (real measurement).
+            if nps_score is not None and (nps_available or float(nps_score) != 0):
                 metrics.append(
                     self._make_metric(
                         job,

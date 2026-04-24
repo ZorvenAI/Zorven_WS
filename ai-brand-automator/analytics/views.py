@@ -450,7 +450,7 @@ class DistributionView(APIView):
             metric_name="sentiment_positive_pct",
         )
         pos_qs = _apply_brand_context_filter(pos_qs, brand_ctx)
-        positive = pos_qs.aggregate(avg=Avg("metric_value"))["avg"] or 0
+        pos_agg = pos_qs.aggregate(avg=Avg("metric_value"))["avg"]
 
         neg_qs = MetricSnapshot.objects.filter(
             base_filter,
@@ -458,8 +458,16 @@ class DistributionView(APIView):
             metric_name="sentiment_negative_pct",
         )
         neg_qs = _apply_brand_context_filter(neg_qs, brand_ctx)
-        negative = neg_qs.aggregate(avg=Avg("metric_value"))["avg"] or 0
+        neg_agg = neg_qs.aggregate(avg=Avg("metric_value"))["avg"]
 
+        # If no sentiment snapshots exist at all, return null so the
+        # frontend can hide the gauge instead of showing misleading 100% neutral.
+        if pos_agg is None and neg_agg is None:
+            cache.set(ck, None, CACHE_TTL)
+            return Response(None)
+
+        positive = pos_agg or 0
+        negative = neg_agg or 0
         neutral = max(0, 100 - positive - negative)
 
         data = {
