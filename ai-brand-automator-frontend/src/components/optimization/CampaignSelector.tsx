@@ -2,6 +2,7 @@
 
 import { ChevronDown, Clock, Bell } from 'lucide-react';
 import type { CampaignRegistry } from '@/types/optimization';
+import Tooltip from './Tooltip';
 
 interface CampaignSelectorProps {
   campaigns: CampaignRegistry[];
@@ -51,40 +52,48 @@ export default function CampaignSelector({
         {selected && (
           <div className="flex items-center gap-3">
             {/* Status badge */}
-            <span
-              className={`px-2.5 py-1 text-xs font-medium rounded-full ${
-                selected.status === 'active'
-                  ? 'bg-emerald-500/20 text-emerald-400'
-                  : selected.status === 'paused'
-                    ? 'bg-amber-500/20 text-amber-400'
-                    : selected.status === 'completed'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'bg-white/10 text-brand-silver'
-              }`}
-            >
-              {selected.status.charAt(0).toUpperCase() +
-                selected.status.slice(1)}
-            </span>
+            <Tooltip text="Current campaign delivery status on Meta Ads. Active means ads are running, Paused means delivery is stopped, Completed means the campaign has ended.">
+              <span
+                className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                  selected.status === 'active'
+                    ? 'bg-emerald-500/20 text-emerald-400'
+                    : selected.status === 'paused'
+                      ? 'bg-amber-500/20 text-amber-400'
+                      : selected.status === 'completed'
+                        ? 'bg-blue-500/20 text-blue-400'
+                        : 'bg-white/10 text-brand-silver'
+                }`}
+              >
+                {selected.status.charAt(0).toUpperCase() +
+                  selected.status.slice(1)}
+              </span>
+            </Tooltip>
 
             {/* Age badge */}
-            <span className="flex items-center gap-1 text-xs text-brand-silver">
-              <Clock className="w-3.5 h-3.5" />
-              {selected.age_days}d old
-            </span>
+            <Tooltip text="Number of days since the campaign started running. Younger campaigns may need more time before optimization patterns emerge.">
+              <span className="flex items-center gap-1 text-xs text-brand-silver">
+                <Clock className="w-3.5 h-3.5" />
+                {selected.age_days}d old
+              </span>
+            </Tooltip>
 
             {/* Pending recommendations badge */}
             {selected.pending_recommendations_count > 0 && (
-              <span className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-brand-electric/20 text-brand-electric">
-                <Bell className="w-3.5 h-3.5" />
-                {selected.pending_recommendations_count} pending
-              </span>
+              <Tooltip text="AI-generated optimization recommendations waiting for your review. Approve or reject each to guide the optimization engine.">
+                <span className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-brand-electric/20 text-brand-electric">
+                  <Bell className="w-3.5 h-3.5" />
+                  {selected.pending_recommendations_count} pending
+                </span>
+              </Tooltip>
             )}
 
             {/* Sandbox badge */}
             {selected.sandbox_mode && (
-              <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-amber-500/20 text-amber-400">
-                Sandbox
-              </span>
+              <Tooltip text="This campaign is in sandbox mode. All optimization actions are simulated and not applied to real Meta Ads.">
+                <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-amber-500/20 text-amber-400">
+                  Sandbox
+                </span>
+              </Tooltip>
             )}
           </div>
         )}

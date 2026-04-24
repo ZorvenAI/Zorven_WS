@@ -9,6 +9,7 @@ import {
   batchApproveRecommendations,
 } from '@/lib/optimization';
 import RecommendationCard from './RecommendationCard';
+import Tooltip from './Tooltip';
 
 interface RecommendationsListProps {
   campaignId: string | null;
@@ -83,9 +84,11 @@ export default function RecommendationsList({
     <div className="glass-card p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-sm font-medium text-white">
-            Recommendations
-          </h3>
+          <Tooltip text="AI-generated suggestions to improve campaign performance. Each recommendation includes a proposed change, its rationale, and projected impact. Review and approve or reject each one.">
+            <h3 className="text-sm font-medium text-white cursor-default">
+              Recommendations
+            </h3>
+          </Tooltip>
           <p className="text-xs text-brand-silver/60 mt-0.5">
             {recommendations.length} recommendation
             {recommendations.length !== 1 ? 's' : ''}
@@ -94,14 +97,16 @@ export default function RecommendationsList({
           </p>
         </div>
         {recommendations.length > 1 && (
-          <button
-            onClick={handleBatchApprove}
-            disabled={batchApproving}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-brand-electric/20 text-brand-electric hover:bg-brand-electric/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <CheckCheck className="w-3.5 h-3.5" />
-            {batchApproving ? 'Approving All...' : 'Approve All'}
-          </button>
+          <Tooltip text="Approve all pending recommendations at once. Expired recommendations will be skipped automatically.">
+            <button
+              onClick={handleBatchApprove}
+              disabled={batchApproving}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-brand-electric/20 text-brand-electric hover:bg-brand-electric/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              {batchApproving ? 'Approving All...' : 'Approve All'}
+            </button>
+          </Tooltip>
         )}
       </div>
 

@@ -2,6 +2,7 @@
 
 import { CheckCircle2, XCircle, History } from 'lucide-react';
 import type { OptimizationAction } from '@/types/optimization';
+import Tooltip from './Tooltip';
 
 interface RecentActionsListProps {
   actions: OptimizationAction[];
@@ -43,7 +44,9 @@ export default function RecentActionsList({
     <div className="glass-card p-6">
       <div className="flex items-center gap-2 mb-4">
         <History className="w-4 h-4 text-brand-silver" />
-        <h3 className="text-sm font-medium text-white">Recent Actions</h3>
+        <Tooltip text="Log of optimization actions executed on this campaign. Includes both autonomous (auto-applied) and manual (human-approved) actions. Shows the most recent 20 actions.">
+          <h3 className="text-sm font-medium text-white cursor-default">Recent Actions</h3>
+        </Tooltip>
         <span className="text-xs text-brand-silver/60">
           ({recent.length} shown)
         </span>
@@ -61,13 +64,41 @@ export default function RecentActionsList({
           <table className="w-full text-sm">
             <thead>
               <tr className="text-brand-silver/60 border-b border-white/5">
-                <th className="text-left py-2 font-medium">Date</th>
-                <th className="text-left py-2 font-medium">Campaign</th>
-                <th className="text-left py-2 font-medium">Action</th>
-                <th className="text-left py-2 font-medium">Entity</th>
-                <th className="text-left py-2 font-medium">Mode</th>
-                <th className="text-center py-2 font-medium">Verified</th>
-                <th className="text-left py-2 font-medium">Rationale</th>
+                <th className="text-left py-2 font-medium">
+                  <Tooltip text="When the action was executed.">
+                    <span className="cursor-default">Date</span>
+                  </Tooltip>
+                </th>
+                <th className="text-left py-2 font-medium">
+                  <Tooltip text="The campaign this action was applied to.">
+                    <span className="cursor-default">Campaign</span>
+                  </Tooltip>
+                </th>
+                <th className="text-left py-2 font-medium">
+                  <Tooltip text="The type of optimization action taken (e.g., Pause, Scale, Reallocate, Adjust Bid).">
+                    <span className="cursor-default">Action</span>
+                  </Tooltip>
+                </th>
+                <th className="text-left py-2 font-medium">
+                  <Tooltip text="The specific entity (campaign, ad set, or ad) the action was applied to.">
+                    <span className="cursor-default">Entity</span>
+                  </Tooltip>
+                </th>
+                <th className="text-left py-2 font-medium">
+                  <Tooltip text="How the action was applied. Autonomous means auto-applied by the AI; Manual means a human approved it first.">
+                    <span className="cursor-default">Mode</span>
+                  </Tooltip>
+                </th>
+                <th className="text-center py-2 font-medium">
+                  <Tooltip text="Whether the action was verified as successfully applied on Meta Ads after execution.">
+                    <span className="cursor-default">Verified</span>
+                  </Tooltip>
+                </th>
+                <th className="text-left py-2 font-medium">
+                  <Tooltip text="The AI-generated explanation for why this action was recommended and executed.">
+                    <span className="cursor-default">Rationale</span>
+                  </Tooltip>
+                </th>
               </tr>
             </thead>
             <tbody>

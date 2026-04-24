@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { TrendingDown, TrendingUp, Minus, X } from 'lucide-react';
 import type { ScorecardItem } from '@/types/analytics';
+import Tooltip from '@/components/ui/Tooltip';
 
 interface KpiScorecardProps {
   items: ScorecardItem[];
@@ -186,22 +187,30 @@ export default function KpiScorecard({ items, loading }: KpiScorecardProps) {
               onClick={() => setSelectedItem(item)}
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-brand-silver truncate">
-                  {item.display_name}
-                </span>
-                <TrendIcon trend={item.trend} />
+                <Tooltip text={`${item.display_name} — extracted from completed workflow results. ${item.higher_is_better ? 'Higher values indicate better performance.' : 'Lower values indicate better performance.'} Click for details.`}>
+                  <span className="text-xs text-brand-silver truncate">
+                    {item.display_name}
+                  </span>
+                </Tooltip>
+                <Tooltip text={`Trend: ${item.trend === 'improving' ? 'Improving over the selected period' : item.trend === 'declining' ? 'Declining over the selected period' : 'Stable — no significant change'}.`}>
+                  <span><TrendIcon trend={item.trend} /></span>
+                </Tooltip>
               </div>
               <div className="flex items-end justify-between">
                 <div>
                   <div className="text-2xl font-bold text-white">
                     {formatValue(item.current_value, item.unit)}
                   </div>
-                  <div className={`text-xs mt-1 ${changeBg}`}>
-                    {item.change_pct > 0 ? '+' : ''}
-                    {item.change_pct.toFixed(1)}%
-                  </div>
+                  <Tooltip text={`Percentage change compared to the previous period. ${item.change_pct > 0 ? 'Positive means the metric increased.' : item.change_pct < 0 ? 'Negative means the metric decreased.' : 'No change from previous period.'}`}>
+                    <span className={`text-xs mt-1 inline-block ${changeBg}`}>
+                      {item.change_pct > 0 ? '+' : ''}
+                      {item.change_pct.toFixed(1)}%
+                    </span>
+                  </Tooltip>
                 </div>
-                <SparklineChart data={item.sparkline_data} color={item.color} />
+                <Tooltip text="Sparkline showing recent data points. Click the card to see the full trend chart.">
+                  <span><SparklineChart data={item.sparkline_data} color={item.color} /></span>
+                </Tooltip>
               </div>
             </div>
           );
