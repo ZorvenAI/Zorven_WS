@@ -1,25 +1,25 @@
 # AI Brand Automator
 
-> **Version**: 3.0.0 (AI Pipeline Orchestration + Agent Microservices)
+> **Version**: 5.0.0 (Full Workflow Pipeline — WF1 Discovery + WF2 Brand Strategy + WF3 Campaign Activation + WF3.5 Intelligence Loop)
 > **Status**: ✅ Production Ready
-> **Last Updated**: February 26, 2026
+> **Last Updated**: April 28, 2026
 
 **Multi-tenant SaaS platform for AI-powered brand building**
 
-A Django REST Framework backend with Next.js frontend and 6 FastAPI agent microservices that helps businesses create and manage their brand strategy, run AI-powered analysis pipelines, and automate social media — all powered by Google Gemini AI and LangGraph orchestration.
+A Django REST Framework backend with Next.js 15 frontend and 24 Python FastAPI agent microservices that helps businesses create and manage their brand strategy, run AI-powered analysis pipelines, and automate advertising campaigns — all powered by Google Gemini 2.0 Flash, Anthropic Claude, and sequential pipeline orchestration.
 
 ## Features
 
 ### Core Platform
-- 🔐 **Multi-tenant Architecture** - Schema-based data isolation with django-tenants
-- 🤖 **AI Brand Strategy Generation** - Powered by Google Gemini 2.0 Flash
-- 📝 **5-Step Onboarding** - Guided company setup with asset uploads
-- 💬 **AI Chatbot** - Interactive brand guidance and file search
-- 📊 **Dynamic Dashboard** - Real-time metrics and activity tracking
-- 🔄 **Auto Token Refresh** - Seamless 7-day authentication
-- 📁 **File Upload** - Multi-file drag-and-drop with GCS integration
-- 💳 **Stripe Integration** - Subscription plans with checkout and billing portal
-- 📱 **Mobile Ready** - Responsive design with network testing support
+- 🔐 **Multi-tenant Architecture** — Schema-based data isolation with django-tenants
+- 🤖 **AI Brand Strategy Generation** — Powered by Google Gemini 2.0 Flash
+- 📝 **5-Step Onboarding** — Guided company setup with asset uploads and PDF export
+- 💬 **AI Chatbot** — Interactive brand guidance with file search and auto-titling
+- 📊 **Dynamic Dashboard** — Real-time metrics, recent activity, and overview cards
+- 🔄 **Auto Token Refresh** — Seamless 7-day JWT authentication
+- 📁 **File Upload** — Multi-file drag-and-drop with GCS integration and deduplication
+- 💳 **Stripe Integration** — Subscription plans with checkout and billing portal
+- 📱 **Mobile Ready** — Responsive design with network testing support
 
 ### Social Media Integrations (All Complete ✅)
 | Platform | OAuth | Posting | Scheduling | Media | Analytics |
@@ -31,12 +31,125 @@ A Django REST Framework backend with Next.js frontend and 6 FastAPI agent micros
 | 📍 Google Business Profile | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### Automation Features
-- 📅 **Content Calendar** - Schedule and manage social media posts across platforms
-- ⚡ **Celery Automation** - Background task processing for scheduled posts
-- 🖼️ **Media Attachments** - Images, videos, documents with platform-specific limits
-- 💾 **Draft Save/Restore** - Auto-save drafts with media support in compose modals
-- 📊 **Social Analytics** - Engagement metrics and insights for all platforms
-- 🤖 **MCP Server** - 23 tools for AI agent integration (Claude, GPT)
+- 📅 **Content Calendar** — Schedule and manage social media posts across platforms
+- ⚡ **Celery Automation** — 6 task queues for background processing
+- 🖼️ **Media Attachments** — Images, videos, documents with platform-specific limits
+- 💾 **Draft Save/Restore** — Auto-save drafts with media support in compose modals
+- 📊 **Social Analytics** — Engagement metrics and insights for all platforms
+- 🤖 **MCP Server** — 23 tools for AI agent integration (Claude, GPT)
+
+### AI Pipeline Orchestration ✅
+- 🔗 **Pipeline-as-Code** — Manifest-driven DAG system for multi-agent pipelines
+- 🧠 **Dynamic Pipeline Composition** — Gemini function-calling auto-detects intent and composes pipelines from the node catalog (chat mode)
+- 📊 **Real-time Progress** — ThoughtTrace UI with per-node status tracking via Redis + polling
+- 🔍 **Web Discovery** — Tavily-powered research with URL scraping and content cleaning
+- ✍️ **Content Authoring** — SEO/AEO/GEO-compliant blog generation from research data
+- 📱 **Social Publishing** — Platform-specific content adaptation and automated posting
+- 💬 **Chat Auto-Titling** — Gemini Flash-powered session title generation via Kafka
+- 🤖 **AI Assistant** — Conversational pipeline launcher with manifest auto-detection
+- ❌ **Job Cancellation** — Redis-based cancel flag checked before each node
+- 📈 **Sequential Execution** — Topological order (Kahn's algorithm) with per-node progress callbacks
+
+### Workflow 1: Discovery & Research ✅
+| Service | Port | Purpose |
+|---------|------|---------|
+| Pipeline Orchestrator | 8010 | Sequential DAG execution, callback reporting |
+| Discovery Agent | 8020 | Web research via Tavily, URL scraping, HTML cleaning |
+| Market Research Agent | 8021 | Market sizing, TAM/SAM/SOM analysis, trends |
+| Competitor Intel Agent | 8022 | Competitor profiling, SWOT, benchmarking |
+| Audience Persona Agent | 8023 | Audience persona profiling (Claude Sonnet 4) |
+| Trend Cultural Agent | 8024 | Trend monitoring, cultural insights, opportunity alerts |
+| VoC Agent | 8025 | Voice of Customer analysis, sentiment, NPS (Claude Sonnet 4) |
+| Intelligence Agent | 8030 | ISO 10668 brand valuation, BSI scoring |
+
+### Workflow 2: Brand Strategy ✅
+| Service | Port | Purpose |
+|---------|------|---------|
+| Brand Positioning Agent | 8031 | Differentiation, perceptual mapping (Claude Sonnet 4) |
+| Brand Architecture Agent | 8032 | Hierarchy tree, naming, portfolio growth (Claude Sonnet 4) |
+| Brand Personality Agent | 8033 | Aaker 5D, archetypes, values, voice matrix (Claude Sonnet 4) |
+| Brand Naming Agent | 8034 | Name candidates, availability checking, tagline synthesis (Claude Sonnet 4) |
+| Brand Story Agent | 8035 | Origin stories, mission/vision, pitches, channel narratives (Claude Sonnet 4) |
+
+### Workflow 3: Campaign Activation ✅
+| Service | Port | Purpose |
+|---------|------|---------|
+| Campaign Architecture Agent | 8041 | Meta Ads blueprint, funnel mapping, audience targeting (Claude Sonnet 4) |
+| Creative Generation Agent | 8042 | AI ad images (Nano Banana 2), ad copy, Meta compliance (Claude Sonnet 4) |
+| Ad Publishing Agent | 8043 | Meta Ads API publishing, human approval gate (Claude Sonnet 4) |
+| Campaign Optimization Agent | 8044 | Continuous optimization, Meta Insights/Management API (Claude Sonnet 4 + Celery Beat) |
+
+### Workflow 3.5: Intelligence Loop ✅
+| Service | Port | Purpose |
+|---------|------|---------|
+| Intelligence Loop Agent | 8045 | Consumes optimization learnings, extracts campaign insights, feeds RAG |
+
+### Supporting Services ✅
+| Service | Port | Purpose |
+|---------|------|---------|
+| Chat Titling Worker | 8040 | Auto-titles chat sessions via Gemini Flash + Kafka |
+| Content Agent | 8050 | SEO/AEO/GEO-compliant blog authoring |
+| Social Agent | 8060 | Platform-specific post adaptation, publishing via MCP |
+| RAG Uploader Agent | 8070 | Persists documents to Vertex AI RAG Store |
+| Brand Equity Calculator | 8090 | Public brand equity calculator (Anthropic Claude) |
+| Odoo MCP Server | 8095 | Odoo ERP MCP bridge with 101 tools |
+| Odoo Worker Agent | 8100 | Multi-persona Odoo worker, PAOR loop |
+
+### Workflow Analytics Dashboard ✅
+- 📊 **KPI Scorecard** — Real-time metric cards extracted from completed pipeline jobs
+- 📈 **Trend Charts** — Time-series visualization with daily/weekly/monthly rollups
+- ⚖️ **Period Comparison** — Side-by-side metric comparison across time ranges
+- 🎯 **Sentiment Distribution** — Gauge visualization for brand sentiment health
+- 📋 **Analytics Coverage** — Badge showing extraction completeness across pipelines
+- 🔍 **Brand Affinity Verification** — 3-tier validation (input match, content scan, RAG)
+- 🏗️ **18 Pipeline Extractors** — Per-workflow metric extraction from result_data
+
+### Optimization Dashboard ✅
+- 📊 **Campaign Performance Charts** — Real-time Meta Ads campaign metrics
+- 🎯 **Campaign Selector** — Multi-campaign monitoring and comparison
+- 💡 **Recommendations Engine** — AI-generated optimization suggestions
+- ⚙️ **Optimization Settings** — Configurable guardrails and thresholds
+- 📋 **Recent Actions List** — Audit trail of optimization actions taken
+- 🔄 **Manual Tick Trigger** — On-demand optimization cycle with skip-reason feedback
+
+### Intelligence Loop Dashboard ✅
+- 📊 **Intelligence Reports** — Campaign insight extraction and analysis
+- 🔄 **WF2 Approval Queue** — Human review gate for brand strategy updates
+- 📈 **Learning Feed** — Continuous optimization learnings from WF3
+
+### Workspace Management ✅
+- 🎨 **Visual Workflow Editor** — React Flow-based pipeline canvas
+- 📸 **Workflow Snapshots** — Frozen execution state for replay
+- 🔗 **Chat↔Workflow Links** — Bidirectional navigation between chat and workspace
+- 🔒 **Collaborative Editing Locks** — Redis-based (2h TTL) to prevent conflicts
+- 📡 **Real-time Progress** — WebSocket updates via `WorkspaceConsumer`
+
+### Dynamic Skill Loading ✅
+
+Runtime skill system that dynamically injects contextual instructions into agent LLM prompts based on user intent. Skills are `.md` files loaded at orchestrator startup — adding a new skill requires no code changes.
+
+> **155 skills** across all agents (28 general + 12 brand-positioning + 12 brand-architecture + 12 brand-personality + 14 brand-naming + 14 brand-story + 12 campaign-architecture + 12 creative-generation + 12 ad-publishing + 27 Odoo-specific).
+
+### Media Curation Service ✅
+- 🎬 **Multi-format Processing** — Documents, images, video, and audio
+- 🔍 **AI Enrichment** — Entity extraction, summarization, keyword generation via Gemini
+- 🛡️ **PII Redaction** — Cloud DLP integration with tenant-specific configuration
+- 📊 **Structured Output** — Normalized JSON for downstream RAG indexing
+- 🔄 **Event-Driven** — Kafka-based pipeline with retry and dead letter queue
+- 🏗️ **Hexagonal Architecture** — Clean separation with Ports & Adapters pattern
+
+### RAG Index Service ✅
+- 🔍 **Document Indexing** — Upsert curated JSON documents into Vertex AI Data Store
+- 🗑️ **Document Deletion** — Remove documents from the index on delete events
+- ⏱️ **Rate Limiting** — Sliding window algorithm enforcing 600 req/min quota
+- 🔄 **Event-Driven** — Kafka consumer with CloudEvents format
+- 🏗️ **Hexagonal Architecture** — Clean separation with Ports & Adapters pattern
+
+### Odoo ERP Integration ✅
+- 🔧 **101 MCP Tools** — Full Odoo CRUD via Model Context Protocol
+- 👥 **Multi-Persona Worker** — PAOR loop (Plan, Act, Observe, Reflect)
+- 🔐 **RBAC Engine** — 16 YAML role definitions for tool-level access control
+- 🏢 **Tenant Provisioning** — Automated Odoo company setup via Kafka events
 
 ### Google Business Profile ✅
 - 📍 GBP listing CRUD operations
@@ -45,97 +158,35 @@ A Django REST Framework backend with Next.js frontend and 6 FastAPI agent micros
 - 📈 GBP insights and analytics
 - 🔧 10 dedicated MCP tools
 
-### AI Pipeline Orchestration (NEW ✅)
-- 🔗 **Pipeline-as-Code** - LangGraph-compatible manifest system for multi-agent pipelines
-- 📊 **Real-time Progress** - ThoughtTrace UI with per-agent status tracking
-- 🏦 **ISO 10668 Brand Valuation** - Royalty Relief NPV and Brand Strength Index scoring
-- 🔍 **Web Discovery** - Tavily-powered research with URL scraping and content cleaning
-- ✍️ **Content Authoring** - SEO/AEO/GEO-compliant blog generation from research data
-- 📱 **Social Publishing** - Platform-specific content adaptation and automated posting
-- 💬 **Chat Auto-Titling** - Gemini Flash-powered session title generation via Kafka
-- 🤖 **AI Assistant** - Conversational pipeline launcher with manifest auto-detection
-
-### Agent Microservices (NEW ✅)
-| Service | Port | Purpose |
-|---------|------|---------|
-| Pipeline Orchestrator | 8010 | LangGraph DAG execution, callback reporting |
-| Discovery Agent | 8020 | Web research via Tavily, URL scraping, HTML cleaning |
-| Intelligence Agent | 8030 | ISO 10668 valuation, BSI scoring, competitive gap analysis |
-| Chat Titling Worker | 8040 | Auto-titles chat sessions via Gemini Flash + Kafka |
-| Content Agent | 8050 | SEO/AEO/GEO-compliant blog authoring |
-| Social Agent | 8060 | Platform-specific post adaptation, publishing via MCP |
-| RAG Uploader Agent | 8070 | Persists documents to Vertex AI RAG Store via ingestion pipeline |
-
-### Dynamic Skill Loading (NEW ✅)
-
-Runtime skill system that dynamically injects contextual instructions into agent LLM prompts based on user intent. Skills are `.md` files loaded at orchestrator startup — adding a new skill requires no code changes.
-
-| Skill | Target Agent | Priority | Purpose | Example Trigger |
-|-------|-------------|----------|---------|-----------------|
-| persona-enforcer | blog_author | 15 | Tenant brand tone enforcement (Corporate/Playful/Technical) | *"Write a blog post about..."* |
-| geo-citation-manager | blog_author | 12 | Prioritize tenant KB citations over public web sources | *"Write a research-backed article..."* |
-| seo-content-guidelines | blog_author | 10 | SEO optimization, keyword placement, E-E-A-T signals | *"Write an SEO-optimized blog..."* |
-| brand-voice-consistency | blog_author, social_promoter | 8 | Consistent brand voice across content | *"Create brand-aligned content..."* |
-| citation-quality | blog_author | 5 | Source quality standards, inline citation format | *"Write a data-driven article..."* |
-| social-tenant-orchestrator | social_promoter | 12 | Role-based publishing (ADMIN→publish, EDITOR→draft) | *"Publish this to LinkedIn..."* |
-| social-platform-best-practices | social_promoter | 10 | Platform-specific engagement tactics | *"Promote on social media..."* |
-| knowledge-retrieval-tool | default_agent | 10 | Vertex AI Search integration, chunk quality | *"Search my documents for..."* |
-| context-synthesizer | default_agent | 8 | RAG + chat history blending, answer relevancy | *"What does our brand guide say..."* |
-| competitive-analysis-methodology | valuation_logic, gap_analyzer | 10 | ISO 10668 framework, competitive gap analysis | *"Analyze our competitive position..."* |
-| manifest-ui-mapper | manager | 10 | Generate UI schema for frontend chart rendering | *"Run a brand analysis report..."* |
-| discovery-event-tracer | web_research | 10 | Real-time browsing trace events for ThoughtTrace UI | *"Research Tesla's market..."* |
-| smart-titler | rag_uploader | 10 | Descriptive filenames for generic uploads | *"Archive uploaded documents..."* |
-| ingestion-bridge | rag_uploader | 8 | Tenant-scoped ingestion pipeline payload formatting | *"Store this file in RAG index..."* |
-| session-titler | chat_titler | 10 | 3-5 word session titles from user intent | *(Auto-triggered after first response)* |
-
-> **15 skills** across all 8 agents. See [docs/SKILLS_REFERENCE.md](docs/SKILLS_REFERENCE.md) for full details.
-
-### Media Curation Service ✅
-- 🎬 **Multi-format Processing** - Documents, images, video, and audio
-- 🔍 **AI Enrichment** - Entity extraction, summarization, keyword generation via Gemini
-- 🛡️ **PII Redaction** - Cloud DLP integration with tenant-specific configuration
-- 📊 **Structured Output** - Normalized JSON for downstream RAG indexing
-- 🔄 **Event-Driven** - Kafka-based pipeline with retry and dead letter queue
-- ⚡ **Celery Tasks** - Background processing with status tracking via Redis
-- 🏗️ **Hexagonal Architecture** - Clean separation with Ports & Adapters pattern
-- 📈 **443 tests** with 86% coverage
-
-### RAG Index Service (NEW ✅)
-- 🔍 **Document Indexing** - Upsert curated JSON documents into Vertex AI Data Store
-- 🗑️ **Document Deletion** - Remove documents from the index on delete events
-- ⏱️ **Rate Limiting** - Sliding window algorithm enforcing 600 req/min quota
-- 📊 **Status Tracking** - Redis-based sync status with TTL
-- 🔄 **Event-Driven** - Kafka consumer with CloudEvents format
-- ⚡ **Celery Tasks** - Background processing with retry logic
-- 🏗️ **Hexagonal Architecture** - Clean separation with Ports & Adapters pattern
-- 📈 **322 tests** covering full pipeline
-
 ## Tech Stack
 
 ### Backend
-- **Django 4.2.16** + Django REST Framework
-- **6 FastAPI Microservices** for agent pipeline execution
-- **LangGraph** for multi-agent pipeline orchestration
+- **Django 4.2** + Django REST Framework
+- **24 FastAPI Microservices** for agent pipeline execution
+- **Sequential Pipeline Orchestration** with topological node execution
 - **Kong Gateway** (DB-less mode) for API gateway, JWT offloading, rate limiting
 - **PostgreSQL** (Neon hosted) with multi-tenancy
 - **Google Gemini 2.0 Flash** for AI content generation
+- **Anthropic Claude** (Sonnet 4) for brand strategy and campaign agents
 - **Stripe** for subscription management
-- **Celery 5.6** + Redis for background task processing
-- **Kafka** (optional) for event streaming and audit logging
+- **Celery 5.6** + Redis for background task processing (6 queues)
+- **Kafka** (optional) for event streaming and audit logging (40+ topics)
 - **JWT Authentication** with token refresh
 - **MCP Server** (Model Context Protocol) with 23 tools
 
 ### Frontend
 - **Next.js 15** + React 19
-- **TypeScript** for type safety
-- **Tailwind CSS** for styling
-- **Automatic API client** with token management
+- **TypeScript** (strict mode) for type safety
+- **Tailwind CSS v4** with "Digital Twilight" dark theme
+- **React Flow** for visual workflow editing
+- **Recharts** for analytics and optimization dashboards
+- **Automatic API client** with token management and multi-tenancy headers
 
 ### Deployment
 - **Railway** for production hosting (with change detection deploys)
 - **Docker** for containerization
 - **GitHub Actions** for CI/CD (8 test jobs)
-- **2770+ tests** (pytest + Hypothesis + microservice suites)
+- **3,300+ tests** (pytest + Hypothesis + microservice suites)
 
 ## Project Structure
 
@@ -143,68 +194,186 @@ Runtime skill system that dynamically injects contextual instructions into agent
 .
 ├── ai-brand-automator/              # Django backend
 │   ├── ai_services/                 # AI integration & chat (Gemini 2.0 Flash)
+│   ├── analytics/                   # Workflow analytics (extractors, rollups, scorecard)
 │   ├── automation/                  # Social media automation & MCP server
-│   ├── orchestration/               # Pipeline orchestration (NEW)
-│   │   ├── models.py                # PipelineManifest, AnalysisJob
-│   │   ├── views.py                 # Job CRUD, callback, cancel
-│   │   ├── services.py              # OrchestratorDispatcher
-│   │   ├── result_handler.py        # Pipeline result processing
-│   │   ├── kafka_consumers.py       # Result + Trace consumers
-│   │   └── tasks.py                 # Celery dispatch task
-│   ├── media_curation/              # Media processing pipeline (Hexagonal)
-│   ├── rag_index/                   # RAG Index Service (Hexagonal)
 │   ├── data_ingestion/              # Data ingestion pipeline (Hexagonal)
 │   ├── files/                       # File upload service
-│   ├── onboarding/                  # Company onboarding
+│   ├── intelligence_loop/           # Intelligence reports & WF2 approval queue
+│   ├── media_curation/              # Media processing pipeline (Hexagonal)
+│   ├── onboarding/                  # Company onboarding with PDF export
+│   ├── optimization/                # Campaign optimization dashboard API
+│   ├── orchestration/               # Pipeline orchestration (dispatch, callbacks, results)
+│   ├── rag_index/                   # RAG Index Service (Hexagonal)
 │   ├── subscriptions/               # Stripe subscription management
 │   ├── tenants/                     # Multi-tenancy models
+│   ├── workspace/                   # Workflow editor (React Flow, snapshots, WebSocket)
 │   └── brand_automator/             # Django settings & Celery config
 │
-├── pipeline-orchestrator-svc/       # LangGraph pipeline engine (FastAPI :8010)
+├── pipeline-orchestrator-svc/       # Pipeline engine (FastAPI :8010)
 ├── discovery-agent-svc/             # Web research agent (FastAPI :8020)
+├── market-research-agent-svc/       # Market sizing agent (FastAPI :8021)
+├── competitor-intel-agent-svc/      # Competitor profiling agent (FastAPI :8022)
+├── audience-persona-agent-svc/      # Audience persona agent (FastAPI :8023)
+├── trend-cultural-agent-svc/        # Trend monitoring agent (FastAPI :8024)
+├── voc-agent-svc/                   # Voice of Customer agent (FastAPI :8025)
 ├── intelligence-agent-svc/          # Brand valuation agent (FastAPI :8030)
+├── brand-positioning-agent-svc/     # Brand positioning agent (FastAPI :8031)
+├── brand-architecture-agent-svc/    # Brand architecture agent (FastAPI :8032)
+├── brand-personality-agent-svc/     # Brand personality agent (FastAPI :8033)
+├── brand-naming-agent-svc/          # Brand naming agent (FastAPI :8034)
+├── brand-story-agent-svc/           # Brand story agent (FastAPI :8035)
 ├── chat-titling-worker/             # Chat title generator (FastAPI :8040)
+├── campaign-architecture-agent-svc/ # Campaign architecture agent (FastAPI :8041)
+├── creative-generation-agent-svc/   # Creative generation agent (FastAPI :8042)
+├── ad-publishing-agent-svc/         # Ad publishing agent (FastAPI :8043)
+├── campaign-optimization-agent-svc/ # Campaign optimization agent (FastAPI :8044)
+├── intelligence-loop-agent-svc/     # Intelligence loop agent (FastAPI :8045)
 ├── content-agent-service/           # Blog authoring agent (FastAPI :8050)
 ├── social-agent-service/            # Social publishing agent (FastAPI :8060)
 ├── rag-uploader-agent-service/      # RAG document archival agent (FastAPI :8070)
+├── brand-equity-calculator-svc/     # Public brand equity calc (FastAPI :8090)
+├── odoo-mcp-server-svc/             # Odoo ERP MCP bridge (FastAPI :8095)
+├── odoo-worker-agent-svc/           # Odoo worker agent (FastAPI :8100)
 │
 ├── ai-brand-automator-frontend/     # Next.js frontend
 │   └── src/
 │       ├── app/                     # Next.js pages
 │       │   ├── automation/          # Social media automation
+│       │   ├── brand-equity/        # Public brand equity calculator
 │       │   ├── dashboard/           # Main dashboard
-│       │   │   ├── pipelines/       # Pipeline management (NEW)
-│       │   │   ├── analysis/        # Brand equity reports (NEW)
-│       │   │   ├── ai-assistant/    # Conversational pipeline launcher (NEW)
-│       │   │   └── team/            # Team management
-│       │   └── subscription/        # Billing management
-│       ├── components/              # React components
-│       │   └── pipelines/           # Pipeline visualization (NEW)
-│       ├── hooks/                   # Custom hooks (useAuth, usePollingJob)
-│       └── lib/                     # API client & utilities
+│       │   │   ├── pipelines/       # Pipeline management
+│       │   │   ├── analysis/        # Brand equity reports
+│       │   │   └── ai-assistant/    # Conversational pipeline launcher
+│       │   ├── intelligence/        # Intelligence loop dashboard
+│       │   ├── optimization/        # Campaign optimization dashboard
+│       │   └── ...                  # auth, billing, chat, files, onboarding
+│       ├── components/
+│       │   ├── analytics/           # KPI scorecard, trend charts, distribution gauges
+│       │   ├── optimization/        # Campaign metrics, recommendations, settings
+│       │   ├── intelligence/        # Intelligence reports, approval queue
+│       │   ├── workspace/           # Workflow canvas, editor components
+│       │   ├── pipelines/           # Pipeline visualization, ThoughtTrace
+│       │   ├── brand/               # Brand equity components
+│       │   └── ...                  # auth, chat, dashboard, layout, ui
+│       ├── hooks/                   # useAuth, usePollingJob, useTenantRole
+│       └── lib/                     # API client, analytics, workspace, orchestration
 │
-├── tests/integration/               # Cross-service integration tests (NEW)
-│   ├── phase1_contracts/            # API contract tests
-│   ├── phase2_domain/               # Domain logic tests
-│   └── phase3_stress/               # Load/stress tests
-│
-├── deployment/                      # Master Docker Compose + Railway configs
-│   ├── docker/                      # Dockerfiles for core services
-│   ├── scripts/                     # Startup scripts
-│   └── docker-compose.yml           # All services orchestration
-│
-├── .github/workflows/               # CI/CD pipelines
-│   ├── ci-cd.yml                    # 8-job test pipeline
-│   └── deploy-railway.yml           # Change-detection deployment
-│
+├── vendor/odoo/community/           # Git submodule — Odoo Community Edition 19.0
+├── tests/integration/               # Cross-service integration tests (3 phases)
+├── deployment/                      # Master Docker Compose + Kong config
+├── scripts/                         # E2E test scripts, GitHub issue automation
 └── docs/                            # Architecture documentation
 ```
+
+## Architecture
+
+### Request Flow
+
+```
+Browser → Next.js (:3000) → apiClient (JWT auto-refresh, X-Tenant-ID) → Kong Gateway (:8000)
+  → JWT validation, CORS, rate limiting → Django Backend (:8001) → Serializer → Model → PostgreSQL
+```
+
+### Pipeline Flow
+
+```
+Django dispatches job → Pipeline Orchestrator (:8010) → sequential node execution (Kahn's algorithm)
+
+  WF1: Discovery & Research
+  ├── discovery-agent (:8020) → web research
+  ├── market-research-agent (:8021) → market sizing
+  ├── competitor-intel-agent (:8022) → SWOT analysis
+  ├── audience-persona-agent (:8023) → persona profiling
+  ├── trend-cultural-agent (:8024) → trend monitoring
+  ├── voc-agent (:8025) → voice of customer
+  └── intelligence-agent (:8030) → brand valuation
+
+  WF2: Brand Strategy
+  ├── brand-positioning-agent (:8031) → differentiation
+  ├── brand-architecture-agent (:8032) → portfolio hierarchy
+  ├── brand-personality-agent (:8033) → Aaker 5D / archetypes
+  ├── brand-naming-agent (:8034) → naming & taglines
+  └── brand-story-agent (:8035) → narratives & pitches
+
+  WF3: Campaign Activation
+  ├── campaign-architecture-agent (:8041) → Meta Ads blueprint
+  ├── creative-generation-agent (:8042) → AI ad creative
+  ├── ad-publishing-agent (:8043) → Meta Ads publishing + approval gate
+  └── campaign-optimization-agent (:8044) → continuous optimization
+
+  WF3.5: Intelligence Loop
+  └── intelligence-loop-agent (:8045) → extracts learnings → feeds RAG
+
+  Supporting Agents
+  ├── content-agent (:8050) → blog authoring
+  ├── social-agent (:8060) → social posting
+  ├── rag-uploader (:8070) → RAG archival
+  └── odoo-worker (:8100) → ERP operations
+
+  → Callback → Django AnalysisJob (atomic update) → extract_metrics_task (analytics)
+```
+
+**Two pipeline modes:**
+- **Chat (auto-detect)**: `PipelineComposer` uses Gemini function-calling to dynamically compose a pipeline from the node catalog
+- **Pipeline UI (manifest-driven)**: Fixed DAG defined in `PipelineManifest` from `seed_manifests.py`
+
+### Data Pipeline (Hexagonal Architecture)
+
+```
+Upload → data_ingestion → Kafka → media_curation → Kafka → rag_index (Vertex AI)
+```
+
+Pipeline apps use **Pydantic domain models (not Django ORM)**, ABC ports, and concrete adapters.
+
+### Analytics Pipeline
+
+```
+Job completes → result_handler.py → extract_metrics_task (Celery)
+  → Brand affinity verification (3 tiers) → Pipeline-specific extractor
+  → MetricSnapshot rows → Rollup aggregation (daily/weekly/monthly)
+  → Cache invalidation → Kafka event (optional)
+```
+
+18 pipeline-specific extractors read KPIs from `result_data.node_results.<node_id>`. Nightly reconciliation via Celery Beat at 02:00 UTC.
+
+## Service Ports
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Kong Gateway | 8000 | External API entry point |
+| Django Backend | 8001 | Internal only (via Kong) |
+| Frontend | 3000 | Next.js development server |
+| Pipeline Orchestrator | 8010 | Sequential DAG execution engine |
+| Discovery Agent | 8020 | Web research service |
+| Market Research Agent | 8021 | Market sizing, TAM/SAM/SOM |
+| Competitor Intel Agent | 8022 | Competitor profiling, SWOT |
+| Audience Persona Agent | 8023 | Persona generation |
+| Trend Cultural Agent | 8024 | Trend monitoring |
+| VoC Agent | 8025 | Voice of Customer analysis |
+| Intelligence Agent | 8030 | Brand valuation (ISO 10668) |
+| Brand Positioning Agent | 8031 | Positioning strategy |
+| Brand Architecture Agent | 8032 | Portfolio hierarchy |
+| Brand Personality Agent | 8033 | Personality & values |
+| Brand Naming Agent | 8034 | Naming & taglines |
+| Brand Story Agent | 8035 | Narrative & pitches |
+| Chat Titling Worker | 8040 | Chat auto-titling |
+| Campaign Architecture Agent | 8041 | Meta Ads campaign blueprint |
+| Creative Generation Agent | 8042 | AI ad creative |
+| Ad Publishing Agent | 8043 | Meta Ads publishing |
+| Campaign Optimization Agent | 8044 | Continuous optimization |
+| Intelligence Loop Agent | 8045 | Optimization learnings extraction |
+| Content Agent | 8050 | Blog authoring service |
+| Social Agent | 8060 | Social content adaptation |
+| RAG Uploader Agent | 8070 | RAG document archival |
+| Kafka UI | 8080 | Kafka monitoring (optional) |
+| MCP Server | 8085 | AI agent tools (SSE) |
+| Brand Equity Calculator | 8090 | Public brand equity (Anthropic Claude) |
+| Odoo MCP Server | 8095 | Odoo ERP bridge (101 tools) |
+| Odoo Worker Agent | 8100 | Multi-persona Odoo worker |
 
 ## Kong Gateway Architecture
 
 Kong Gateway runs in **DB-less (declarative) mode** as the API entry point, providing JWT authentication offloading, rate limiting, and CORS handling.
-
-### Architecture Diagram
 
 ```
                     ┌─────────────────────────────────────────┐
@@ -217,28 +386,9 @@ Kong Gateway runs in **DB-less (declarative) mode** as the API entry point, prov
                                                                          │
                                                                          ▼
                                                                   Gemini 2.0 Flash
+                                                                  Anthropic Claude
                                                                   Stripe / Celery+Redis
 ```
-
-### Service Ports
-
-| Service | Port | Description |
-|---------|------|-------------|
-| Kong Gateway | 8000 | External API entry point |
-| Django Backend | 8001 | Internal only (via Kong) |
-| Kong Admin API | 8001 | Configuration/debugging (Docker only; backend is not host-exposed) |
-| Frontend | 3000 | Next.js development server |
-| Pipeline Orchestrator | 8010 | LangGraph pipeline engine |
-| Discovery Agent | 8020 | Web research service |
-| Intelligence Agent | 8030 | Brand valuation service |
-| Chat Titling Worker | 8040 | Chat auto-titling |
-| Content Agent | 8050 | Blog authoring service |
-| Social Agent | 8060 | Social content adaptation |
-| RAG Uploader Agent | 8070 | RAG document archival |
-| Kafka UI | 8080 | Kafka monitoring (optional) |
-| MCP Server | 8085 | AI agent tools (SSE) |
-
-### Key Features
 
 - **JWT Offloading**: Kong validates JWT tokens at the edge; Django trusts pre-validated claims
 - **Rate Limiting**: Configurable per-route limits (100 req/min API, 20 req/min auth)
@@ -246,65 +396,22 @@ Kong Gateway runs in **DB-less (declarative) mode** as the API entry point, prov
 - **Request Transformation**: Header injection for tenant context
 - **Health Checks**: Automatic backend health monitoring
 
-### Configuration Files
-
-| File | Purpose |
-|------|---------|
-| `deployment/docker/kong/kong.yaml` | Declarative Kong configuration |
-| `deployment/docker/kong/docker-entrypoint.sh` | Environment variable substitution |
-| `ai-brand-automator/docker-compose.yml` | Local development with Kong |
-| `ai-brand-automator/brand_automator/middleware.py` | `KongAuthenticationMiddleware` |
-
-### Running with Kong (Local Development)
-
-```bash
-# Start all services (Kong, Django, Redis, PostgreSQL)
-cd ai-brand-automator
-docker-compose up -d
-
-# Frontend points to Kong at localhost:8000
-cd ../ai-brand-automator-frontend
-NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
-```
-
-### Running without Kong (Direct Backend)
-
-```bash
-# Django runs on port 8000 directly
-cd ai-brand-automator
-python manage.py runserver
-
-# Frontend points directly to Django
-cd ../ai-brand-automator-frontend
-NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
-```
-
-### Environment Variables
-
-```bash
-# Backend - Enable Kong mode
-KONG_ENABLED=True              # Trust Kong JWT validation
-
-# Kong - Backend connection (production)
-BACKEND_URL=https://your-backend.railway.app
-BACKEND_HOST=your-backend.railway.app
-```
-
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - Node.js 18+
 - PostgreSQL database (or use Neon)
 - Google Cloud account (for Gemini API)
+- Redis (for Celery, caching, job tracking)
 
 ### Backend Setup
 
 1. **Create virtual environment**:
    ```bash
    python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   source .venv/bin/activate
    ```
 
 2. **Install dependencies**:
@@ -321,88 +428,43 @@ BACKEND_HOST=your-backend.railway.app
 
    **Required variables**:
    ```bash
-   # Django
-   SECRET_KEY=your-secret-key-here  # Generate with: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+   SECRET_KEY=your-secret-key-here
    DEBUG=True
    ALLOWED_HOSTS=localhost,127.0.0.1
-
-   # Database (PostgreSQL)
    DB_NAME=your-database-name
    DB_USER=your-db-user
    DB_PASSWORD=your-db-password
    DB_HOST=your-host.neon.tech
    DB_PORT=5432
-
-   # AI Services
    GOOGLE_API_KEY=your-google-gemini-api-key
-
-   # Google Cloud Storage (optional for MVP)
-   GS_BUCKET_NAME=your-bucket-name
-   GS_PROJECT_ID=your-project-id
-   GS_CREDENTIALS_PATH=path/to/service-account.json
-
-   # CORS
-   CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+   STRIPE_SECRET_KEY=sk_test_...
+   STRIPE_PUBLISHABLE_KEY=pk_test_...
    ```
 
 4. **Run migrations**:
    ```bash
-   python manage.py migrate
+   python manage.py migrate_schemas --shared --noinput
    ```
 
-5. **Seed subscription plans**:
+5. **Seed data**:
    ```bash
-   python manage.py seed_subscription_plans
+   python manage.py seed_manifests               # Pipeline manifests
+   python manage.py seed_metrics                  # Analytics MetricDefinitions
+   python manage.py seed_subscription_plans       # Stripe plans
    ```
 
 6. **Start development server**:
    ```bash
-   python manage.py runserver
-   # Server runs at http://localhost:8000
-   
-   # For mobile/network testing:
-   python manage.py runserver 0.0.0.0:8000
+   python manage.py runserver 0.0.0.0:8001
    ```
 
-### Docker Quick Start (Full Stack)
-
-For full-stack development with Kong Gateway, all microservices, and optional Kafka:
-
-```bash
-# From the project root
-cd deployment
-
-# Start all core services (Kong, Django, Frontend, 6 Microservices, Redis, Celery)
-docker compose up --build
-
-# Include Kafka for event streaming (chat titling, pipeline triggers)
-docker compose --profile with-kafka up --build
-
-# Include local PostgreSQL (instead of Neon)
-docker compose --profile with-db up --build
-
-# All profiles combined
-docker compose --profile with-kafka --profile with-db --profile with-nginx up --build
-
-# Verify services are running
-curl http://localhost:8000/health/    # Via Kong
-curl http://localhost:8010/health     # Pipeline Orchestrator
-curl http://localhost:8020/health     # Discovery Agent
-curl http://localhost:8030/health     # Intelligence Agent
-```
-
-7. **Start Celery for background tasks** (optional, for scheduled posting):
+7. **Start Celery** (background tasks):
    ```bash
-   # Terminal 1 - Start Redis (macOS)
-   brew services start redis
-   
-   # Terminal 2 - Celery Worker
-   cd ai-brand-automator
-   ../.venv/bin/python -m celery -A brand_automator worker -l info
-   
-   # Terminal 3 - Celery Beat (scheduler)
-   cd ai-brand-automator
-   ../.venv/bin/python -m celery -A brand_automator beat -l info
+   # Worker (default + orchestration queues)
+   celery -A brand_automator worker -l info
+
+   # Scheduler (publishing, stale jobs, rollup reconciliation)
+   celery -A brand_automator beat -l info
    ```
 
 ### Frontend Setup
@@ -416,12 +478,10 @@ curl http://localhost:8030/health     # Intelligence Agent
 2. **Configure environment**:
    ```bash
    cp .env.example .env.local
-   # Edit .env.local
    ```
-
-   **Required variables**:
    ```bash
    NEXT_PUBLIC_API_URL=http://localhost:8000
+   NEXT_PUBLIC_BRAND_EQUITY_API_URL=http://localhost:8090
    ```
 
 3. **Start development server**:
@@ -430,163 +490,211 @@ curl http://localhost:8030/health     # Intelligence Agent
    # Server runs at http://localhost:3000
    ```
 
-4. **Build for production**:
-   ```bash
-   npm run build
-   npm start
-   ```
+### Docker Quick Start (Full Stack)
+
+```bash
+cd deployment
+
+# Start all core services (Kong, Django, Frontend, 24 Microservices, Redis, Celery)
+docker compose up --build
+
+# Include Kafka for event streaming
+docker compose --profile with-kafka up --build
+
+# Include local PostgreSQL (instead of Neon)
+docker compose --profile with-kafka --profile with-db up --build
+
+# Tear down
+docker compose down -v
+```
+
+### Microservices (all FastAPI + Python 3.12)
+
+Each microservice follows the same pattern:
+```bash
+cd <service-dir>
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port <PORT> --reload
+pytest tests/ -v
+```
 
 ## API Endpoints
 
 ### Authentication
-- `POST /api/v1/auth/register/` - User registration with tenant creation
-- `POST /api/v1/auth/login/` - Email-based JWT login
-- `POST /api/v1/auth/token/refresh/` - Refresh access token
+- `POST /api/v1/auth/register/` — User registration with tenant creation
+- `POST /api/v1/auth/login/` — Email-based JWT login
+- `POST /api/v1/auth/token/refresh/` — Refresh access token
 
 ### Tenants (Workspaces)
-- `GET /api/v1/tenants/me/` - List user's workspaces with roles
-- `POST /api/v1/tenants/` - Create new workspace
-- `POST /api/v1/tenants/{id}/switch/` - Switch active workspace (issues new JWT)
-- `POST /api/v1/tenants/{id}/invite/` - Invite member to workspace
-- `GET /api/v1/tenants/{id}/members/` - List workspace members
+- `GET /api/v1/tenants/me/` — List user's workspaces with roles
+- `POST /api/v1/tenants/` — Create new workspace
+- `POST /api/v1/tenants/{id}/switch/` — Switch active workspace (issues new JWT)
+- `POST /api/v1/tenants/{id}/invite/` — Invite member to workspace
+- `GET /api/v1/tenants/{id}/members/` — List workspace members
 
 ### Onboarding
-- `GET|POST /api/v1/companies/` - Company CRUD
-- `PUT /api/v1/companies/{id}/` - Update company data
-- `POST /api/v1/companies/{id}/generate_brand_strategy/` - AI brand strategy
-- `POST /api/v1/companies/{id}/generate_brand_identity/` - AI brand identity
-- `GET|POST /api/v1/assets/` - Brand assets
-- `POST /api/v1/assets/upload/` - File upload
+- `GET|POST /api/v1/companies/` — Company CRUD
+- `PATCH /api/v1/companies/{id}/` — Update company data (PATCH, not PUT)
+- `POST /api/v1/companies/{id}/generate_brand_strategy/` — AI brand strategy
+- `POST /api/v1/companies/{id}/generate_brand_identity/` — AI brand identity
+- `GET|POST /api/v1/assets/` — Brand assets
+- `POST /api/v1/assets/upload/` — File upload (HTTP 409 on duplicate)
 
 ### AI Services
-- `POST /api/v1/ai/chat/` - AI chatbot interaction
-- `GET /api/v1/ai/chat-sessions/` - Chat history
-- `GET /api/v1/ai/generations/` - AI generation logs
-
-### Subscriptions
-- `GET /api/v1/subscriptions/plans/` - List subscription plans
-- `GET /api/v1/subscriptions/status/` - Current subscription status
-- `POST /api/v1/subscriptions/create-checkout-session/` - Create Stripe checkout
-- `POST /api/v1/subscriptions/sync/` - Sync subscription from Stripe
-- `POST /api/v1/subscriptions/webhook/` - Handle Stripe webhooks
-- `POST /api/v1/subscriptions/create-portal-session/` - Customer billing portal
-- `POST /api/v1/subscriptions/cancel/` - Cancel subscription
-
-### Social Media Automation
-- `GET /api/v1/automation/social-profiles/` - List connected profiles
-- `GET /api/v1/automation/social-profiles/status/` - Platform connection status
-
-#### LinkedIn
-- `GET /api/v1/automation/linkedin/connect/` - Initiate LinkedIn OAuth
-- `GET /api/v1/automation/linkedin/callback/` - OAuth callback handler
-- `POST /api/v1/automation/linkedin/disconnect/` - Disconnect LinkedIn account
-- `POST /api/v1/automation/linkedin/post/` - Post to LinkedIn immediately
-- `POST /api/v1/automation/linkedin/media/upload/` - Upload media
-
-#### Twitter/X
-- `GET /api/v1/automation/twitter/connect/` - Initiate Twitter OAuth
-- `GET /api/v1/automation/twitter/callback/` - OAuth callback handler
-- `POST /api/v1/automation/twitter/disconnect/` - Disconnect Twitter account
-- `POST /api/v1/automation/twitter/post/` - Post to Twitter immediately
-
-#### Facebook
-- `GET /api/v1/automation/facebook/connect/` - Initiate Facebook OAuth
-- `GET /api/v1/automation/facebook/callback/` - OAuth callback handler
-- `POST /api/v1/automation/facebook/disconnect/` - Disconnect Facebook account
-- `POST /api/v1/automation/facebook/post/` - Post to Facebook immediately
-
-#### Instagram
-- `GET /api/v1/automation/instagram/connect/` - Initiate Instagram OAuth
-- `GET /api/v1/automation/instagram/callback/` - OAuth callback handler
-- `POST /api/v1/automation/instagram/disconnect/` - Disconnect Instagram account
-- `POST /api/v1/automation/instagram/post/` - Post to Instagram immediately
-
-#### Google Business Profile
-- `GET /api/v1/automation/gbp/listings/` - List GBP listings
-- `POST /api/v1/automation/gbp/listings/` - Create GBP listing
-- `GET /api/v1/automation/gbp/listings/{id}/` - Get GBP listing details
-- `PUT /api/v1/automation/gbp/listings/{id}/` - Update GBP listing
-- `DELETE /api/v1/automation/gbp/listings/{id}/` - Delete GBP listing
-- `POST /api/v1/automation/gbp/listings/{id}/posts/` - Create GBP post
-- `GET /api/v1/automation/gbp/listings/{id}/posts/` - List GBP posts
-- `GET /api/v1/automation/gbp/listings/{id}/reviews/` - Get GBP reviews
-- `POST /api/v1/automation/gbp/reviews/{id}/reply/` - Reply to review
-- `GET /api/v1/automation/gbp/listings/{id}/insights/` - Get GBP insights
-
-#### Content Calendar
-- `GET /api/v1/automation/content-calendar/` - List scheduled posts
-- `POST /api/v1/automation/content-calendar/` - Create scheduled post
-- `PUT /api/v1/automation/content-calendar/{id}/` - Edit scheduled post
-- `GET /api/v1/automation/content-calendar/upcoming/` - Get upcoming posts
-- `POST /api/v1/automation/content-calendar/{id}/publish/` - Publish post now
-- `POST /api/v1/automation/content-calendar/{id}/cancel/` - Cancel scheduled post
-
-### Media Curation
-- `POST /api/v1/media-curation/curate/` - Submit single curation request
-- `POST /api/v1/media-curation/curate/batch/` - Submit batch curation request
-- `GET /api/v1/media-curation/status/{event_id}/` - Get curation status
-- `POST /api/v1/media-curation/curate/sync/` - Synchronous curation (blocking)
-- `GET /api/v1/media-curation/health/` - Service health check
-- `GET /api/v1/media-curation/tenant-config/` - List tenant configurations
-- `POST /api/v1/media-curation/tenant-config/` - Create tenant configuration
-- `GET /api/v1/media-curation/tenant-config/{tenant_id}/` - Get tenant config
-- `PUT /api/v1/media-curation/tenant-config/{tenant_id}/` - Update tenant config
-- `DELETE /api/v1/media-curation/tenant-config/{tenant_id}/` - Delete tenant config
+- `POST /api/v1/ai/chat/` — AI chatbot interaction
+- `GET /api/v1/ai/chat-sessions/` — Chat history
+- `GET /api/v1/ai/generations/` — AI generation logs
 
 ### Pipeline Orchestration
-- `POST /api/v1/orchestration/jobs/` - Create and dispatch a new analysis job
-- `GET /api/v1/orchestration/jobs/` - List analysis jobs (tenant-filtered)
-- `GET /api/v1/orchestration/jobs/{job_id}/` - Get job details with progress
-- `GET /api/v1/orchestration/jobs/{job_id}/quick-status/` - Fast status (Redis-cached, for polling)
-- `PATCH /api/v1/orchestration/jobs/{job_id}/callback/` - Orchestrator callback (service-to-service auth)
-- `POST /api/v1/orchestration/jobs/{job_id}/cancel/` - Cancel running job
-- `GET /api/v1/orchestration/manifests/` - List pipeline manifests
-- `POST /api/v1/orchestration/manifests/` - Create pipeline manifest (admin only)
-- `GET /api/v1/orchestration/manifests/{id}/` - Manifest details
+- `POST /api/v1/orchestration/jobs/` — Create and dispatch a new analysis job
+- `GET /api/v1/orchestration/jobs/` — List analysis jobs (tenant-filtered)
+- `GET /api/v1/orchestration/jobs/{job_id}/` — Get job details with progress
+- `GET /api/v1/orchestration/jobs/{job_id}/quick-status/` — Fast status (Redis-cached, for polling)
+- `PATCH /api/v1/orchestration/jobs/{job_id}/callback/` — Orchestrator callback (service-to-service auth)
+- `POST /api/v1/orchestration/jobs/{job_id}/cancel/` — Cancel running job
+- `GET /api/v1/orchestration/manifests/` — List pipeline manifests
+- `POST /api/v1/orchestration/manifests/` — Create pipeline manifest (admin only)
 
-## User Flow
+### Analytics
+- `GET /api/v1/analytics/scorecard/` — KPI scorecard metrics
+- `GET /api/v1/analytics/trends/` — Time-series trend data
+- `GET /api/v1/analytics/comparison/` — Period comparison metrics
+- `GET /api/v1/analytics/distribution/` — Sentiment distribution data
+- `GET /api/v1/analytics/coverage/` — Analytics extraction coverage
 
-1. **Registration** → Create account + tenant
-2. **Onboarding Step 1** → Company information
-3. **Onboarding Step 2** → Brand details
-4. **Onboarding Step 3** → Target audience
-5. **Onboarding Step 4** → Upload assets (optional)
-6. **Onboarding Step 5** → Review & generate brand strategy with AI
-7. **Dashboard** → View metrics and recent activity
-8. **Chat** → Interact with AI for brand guidance (auto-titled via Gemini Flash)
-9. **Automation** → Connect social profiles, create and schedule posts
-10. **AI Assistant** → Launch analysis pipelines with conversational interface
-11. **Pipelines** → Monitor pipeline execution with real-time progress
-12. **Analysis** → View ISO 10668 brand equity reports and valuations
+### Optimization
+- `GET /api/v1/optimization/campaigns/` — Campaign performance metrics
+- `GET /api/v1/optimization/recommendations/` — AI optimization recommendations
+- `POST /api/v1/optimization/trigger-tick/` — Manual optimization cycle trigger
+- `GET /api/v1/optimization/settings/` — Optimization configuration
+
+### Intelligence Loop
+- `GET /api/v1/intelligence-loop/intelligence-reports/` — Intelligence reports
+- `GET /api/v1/intelligence-loop/approval-queue/` — WF2 approval queue
+
+### Workspace
+- `GET|POST /api/v1/workspace/workflows/` — User workflows CRUD
+- `GET /api/v1/workspace/workflows/{id}/snapshots/` — Workflow execution snapshots
+- `POST /api/v1/workspace/workflows/{id}/lock/` — Acquire collaborative editing lock
+- `WebSocket ws://host/ws/workspace/<tenant_id>/` — Real-time progress updates
+
+### Subscriptions
+- `GET /api/v1/subscriptions/plans/` — List subscription plans
+- `GET /api/v1/subscriptions/status/` — Current subscription status
+- `POST /api/v1/subscriptions/create-checkout-session/` — Create Stripe checkout
+- `POST /api/v1/subscriptions/webhook/` — Handle Stripe webhooks
+- `POST /api/v1/subscriptions/create-portal-session/` — Customer billing portal
+
+### Social Media Automation
+- `GET /api/v1/automation/social-profiles/` — List connected profiles
+- `GET /api/v1/automation/social-profiles/status/` — Platform connection status
+- `GET /api/v1/automation/{platform}/connect/` — Initiate OAuth
+- `GET /api/v1/automation/{platform}/callback/` — OAuth callback
+- `POST /api/v1/automation/{platform}/disconnect/` — Disconnect account
+- `POST /api/v1/automation/{platform}/post/` — Post immediately
+
+### Content Calendar
+- `GET /api/v1/automation/content-calendar/` — List scheduled posts
+- `POST /api/v1/automation/content-calendar/` — Create scheduled post
+- `PUT /api/v1/automation/content-calendar/{id}/` — Edit scheduled post
+- `GET /api/v1/automation/content-calendar/upcoming/` — Get upcoming posts
+- `POST /api/v1/automation/content-calendar/{id}/publish/` — Publish post now
+
+### Media Curation
+- `POST /api/v1/media-curation/curate/` — Submit curation request
+- `POST /api/v1/media-curation/curate/batch/` — Batch curation
+- `GET /api/v1/media-curation/status/{event_id}/` — Curation status
+- `GET|POST /api/v1/media-curation/tenant-config/` — Tenant configurations
+
+### Google Business Profile
+- `GET|POST /api/v1/automation/gbp/listings/` — GBP listings
+- `POST /api/v1/automation/gbp/listings/{id}/posts/` — Create GBP post
+- `GET /api/v1/automation/gbp/listings/{id}/reviews/` — GBP reviews
+- `POST /api/v1/automation/gbp/reviews/{id}/reply/` — Reply to review
+- `GET /api/v1/automation/gbp/listings/{id}/insights/` — GBP insights
+
+## Service-to-Service Authentication
+
+| Header | Direction | Purpose |
+|--------|-----------|---------|
+| `X-Service-Token` | Django → Orchestrator | Dispatch and cancel |
+| `X-Callback-Token` | Orchestrator → Django | Callback authentication |
+| `X-Worker-Token` | Chat Titling Worker → Django | Title update |
+| `X-Service-Token` | Content/Social Agent → Django | Blog/post creation |
+| `X-Tenant-ID` | Frontend → Django, Orchestrator → Odoo MCP | Tenant routing |
+| *(none)* | Browser → Brand Equity Calculator | Public/unauthenticated |
+
+## Multi-Tenancy
+
+The application uses **schema-based multi-tenancy** with django-tenants:
+
+- Each user gets a unique tenant on registration
+- Data is isolated via tenant FK filtering in the shared (public) schema
+- **Workspace Switcher** in the frontend lets users create/switch between workspaces
+- **Role-based access**: owner, admin, editor, viewer roles per workspace
+- `TenantMembershipMiddleware` reads `X-Tenant-ID` header (injected by frontend)
+
+### Tenant-Scoped Queries
+
+All models have a nullable `tenant` FK. Queries use the backward-compatible Q() pattern:
+
+```python
+from django.db.models import Q
+
+tenant = getattr(request, 'tenant', None)
+if tenant:
+    qs = Model.objects.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+else:
+    qs = Model.objects.filter(tenant__isnull=True)
+```
 
 ## Development
 
 ### Running Tests
 
-**Backend (2090+ tests)**:
+**Backend (2,075+ tests)**:
 ```bash
 cd ai-brand-automator
 source ../.venv/bin/activate
 pytest -v                          # All backend tests
 pytest -m unit                     # Unit tests only
 pytest -m property                 # Property-based tests (Hypothesis)
-pytest automation/tests/ -v        # Automation tests
-pytest orchestration/tests/ -v     # Orchestration tests (123)
-pytest media_curation/ -v          # Media curation tests (469)
+pytest analytics/tests/ -v         # Analytics tests
+pytest orchestration/tests/ -v     # Orchestration tests
+pytest media_curation/ -v          # Media curation tests
 pytest --cov=. --cov-report=html   # With coverage
 ```
 
-**Microservices (628 tests)**:
+**Microservices (1,200+ tests)**:
 ```bash
-cd pipeline-orchestrator-svc && pytest tests/ -v    # Orchestrator (171)
-cd discovery-agent-svc && pytest tests/ -v          # Discovery (179)
-cd intelligence-agent-svc && pytest tests/ -v       # Intelligence (100)
-cd chat-titling-worker && pytest tests/ -v          # Chat Titling (34)
-cd content-agent-service && pytest tests/ -v        # Content Agent (55)
-cd social-agent-service && pytest tests/ -v         # Social Agent (89)
+cd pipeline-orchestrator-svc && pytest tests/ -v
+cd discovery-agent-svc && pytest tests/ -v
+cd market-research-agent-svc && pytest tests/ -v
+cd competitor-intel-agent-svc && pytest tests/ -v
+cd audience-persona-agent-svc && pytest tests/ -v
+cd trend-cultural-agent-svc && pytest tests/ -v
+cd voc-agent-svc && pytest tests/ -v
+cd intelligence-agent-svc && pytest tests/ -v
+cd brand-positioning-agent-svc && pytest tests/ -v
+cd brand-architecture-agent-svc && pytest tests/ -v
+cd brand-personality-agent-svc && pytest tests/ -v
+cd brand-naming-agent-svc && pytest tests/ -v
+cd brand-story-agent-svc && pytest tests/ -v
+cd campaign-architecture-agent-svc && pytest tests/ -v
+cd creative-generation-agent-svc && pytest tests/ -v
+cd ad-publishing-agent-svc && pytest tests/ -v
+cd campaign-optimization-agent-svc && pytest tests/ -v
+cd intelligence-loop-agent-svc && pytest tests/ -v
+cd content-agent-service && pytest tests/ -v
+cd social-agent-service && pytest tests/ -v
+cd chat-titling-worker && pytest tests/ -v
+cd brand-equity-calculator-svc && pytest tests/ -v
+cd odoo-mcp-server-svc && pytest tests/ -v
+cd odoo-worker-agent-svc && pytest tests/ -v
+cd rag-uploader-agent-service && pytest tests/ -v
 ```
 
-**Integration Tests (60 tests)**:
+**Integration Tests**:
 ```bash
 cd tests/integration
 pytest phase1_contracts/ -v   # API contract tests
@@ -605,7 +713,7 @@ npm test -- --coverage         # With coverage (60% threshold)
 
 **Backend**:
 ```bash
-black .                        # Format code
+black .                        # Format code (88 char lines)
 flake8 .                       # Lint code
 python manage.py check         # Django system check
 ```
@@ -614,105 +722,57 @@ python manage.py check         # Django system check
 ```bash
 npm run lint                   # ESLint
 npm run build                  # TypeScript compilation check
-```
-
-## Multi-Tenancy
-
-The application uses **schema-based multi-tenancy** with django-tenants:
-
-- Each user gets a unique tenant on registration
-- Data is isolated via tenant FK filtering in the shared (public) schema
-- `PUBLIC_SCHEMA_NAME = 'public'` for shared data
-- `TENANT_MODEL = 'tenants.Tenant'`
-- `TENANT_DOMAIN_MODEL = 'tenants.Domain'`
-- **Workspace Switcher** in the frontend lets users create/switch between workspaces
-- **Role-based access**: owner, admin, editor, viewer roles per workspace
-
-### Tenant-Scoped Queries
-
-All models have a nullable `tenant` FK. Queries use the backward-compatible Q() pattern:
-
-```python
-from django.db.models import Q
-
-tenant = getattr(request, 'tenant', None)
-if tenant:
-    qs = Model.objects.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
-else:
-    qs = Model.objects.filter(tenant__isnull=True)
-```
-
-### Tenant Creation
-
-Automatic on user registration:
-```python
-tenant = Tenant.objects.create(
-    schema_name=f'tenant_{user.id}',
-    name=f"{user.username}'s Company"
-)
+npx tsc --noEmit               # TypeScript check only
 ```
 
 ## Security Features
 
-- ✅ No hardcoded credentials (all in .env)
+- ✅ No hardcoded credentials (all via `decouple.config()` with defaults)
 - ✅ JWT tokens with 60-min access + 7-day refresh
 - ✅ Automatic token refresh with queue management
-- ✅ Authentication guards on all protected routes
-- ✅ CORS properly configured with allowed headers
 - ✅ Schema-based tenant data isolation
-- ✅ IsAuthenticated permission on all API endpoints
+- ✅ Role-based permissions (owner, admin, editor, viewer)
+- ✅ Encrypted OAuth tokens (Fernet encryption derived from SECRET_KEY)
+- ✅ SSRF prevention (external URLs validated against `ALLOWED_URL_PREFIXES`)
+- ✅ Input validation (`sanitize_text_input`, `sanitize_ai_prompt`, `validate_file_upload`)
+- ✅ Callback payload size limits (≤ 1 MB)
+- ✅ Service-to-service token authentication
+- ✅ DB SSL (`sslmode=require`, `channel_binding=require` for Neon)
 
-## Environment Variables Reference
+## User Flow
 
-### Backend (.env)
+1. **Registration** → Create account + tenant
+2. **Onboarding** → 5-step wizard (Company → Brand Voice → Audience → Assets → Review + PDF)
+3. **Dashboard** → View metrics, recent activity, overview cards
+4. **Chat** → Interact with AI for brand guidance (auto-titled via Gemini Flash)
+5. **AI Assistant** → Launch analysis pipelines with conversational interface
+6. **Pipelines** → Monitor pipeline execution with real-time ThoughtTrace progress
+7. **Analysis** → View ISO 10668 brand equity reports and valuations
+8. **Analytics** → KPI scorecard, trend charts, period comparison, sentiment distribution
+9. **Workspace** → Visual workflow editor with React Flow
+10. **Optimization** → Campaign performance, AI recommendations, manual tick triggers
+11. **Intelligence** → Intelligence reports, WF2 approval queue, learning feed
+12. **Automation** → Connect social profiles, create and schedule posts
+13. **Brand Equity** → Public brand equity calculator (no login required)
 
-| Variable | Required | Description | Example |
-|----------|----------|-------------|---------|
-| `SECRET_KEY` | ✅ Yes | Django secret key | Generate with Django command |
-| `DEBUG` | ✅ Yes | Debug mode | `True` or `False` |
-| `DB_NAME` | ✅ Yes | PostgreSQL database | `ai_brand_automator` |
-| `DB_USER` | ✅ Yes | Database user | `postgres` |
-| `DB_PASSWORD` | ✅ Yes | Database password | `your-secure-password` |
-| `DB_HOST` | ✅ Yes | Database host | `ep-xxx.neon.tech` |
-| `GOOGLE_API_KEY` | ✅ Yes | Gemini API key | `AIza...` |
-| `GS_BUCKET_NAME` | ⚠️ Optional | GCS bucket | `my-bucket` |
-| `GS_PROJECT_ID` | ⚠️ Optional | GCP project | `my-project-123` |
-| `CORS_ALLOWED_ORIGINS` | ⚠️ Optional | Frontend URLs | `http://localhost:3000` |
-| `STRIPE_SECRET_KEY` | ✅ Yes | Stripe secret key | `sk_test_...` |
-| `STRIPE_PUBLISHABLE_KEY` | ✅ Yes | Stripe public key | `pk_test_...` |
-| `STRIPE_WEBHOOK_SECRET` | ⚠️ Optional | Webhook signing secret | `whsec_...` |
-| `STRIPE_PRICE_BASIC` | ✅ Yes | Basic plan price ID | `price_...` |
-| `STRIPE_PRICE_PRO` | ✅ Yes | Pro plan price ID | `price_...` |
-| `STRIPE_PRICE_ENTERPRISE` | ✅ Yes | Enterprise price ID | `price_...` |
-| `LINKEDIN_CLIENT_ID` | ⚠️ Optional | LinkedIn OAuth app ID | `77xxx...` |
-| `LINKEDIN_CLIENT_SECRET` | ⚠️ Optional | LinkedIn OAuth secret | `WPLxxx...` |
-| `LINKEDIN_REDIRECT_URI` | ⚠️ Optional | OAuth callback URL | `http://localhost:8000/api/v1/automation/linkedin/callback/` |
-| `TWITTER_CLIENT_ID` | ⚠️ Optional | Twitter OAuth app ID | `xxx...` |
-| `TWITTER_CLIENT_SECRET` | ⚠️ Optional | Twitter OAuth secret | `xxx...` |
-| `FACEBOOK_APP_ID` | ⚠️ Optional | Facebook app ID | `xxx...` |
-| `FACEBOOK_APP_SECRET` | ⚠️ Optional | Facebook app secret | `xxx...` |
-| `INSTAGRAM_CLIENT_ID` | ⚠️ Optional | Instagram client ID | `xxx...` |
-| `INSTAGRAM_CLIENT_SECRET` | ⚠️ Optional | Instagram client secret | `xxx...` |
-| `GOOGLE_CLIENT_ID` | ⚠️ Optional | Google OAuth client ID | `xxx...` |
-| `GOOGLE_CLIENT_SECRET` | ⚠️ Optional | Google OAuth client secret | `xxx...` |
-| `CELERY_BROKER_URL` | ⚠️ Optional | Redis broker URL | `redis://localhost:6379/0` |
-| `CELERY_RESULT_BACKEND` | ⚠️ Optional | Redis result backend | `redis://localhost:6379/0` |
-| `KAFKA_BOOTSTRAP_SERVERS` | ⚠️ Optional | Kafka brokers | `localhost:9092` |
-| `MEDIA_CURATION_REDIS_URL` | ⚠️ Optional | Redis for curation cache | `redis://localhost:6379/1` |
-| `GCS_BUCKET_NAME` | ⚠️ Optional | GCS bucket for curated output | `media-curation-output` |
-| `ORCHESTRATOR_URL` | ⚠️ Optional | Pipeline orchestrator URL | `http://localhost:8010` |
-| `ORCHESTRATOR_SERVICE_TOKEN` | ⚠️ Optional | Service-to-service auth for dispatch | (secret) |
-| `ORCHESTRATOR_CALLBACK_TOKEN` | ⚠️ Optional | Callback auth from orchestrator | (secret) |
-| `ORCHESTRATOR_TIMEOUT` | ⚠️ Optional | HTTP timeout for dispatch (seconds) | `30` |
-| `BACKEND_URL` | ⚠️ Optional | Backend URL for callbacks | `http://localhost:8001` |
-| `ORCHESTRATION_KAFKA_ENABLED` | ⚠️ Optional | Use Kafka dispatch vs HTTP | `false` |
-| `WORKER_TOKEN` | ⚠️ Optional | Auth for chat-titling-worker | (secret) |
+## Media Specifications by Platform
 
-### Frontend (.env.local)
+| Platform | Image | Video | Document |
+|----------|-------|-------|----------|
+| LinkedIn | 8MB (JPEG, PNG, GIF) | 500MB (MP4) | 100MB (PDF, DOC, PPT) |
+| Twitter/X | 5MB (JPEG, PNG, GIF) | 512MB (MP4) | N/A |
+| Facebook | 4MB (JPEG, PNG) | 4GB (MP4) | N/A |
+| Instagram | 8MB (JPEG, PNG) | 100MB (MP4) | N/A |
+| GBP | 5MB (JPEG, PNG) | N/A | N/A |
 
-| Variable | Required | Description | Default |
-|----------|----------|-------------|---------|
-| `NEXT_PUBLIC_API_URL` | ✅ Yes | Backend API URL | `http://localhost:8000` |
+## Media Curation Supported Formats
+
+| Content Type | Formats | Features |
+|-------------|---------|----------|
+| Documents | PDF, DOC, TXT, HTML, MD, CSV | Text extraction, AI summarization |
+| Images | PNG, JPEG, GIF, WebP, TIFF | OCR, Vision API, entity extraction |
+| Video | MP4, WebM, MPEG, QuickTime | Speech-to-text, scene analysis |
+| Audio | MP3, WAV, OGG, FLAC | Speech-to-text, transcription |
 
 ## Troubleshooting
 
@@ -726,8 +786,7 @@ tenant = Tenant.objects.create(
 **AI generation returns fallback text**:
 - Check `GOOGLE_API_KEY` is set in `.env`
 - Verify API key is valid in Google AI Studio
-- Check rate limits haven't been exceeded
-- Ensure using `gemini-2.0-flash` model (1.5 is deprecated)
+- Ensure using `gemini-2.0-flash` model
 
 **Token authentication fails**:
 - Clear localStorage in browser
@@ -738,54 +797,56 @@ tenant = Tenant.objects.create(
 
 **CORS errors**:
 - Verify backend `CORS_ALLOWED_ORIGINS` includes `http://localhost:3000`
-- Check frontend uses correct API URL
-- Ensure both servers are running
 - **Critical**: `CorsMiddleware` must be FIRST in MIDDLEWARE list (before TenantMainMiddleware)
 
-**Mobile/Network testing 404 errors**:
-- Add your network IP to tenant domains in database:
-  ```python
-  from tenants.models import Tenant, Domain
-  tenant = Tenant.objects.get(schema_name='public')
-  Domain.objects.get_or_create(domain='<your-ip>', defaults={'tenant': tenant, 'is_primary': False})
-  ```
+**401 Unauthorized**:
+- Token expired — will auto-refresh
+- If refresh fails, redirects to login
+- Check `access_token` and `refresh_token` in localStorage
 
 **Build fails**:
 - Run `npm run build` to see TypeScript errors
 - Check all imports are correct
-- Verify all required components exported
-
-**401 Unauthorized**:
-- Token expired - will auto-refresh
-- If refresh fails, redirects to login
-- Check `access_token` and `refresh_token` in localStorage
 
 ## Contributing
 
 1. Create feature branch from `main`
-2. Make changes with descriptive commits
+2. Make changes with conventional commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`)
 3. Test locally (backend + frontend)
 4. Push and create pull request
 
 ## Documentation
 
-- [MVP Architecture](docs/ai_brand_automator_mvp_architecture.md) - Complete architecture overview
-- [Architecture Plan](docs/ai_brand_automator_mvp_plan.md) - Original MVP plan
-- [Codebase Analysis](docs/CODEBASE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md) - Implementation details
-- [Copilot Instructions](.github/copilot-instructions.md) - AI pair programming guide
-- [LinkedIn Integration](ai-brand-automator/automation/docs/LINKEDIN_INTEGRATION_REPORT.md)
-- [Twitter Integration](ai-brand-automator/automation/docs/TWITTER_INTEGRATION_REPORT.md)
-- [Facebook Integration](ai-brand-automator/automation/docs/FACEBOOK_INTEGRATION_REPORT.md)
-- [Instagram Integration](ai-brand-automator/automation/docs/INSTAGRAM_INTEGRATION_REPORT.md)
-- [GBP Implementation](ai-brand-automator/automation/docs/GOOGLE_BUSINESS_PROFILE_IMPLEMENTATION_PLAN.md)
-- [Media Curation Service](ai-brand-automator/media_curation/README.md)
+- [Architecture Overview](ARCHITECTURE.md)
+- [Agent Boundaries](AGENTS.md)
+- [Copilot Instructions](.github/copilot-instructions.md)
 - [Pipeline Orchestrator](pipeline-orchestrator-svc/CLAUDE.md)
 - [Discovery Agent](discovery-agent-svc/CLAUDE.md)
 - [Intelligence Agent](intelligence-agent-svc/CLAUDE.md)
 - [Content Agent](content-agent-service/CLAUDE.md)
 - [Social Agent](social-agent-service/CLAUDE.md)
 - [Chat Titling Worker](chat-titling-worker/CLAUDE.md)
+- [Brand Equity Calculator](brand-equity-calculator-svc/CLAUDE.md)
+- [Odoo MCP Server](odoo-mcp-server-svc/CLAUDE.md)
+- [Odoo Worker Agent](odoo-worker-agent-svc/CLAUDE.md)
+- [Market Research Agent](market-research-agent-svc/CLAUDE.md)
+- [Competitor Intel Agent](competitor-intel-agent-svc/CLAUDE.md)
+- [Audience Persona Agent](audience-persona-agent-svc/CLAUDE.md)
+- [Trend Cultural Agent](trend-cultural-agent-svc/CLAUDE.md)
+- [VoC Agent](voc-agent-svc/CLAUDE.md)
+- [Brand Positioning Agent](brand-positioning-agent-svc/CLAUDE.md)
+- [Brand Architecture Agent](brand-architecture-agent-svc/CLAUDE.md)
+- [Brand Personality Agent](brand-personality-agent-svc/CLAUDE.md)
+- [Brand Naming Agent](brand-naming-agent-svc/CLAUDE.md)
+- [Brand Story Agent](brand-story-agent-svc/CLAUDE.md)
+- [Campaign Architecture Agent](campaign-architecture-agent-svc/CLAUDE.md)
+- [Creative Generation Agent](creative-generation-agent-svc/CLAUDE.md)
+- [Ad Publishing Agent](ad-publishing-agent-svc/CLAUDE.md)
+- [Campaign Optimization Agent](campaign-optimization-agent-svc/CLAUDE.md)
+- [Intelligence Loop Agent](intelligence-loop-agent-svc/CLAUDE.md)
+- [Media Curation Service](ai-brand-automator/media_curation/README.md)
 - [Deployment Guide](deployment/README.md)
+- [Design System](ai-brand-automator-frontend/DESIGN_SYSTEM.md)
 
 ## License
 
@@ -793,15 +854,15 @@ See [LICENSE.md](docs/LICENSE.md)
 
 ## Status
 
-**Current Version**: 3.0.0 (AI Pipeline Orchestration + Agent Microservices)
+**Current Version**: 5.0.0 (Full Workflow Pipeline — WF1 + WF2 + WF3 + WF3.5)
 **Status**: ✅ Production Ready
 **Deployment**: Railway (with change detection)
-**Last Updated**: February 26, 2026
+**Last Updated**: April 28, 2026
 
 ### Test Coverage
 | Component | Tests | Status |
 |-----------|-------|--------|
-| **Django Backend** | | |
+| **Django Backend** | **~2,075** | ✅ |
 | Media Curation | 469 | ✅ |
 | RAG Index | 348 | ✅ |
 | Onboarding | 258 | ✅ |
@@ -810,80 +871,35 @@ See [LICENSE.md](docs/LICENSE.md)
 | Tenants | 172 | ✅ |
 | AI Services | 143 | ✅ |
 | Orchestration | 123 | ✅ |
-| Files | 18 | ✅ |
-| Other (conftest, etc.) | 80+ | ✅ |
-| **Microservices** | | |
-| Discovery Agent | 179 | ✅ |
+| Analytics | 50+ | ✅ |
+| Workspace | 30+ | ✅ |
+| Optimization | 30+ | ✅ |
+| Other | 80+ | ✅ |
+| **Microservices** | **~1,200** | ✅ |
 | Pipeline Orchestrator | 171 | ✅ |
+| Discovery Agent | 179 | ✅ |
+| Market Research Agent | 100+ | ✅ |
+| Competitor Intel Agent | 90+ | ✅ |
+| Audience Persona Agent | 100+ | ✅ |
+| Trend Cultural Agent | 50+ | ✅ |
+| VoC Agent | 100+ | ✅ |
 | Intelligence Agent | 100 | ✅ |
-| Social Agent | 89 | ✅ |
+| Brand Positioning Agent | 40+ | ✅ |
+| Brand Architecture Agent | 35+ | ✅ |
+| Brand Personality Agent | 35+ | ✅ |
+| Brand Naming Agent | 50+ | ✅ |
+| Brand Story Agent | 35+ | ✅ |
+| Campaign Architecture Agent | 45+ | ✅ |
+| Creative Generation Agent | 25+ | ✅ |
+| Ad Publishing Agent | 40+ | ✅ |
+| Campaign Optimization Agent | 45+ | ✅ |
+| Intelligence Loop Agent | 20+ | ✅ |
 | Content Agent | 55 | ✅ |
+| Social Agent | 89 | ✅ |
 | Chat Titling Worker | 34 | ✅ |
-| **Integration Tests** | 60 | ✅ |
-| **Total** | **~2770** | ✅ |
-
-### Completed Features
-- ✅ Multi-tenant authentication
-- ✅ User registration with tenant creation
-- ✅ 5-step onboarding flow
-- ✅ AI brand strategy generation (Gemini 2.0 Flash)
-- ✅ AI brand identity with color palettes
-- ✅ Dynamic dashboard
-- ✅ Token refresh
-- ✅ File upload UI
-- ✅ Chat interface with auto-titling
-- ✅ Stripe subscription management
-- ✅ Checkout flow with plan sync
-- ✅ Mobile/network testing support
-- ✅ **LinkedIn** - OAuth, posting, scheduling, media, analytics
-- ✅ **Twitter/X** - OAuth with PKCE, threads, media uploads, analytics
-- ✅ **Facebook** - Page posting, stories, carousels, video uploads
-- ✅ **Instagram** - OAuth, posting, stories, reels, carousels
-- ✅ **Google Business Profile** - Listings, posts, reviews, insights
-- ✅ Content Calendar with scheduling
-- ✅ Celery-based automatic publishing (every 60 seconds)
-- ✅ MCP Server with 23 tools for AI agents
-- ✅ Railway production deployment
-- ✅ CI/CD with GitHub Actions (8 test jobs)
-- ✅ 2770+ automated tests
-- ✅ **Media Curation Service** - AI-powered content processing pipeline
-- ✅ **RAG Index Service** - Vertex AI document indexing pipeline
-- ✅ **Multi-Tenancy** - Schema-based tenant isolation with django-tenants
-- ✅ **Workspace Switcher** - Create/switch workspaces in the frontend
-- ✅ **Tenant-Scoped Automation** - All social posting and calendar entries scoped by tenant
-- ✅ **Pipeline Orchestration** - LangGraph-based multi-agent pipeline execution
-- ✅ **6 Agent Microservices** - Orchestrator, Discovery, Intelligence, Content, Social, Chat Titling
-- ✅ **ISO 10668 Brand Valuation** - Royalty Relief NPV and Brand Strength Index scoring
-- ✅ **AI Assistant** - Conversational pipeline launcher with ThoughtTrace progress
-- ✅ **Pipeline Dashboard** - Real-time pipeline monitoring and management
-- ✅ **Analysis Dashboard** - Brand equity reports and valuation history
-- ✅ **Chat Auto-Titling** - Gemini Flash-powered session titles via Kafka
-- ✅ **Service-to-Service Auth** - X-Service-Token, X-Callback-Token patterns
-- ✅ **Cross-Service Integration Tests** - 3-phase contract, domain, and stress tests
-
-### Media Curation Supported Formats
-
-| Content Type | Formats | Features |
-|-------------|---------|----------|
-| Documents | PDF, DOC, TXT, HTML, MD, CSV | Text extraction, AI summarization |
-| Images | PNG, JPEG, GIF, WebP, TIFF | OCR, Vision API, entity extraction |
-| Video | MP4, WebM, MPEG, QuickTime | Speech-to-text, scene analysis |
-| Audio | MP3, WAV, OGG, FLAC | Speech-to-text, transcription |
-
-### Media Specifications by Platform
-
-| Platform | Image | Video | Document |
-|----------|-------|-------|----------|
-| LinkedIn | 8MB (JPEG, PNG, GIF) | 500MB (MP4) | 100MB (PDF, DOC, PPT) |
-| Twitter/X | 5MB (JPEG, PNG, GIF) | 512MB (MP4) | N/A |
-| Facebook | 4MB (JPEG, PNG) | 4GB (MP4) | N/A |
-| Instagram | 8MB (JPEG, PNG) | 100MB (MP4) | N/A |
-| GBP | 5MB (JPEG, PNG) | N/A | N/A |
-
-### Future Enhancements (Post-MVP)
-See [Architecture Document](docs/ai_brand_automator_mvp_architecture.md#future-enhancements-post-mvp) for Phases 9-17:
-- Phase 9: Video & Content (YouTube, TikTok, Pinterest)
-- Phase 10: E-commerce (Shopify, Amazon)
-- ~~Phase 11: Analytics & Reporting~~ → Replaced by Media Curation Service
-- Phase 12: Team & Collaboration
-- Phase 13-17: Advanced AI, Marketing, Enterprise features
+| Brand Equity Calculator | 15+ | ✅ |
+| Odoo MCP Server | 150+ | ✅ |
+| Odoo Worker Agent | 60+ | ✅ |
+| RAG Uploader Agent | 50+ | ✅ |
+| **Integration Tests** | **60** | ✅ |
+| **Total** | **~3,300+** | ✅ |
