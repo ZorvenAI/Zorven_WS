@@ -374,13 +374,17 @@ def approve_wf2_request(request, request_id):
             status=status.HTTP_410_GONE,
         )
 
-    pipeline_id = WF2_AGENT_TO_PIPELINE.get(wf2_req.requested_agent.upper())
+    agent_key = wf2_req.requested_agent.upper()
+    pipeline_id = (
+        WF1_AGENT_TO_PIPELINE.get(agent_key)
+        or WF2_AGENT_TO_PIPELINE.get(agent_key)
+        or WF3_AGENT_TO_PIPELINE.get(agent_key)
+    )
     if not pipeline_id:
         return Response(
             {
                 "detail": (
-                    f"No WF2 pipeline mapping for agent "
-                    f"'{wf2_req.requested_agent}'."
+                    f"No pipeline mapping for agent " f"'{wf2_req.requested_agent}'."
                 )
             },
             status=status.HTTP_400_BAD_REQUEST,
