@@ -78,7 +78,7 @@ All prefixed with `MRA_`. Key ones:
 - `MRA_GNEWS_API_KEY` — empty = no news data
 - `MRA_REDIS_URL` — default `redis://localhost:6379/11` (DB 11)
 - `MRA_KAFKA_BOOTSTRAP_SERVERS` — empty = no Kafka events
-- `MRA_LLM_MODEL` — default `claude-sonnet-4-20250514`
+- `MRA_LLM_MODEL` — default `claude-sonnet-4-5-20250929`
 - `MRA_RATE_LIMIT_PER_MINUTE` — default 10
 
 ## Testing Conventions

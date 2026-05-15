@@ -82,7 +82,7 @@ def _make_researcher(
         output_guardrails=output_guardrails,
         event_emitter=event_emitter,
         anthropic_client=anthropic_client,
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-5-20250929",
     )
 
 

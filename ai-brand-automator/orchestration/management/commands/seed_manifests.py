@@ -800,7 +800,7 @@ class Command(BaseCommand):
                     ["trend_cultural", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.5,
                 },
             },
@@ -840,7 +840,7 @@ class Command(BaseCommand):
                     ["voice_of_customer", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.5,
                 },
             },
@@ -917,7 +917,7 @@ class Command(BaseCommand):
                     ["voice_of_customer", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.5,
                 },
             },
@@ -991,7 +991,7 @@ class Command(BaseCommand):
                     ["trend_cultural", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.5,
                 },
             },
@@ -1088,7 +1088,7 @@ class Command(BaseCommand):
                     ["brand_story", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.4,
                 },
             },
@@ -1134,7 +1134,7 @@ class Command(BaseCommand):
                     ["brand_architecture", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.4,
                 },
             },
@@ -1178,7 +1178,7 @@ class Command(BaseCommand):
                     ["brand_personality", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.4,
                 },
             },
@@ -1221,7 +1221,7 @@ class Command(BaseCommand):
                     ["brand_naming", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.4,
                 },
             },
@@ -1267,7 +1267,7 @@ class Command(BaseCommand):
                     ["brand_story", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.4,
                 },
             },
@@ -1315,7 +1315,7 @@ class Command(BaseCommand):
                     ["campaign_architecture", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.3,
                 },
             },
@@ -1363,7 +1363,7 @@ class Command(BaseCommand):
                     ["creative_generation", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.4,
                 },
             },
@@ -1442,7 +1442,7 @@ class Command(BaseCommand):
                     ["ad_publishing", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.4,
                 },
             },
@@ -1490,7 +1490,7 @@ class Command(BaseCommand):
                     ["ad_publishing", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.3,
                 },
             },
@@ -1534,7 +1534,7 @@ class Command(BaseCommand):
                     ["campaign_intelligence", "manager"],
                 ],
                 "global_config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-5-20250929",
                     "temperature": 0.2,
                 },
             },

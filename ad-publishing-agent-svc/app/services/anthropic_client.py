@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class AnthropicClient:
     """Wrapper providing structured LLM calls for targeting translation."""
 
-    def __init__(self, client, model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, client, model: str = "claude-sonnet-4-5-20250929"):
         self._client = client
         self.model = model
 
