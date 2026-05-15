@@ -265,7 +265,6 @@ class TrendsView(APIView):
         # more snapshots contribute proportionally — matching the
         # scorecard's Avg(metric_value) over raw snapshots.
         if not pipeline_id:
-
             grouped = (
                 qs.values("period_start")
                 .annotate(
