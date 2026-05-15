@@ -49,7 +49,7 @@ class SWOTAnalysisGenerator(BaseSkill):
     def __init__(
         self,
         anthropic_client: Any = None,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "claude-sonnet-4-5-20250929",
         temperature: float = 0.3,
         max_tokens: int = 4096,
     ) -> None:
