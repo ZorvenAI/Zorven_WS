@@ -3,25 +3,49 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+    paths:
+      - 'ai-brand-automator/**'
+      - 'ai-brand-automator-frontend/**'
+      - 'pipeline-orchestrator-svc/**'
+      - 'discovery-agent-svc/**'
+      - 'intelligence-agent-svc/**'
+      - 'chat-titling-worker/**'
+      - 'content-agent-service/**'
+      - 'social-agent-service/**'
+      - 'rag-uploader-agent-service/**'
+      - 'brand-equity-calculator-svc/**'
+      - 'market-research-agent-svc/**'
+      - 'competitor-intel-agent-svc/**'
+      - 'audience-persona-agent-svc/**'
+      - 'trend-cultural-agent-svc/**'
+      - 'voc-agent-svc/**'
+      - 'brand-positioning-agent-svc/**'
+      - 'brand-architecture-agent-svc/**'
+      - 'brand-personality-agent-svc/**'
+      - 'brand-naming-agent-svc/**'
+      - 'brand-story-agent-svc/**'
+      - 'campaign-architecture-agent-svc/**'
+      - 'creative-generation-agent-svc/**'
+      - 'ad-publishing-agent-svc/**'
+      - 'campaign-optimization-agent-svc/**'
+      - 'intelligence-loop-agent-svc/**'
+      - 'odoo-mcp-server-svc/**'
+      - 'odoo-worker-agent-svc/**'
+      - 'tests/integration/**'
+      - 'deployment/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: read
       id-token: write
 
@@ -29,7 +53,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Run Claude Code Review
         id: claude-review
@@ -39,6 +63,13 @@ jobs:
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-
+          review_instructions: |
+            Focus on:
+            - Multi-tenancy: ensure tenant-scoped queries use Q(tenant=tenant) | Q(tenant__isnull=True)
+            - Security: no os.environ (use decouple.config()), no raw fetch() in frontend (use apiClient)
+            - Django patterns: select_related on FK querysets, atomic callbacks, proper migration usage
+            - TypeScript: no 'any' types, strict mode compliance
+            - Service boundaries: check service-to-service auth headers (X-Service-Token, X-Callback-Token)
+            - Kafka topic naming consistency with existing conventions
+            - Redis DB allocation conflicts (DB 0-25 are assigned)
+            - Frontend: useAuth() guard, hydration-safe tenant-role UI, setTimeout polling (not setInterval)
