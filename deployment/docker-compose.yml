@@ -1663,7 +1663,7 @@ services:
       dockerfile: docker/mlflow/Dockerfile
     container_name: ai-brand-automator-mlflow
     environment:
-      - MLFLOW_BACKEND_STORE_URI=postgresql://mlflow:mlflow@mlflow-db:5432/mlflow
+      - MLFLOW_BACKEND_STORE_URI=postgresql://mlflow:${MLFLOW_DB_PASSWORD:-mlflow}@mlflow-db:5432/mlflow
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
     ports:
       - "5000:5000"

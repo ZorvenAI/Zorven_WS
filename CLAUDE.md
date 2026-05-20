@@ -21,18 +21,18 @@ rag-uploader-agent-service/      # FastAPI — RAG document archival (port 8070)
 brand-equity-calculator-svc/     # FastAPI — Public brand equity calc, Anthropic Claude (port 8090)
 market-research-agent-svc/       # FastAPI — Market sizing, TAM/SAM/SOM, trends (port 8021)
 competitor-intel-agent-svc/      # FastAPI — Competitor profiling, SWOT, benchmarking (port 8022)
-audience-persona-agent-svc/      # FastAPI — Audience persona profiling, Claude Sonnet 4.5 (port 8023)
+audience-persona-agent-svc/      # FastAPI — Audience persona profiling, Claude Sonnet 4 (port 8023)
 trend-cultural-agent-svc/       # FastAPI — Trend monitoring, cultural insights, opportunity alerts (port 8024)
-voc-agent-svc/                  # FastAPI — Voice of Customer analysis, sentiment, NPS, Claude Sonnet 4.5 (port 8025)
-brand-positioning-agent-svc/    # FastAPI — WF2 brand positioning, differentiation, perceptual mapping, Claude Sonnet 4.5 (port 8031)
-brand-architecture-agent-svc/   # FastAPI — WF2 brand architecture, hierarchy tree, naming, portfolio growth, Claude Sonnet 4.5 (port 8032)
-brand-personality-agent-svc/    # FastAPI — WF2 brand personality, Aaker 5D, archetypes, values, voice matrix, Claude Sonnet 4.5 (port 8033)
-brand-naming-agent-svc/         # FastAPI — WF2 naming & tagline, name candidates, availability checking, tagline synthesis, Claude Sonnet 4.5 (port 8034)
-brand-story-agent-svc/          # FastAPI — WF2 brand story & narrative, origin stories, mission/vision, pitches, channel narratives, Claude Sonnet 4.5 (port 8035)
-campaign-architecture-agent-svc/ # FastAPI — WF3 campaign architecture, Meta Ads blueprint, funnel mapping, audience targeting, Claude Sonnet 4.5 (port 8041)
-creative-generation-agent-svc/  # FastAPI — WF3 creative generation, AI ad images (Nano Banana 2), ad copy, Meta compliance, Claude Sonnet 4.5 (port 8042)
-ad-publishing-agent-svc/        # FastAPI — WF3 ad publishing, Meta Ads API, human approval gate, Claude Sonnet 4.5 (port 8043)
-campaign-optimization-agent-svc/ # FastAPI + Celery Beat — WF3 continuous optimization, Meta Insights/Management API, Claude Sonnet 4.5 (port 8044)
+voc-agent-svc/                  # FastAPI — Voice of Customer analysis, sentiment, NPS, Claude Sonnet 4 (port 8025)
+brand-positioning-agent-svc/    # FastAPI — WF2 brand positioning, differentiation, perceptual mapping, Claude Sonnet 4 (port 8031)
+brand-architecture-agent-svc/   # FastAPI — WF2 brand architecture, hierarchy tree, naming, portfolio growth, Claude Sonnet 4 (port 8032)
+brand-personality-agent-svc/    # FastAPI — WF2 brand personality, Aaker 5D, archetypes, values, voice matrix, Claude Sonnet 4 (port 8033)
+brand-naming-agent-svc/         # FastAPI — WF2 naming & tagline, name candidates, availability checking, tagline synthesis, Claude Sonnet 4 (port 8034)
+brand-story-agent-svc/          # FastAPI — WF2 brand story & narrative, origin stories, mission/vision, pitches, channel narratives, Claude Sonnet 4 (port 8035)
+campaign-architecture-agent-svc/ # FastAPI — WF3 campaign architecture, Meta Ads blueprint, funnel mapping, audience targeting, Claude Sonnet 4 (port 8041)
+creative-generation-agent-svc/  # FastAPI — WF3 creative generation, AI ad images (Nano Banana 2), ad copy, Meta compliance, Claude Sonnet 4 (port 8042)
+ad-publishing-agent-svc/        # FastAPI — WF3 ad publishing, Meta Ads API, human approval gate, Claude Sonnet 4 (port 8043)
+campaign-optimization-agent-svc/ # FastAPI + Celery Beat — WF3 continuous optimization, Meta Insights/Management API, Claude Sonnet 4 (port 8044)
 intelligence-loop-agent-svc/    # FastAPI — WF3.5 intelligence loop, consumes optimization learnings, extracts campaign insights, feeds RAG (port 8045)
 odoo-mcp-server-svc/            # FastAPI — Odoo ERP MCP bridge, 101 tools (port 8095)
 odoo-worker-agent-svc/          # FastAPI — Multi-persona Odoo worker, PAOR loop (port 8100)
@@ -265,8 +265,6 @@ Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `C
 
 ### Kafka Topics
 
-**Core pipeline topics:**
-
 | Topic | Producer | Consumer | Purpose |
 |-------|----------|----------|---------|
 | `pipeline-trigger-topic` | Django (Celery) | Orchestrator | Pipeline dispatch |
@@ -274,23 +272,48 @@ Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `C
 | `agent-trace-topic` | Orchestrator nodes | Django (Celery) | Real-time node progress/thoughts |
 | `data-ingestion-topic` | `data_ingestion` app | `media_curation` consumer | File processing pipeline |
 | `media-curation-topic` | `media_curation` consumer | `rag_index` consumer | RAG indexing pipeline |
+| `discovery-audit-topic` | Discovery agent | — | Discovery audit trail |
+| `valuation-audit-logs` | Intelligence agent | — | Valuation audit trail |
+| `content-published-topic` | Content agent | — | Content publish events |
+| `social-audit-topic` | Social agent | — | Social publish audit trail |
 | `chat-titling-topic` | Django | Titling worker | Chat session titling |
+| `odoo-mcp-audit-topic` | Odoo MCP server | — | Odoo tool call audit trail |
+| `odoo-tenant-events-topic` | Odoo MCP server | — | Odoo tenant lifecycle events |
+| `tenant-provisioning-topic` | — | Odoo MCP server | New tenant provisioning |
+| `tcia-trend-audit-topic` | Trend Cultural agent | — | Trend analysis audit trail |
+| `tcia-trend-alerts-topic` | Trend Cultural agent | — | Opportunity alert streaming |
+| `agent.commands.trend-cultural-agent` | Django (Celery) | Trend Cultural agent | Scheduled scan commands |
+| `audience-persona-audit-topic` | Audience Persona agent | — | APA compliance audit trail |
+| `agent.commands.audience-persona-agent` | Django (Celery) | Audience Persona agent | Scheduled APA scan commands |
+| `voc-audit-topic` | VoC agent | — | VoC analysis audit trail |
+| `voc-insights-topic` | VoC agent | — | VoC insight alerts |
+| `agent.commands.voice-of-customer-agent` | Django (Celery) | VoC agent | Scheduled VoC scan commands |
+| `odoo-worker-audit-topic` | Odoo Worker agent | — | Odoo worker tool call audit trail |
+| `bpa-positioning-audit-topic` | Brand Positioning agent | — | Positioning decision audit trail |
+| `bpa-positioning-events-topic` | Brand Positioning agent | — | Positioning strategy events |
+| `baa-architecture-audit-topic` | Brand Architecture agent | — | Architecture decision audit trail |
+| `baa-architecture-events-topic` | Brand Architecture agent | — | Architecture strategy events |
+| `bpv-personality-audit-topic` | Brand Personality agent | — | Personality decision audit trail |
+| `bpv-personality-events-topic` | Brand Personality agent | — | Personality strategy events |
+| `nta-naming-audit-topic` | Brand Naming agent | — | Naming decision audit trail |
+| `nta-naming-events-topic` | Brand Naming agent | — | Naming strategy events |
+| `bsa-story-audit-topic` | Brand Story agent | — | Story decision audit trail |
+| `bsa-story-events-topic` | Brand Story agent | — | Story strategy events |
+| `caa-architecture-audit-topic` | Campaign Architecture agent | — | Campaign architecture audit trail |
+| `caa-architecture-events-topic` | Campaign Architecture agent | — | Campaign architecture events |
+| `cga-creative-audit-topic` | Creative Generation agent | — | Creative generation audit trail |
+| `cga-creative-events-topic` | Creative Generation agent | — | Creative generation events |
+| `apa33-publishing-audit-topic` | Ad Publishing agent | — | Ad publishing audit trail |
+| `apa33-publishing-events-topic` | Ad Publishing agent | — | Ad publishing events |
+| `coa-optimization-audit-topic` | Campaign Optimization agent | — | Optimization decision audit trail |
+| `coa-optimization-events-topic` | Campaign Optimization agent | — | Optimization lifecycle events |
+| `agent.optimization.creative_refresh` | Campaign Optimization agent | Creative Generation agent | Creative refresh requests for fatigued ads |
+| `agent.optimization.spend_milestone` | Campaign Optimization agent | Campaign Optimization agent | Spend milestone self-trigger (50%/75%/100%) |
+| `agent.optimization.action_executed` | Campaign Optimization agent | Intelligence Loop Agent | Optimization learnings consumed by ILA for extraction + RAG ingestion |
+
 | `analytics-events` | Analytics extraction | — | Metric extraction/rejection audit (conditional via `ANALYTICS_KAFKA_ENABLED`) |
 
-**Per-agent audit/event topics** — each agent service publishes to `{prefix}-audit-topic` and `{prefix}-events-topic` (e.g., `bpa-positioning-audit-topic`, `cga-creative-events-topic`). These are fire-and-forget audit trails. Prefixes: `discovery`, `valuation`, `content-published`, `social`, `odoo-mcp`, `odoo-worker`, `audience-persona`, `voc`, `tcia-trend`, `bpa-positioning`, `baa-architecture`, `bpv-personality`, `nta-naming`, `bsa-story`, `caa-architecture`, `cga-creative`, `apa33-publishing`, `coa-optimization`.
-
-**Scheduled command topics** — Django Celery Beat → agent consumers: `agent.commands.trend-cultural-agent`, `agent.commands.audience-persona-agent`, `agent.commands.voice-of-customer-agent`.
-
-**Cross-agent communication:**
-
-| Topic | Producer | Consumer | Purpose |
-|-------|----------|----------|---------|
-| `agent.optimization.creative_refresh` | Campaign Optimization | Creative Generation | Refresh fatigued ad creatives |
-| `agent.optimization.spend_milestone` | Campaign Optimization | Campaign Optimization | Self-trigger at 50%/75%/100% spend |
-| `agent.optimization.action_executed` | Campaign Optimization | Intelligence Loop Agent | Learnings → extraction + RAG ingestion |
-| `tenant-provisioning-topic` | — | Odoo MCP server | New tenant provisioning |
-
-**Manual COA tick trigger**: The Optimization Dashboard exposes a manual trigger button via Django's `/api/v1/optimization/trigger-tick/` endpoint, which proxies to COA (`X-Service-Token` auth). Requires `COA_SERVICE_URL` and `COA_SERVICE_TOKEN` env vars on Django.
+**Manual COA tick trigger**: Besides Celery Beat's scheduled ticks, the Optimization Dashboard exposes a manual trigger button that calls Django's `/api/v1/optimization/trigger-tick/` endpoint, which proxies to COA (`X-Service-Token` auth) and returns synchronous per-campaign results including skip reasons (guardrail failures, campaign age filters, etc.) for immediate UI feedback. COA service URL and service token must be configured on the Django backend (`COA_SERVICE_URL`, `COA_SERVICE_TOKEN`).
 
 ## Critical Code Patterns
 
@@ -402,14 +425,6 @@ try {
 
 Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `text-brand-electric`, `text-brand-silver`, `btn-primary`. Icons from `lucide-react`. Charts via `recharts`. See `ai-brand-automator-frontend/DESIGN_SYSTEM.md`.
 
-## Backend Code Style
-
-- **Imports**: stdlib → third-party → local, separated by blank lines
-- **Docstrings**: Google style — one-line summary, then Args/Returns/Raises
-- **Type hints**: Use on function signatures and complex return types
-- **Serializers**: Use `read_only_fields` for computed fields, `validate_<field>()` for field-level validation
-- **URLs**: Prefix all routes with `/api/v1/`, use DRF `DefaultRouter` for ViewSets, `path()` with trailing slashes
-
 ## Non-Negotiable Rules
 
 ### Backend
@@ -432,8 +447,6 @@ Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `t
 - **TypeScript**: Strict mode, path alias `@/*` → `./src/*`, never use `any` — use `unknown` and narrow with type guards
 - **ESLint only** (no Prettier)
 - **Components**: Functional components only, no class-based React
-- **App Router**: Use `app/` directory, `'use client'` directive for interactive pages, `loading.tsx` for loading states, `error.tsx` for error boundaries
-- **Types**: Use `interface` for object shapes, `type` for unions/intersections. Define API response types in component files or `@/types/`
 
 ## Key Files
 
@@ -505,7 +518,6 @@ Conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`
 - **GCS**: Mocked via `unittest.mock.patch` on `GCSService`
 - **Email**: Redirected to `locmem.EmailBackend` (autouse fixture)
 - **Orchestrator**: Mocked via `unittest.mock.patch` on `OrchestratorDispatcher`
-- **Stripe**: Mocked via `@patch('subscriptions.views.stripe')`
 - **Microservice integration tests**: Marked with `@pytest.mark.integration` (require Redis)
 - **Test markers**: `unit`, `integration`, `property`, `hypothesis`, `slow`, `skip_ci`, `gcp` (real GCP creds), `asyncio`
 - **Test pyramid**: 70% unit / 25% integration / 5% property
