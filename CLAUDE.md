@@ -140,7 +140,7 @@ docker compose --profile with-kafka --profile with-db up      # + Local PostgreS
 docker compose down -v                                        # Tear down
 ```
 
-**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, Orchestrator 8010, Discovery 8020, Market Research 8021, Competitor Intel 8022, Audience Persona 8023, Trend Cultural 8024, VoC Agent 8025, Intelligence 8030, Brand Positioning 8031, Brand Architecture 8032, Brand Personality 8033, Brand Naming 8034, Brand Story 8035, Titling 8040, Campaign Architecture 8041, Creative Generation 8042, Ad Publishing 8043, Campaign Optimization 8044, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090, Odoo MCP 8095, Odoo Worker 8100
+**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, MLflow 5000, MLflow DB 5435 (host), Orchestrator 8010, Discovery 8020, Market Research 8021, Competitor Intel 8022, Audience Persona 8023, Trend Cultural 8024, VoC Agent 8025, Intelligence 8030, Brand Positioning 8031, Brand Architecture 8032, Brand Personality 8033, Brand Naming 8034, Brand Story 8035, Titling 8040, Campaign Architecture 8041, Creative Generation 8042, Ad Publishing 8043, Campaign Optimization 8044, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090, Odoo MCP 8095, Odoo Worker 8100
 
 **Frontend Docker build** requires `output: "standalone"` in `next.config.ts`. Without it, the Dockerfile `COPY --from=builder /app/.next/standalone` step fails.
 

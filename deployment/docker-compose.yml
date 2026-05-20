@@ -1628,6 +1628,61 @@ services:
       - app-network
 
   # ==========================================================================
+  # MLflow PostgreSQL — Dedicated database for MLflow Tracking Server
+  # Stores prompt registry, experiment tracking, and run metadata
+  # ==========================================================================
+  mlflow-db:
+    image: postgres:15-alpine
+    container_name: ai-brand-automator-mlflow-db
+    environment:
+      - POSTGRES_DB=mlflow
+      - POSTGRES_USER=mlflow
+      - POSTGRES_PASSWORD=${MLFLOW_DB_PASSWORD:-mlflow}
+    ports:
+      - "5435:5432"
+    volumes:
+      - mlflow_postgres_volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # MLflow Tracking Server — Prompt registry and experiment tracking
+  # Central versioned prompt registry for all 15 agent services
+  # Backend store: PostgreSQL | Artifact store: local volume
+  # ==========================================================================
+  mlflow-server:
+    build:
+      context: .
+      dockerfile: docker/mlflow/Dockerfile
+    container_name: ai-brand-automator-mlflow
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=postgresql://mlflow:${MLFLOW_DB_PASSWORD:-mlflow}@mlflow-db:5432/mlflow
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_artifacts_volume:/mlflow/artifacts
+    depends_on:
+      mlflow-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
   # Brand Equity Calculator — ISO 20671:2019 brand evaluation (public)
   # Powered by Claude AI (Anthropic). No auth required.
   # ==========================================================================
@@ -1674,6 +1729,8 @@ volumes:
   odoo_postgres_volume:
   odoo_data_volume:
   odoo_addons_volume:
+  mlflow_postgres_volume:
+  mlflow_artifacts_volume:
 
 # ==========================================================================
 # Networks
