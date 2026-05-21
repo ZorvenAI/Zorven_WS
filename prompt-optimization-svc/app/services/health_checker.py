@@ -1,5 +1,6 @@
 """Multi-dependency health checker for prompt-optimization-svc."""
 
+import asyncio
 import logging
 import time
 from typing import Optional
@@ -129,13 +130,13 @@ class HealthChecker:
             )
 
     async def check_all(self) -> HealthResponse:
-        """Run all dependency checks and return aggregate status."""
-        deps = [
-            await self.check_mlflow(),
-            await self.check_redis(),
-            await self.check_kafka(),
-            await self.check_postgres(),
-        ]
+        """Run all dependency checks concurrently and return aggregate status."""
+        deps = list(await asyncio.gather(
+            self.check_mlflow(),
+            self.check_redis(),
+            self.check_kafka(),
+            self.check_postgres(),
+        ))
 
         down_required = [
             d for d in deps if d.status == "down" and d.name in ("mlflow", "redis")

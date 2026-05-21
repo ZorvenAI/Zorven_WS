@@ -18,13 +18,17 @@ class RedisManager:
         self.result_cache_ttl = result_cache_ttl
         self._redis: Optional[aioredis.Redis] = None
 
-    async def _get_redis(self) -> aioredis.Redis:
-        """Lazy connection initialization."""
+    async def connect(self) -> aioredis.Redis:
+        """Initialize and return the Redis connection."""
         if self._redis is None:
             self._redis = aioredis.from_url(
                 self.redis_url, decode_responses=True
             )
         return self._redis
+
+    async def _get_redis(self) -> aioredis.Redis:
+        """Lazy connection initialization."""
+        return await self.connect()
 
     @property
     def client(self) -> Optional[aioredis.Redis]:

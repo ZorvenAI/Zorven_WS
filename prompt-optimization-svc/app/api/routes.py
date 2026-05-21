@@ -22,7 +22,7 @@ async def health() -> HealthResponse:
     """Health check with dependency status."""
     if health_checker is not None:
         return await health_checker.check_all()
-    return HealthResponse(status="healthy")
+    return HealthResponse(status="unhealthy", dependencies=[])
 
 
 @router.post("/v1/execute", response_model=ExecuteResponse, status_code=501)

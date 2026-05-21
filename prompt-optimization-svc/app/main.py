@@ -27,8 +27,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # 1. Redis
     redis_manager = RedisManager(redis_url=settings.REDIS_URL)
-    # Force connection to get a client reference for health checks
-    redis_client = await redis_manager._get_redis()
+    redis_client = await redis_manager.connect()
 
     # 2. Kafka producers
     trace_producer = TraceProducer(settings.KAFKA_BOOTSTRAP_SERVERS)
