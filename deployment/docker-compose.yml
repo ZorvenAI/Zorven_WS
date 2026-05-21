@@ -311,7 +311,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ai-brand-automator-redis
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 25
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 27
     ports:
       - "6379:6379"
     volumes:
@@ -1674,6 +1674,45 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ==========================================================================
+  # Prompt Optimization Service — MLflow prompt registry + GEPA optimization
+  # Central prompt management, optimization, and dataset CRUD for all agents
+  # ==========================================================================
+  prompt-optimization-svc:
+    build:
+      context: ../prompt-optimization-svc
+      dockerfile: Dockerfile
+    container_name: ai-brand-automator-prompt-optimization
+    environment:
+      - POI_REDIS_URL=redis://redis:6379/26
+      - POI_KAFKA_BOOTSTRAP_SERVERS=${POI_KAFKA_BOOTSTRAP_SERVERS:-}
+      - POI_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - POI_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - POI_DATABASE_URL=postgresql://mlflow:${MLFLOW_DB_PASSWORD:-mlflow}@mlflow-db:5432/mlflow
+      - POI_LOG_LEVEL=${POI_LOG_LEVEL:-INFO}
+      - POI_HOST=0.0.0.0
+      - POI_PORT=8110
+      - POI_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - POI_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+    expose:
+      - "8110"
+    ports:
+      - "8110:8110"
+    depends_on:
+      redis:
+        condition: service_healthy
+      mlflow-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8110/health"]
       interval: 30s
       timeout: 10s
       retries: 3

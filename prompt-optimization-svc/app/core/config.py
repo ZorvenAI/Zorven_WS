@@ -1,0 +1,43 @@
+"""Prompt Optimization Service configuration via environment variables."""
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Service configuration loaded from POI_* environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="POI_",
+        case_sensitive=False,
+    )
+
+    # Server
+    HOST: str = "0.0.0.0"
+    PORT: int = 8110
+
+    # MLflow Tracking Server
+    MLFLOW_TRACKING_URI: str = "http://mlflow-server:5000"
+
+    # PostgreSQL (shared with MLflow backend store)
+    DATABASE_URL: str = "postgresql://mlflow:mlflow@mlflow-db:5432/mlflow"
+
+    # Redis (DB 26)
+    REDIS_URL: str = "redis://localhost:6379/26"
+
+    # Kafka
+    KAFKA_BOOTSTRAP_SERVERS: str = ""
+
+    # Anthropic
+    ANTHROPIC_API_KEY: str = ""
+
+    # CORS
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
+
+    # Logging
+    LOG_LEVEL: str = "INFO"
+
+    # Service auth
+    SERVICE_TOKEN: str = ""
+
+
+settings = Settings()
