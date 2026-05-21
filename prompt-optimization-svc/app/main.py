@@ -1,7 +1,9 @@
 """FastAPI application for prompt-optimization-svc."""
 
 import logging
+import subprocess
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
@@ -17,6 +19,28 @@ from app.services.health_checker import HealthChecker
 logger = logging.getLogger(__name__)
 
 
+def _run_migrations() -> None:
+    """Run Alembic migrations on startup."""
+    alembic_ini = Path(__file__).resolve().parents[1] / "alembic.ini"
+    if not alembic_ini.exists():
+        logger.warning("alembic.ini not found at %s — skipping migrations", alembic_ini)
+        return
+    try:
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            cwd=str(alembic_ini.parent),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode == 0:
+            logger.info("Alembic migrations applied successfully")
+        else:
+            logger.error("Alembic migration failed: %s", result.stderr)
+    except Exception as exc:
+        logger.error("Alembic migration error: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup and shutdown hooks."""
@@ -24,6 +48,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info(
         "prompt-optimization-svc starting on %s:%d", settings.HOST, settings.PORT
     )
+
+    # 0. Run database migrations
+    _run_migrations()
 
     # 1. Redis
     redis_manager = RedisManager(redis_url=settings.REDIS_URL)

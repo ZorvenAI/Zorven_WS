@@ -54,6 +54,22 @@ pytest tests/ -m "not integration" -v
 black app/ tests/
 ```
 
+## Database Migrations (Alembic)
+
+Uses `prompt_optimization` PostgreSQL schema within the shared MLflow database.
+
+```bash
+alembic upgrade head           # Apply all migrations
+alembic downgrade -1           # Rollback last migration
+alembic downgrade base         # Rollback all migrations
+alembic revision -m "desc"     # Create new migration (manual)
+alembic revision --autogenerate -m "desc"  # Auto-detect model changes
+alembic current                # Show current revision
+alembic history                # Show migration history
+```
+
+Migrations run automatically on service startup via `_run_migrations()` in `main.py`.
+
 ## Health Endpoint
 
 `GET /health` returns dependency status for MLflow, Redis, Kafka, and PostgreSQL.
