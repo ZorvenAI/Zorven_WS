@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column
@@ -61,7 +62,7 @@ class GoldenDataset(Base):
         Float, nullable=True, comment="Scorer aggregate when source=mined"
     )
     active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="true", comment="Soft-delete flag"
+        Boolean, nullable=False, server_default=text("true"), comment="Soft-delete flag"
     )
     metadata_extra: Mapped[dict | None] = mapped_column(
         "metadata", JSON, nullable=True, comment="Industry, maturity, objective, etc."
@@ -70,14 +71,14 @@ class GoldenDataset(Base):
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
-        server_default="now()",
+        server_default=text("now()"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
-        server_default="now()",
+        server_default=text("now()"),
     )
 
     def __repr__(self) -> str:

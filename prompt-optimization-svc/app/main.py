@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def _run_migrations() -> None:
-    """Run Alembic migrations on startup."""
+    """Run Alembic migrations on startup. Fails fast on error."""
     alembic_ini = Path(__file__).resolve().parents[1] / "alembic.ini"
     if not alembic_ini.exists():
         logger.warning("alembic.ini not found at %s — skipping migrations", alembic_ini)
@@ -35,10 +35,24 @@ def _run_migrations() -> None:
         )
         if result.returncode == 0:
             logger.info("Alembic migrations applied successfully")
+            if result.stdout:
+                logger.debug("Alembic stdout: %s", result.stdout)
         else:
-            logger.error("Alembic migration failed: %s", result.stderr)
+            logger.error(
+                "Alembic migration failed (exit %d)\nstdout: %s\nstderr: %s",
+                result.returncode,
+                result.stdout,
+                result.stderr,
+            )
+            raise RuntimeError(
+                f"Alembic migration failed (exit {result.returncode}): {result.stderr}"
+            )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("Alembic migration timed out after 60 seconds")
+    except RuntimeError:
+        raise
     except Exception as exc:
-        logger.error("Alembic migration error: %s", exc)
+        raise RuntimeError(f"Alembic migration error: {exc}") from exc
 
 
 @asynccontextmanager
