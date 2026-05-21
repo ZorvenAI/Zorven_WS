@@ -99,8 +99,54 @@ echo "=== Seeding analytics metric definitions ==="
 python manage.py seed_metrics || echo "Metric seeding skipped"
 echo "=== Collecting static files ==="
 python manage.py collectstatic --noinput || true
-echo "=== Starting Gunicorn on port $PORT ==="
-exec gunicorn brand_automator.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 2 --timeout 120 --access-logfile - --error-logfile -
+
+# Branch by PROCESS_TYPE: web (default), worker, beat, or custom command
+case "${PROCESS_TYPE:-web}" in
+  web)
+    echo "=== Starting Gunicorn on port $PORT ==="
+    exec gunicorn brand_automator.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 2 --timeout 120 --access-logfile - --error-logfile -
+    ;;
+  worker)
+    echo "=== Starting Celery worker ==="
+    exec celery -A brand_automator worker -l info --concurrency=2
+    ;;
+  orchestration-worker)
+    echo "=== Starting Celery orchestration worker ==="
+    exec celery -A brand_automator worker -Q orchestration -l info --concurrency=4
+    ;;
+  beat)
+    echo "=== Starting Celery beat ==="
+    exec celery -A brand_automator beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    ;;
+  ingestion-worker)
+    echo "=== Starting Celery ingestion worker ==="
+    exec celery -A brand_automator worker -Q ingestion -l info --concurrency=2
+    ;;
+  curation-worker)
+    echo "=== Starting Celery curation worker ==="
+    exec celery -A brand_automator worker -Q curation -l info --concurrency=2
+    ;;
+  ingestion-consumer)
+    echo "=== Starting ingestion consumer ==="
+    exec python manage.py run_ingestion --batch-size 10 --poll-timeout 1.0
+    ;;
+  curation-consumer)
+    echo "=== Starting curation consumer ==="
+    exec python manage.py run_curation_consumer --batch-size 10 --poll-timeout 1.0
+    ;;
+  rag-index-consumer)
+    echo "=== Starting RAG index consumer ==="
+    exec python manage.py consume_sync_events --topic rag-sync-ready-topic --group rag-index-consumers --poll-timeout 1.0
+    ;;
+  mcp-server)
+    echo "=== Starting MCP server on port ${PORT:-8085} ==="
+    exec python run_mcp_server.py --transport sse --port ${PORT:-8085} --host 0.0.0.0
+    ;;
+  *)
+    echo "=== Unknown PROCESS_TYPE: ${PROCESS_TYPE} — running as command ==="
+    exec ${PROCESS_TYPE}
+    ;;
+esac
 EOF
 
 # Create worker entrypoint (for Kafka consumers and Celery workers on Railway)
