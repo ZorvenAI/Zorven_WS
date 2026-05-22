@@ -109,7 +109,6 @@ class ZorvenPromptLoader:
                 )
                 if template is not None:
                     logger.debug("Tier 2 HIT (MLflow): %s", name)
-                    # Resolve TTL lazily — only needed for cache write
                     resolved_ttl = await self._resolve_ttl(ttl, tenant_id)
                     await self.prompt_cache.set_prompt(
                         name,
@@ -118,10 +117,12 @@ class ZorvenPromptLoader:
                         tenant_id=resolved_tenant,
                     )
                     return template
+                # AC-3: Missing tenant override silently falls through
+                logger.debug("Tier 2 MISS (MLflow): %s", name)
             except Exception as exc:
-                # AC-2: Log warning and fall through to fallback
+                # Only log warnings for actual errors, not "not found"
                 logger.warning(
-                    "Tier 2 FAIL (MLflow) for prompt '%s': %s", name, exc
+                    "Tier 2 ERROR (MLflow) for prompt '%s': %s", name, exc
                 )
 
         # --- Tier 3: fallback (handled by caller) ---
@@ -142,16 +143,31 @@ class ZorvenPromptLoader:
     ) -> tuple[Optional[str], Optional[str]]:
         """Lifecycle-aware MLflow resolution (runs in thread).
 
-        Checks TENANT_OVERRIDE first (if tenant_id), then global
-        PRODUCTION. Returns (template, resolved_tenant_id).
+        Resolution order for tenant_id:
+        1. Named tenant prompt: <name>-tenant-<tid> (AC-2)
+        2. TENANT_OVERRIDE state on base prompt
+        3. Global PRODUCTION
+
+        Returns (template, resolved_tenant_id).
+        Missing tenant override silently returns None (AC-3).
         """
-        # Try tenant override first
         if tenant_id:
+            # AC-2: Try tenant-specific named prompt first
+            tenant_prompt_name = f"{name}-tenant-{tenant_id}"
+            template = self.mlflow_registry.load_prompt_template(
+                tenant_prompt_name
+            )
+            if template is not None:
+                return template, tenant_id
+
+            # Try TENANT_OVERRIDE state on base prompt
             info = self.mlflow_registry.get_prompt_by_state(
                 name, "TENANT_OVERRIDE", tenant_id=tenant_id
             )
             if info is not None:
                 return info.template, tenant_id
+
+            # AC-3: Silent fall-through — no warning for missing override
 
         # Fall back to global PRODUCTION
         info = self.mlflow_registry.get_prompt_by_state(
