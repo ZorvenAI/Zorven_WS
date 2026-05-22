@@ -10,9 +10,17 @@ from app.api.schemas import (
     ExecuteRequest,
     ExecuteResponse,
     HealthResponse,
+    ProductionPromptResponse,
     PromptRegistrationRequest,
     PromptRegistrationResponse,
+    PromptTransitionRequest,
+    PromptTransitionResponse,
     SeedResponse,
+)
+from app.logic.lifecycle import (
+    InvalidTransitionError,
+    PromptLifecycleManager,
+    PromptState,
 )
 from app.services.health_checker import HealthChecker
 from app.services.mlflow_registry import MLflowPromptRegistry
@@ -24,6 +32,7 @@ router = APIRouter()
 # Module-level dependencies — initialized in main.py lifespan
 health_checker: Optional[HealthChecker] = None
 mlflow_registry: Optional[MLflowPromptRegistry] = None
+lifecycle_manager: Optional[PromptLifecycleManager] = None
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -81,6 +90,124 @@ async def seed_prompts() -> SeedResponse:
         skipped=result.skipped,
         errors=result.errors,
         details=result.details,
+    )
+
+
+@router.put("/v1/prompts/{name}/versions/{version}/promote")
+async def promote_prompt(
+    name: str,
+    version: int,
+    request: PromptTransitionRequest,
+    x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
+) -> PromptTransitionResponse:
+    """Promote a prompt version to the next lifecycle state."""
+    if lifecycle_manager is None:
+        return PromptTransitionResponse(
+            name=name, version=version, from_state="unknown",
+            to_state=request.target_state, success=False,
+            message="Lifecycle manager not initialized",
+        )
+    try:
+        current = mlflow_registry.get_prompt(name) if mlflow_registry else None
+        current_state = (current.tags.get("state", "DRAFT") if current else "DRAFT")
+
+        from_state = PromptState(current_state)
+        to_state = PromptState(request.target_state)
+
+        if to_state == PromptState.PRODUCTION:
+            lifecycle_manager.promote_to_production(
+                name, version, tenant_id=request.tenant_id
+            )
+        else:
+            lifecycle_manager.transition(
+                name, version, from_state, to_state,
+                tenant_id=request.tenant_id,
+            )
+
+        return PromptTransitionResponse(
+            name=name, version=version, from_state=from_state.value,
+            to_state=to_state.value, success=True,
+        )
+    except (InvalidTransitionError, ValueError) as exc:
+        return PromptTransitionResponse(
+            name=name, version=version, from_state="unknown",
+            to_state=request.target_state, success=False, message=str(exc),
+        )
+
+
+@router.put("/v1/prompts/{name}/versions/{version}/reject")
+async def reject_prompt(name: str, version: int) -> PromptTransitionResponse:
+    """Reject a STAGING prompt version (AC-3: never hard-deleted)."""
+    if lifecycle_manager is None:
+        return PromptTransitionResponse(
+            name=name, version=version, from_state="STAGING",
+            to_state="REJECTED", success=False,
+            message="Lifecycle manager not initialized",
+        )
+    try:
+        lifecycle_manager.reject(name, version)
+        return PromptTransitionResponse(
+            name=name, version=version, from_state="STAGING",
+            to_state="REJECTED", success=True,
+        )
+    except InvalidTransitionError as exc:
+        return PromptTransitionResponse(
+            name=name, version=version, from_state="STAGING",
+            to_state="REJECTED", success=False, message=str(exc),
+        )
+
+
+@router.put("/v1/prompts/{name}/versions/{version}/rollback")
+async def rollback_prompt(
+    name: str,
+    version: int,
+    x_tenant_id: str = Header(default=None, alias="X-Tenant-ID"),
+) -> PromptTransitionResponse:
+    """Roll back a CANARY or PRODUCTION version."""
+    if lifecycle_manager is None:
+        return PromptTransitionResponse(
+            name=name, version=version, from_state="unknown",
+            to_state="ROLLED_BACK", success=False,
+            message="Lifecycle manager not initialized",
+        )
+    try:
+        current = mlflow_registry.get_prompt(name) if mlflow_registry else None
+        current_state = PromptState(
+            current.tags.get("state", "PRODUCTION") if current else "PRODUCTION"
+        )
+        lifecycle_manager.rollback(name, version, current_state, tenant_id=x_tenant_id)
+        return PromptTransitionResponse(
+            name=name, version=version, from_state=current_state.value,
+            to_state="ROLLED_BACK", success=True,
+        )
+    except InvalidTransitionError as exc:
+        return PromptTransitionResponse(
+            name=name, version=version, from_state="unknown",
+            to_state="ROLLED_BACK", success=False, message=str(exc),
+        )
+
+
+@router.get("/v1/prompts/{name}/production", response_model=None)
+async def get_production_prompt(
+    name: str,
+    x_tenant_id: str = Header(default=None, alias="X-Tenant-ID"),
+):
+    """Get the current production version (AC-4, AC-5: tenant override first)."""
+    if lifecycle_manager is None:
+        return JSONResponse(status_code=503, content={"detail": "Not initialized"})
+    prod = lifecycle_manager.get_production_version(name, tenant_id=x_tenant_id)
+    if prod is None:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"No production version found for '{name}'"},
+        )
+    return ProductionPromptResponse(
+        name=prod.name,
+        version=prod.version,
+        template=prod.template,
+        state=prod.tags.get("state", "PRODUCTION"),
+        tenant_id=prod.tags.get("tenant_id"),
+        tags=prod.tags,
     )
 
 

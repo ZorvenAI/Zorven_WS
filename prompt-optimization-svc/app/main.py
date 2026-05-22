@@ -16,7 +16,8 @@ from app.cache.prompt_cache import PromptCacheManager
 from app.cache.redis_manager import RedisManager
 from app.core.config import settings
 from app.core.logging_config import setup_logging
-from app.kafka.producer import AuditProducer, TraceProducer
+from app.kafka.producer import AuditProducer, LifecycleProducer, TraceProducer
+from app.logic.lifecycle import PromptLifecycleManager
 from app.services.health_checker import HealthChecker
 from app.services.mlflow_registry import MLflowPromptRegistry
 
@@ -83,6 +84,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await trace_producer.start()
     audit_producer = AuditProducer(settings.KAFKA_BOOTSTRAP_SERVERS)
     await audit_producer.start()
+    lifecycle_producer = LifecycleProducer(settings.KAFKA_BOOTSTRAP_SERVERS)
+    await lifecycle_producer.start()
 
     # 3. MLflow Prompt Registry
     registry: MLflowPromptRegistry | None = None
@@ -92,14 +95,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("MLflow prompt registry unavailable: %s", exc)
 
-    # 4. Health checker
+    # 4. Lifecycle manager
+    lcm = None
+    if registry:
+        lcm = PromptLifecycleManager(registry, lifecycle_producer)
+
+    # 5. Health checker
     checker = HealthChecker(redis_client=redis_client)
 
-    # 5. Assign to routes module
+    # 6. Assign to routes module
     from app.api import routes
 
     routes.health_checker = checker
     routes.mlflow_registry = registry
+    routes.lifecycle_manager = lcm
 
     logger.info(
         "Service initialized — MLflow=%s, Redis=%s, PromptCache=%s, Kafka=%s",
@@ -111,11 +120,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # Shutdown
+    await lifecycle_producer.stop()
     await trace_producer.stop()
     await audit_producer.stop()
     await prompt_cache.close()
     await redis_manager.close()
     routes.health_checker = None
+    routes.lifecycle_manager = None
     logger.info("prompt-optimization-svc shut down")
 
 
