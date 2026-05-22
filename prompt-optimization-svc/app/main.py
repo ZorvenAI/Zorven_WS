@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.kafka.producer import AuditProducer, TraceProducer
 from app.services.health_checker import HealthChecker
+from app.services.mlflow_registry import MLflowPromptRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -83,13 +84,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     audit_producer = AuditProducer(settings.KAFKA_BOOTSTRAP_SERVERS)
     await audit_producer.start()
 
-    # 3. Health checker
+    # 3. MLflow Prompt Registry
+    registry: MLflowPromptRegistry | None = None
+    try:
+        registry = MLflowPromptRegistry(settings.MLFLOW_TRACKING_URI)
+        logger.info("MLflow prompt registry connected: %s", settings.MLFLOW_TRACKING_URI)
+    except Exception as exc:
+        logger.warning("MLflow prompt registry unavailable: %s", exc)
+
+    # 4. Health checker
     checker = HealthChecker(redis_client=redis_client)
 
-    # 4. Assign to routes module
+    # 5. Assign to routes module
     from app.api import routes
 
     routes.health_checker = checker
+    routes.mlflow_registry = registry
 
     logger.info(
         "Service initialized — MLflow=%s, Redis=%s, PromptCache=%s, Kafka=%s",
