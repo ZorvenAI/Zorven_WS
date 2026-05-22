@@ -87,6 +87,61 @@ class PromptRegistrationResponse(BaseModel):
     message: str = ""
 
 
+class PromptMetadata(BaseModel):
+    """Structured metadata block per §3.4."""
+
+    workflow: str = Field(..., description="e.g. wf1, wf2, wf3")
+    agent_code: str = Field(..., description="e.g. mra, cga, bpa")
+    agent_port: int = Field(..., description="Agent service port, e.g. 8021")
+    skill: str = Field(..., description="Skill name, e.g. landscape, system")
+    model_target: str = Field(
+        default="claude-sonnet-4-6", description="Target LLM model"
+    )
+    optimization_group: str = Field(
+        ..., description="e.g. wf1-discovery-pipeline"
+    )
+    tenant_overridable: bool = Field(
+        default=True, description="Whether tenants can customize this prompt"
+    )
+    optimization_priority: str = Field(
+        default="MEDIUM", description="CRITICAL | HIGH | MEDIUM | LOW"
+    )
+    last_optimized: Optional[str] = Field(
+        default=None, description="ISO timestamp of last optimization"
+    )
+    optimization_run_id: Optional[str] = Field(
+        default=None, description="MLflow run ID of last optimization"
+    )
+
+
+class PromptDetailResponse(BaseModel):
+    """Response for GET /v1/prompts/{name} — full prompt detail with metadata."""
+
+    name: str
+    version: int
+    template: str
+    state: str
+    metadata: PromptMetadata
+    tags: dict[str, str] = Field(default_factory=dict)
+
+
+class PromptSummary(BaseModel):
+    """Summary entry for GET /v1/prompts list."""
+
+    name: str
+    version: int
+    state: str
+    agent_code: str
+    workflow: str
+
+
+class PromptListResponse(BaseModel):
+    """Response for GET /v1/prompts."""
+
+    prompts: list[PromptSummary]
+    total: int
+
+
 class PromptTransitionRequest(BaseModel):
     """Request body for lifecycle transitions."""
 
