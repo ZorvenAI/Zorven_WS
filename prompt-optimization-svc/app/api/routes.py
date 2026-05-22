@@ -3,10 +3,16 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 
-from app.api.schemas import ExecuteRequest, ExecuteResponse, HealthResponse
+from app.api.schemas import (
+    ExecuteRequest,
+    ExecuteResponse,
+    HealthResponse,
+    PromptRegistrationRequest,
+    PromptRegistrationResponse,
+)
 from app.services.health_checker import HealthChecker
 
 logger = logging.getLogger(__name__)
@@ -23,6 +29,20 @@ async def health() -> HealthResponse:
     if health_checker is not None:
         return await health_checker.check_all()
     return HealthResponse(status="unhealthy", dependencies=[])
+
+
+@router.post("/v1/prompts", response_model=PromptRegistrationResponse)
+async def register_prompt(
+    request: PromptRegistrationRequest,
+    x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
+) -> PromptRegistrationResponse:
+    """Register a prompt template (stub — MLflow integration in US-007)."""
+    return PromptRegistrationResponse(
+        name=request.name,
+        version=1,
+        status="registered",
+        message="Prompt registered (stub — MLflow integration pending)",
+    )
 
 
 @router.post("/v1/execute", response_model=ExecuteResponse, status_code=501)

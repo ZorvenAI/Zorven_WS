@@ -2,7 +2,9 @@
 
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.logic.prompt_naming import validate_prompt_name
 
 
 class DependencyStatus(BaseModel):
@@ -55,3 +57,31 @@ class ExecuteResponse(BaseModel):
 
     status: str = "not_implemented"
     message: str = "Prompt optimization endpoints will be available in EPIC-2+"
+
+
+class PromptRegistrationRequest(BaseModel):
+    """Request body for POST /v1/prompts — register a prompt template."""
+
+    name: str = Field(
+        ...,
+        description="Prompt name following §3.1: zorven-wf<n>-<agent_code>-<skill>[-<variant>]",
+    )
+    template: str = Field(..., description="Prompt template text")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Optional metadata (workflow, model_target, etc.)"
+    )
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        validate_prompt_name(v)
+        return v
+
+
+class PromptRegistrationResponse(BaseModel):
+    """Response for POST /v1/prompts."""
+
+    name: str
+    version: int = 1
+    status: str = "registered"
+    message: str = ""
