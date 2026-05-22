@@ -21,8 +21,11 @@ class Settings(BaseSettings):
     # PostgreSQL (shared with MLflow backend store)
     DATABASE_URL: str = "postgresql://mlflow:mlflow@mlflow-db:5432/mlflow"
 
-    # Redis (DB 26)
+    # Redis (DB 26 — general service cache/rate-limiting)
     REDIS_URL: str = "redis://localhost:6379/26"
+
+    # Redis (DB 2 — prompt cache, optimization locks, progress tracking)
+    PROMPT_CACHE_REDIS_URL: str = "redis://localhost:6379/2"
 
     # Kafka
     KAFKA_BOOTSTRAP_SERVERS: str = ""

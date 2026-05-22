@@ -1693,6 +1693,7 @@ services:
     container_name: ai-brand-automator-prompt-optimization
     environment:
       - POI_REDIS_URL=redis://redis:6379/26
+      - POI_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
       - POI_KAFKA_BOOTSTRAP_SERVERS=${POI_KAFKA_BOOTSTRAP_SERVERS:-}
       - POI_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - POI_MLFLOW_TRACKING_URI=http://mlflow-server:5000
