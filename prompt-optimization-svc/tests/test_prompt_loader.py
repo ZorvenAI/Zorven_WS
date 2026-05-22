@@ -217,7 +217,7 @@ class TestTier3Fallback:
 
         with caplog.at_level(logging.WARNING):
             await loader.load("test", fallback_template="fb")
-        assert any("Tier 2 FAIL" in r.message for r in caplog.records)
+        assert any("Tier 2 ERROR" in r.message for r in caplog.records)
 
     async def test_all_tiers_fail_returns_empty(
         self, loader, mock_cache, mock_registry
