@@ -11,8 +11,12 @@ from app.api.schemas import (
     ExecuteResponse,
     HealthResponse,
     ProductionPromptResponse,
+    PromptDetailResponse,
+    PromptListResponse,
+    PromptMetadata,
     PromptRegistrationRequest,
     PromptRegistrationResponse,
+    PromptSummary,
     PromptTransitionRequest,
     PromptTransitionResponse,
     SeedResponse,
@@ -41,6 +45,63 @@ async def health() -> HealthResponse:
     if health_checker is not None:
         return await health_checker.check_all()
     return HealthResponse(status="unhealthy", dependencies=[])
+
+
+@router.get("/v1/prompts", response_model=PromptListResponse)
+async def list_prompts() -> PromptListResponse:
+    """List all registered prompts with summary info."""
+    if mlflow_registry is None:
+        return PromptListResponse(prompts=[], total=0)
+    try:
+        names = mlflow_registry.list_prompts()
+        summaries = []
+        for name in names:
+            info = mlflow_registry.get_prompt(name)
+            if info:
+                summaries.append(PromptSummary(
+                    name=info.name,
+                    version=info.version,
+                    state=info.tags.get("state", "DRAFT"),
+                    agent_code=info.tags.get("agent_code", ""),
+                    workflow=info.tags.get("workflow", ""),
+                ))
+        return PromptListResponse(prompts=summaries, total=len(summaries))
+    except Exception as exc:
+        logger.error("Failed to list prompts: %s", exc)
+        return PromptListResponse(prompts=[], total=0)
+
+
+@router.get("/v1/prompts/{name}", response_model=PromptDetailResponse, response_model_exclude_none=True)
+async def get_prompt_detail(name: str) -> PromptDetailResponse | JSONResponse:
+    """Get full prompt detail with metadata (AC-2)."""
+    if mlflow_registry is None:
+        return JSONResponse(status_code=503, content={"detail": "Not initialized"})
+    info = mlflow_registry.get_prompt(name)
+    if info is None:
+        return JSONResponse(status_code=404, content={"detail": f"Prompt '{name}' not found"})
+
+    tags = info.tags
+    metadata = PromptMetadata(
+        workflow=tags.get("workflow", ""),
+        agent_code=tags.get("agent_code", ""),
+        agent_port=int(tags.get("agent_port", "0")),
+        skill=tags.get("skill", ""),
+        model_target=tags.get("model_target", "claude-sonnet-4-6"),
+        optimization_group=tags.get("optimization_group", ""),
+        tenant_overridable=tags.get("tenant_overridable", "true") == "true",
+        optimization_priority=tags.get("optimization_priority", "MEDIUM"),
+        last_optimized=tags.get("last_optimized") or None,
+        optimization_run_id=tags.get("optimization_run_id") or None,
+    )
+
+    return PromptDetailResponse(
+        name=info.name,
+        version=info.version,
+        template=info.template,
+        state=tags.get("state", "DRAFT"),
+        metadata=metadata,
+        tags=tags,
+    )
 
 
 @router.post("/v1/prompts", response_model=PromptRegistrationResponse)
