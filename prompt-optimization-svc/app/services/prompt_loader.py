@@ -2,10 +2,11 @@
 
 Resolution order:
     1. Redis cache (sub-ms) — tenant override first, then global production
-    2. MLflow API (~50ms) — fetch from registry, write to cache
+    2. MLflow API (~50ms) — lifecycle-aware fetch, write to cache
     3. Hardcoded fallback — return fallback_template with warning
 """
 
+import asyncio
 import logging
 import re
 from typing import Any, Optional
@@ -15,12 +16,15 @@ from app.services.mlflow_registry import MLflowPromptRegistry
 
 logger = logging.getLogger(__name__)
 
-# MLflow uses {{var}} but Python format_map needs {var}
+# MLflow uses {{var}} but Python needs {var}
 _MLFLOW_VAR_PATTERN = re.compile(r"\{\{(\w[\w.]*)\}\}")
+
+# Single-pass placeholder pattern for safe substitution
+_PLACEHOLDER_PATTERN = re.compile(r"\{([\w.]+)\}")
 
 
 def _convert_mlflow_template(template: str) -> str:
-    """Convert MLflow {{var}} placeholders to Python {var} for format_map."""
+    """Convert MLflow {{var}} placeholders to Python {var}."""
     return _MLFLOW_VAR_PATTERN.sub(r"{\1}", template)
 
 
@@ -83,7 +87,9 @@ class ZorvenPromptLoader:
                 name, tenant_id=tenant_id
             )
             if cached is not None:
-                logger.debug("Tier 1 HIT (tenant): %s tenant=%s", name, tenant_id)
+                logger.debug(
+                    "Tier 1 HIT (tenant): %s tenant=%s", name, tenant_id
+                )
                 return cached
 
         cached = await self.prompt_cache.get_prompt(name)
@@ -91,18 +97,20 @@ class ZorvenPromptLoader:
             logger.debug("Tier 1 HIT (production): %s", name)
             return cached
 
-        # --- Tier 2: MLflow API ---
+        # --- Tier 2: MLflow API (lifecycle-aware) ---
         if self.mlflow_registry is not None:
             try:
-                template = self.mlflow_registry.load_prompt_template(name)
+                template, resolved_tenant = await asyncio.to_thread(
+                    self._mlflow_resolve, name, tenant_id
+                )
                 if template is not None:
                     logger.debug("Tier 2 HIT (MLflow): %s", name)
-                    # Write to cache with configurable TTL (AC-3)
+                    # Cache under the correct key (AC-3)
                     await self.prompt_cache.set_prompt(
                         name,
                         template,
                         ttl=ttl,
-                        tenant_id=tenant_id,
+                        tenant_id=resolved_tenant,
                     )
                     return template
             except Exception as exc:
@@ -114,15 +122,41 @@ class ZorvenPromptLoader:
         # --- Tier 3: fallback (handled by caller) ---
         return None
 
+    def _mlflow_resolve(
+        self, name: str, tenant_id: Optional[str]
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Lifecycle-aware MLflow resolution (runs in thread).
+
+        Checks TENANT_OVERRIDE first (if tenant_id), then global
+        PRODUCTION. Returns (template, resolved_tenant_id).
+        """
+        # Try tenant override first
+        if tenant_id:
+            info = self.mlflow_registry.get_prompt_by_state(
+                name, "TENANT_OVERRIDE", tenant_id=tenant_id
+            )
+            if info is not None:
+                return info.template, tenant_id
+
+        # Fall back to global PRODUCTION
+        info = self.mlflow_registry.get_prompt_by_state(
+            name, "PRODUCTION", tenant_id=None
+        )
+        if info is not None:
+            return info.template, None
+
+        # Last resort: load latest version (any state)
+        template = self.mlflow_registry.load_prompt_template(name)
+        return template, None
+
     def _format(
         self, template: str, variables: Optional[dict[str, Any]]
     ) -> str:
         """Format a template with variables (AC-4).
 
-        Converts MLflow {{var}} to Python {var}, then applies
-        str.format_map with stringified values. Dotted keys like
-        {context.brand_name} are replaced directly via string
-        substitution since str.format_map treats dots as attribute access.
+        Uses single-pass regex substitution to safely replace
+        {context.var} placeholders without re-processing substituted
+        values.
         """
         if not template or not variables:
             return template
@@ -133,12 +167,14 @@ class ZorvenPromptLoader:
         # Stringify all values (AC-4)
         stringified = {k: str(v) for k, v in variables.items()}
 
-        # Replace dotted keys directly (format_map can't handle dots)
-        result = converted
-        for key, value in stringified.items():
-            result = result.replace(f"{{{key}}}", value)
+        # Single-pass regex substitution (safe against nested placeholders)
+        def _replace(match: re.Match) -> str:
+            key = match.group(1)
+            if key in stringified:
+                return stringified[key]
+            return match.group(0)  # Leave unmatched placeholders as-is
 
-        return result
+        return _PLACEHOLDER_PATTERN.sub(_replace, converted)
 
     async def invalidate(self, name: str) -> int:
         """Invalidate all cached versions of a prompt.

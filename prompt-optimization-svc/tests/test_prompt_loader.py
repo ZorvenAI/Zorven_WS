@@ -93,19 +93,20 @@ class TestTier2MLflow:
     async def test_mlflow_hit_on_cache_miss(
         self, loader, mock_cache, mock_registry
     ):
-        """Cache miss triggers MLflow fetch."""
+        """Cache miss triggers lifecycle-aware MLflow fetch."""
         mock_cache.get_prompt.return_value = None
+        mock_registry.get_prompt_by_state.return_value = None
         mock_registry.load_prompt_template.return_value = "MLflow template"
 
         result = await loader.load("test")
         assert result == "MLflow template"
-        mock_registry.load_prompt_template.assert_called_once_with("test")
 
     async def test_mlflow_result_cached_with_ttl(
         self, loader, mock_cache, mock_registry
     ):
         """AC-3: MLflow result written to Redis with setex (configurable TTL)."""
         mock_cache.get_prompt.return_value = None
+        mock_registry.get_prompt_by_state.return_value = None
         mock_registry.load_prompt_template.return_value = "MLflow template"
 
         await loader.load("test", ttl=600)
@@ -118,10 +119,69 @@ class TestTier2MLflow:
     ):
         """TTL parameter flows through to cache set."""
         mock_cache.get_prompt.return_value = None
+        mock_registry.get_prompt_by_state.return_value = None
         mock_registry.load_prompt_template.return_value = "t"
 
         await loader.load("test", ttl=120)
         assert mock_cache.set_prompt.call_args[1]["ttl"] == 120
+
+    async def test_tenant_id_resolves_tenant_override_first(
+        self, loader, mock_cache, mock_registry
+    ):
+        """Tier 2 with tenant_id checks TENANT_OVERRIDE before PRODUCTION."""
+        mock_cache.get_prompt.return_value = None
+
+        from app.services.mlflow_registry import PromptInfo
+
+        tenant_info = PromptInfo(
+            name="test",
+            version=3,
+            template="Tenant override template",
+            tags={"state": "TENANT_OVERRIDE", "tenant_id": "t-1"},
+        )
+
+        def by_state(name, state, tenant_id=None):
+            if state == "TENANT_OVERRIDE" and tenant_id == "t-1":
+                return tenant_info
+            return None
+
+        mock_registry.get_prompt_by_state.side_effect = by_state
+
+        result = await loader.load("test", tenant_id="t-1")
+        assert result == "Tenant override template"
+        # Should be cached under the tenant key
+        mock_cache.set_prompt.assert_called_once_with(
+            "test", "Tenant override template", ttl=300, tenant_id="t-1"
+        )
+
+    async def test_tenant_id_falls_back_to_production(
+        self, loader, mock_cache, mock_registry
+    ):
+        """Tier 2: No tenant override → falls back to global PRODUCTION."""
+        mock_cache.get_prompt.return_value = None
+
+        from app.services.mlflow_registry import PromptInfo
+
+        prod_info = PromptInfo(
+            name="test",
+            version=2,
+            template="Global production",
+            tags={"state": "PRODUCTION"},
+        )
+
+        def by_state(name, state, tenant_id=None):
+            if state == "PRODUCTION" and tenant_id is None:
+                return prod_info
+            return None
+
+        mock_registry.get_prompt_by_state.side_effect = by_state
+
+        result = await loader.load("test", tenant_id="t-1")
+        assert result == "Global production"
+        # Cached under production key (tenant_id=None)
+        mock_cache.set_prompt.assert_called_once_with(
+            "test", "Global production", ttl=300, tenant_id=None
+        )
 
 
 # ------------------------------------------------------------------
@@ -137,7 +197,9 @@ class TestTier3Fallback:
     ):
         """AC-2: MLflow exception → fallback_template returned."""
         mock_cache.get_prompt.return_value = None
-        mock_registry.load_prompt_template.side_effect = Exception("connection refused")
+        mock_registry.get_prompt_by_state.side_effect = Exception(
+            "connection refused"
+        )
 
         result = await loader.load(
             "test", fallback_template="Fallback: help with {context.task}"
@@ -149,7 +211,7 @@ class TestTier3Fallback:
     ):
         """AC-2: Warning logged on MLflow failure."""
         mock_cache.get_prompt.return_value = None
-        mock_registry.load_prompt_template.side_effect = Exception("timeout")
+        mock_registry.get_prompt_by_state.side_effect = Exception("timeout")
 
         import logging
 
@@ -162,6 +224,7 @@ class TestTier3Fallback:
     ):
         """All tiers fail + no fallback → empty string."""
         mock_cache.get_prompt.return_value = None
+        mock_registry.get_prompt_by_state.return_value = None
         mock_registry.load_prompt_template.return_value = None
 
         result = await loader.load("test")
@@ -172,6 +235,7 @@ class TestTier3Fallback:
     ):
         """MLflow returns None (prompt not found) → fallback."""
         mock_cache.get_prompt.return_value = None
+        mock_registry.get_prompt_by_state.return_value = None
         mock_registry.load_prompt_template.return_value = None
 
         result = await loader.load("test", fallback_template="default prompt")
