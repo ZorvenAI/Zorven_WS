@@ -141,25 +141,34 @@ class PromptCacheManager:
             logger.warning("Lock acquire error: %s", exc)
             return False
 
+    # Lua script for atomic compare-and-delete (lock release)
+    _RELEASE_LOCK_SCRIPT = """
+    if redis.call("GET", KEYS[1]) == ARGV[1] then
+        return redis.call("DEL", KEYS[1])
+    else
+        return 0
+    end
+    """
+
     async def release_optimization_lock(
         self, group: str, owner: str
     ) -> bool:
         """Release an optimization lock (only if held by the given owner).
+
+        Uses an atomic Lua script to compare-and-delete, preventing race
+        conditions where the lock expires and is re-acquired between
+        GET and DEL.
 
         Returns True if released, False if not held or held by another owner.
         """
         try:
             r = await self.connect()
             key = self._lock_key(group)
-            current_owner = await r.get(key)
-            if current_owner == owner:
-                await r.delete(key)
+            result = await r.eval(self._RELEASE_LOCK_SCRIPT, 1, key, owner)
+            if result:
                 logger.info("Lock released: %s (owner=%s)", group, owner)
                 return True
-            logger.debug(
-                "Lock release denied: %s (owner=%s, held_by=%s)",
-                group, owner, current_owner,
-            )
+            logger.debug("Lock release denied: %s (owner=%s)", group, owner)
             return False
         except Exception as exc:
             logger.warning("Lock release error: %s", exc)

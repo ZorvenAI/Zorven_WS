@@ -1,6 +1,6 @@
 """Tests for PromptCacheManager — Redis DB 2 prompt cache, locks, and progress."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -167,21 +167,18 @@ class TestOptimizationLock:
         )
 
     async def test_release_lock_by_owner(self, cache, mock_redis):
-        mock_redis.get.return_value = "worker-1"
+        mock_redis.eval.return_value = 1  # Lua script returns 1 (DEL succeeded)
         released = await cache.release_optimization_lock("wf3-creative", "worker-1")
         assert released is True
-        mock_redis.delete.assert_called_once_with(
-            "prompt:optimization:lock:wf3-creative"
-        )
+        mock_redis.eval.assert_called_once()
 
     async def test_release_lock_wrong_owner(self, cache, mock_redis):
-        mock_redis.get.return_value = "worker-1"
+        mock_redis.eval.return_value = 0  # Lua script returns 0 (owner mismatch)
         released = await cache.release_optimization_lock("wf3-creative", "worker-2")
         assert released is False
-        mock_redis.delete.assert_not_called()
 
     async def test_release_lock_not_held(self, cache, mock_redis):
-        mock_redis.get.return_value = None
+        mock_redis.eval.return_value = 0  # Lua script returns 0 (key doesn't exist)
         released = await cache.release_optimization_lock("grp", "owner")
         assert released is False
 
