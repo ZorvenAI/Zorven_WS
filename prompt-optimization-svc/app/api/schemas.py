@@ -85,3 +85,12 @@ class PromptRegistrationResponse(BaseModel):
     version: int = 1
     status: str = "registered"
     message: str = ""
+
+
+class SeedResponse(BaseModel):
+    """Response for POST /v1/prompts/seed."""
+
+    created: int = 0
+    skipped: int = 0
+    errors: int = 0
+    details: list[str] = Field(default_factory=list)
