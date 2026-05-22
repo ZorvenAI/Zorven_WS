@@ -1702,7 +1702,7 @@ services:
       - POI_HOST=0.0.0.0
       - POI_PORT=8110
       - POI_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
-      - POI_JWT_SECRET=${JWT_SECRET:-}
+      - POI_JWT_SECRET=${SECRET_KEY:-dev-secret-key-change-in-production}
       - POI_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
     expose:
       - "8110"
