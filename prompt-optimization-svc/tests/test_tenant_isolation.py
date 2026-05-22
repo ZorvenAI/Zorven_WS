@@ -167,27 +167,39 @@ class TestSilentFallthrough:
     async def test_no_warning_on_tenant_miss(
         self, loader, mock_cache, mock_registry, caplog
     ):
-        """Missing tenant override doesn't log a warning."""
+        """Missing tenant override doesn't log a warning when PRODUCTION exists."""
         mock_cache.get_prompt.return_value = None
-        mock_registry.load_prompt_template.return_value = None
-        mock_registry.get_prompt_by_state.return_value = None
+
+        # Tenant-named prompt miss, TENANT_OVERRIDE miss,
+        # but PRODUCTION exists → no fallback warning either
+        def load_template(name):
+            return None  # No tenant-named prompt
+
+        mock_registry.load_prompt_template.side_effect = load_template
+
+        def by_state(name, state, tenant_id=None):
+            if state == "PRODUCTION" and tenant_id is None:
+                return PromptInfo(
+                    name=name,
+                    version=1,
+                    template="Global production",
+                    tags={"state": "PRODUCTION"},
+                )
+            return None  # No tenant override
+
+        mock_registry.get_prompt_by_state.side_effect = by_state
 
         with caplog.at_level(logging.DEBUG):
-            await loader.load(
-                "test",
-                tenant_id="t-1",
-                fallback_template="fallback",
-            )
+            result = await loader.load("test", tenant_id="t-1")
 
-        # Should NOT have any WARNING about tenant miss
+        assert result == "Global production"
+
+        # No WARNING-level logs at all — silent fall-through
         warnings = [
-            r
-            for r in caplog.records
-            if r.levelno >= logging.WARNING
-            and "tenant" in r.message.lower()
+            r for r in caplog.records if r.levelno >= logging.WARNING
         ]
         assert len(warnings) == 0, (
-            f"Unexpected tenant warnings: {[r.message for r in warnings]}"
+            f"Unexpected warnings: {[r.message for r in warnings]}"
         )
 
     async def test_actual_error_still_logs_warning(
