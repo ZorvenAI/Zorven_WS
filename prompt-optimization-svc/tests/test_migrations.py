@@ -34,7 +34,7 @@ class TestMigrationFiles:
         """upgrade() creates the golden_datasets table."""
         migration = MIGRATIONS_DIR / "001_create_golden_datasets.py"
         content = migration.read_text()
-        assert 'create_table' in content
+        assert "create_table" in content
         assert '"golden_datasets"' in content
 
     def test_upgrade_creates_indexes(self):

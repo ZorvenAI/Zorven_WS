@@ -35,11 +35,11 @@ class GoldenDataset(Base):
         {"schema": SCHEMA},
     )
 
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     prompt_name: Mapped[str] = mapped_column(
-        String(255), nullable=False, comment="Prompt identifier, e.g. zorven-wf1-mra-landscape"
+        String(255),
+        nullable=False,
+        comment="Prompt identifier, e.g. zorven-wf1-mra-landscape",
     )
     agent_code: Mapped[str] = mapped_column(
         String(50), nullable=False, comment="Agent code, e.g. MRA, CGA, BPA"

@@ -36,7 +36,9 @@ class TestCatalogCompleteness:
 
     def test_no_duplicate_names(self):
         names = [e.name for e in PROMPT_CATALOG]
-        assert len(names) == len(set(names)), f"Duplicates: {[n for n in names if names.count(n) > 1]}"
+        assert len(names) == len(
+            set(names)
+        ), f"Duplicates: {[n for n in names if names.count(n) > 1]}"
 
 
 class TestNamingConvention:
@@ -111,6 +113,6 @@ class TestTemplates:
     @pytest.mark.parametrize("entry", PROMPT_CATALOG, ids=lambda e: e.name)
     def test_template_uses_context_variables(self, entry):
         """Templates should reference {{context.*}} variables."""
-        assert "{{context." in entry.template, (
-            f"{entry.name} template has no {{{{context.*}}}} variables"
-        )
+        assert (
+            "{{context." in entry.template
+        ), f"{entry.name} template has no {{{{context.*}}}} variables"

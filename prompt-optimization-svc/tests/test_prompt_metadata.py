@@ -57,9 +57,18 @@ class TestCatalogMetadata:
     """Verify catalog entries have full §3.4 metadata tags (AC-1)."""
 
     REQUIRED_TAG_KEYS = {
-        "workflow", "agent_code", "agent_port", "skill", "prompt_type",
-        "model_target", "optimization_group", "tenant_overridable",
-        "optimization_priority", "state",
+        "workflow",
+        "agent_code",
+        "agent_port",
+        "skill",
+        "prompt_type",
+        "model_target",
+        "optimization_group",
+        "tenant_overridable",
+        "optimization_priority",
+        "last_optimized",
+        "optimization_run_id",
+        "state",
     }
 
     @pytest.mark.parametrize("entry", PROMPT_CATALOG, ids=lambda e: e.name)
@@ -73,16 +82,16 @@ class TestCatalogMetadata:
         """agent_port tag matches the known port registry."""
         agent = entry.tags["agent_code"]
         expected_port = AGENT_PORTS.get(agent)
-        assert entry.tags["agent_port"] == str(expected_port), (
-            f"{entry.name}: port {entry.tags['agent_port']} != {expected_port}"
-        )
+        assert entry.tags["agent_port"] == str(
+            expected_port
+        ), f"{entry.name}: port {entry.tags['agent_port']} != {expected_port}"
 
     @pytest.mark.parametrize("entry", PROMPT_CATALOG, ids=lambda e: e.name)
     def test_optimization_group_set(self, entry):
         """optimization_group tag is non-empty."""
-        assert entry.tags["optimization_group"] != "", (
-            f"{entry.name} missing optimization_group"
-        )
+        assert (
+            entry.tags["optimization_group"] != ""
+        ), f"{entry.name} missing optimization_group"
 
     @pytest.mark.parametrize("entry", PROMPT_CATALOG, ids=lambda e: e.name)
     def test_optimization_priority_valid(self, entry):
@@ -94,9 +103,9 @@ class TestCatalogMetadata:
         """ADPUB and COA should be CRITICAL priority."""
         for entry in PROMPT_CATALOG:
             if entry.tags["agent_code"] in ("adpub", "coa"):
-                assert entry.tags["optimization_priority"] == "CRITICAL", (
-                    f"{entry.name} should be CRITICAL"
-                )
+                assert (
+                    entry.tags["optimization_priority"] == "CRITICAL"
+                ), f"{entry.name} should be CRITICAL"
 
     def test_model_target_set(self):
         """All entries have a model_target."""
@@ -125,3 +134,117 @@ class TestOptimizationGroups:
         assert "wf1" in OPTIMIZATION_GROUPS[1]
         assert "wf2" in OPTIMIZATION_GROUPS[2]
         assert "wf3" in OPTIMIZATION_GROUPS[3]
+
+
+# ------------------------------------------------------------------
+# API endpoint tests for GET /v1/prompts and GET /v1/prompts/{name}
+# ------------------------------------------------------------------
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from httpx import ASGITransport, AsyncClient
+
+from app.services.mlflow_registry import PromptInfo
+
+
+@pytest.fixture
+async def client():
+    """Async test client with mocked Redis."""
+    with patch("app.cache.redis_manager.aioredis") as mock_aioredis:
+        mock_redis = AsyncMock()
+        mock_redis.ping.return_value = True
+        mock_redis.aclose.return_value = None
+        mock_aioredis.from_url.return_value = mock_redis
+
+        from app.main import app
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            yield c
+
+
+class TestGetPromptDetailEndpoint:
+    """Test GET /v1/prompts/{name} endpoint."""
+
+    async def test_returns_503_when_not_initialized(self, client):
+        """Registry not initialized → 503."""
+        from app.api import routes
+
+        routes.mlflow_registry = None
+        resp = await client.get("/v1/prompts/zorven-wf1-mra-system")
+        assert resp.status_code == 503
+
+    async def test_returns_404_for_unknown_prompt(self, client):
+        """Unknown prompt → 404."""
+        from app.api import routes
+
+        mock_reg = MagicMock()
+        mock_reg.get_prompt.return_value = None
+        routes.mlflow_registry = mock_reg
+
+        resp = await client.get("/v1/prompts/zorven-wf1-mra-unknown")
+        assert resp.status_code == 404
+
+    async def test_returns_prompt_with_metadata(self, client):
+        """Returns full detail with §3.4 metadata."""
+        from app.api import routes
+
+        mock_reg = MagicMock()
+        mock_reg.get_prompt.return_value = PromptInfo(
+            name="zorven-wf1-mra-system",
+            version=1,
+            template="You are a researcher...",
+            tags={
+                "workflow": "wf1",
+                "agent_code": "mra",
+                "agent_port": "8021",
+                "skill": "system",
+                "model_target": "claude-sonnet-4-6",
+                "optimization_group": "wf1-discovery-pipeline",
+                "tenant_overridable": "true",
+                "optimization_priority": "MEDIUM",
+                "last_optimized": "",
+                "optimization_run_id": "",
+                "state": "DRAFT",
+            },
+        )
+        routes.mlflow_registry = mock_reg
+
+        resp = await client.get("/v1/prompts/zorven-wf1-mra-system")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "zorven-wf1-mra-system"
+        assert data["version"] == 1
+        assert data["template"] == "You are a researcher..."
+        assert data["metadata"]["agent_port"] == 8021
+        assert data["metadata"]["optimization_group"] == "wf1-discovery-pipeline"
+
+
+class TestListPromptsEndpoint:
+    """Test GET /v1/prompts endpoint."""
+
+    async def test_returns_503_when_not_initialized(self, client):
+        from app.api import routes
+
+        routes.mlflow_registry = None
+        resp = await client.get("/v1/prompts")
+        assert resp.status_code == 503
+
+    async def test_returns_prompt_list(self, client):
+        from app.api import routes
+
+        mock_reg = MagicMock()
+        mock_reg.list_prompts.return_value = ["zorven-wf1-mra-system"]
+        mock_reg.get_prompt.return_value = PromptInfo(
+            name="zorven-wf1-mra-system",
+            version=1,
+            template="t",
+            tags={"state": "DRAFT", "agent_code": "mra", "workflow": "wf1"},
+        )
+        routes.mlflow_registry = mock_reg
+
+        resp = await client.get("/v1/prompts")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["prompts"][0]["name"] == "zorven-wf1-mra-system"

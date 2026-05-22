@@ -91,7 +91,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     registry: MLflowPromptRegistry | None = None
     try:
         registry = MLflowPromptRegistry(settings.MLFLOW_TRACKING_URI)
-        logger.info("MLflow prompt registry connected: %s", settings.MLFLOW_TRACKING_URI)
+        logger.info(
+            "MLflow prompt registry connected: %s", settings.MLFLOW_TRACKING_URI
+        )
     except Exception as exc:
         logger.warning("MLflow prompt registry unavailable: %s", exc)
 
@@ -140,14 +142,13 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        origin.strip()
-        for origin in settings.CORS_ORIGINS.split(",")
-        if origin.strip()
+        origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
