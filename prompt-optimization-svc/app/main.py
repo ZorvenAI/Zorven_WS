@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
+from app.cache.prompt_cache import PromptCacheManager
 from app.cache.redis_manager import RedisManager
 from app.core.config import settings
 from app.core.logging_config import setup_logging
@@ -66,9 +67,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 0. Run database migrations
     _run_migrations()
 
-    # 1. Redis
+    # 1. Redis (general cache)
     redis_manager = RedisManager(redis_url=settings.REDIS_URL)
     redis_client = await redis_manager.connect()
+
+    # 1b. Redis DB 2 (prompt cache, locks, progress)
+    prompt_cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
+    await prompt_cache.connect()
 
     # 2. Kafka producers
     trace_producer = TraceProducer(settings.KAFKA_BOOTSTRAP_SERVERS)
@@ -85,9 +90,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     routes.health_checker = checker
 
     logger.info(
-        "Service initialized — MLflow=%s, Redis=%s, Kafka=%s",
+        "Service initialized — MLflow=%s, Redis=%s, PromptCache=%s, Kafka=%s",
         settings.MLFLOW_TRACKING_URI,
         settings.REDIS_URL,
+        settings.PROMPT_CACHE_REDIS_URL,
         settings.KAFKA_BOOTSTRAP_SERVERS or "disabled",
     )
     yield
@@ -95,6 +101,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shutdown
     await trace_producer.stop()
     await audit_producer.stop()
+    await prompt_cache.close()
     await redis_manager.close()
     routes.health_checker = None
     logger.info("prompt-optimization-svc shut down")

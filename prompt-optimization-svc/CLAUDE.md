@@ -31,6 +31,7 @@ app/
 POI_MLFLOW_TRACKING_URI=http://mlflow-server:5000
 POI_DATABASE_URL=postgresql://mlflow:mlflow@mlflow-db:5432/mlflow
 POI_REDIS_URL=redis://localhost:6379/26
+POI_PROMPT_CACHE_REDIS_URL=redis://localhost:6379/2
 POI_KAFKA_BOOTSTRAP_SERVERS=    # Empty = disabled
 POI_ANTHROPIC_API_KEY=
 POI_HOST=0.0.0.0
