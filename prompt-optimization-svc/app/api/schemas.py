@@ -87,6 +87,35 @@ class PromptRegistrationResponse(BaseModel):
     message: str = ""
 
 
+class PromptTransitionRequest(BaseModel):
+    """Request body for lifecycle transitions."""
+
+    target_state: str = Field(..., description="Target state: STAGING, CANARY, PRODUCTION, etc.")
+    tenant_id: Optional[str] = Field(default=None, description="Tenant ID for scoped transitions")
+
+
+class PromptTransitionResponse(BaseModel):
+    """Response for lifecycle transition endpoints."""
+
+    name: str
+    version: int
+    from_state: str
+    to_state: str
+    success: bool
+    message: str = ""
+
+
+class ProductionPromptResponse(BaseModel):
+    """Response for GET /v1/prompts/{name}/production."""
+
+    name: str
+    version: int
+    template: str
+    state: str
+    tenant_id: Optional[str] = None
+    tags: dict[str, str] = Field(default_factory=dict)
+
+
 class SeedResponse(BaseModel):
     """Response for POST /v1/prompts/seed."""
 

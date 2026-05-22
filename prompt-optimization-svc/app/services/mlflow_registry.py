@@ -87,3 +87,40 @@ class MLflowPromptRegistry:
             return pv.template
         except Exception:
             return None
+
+    def set_prompt_state(
+        self, name: str, version: int, state: str
+    ) -> None:
+        """Update the state tag on a prompt version."""
+        self.client.set_prompt_version_tag(name, version, "state", state)
+        logger.info("State updated: %s v%d → %s", name, version, state)
+
+    def get_prompt_by_state(
+        self,
+        name: str,
+        state: str,
+        tenant_id: Optional[str] = None,
+    ) -> Optional[PromptInfo]:
+        """Find a prompt version with a specific state tag.
+
+        Searches versions from latest to earliest.
+        """
+        try:
+            versions = self.client.search_prompt_versions(name)
+            for pv in versions:
+                tags = pv.tags or {}
+                if tags.get("state") != state:
+                    continue
+                if tenant_id and tags.get("tenant_id") != tenant_id:
+                    continue
+                if not tenant_id and tags.get("tenant_id"):
+                    continue
+                return PromptInfo(
+                    name=name,
+                    version=pv.version,
+                    template=pv.template,
+                    tags=tags,
+                )
+            return None
+        except Exception:
+            return None

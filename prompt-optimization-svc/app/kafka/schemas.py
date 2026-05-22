@@ -19,6 +19,20 @@ class TraceEvent(BaseModel):
     )
 
 
+class PromptLifecycleEvent(BaseModel):
+    """Lifecycle event for prompt-lifecycle-events topic."""
+
+    event_type: str = Field(..., description="e.g. prompt.promoted, prompt.rejected")
+    prompt_name: str = Field(...)
+    version: int = Field(...)
+    from_state: str = Field(...)
+    to_state: str = Field(...)
+    tenant_id: str | None = Field(default=None)
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
 class AuditEvent(BaseModel):
     """Audit event for poi-optimization-audit-topic."""
 
