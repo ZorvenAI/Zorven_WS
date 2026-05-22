@@ -12,6 +12,7 @@ import re
 from typing import Any, Optional
 
 from app.cache.prompt_cache import PromptCacheManager
+from app.cache.tenant_config import TenantConfigManager
 from app.services.mlflow_registry import MLflowPromptRegistry
 
 logger = logging.getLogger(__name__)
@@ -39,9 +40,11 @@ class ZorvenPromptLoader:
         self,
         prompt_cache: PromptCacheManager,
         mlflow_registry: Optional[MLflowPromptRegistry] = None,
+        tenant_config: Optional[TenantConfigManager] = None,
     ) -> None:
         self.prompt_cache = prompt_cache
         self.mlflow_registry = mlflow_registry
+        self.tenant_config = tenant_config
 
     async def load(
         self,
@@ -49,7 +52,7 @@ class ZorvenPromptLoader:
         tenant_id: Optional[str] = None,
         variables: Optional[dict[str, Any]] = None,
         fallback_template: str = "",
-        ttl: int = 300,
+        ttl: Optional[int] = None,
     ) -> str:
         """Load, format, and return a prompt template.
 
@@ -58,11 +61,19 @@ class ZorvenPromptLoader:
             tenant_id: Optional tenant for override resolution (AC-1).
             variables: Template variables for formatting (AC-4).
             fallback_template: Hardcoded fallback if all tiers fail (AC-2).
-            ttl: Cache TTL in seconds for setex (AC-3).
+            ttl: Cache TTL in seconds. If None, resolved from tenant config
+                 (US-011: clamped to [10, 3600], default 300s).
 
         Returns:
             Formatted prompt string.
         """
+        # Resolve TTL from tenant config if not explicitly provided
+        if ttl is None:
+            if self.tenant_config is not None:
+                ttl = await self.tenant_config.get_prompt_cache_ttl(tenant_id)
+            else:
+                ttl = 300
+
         template = await self._resolve(name, tenant_id, ttl)
 
         if template is None:
