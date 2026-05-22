@@ -370,6 +370,9 @@ Job completes → result_handler.py → extract_metrics_task (Celery)
 | Brand Equity Calculator | 8090 | Public brand equity (Anthropic Claude) |
 | Odoo MCP Server | 8095 | Odoo ERP bridge (101 tools) |
 | Odoo Worker Agent | 8100 | Multi-persona Odoo worker |
+| Prompt Optimization Service | 8110 | MLflow prompt registry + GEPA optimization |
+| MLflow Tracking Server | 5000 | Prompt registry & experiment tracking |
+| MLflow Database | 5435 | MLflow PostgreSQL (host port) |
 
 ## Kong Gateway Architecture
 

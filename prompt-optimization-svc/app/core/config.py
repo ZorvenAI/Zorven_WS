@@ -41,6 +41,7 @@ class Settings(BaseSettings):
 
     # Service auth
     SERVICE_TOKEN: str = ""
+    JWT_SECRET: str = ""
 
 
 settings = Settings()
