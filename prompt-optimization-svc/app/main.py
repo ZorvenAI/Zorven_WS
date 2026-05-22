@@ -6,8 +6,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.routes import router
 from app.cache.prompt_cache import PromptCacheManager
@@ -125,5 +127,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Return 400 (not 422) for validation errors with corrective messages."""
+    errors = []
+    for error in exc.errors():
+        field = ".".join(str(loc) for loc in error["loc"] if loc != "body")
+        errors.append({"field": field, "message": error["msg"]})
+    return JSONResponse(
+        status_code=400,
+        content={"detail": "Validation error", "errors": errors},
+    )
+
 
 app.include_router(router)
