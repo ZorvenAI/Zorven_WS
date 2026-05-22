@@ -131,20 +131,20 @@ class HealthChecker:
 
     async def check_all(self) -> HealthResponse:
         """Run all dependency checks concurrently and return aggregate status."""
-        deps = list(await asyncio.gather(
-            self.check_mlflow(),
-            self.check_redis(),
-            self.check_kafka(),
-            self.check_postgres(),
-        ))
+        deps = list(
+            await asyncio.gather(
+                self.check_mlflow(),
+                self.check_redis(),
+                self.check_kafka(),
+                self.check_postgres(),
+            )
+        )
 
         down_required = [
             d for d in deps if d.status == "down" and d.name in ("mlflow", "redis")
         ]
         down_optional = [
-            d
-            for d in deps
-            if d.status == "down" and d.name in ("kafka", "postgres")
+            d for d in deps if d.status == "down" and d.name in ("kafka", "postgres")
         ]
 
         if down_required:

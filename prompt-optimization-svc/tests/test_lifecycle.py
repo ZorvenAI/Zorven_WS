@@ -51,31 +51,45 @@ class TestValidTransitions:
         mock_registry.set_prompt_state.assert_called_with("test", 1, "CANARY")
 
     def test_canary_to_production(self, manager, mock_registry):
-        result = manager.transition("test", 1, PromptState.CANARY, PromptState.PRODUCTION)
+        result = manager.transition(
+            "test", 1, PromptState.CANARY, PromptState.PRODUCTION
+        )
         assert result is True
 
     def test_production_to_archived(self, manager, mock_registry):
-        result = manager.transition("test", 1, PromptState.PRODUCTION, PromptState.ARCHIVED)
+        result = manager.transition(
+            "test", 1, PromptState.PRODUCTION, PromptState.ARCHIVED
+        )
         assert result is True
 
     def test_staging_to_rejected(self, manager, mock_registry):
-        result = manager.transition("test", 1, PromptState.STAGING, PromptState.REJECTED)
+        result = manager.transition(
+            "test", 1, PromptState.STAGING, PromptState.REJECTED
+        )
         assert result is True
 
     def test_canary_to_rolled_back(self, manager, mock_registry):
-        result = manager.transition("test", 1, PromptState.CANARY, PromptState.ROLLED_BACK)
+        result = manager.transition(
+            "test", 1, PromptState.CANARY, PromptState.ROLLED_BACK
+        )
         assert result is True
 
     def test_production_to_rolled_back(self, manager, mock_registry):
-        result = manager.transition("test", 1, PromptState.PRODUCTION, PromptState.ROLLED_BACK)
+        result = manager.transition(
+            "test", 1, PromptState.PRODUCTION, PromptState.ROLLED_BACK
+        )
         assert result is True
 
     def test_draft_to_tenant_override(self, manager, mock_registry):
-        result = manager.transition("test", 1, PromptState.DRAFT, PromptState.TENANT_OVERRIDE, tenant_id="t-1")
+        result = manager.transition(
+            "test", 1, PromptState.DRAFT, PromptState.TENANT_OVERRIDE, tenant_id="t-1"
+        )
         assert result is True
 
     def test_tenant_override_to_archived(self, manager, mock_registry):
-        result = manager.transition("test", 1, PromptState.TENANT_OVERRIDE, PromptState.ARCHIVED)
+        result = manager.transition(
+            "test", 1, PromptState.TENANT_OVERRIDE, PromptState.ARCHIVED
+        )
         assert result is True
 
 
@@ -159,8 +173,10 @@ class TestReject:
         """AC-3: Rejected versions retain traces, never hard-deleted."""
         manager.reject("test", 1)
         # No delete calls on the registry
-        assert not hasattr(mock_registry, 'delete_prompt') or \
-               not mock_registry.delete_prompt.called
+        assert (
+            not hasattr(mock_registry, "delete_prompt")
+            or not mock_registry.delete_prompt.called
+        )
 
 
 class TestGetProductionVersion:
@@ -169,11 +185,15 @@ class TestGetProductionVersion:
     def test_tenant_override_takes_precedence(self, manager, mock_registry):
         """AC-5: TENANT_OVERRIDE takes precedence over global PRODUCTION."""
         tenant_override = PromptInfo(
-            name="test", version=3, template="tenant",
+            name="test",
+            version=3,
+            template="tenant",
             tags={"state": "TENANT_OVERRIDE", "tenant_id": "t-1"},
         )
         global_prod = PromptInfo(
-            name="test", version=2, template="global",
+            name="test",
+            version=2,
+            template="global",
             tags={"state": "PRODUCTION"},
         )
 
@@ -193,7 +213,9 @@ class TestGetProductionVersion:
     def test_falls_back_to_global_production(self, manager, mock_registry):
         """When no tenant override, returns global PRODUCTION."""
         global_prod = PromptInfo(
-            name="test", version=2, template="global",
+            name="test",
+            version=2,
+            template="global",
             tags={"state": "PRODUCTION"},
         )
 
@@ -240,7 +262,9 @@ class TestKafkaEvents:
             tenant_id=None,
         )
 
-    def test_promotion_emits_promoted_event(self, manager, mock_registry, mock_producer):
+    def test_promotion_emits_promoted_event(
+        self, manager, mock_registry, mock_producer
+    ):
         mock_registry.get_prompt_by_state.return_value = None
         manager.promote_to_production("test", 1)
         mock_producer.send_lifecycle_event_sync.assert_called_once_with(

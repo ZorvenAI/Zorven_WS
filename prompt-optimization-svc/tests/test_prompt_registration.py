@@ -16,6 +16,10 @@ async def client():
         mock_aioredis.from_url.return_value = mock_redis
 
         from app.main import app
+        from app.api import routes
+
+        # Ensure stub mode (no MLflow connection)
+        routes.mlflow_registry = None
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as c:

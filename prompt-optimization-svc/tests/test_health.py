@@ -81,11 +81,11 @@ class TestHealthChecker:
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client_cls.return_value = mock_client
 
-        with patch.object(checker, "check_kafka") as mock_kafka, \
-             patch.object(checker, "check_postgres") as mock_pg:
-            mock_kafka.return_value = DependencyStatus(
-                name="kafka", status="disabled"
-            )
+        with (
+            patch.object(checker, "check_kafka") as mock_kafka,
+            patch.object(checker, "check_postgres") as mock_pg,
+        ):
+            mock_kafka.return_value = DependencyStatus(name="kafka", status="disabled")
             mock_pg.return_value = DependencyStatus(
                 name="postgres", status="up", latency_ms=5.0
             )
@@ -95,9 +95,7 @@ class TestHealthChecker:
         assert len(result.dependencies) == 4
 
     @patch("app.services.health_checker.httpx.AsyncClient")
-    async def test_check_all_unhealthy_when_mlflow_down(
-        self, mock_client_cls, checker
-    ):
+    async def test_check_all_unhealthy_when_mlflow_down(self, mock_client_cls, checker):
         """MLflow down → status unhealthy."""
         mock_client = AsyncMock()
         mock_client.get.side_effect = ConnectionError("refused")
@@ -105,11 +103,11 @@ class TestHealthChecker:
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client_cls.return_value = mock_client
 
-        with patch.object(checker, "check_kafka") as mock_kafka, \
-             patch.object(checker, "check_postgres") as mock_pg:
-            mock_kafka.return_value = DependencyStatus(
-                name="kafka", status="disabled"
-            )
+        with (
+            patch.object(checker, "check_kafka") as mock_kafka,
+            patch.object(checker, "check_postgres") as mock_pg,
+        ):
+            mock_kafka.return_value = DependencyStatus(name="kafka", status="disabled")
             mock_pg.return_value = DependencyStatus(
                 name="postgres", status="up", latency_ms=5.0
             )
@@ -130,11 +128,11 @@ class TestHealthChecker:
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client_cls.return_value = mock_client
 
-        with patch.object(checker, "check_kafka") as mock_kafka, \
-             patch.object(checker, "check_postgres") as mock_pg:
-            mock_kafka.return_value = DependencyStatus(
-                name="kafka", status="disabled"
-            )
+        with (
+            patch.object(checker, "check_kafka") as mock_kafka,
+            patch.object(checker, "check_postgres") as mock_pg,
+        ):
+            mock_kafka.return_value = DependencyStatus(name="kafka", status="disabled")
             mock_pg.return_value = DependencyStatus(
                 name="postgres", status="down", message="refused"
             )

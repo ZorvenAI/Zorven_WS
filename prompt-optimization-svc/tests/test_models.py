@@ -112,8 +112,7 @@ class TestGoldenDatasetModel:
     def test_idx_golden_prompt_columns(self):
         """idx_golden_prompt covers (prompt_name, active)."""
         idx = next(
-            i for i in GoldenDataset.__table__.indexes
-            if i.name == "idx_golden_prompt"
+            i for i in GoldenDataset.__table__.indexes if i.name == "idx_golden_prompt"
         )
         col_names = [c.name for c in idx.columns]
         assert col_names == ["prompt_name", "active"]
@@ -121,8 +120,7 @@ class TestGoldenDatasetModel:
     def test_idx_golden_tenant_columns(self):
         """idx_golden_tenant covers (tenant_id, agent_code)."""
         idx = next(
-            i for i in GoldenDataset.__table__.indexes
-            if i.name == "idx_golden_tenant"
+            i for i in GoldenDataset.__table__.indexes if i.name == "idx_golden_tenant"
         )
         col_names = [c.name for c in idx.columns]
         assert col_names == ["tenant_id", "agent_code"]

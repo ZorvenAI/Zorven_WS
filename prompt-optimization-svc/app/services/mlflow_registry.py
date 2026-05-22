@@ -81,16 +81,12 @@ class MLflowPromptRegistry:
                 pv = self.client.get_prompt_version(name, version)
             else:
                 prompt = self.client.get_prompt(name)
-                pv = self.client.get_prompt_version(
-                    name, prompt.latest_version
-                )
+                pv = self.client.get_prompt_version(name, prompt.latest_version)
             return pv.template
         except Exception:
             return None
 
-    def set_prompt_state(
-        self, name: str, version: int, state: str
-    ) -> None:
+    def set_prompt_state(self, name: str, version: int, state: str) -> None:
         """Update the state tag on a prompt version."""
         self.client.set_prompt_version_tag(name, version, "state", state)
         logger.info("State updated: %s v%d → %s", name, version, state)
