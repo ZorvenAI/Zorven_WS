@@ -12,7 +12,7 @@ import re
 from typing import Any, Optional
 
 from app.cache.prompt_cache import PromptCacheManager
-from app.cache.tenant_config import TenantConfigManager
+from app.cache.tenant_config import DEFAULT_TTL, TenantConfigManager
 from app.services.mlflow_registry import MLflowPromptRegistry
 
 logger = logging.getLogger(__name__)
@@ -67,13 +67,6 @@ class ZorvenPromptLoader:
         Returns:
             Formatted prompt string.
         """
-        # Resolve TTL from tenant config if not explicitly provided
-        if ttl is None:
-            if self.tenant_config is not None:
-                ttl = await self.tenant_config.get_prompt_cache_ttl(tenant_id)
-            else:
-                ttl = 300
-
         template = await self._resolve(name, tenant_id, ttl)
 
         if template is None:
@@ -89,7 +82,7 @@ class ZorvenPromptLoader:
         self,
         name: str,
         tenant_id: Optional[str],
-        ttl: int,
+        ttl: Optional[int],
     ) -> Optional[str]:
         """Resolve prompt template through three tiers."""
         # --- Tier 1: Redis cache (AC-1: tenant override first) ---
@@ -116,11 +109,12 @@ class ZorvenPromptLoader:
                 )
                 if template is not None:
                     logger.debug("Tier 2 HIT (MLflow): %s", name)
-                    # Cache under the correct key (AC-3)
+                    # Resolve TTL lazily — only needed for cache write
+                    resolved_ttl = await self._resolve_ttl(ttl, tenant_id)
                     await self.prompt_cache.set_prompt(
                         name,
                         template,
-                        ttl=ttl,
+                        ttl=resolved_ttl,
                         tenant_id=resolved_tenant,
                     )
                     return template
@@ -132,6 +126,16 @@ class ZorvenPromptLoader:
 
         # --- Tier 3: fallback (handled by caller) ---
         return None
+
+    async def _resolve_ttl(
+        self, ttl: Optional[int], tenant_id: Optional[str]
+    ) -> int:
+        """Resolve cache TTL: explicit > tenant config > default."""
+        if ttl is not None:
+            return ttl
+        if self.tenant_config is not None:
+            return await self.tenant_config.get_prompt_cache_ttl(tenant_id)
+        return DEFAULT_TTL
 
     def _mlflow_resolve(
         self, name: str, tenant_id: Optional[str]

@@ -173,16 +173,14 @@ class TestSetTTL:
 
 
 class TestSetThenGet:
-    """AC-3: Updating config takes effect within one load cycle."""
+    """Unit tests for set-then-get TTL consistency."""
 
     async def test_get_after_set_returns_updated_value(
         self, config, mock_redis
     ):
-        """AC-3: Set TTL, then get returns the new value."""
-        # Set TTL to 120s
+        """Set TTL, then get returns the new value."""
         await config.set_prompt_cache_ttl("tenant-1", 120)
 
-        # Simulate Redis returning the stored value on next get
         mock_redis.get.return_value = "120"
         ttl = await config.get_prompt_cache_ttl("tenant-1")
         assert ttl == 120
@@ -190,14 +188,122 @@ class TestSetThenGet:
     async def test_update_takes_effect_immediately(
         self, config, mock_redis
     ):
-        """AC-3: Change from 300 to 60, next read returns 60."""
-        # Initial state: 300
+        """Change from 300 to 60, next read returns 60."""
         mock_redis.get.return_value = "300"
         assert await config.get_prompt_cache_ttl("t-1") == 300
 
-        # Update to 60
         await config.set_prompt_cache_ttl("t-1", 60)
 
-        # Next read returns 60
         mock_redis.get.return_value = "60"
         assert await config.get_prompt_cache_ttl("t-1") == 60
+
+
+# ------------------------------------------------------------------
+# Loader-level integration: tenant TTL in ZorvenPromptLoader (AC-3)
+# ------------------------------------------------------------------
+
+from unittest.mock import MagicMock
+
+from app.services.mlflow_registry import PromptInfo
+from app.services.prompt_loader import ZorvenPromptLoader
+
+
+class TestLoaderTenantTTL:
+    """AC-3: Tenant TTL change takes effect within one load cycle."""
+
+    async def test_loader_uses_tenant_ttl_on_cache_miss(self):
+        """ZorvenPromptLoader resolves TTL from tenant config on Tier 2."""
+        mock_cache = AsyncMock()
+        mock_cache.get_prompt = AsyncMock(return_value=None)
+        mock_cache.set_prompt = AsyncMock()
+        mock_cache.connect = AsyncMock()
+
+        mock_registry = MagicMock()
+        mock_registry.get_prompt_by_state.return_value = None
+        mock_registry.load_prompt_template.return_value = "Template"
+
+        mock_tenant_config = AsyncMock()
+        mock_tenant_config.get_prompt_cache_ttl = AsyncMock(
+            return_value=120
+        )
+
+        loader = ZorvenPromptLoader(
+            mock_cache, mock_registry, tenant_config=mock_tenant_config
+        )
+        await loader.load("test", tenant_id="t-1")
+
+        # TTL resolved from tenant config (120s), not default (300s)
+        mock_cache.set_prompt.assert_called_once()
+        assert mock_cache.set_prompt.call_args[1]["ttl"] == 120
+
+    async def test_loader_uses_explicit_ttl_over_tenant_config(self):
+        """Explicit ttl parameter takes precedence over tenant config."""
+        mock_cache = AsyncMock()
+        mock_cache.get_prompt = AsyncMock(return_value=None)
+        mock_cache.set_prompt = AsyncMock()
+
+        mock_registry = MagicMock()
+        mock_registry.get_prompt_by_state.return_value = None
+        mock_registry.load_prompt_template.return_value = "T"
+
+        mock_tenant_config = AsyncMock()
+        mock_tenant_config.get_prompt_cache_ttl = AsyncMock(
+            return_value=120
+        )
+
+        loader = ZorvenPromptLoader(
+            mock_cache, mock_registry, tenant_config=mock_tenant_config
+        )
+        await loader.load("test", tenant_id="t-1", ttl=600)
+
+        # Explicit 600s used, not tenant config 120s
+        assert mock_cache.set_prompt.call_args[1]["ttl"] == 600
+        mock_tenant_config.get_prompt_cache_ttl.assert_not_called()
+
+    async def test_loader_skips_ttl_resolution_on_cache_hit(self):
+        """TTL resolution skipped on Tier 1 cache hit (no extra Redis call)."""
+        mock_cache = AsyncMock()
+        mock_cache.get_prompt = AsyncMock(return_value="Cached prompt")
+
+        mock_tenant_config = AsyncMock()
+        mock_tenant_config.get_prompt_cache_ttl = AsyncMock()
+
+        loader = ZorvenPromptLoader(
+            mock_cache, tenant_config=mock_tenant_config
+        )
+        result = await loader.load("test", tenant_id="t-1")
+
+        assert result == "Cached prompt"
+        mock_tenant_config.get_prompt_cache_ttl.assert_not_called()
+
+    async def test_tenant_ttl_change_affects_next_load(self):
+        """AC-3: Updating tenant TTL takes effect on the next load cycle."""
+        mock_cache = AsyncMock()
+        mock_cache.get_prompt = AsyncMock(return_value=None)
+        mock_cache.set_prompt = AsyncMock()
+
+        mock_registry = MagicMock()
+        mock_registry.get_prompt_by_state.return_value = None
+        mock_registry.load_prompt_template.return_value = "T"
+
+        mock_tenant_config = AsyncMock()
+
+        loader = ZorvenPromptLoader(
+            mock_cache, mock_registry, tenant_config=mock_tenant_config
+        )
+
+        # First load: TTL = 300
+        mock_tenant_config.get_prompt_cache_ttl = AsyncMock(
+            return_value=300
+        )
+        await loader.load("test", tenant_id="t-1")
+        assert mock_cache.set_prompt.call_args[1]["ttl"] == 300
+
+        mock_cache.set_prompt.reset_mock()
+
+        # Tenant updates TTL to 60 — next load uses 60
+        mock_tenant_config.get_prompt_cache_ttl = AsyncMock(
+            return_value=60
+        )
+        await loader.load("test", tenant_id="t-1")
+        assert mock_cache.set_prompt.call_args[1]["ttl"] == 60
