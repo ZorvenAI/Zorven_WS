@@ -72,9 +72,7 @@ class TraceProducer:
             metadata=metadata or {},
         )
         try:
-            await self._producer.send_and_wait(
-                self.TOPIC, event.model_dump()
-            )
+            await self._producer.send_and_wait(self.TOPIC, event.model_dump())
         except Exception as exc:
             logger.warning("Failed to send trace event: %s", exc)
 
@@ -140,9 +138,7 @@ class AuditProducer:
             details=details or {},
         )
         try:
-            await self._producer.send_and_wait(
-                self.TOPIC, event.model_dump()
-            )
+            await self._producer.send_and_wait(self.TOPIC, event.model_dump())
         except Exception as exc:
             logger.warning("Failed to send audit event: %s", exc)
 

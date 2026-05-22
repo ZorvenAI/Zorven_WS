@@ -32,9 +32,7 @@ class PromptCacheManager:
     async def connect(self) -> aioredis.Redis:
         """Initialize and return the Redis connection."""
         if self._redis is None:
-            self._redis = aioredis.from_url(
-                self.redis_url, decode_responses=True
-            )
+            self._redis = aioredis.from_url(self.redis_url, decode_responses=True)
         return self._redis
 
     @property
@@ -150,9 +148,7 @@ class PromptCacheManager:
     end
     """
 
-    async def release_optimization_lock(
-        self, group: str, owner: str
-    ) -> bool:
+    async def release_optimization_lock(self, group: str, owner: str) -> bool:
         """Release an optimization lock (only if held by the given owner).
 
         Uses an atomic Lua script to compare-and-delete, preventing race
@@ -174,9 +170,7 @@ class PromptCacheManager:
             logger.warning("Lock release error: %s", exc)
             return False
 
-    async def get_optimization_lock_info(
-        self, group: str
-    ) -> Optional[dict[str, Any]]:
+    async def get_optimization_lock_info(self, group: str) -> Optional[dict[str, Any]]:
         """Get lock info (owner and remaining TTL)."""
         try:
             r = await self.connect()
@@ -221,9 +215,7 @@ class PromptCacheManager:
         except Exception as exc:
             logger.warning("Progress set error: %s", exc)
 
-    async def get_optimization_progress(
-        self, run_id: str
-    ) -> Optional[dict[str, str]]:
+    async def get_optimization_progress(self, run_id: str) -> Optional[dict[str, str]]:
         """Get optimization progress hash. Returns None if not found."""
         try:
             r = await self.connect()

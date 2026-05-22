@@ -19,9 +19,7 @@ class DependencyStatus(BaseModel):
 class HealthResponse(BaseModel):
     """Aggregate health check response."""
 
-    status: str = Field(
-        default="healthy", description="healthy | degraded | unhealthy"
-    )
+    status: str = Field(default="healthy", description="healthy | degraded | unhealthy")
     dependencies: list[DependencyStatus] = Field(default_factory=list)
 
 
@@ -68,7 +66,8 @@ class PromptRegistrationRequest(BaseModel):
     )
     template: str = Field(..., description="Prompt template text")
     metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Optional metadata (workflow, model_target, etc.)"
+        default_factory=dict,
+        description="Optional metadata (workflow, model_target, etc.)",
     )
 
     @field_validator("name")
@@ -145,8 +144,12 @@ class PromptListResponse(BaseModel):
 class PromptTransitionRequest(BaseModel):
     """Request body for lifecycle transitions."""
 
-    target_state: str = Field(..., description="Target state: STAGING, CANARY, PRODUCTION, etc.")
-    tenant_id: Optional[str] = Field(default=None, description="Tenant ID for scoped transitions")
+    target_state: str = Field(
+        ..., description="Target state: STAGING, CANARY, PRODUCTION, etc."
+    )
+    tenant_id: Optional[str] = Field(
+        default=None, description="Tenant ID for scoped transitions"
+    )
 
 
 class PromptTransitionResponse(BaseModel):

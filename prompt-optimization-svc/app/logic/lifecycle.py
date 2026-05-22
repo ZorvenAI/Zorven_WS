@@ -41,7 +41,11 @@ VALID_TRANSITIONS: dict[PromptState, set[PromptState]] = {
 }
 
 # States that are served to production agents
-SERVABLE_STATES = {PromptState.PRODUCTION, PromptState.TENANT_OVERRIDE, PromptState.CANARY}
+SERVABLE_STATES = {
+    PromptState.PRODUCTION,
+    PromptState.TENANT_OVERRIDE,
+    PromptState.CANARY,
+}
 
 # Event type names for Kafka
 STATE_EVENT_MAP: dict[PromptState, str] = {
@@ -138,7 +142,11 @@ class PromptLifecycleManager:
 
         logger.info(
             "Lifecycle transition: %s v%d %s → %s (tenant=%s)",
-            name, version, from_state.value, to_state.value, tenant_id,
+            name,
+            version,
+            from_state.value,
+            to_state.value,
+            tenant_id,
         )
         return True
 
@@ -168,15 +176,16 @@ class PromptLifecycleManager:
 
         # Promote new version
         return self.transition(
-            name, version, PromptState.CANARY, PromptState.PRODUCTION,
+            name,
+            version,
+            PromptState.CANARY,
+            PromptState.PRODUCTION,
             tenant_id=tenant_id,
         )
 
     def reject(self, name: str, version: int) -> bool:
         """Reject a STAGING version. AC-3: Never hard-deleted."""
-        return self.transition(
-            name, version, PromptState.STAGING, PromptState.REJECTED
-        )
+        return self.transition(name, version, PromptState.STAGING, PromptState.REJECTED)
 
     def rollback(
         self,
@@ -187,7 +196,10 @@ class PromptLifecycleManager:
     ) -> bool:
         """Roll back a CANARY or PRODUCTION version."""
         return self.transition(
-            name, version, current_state, PromptState.ROLLED_BACK,
+            name,
+            version,
+            current_state,
+            PromptState.ROLLED_BACK,
             tenant_id=tenant_id,
         )
 

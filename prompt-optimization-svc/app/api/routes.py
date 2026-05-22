@@ -47,38 +47,47 @@ async def health() -> HealthResponse:
     return HealthResponse(status="unhealthy", dependencies=[])
 
 
-@router.get("/v1/prompts", response_model=PromptListResponse)
-async def list_prompts() -> PromptListResponse:
+@router.get("/v1/prompts", response_model=None)
+async def list_prompts():
     """List all registered prompts with summary info."""
     if mlflow_registry is None:
-        return PromptListResponse(prompts=[], total=0)
+        return JSONResponse(
+            status_code=503, content={"detail": "Registry not initialized"}
+        )
     try:
         names = mlflow_registry.list_prompts()
         summaries = []
         for name in names:
             info = mlflow_registry.get_prompt(name)
             if info:
-                summaries.append(PromptSummary(
-                    name=info.name,
-                    version=info.version,
-                    state=info.tags.get("state", "DRAFT"),
-                    agent_code=info.tags.get("agent_code", ""),
-                    workflow=info.tags.get("workflow", ""),
-                ))
+                summaries.append(
+                    PromptSummary(
+                        name=info.name,
+                        version=info.version,
+                        state=info.tags.get("state", "DRAFT"),
+                        agent_code=info.tags.get("agent_code", ""),
+                        workflow=info.tags.get("workflow", ""),
+                    )
+                )
         return PromptListResponse(prompts=summaries, total=len(summaries))
     except Exception as exc:
-        logger.error("Failed to list prompts: %s", exc)
-        return PromptListResponse(prompts=[], total=0)
+        logger.exception("Failed to list prompts: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={"detail": f"Registry error: {exc}"},
+        )
 
 
-@router.get("/v1/prompts/{name}", response_model=PromptDetailResponse, response_model_exclude_none=True)
-async def get_prompt_detail(name: str) -> PromptDetailResponse | JSONResponse:
+@router.get("/v1/prompts/{name}", response_model=None)
+async def get_prompt_detail(name: str):
     """Get full prompt detail with metadata (AC-2)."""
     if mlflow_registry is None:
         return JSONResponse(status_code=503, content={"detail": "Not initialized"})
     info = mlflow_registry.get_prompt(name)
     if info is None:
-        return JSONResponse(status_code=404, content={"detail": f"Prompt '{name}' not found"})
+        return JSONResponse(
+            status_code=404, content={"detail": f"Prompt '{name}' not found"}
+        )
 
     tags = info.tags
     metadata = PromptMetadata(
@@ -88,7 +97,8 @@ async def get_prompt_detail(name: str) -> PromptDetailResponse | JSONResponse:
         skill=tags.get("skill", ""),
         model_target=tags.get("model_target", "claude-sonnet-4-6"),
         optimization_group=tags.get("optimization_group", ""),
-        tenant_overridable=tags.get("tenant_overridable", "true") == "true",
+        tenant_overridable=tags.get("tenant_overridable", "true").lower()
+        in ("true", "1", "yes"),
         optimization_priority=tags.get("optimization_priority", "MEDIUM"),
         last_optimized=tags.get("last_optimized") or None,
         optimization_run_id=tags.get("optimization_run_id") or None,
@@ -164,13 +174,16 @@ async def promote_prompt(
     """Promote a prompt version to the next lifecycle state."""
     if lifecycle_manager is None:
         return PromptTransitionResponse(
-            name=name, version=version, from_state="unknown",
-            to_state=request.target_state, success=False,
+            name=name,
+            version=version,
+            from_state="unknown",
+            to_state=request.target_state,
+            success=False,
             message="Lifecycle manager not initialized",
         )
     try:
         current = mlflow_registry.get_prompt(name) if mlflow_registry else None
-        current_state = (current.tags.get("state", "DRAFT") if current else "DRAFT")
+        current_state = current.tags.get("state", "DRAFT") if current else "DRAFT"
 
         from_state = PromptState(current_state)
         to_state = PromptState(request.target_state)
@@ -181,18 +194,28 @@ async def promote_prompt(
             )
         else:
             lifecycle_manager.transition(
-                name, version, from_state, to_state,
+                name,
+                version,
+                from_state,
+                to_state,
                 tenant_id=request.tenant_id,
             )
 
         return PromptTransitionResponse(
-            name=name, version=version, from_state=from_state.value,
-            to_state=to_state.value, success=True,
+            name=name,
+            version=version,
+            from_state=from_state.value,
+            to_state=to_state.value,
+            success=True,
         )
     except (InvalidTransitionError, ValueError) as exc:
         return PromptTransitionResponse(
-            name=name, version=version, from_state="unknown",
-            to_state=request.target_state, success=False, message=str(exc),
+            name=name,
+            version=version,
+            from_state="unknown",
+            to_state=request.target_state,
+            success=False,
+            message=str(exc),
         )
 
 
@@ -201,20 +224,30 @@ async def reject_prompt(name: str, version: int) -> PromptTransitionResponse:
     """Reject a STAGING prompt version (AC-3: never hard-deleted)."""
     if lifecycle_manager is None:
         return PromptTransitionResponse(
-            name=name, version=version, from_state="STAGING",
-            to_state="REJECTED", success=False,
+            name=name,
+            version=version,
+            from_state="STAGING",
+            to_state="REJECTED",
+            success=False,
             message="Lifecycle manager not initialized",
         )
     try:
         lifecycle_manager.reject(name, version)
         return PromptTransitionResponse(
-            name=name, version=version, from_state="STAGING",
-            to_state="REJECTED", success=True,
+            name=name,
+            version=version,
+            from_state="STAGING",
+            to_state="REJECTED",
+            success=True,
         )
     except InvalidTransitionError as exc:
         return PromptTransitionResponse(
-            name=name, version=version, from_state="STAGING",
-            to_state="REJECTED", success=False, message=str(exc),
+            name=name,
+            version=version,
+            from_state="STAGING",
+            to_state="REJECTED",
+            success=False,
+            message=str(exc),
         )
 
 
@@ -227,8 +260,11 @@ async def rollback_prompt(
     """Roll back a CANARY or PRODUCTION version."""
     if lifecycle_manager is None:
         return PromptTransitionResponse(
-            name=name, version=version, from_state="unknown",
-            to_state="ROLLED_BACK", success=False,
+            name=name,
+            version=version,
+            from_state="unknown",
+            to_state="ROLLED_BACK",
+            success=False,
             message="Lifecycle manager not initialized",
         )
     try:
@@ -236,15 +272,24 @@ async def rollback_prompt(
         current_state = PromptState(
             current.tags.get("state", "PRODUCTION") if current else "PRODUCTION"
         )
-        lifecycle_manager.rollback(name, version, current_state, tenant_id=x_tenant_id)
+        lifecycle_manager.rollback(
+            name, version, current_state, tenant_id=x_tenant_id
+        )
         return PromptTransitionResponse(
-            name=name, version=version, from_state=current_state.value,
-            to_state="ROLLED_BACK", success=True,
+            name=name,
+            version=version,
+            from_state=current_state.value,
+            to_state="ROLLED_BACK",
+            success=True,
         )
     except InvalidTransitionError as exc:
         return PromptTransitionResponse(
-            name=name, version=version, from_state="unknown",
-            to_state="ROLLED_BACK", success=False, message=str(exc),
+            name=name,
+            version=version,
+            from_state="unknown",
+            to_state="ROLLED_BACK",
+            success=False,
+            message=str(exc),
         )
 
 

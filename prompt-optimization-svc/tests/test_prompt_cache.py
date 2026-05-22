@@ -69,7 +69,9 @@ class TestPromptCache:
     """Test prompt get/set/invalidate."""
 
     async def test_set_production_prompt(self, cache, mock_redis):
-        await cache.set_prompt("zorven-wf1-mra-landscape", "You are a market researcher")
+        await cache.set_prompt(
+            "zorven-wf1-mra-landscape", "You are a market researcher"
+        )
         mock_redis.set.assert_called_once_with(
             "prompt:zorven-wf1-mra-landscape:production",
             "You are a market researcher",
@@ -77,7 +79,9 @@ class TestPromptCache:
         )
 
     async def test_set_tenant_prompt(self, cache, mock_redis):
-        await cache.set_prompt("zorven-wf1-mra-landscape", "Custom prompt", tenant_id="t-99")
+        await cache.set_prompt(
+            "zorven-wf1-mra-landscape", "Custom prompt", tenant_id="t-99"
+        )
         mock_redis.set.assert_called_once_with(
             "prompt:zorven-wf1-mra-landscape:tenant:t-99",
             "Custom prompt",
@@ -215,7 +219,11 @@ class TestOptimizationProgress:
         mock_redis.hset.assert_called_once()
         # Verify the key was passed (positional or keyword)
         call_args = mock_redis.hset.call_args
-        key_arg = call_args[0][0] if call_args[0] else call_args[1].get("name", call_args[1].get("key"))
+        key_arg = (
+            call_args[0][0]
+            if call_args[0]
+            else call_args[1].get("name", call_args[1].get("key"))
+        )
         assert key_arg == "prompt:optimization:progress:run-123"
         mock_redis.expire.assert_called_once_with(
             "prompt:optimization:progress:run-123", PROGRESS_TTL

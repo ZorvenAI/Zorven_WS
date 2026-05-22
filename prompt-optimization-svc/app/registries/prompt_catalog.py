@@ -17,11 +17,23 @@ class CatalogEntry:
     tags: dict[str, str] = field(default_factory=dict)
 
 
-# Agent port registry (matches CLAUDE.md Service Ports)
+# Agent port registry (matches README.md Service Ports table)
 AGENT_PORTS: dict[str, int] = {
-    "mra": 8021, "cia": 8022, "apa": 8023, "tcia": 8024, "voca": 8025,
-    "bpa": 8031, "baa": 8032, "bpv": 8033, "nta": 8034, "bsa": 8035,
-    "caa": 8041, "cga": 8042, "adpub": 8043, "coa": 8044, "ila": 8045,
+    "mra": 8021,
+    "cia": 8022,
+    "apa": 8023,
+    "tcia": 8024,
+    "voca": 8025,
+    "bpa": 8031,
+    "baa": 8032,
+    "bpv": 8033,
+    "nta": 8034,
+    "bsa": 8035,
+    "caa": 8041,
+    "cga": 8042,
+    "adpub": 8043,
+    "coa": 8044,
+    "ila": 8045,
 }
 
 # Optimization groups per workflow
@@ -33,17 +45,27 @@ OPTIMIZATION_GROUPS: dict[int, str] = {
 
 # Optimization priority — CRITICAL for agents that touch ad spend
 OPTIMIZATION_PRIORITY: dict[str, str] = {
-    "adpub": "CRITICAL", "coa": "CRITICAL",
-    "cga": "HIGH", "caa": "HIGH",
-    "bpa": "HIGH", "bpv": "HIGH",
-    "mra": "MEDIUM", "cia": "MEDIUM", "apa": "MEDIUM",
-    "tcia": "MEDIUM", "voca": "MEDIUM",
-    "baa": "MEDIUM", "nta": "MEDIUM", "bsa": "MEDIUM",
+    "adpub": "CRITICAL",
+    "coa": "CRITICAL",
+    "cga": "HIGH",
+    "caa": "HIGH",
+    "bpa": "HIGH",
+    "bpv": "HIGH",
+    "mra": "MEDIUM",
+    "cia": "MEDIUM",
+    "apa": "MEDIUM",
+    "tcia": "MEDIUM",
+    "voca": "MEDIUM",
+    "baa": "MEDIUM",
+    "nta": "MEDIUM",
+    "bsa": "MEDIUM",
     "ila": "MEDIUM",
 }
 
 
-def _tags(wf: int, agent: str, skill: str, prompt_type: str = "skill") -> dict[str, str]:
+def _tags(
+    wf: int, agent: str, skill: str, prompt_type: str = "skill"
+) -> dict[str, str]:
     """Build standard tags for a catalog entry (§3.4 metadata)."""
     return {
         "workflow": f"wf{wf}",

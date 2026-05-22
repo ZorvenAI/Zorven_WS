@@ -92,9 +92,21 @@ class TestAllAgentCodes:
     @pytest.mark.parametrize(
         "wf,code",
         [
-            (1, "mra"), (1, "cia"), (1, "apa"), (1, "tcia"), (1, "voca"),
-            (2, "bpa"), (2, "baa"), (2, "bpv"), (2, "nta"), (2, "bsa"),
-            (3, "caa"), (3, "cga"), (3, "adpub"), (3, "coa"), (3, "ila"),
+            (1, "mra"),
+            (1, "cia"),
+            (1, "apa"),
+            (1, "tcia"),
+            (1, "voca"),
+            (2, "bpa"),
+            (2, "baa"),
+            (2, "bpv"),
+            (2, "nta"),
+            (2, "bsa"),
+            (3, "caa"),
+            (3, "cga"),
+            (3, "adpub"),
+            (3, "coa"),
+            (3, "ila"),
         ],
     )
     def test_agent_code_accepted(self, wf, code):
