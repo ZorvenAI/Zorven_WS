@@ -89,6 +89,12 @@ class ZorvenGepaOptimizer:
             self.reflection_model,
         )
 
+        # Track best candidate across potential partial failures
+        best_prompt = ""
+        best_score = 0.0
+        candidates = 0
+        run_id = ""
+
         try:
             import mlflow
 
@@ -117,12 +123,6 @@ class ZorvenGepaOptimizer:
 
             duration = time.monotonic() - start_time
 
-            # Extract best candidate
-            best_prompt = ""
-            best_score = 0.0
-            candidates = 0
-            run_id = ""
-
             if result:
                 best_prompt = getattr(result, "best_prompt", "")
                 best_score = getattr(result, "best_score", 0.0)
@@ -150,23 +150,24 @@ class ZorvenGepaOptimizer:
                 mlflow_run_id=str(run_id),
                 duration_seconds=round(duration, 2),
                 agent_code=agent_code,
-                prompt_uris=prompt_uris,
+                prompt_uris=list(prompt_uris),
             )
 
         except Exception as exc:
             duration = time.monotonic() - start_time
-            logger.error(
-                "GEPA optimization failed: agent=%s, error=%s, duration=%.1fs",
+            logger.exception(
+                "GEPA optimization failed: agent=%s, duration=%.1fs",
                 agent_code,
-                exc,
                 duration,
             )
             # AC-4: Return best candidate found so far on failure
             return OptimizationResult(
-                candidates_evaluated=0,
+                best_prompt=str(best_prompt) if best_prompt else "",
+                best_score=best_score if best_score else 0.0,
+                candidates_evaluated=candidates if candidates else 0,
                 budget_exhausted=False,
                 duration_seconds=round(duration, 2),
                 agent_code=agent_code,
-                prompt_uris=prompt_uris,
+                prompt_uris=list(prompt_uris),
                 error=str(exc),
             )

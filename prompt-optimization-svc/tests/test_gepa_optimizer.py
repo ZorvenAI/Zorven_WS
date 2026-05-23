@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.registries.optimization_budgets import (
     AGENT_BUDGETS,
     DEFAULT_BUDGET,
