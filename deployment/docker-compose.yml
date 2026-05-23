@@ -1474,6 +1474,8 @@ services:
     container_name: ai-brand-automator-campaign-architecture
     environment:
       - CAA_REDIS_URL=redis://redis:6379/21
+      - CAA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - CAA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - CAA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - CAA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - CAA_BACKEND_URL=http://backend:8001
@@ -1513,7 +1515,9 @@ services:
       dockerfile: Dockerfile
     container_name: ai-brand-automator-creative-generation
     environment:
-      - CGA_REDIS_URL=redis://redis:6379/22  # DB index 22 (--databases 23 = DBs 0-22)
+      - CGA_REDIS_URL=redis://redis:6379/22
+      - CGA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - CGA_MLFLOW_TRACKING_URI=http://mlflow-server:5000  # DB index 22 (--databases 23 = DBs 0-22)
       - CGA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - CGA_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - CGA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
@@ -1554,6 +1558,8 @@ services:
     container_name: ai-brand-automator-ad-publishing
     environment:
       - ADPUB_REDIS_URL=redis://redis:6379/23
+      - ADPUB_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - ADPUB_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - ADPUB_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - ADPUB_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - ADPUB_BACKEND_URL=http://backend:8001
@@ -1589,6 +1595,8 @@ services:
     container_name: ai-brand-automator-campaign-optimization
     environment:
       - COA_REDIS_URL=redis://redis:6379/24
+      - COA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - COA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - COA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - COA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - COA_BACKEND_URL=http://backend:8001
@@ -1623,6 +1631,8 @@ services:
     container_name: ai-brand-automator-intelligence-loop
     environment:
       - ILA_REDIS_URL=redis://redis:6379/25
+      - ILA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - ILA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - ILA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - ILA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - ILA_BACKEND_URL=http://backend:8001
