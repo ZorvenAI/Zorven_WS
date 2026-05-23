@@ -20,6 +20,7 @@ from app.services.bsa_analyzer import BSAAnalyzer
 from app.services.bsa_executor import BSAExecutor
 from app.services.context_loader import BSAContextLoader
 from app.services.gcs_client import GCSClient
+from app.prompts.loader import AgentPromptClient
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,15 @@ async def lifespan(app: FastAPI):
     app.state.redis_manager = redis_manager
 
     logger.info("Brand Story Agent service ready")
+
+
+    # Prompt loader (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+    app.state.prompt_loader = prompt_loader
 
     yield
 

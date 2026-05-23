@@ -19,6 +19,7 @@ from app.messaging.kafka_producer import AuditProducer, EventProducer, TraceProd
 from app.services.baa_analyzer import BAAAnalyzer
 from app.services.baa_executor import BAAExecutor
 from app.services.context_loader import BAAContextLoader
+from app.prompts.loader import AgentPromptClient
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +102,19 @@ async def lifespan(app: FastAPI):
         settings.BACKEND_URL,
     )
 
+
+    # Prompt loader (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+    routes.prompt_loader = prompt_loader
+
     yield
 
     # Shutdown
+    await prompt_loader.stop()
     logger.info("Shutting down Brand Architecture Agent service")
     await executor.close()
     await event_producer.stop()

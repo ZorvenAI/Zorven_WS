@@ -7,7 +7,7 @@ and MLflow tracking server independently of the prompt-optimization-svc.
 Usage in an agent service:
     loader = AgentPromptClient(redis_url="redis://redis:6379/2", mlflow_uri="http://mlflow-server:5000")
     await loader.start()
-    prompt = await loader.load("zorven-wf1-mra-system", tenant_id="t-1", fallback="You are...")
+    prompt = await loader.load("zorven-wf2-<agent>-system", tenant_id="t-1", fallback="You are...")
     await loader.stop()
 """
 
