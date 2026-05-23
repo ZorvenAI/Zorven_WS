@@ -107,6 +107,11 @@ WF2_VARIABLES = [
         agents=("baa",),
     ),
     ContextVariable(
+        "context.market_data", source="upstream",
+        description="Market data for portfolio growth strategy",
+        agents=("baa",),
+    ),
+    ContextVariable(
         "context.architecture", source="upstream",
         description="BAA architecture output",
         agents=("baa",),

@@ -72,6 +72,23 @@ class TestBuildContextFromOnboarding:
         )
         assert "context.brand_voice" not in ctx
 
+    def test_none_runtime_values_excluded(self):
+        """None values in runtime data are skipped, not stringified."""
+        ctx = build_context_from_onboarding(
+            {"brand_name": "Test"},
+            runtime_data={"query": "valid", "budget": None},
+        )
+        assert ctx["context.query"] == "valid"
+        assert "context.budget" not in ctx
+
+    def test_none_upstream_values_excluded(self):
+        ctx = build_context_from_onboarding(
+            {"brand_name": "Test"},
+            upstream_data={"market_research": "data", "positioning": None},
+        )
+        assert ctx["context.market_research"] == "data"
+        assert "context.positioning" not in ctx
+
     def test_empty_onboarding_produces_empty_context(self):
         ctx = build_context_from_onboarding({})
         assert len(ctx) == 0
@@ -101,10 +118,17 @@ class TestPlaceholderValidator:
         violations = validate_template_placeholders(template)
         assert len(violations) == 2
 
-    def test_escaped_braces_ignored(self):
-        template = "Use {{context.var}} for MLflow, {context.brand_name} for runtime"
+    def test_mlflow_double_braces_validated(self):
+        """MLflow {{context.var}} placeholders are also validated."""
+        template = "Use {{context.brand_name}} for MLflow"
         violations = validate_template_placeholders(template)
         assert violations == []
+
+    def test_mlflow_non_context_rejected(self):
+        template = "Use {{user_name}} in template"
+        violations = validate_template_placeholders(template)
+        assert len(violations) == 1
+        assert "user_name" in violations[0]
 
     def test_no_placeholders_valid(self):
         template = "Plain text without any placeholders"
@@ -119,12 +143,26 @@ class TestPlaceholderValidator:
         assert len(violations) == 1
         assert "not in context variable registry" in violations[0]
 
+    def test_empty_registry_rejects_all(self):
+        """Explicit empty registry rejects all placeholders."""
+        template = "Check {context.brand_name}"
+        violations = validate_template_placeholders(
+            template, registry=set()
+        )
+        assert len(violations) == 1
+
 
 class TestExtractPlaceholders:
     """Test placeholder extraction."""
 
-    def test_single_placeholder(self):
+    def test_single_brace_placeholder(self):
         assert extract_placeholders("{context.brand_name}") == {
+            "context.brand_name"
+        }
+
+    def test_double_brace_placeholder(self):
+        """MLflow {{var}} syntax is extracted."""
+        assert extract_placeholders("{{context.brand_name}}") == {
             "context.brand_name"
         }
 
@@ -134,9 +172,11 @@ class TestExtractPlaceholders:
         )
         assert result == {"context.brand_name", "context.industry"}
 
-    def test_mlflow_double_braces_excluded(self):
-        result = extract_placeholders("{{context.brand_name}}")
-        assert result == set()
+    def test_mixed_single_and_double(self):
+        result = extract_placeholders(
+            "{context.a} and {{context.b}}"
+        )
+        assert result == {"context.a", "context.b"}
 
     def test_no_placeholders(self):
         assert extract_placeholders("plain text") == set()

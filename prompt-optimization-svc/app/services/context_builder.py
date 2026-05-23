@@ -42,15 +42,19 @@ def build_context_from_onboarding(
         if value is not None:
             context[ctx_key] = str(value)
 
-    # Runtime data (pass through with context. prefix)
+    # Runtime data (pass through with context. prefix, skip None)
     if runtime_data:
         for key, value in runtime_data.items():
+            if value is None:
+                continue
             ctx_key = key if key.startswith("context.") else f"context.{key}"
             context[ctx_key] = str(value)
 
-    # Upstream data (pass through with context. prefix)
+    # Upstream data (pass through with context. prefix, skip None)
     if upstream_data:
         for key, value in upstream_data.items():
+            if value is None:
+                continue
             ctx_key = key if key.startswith("context.") else f"context.{key}"
             context[ctx_key] = str(value)
 
