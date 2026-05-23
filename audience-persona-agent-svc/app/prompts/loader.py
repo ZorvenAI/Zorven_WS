@@ -54,10 +54,27 @@ class AgentPromptClient:
             logger.warning("Prompt cache unavailable: %s", exc)
             self._redis = None
 
-        self._http = httpx.AsyncClient(
-            base_url=self.mlflow_uri, timeout=10.0
-        )
-        logger.info("Prompt loader initialized (MLflow: %s)", self.mlflow_uri)
+        if self.mlflow_uri:
+            try:
+                self._http = httpx.AsyncClient(
+                    base_url=self.mlflow_uri, timeout=5.0
+                )
+                resp = await self._http.get("/health")
+                if resp.status_code == 200:
+                    logger.info("MLflow connected: %s", self.mlflow_uri)
+                else:
+                    logger.warning("MLflow unhealthy (%d) — disabled", resp.status_code)
+                    await self._http.aclose()
+                    self._http = None
+            except Exception as exc:
+                logger.warning("MLflow unavailable: %s — disabled", exc)
+                if self._http:
+                    await self._http.aclose()
+                self._http = None
+        else:
+            logger.info("MLflow URI not configured — prompt loader in fallback-only mode")
+
+        logger.info("Prompt loader initialized")
 
     async def stop(self) -> None:
         """Close connections."""
@@ -88,7 +105,7 @@ class AgentPromptClient:
         Returns:
             Formatted prompt string.
         """
-        resolve_ttl = ttl or self.default_ttl
+        resolve_ttl = self.default_ttl if ttl is None else ttl
         template = None
 
         # Tier 1: Redis cache
@@ -167,10 +184,33 @@ class AgentPromptClient:
             return None
 
     async def _fetch_prompt(self, name: str) -> Optional[str]:
-        """Fetch a prompt template from MLflow REST API."""
+        """Fetch a prompt template from MLflow REST API.
+
+        Prefers PRODUCTION-tagged versions over latest to match
+        the lifecycle-based resolution of ZorvenPromptLoader.
+        """
         try:
+            # Search for versions and prefer PRODUCTION state
             resp = await self._http.get(
-                f"/api/2.0/mlflow/prompts/get",
+                "/api/2.0/mlflow/prompts/versions/search",
+                params={"name": name},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                versions = data.get("prompt_versions", [])
+                # Find PRODUCTION version first
+                for v in versions:
+                    tags = v.get("tags", {})
+                    if isinstance(tags, list):
+                        tag_dict = {t["key"]: t["value"] for t in tags}
+                    else:
+                        tag_dict = tags
+                    if tag_dict.get("state") == "PRODUCTION":
+                        return v.get("template")
+
+            # Fallback: get latest version if no PRODUCTION found
+            resp = await self._http.get(
+                "/api/2.0/mlflow/prompts/get",
                 params={"name": name},
             )
             if resp.status_code == 200:
@@ -179,7 +219,7 @@ class AgentPromptClient:
                 latest = prompt.get("latest_version")
                 if latest:
                     ver_resp = await self._http.get(
-                        f"/api/2.0/mlflow/prompts/versions/get",
+                        "/api/2.0/mlflow/prompts/versions/get",
                         params={"name": name, "version": latest},
                     )
                     if ver_resp.status_code == 200:
