@@ -1278,6 +1278,8 @@ services:
     container_name: ai-brand-automator-brand-positioning
     environment:
       - BPA_REDIS_URL=redis://redis:6379/16
+      - BPA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BPA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - BPA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - BPA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - BPA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
@@ -1315,6 +1317,8 @@ services:
     container_name: ai-brand-automator-brand-architecture
     environment:
       - BAA_REDIS_URL=redis://redis:6379/17
+      - BAA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BAA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - BAA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - BAA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - BAA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
@@ -1352,6 +1356,8 @@ services:
     container_name: ai-brand-automator-brand-personality
     environment:
       - BPV_REDIS_URL=redis://redis:6379/18
+      - BPV_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BPV_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - BPV_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - BPV_TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - BPV_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
@@ -1389,6 +1395,8 @@ services:
     container_name: ai-brand-automator-brand-naming
     environment:
       - NTA_REDIS_URL=redis://redis:6379/19
+      - NTA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - NTA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - NTA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - NTA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - NTA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
@@ -1426,6 +1434,8 @@ services:
     container_name: ai-brand-automator-brand-story
     environment:
       - BSA_REDIS_URL=redis://redis:6379/20
+      - BSA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BSA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - BSA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - BSA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - BSA_BACKEND_URL=http://backend:8001

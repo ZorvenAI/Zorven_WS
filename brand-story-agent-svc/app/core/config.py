@@ -23,6 +23,9 @@ class Settings(BaseSettings):
 
     # Redis (DB 20)
     REDIS_URL: str = "redis://localhost:6379/20"
+    # Prompt optimization
+    PROMPT_CACHE_REDIS_URL: str = "redis://localhost:6379/2"
+    MLFLOW_TRACKING_URI: str = "http://mlflow-server:5000"
 
     # Anthropic Claude Sonnet 4
     ANTHROPIC_API_KEY: str = ""
