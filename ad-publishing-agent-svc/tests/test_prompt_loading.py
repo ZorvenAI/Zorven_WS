@@ -81,17 +81,19 @@ class TestAgentPromptClient:
         )
         assert "TestBrand" in result
 
-
 class TestCriticalAgentWarning:
     """AC-2: CRITICAL agents surface HIGH-severity warning on fallback."""
 
     async def test_critical_fallback_logs_warning(self, caplog):
-        """ADPUB/COA fallback must emit a HIGH-severity warning."""
-        assert CRITICAL_AGENT is True, "ADPUB must be marked CRITICAL"
+        """CRITICAL agent fallback must emit a WARNING-level log."""
+        import logging
+
+        assert CRITICAL_AGENT is True
 
         client = AgentPromptClient(
             redis_url="redis://localhost:6379/2",
             mlflow_uri="",
+            critical_agent=True,
         )
         client._redis = None
         client._http = None
@@ -101,6 +103,14 @@ class TestCriticalAgentWarning:
                 "zorven-wf3-adpub-system",
                 fallback=FALLBACK_SYSTEM,
             )
+
         assert result == FALLBACK_SYSTEM
-        # The fallback was used — in production, the agent should
-        # log a HIGH-severity warning when CRITICAL_AGENT is True
+        warnings = [
+            r for r in caplog.records
+            if r.levelno >= logging.WARNING
+            and "CRITICAL AGENT FALLBACK" in r.message
+        ]
+        assert len(warnings) >= 1, (
+            f"Expected CRITICAL AGENT FALLBACK warning, got: "
+            f"{[r.message for r in caplog.records]}"
+        )

@@ -139,6 +139,7 @@ async def lifespan(app: FastAPI):
 
     # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
     prompt_loader = AgentPromptClient(
+        critical_agent=True,
         redis_url=settings.PROMPT_CACHE_REDIS_URL,
         mlflow_uri=settings.MLFLOW_TRACKING_URI,
     )

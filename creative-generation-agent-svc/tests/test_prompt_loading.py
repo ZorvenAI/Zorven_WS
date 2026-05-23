@@ -1,6 +1,5 @@
 """Tests for CGA prompt loading integration."""
 
-import logging
 from unittest.mock import AsyncMock
 
 import pytest

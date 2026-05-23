@@ -1,6 +1,5 @@
 """Tests for ILA prompt loading integration."""
 
-import logging
 from unittest.mock import AsyncMock
 
 import pytest
