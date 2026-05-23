@@ -14,6 +14,8 @@ from app.messaging.kafka_consumer import IlaKafkaConsumer
 from app.messaging.kafka_producer import AuditProducer, EventProducer
 from app.services.django_client import DjangoClient
 from app.services.extractor import IntelligenceExtractor
+from app.prompts.loader import AgentPromptClient
+from app.prompts.invalidator import PromptCacheInvalidator
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +51,20 @@ async def lifespan(app: FastAPI):
     app.state.kafka_consumer = consumer
 
     logger.info("Intelligence Loop Agent ready")
+
+    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
     yield
 
     await consumer.stop()

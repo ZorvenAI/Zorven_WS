@@ -36,6 +36,8 @@ from app.services.optimization_verifier import OptimizationVerifier
 from app.services.performance_analyzer import PerformanceAnalyzer
 from app.services.recommendation_generator import RecommendationGenerator
 from app.services.reporter import Reporter
+from app.prompts.loader import AgentPromptClient
+from app.prompts.invalidator import PromptCacheInvalidator
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +135,20 @@ async def lifespan(app: FastAPI):
     app.state.callback_client = callback_client
 
     logger.info("Campaign Optimization Agent service ready")
+
+
+    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
 
     yield
 

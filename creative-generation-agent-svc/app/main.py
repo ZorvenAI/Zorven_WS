@@ -22,6 +22,8 @@ from app.services.cga_executor import CGAExecutor
 from app.services.context_loader import CGAContextLoader
 from app.services.gcs_client import GCSClient
 from app.services.image_gen_client import create_image_gen_client
+from app.prompts.loader import AgentPromptClient
+from app.prompts.invalidator import PromptCacheInvalidator
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +106,20 @@ async def lifespan(app: FastAPI):
     app.state.redis_manager = redis_manager
 
     logger.info("Creative Generation Agent service ready")
+
+
+    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
 
     yield
 
