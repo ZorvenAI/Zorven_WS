@@ -18,6 +18,9 @@ class Settings(BaseSettings):
 
     # Redis connection (DB 15)
     REDIS_URL: str = "redis://localhost:6379/15"
+    # Prompt optimization
+    PROMPT_CACHE_REDIS_URL: str = "redis://localhost:6379/2"
+    MLFLOW_TRACKING_URI: str = "http://mlflow-server:5000"
 
     # Kafka connection
     KAFKA_BOOTSTRAP_SERVERS: str = ""
