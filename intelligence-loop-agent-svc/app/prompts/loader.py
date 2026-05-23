@@ -35,10 +35,12 @@ class AgentPromptClient:
         redis_url: str = "redis://localhost:6379/2",
         mlflow_uri: str = "http://mlflow-server:5000",
         default_ttl: int = 300,
+        critical_agent: bool = False,
     ) -> None:
         self.redis_url = redis_url
         self.mlflow_uri = mlflow_uri
         self.default_ttl = default_ttl
+        self.critical_agent = critical_agent
         self._redis: Optional[aioredis.Redis] = None
         self._http: Optional[httpx.AsyncClient] = None
 
@@ -120,7 +122,16 @@ class AgentPromptClient:
         # Tier 3: Fallback
         if template is None:
             if fallback:
-                logger.debug("Using fallback for prompt '%s'", name)
+                if self.critical_agent:
+                    logger.warning(
+                        "CRITICAL AGENT FALLBACK: prompt '%s' (tenant=%s) "
+                        "— MLflow and Redis both unreachable, using "
+                        "hardcoded fallback. This agent handles ad spend.",
+                        name,
+                        tenant_id,
+                    )
+                else:
+                    logger.debug("Using fallback for prompt '%s'", name)
             template = fallback
 
         return self._format(template, variables)
