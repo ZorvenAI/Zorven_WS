@@ -53,6 +53,11 @@ def make_predict_fn(
     # Create Anthropic client
     client = anthropic.Anthropic(api_key=api_key)
 
+    # Cache MlflowClient on the closure to avoid per-call overhead
+    from mlflow.tracking import MlflowClient
+
+    _mlflow_client = MlflowClient(tracking_uri)
+
     def predict_fn(**kwargs: Any) -> str:
         """Load prompt, format, call Claude, return text.
 
@@ -65,7 +70,17 @@ def make_predict_fn(
         """
         try:
             # AC-1: Load prompt from MLflow registry
-            prompt_uri = f"prompts:/{prompt_name}/production"
+            versions = _mlflow_client.search_prompt_versions(prompt_name)
+            if not versions:
+                logger.warning(
+                    "Prompt '%s' not found in MLflow — returning empty",
+                    prompt_name,
+                )
+                return ""
+            latest_ver = max(
+                versions, key=lambda v: int(v.version)
+            ).version
+            prompt_uri = f"prompts:/{prompt_name}/{latest_ver}"
             prompt_version = mlflow.genai.load_prompt(
                 prompt_uri, allow_missing=True
             )

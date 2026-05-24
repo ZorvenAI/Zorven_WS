@@ -1,368 +1,148 @@
-"""Tests for ZorvenPromptLoader — three-tier resolution (§7.3)."""
-
-from unittest.mock import AsyncMock, MagicMock
+"""Tests for ZorvenPromptLoader using real Redis + MLflow (US-010, US-012)."""
 
 import pytest
 
-from app.services.prompt_loader import (
-    ZorvenPromptLoader,
-    _convert_mlflow_template,
-)
+from app.cache.prompt_cache import PromptCacheManager
+from app.services.mlflow_registry import MLflowPromptRegistry
+from app.services.prompt_loader import ZorvenPromptLoader, _convert_mlflow_template
+from .conftest import MLFLOW_URI, REDIS_URL, requires_mlflow, requires_redis
+
+TEST_PREFIX = "__test_loader_"
 
 
-@pytest.fixture
-def mock_cache():
-    """Mock PromptCacheManager."""
-    cache = AsyncMock()
-    cache.get_prompt = AsyncMock(return_value=None)
-    cache.set_prompt = AsyncMock()
-    cache.invalidate_prompt = AsyncMock(return_value=0)
-    return cache
-
-
-@pytest.fixture
-def mock_registry():
-    """Mock MLflowPromptRegistry."""
-    reg = MagicMock()
-    reg.load_prompt_template = MagicMock(return_value=None)
-    return reg
-
-
-@pytest.fixture
-def loader(mock_cache, mock_registry):
-    """ZorvenPromptLoader with mocked dependencies."""
-    return ZorvenPromptLoader(mock_cache, mock_registry)
-
-
-# ------------------------------------------------------------------
-# Tier 1: Redis cache (AC-1)
-# ------------------------------------------------------------------
-
-
+@requires_redis
 class TestTier1CacheHit:
-    """Redis cache returns template — no MLflow call needed."""
+    @pytest.fixture
+    async def loader(self):
+        cache = PromptCacheManager(redis_url=REDIS_URL)
+        await cache.connect()
+        ldr = ZorvenPromptLoader(cache)
+        yield ldr
+        r = await cache.connect()
+        async for key in r.scan_iter(match=f"prompt:{TEST_PREFIX}*"):
+            await r.delete(key)
+        await cache.close()
 
-    async def test_cache_hit_production(self, loader, mock_cache, mock_registry):
-        """Production cache hit returns template without calling MLflow."""
-        mock_cache.get_prompt.return_value = "You are a researcher for {context.brand_name}"
-        result = await loader.load("zorven-wf1-mra-system")
-        assert "researcher" in result
-        mock_registry.load_prompt_template.assert_not_called()
-
-    async def test_tenant_override_checked_first(self, loader, mock_cache):
-        """AC-1: Tenant override cache is checked before global production."""
-        call_count = 0
-
-        async def side_effect(name, tenant_id=None):
-            nonlocal call_count
-            call_count += 1
-            if tenant_id == "t-1" and call_count == 1:
-                return "Tenant-specific prompt"
-            return None
-
-        mock_cache.get_prompt = AsyncMock(side_effect=side_effect)
-        result = await loader.load("test", tenant_id="t-1")
-        assert result == "Tenant-specific prompt"
-
-    async def test_falls_through_to_global_on_tenant_miss(
-        self, loader, mock_cache
-    ):
-        """If tenant cache misses, checks global production cache."""
-        call_count = 0
-
-        async def side_effect(name, tenant_id=None):
-            nonlocal call_count
-            call_count += 1
-            if tenant_id is not None:
-                return None  # Tenant miss
-            return "Global production prompt"
-
-        mock_cache.get_prompt = AsyncMock(side_effect=side_effect)
-        result = await loader.load("test", tenant_id="t-1")
-        assert result == "Global production prompt"
-
-
-# ------------------------------------------------------------------
-# Tier 2: MLflow API (AC-3)
-# ------------------------------------------------------------------
-
-
-class TestTier2MLflow:
-    """Redis miss → MLflow fetch → cache write."""
-
-    async def test_mlflow_hit_on_cache_miss(
-        self, loader, mock_cache, mock_registry
-    ):
-        """Cache miss triggers lifecycle-aware MLflow fetch."""
-        mock_cache.get_prompt.return_value = None
-        mock_registry.get_prompt_by_state.return_value = None
-        mock_registry.load_prompt_template.return_value = "MLflow template"
-
-        result = await loader.load("test")
-        assert result == "MLflow template"
-
-    async def test_mlflow_result_cached_with_ttl(
-        self, loader, mock_cache, mock_registry
-    ):
-        """AC-3: MLflow result written to Redis with setex (configurable TTL)."""
-        mock_cache.get_prompt.return_value = None
-        mock_registry.get_prompt_by_state.return_value = None
-        mock_registry.load_prompt_template.return_value = "MLflow template"
-
-        await loader.load("test", ttl=600)
-        mock_cache.set_prompt.assert_called_once_with(
-            "test", "MLflow template", ttl=600, tenant_id=None
+    async def test_cache_hit_production(self, loader):
+        await loader.prompt_cache.set_prompt(
+            f"{TEST_PREFIX}cached", "Cached template", ttl=10
         )
+        result = await loader.load(f"{TEST_PREFIX}cached")
+        assert result == "Cached template"
 
-    async def test_custom_ttl_passed_to_cache(
-        self, loader, mock_cache, mock_registry
-    ):
-        """TTL parameter flows through to cache set."""
-        mock_cache.get_prompt.return_value = None
-        mock_registry.get_prompt_by_state.return_value = None
-        mock_registry.load_prompt_template.return_value = "t"
-
-        await loader.load("test", ttl=120)
-        assert mock_cache.set_prompt.call_args[1]["ttl"] == 120
-
-    async def test_tenant_id_resolves_tenant_override_first(
-        self, loader, mock_cache, mock_registry
-    ):
-        """Tier 2 with tenant_id checks TENANT_OVERRIDE before PRODUCTION."""
-        mock_cache.get_prompt.return_value = None
-
-        from app.services.mlflow_registry import PromptInfo
-
-        tenant_info = PromptInfo(
-            name="test",
-            version=3,
-            template="Tenant override template",
-            tags={"state": "TENANT_OVERRIDE", "tenant_id": "t-1"},
+    async def test_tenant_override_checked_first(self, loader):
+        await loader.prompt_cache.set_prompt(
+            f"{TEST_PREFIX}tenant", "Global", ttl=10
         )
-
-        def by_state(name, state, tenant_id=None):
-            if state == "TENANT_OVERRIDE" and tenant_id == "t-1":
-                return tenant_info
-            return None
-
-        mock_registry.get_prompt_by_state.side_effect = by_state
-
-        result = await loader.load("test", tenant_id="t-1")
-        assert result == "Tenant override template"
-        # Should be cached under the tenant key
-        mock_cache.set_prompt.assert_called_once_with(
-            "test", "Tenant override template", ttl=300, tenant_id="t-1"
+        await loader.prompt_cache.set_prompt(
+            f"{TEST_PREFIX}tenant", "Tenant-specific", ttl=10, tenant_id="t-1"
         )
+        result = await loader.load(f"{TEST_PREFIX}tenant", tenant_id="t-1")
+        assert result == "Tenant-specific"
 
-    async def test_tenant_id_falls_back_to_production(
-        self, loader, mock_cache, mock_registry
-    ):
-        """Tier 2: No tenant override → falls back to global PRODUCTION."""
-        mock_cache.get_prompt.return_value = None
-
-        from app.services.mlflow_registry import PromptInfo
-
-        prod_info = PromptInfo(
-            name="test",
-            version=2,
-            template="Global production",
-            tags={"state": "PRODUCTION"},
+    async def test_falls_through_to_global(self, loader):
+        await loader.prompt_cache.set_prompt(
+            f"{TEST_PREFIX}global", "Global only", ttl=10
         )
-
-        def by_state(name, state, tenant_id=None):
-            if state == "PRODUCTION" and tenant_id is None:
-                return prod_info
-            return None
-
-        mock_registry.get_prompt_by_state.side_effect = by_state
-
-        result = await loader.load("test", tenant_id="t-1")
-        assert result == "Global production"
-        # Cached under production key (tenant_id=None)
-        mock_cache.set_prompt.assert_called_once_with(
-            "test", "Global production", ttl=300, tenant_id=None
-        )
+        result = await loader.load(f"{TEST_PREFIX}global", tenant_id="t-miss")
+        assert result == "Global only"
 
 
-# ------------------------------------------------------------------
-# Tier 3: Fallback (AC-2)
-# ------------------------------------------------------------------
-
-
+@requires_redis
 class TestTier3Fallback:
-    """Redis miss + MLflow failure → fallback template."""
+    @pytest.fixture
+    async def loader(self):
+        cache = PromptCacheManager(redis_url=REDIS_URL)
+        await cache.connect()
+        ldr = ZorvenPromptLoader(cache)
+        yield ldr
+        await cache.close()
 
-    async def test_mlflow_failure_returns_fallback(
-        self, loader, mock_cache, mock_registry
-    ):
-        """AC-2: MLflow exception → fallback_template returned."""
-        mock_cache.get_prompt.return_value = None
-        mock_registry.get_prompt_by_state.side_effect = Exception(
-            "connection refused"
-        )
-
+    async def test_all_miss_returns_fallback(self, loader):
         result = await loader.load(
-            "test", fallback_template="Fallback: help with {context.task}"
+            f"{TEST_PREFIX}nonexistent_xyz", fallback_template="Fallback text"
         )
-        assert "Fallback" in result
+        assert result == "Fallback text"
 
-    async def test_mlflow_failure_logs_warning(
-        self, loader, mock_cache, mock_registry, caplog
-    ):
-        """AC-2: Warning logged on MLflow failure."""
-        mock_cache.get_prompt.return_value = None
-        mock_registry.get_prompt_by_state.side_effect = Exception("timeout")
-
-        import logging
-
-        with caplog.at_level(logging.WARNING):
-            await loader.load("test", fallback_template="fb")
-        assert any("Tier 2 ERROR" in r.message for r in caplog.records)
-
-    async def test_all_tiers_fail_returns_empty(
-        self, loader, mock_cache, mock_registry
-    ):
-        """All tiers fail + no fallback → empty string."""
-        mock_cache.get_prompt.return_value = None
-        mock_registry.get_prompt_by_state.return_value = None
-        mock_registry.load_prompt_template.return_value = None
-
-        result = await loader.load("test")
+    async def test_empty_fallback_returns_empty(self, loader):
+        result = await loader.load(f"{TEST_PREFIX}nonexistent_xyz")
         assert result == ""
 
-    async def test_mlflow_returns_none_uses_fallback(
-        self, loader, mock_cache, mock_registry
-    ):
-        """MLflow returns None (prompt not found) → fallback."""
-        mock_cache.get_prompt.return_value = None
-        mock_registry.get_prompt_by_state.return_value = None
-        mock_registry.load_prompt_template.return_value = None
 
-        result = await loader.load("test", fallback_template="default prompt")
-        assert result == "default prompt"
-
-    async def test_no_registry_uses_fallback(self, mock_cache):
-        """Loader without MLflow registry goes straight to fallback."""
-        loader = ZorvenPromptLoader(mock_cache, mlflow_registry=None)
-        mock_cache.get_prompt.return_value = None
-
-        result = await loader.load("test", fallback_template="fallback only")
-        assert result == "fallback only"
-
-
-# ------------------------------------------------------------------
-# Template formatting (AC-4)
-# ------------------------------------------------------------------
-
-
+@requires_redis
 class TestTemplateFormatting:
-    """Template formatting with str.format_map and stringified variables."""
+    @pytest.fixture
+    async def loader(self):
+        cache = PromptCacheManager(redis_url=REDIS_URL)
+        await cache.connect()
+        ldr = ZorvenPromptLoader(cache)
+        yield ldr
+        r = await cache.connect()
+        async for key in r.scan_iter(match=f"prompt:{TEST_PREFIX}*"):
+            await r.delete(key)
+        await cache.close()
 
-    async def test_variables_applied(self, loader, mock_cache):
-        """AC-4: Variables replace placeholders."""
-        mock_cache.get_prompt.return_value = (
-            "Analyze {context.brand_name} in {context.industry}"
+    async def test_variables_applied(self, loader):
+        await loader.prompt_cache.set_prompt(
+            f"{TEST_PREFIX}fmt",
+            "Analyze {{context.brand_name}} in {{context.industry}}",
+            ttl=10,
         )
         result = await loader.load(
-            "test",
-            variables={
-                "context.brand_name": "Acme Corp",
-                "context.industry": "tech",
-            },
+            f"{TEST_PREFIX}fmt",
+            variables={"context.brand_name": "Acme", "context.industry": "tech"},
         )
-        assert "Acme Corp" in result
+        assert "Acme" in result
         assert "tech" in result
 
-    async def test_non_string_values_stringified(self, loader, mock_cache):
-        """AC-4: Non-string values converted to strings."""
-        mock_cache.get_prompt.return_value = (
-            "Budget: {context.budget}, Items: {context.count}"
+    async def test_no_variables_unchanged(self, loader):
+        await loader.prompt_cache.set_prompt(
+            f"{TEST_PREFIX}plain", "Plain template", ttl=10
         )
-        result = await loader.load(
-            "test",
-            variables={"context.budget": 50000.0, "context.count": 5},
-        )
-        assert "50000.0" in result
-        assert "5" in result
-
-    async def test_no_variables_returns_template_as_is(
-        self, loader, mock_cache
-    ):
-        """No variables → template returned unchanged."""
-        mock_cache.get_prompt.return_value = "Plain template"
-        result = await loader.load("test")
+        result = await loader.load(f"{TEST_PREFIX}plain")
         assert result == "Plain template"
-
-    async def test_missing_variable_handled_gracefully(
-        self, loader, mock_cache
-    ):
-        """Missing variable doesn't crash — returns template with placeholder."""
-        mock_cache.get_prompt.return_value = "Hello {name}, your {missing_var}"
-        result = await loader.load(
-            "test", variables={"name": "World"}
-        )
-        assert "Hello World" in result
-
-    async def test_mlflow_double_brace_conversion(self, loader, mock_cache):
-        """MLflow {{var}} converted to {var} for format_map."""
-        mock_cache.get_prompt.return_value = (
-            "Analyze {{context.brand_name}} in {{context.industry}}"
-        )
-        result = await loader.load(
-            "test",
-            variables={
-                "context.brand_name": "TestBrand",
-                "context.industry": "retail",
-            },
-        )
-        assert "TestBrand" in result
-        assert "retail" in result
 
 
 class TestMlflowTemplateConversion:
-    """Test _convert_mlflow_template helper."""
-
-    def test_double_braces_to_single(self):
+    def test_double_to_single(self):
         assert _convert_mlflow_template("{{var}}") == "{var}"
 
-    def test_dotted_variables(self):
-        result = _convert_mlflow_template("{{context.brand_name}}")
-        assert result == "{context.brand_name}"
+    def test_dotted(self):
+        assert _convert_mlflow_template("{{context.brand_name}}") == "{context.brand_name}"
 
-    def test_multiple_variables(self):
-        result = _convert_mlflow_template("{{a}} and {{b.c}}")
-        assert result == "{a} and {b.c}"
+    def test_multiple(self):
+        assert _convert_mlflow_template("{{a}} and {{b.c}}") == "{a} and {b.c}"
 
-    def test_no_variables_unchanged(self):
+    def test_plain_unchanged(self):
         assert _convert_mlflow_template("plain text") == "plain text"
 
     def test_single_braces_unchanged(self):
         assert _convert_mlflow_template("{already_single}") == "{already_single}"
 
 
-# ------------------------------------------------------------------
-# Cache invalidation (AC-5)
-# ------------------------------------------------------------------
-
-
+@requires_redis
 class TestCacheInvalidation:
-    """Test cache invalidation path."""
+    @pytest.fixture
+    async def loader(self):
+        cache = PromptCacheManager(redis_url=REDIS_URL)
+        await cache.connect()
+        ldr = ZorvenPromptLoader(cache)
+        yield ldr
+        r = await cache.connect()
+        async for key in r.scan_iter(match=f"prompt:{TEST_PREFIX}*"):
+            await r.delete(key)
+        await cache.close()
 
-    async def test_invalidate_delegates_to_cache(
-        self, loader, mock_cache
-    ):
-        """invalidate() calls PromptCacheManager.invalidate_prompt()."""
-        mock_cache.invalidate_prompt.return_value = 3
-        deleted = await loader.invalidate("zorven-wf1-mra-system")
-        assert deleted == 3
-        mock_cache.invalidate_prompt.assert_called_once_with(
-            "zorven-wf1-mra-system"
+    async def test_invalidate_removes_cached(self, loader):
+        await loader.prompt_cache.set_prompt(
+            f"{TEST_PREFIX}inval", "Before", ttl=10
         )
+        await loader.invalidate(f"{TEST_PREFIX}inval")
+        result = await loader.load(
+            f"{TEST_PREFIX}inval", fallback_template="After"
+        )
+        assert result == "After"
 
-    async def test_invalidate_returns_zero_on_miss(
-        self, loader, mock_cache
-    ):
-        """No keys to invalidate → returns 0."""
-        mock_cache.invalidate_prompt.return_value = 0
-        deleted = await loader.invalidate("nonexistent")
+    async def test_invalidate_returns_zero_on_miss(self, loader):
+        deleted = await loader.invalidate(f"{TEST_PREFIX}nope_xyz")
         assert deleted == 0

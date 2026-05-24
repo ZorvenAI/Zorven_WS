@@ -52,11 +52,13 @@ class MLflowPromptRegistry:
     def get_prompt(self, name: str) -> Optional[PromptInfo]:
         """Get the latest version of a prompt. Returns None if not found."""
         try:
-            prompt = self.client.get_prompt(name)
-            latest = self.client.get_prompt_version(name, prompt.latest_version)
+            versions = self.client.search_prompt_versions(name)
+            if not versions:
+                return None
+            latest = max(versions, key=lambda v: int(v.version))
             return PromptInfo(
                 name=name,
-                version=int(prompt.latest_version),
+                version=int(latest.version),
                 template=latest.template,
                 tags=latest.tags or {},
             )
@@ -79,10 +81,13 @@ class MLflowPromptRegistry:
         try:
             if version:
                 pv = self.client.get_prompt_version(name, version)
+                return pv.template
             else:
-                prompt = self.client.get_prompt(name)
-                pv = self.client.get_prompt_version(name, prompt.latest_version)
-            return pv.template
+                versions = self.client.search_prompt_versions(name)
+                if versions:
+                    latest = max(versions, key=lambda v: int(v.version))
+                    return latest.template
+                return None
         except Exception:
             return None
 

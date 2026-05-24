@@ -1,7 +1,6 @@
 """Tests for Alembic migration structure."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 

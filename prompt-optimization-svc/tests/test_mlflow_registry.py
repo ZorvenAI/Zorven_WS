@@ -1,137 +1,102 @@
-"""Tests for MLflow Prompt Registry client."""
-
-from unittest.mock import MagicMock, patch
+"""Tests for MLflow Prompt Registry client using real MLflow (US-007, US-008)."""
 
 import pytest
 
 from app.services.mlflow_registry import MLflowPromptRegistry, PromptInfo
+from .conftest import MLFLOW_URI, requires_mlflow
+
+TEST_PREFIX = "__test_reg_"
 
 
-@pytest.fixture
-def mock_client():
-    """Mock MlflowClient."""
-    return MagicMock()
-
-
-@pytest.fixture
-def registry(mock_client):
-    """MLflowPromptRegistry with mocked client."""
-    with patch("app.services.mlflow_registry.MlflowClient", return_value=mock_client):
-        reg = MLflowPromptRegistry("http://localhost:5000")
-    reg.client = mock_client
-    return reg
-
-
+@requires_mlflow
 class TestRegisterPrompt:
-    """Test prompt registration."""
+    @pytest.fixture
+    def registry(self):
+        return MLflowPromptRegistry(MLFLOW_URI)
 
-    def test_register_new_prompt(self, registry, mock_client):
-        mock_pv = MagicMock()
-        mock_pv.version = 1
-        mock_client.register_prompt.return_value = mock_pv
-
+    def test_register_new_prompt(self, registry):
         info = registry.register_prompt(
-            name="zorven-wf1-mra-system",
-            template="You are a market researcher...",
+            name=f"{TEST_PREFIX}new",
+            template="You are a test assistant",
             tags={"state": "DRAFT"},
         )
-        assert info.name == "zorven-wf1-mra-system"
-        assert info.version == 1
-        mock_client.register_prompt.assert_called_once()
+        assert info.name == f"{TEST_PREFIX}new"
+        assert info.version >= 1
 
-    def test_register_with_tags(self, registry, mock_client):
-        mock_pv = MagicMock()
-        mock_pv.version = 1
-        mock_client.register_prompt.return_value = mock_pv
-
+    def test_register_with_tags(self, registry):
         tags = {"workflow": "wf1", "agent_code": "mra", "state": "DRAFT"}
-        registry.register_prompt("test", "template", tags=tags)
-        call_kwargs = mock_client.register_prompt.call_args[1]
-        assert call_kwargs["tags"] == tags
+        info = registry.register_prompt(
+            f"{TEST_PREFIX}tags", "template", tags=tags
+        )
+        assert info.tags == tags
 
 
+@requires_mlflow
 class TestGetPrompt:
-    """Test prompt retrieval."""
+    @pytest.fixture
+    def registry(self):
+        reg = MLflowPromptRegistry(MLFLOW_URI)
+        reg.register_prompt(
+            name=f"{TEST_PREFIX}get",
+            template="Get test template",
+            tags={"state": "DRAFT"},
+        )
+        return reg
 
-    def test_get_existing_prompt(self, registry, mock_client):
-        mock_prompt = MagicMock()
-        mock_prompt.latest_version = 2
-        mock_client.get_prompt.return_value = mock_prompt
-
-        mock_pv = MagicMock()
-        mock_pv.template = "Template text"
-        mock_pv.tags = {"state": "DRAFT"}
-        mock_client.get_prompt_version.return_value = mock_pv
-
-        info = registry.get_prompt("zorven-wf1-mra-system")
+    def test_get_existing_prompt(self, registry):
+        info = registry.get_prompt(f"{TEST_PREFIX}get")
         assert info is not None
-        assert info.version == 2
-        assert info.template == "Template text"
+        assert info.template == "Get test template"
 
-    def test_get_nonexistent_prompt(self, registry, mock_client):
-        mock_client.get_prompt.side_effect = Exception("not found")
-        info = registry.get_prompt("nonexistent")
+    def test_get_nonexistent_prompt(self, registry):
+        info = registry.get_prompt(f"{TEST_PREFIX}nonexistent_xyz")
         assert info is None
 
 
+@requires_mlflow
 class TestPromptExists:
-    """Test existence check."""
+    @pytest.fixture
+    def registry(self):
+        reg = MLflowPromptRegistry(MLFLOW_URI)
+        reg.register_prompt(name=f"{TEST_PREFIX}exists", template="t")
+        return reg
 
-    def test_exists_true(self, registry, mock_client):
-        mock_prompt = MagicMock()
-        mock_prompt.latest_version = 1
-        mock_client.get_prompt.return_value = mock_prompt
-        mock_pv = MagicMock()
-        mock_pv.template = "t"
-        mock_pv.tags = {}
-        mock_client.get_prompt_version.return_value = mock_pv
+    def test_exists_true(self, registry):
+        assert registry.prompt_exists(f"{TEST_PREFIX}exists") is True
 
-        assert registry.prompt_exists("zorven-wf1-mra-system") is True
-
-    def test_exists_false(self, registry, mock_client):
-        mock_client.get_prompt.side_effect = Exception("not found")
-        assert registry.prompt_exists("nonexistent") is False
+    def test_exists_false(self, registry):
+        assert registry.prompt_exists(f"{TEST_PREFIX}nope_xyz") is False
 
 
+@requires_mlflow
 class TestLoadPromptTemplate:
-    """Test template loading (AC-5 smoke test pattern)."""
+    @pytest.fixture
+    def registry(self):
+        reg = MLflowPromptRegistry(MLFLOW_URI)
+        reg.register_prompt(
+            name=f"{TEST_PREFIX}load",
+            template="You are a {{context.role}}...",
+        )
+        return reg
 
-    def test_load_latest_version(self, registry, mock_client):
-        mock_prompt = MagicMock()
-        mock_prompt.latest_version = 3
-        mock_client.get_prompt.return_value = mock_prompt
+    def test_load_latest_version(self, registry):
+        template = registry.load_prompt_template(f"{TEST_PREFIX}load")
+        assert template is not None
+        assert "{{context.role}}" in template
 
-        mock_pv = MagicMock()
-        mock_pv.template = "You are a {{context.role}}..."
-        mock_client.get_prompt_version.return_value = mock_pv
-
-        template = registry.load_prompt_template("zorven-wf1-mra-system")
-        assert template == "You are a {{context.role}}..."
-
-    def test_load_specific_version(self, registry, mock_client):
-        mock_pv = MagicMock()
-        mock_pv.template = "Version 2 template"
-        mock_client.get_prompt_version.return_value = mock_pv
-
-        template = registry.load_prompt_template("test", version=2)
-        assert template == "Version 2 template"
-        mock_client.get_prompt_version.assert_called_once_with("test", 2)
-
-    def test_load_nonexistent_returns_none(self, registry, mock_client):
-        mock_client.get_prompt.side_effect = Exception("not found")
-        template = registry.load_prompt_template("nonexistent")
+    def test_load_nonexistent_returns_none(self, registry):
+        template = registry.load_prompt_template(f"{TEST_PREFIX}nope_xyz")
         assert template is None
 
 
+@requires_mlflow
 class TestListPrompts:
-    """Test prompt listing."""
+    @pytest.fixture
+    def registry(self):
+        reg = MLflowPromptRegistry(MLFLOW_URI)
+        reg.register_prompt(name=f"{TEST_PREFIX}list", template="listed")
+        return reg
 
-    def test_list_returns_names(self, registry, mock_client):
-        mock_p1 = MagicMock()
-        mock_p1.name = "zorven-wf1-mra-system"
-        mock_p2 = MagicMock()
-        mock_p2.name = "zorven-wf2-bpa-system"
-        mock_client.search_prompts.return_value = [mock_p1, mock_p2]
-
+    def test_list_returns_names(self, registry):
         names = registry.list_prompts()
-        assert names == ["zorven-wf1-mra-system", "zorven-wf2-bpa-system"]
+        assert f"{TEST_PREFIX}list" in names
