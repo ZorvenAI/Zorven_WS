@@ -322,8 +322,7 @@ async def get_production_prompt(
 @router.post("/v1/optimize/group/{group_name}", response_model=None)
 async def optimize_group(group_name: str):
     """Trigger joint optimization for a prompt group (US-019)."""
-    from app.registries.optimization_groups import get_group, OPTIMIZATION_GROUPS
-    from app.api.schemas import JointOptimizationResponse
+    from app.registries.optimization_groups import get_group
 
     try:
         group = get_group(group_name)
@@ -333,7 +332,6 @@ async def optimize_group(group_name: str):
     return JointOptimizationResponse(
         group_name=group_name,
         prompt_count=len(group.prompt_names),
-        error="Optimization not triggered — use Celery task or CLI",
     )
 
 

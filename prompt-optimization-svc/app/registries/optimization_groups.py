@@ -4,7 +4,7 @@ Groups define sets of prompts that are optimized jointly so they
 evolve together and avoid local optima.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

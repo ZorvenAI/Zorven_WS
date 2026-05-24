@@ -5,12 +5,11 @@ import pytest
 from app.logic.prompt_naming import validate_prompt_name
 from app.registries.optimization_groups import (
     OPTIMIZATION_GROUPS,
-    OptimizationGroup,
     get_group,
 )
 from app.services.joint_optimizer import JointOptimizationResult, JointOptimizer
 from app.services.gepa_optimizer import ZorvenGepaOptimizer
-from .conftest import MLFLOW_URI, requires_mlflow
+from .conftest import MLFLOW_URI
 
 
 class TestOptimizationGroupRegistry:

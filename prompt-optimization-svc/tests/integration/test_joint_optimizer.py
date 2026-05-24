@@ -12,7 +12,6 @@ from app.services.mlflow_registry import MLflowPromptRegistry
 
 from .conftest import MLFLOW_URI, requires_mlflow
 
-TEST_PREFIX = "__test_joint_"
 
 
 @pytest.mark.integration

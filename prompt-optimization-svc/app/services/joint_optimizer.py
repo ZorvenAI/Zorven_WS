@@ -80,7 +80,10 @@ class JointOptimizer:
         )
 
         # AC-2: Single optimization run covering all prompts
-        # Use the first agent's budget (joint runs share budget)
+        # Use max budget across all agents in the group
+        from app.registries.optimization_budgets import get_budget
+
+        max_budget = max(get_budget(a) for a in group.agent_codes)
         primary_agent = group.agent_codes[0]
         opt_result = self.gepa.optimize(
             prompt_uris=prompt_uris,
@@ -88,6 +91,7 @@ class JointOptimizer:
             train_data=train_data,
             scorers=scorers,
             agent_code=primary_agent,
+            max_metric_calls=max_budget,
         )
 
         return JointOptimizationResult(
@@ -126,41 +130,52 @@ class JointOptimizer:
         except KeyError:
             return result
 
-        promoted = []
-        try:
-            for prompt_name in group.prompt_names:
-                info = self.registry.get_prompt(prompt_name)
-                if info is None:
-                    continue
-                self.lifecycle_manager.transition(
-                    prompt_name,
-                    info.version,
-                    PromptState.STAGING,
-                    PromptState.CANARY,
+        # Pre-validate: all prompts must exist and be in STAGING
+        prompt_snapshots: list[tuple[str, int, PromptState]] = []
+        for prompt_name in group.prompt_names:
+            info = self.registry.get_prompt(prompt_name)
+            if info is None:
+                result.error = (
+                    f"Group promotion failed: prompt '{prompt_name}' "
+                    f"not found in registry"
                 )
-                promoted.append(prompt_name)
+                return result
+            current_state = PromptState(
+                info.tags.get("state", "DRAFT")
+            )
+            prompt_snapshots.append(
+                (prompt_name, info.version, current_state)
+            )
+
+        # Promote all as a coherent set
+        promoted: list[tuple[str, int, PromptState]] = []
+        try:
+            for name, version, from_state in prompt_snapshots:
+                self.lifecycle_manager.transition(
+                    name, version, from_state, PromptState.CANARY,
+                )
+                promoted.append((name, version, from_state))
 
             result.promoted_as_set = True
             logger.info(
-                "Group '%s' promoted to CANARY as coherent set: %d prompts",
+                "Group '%s' promoted to CANARY as coherent set: "
+                "%d prompts",
                 group_name,
                 len(promoted),
             )
         except Exception as exc:
-            # Rollback: revert any already-promoted prompts
+            # Rollback using captured snapshots
             logger.error(
                 "Group promotion failed at %d/%d — rolling back: %s",
                 len(promoted),
-                len(group.prompt_names),
+                len(prompt_snapshots),
                 exc,
             )
-            for name in promoted:
+            for name, version, _ in promoted:
                 try:
-                    info = self.registry.get_prompt(name)
-                    if info:
-                        self.lifecycle_manager.rollback(
-                            name, info.version, PromptState.CANARY
-                        )
+                    self.lifecycle_manager.rollback(
+                        name, version, PromptState.CANARY
+                    )
                 except Exception:
                     pass
             result.promoted_as_set = False
