@@ -7,6 +7,7 @@ from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 
 from app.api.schemas import (
+    JointOptimizationResponse,
     ExecuteRequest,
     ExecuteResponse,
     HealthResponse,
@@ -314,6 +315,23 @@ async def get_production_prompt(
         state=prod.tags.get("state", "PRODUCTION"),
         tenant_id=prod.tags.get("tenant_id"),
         tags=prod.tags,
+    )
+
+
+
+@router.post("/v1/optimize/group/{group_name}", response_model=None)
+async def optimize_group(group_name: str):
+    """Trigger joint optimization for a prompt group (US-019)."""
+    from app.registries.optimization_groups import get_group
+
+    try:
+        group = get_group(group_name)
+    except KeyError as exc:
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    return JointOptimizationResponse(
+        group_name=group_name,
+        prompt_count=len(group.prompt_names),
     )
 
 
