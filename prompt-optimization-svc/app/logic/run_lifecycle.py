@@ -122,13 +122,13 @@ class RunLifecycleManager:
         self,
         prompt_cache=None,
         lifecycle_producer=None,
+        db_session_factory=None,
     ) -> None:
         self.prompt_cache = prompt_cache
         self.producer = lifecycle_producer
+        self.db_session_factory = db_session_factory
 
-    def validate_transition(
-        self, from_state: RunState, to_state: RunState
-    ) -> bool:
+    def validate_transition(self, from_state: RunState, to_state: RunState) -> bool:
         """Check if a run state transition is valid."""
         allowed = VALID_RUN_TRANSITIONS.get(from_state, set())
         if to_state not in allowed:
@@ -147,24 +147,51 @@ class RunLifecycleManager:
         """Execute a run state transition with persistence and events."""
         self.validate_transition(from_state, to_state)
 
+        now = datetime.now(timezone.utc)
+
+        # AC-1: Persist to PostgreSQL
+        if self.db_session_factory is not None:
+            from app.models.optimization_run import OptimizationRun
+
+            async with self.db_session_factory() as session:
+                from sqlalchemy import select
+
+                stmt = select(OptimizationRun).where(OptimizationRun.id == run_id)
+                result = await session.execute(stmt)
+                run = result.scalar_one_or_none()
+                if run is None:
+                    run = OptimizationRun(
+                        id=run_id,
+                        prompt_name=prompt_name,
+                        agent_code=agent_code,
+                        state=to_state.value,
+                        started_at=now,
+                        updated_at=now,
+                    )
+                    if error_message:
+                        run.error_message = error_message
+                    session.add(run)
+                else:
+                    run.state = to_state.value
+                    run.updated_at = now
+                    if error_message:
+                        run.error_message = error_message
+                await session.commit()
+
         # AC-1: Persist to Redis progress hash
         if self.prompt_cache is not None:
             progress = {
                 "state": to_state.value,
                 "prompt_name": prompt_name,
                 "agent_code": agent_code,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": now.isoformat(),
             }
             if error_message:
                 progress["error_message"] = error_message
-            await self.prompt_cache.set_optimization_progress(
-                run_id, progress
-            )
+            await self.prompt_cache.set_optimization_progress(run_id, progress)
 
         # AC-3: Emit Kafka event
-        event_type = RUN_EVENT_MAP.get(
-            to_state, "optimization.run.state_changed"
-        )
+        event_type = RUN_EVENT_MAP.get(to_state, "optimization.run.state_changed")
         if self.producer is not None:
             self.producer.send_lifecycle_event_sync(
                 event_type=event_type,
@@ -199,7 +226,21 @@ class RunLifecycleManager:
             seconds=DEFERRED_RETRY_SECONDS
         )
 
-        # Update progress with retry time
+        # Persist deferred_until to PostgreSQL
+        if self.db_session_factory is not None:
+            from app.models.optimization_run import OptimizationRun
+
+            async with self.db_session_factory() as session:
+                from sqlalchemy import select
+
+                stmt = select(OptimizationRun).where(OptimizationRun.id == run_id)
+                result = await session.execute(stmt)
+                run = result.scalar_one_or_none()
+                if run is not None:
+                    run.deferred_until = retry_at
+                    await session.commit()
+
+        # Update progress with retry time in Redis
         if self.prompt_cache is not None:
             await self.prompt_cache.set_optimization_progress(
                 run_id,

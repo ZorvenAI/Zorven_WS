@@ -24,7 +24,7 @@ def upgrade() -> None:
         sa.Column("prompt_name", sa.String(255), nullable=False),
         sa.Column("agent_code", sa.String(50), nullable=False),
         sa.Column("group_name", sa.String(100), nullable=True),
-        sa.Column("state", sa.String(30), nullable=False, server_default="QUEUED"),
+        sa.Column("state", sa.String(30), nullable=False, server_default=sa.text("'QUEUED'")),
         sa.Column("mlflow_run_id", sa.String(100), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("deferred_until", sa.DateTime(timezone=True), nullable=True),

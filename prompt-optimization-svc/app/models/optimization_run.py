@@ -3,8 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSON, UUID
+from sqlalchemy import DateTime, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import text
 
