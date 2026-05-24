@@ -78,10 +78,15 @@ def make_predict_fn(
                 return ""
 
             # AC-2: Format template with kwargs
-            # Convert underscore keys to dot notation for {{context.brand_name}}
+            # Convert context_ prefix: context_brand_name → context.brand_name
             formatted_kwargs = {}
             for key, value in kwargs.items():
-                formatted_kwargs[key.replace("_", ".")] = str(value)
+                if key.startswith("context_"):
+                    # Only replace the first underscore after "context"
+                    dot_key = "context." + key[len("context_"):]
+                    formatted_kwargs[dot_key] = str(value)
+                else:
+                    formatted_kwargs[key] = str(value)
 
             formatted_prompt = prompt_version.format(**formatted_kwargs)
 

@@ -71,12 +71,11 @@ class TestPredictFnExecution:
         fn = make_predict_fn("zorven-wf1-mra-system")
         fn(context_brand_name="Nike", context_industry="sportswear")
 
-        # Underscores converted to dots
+        # context_ prefix converted to context. (preserving field name)
         mock_pv.format.assert_called_once()
         call_kwargs = mock_pv.format.call_args[1]
-        assert call_kwargs["context.brand.name"] == "Nike" or \
-               call_kwargs.get("context_brand_name") == "Nike" or \
-               "Nike" in str(call_kwargs)
+        assert call_kwargs["context.brand_name"] == "Nike"
+        assert call_kwargs["context.industry"] == "sportswear"
 
     @patch("app.predict_fns.factory.anthropic")
     @patch("app.predict_fns.factory.mlflow")
