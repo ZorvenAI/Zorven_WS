@@ -194,3 +194,22 @@ class JointOptimizationResponse(BaseModel):
     promoted_as_set: bool = False
     duration_seconds: float = 0.0
     error: Optional[str] = None
+
+
+class RunStatusResponse(BaseModel):
+    """Response for GET /v1/optimize/runs/{run_id}."""
+
+    run_id: str
+    state: str
+    prompt_name: str = ""
+    agent_code: str = ""
+    error_message: str = ""
+    deferred_until: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class RunListResponse(BaseModel):
+    """Response for GET /v1/optimize/runs."""
+
+    runs: list[RunStatusResponse]
+    total: int

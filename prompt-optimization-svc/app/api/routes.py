@@ -335,6 +335,68 @@ async def optimize_group(group_name: str):
     )
 
 
+
+@router.get("/v1/optimize/runs", response_model=None)
+async def list_optimization_runs():
+    """AC-4: List active optimization runs from Redis progress hashes."""
+    from app.api.schemas import RunListResponse, RunStatusResponse
+    from app.cache.prompt_cache import PromptCacheManager
+    from app.core.config import settings
+
+    cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
+    await cache.connect()
+    try:
+        runs = []
+        r = await cache.connect()
+        async for key in r.scan_iter(
+            match="prompt:optimization:progress:*"
+        ):
+            run_id = key.split(":")[-1]
+            progress = await cache.get_optimization_progress(run_id)
+            if progress:
+                runs.append(
+                    RunStatusResponse(
+                        run_id=run_id,
+                        state=progress.get("state", "UNKNOWN"),
+                        prompt_name=progress.get("prompt_name", ""),
+                        agent_code=progress.get("agent_code", ""),
+                        updated_at=progress.get("updated_at"),
+                    )
+                )
+        return RunListResponse(runs=runs, total=len(runs))
+    finally:
+        await cache.close()
+
+
+@router.get("/v1/optimize/runs/{run_id}", response_model=None)
+async def get_optimization_run(run_id: str):
+    """Get optimization run detail from Redis progress hash."""
+    from app.api.schemas import RunStatusResponse
+    from app.cache.prompt_cache import PromptCacheManager
+    from app.core.config import settings
+
+    cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
+    await cache.connect()
+    try:
+        progress = await cache.get_optimization_progress(run_id)
+        if progress is None:
+            return JSONResponse(
+                status_code=404,
+                content={"detail": "Run not found"},
+            )
+        return RunStatusResponse(
+            run_id=run_id,
+            state=progress.get("state", "UNKNOWN"),
+            prompt_name=progress.get("prompt_name", ""),
+            agent_code=progress.get("agent_code", ""),
+            error_message=progress.get("error_message", ""),
+            deferred_until=progress.get("deferred_until"),
+            updated_at=progress.get("updated_at"),
+        )
+    finally:
+        await cache.close()
+
+
 @router.post("/v1/execute", response_model=ExecuteResponse, status_code=501)
 async def execute(
     request: ExecuteRequest,
