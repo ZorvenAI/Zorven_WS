@@ -181,3 +181,16 @@ class SeedResponse(BaseModel):
     skipped: int = 0
     errors: int = 0
     details: list[str] = Field(default_factory=list)
+
+
+class JointOptimizationResponse(BaseModel):
+    """Response for POST /v1/optimize/group/{group_name}."""
+
+    group_name: str
+    mlflow_run_id: str = ""
+    prompt_count: int = 0
+    overall_score: float = 0.0
+    candidates_evaluated: int = 0
+    promoted_as_set: bool = False
+    duration_seconds: float = 0.0
+    error: Optional[str] = None
