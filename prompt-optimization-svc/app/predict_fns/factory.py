@@ -65,7 +65,19 @@ def make_predict_fn(
         """
         try:
             # AC-1: Load prompt from MLflow registry
-            prompt_uri = f"prompts:/{prompt_name}/production"
+            # Find latest version first, then load with version URI
+            from mlflow.tracking import MlflowClient
+
+            mlflow_client = MlflowClient(tracking_uri)
+            versions = mlflow_client.search_prompt_versions(prompt_name)
+            if not versions:
+                logger.warning(
+                    "Prompt '%s' not found in MLflow — returning empty",
+                    prompt_name,
+                )
+                return ""
+            latest_ver = versions[0].version
+            prompt_uri = f"prompts:/{prompt_name}/{latest_ver}"
             prompt_version = mlflow.genai.load_prompt(
                 prompt_uri, allow_missing=True
             )

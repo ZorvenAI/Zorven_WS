@@ -1,6 +1,5 @@
 """Hypothesis property tests for make_predict_fn (US-018)."""
 
-import os
 
 from hypothesis import given, settings as hyp_settings
 from hypothesis import strategies as st
@@ -8,7 +7,7 @@ from hypothesis import strategies as st
 from app.predict_fns.factory import make_predict_fn
 from .conftest import MLFLOW_URI
 
-ANTHROPIC_KEY = os.environ.get("POI_ANTHROPIC_API_KEY", "")
+from .conftest import ANTHROPIC_API_KEY
 
 _prompt_names = st.sampled_from([
     "zorven-wf1-mra-system",
@@ -25,7 +24,7 @@ class TestPredictFnProperties:
         fn = make_predict_fn(
             prompt_name,
             mlflow_tracking_uri=MLFLOW_URI,
-            anthropic_api_key=ANTHROPIC_KEY or "placeholder",
+            anthropic_api_key=ANTHROPIC_API_KEY or "placeholder",
         )
         assert callable(fn)
 
@@ -38,7 +37,7 @@ class TestPredictFnProperties:
         fn = make_predict_fn(
             prompt_name, model=model,
             mlflow_tracking_uri=MLFLOW_URI,
-            anthropic_api_key=ANTHROPIC_KEY or "placeholder",
+            anthropic_api_key=ANTHROPIC_API_KEY or "placeholder",
         )
         assert fn.prompt_name == prompt_name
         assert fn.model == model
@@ -47,7 +46,7 @@ class TestPredictFnProperties:
         fn = make_predict_fn(
             "__test_prop_nope_xyz",
             mlflow_tracking_uri=MLFLOW_URI,
-            anthropic_api_key=ANTHROPIC_KEY or "placeholder",
+            anthropic_api_key=ANTHROPIC_API_KEY or "placeholder",
         )
         result = fn()
         assert isinstance(result, str)

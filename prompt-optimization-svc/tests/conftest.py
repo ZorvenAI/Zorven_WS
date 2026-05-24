@@ -17,6 +17,7 @@ MLFLOW_URI = os.environ.get(
     "POI_MLFLOW_TRACKING_URI",
     "https://mlflow-server-production-4661.up.railway.app",
 )
+ANTHROPIC_API_KEY = os.environ.get("POI_ANTHROPIC_API_KEY", "")
 
 
 def _redis_available() -> bool:
