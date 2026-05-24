@@ -9,6 +9,19 @@ from .conftest import REDIS_URL, requires_redis
 TEST_PREFIX = "__test_iso_"
 
 
+class TestTenantIsolationKeys:
+    """Pure logic tests — no Redis needed."""
+
+    def test_cache_keys_are_tenant_scoped(self):
+        key_t1 = PromptCacheManager._prompt_key("test", "t-1")
+        key_t2 = PromptCacheManager._prompt_key("test", "t-2")
+        key_global = PromptCacheManager._prompt_key("test")
+        assert key_t1 != key_t2
+        assert key_t1 != key_global
+        assert "t-1" in key_t1
+        assert "production" in key_global
+
+
 @requires_redis
 class TestCacheFallthrough:
     @pytest.fixture
@@ -48,16 +61,7 @@ class TestCacheFallthrough:
 
 
 @requires_redis
-class TestTenantIsolation:
-    def test_cache_keys_are_tenant_scoped(self):
-        key_t1 = PromptCacheManager._prompt_key("test", "t-1")
-        key_t2 = PromptCacheManager._prompt_key("test", "t-2")
-        key_global = PromptCacheManager._prompt_key("test")
-        assert key_t1 != key_t2
-        assert key_t1 != key_global
-        assert "t-1" in key_t1
-        assert "production" in key_global
-
+class TestTenantIsolationRedis:
     @pytest.fixture
     async def loader(self):
         cache = PromptCacheManager(redis_url=REDIS_URL)

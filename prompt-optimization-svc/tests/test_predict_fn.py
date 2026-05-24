@@ -4,7 +4,7 @@ import pytest
 
 from app.predict_fns.factory import make_predict_fn
 from app.services.mlflow_registry import MLflowPromptRegistry
-from .conftest import ANTHROPIC_API_KEY, MLFLOW_URI, requires_mlflow
+from .conftest import ANTHROPIC_API_KEY, MLFLOW_URI, requires_anthropic, requires_mlflow
 
 TEST_PREFIX = "__test_pfn_"
 
@@ -44,6 +44,7 @@ class TestPredictFnExecution:
         assert result == ""
 
     
+    @requires_anthropic
     def test_registered_prompt_returns_text(self):
         reg = MLflowPromptRegistry(MLFLOW_URI)
         reg.register_prompt(
@@ -61,6 +62,7 @@ class TestPredictFnExecution:
         assert isinstance(result, str)
         assert len(result) > 0
 @requires_mlflow
+@requires_anthropic
 class TestPredictFnAgentPrompts:
     def test_works_with_cga_prompt(self):
         reg = MLflowPromptRegistry(MLFLOW_URI)

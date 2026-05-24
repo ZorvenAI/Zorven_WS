@@ -12,7 +12,6 @@ from app.cache.prompt_cache import (
 from .conftest import REDIS_URL, requires_redis
 
 
-@requires_redis
 class TestKeyPatterns:
     """Verify §9.1 key naming convention."""
 

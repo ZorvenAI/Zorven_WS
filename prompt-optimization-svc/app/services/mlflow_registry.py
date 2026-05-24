@@ -55,7 +55,7 @@ class MLflowPromptRegistry:
             versions = self.client.search_prompt_versions(name)
             if not versions:
                 return None
-            latest = versions[0]  # search returns newest first
+            latest = max(versions, key=lambda v: int(v.version))
             return PromptInfo(
                 name=name,
                 version=int(latest.version),
@@ -85,7 +85,8 @@ class MLflowPromptRegistry:
             else:
                 versions = self.client.search_prompt_versions(name)
                 if versions:
-                    return versions[0].template
+                    latest = max(versions, key=lambda v: int(v.version))
+                    return latest.template
                 return None
         except Exception:
             return None

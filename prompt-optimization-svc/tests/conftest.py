@@ -1,8 +1,8 @@
-"""Test fixtures using real Redis and MLflow services.
+"""Test fixtures using real Redis, MLflow, and Anthropic services.
 
 Environment variables:
-    POI_REDIS_URL: Redis URL (default redis://localhost:6379/2)
-    POI_MLFLOW_TRACKING_URI: MLflow URI
+    POI_PROMPT_CACHE_REDIS_URL: Prompt cache Redis (default redis://localhost:6379/2)
+    POI_MLFLOW_TRACKING_URI: MLflow URI (default http://localhost:5000)
     POI_ANTHROPIC_API_KEY: Anthropic API key
 """
 
@@ -12,17 +12,18 @@ import pytest
 import redis.asyncio as aioredis
 from httpx import ASGITransport, AsyncClient
 
-REDIS_URL = os.environ.get("POI_REDIS_URL", "redis://localhost:6379/2")
+REDIS_URL = os.environ.get(
+    "POI_PROMPT_CACHE_REDIS_URL",
+    os.environ.get("POI_REDIS_URL", "redis://localhost:6379/2"),
+)
 MLFLOW_URI = os.environ.get(
-    "POI_MLFLOW_TRACKING_URI",
-    "https://mlflow-server-production-4661.up.railway.app",
+    "POI_MLFLOW_TRACKING_URI", "http://localhost:5000"
 )
 ANTHROPIC_API_KEY = os.environ.get("POI_ANTHROPIC_API_KEY", "")
 
 
 def _redis_available() -> bool:
     import redis as sync_redis
-
     try:
         r = sync_redis.from_url(REDIS_URL)
         r.ping()
@@ -35,7 +36,6 @@ def _redis_available() -> bool:
 def _mlflow_available() -> bool:
     try:
         import httpx
-
         resp = httpx.get(f"{MLFLOW_URI}/health", timeout=5)
         return resp.status_code == 200
     except Exception:
@@ -51,24 +51,31 @@ requires_redis = pytest.mark.skipif(
 requires_mlflow = pytest.mark.skipif(
     not MLFLOW_AVAILABLE, reason=f"MLflow not available at {MLFLOW_URI}"
 )
+requires_anthropic = pytest.mark.skipif(
+    not ANTHROPIC_API_KEY, reason="POI_ANTHROPIC_API_KEY not set"
+)
 
 
 @pytest.fixture
 async def real_redis():
-    """Real async Redis connection (DB 2 — prompt cache)."""
+    """Real async Redis connection (prompt cache DB)."""
     r = aioredis.from_url(REDIS_URL, decode_responses=True)
     yield r
-    async for key in r.scan_iter(match="*__test*"):
-        await r.delete(key)
+    # Targeted cleanup — only test-prefixed keys
+    for pattern in ("prompt:__test*", "tenant:__test*",
+                    "prompt:optimization:lock:__test*",
+                    "prompt:optimization:progress:__test*"):
+        async for key in r.scan_iter(match=pattern):
+            await r.delete(key)
     await r.aclose()
 
 
 @pytest.fixture
 async def api_client():
-    """Async test client for the FastAPI app."""
+    """Async test client — lifespan disabled to avoid external deps."""
     from app.main import app
 
-    transport = ASGITransport(app=app)
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(
         transport=transport, base_url="http://test"
     ) as client:
