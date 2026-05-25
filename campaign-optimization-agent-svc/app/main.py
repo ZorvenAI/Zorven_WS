@@ -154,6 +154,8 @@ async def lifespan(app: FastAPI):
     yield
 
     # Teardown
+    await cache_invalidator.stop()
+    await prompt_loader.stop()
     await trace_producer.stop()
     await audit_producer.stop()
     await event_producer.stop()

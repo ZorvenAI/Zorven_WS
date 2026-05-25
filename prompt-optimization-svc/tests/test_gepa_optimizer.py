@@ -10,15 +10,33 @@ from .conftest import MLFLOW_URI
 
 
 class TestOptimizationBudgets:
-    def test_cga_budget_is_500(self): assert get_budget("cga") == 500
-    def test_caa_budget_is_400(self): assert get_budget("caa") == 400
-    def test_adpub_budget_is_300(self): assert get_budget("adpub") == 300
-    def test_coa_budget_is_300(self): assert get_budget("coa") == 300
-    def test_bpa_budget_is_300(self): assert get_budget("bpa") == 300
-    def test_mra_budget_is_200(self): assert get_budget("mra") == 200
-    def test_unknown_gets_default(self): assert get_budget("x") == DEFAULT_BUDGET
-    def test_case_insensitive(self): assert get_budget("CGA") == 500
-    def test_all_15_agents(self): assert len(AGENT_BUDGETS) == 15
+    def test_cga_budget_is_500(self):
+        assert get_budget("cga") == 500
+
+    def test_caa_budget_is_400(self):
+        assert get_budget("caa") == 400
+
+    def test_adpub_budget_is_300(self):
+        assert get_budget("adpub") == 300
+
+    def test_coa_budget_is_300(self):
+        assert get_budget("coa") == 300
+
+    def test_bpa_budget_is_300(self):
+        assert get_budget("bpa") == 300
+
+    def test_mra_budget_is_200(self):
+        assert get_budget("mra") == 200
+
+    def test_unknown_gets_default(self):
+        assert get_budget("x") == DEFAULT_BUDGET
+
+    def test_case_insensitive(self):
+        assert get_budget("CGA") == 500
+
+    def test_all_15_agents(self):
+        assert len(AGENT_BUDGETS) == 15
+
     def test_all_positive(self):
         for a, b in AGENT_BUDGETS.items():
             assert b > 0, f"{a} budget must be positive"

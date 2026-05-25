@@ -12,14 +12,16 @@ TEST_PREFIX = "__test_pfn_"
 class TestMakePredictFnFactory:
     def test_factory_returns_callable(self):
         fn = make_predict_fn(
-            "test", mlflow_tracking_uri=MLFLOW_URI,
+            "test",
+            mlflow_tracking_uri=MLFLOW_URI,
             anthropic_api_key=ANTHROPIC_API_KEY or "placeholder",
         )
         assert callable(fn)
 
     def test_factory_attaches_metadata(self):
         fn = make_predict_fn(
-            "zorven-wf1-mra-system", model="claude-haiku-4-5",
+            "zorven-wf1-mra-system",
+            model="claude-haiku-4-5",
             mlflow_tracking_uri=MLFLOW_URI,
             anthropic_api_key=ANTHROPIC_API_KEY or "placeholder",
         )
@@ -28,10 +30,13 @@ class TestMakePredictFnFactory:
 
     def test_default_model(self):
         fn = make_predict_fn(
-            "test", mlflow_tracking_uri=MLFLOW_URI,
+            "test",
+            mlflow_tracking_uri=MLFLOW_URI,
             anthropic_api_key=ANTHROPIC_API_KEY or "placeholder",
         )
         assert fn.model == "claude-sonnet-4-6"
+
+
 @requires_mlflow
 class TestPredictFnExecution:
     def test_missing_prompt_returns_empty(self):
@@ -43,7 +48,6 @@ class TestPredictFnExecution:
         result = fn()
         assert result == ""
 
-    
     @requires_anthropic
     def test_registered_prompt_returns_text(self):
         reg = MLflowPromptRegistry(MLFLOW_URI)
@@ -61,6 +65,8 @@ class TestPredictFnExecution:
         result = fn()
         assert isinstance(result, str)
         assert len(result) > 0
+
+
 @requires_mlflow
 @requires_anthropic
 class TestPredictFnAgentPrompts:

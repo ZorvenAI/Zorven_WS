@@ -41,10 +41,11 @@ class MLflowPromptRegistry:
             template=template,
             tags=tags or {},
         )
-        logger.info("Registered prompt: %s v%d", name, pv.version)
+        version = int(pv.version)
+        logger.info("Registered prompt: %s v%d", name, version)
         return PromptInfo(
             name=name,
-            version=pv.version,
+            version=version,
             template=template,
             tags=tags or {},
         )
@@ -118,7 +119,7 @@ class MLflowPromptRegistry:
                     continue
                 return PromptInfo(
                     name=name,
-                    version=pv.version,
+                    version=int(pv.version),
                     template=pv.template,
                     tags=tags,
                 )
