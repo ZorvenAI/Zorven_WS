@@ -11,8 +11,8 @@ from mlflow.genai.scorers import scorer
 
 logger = logging.getLogger(__name__)
 
-BLUEPRINT_REQUIRED = {"campaign_name", "campaign_objective", "ad_sets"}
-AD_SET_REQUIRED = {"name", "funnel_stage", "targeting"}
+BLUEPRINT_REQUIRED = ("campaign_name", "campaign_objective")
+AD_SET_REQUIRED = ("name", "funnel_stage", "targeting")
 
 
 def _parse_output(outputs) -> dict | None:
@@ -54,20 +54,26 @@ def structure_validity(*, inputs, outputs, expectations=None):
             rationale="Missing or invalid 'blueprint' field.",
         )
 
-    # Check blueprint-level required fields
+    # Check blueprint-level required fields (presence, not truthiness)
     checks_passed = 0
     checks_total = 0
     issues = []
 
     for field in BLUEPRINT_REQUIRED:
         checks_total += 1
-        if field in blueprint and blueprint[field]:
+        if field in blueprint:
             checks_passed += 1
         else:
             issues.append(f"blueprint.{field} missing")
 
-    # Validate ad_sets
+    # Validate ad_sets — check presence, type, and non-empty separately
+    checks_total += 1  # presence check
     ad_sets = blueprint.get("ad_sets")
+    if ad_sets is not None:
+        checks_passed += 1
+    else:
+        issues.append("blueprint.ad_sets missing")
+
     if not isinstance(ad_sets, list):
         checks_total += 1
         issues.append("ad_sets is not a list")
@@ -78,6 +84,7 @@ def structure_validity(*, inputs, outputs, expectations=None):
             rationale=f"{checks_passed}/{checks_total} checks passed. Issues: {', '.join(issues)}",
         )
 
+    checks_total += 1  # non-empty check
     if not ad_sets:
         issues.append("ad_sets is empty")
         score = round(checks_passed / max(checks_total, 1), 4)
@@ -86,6 +93,8 @@ def structure_validity(*, inputs, outputs, expectations=None):
             value=score,
             rationale=f"{checks_passed}/{checks_total} checks passed. Issues: {', '.join(issues)}",
         )
+
+    checks_passed += 1  # ad_sets is non-empty
 
     # Validate each ad set
     for i, ad_set in enumerate(ad_sets):

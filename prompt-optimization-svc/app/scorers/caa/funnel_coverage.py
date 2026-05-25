@@ -11,7 +11,7 @@ from mlflow.genai.scorers import scorer
 
 logger = logging.getLogger(__name__)
 
-EXPECTED_STAGES = {"tofu", "mofu", "bofu", "retention"}
+EXPECTED_STAGES = ("tofu", "mofu", "bofu", "retention")
 
 # Minimum budget percentage thresholds by brand maturity
 MATURITY_THRESHOLDS: dict[str, dict[str, float]] = {
@@ -100,7 +100,7 @@ def funnel_coverage(*, inputs, outputs, expectations=None):
         )
 
     # Stage presence score (50% weight)
-    present = set(stage_budgets.keys()) & EXPECTED_STAGES
+    present = set(stage_budgets.keys()) & set(EXPECTED_STAGES)
     presence_score = len(present) / len(EXPECTED_STAGES)
 
     # Maturity-appropriate allocation score (50% weight)
