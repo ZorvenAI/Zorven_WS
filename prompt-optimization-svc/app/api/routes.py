@@ -273,9 +273,7 @@ async def rollback_prompt(
         current_state = PromptState(
             current.tags.get("state", "PRODUCTION") if current else "PRODUCTION"
         )
-        lifecycle_manager.rollback(
-            name, version, current_state, tenant_id=x_tenant_id
-        )
+        lifecycle_manager.rollback(name, version, current_state, tenant_id=x_tenant_id)
         return PromptTransitionResponse(
             name=name,
             version=version,
@@ -318,7 +316,6 @@ async def get_production_prompt(
     )
 
 
-
 @router.post("/v1/optimize/group/{group_name}", response_model=None)
 async def optimize_group(group_name: str):
     """Trigger joint optimization for a prompt group (US-019)."""
@@ -335,7 +332,6 @@ async def optimize_group(group_name: str):
     )
 
 
-
 @router.get("/v1/optimize/runs", response_model=None)
 async def list_optimization_runs():
     """AC-4: List active optimization runs from Redis progress hashes."""
@@ -348,9 +344,7 @@ async def list_optimization_runs():
     try:
         runs = []
         r = await cache.connect()
-        async for key in r.scan_iter(
-            match="prompt:optimization:progress:*"
-        ):
+        async for key in r.scan_iter(match="prompt:optimization:progress:*"):
             run_id = key.split(":")[-1]
             progress = await cache.get_optimization_progress(run_id)
             if progress:
@@ -418,4 +412,44 @@ async def optimize(
     return JSONResponse(
         status_code=501,
         content=ExecuteResponse().model_dump(),
+    )
+
+
+@router.post("/v1/datasets/seed", response_model=None)
+async def seed_golden_datasets():
+    """Seed golden evaluation datasets into PostgreSQL."""
+    from app.api.schemas import DatasetSeedResponse
+    from app.datasets.seeder import seed_golden_datasets as do_seed
+    from app.models.database import async_session_factory
+
+    result = await do_seed(async_session_factory)
+    return DatasetSeedResponse(
+        created=result.created,
+        skipped=result.skipped,
+        errors=result.errors,
+        details=result.details,
+    )
+
+
+@router.get("/v1/datasets/stats", response_model=None)
+async def get_dataset_stats():
+    """Get golden dataset statistics per agent and source."""
+    from collections import Counter
+
+    from app.api.schemas import DatasetStatsResponse
+    from app.datasets.golden_seed import GOLDEN_EXAMPLES
+
+    agent_counts = Counter(e.agent_code for e in GOLDEN_EXAMPLES)
+    source_counts = Counter(e.source for e in GOLDEN_EXAMPLES)
+    industries = {
+        e.metadata_extra.get("industry", "")
+        for e in GOLDEN_EXAMPLES
+        if e.metadata_extra.get("industry")
+    }
+
+    return DatasetStatsResponse(
+        per_agent=dict(agent_counts),
+        per_source=dict(source_counts),
+        industry_count=len(industries),
+        total=len(GOLDEN_EXAMPLES),
     )
