@@ -80,15 +80,23 @@ def brand_voice_match(*, inputs, outputs, expectations=None):
 
     # Collect ad copy samples before checking API key
     samples = []
-    for hook in data.get("hooks", [])[:5]:
-        text = hook.get("hook_text", "").strip()
-        if text:
-            samples.append(f"Hook: {text}")
-    for cv in data.get("copy_variants", [])[:5]:
-        text = cv.get("copy_text", "").strip()
-        if text:
-            label = cv.get("length_label", "")
-            samples.append(f"Copy ({label}): {text}")
+    hooks = data.get("hooks", [])
+    if isinstance(hooks, list):
+        for hook in hooks[:5]:
+            if not isinstance(hook, dict):
+                continue
+            text = hook.get("hook_text", "").strip()
+            if text:
+                samples.append(f"Hook: {text}")
+    copy_variants = data.get("copy_variants", [])
+    if isinstance(copy_variants, list):
+        for cv in copy_variants[:5]:
+            if not isinstance(cv, dict):
+                continue
+            text = cv.get("copy_text", "").strip()
+            if text:
+                label = cv.get("length_label", "")
+                samples.append(f"Copy ({label}): {text}")
 
     if not samples:
         return Feedback(

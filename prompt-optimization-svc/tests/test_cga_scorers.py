@@ -853,3 +853,115 @@ class TestScorerConformance:
         ]:
             result = s(inputs="test", outputs=_cga_output(), expectations=None)
             assert result is not None
+
+
+class TestMalformedInputRobustness:
+    """All scorers handle malformed-but-valid JSON without crashing."""
+
+    def test_creative_compliance_string_results(self):
+        out = json.dumps(
+            {
+                "hooks": [],
+                "copy_variants": [],
+                "ctas": [],
+                "compliance_results": "pass",
+            }
+        )
+        result = creative_compliance(inputs="test", outputs=out, expectations=None)
+        assert result.value == 0.0
+
+    def test_character_limits_string_hooks(self):
+        out = json.dumps(
+            {
+                "hooks": "bad",
+                "copy_variants": [],
+                "ctas": [],
+                "compliance_results": [],
+            }
+        )
+        result = character_limits(inputs="test", outputs=out, expectations=None)
+        assert result.value == 0.0
+
+    def test_variant_diversity_string_hooks(self):
+        out = json.dumps(
+            {
+                "hooks": "bad",
+                "copy_variants": [],
+                "ctas": [],
+                "compliance_results": [],
+            }
+        )
+        result = variant_diversity(inputs="test", outputs=out, expectations=None)
+        assert result.value == 0.0
+
+    def test_cta_effectiveness_string_ctas(self):
+        out = json.dumps(
+            {
+                "hooks": [],
+                "copy_variants": [],
+                "ctas": "bad",
+                "compliance_results": [],
+            }
+        )
+        result = cta_effectiveness(inputs="test", outputs=out, expectations=None)
+        assert result.value == 0.0
+
+    def test_brand_voice_match_string_hooks(self):
+        from app.scorers.cga.brand_voice_match import brand_voice_match
+
+        out = json.dumps(
+            {
+                "hooks": "bad",
+                "copy_variants": [],
+                "ctas": [],
+                "compliance_results": [],
+            }
+        )
+        result = brand_voice_match(inputs="test", outputs=out, expectations=None)
+        assert result.value == 0.0
+
+    def test_character_limits_non_dict_items(self):
+        out = json.dumps(
+            {
+                "hooks": ["not a dict", 42],
+                "copy_variants": [None],
+                "ctas": [True],
+                "compliance_results": [],
+            }
+        )
+        result = character_limits(inputs="test", outputs=out, expectations=None)
+        assert result.value == 0.0
+
+    def test_character_limits_long_copy(self):
+        """Long copy variant uses 500 char limit."""
+        out = _cga_output(
+            copy_variants=[
+                {
+                    "copy_text": "A" * 450,
+                    "funnel_stage": "bofu",
+                    "length_label": "long",
+                    "char_count": 450,
+                    "voice_consistency": 80,
+                    "positioning_alignment": 80,
+                }
+            ]
+        )
+        result = character_limits(inputs="test", outputs=out, expectations=None)
+        assert result.value == 1.0
+
+    def test_character_limits_medium_over_200(self):
+        """Medium copy variant uses 200 char limit."""
+        out = _cga_output(
+            copy_variants=[
+                {
+                    "copy_text": "A" * 205,
+                    "funnel_stage": "mofu",
+                    "length_label": "medium",
+                    "char_count": 205,
+                    "voice_consistency": 80,
+                    "positioning_alignment": 80,
+                }
+            ]
+        )
+        result = character_limits(inputs="test", outputs=out, expectations=None)
+        assert result.value < 1.0

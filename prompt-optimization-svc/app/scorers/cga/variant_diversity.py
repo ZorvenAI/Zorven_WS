@@ -88,14 +88,22 @@ def variant_diversity(*, inputs, outputs, expectations=None):
         )
 
     texts = []
-    for hook in data.get("hooks", []):
-        text = hook.get("hook_text", "").strip()
-        if text:
-            texts.append(text)
-    for cv in data.get("copy_variants", []):
-        text = cv.get("copy_text", "").strip()
-        if text:
-            texts.append(text)
+    hooks = data.get("hooks", [])
+    if isinstance(hooks, list):
+        for hook in hooks:
+            if not isinstance(hook, dict):
+                continue
+            text = hook.get("hook_text", "").strip()
+            if text:
+                texts.append(text)
+    copy_variants = data.get("copy_variants", [])
+    if isinstance(copy_variants, list):
+        for cv in copy_variants:
+            if not isinstance(cv, dict):
+                continue
+            text = cv.get("copy_text", "").strip()
+            if text:
+                texts.append(text)
 
     if len(texts) < 2:
         return Feedback(

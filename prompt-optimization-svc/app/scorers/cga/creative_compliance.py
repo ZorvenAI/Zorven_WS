@@ -62,6 +62,14 @@ def creative_compliance(*, inputs, outputs, expectations=None):
         )
 
     results = data.get("compliance_results", [])
+    if not isinstance(results, list):
+        return Feedback(
+            name="creative_compliance",
+            value=0.0,
+            rationale="compliance_results is not a list.",
+        )
+    # Filter to valid dict entries only
+    results = [r for r in results if isinstance(r, dict)]
     if not results:
         return Feedback(
             name="creative_compliance",

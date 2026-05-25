@@ -122,6 +122,13 @@ def cta_effectiveness(*, inputs, outputs, expectations=None):
         )
 
     ctas = data.get("ctas", [])
+    if not isinstance(ctas, list):
+        return Feedback(
+            name="cta_effectiveness",
+            value=0.0,
+            rationale="ctas is not a list.",
+        )
+    ctas = [c for c in ctas if isinstance(c, dict)]
     if not ctas:
         return Feedback(
             name="cta_effectiveness",

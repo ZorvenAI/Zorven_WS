@@ -14,8 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Meta Ads character limits
 HOOK_LIMIT = 40
-COPY_SHORT_LIMIT = 125
-COPY_MEDIUM_LIMIT = 250
+COPY_LIMITS = {"short": 125, "medium": 200, "long": 500}
 CTA_LIMIT = 30
 
 # Zero-tolerance overflow threshold
@@ -60,59 +59,67 @@ def character_limits(*, inputs, outputs, expectations=None):
     compliant = 0
 
     # Check hooks (≤40 chars)
-    for hook in data.get("hooks", []):
-        total += 1
-        text = hook.get("hook_text", "")
-        char_count = len(text)
-        if char_count > HOOK_LIMIT + OVERFLOW_TOLERANCE:
-            violations.append(
-                f"hook '{text[:20]}...' ({char_count} chars, limit {HOOK_LIMIT}) — ZERO TOLERANCE"
-            )
-            return Feedback(
-                name="character_limits",
-                value=0.0,
-                rationale=f"Zero-tolerance violation: hook has {char_count} chars (limit {HOOK_LIMIT}, >{OVERFLOW_TOLERANCE} over).",
-            )
-        elif char_count > HOOK_LIMIT:
-            violations.append(f"hook ({char_count}/{HOOK_LIMIT})")
-        else:
-            compliant += 1
+    hooks = data.get("hooks", [])
+    if isinstance(hooks, list):
+        for hook in hooks:
+            if not isinstance(hook, dict):
+                continue
+            total += 1
+            text = hook.get("hook_text", "")
+            char_count = len(text)
+            if char_count > HOOK_LIMIT + OVERFLOW_TOLERANCE:
+                return Feedback(
+                    name="character_limits",
+                    value=0.0,
+                    rationale=f"Zero-tolerance violation: hook has {char_count} chars (limit {HOOK_LIMIT}, >{OVERFLOW_TOLERANCE} over).",
+                )
+            elif char_count > HOOK_LIMIT:
+                violations.append(f"hook ({char_count}/{HOOK_LIMIT})")
+            else:
+                compliant += 1
 
-    # Check copy variants
-    for cv in data.get("copy_variants", []):
-        total += 1
-        text = cv.get("copy_text", "")
-        char_count = len(text)
-        label = cv.get("length_label", "short")
+    # Check copy variants (short ≤125, medium ≤200, long ≤500)
+    copy_variants = data.get("copy_variants", [])
+    if isinstance(copy_variants, list):
+        for cv in copy_variants:
+            if not isinstance(cv, dict):
+                continue
+            total += 1
+            text = cv.get("copy_text", "")
+            char_count = len(text)
+            label = cv.get("length_label", "short")
+            limit = COPY_LIMITS.get(label, COPY_LIMITS["short"])
 
-        limit = COPY_SHORT_LIMIT if label == "short" else COPY_MEDIUM_LIMIT
-
-        if char_count > limit + OVERFLOW_TOLERANCE:
-            return Feedback(
-                name="character_limits",
-                value=0.0,
-                rationale=f"Zero-tolerance violation: {label} copy has {char_count} chars (limit {limit}, >{OVERFLOW_TOLERANCE} over).",
-            )
-        elif char_count > limit:
-            violations.append(f"{label} copy ({char_count}/{limit})")
-        else:
-            compliant += 1
+            if char_count > limit + OVERFLOW_TOLERANCE:
+                return Feedback(
+                    name="character_limits",
+                    value=0.0,
+                    rationale=f"Zero-tolerance violation: {label} copy has {char_count} chars (limit {limit}, >{OVERFLOW_TOLERANCE} over).",
+                )
+            elif char_count > limit:
+                violations.append(f"{label} copy ({char_count}/{limit})")
+            else:
+                compliant += 1
 
     # Check CTAs (≤30 chars)
-    for cta in data.get("ctas", []):
-        total += 1
-        text = cta.get("cta_text", "")
-        char_count = len(text)
-        if char_count > CTA_LIMIT + OVERFLOW_TOLERANCE:
-            return Feedback(
-                name="character_limits",
-                value=0.0,
-                rationale=f"Zero-tolerance violation: CTA has {char_count} chars (limit {CTA_LIMIT}, >{OVERFLOW_TOLERANCE} over).",
-            )
-        elif char_count > CTA_LIMIT:
-            violations.append(f"CTA ({char_count}/{CTA_LIMIT})")
-        else:
-            compliant += 1
+    ctas = data.get("ctas", [])
+    if isinstance(ctas, list):
+        for cta in ctas:
+            if not isinstance(cta, dict):
+                continue
+            total += 1
+            text = cta.get("cta_text", "")
+            char_count = len(text)
+            if char_count > CTA_LIMIT + OVERFLOW_TOLERANCE:
+                return Feedback(
+                    name="character_limits",
+                    value=0.0,
+                    rationale=f"Zero-tolerance violation: CTA has {char_count} chars (limit {CTA_LIMIT}, >{OVERFLOW_TOLERANCE} over).",
+                )
+            elif char_count > CTA_LIMIT:
+                violations.append(f"CTA ({char_count}/{CTA_LIMIT})")
+            else:
+                compliant += 1
 
     if total == 0:
         return Feedback(
