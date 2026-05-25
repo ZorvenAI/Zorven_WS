@@ -96,9 +96,7 @@ class PromptMetadata(BaseModel):
     model_target: str = Field(
         default="claude-sonnet-4-6", description="Target LLM model"
     )
-    optimization_group: str = Field(
-        ..., description="e.g. wf1-discovery-pipeline"
-    )
+    optimization_group: str = Field(..., description="e.g. wf1-discovery-pipeline")
     tenant_overridable: bool = Field(
         default=True, description="Whether tenants can customize this prompt"
     )
@@ -213,3 +211,35 @@ class RunListResponse(BaseModel):
 
     runs: list[RunStatusResponse]
     total: int
+
+
+# ── Golden Dataset schemas ──
+
+
+class GoldenDatasetResponse(BaseModel):
+    """Response for a single golden dataset entry."""
+
+    id: int
+    prompt_name: str
+    agent_code: str
+    source: str
+    metadata_extra: dict[str, Any] = Field(default_factory=dict)
+    active: bool = True
+
+
+class DatasetStatsResponse(BaseModel):
+    """Response for GET /v1/datasets/stats."""
+
+    per_agent: dict[str, int] = Field(default_factory=dict)
+    per_source: dict[str, int] = Field(default_factory=dict)
+    industry_count: int = 0
+    total: int = 0
+
+
+class DatasetSeedResponse(BaseModel):
+    """Response for POST /v1/datasets/seed."""
+
+    created: int = 0
+    skipped: int = 0
+    errors: int = 0
+    details: list[str] = Field(default_factory=list)
