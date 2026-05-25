@@ -17,7 +17,7 @@ class TestGoldenDatasetProperties:
     @settings(max_examples=100, deadline=None)
     def test_all_context_keys_prefixed(self, example):
         for key in example.input_context:
-            assert key.startswith("context."), f"Key '{key}' not prefixed"
+            assert key.startswith("context_"), f"Key '{key}' not prefixed"
 
     @given(example_strategy)
     @settings(max_examples=100, deadline=None)

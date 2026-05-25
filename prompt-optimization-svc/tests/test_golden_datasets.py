@@ -86,7 +86,7 @@ class TestContextKeys:
     def test_all_keys_start_with_context(self):
         for i, e in enumerate(GOLDEN_EXAMPLES):
             for key in e.input_context:
-                assert key.startswith("context."), (
+                assert key.startswith("context_"), (
                     f"Example {i} ({e.prompt_name}): key '{key}' "
                     "does not start with 'context.'"
                 )
@@ -102,7 +102,7 @@ class TestContextKeys:
     def test_shared_context_keys_present(self):
         """Most examples should have brand_name and industry."""
         with_brand = sum(
-            1 for e in GOLDEN_EXAMPLES if "context.brand_name" in e.input_context
+            1 for e in GOLDEN_EXAMPLES if "context_brand_name" in e.input_context
         )
         assert with_brand >= len(GOLDEN_EXAMPLES) * 0.8
 

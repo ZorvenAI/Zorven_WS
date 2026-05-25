@@ -3,15 +3,38 @@
 Requires real PostgreSQL database.
 """
 
+import os
+
 import pytest
 
 from app.datasets.golden_seed import GOLDEN_EXAMPLES
 
 
+def _postgres_available() -> bool:
+    """Check if PostgreSQL is reachable."""
+    db_url = os.environ.get("POI_DATABASE_URL", "")
+    if not db_url:
+        return False
+    try:
+        import psycopg2
+
+        conn = psycopg2.connect(db_url)
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+requires_postgres = pytest.mark.skipif(
+    not _postgres_available(),
+    reason="PostgreSQL not available (set POI_DATABASE_URL)",
+)
+
+
+@requires_postgres
 class TestGoldenDatasetSeeder:
     """Seeder integration tests — require PostgreSQL."""
 
-    @pytest.mark.skipif(True, reason="Requires PostgreSQL — run manually")
     async def test_seeder_creates_rows(self):
         from app.datasets.seeder import seed_golden_datasets
         from app.models.database import async_session_factory
@@ -20,7 +43,6 @@ class TestGoldenDatasetSeeder:
         assert result.created + result.skipped == len(GOLDEN_EXAMPLES)
         assert result.errors == 0
 
-    @pytest.mark.skipif(True, reason="Requires PostgreSQL — run manually")
     async def test_seeder_is_idempotent(self):
         from app.datasets.seeder import seed_golden_datasets
         from app.models.database import async_session_factory

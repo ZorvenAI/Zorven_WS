@@ -132,79 +132,79 @@ MATURITIES = ["new", "emerging", "established"]
 # ---------------------------------------------------------------------------
 
 AGENT_PROMPTS: dict[str, list[str]] = {
-    "MRA": [
+    "mra": [
         "zorven-wf1-mra-system",
         "zorven-wf1-mra-planning",
         "zorven-wf1-mra-synthesis",
     ],
-    "CIA": [
+    "cia": [
         "zorven-wf1-cia-system",
         "zorven-wf1-cia-analysis",
         "zorven-wf1-cia-benchmarking",
     ],
-    "APA": [
+    "apa": [
         "zorven-wf1-apa-system",
         "zorven-wf1-apa-profiling",
         "zorven-wf1-apa-segmentation",
     ],
-    "TCIA": [
+    "tcia": [
         "zorven-wf1-tcia-system",
         "zorven-wf1-tcia-monitoring",
         "zorven-wf1-tcia-scoring",
     ],
-    "VoCA": [
+    "voca": [
         "zorven-wf1-voca-system",
         "zorven-wf1-voca-sentiment",
         "zorven-wf1-voca-themes",
     ],
-    "BPA": [
+    "bpa": [
         "zorven-wf2-bpa-system",
         "zorven-wf2-bpa-positioning",
         "zorven-wf2-bpa-perceptual",
     ],
-    "BAA": [
+    "baa": [
         "zorven-wf2-baa-system",
         "zorven-wf2-baa-hierarchy",
         "zorven-wf2-baa-portfolio",
     ],
-    "BPV": [
+    "bpv": [
         "zorven-wf2-bpv-system",
         "zorven-wf2-bpv-personality",
         "zorven-wf2-bpv-voice",
     ],
-    "NTA": [
+    "nta": [
         "zorven-wf2-nta-system",
         "zorven-wf2-nta-naming",
         "zorven-wf2-nta-tagline",
     ],
-    "BSA": [
+    "bsa": [
         "zorven-wf2-bsa-system",
         "zorven-wf2-bsa-narrative",
         "zorven-wf2-bsa-origin",
     ],
-    "CAA": [
+    "caa": [
         "zorven-wf3-caa-system",
         "zorven-wf3-caa-blueprint",
         "zorven-wf3-caa-targeting",
     ],
-    "CGA": [
+    "cga": [
         "zorven-wf3-cga-system",
         "zorven-wf3-cga-profiling",
         "zorven-wf3-cga-copywriting",
         "zorven-wf3-cga-compliance",
     ],
-    "ADPUB": [
+    "adpub": [
         "zorven-wf3-adpub-system",
         "zorven-wf3-adpub-publishing",
         "zorven-wf3-adpub-approval",
     ],
-    "COA": [
+    "coa": [
         "zorven-wf3-coa-system",
         "zorven-wf3-coa-optimization",
         "zorven-wf3-coa-recommendation",
         "zorven-wf3-coa-planner",
     ],
-    "ILA": [
+    "ila": [
         "zorven-wf3-ila-system",
         "zorven-wf3-ila-extraction",
         "zorven-wf3-ila-synthesis",
@@ -214,21 +214,21 @@ AGENT_PROMPTS: dict[str, list[str]] = {
 
 # Per-agent minimum counts
 AGENT_MINIMUMS: dict[str, int] = {
-    "CGA": 20,
-    "COA": 20,
-    "BPA": 20,
-    "BPV": 20,
-    "CAA": 15,
-    "ADPUB": 15,
-    "ILA": 15,
-    "MRA": 15,
-    "CIA": 15,
-    "APA": 15,
-    "TCIA": 15,
-    "VoCA": 15,
-    "BAA": 15,
-    "NTA": 15,
-    "BSA": 15,
+    "cga": 20,
+    "coa": 20,
+    "bpa": 20,
+    "bpv": 20,
+    "caa": 15,
+    "adpub": 15,
+    "ila": 15,
+    "mra": 15,
+    "cia": 15,
+    "apa": 15,
+    "tcia": 15,
+    "voca": 15,
+    "baa": 15,
+    "nta": 15,
+    "bsa": 15,
 }
 
 # ---------------------------------------------------------------------------
@@ -236,7 +236,7 @@ AGENT_MINIMUMS: dict[str, int] = {
 # ---------------------------------------------------------------------------
 
 _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
-    "MRA": {
+    "mra": {
         "system": (
             "Initialize market research analysis for {brand} in {industry}, "
             "establishing TAM/SAM/SOM framework and research methodology."
@@ -250,7 +250,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "key growth drivers, and entry barriers for {industry}."
         ),
     },
-    "CIA": {
+    "cia": {
         "system": (
             "Initialize competitor intelligence framework for {brand} "
             "with SWOT template and benchmarking criteria."
@@ -264,7 +264,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "on pricing, features, market share, and brand perception."
         ),
     },
-    "APA": {
+    "apa": {
         "system": (
             "Initialize audience persona profiling for {brand} with "
             "demographic and psychographic segmentation framework."
@@ -278,7 +278,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "segments ranked by revenue potential and acquisition cost."
         ),
     },
-    "TCIA": {
+    "tcia": {
         "system": (
             "Initialize trend and cultural intelligence monitoring for "
             "{brand} in the {industry} sector."
@@ -292,7 +292,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "feasibility, and brand-fit for {brand}."
         ),
     },
-    "VoCA": {
+    "voca": {
         "system": (
             "Initialize voice of customer analysis framework for {brand} "
             "with sentiment taxonomy and NPS methodology."
@@ -306,7 +306,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "praise themes and top 5 complaint themes for {brand}."
         ),
     },
-    "BPA": {
+    "bpa": {
         "system": (
             "Initialize brand positioning strategy for {brand} with "
             "differentiation framework and competitive context."
@@ -320,7 +320,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "dimensions relevant to {industry} purchase decisions."
         ),
     },
-    "BAA": {
+    "baa": {
         "system": (
             "Initialize brand architecture analysis for {brand} with "
             "hierarchy assessment and portfolio strategy framework."
@@ -334,7 +334,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "opportunities and cannibalization risks."
         ),
     },
-    "BPV": {
+    "bpv": {
         "system": (
             "Initialize brand personality and values framework for {brand} "
             "using Aaker 5D model and archetype mapping."
@@ -348,7 +348,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "grammar style, and channel-specific adaptations."
         ),
     },
-    "NTA": {
+    "nta": {
         "system": (
             "Initialize naming and tagline development for {brand} with "
             "linguistic criteria and availability checking framework."
@@ -362,7 +362,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "brand promise, and emotional resonance for {audience}."
         ),
     },
-    "BSA": {
+    "bsa": {
         "system": (
             "Initialize brand story and narrative framework for {brand} "
             "with origin story template and mission/vision structure."
@@ -376,7 +376,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "early struggles, and breakthrough moment that defines the brand."
         ),
     },
-    "CAA": {
+    "caa": {
         "system": (
             "Initialize campaign architecture for {brand} with Meta Ads "
             "blueprint, funnel mapping, and budget allocation framework."
@@ -390,7 +390,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "custom audiences, lookalikes, and interest-based segments."
         ),
     },
-    "CGA": {
+    "cga": {
         "system": (
             "Initialize creative generation pipeline for {brand} with "
             "visual style guide and copy framework."
@@ -408,7 +408,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "text-to-image ratio, prohibited content, and policy adherence."
         ),
     },
-    "ADPUB": {
+    "adpub": {
         "system": (
             "Initialize ad publishing workflow for {brand} with Meta Ads API "
             "configuration and human approval gate setup."
@@ -422,7 +422,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "guidelines, legal review, and stakeholder sign-off status."
         ),
     },
-    "COA": {
+    "coa": {
         "system": (
             "Initialize campaign optimization framework for {brand} with "
             "KPI thresholds, guardrails, and automated rule definitions."
@@ -440,7 +440,7 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
             "cadence, weekly review milestones, and escalation criteria."
         ),
     },
-    "ILA": {
+    "ila": {
         "system": (
             "Initialize intelligence loop for {brand} consuming optimization "
             "learnings and extracting reusable campaign insights."
@@ -467,70 +467,70 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
 
 def _wf1_context(brand_info: dict[str, str]) -> dict[str, Any]:
     return {
-        "context.brand_name": brand_info["brand_name"],
-        "context.industry": brand_info["_industry"],
-        "context.target_audience": brand_info["target_audience"],
-        "context.brand_voice": brand_info["brand_voice"],
-        "context.product_description": brand_info["product_description"],
-        "context.query": f"Analyze market opportunity for {brand_info['brand_name']}",
-        "context.competitors": f"Top 5 competitors in {brand_info['_industry']}",
-        "context.audience_data": f"Demographics and behaviors of {brand_info['target_audience']}",
-        "context.trends": f"Current macro and micro trends in {brand_info['_industry']}",
-        "context.feedback_data": f"Customer reviews and NPS data for {brand_info['brand_name']}",
+        "context_brand_name": brand_info["brand_name"],
+        "context_industry": brand_info["_industry"],
+        "context_target_audience": brand_info["target_audience"],
+        "context_brand_voice": brand_info["brand_voice"],
+        "context_product_description": brand_info["product_description"],
+        "context_query": f"Analyze market opportunity for {brand_info['brand_name']}",
+        "context_competitors": f"Top 5 competitors in {brand_info['_industry']}",
+        "context_audience_data": f"Demographics and behaviors of {brand_info['target_audience']}",
+        "context_trends": f"Current macro and micro trends in {brand_info['_industry']}",
+        "context_feedback_data": f"Customer reviews and NPS data for {brand_info['brand_name']}",
     }
 
 
 def _wf2_context(brand_info: dict[str, str]) -> dict[str, Any]:
     return {
-        "context.brand_name": brand_info["brand_name"],
-        "context.industry": brand_info["_industry"],
-        "context.target_audience": brand_info["target_audience"],
-        "context.brand_voice": brand_info["brand_voice"],
-        "context.product_description": brand_info["product_description"],
-        "context.market_research": f"TAM/SAM/SOM analysis for {brand_info['_industry']}",
-        "context.positioning": f"{brand_info['brand_name']} value proposition and differentiation",
-        "context.personality": f"Brand archetype and Aaker 5D profile for {brand_info['brand_name']}",
-        "context.voice": brand_info["brand_voice"],
-        "context.architecture": f"Brand hierarchy for {brand_info['brand_name']}",
-        "context.values": f"Core values driving {brand_info['brand_name']}'s mission",
-        "context.founder_info": f"Founder story and motivation behind {brand_info['brand_name']}",
+        "context_brand_name": brand_info["brand_name"],
+        "context_industry": brand_info["_industry"],
+        "context_target_audience": brand_info["target_audience"],
+        "context_brand_voice": brand_info["brand_voice"],
+        "context_product_description": brand_info["product_description"],
+        "context_market_research": f"TAM/SAM/SOM analysis for {brand_info['_industry']}",
+        "context_positioning": f"{brand_info['brand_name']} value proposition and differentiation",
+        "context_personality": f"Brand archetype and Aaker 5D profile for {brand_info['brand_name']}",
+        "context_voice": brand_info["brand_voice"],
+        "context_architecture": f"Brand hierarchy for {brand_info['brand_name']}",
+        "context_values": f"Core values driving {brand_info['brand_name']}'s mission",
+        "context_founder_info": f"Founder story and motivation behind {brand_info['brand_name']}",
     }
 
 
 def _wf3_context(brand_info: dict[str, str]) -> dict[str, Any]:
     return {
-        "context.brand_name": brand_info["brand_name"],
-        "context.industry": brand_info["_industry"],
-        "context.target_audience": brand_info["target_audience"],
-        "context.brand_voice": brand_info["brand_voice"],
-        "context.product_description": brand_info["product_description"],
-        "context.objective": f"Drive trial signups for {brand_info['brand_name']}",
-        "context.budget": brand_info["budget_range"],
-        "context.personas": f"Three prioritized personas for {brand_info['target_audience']}",
-        "context.campaign_blueprint": f"3-stage funnel campaign for {brand_info['brand_name']}",
-        "context.creative_profiles": f"Visual and copy profiles for {brand_info['brand_name']} ads",
-        "context.campaign_metrics": f"CTR, CPA, ROAS benchmarks for {brand_info['_industry']}",
-        "context.performance_data": f"Last 14 days performance for {brand_info['brand_name']} campaigns",
-        "context.guardrails": "Max CPA $45, min ROAS 2.5x, daily budget cap adherence",
+        "context_brand_name": brand_info["brand_name"],
+        "context_industry": brand_info["_industry"],
+        "context_target_audience": brand_info["target_audience"],
+        "context_brand_voice": brand_info["brand_voice"],
+        "context_product_description": brand_info["product_description"],
+        "context_objective": f"Drive trial signups for {brand_info['brand_name']}",
+        "context_budget": brand_info["budget_range"],
+        "context_personas": f"Three prioritized personas for {brand_info['target_audience']}",
+        "context_campaign_blueprint": f"3-stage funnel campaign for {brand_info['brand_name']}",
+        "context_creative_profiles": f"Visual and copy profiles for {brand_info['brand_name']} ads",
+        "context_campaign_metrics": f"CTR, CPA, ROAS benchmarks for {brand_info['_industry']}",
+        "context_performance_data": f"Last 14 days performance for {brand_info['brand_name']} campaigns",
+        "context_guardrails": "Max CPA $45, min ROAS 2.5x, daily budget cap adherence",
     }
 
 
 _CONTEXT_BUILDERS = {
-    "MRA": _wf1_context,
-    "CIA": _wf1_context,
-    "APA": _wf1_context,
-    "TCIA": _wf1_context,
-    "VoCA": _wf1_context,
-    "BPA": _wf2_context,
-    "BAA": _wf2_context,
-    "BPV": _wf2_context,
-    "NTA": _wf2_context,
-    "BSA": _wf2_context,
-    "CAA": _wf3_context,
-    "CGA": _wf3_context,
-    "ADPUB": _wf3_context,
-    "COA": _wf3_context,
-    "ILA": _wf3_context,
+    "mra": _wf1_context,
+    "cia": _wf1_context,
+    "apa": _wf1_context,
+    "tcia": _wf1_context,
+    "voca": _wf1_context,
+    "bpa": _wf2_context,
+    "baa": _wf2_context,
+    "bpv": _wf2_context,
+    "nta": _wf2_context,
+    "bsa": _wf2_context,
+    "caa": _wf3_context,
+    "cga": _wf3_context,
+    "adpub": _wf3_context,
+    "coa": _wf3_context,
+    "ila": _wf3_context,
 }
 
 # ---------------------------------------------------------------------------
@@ -735,21 +735,21 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf3-cga-copywriting",
-            agent_code="CGA",
+            agent_code="cga",
             input_context={
-                "context.brand_name": "UnknownBrand",
-                "context.industry": "",
-                "context.target_audience": "",
-                "context.brand_voice": "",
-                "context.product_description": "",
-                "context.objective": "Generate ad copy",
-                "context.budget": "",
-                "context.personas": "",
-                "context.campaign_blueprint": "",
-                "context.creative_profiles": "",
-                "context.campaign_metrics": "",
-                "context.performance_data": "",
-                "context.guardrails": "",
+                "context_brand_name": "UnknownBrand",
+                "context_industry": "",
+                "context_target_audience": "",
+                "context_brand_voice": "",
+                "context_product_description": "",
+                "context_objective": "Generate ad copy",
+                "context_budget": "",
+                "context_personas": "",
+                "context_campaign_blueprint": "",
+                "context_creative_profiles": "",
+                "context_campaign_metrics": "",
+                "context_performance_data": "",
+                "context_guardrails": "",
             },
             expected_output=(
                 "Request clarification on missing brand context before "
@@ -757,7 +757,7 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
             ),
             source="adversarial",
             metadata_extra={
-                "industry": "Unknown",
+                "industry": "SaaS/Technology",
                 "brand_maturity": "new",
                 "objective": "incomplete context handling",
                 "voice_tone": "neutral",
@@ -771,21 +771,21 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf3-coa-optimization",
-            agent_code="COA",
+            agent_code="coa",
             input_context={
-                "context.brand_name": "ParadoxCo",
-                "context.industry": "Financial Services",
-                "context.target_audience": "High-net-worth individuals and college students",
-                "context.brand_voice": "Both ultra-formal and slang-heavy",
-                "context.product_description": "Premium investment app that is also free",
-                "context.objective": "Maximize ROAS while minimizing spend to zero",
-                "context.budget": "$0",
-                "context.personas": "Contradictory: luxury seekers who refuse to pay",
-                "context.campaign_blueprint": "Full funnel with no budget allocation",
-                "context.creative_profiles": "Minimalist maximalism aesthetic",
-                "context.campaign_metrics": "CTR 15% but conversion 0.01%",
-                "context.performance_data": "High engagement, zero revenue",
-                "context.guardrails": "No spend allowed, must generate revenue",
+                "context_brand_name": "ParadoxCo",
+                "context_industry": "Financial Services",
+                "context_target_audience": "High-net-worth individuals and college students",
+                "context_brand_voice": "Both ultra-formal and slang-heavy",
+                "context_product_description": "Premium investment app that is also free",
+                "context_objective": "Maximize ROAS while minimizing spend to zero",
+                "context_budget": "$0",
+                "context_personas": "Contradictory: luxury seekers who refuse to pay",
+                "context_campaign_blueprint": "Full funnel with no budget allocation",
+                "context_creative_profiles": "Minimalist maximalism aesthetic",
+                "context_campaign_metrics": "CTR 15% but conversion 0.01%",
+                "context_performance_data": "High engagement, zero revenue",
+                "context_guardrails": "No spend allowed, must generate revenue",
             },
             expected_output=(
                 "Flag contradictory objectives and recommend resolving budget "
@@ -807,20 +807,20 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf2-bpa-positioning",
-            agent_code="BPA",
+            agent_code="bpa",
             input_context={
-                "context.brand_name": "YetAnotherCRM",
-                "context.industry": "SaaS/Technology",
-                "context.target_audience": "SMB sales teams already using 3+ CRMs",
-                "context.brand_voice": "Generic corporate",
-                "context.product_description": "CRM platform with standard features",
-                "context.market_research": "Market saturated with 200+ CRM vendors",
-                "context.positioning": "No clear differentiator identified",
-                "context.personality": "Undefined",
-                "context.voice": "Generic corporate",
-                "context.architecture": "Single product",
-                "context.values": "Efficiency",
-                "context.founder_info": "Former Salesforce employee",
+                "context_brand_name": "YetAnotherCRM",
+                "context_industry": "SaaS/Technology",
+                "context_target_audience": "SMB sales teams already using 3+ CRMs",
+                "context_brand_voice": "Generic corporate",
+                "context_product_description": "CRM platform with standard features",
+                "context_market_research": "Market saturated with 200+ CRM vendors",
+                "context_positioning": "No clear differentiator identified",
+                "context_personality": "Undefined",
+                "context_voice": "Generic corporate",
+                "context_architecture": "Single product",
+                "context_values": "Efficiency",
+                "context_founder_info": "Former Salesforce employee",
             },
             expected_output=(
                 "Identify micro-niche positioning opportunities in the "
@@ -842,20 +842,20 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf2-bpv-personality",
-            agent_code="BPV",
+            agent_code="bpv",
             input_context={
-                "context.brand_name": "GlobalHarmony",
-                "context.industry": "Entertainment/Media",
-                "context.target_audience": "Gen-Z audiences across US, Japan, Saudi Arabia, and Brazil",
-                "context.brand_voice": "Must resonate across vastly different cultural norms",
-                "context.product_description": "Global streaming platform for independent creators",
-                "context.market_research": "Cultural sensitivity requirements vary dramatically",
-                "context.positioning": "Inclusive global platform",
-                "context.personality": "Must avoid cultural offense while being authentic",
-                "context.voice": "Adaptable across cultures",
-                "context.architecture": "Single global brand",
-                "context.values": "Diversity, creativity, authenticity",
-                "context.founder_info": "Multi-national founding team from 4 countries",
+                "context_brand_name": "GlobalHarmony",
+                "context_industry": "Entertainment/Media",
+                "context_target_audience": "Gen-Z audiences across US, Japan, Saudi Arabia, and Brazil",
+                "context_brand_voice": "Must resonate across vastly different cultural norms",
+                "context_product_description": "Global streaming platform for independent creators",
+                "context_market_research": "Cultural sensitivity requirements vary dramatically",
+                "context_positioning": "Inclusive global platform",
+                "context_personality": "Must avoid cultural offense while being authentic",
+                "context_voice": "Adaptable across cultures",
+                "context_architecture": "Single global brand",
+                "context_values": "Diversity, creativity, authenticity",
+                "context_founder_info": "Multi-national founding team from 4 countries",
             },
             expected_output=(
                 "Define a universal personality core with culture-specific "
@@ -877,21 +877,21 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf3-ila-extraction",
-            agent_code="ILA",
+            agent_code="ila",
             input_context={
-                "context.brand_name": "NoisyCo",
-                "context.industry": "E-commerce/Retail",
-                "context.target_audience": "Bargain hunters",
-                "context.brand_voice": "Aggressive discounting",
-                "context.product_description": "Flash sale platform",
-                "context.objective": "Extract learnings from chaotic campaign data",
-                "context.budget": "$5K/quarter",
-                "context.personas": "Price-sensitive impulse buyers",
-                "context.campaign_blueprint": "Ad-hoc campaigns with no structure",
-                "context.creative_profiles": "Inconsistent branding across 50+ creatives",
-                "context.campaign_metrics": "Metrics contradict across platforms",
-                "context.performance_data": "Incomplete tracking, missing attribution",
-                "context.guardrails": "None defined",
+                "context_brand_name": "NoisyCo",
+                "context_industry": "E-commerce/Retail",
+                "context_target_audience": "Bargain hunters",
+                "context_brand_voice": "Aggressive discounting",
+                "context_product_description": "Flash sale platform",
+                "context_objective": "Extract learnings from chaotic campaign data",
+                "context_budget": "$5K/quarter",
+                "context_personas": "Price-sensitive impulse buyers",
+                "context_campaign_blueprint": "Ad-hoc campaigns with no structure",
+                "context_creative_profiles": "Inconsistent branding across 50+ creatives",
+                "context_campaign_metrics": "Metrics contradict across platforms",
+                "context_performance_data": "Incomplete tracking, missing attribution",
+                "context_guardrails": "None defined",
             },
             expected_output=(
                 "Identify data quality issues, recommend tracking fixes, and "
@@ -913,21 +913,21 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf3-caa-blueprint",
-            agent_code="CAA",
+            agent_code="caa",
             input_context={
-                "context.brand_name": "TinyStartup",
-                "context.industry": "Education/EdTech",
-                "context.target_audience": "Parents of K-3 students in rural areas",
-                "context.brand_voice": "Friendly and accessible",
-                "context.product_description": "Free reading app for early learners",
-                "context.objective": "Drive app downloads on $500 total budget",
-                "context.budget": "$500 total",
-                "context.personas": "Budget-constrained parents with limited internet",
-                "context.campaign_blueprint": "Single campaign with micro-budget",
-                "context.creative_profiles": "DIY creative assets",
-                "context.campaign_metrics": "Industry avg CPI $3.50",
-                "context.performance_data": "No historical data",
-                "context.guardrails": "Cannot exceed $500 total spend",
+                "context_brand_name": "TinyStartup",
+                "context_industry": "Education/EdTech",
+                "context_target_audience": "Parents of K-3 students in rural areas",
+                "context_brand_voice": "Friendly and accessible",
+                "context_product_description": "Free reading app for early learners",
+                "context_objective": "Drive app downloads on $500 total budget",
+                "context_budget": "$500 total",
+                "context_personas": "Budget-constrained parents with limited internet",
+                "context_campaign_blueprint": "Single campaign with micro-budget",
+                "context_creative_profiles": "DIY creative assets",
+                "context_campaign_metrics": "Industry avg CPI $3.50",
+                "context_performance_data": "No historical data",
+                "context_guardrails": "Cannot exceed $500 total spend",
             },
             expected_output=(
                 "Design micro-budget campaign focusing on single best-performing "
@@ -949,21 +949,21 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf3-adpub-approval",
-            agent_code="ADPUB",
+            agent_code="adpub",
             input_context={
-                "context.brand_name": "MedClaim",
-                "context.industry": "Healthcare/Wellness",
-                "context.target_audience": "Patients with chronic conditions",
-                "context.brand_voice": "Clinical and reassuring",
-                "context.product_description": "FDA-pending supplement claiming health benefits",
-                "context.objective": "Publish compliant health ads",
-                "context.budget": "$50K/quarter",
-                "context.personas": "Vulnerable health-seeking consumers",
-                "context.campaign_blueprint": "Health claims campaign",
-                "context.creative_profiles": "Before/after imagery with testimonials",
-                "context.campaign_metrics": "N/A - first campaign",
-                "context.performance_data": "No historical data",
-                "context.guardrails": "FDA, FTC, Meta health ads policy compliance required",
+                "context_brand_name": "MedClaim",
+                "context_industry": "Healthcare/Wellness",
+                "context_target_audience": "Patients with chronic conditions",
+                "context_brand_voice": "Clinical and reassuring",
+                "context_product_description": "FDA-pending supplement claiming health benefits",
+                "context_objective": "Publish compliant health ads",
+                "context_budget": "$50K/quarter",
+                "context_personas": "Vulnerable health-seeking consumers",
+                "context_campaign_blueprint": "Health claims campaign",
+                "context_creative_profiles": "Before/after imagery with testimonials",
+                "context_campaign_metrics": "N/A - first campaign",
+                "context_performance_data": "No historical data",
+                "context_guardrails": "FDA, FTC, Meta health ads policy compliance required",
             },
             expected_output=(
                 "Flag potential health claim violations, require legal review "
@@ -985,20 +985,20 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf2-nta-naming",
-            agent_code="NTA",
+            agent_code="nta",
             input_context={
-                "context.brand_name": "Appel",
-                "context.industry": "SaaS/Technology",
-                "context.target_audience": "Enterprise developers",
-                "context.brand_voice": "Innovative and bold",
-                "context.product_description": "Developer productivity platform",
-                "context.market_research": "Strong incumbents with protected trademarks",
-                "context.positioning": "Premium developer experience",
-                "context.personality": "Rebellious innovator",
-                "context.voice": "Bold, technical",
-                "context.architecture": "Single product brand",
-                "context.values": "Developer freedom",
-                "context.founder_info": "Two ex-FAANG engineers",
+                "context_brand_name": "Appel",
+                "context_industry": "SaaS/Technology",
+                "context_target_audience": "Enterprise developers",
+                "context_brand_voice": "Innovative and bold",
+                "context_product_description": "Developer productivity platform",
+                "context_market_research": "Strong incumbents with protected trademarks",
+                "context_positioning": "Premium developer experience",
+                "context_personality": "Rebellious innovator",
+                "context_voice": "Bold, technical",
+                "context_architecture": "Single product brand",
+                "context_values": "Developer freedom",
+                "context_founder_info": "Two ex-FAANG engineers",
             },
             expected_output=(
                 "Flag high trademark collision risk with Apple Inc., recommend "
@@ -1020,20 +1020,20 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf2-bsa-origin",
-            agent_code="BSA",
+            agent_code="bsa",
             input_context={
-                "context.brand_name": "RedeemTech",
-                "context.industry": "Professional Services",
-                "context.target_audience": "SMB owners seeking consulting",
-                "context.brand_voice": "Humble and transparent",
-                "context.product_description": "Business turnaround consulting",
-                "context.market_research": "Growing demand for turnaround services",
-                "context.positioning": "Second-chance business partner",
-                "context.personality": "Resilient and honest",
-                "context.voice": "Humble, transparent",
-                "context.architecture": "Single brand",
-                "context.values": "Redemption, integrity, perseverance",
-                "context.founder_info": "Founder previously led a company into bankruptcy",
+                "context_brand_name": "RedeemTech",
+                "context_industry": "Professional Services",
+                "context_target_audience": "SMB owners seeking consulting",
+                "context_brand_voice": "Humble and transparent",
+                "context_product_description": "Business turnaround consulting",
+                "context_market_research": "Growing demand for turnaround services",
+                "context_positioning": "Second-chance business partner",
+                "context_personality": "Resilient and honest",
+                "context_voice": "Humble, transparent",
+                "context_architecture": "Single brand",
+                "context_values": "Redemption, integrity, perseverance",
+                "context_founder_info": "Founder previously led a company into bankruptcy",
             },
             expected_output=(
                 "Frame the founder's past failure as a credibility asset for "
@@ -1055,18 +1055,18 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf1-mra-synthesis",
-            agent_code="MRA",
+            agent_code="mra",
             input_context={
-                "context.brand_name": "QuantumLeap",
-                "context.industry": "SaaS/Technology",
-                "context.target_audience": "Quantum computing researchers",
-                "context.brand_voice": "Pioneering and academic",
-                "context.product_description": "Quantum algorithm marketplace",
-                "context.query": "Size the quantum computing SaaS market",
-                "context.competitors": "No direct competitors exist yet",
-                "context.audience_data": "Fewer than 5,000 potential users globally",
-                "context.trends": "Pre-commercial technology, 5-10 year horizon",
-                "context.feedback_data": "No customer feedback available",
+                "context_brand_name": "QuantumLeap",
+                "context_industry": "SaaS/Technology",
+                "context_target_audience": "Quantum computing researchers",
+                "context_brand_voice": "Pioneering and academic",
+                "context_product_description": "Quantum algorithm marketplace",
+                "context_query": "Size the quantum computing SaaS market",
+                "context_competitors": "No direct competitors exist yet",
+                "context_audience_data": "Fewer than 5,000 potential users globally",
+                "context_trends": "Pre-commercial technology, 5-10 year horizon",
+                "context_feedback_data": "No customer feedback available",
             },
             expected_output=(
                 "Acknowledge data scarcity, use analogous market proxies for "
@@ -1088,18 +1088,18 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf1-voca-sentiment",
-            agent_code="VoCA",
+            agent_code="voca",
             input_context={
-                "context.brand_name": "ShadySupps",
-                "context.industry": "Food & Beverage",
-                "context.target_audience": "Fitness enthusiasts",
-                "context.brand_voice": "Hype-driven",
-                "context.product_description": "Pre-workout supplement",
-                "context.query": "Analyze customer sentiment",
-                "context.competitors": "Established supplement brands",
-                "context.audience_data": "Young male fitness enthusiasts 18-30",
-                "context.trends": "Clean label movement",
-                "context.feedback_data": "95% 5-star reviews with identical phrasing patterns",
+                "context_brand_name": "ShadySupps",
+                "context_industry": "Food & Beverage",
+                "context_target_audience": "Fitness enthusiasts",
+                "context_brand_voice": "Hype-driven",
+                "context_product_description": "Pre-workout supplement",
+                "context_query": "Analyze customer sentiment",
+                "context_competitors": "Established supplement brands",
+                "context_audience_data": "Young male fitness enthusiasts 18-30",
+                "context_trends": "Clean label movement",
+                "context_feedback_data": "95% 5-star reviews with identical phrasing patterns",
             },
             expected_output=(
                 "Flag suspected astroturfing in review data, discount fake "
@@ -1121,20 +1121,20 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf2-baa-portfolio",
-            agent_code="BAA",
+            agent_code="baa",
             input_context={
-                "context.brand_name": "OmniSoft",
-                "context.industry": "SaaS/Technology",
-                "context.target_audience": "Enterprise IT teams",
-                "context.brand_voice": "Enterprise-grade authoritative",
-                "context.product_description": "Suite of 12 overlapping SaaS products",
-                "context.market_research": "Customers confused by product overlap",
-                "context.positioning": "End-to-end enterprise platform",
-                "context.personality": "Reliable but complex",
-                "context.voice": "Technical and comprehensive",
-                "context.architecture": "12 sub-brands with overlapping features",
-                "context.values": "Completeness, integration",
-                "context.founder_info": "Growth-through-acquisition strategy",
+                "context_brand_name": "OmniSoft",
+                "context_industry": "SaaS/Technology",
+                "context_target_audience": "Enterprise IT teams",
+                "context_brand_voice": "Enterprise-grade authoritative",
+                "context_product_description": "Suite of 12 overlapping SaaS products",
+                "context_market_research": "Customers confused by product overlap",
+                "context_positioning": "End-to-end enterprise platform",
+                "context_personality": "Reliable but complex",
+                "context_voice": "Technical and comprehensive",
+                "context_architecture": "12 sub-brands with overlapping features",
+                "context_values": "Completeness, integration",
+                "context_founder_info": "Growth-through-acquisition strategy",
             },
             expected_output=(
                 "Map product overlap, recommend consolidation of 12 brands "
@@ -1156,18 +1156,18 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf1-apa-profiling",
-            agent_code="APA",
+            agent_code="apa",
             input_context={
-                "context.brand_name": "KinderSafe",
-                "context.industry": "Education/EdTech",
-                "context.target_audience": "Children aged 6-12 and their parents",
-                "context.brand_voice": "Safe, nurturing, COPPA-compliant",
-                "context.product_description": "Educational gaming platform for children",
-                "context.query": "Profile our target audience",
-                "context.competitors": "PBS Kids, Khan Academy Kids",
-                "context.audience_data": "Cannot collect data from children under 13",
-                "context.trends": "COPPA enforcement increasing, EU DSA compliance",
-                "context.feedback_data": "Parent reviews only, no child data",
+                "context_brand_name": "KinderSafe",
+                "context_industry": "Education/EdTech",
+                "context_target_audience": "Children aged 6-12 and their parents",
+                "context_brand_voice": "Safe, nurturing, COPPA-compliant",
+                "context_product_description": "Educational gaming platform for children",
+                "context_query": "Profile our target audience",
+                "context_competitors": "PBS Kids, Khan Academy Kids",
+                "context_audience_data": "Cannot collect data from children under 13",
+                "context_trends": "COPPA enforcement increasing, EU DSA compliance",
+                "context_feedback_data": "Parent reviews only, no child data",
             },
             expected_output=(
                 "Build parent-proxy personas respecting COPPA constraints; "
@@ -1189,18 +1189,18 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf1-tcia-scoring",
-            agent_code="TCIA",
+            agent_code="tcia",
             input_context={
-                "context.brand_name": "GenericAI",
-                "context.industry": "SaaS/Technology",
-                "context.target_audience": "Enterprise buyers fatigued by AI hype",
-                "context.brand_voice": "Measured and substantive",
-                "context.product_description": "Yet another AI assistant tool",
-                "context.query": "Score trend opportunities in AI tools market",
-                "context.competitors": "ChatGPT, Gemini, Copilot, and 500+ startups",
-                "context.audience_data": "Buyers reporting AI fatigue and skepticism",
-                "context.trends": "AI hype cycle entering trough of disillusionment",
-                "context.feedback_data": "Prospects say 'we already have too many AI tools'",
+                "context_brand_name": "GenericAI",
+                "context_industry": "SaaS/Technology",
+                "context_target_audience": "Enterprise buyers fatigued by AI hype",
+                "context_brand_voice": "Measured and substantive",
+                "context_product_description": "Yet another AI assistant tool",
+                "context_query": "Score trend opportunities in AI tools market",
+                "context_competitors": "ChatGPT, Gemini, Copilot, and 500+ startups",
+                "context_audience_data": "Buyers reporting AI fatigue and skepticism",
+                "context_trends": "AI hype cycle entering trough of disillusionment",
+                "context_feedback_data": "Prospects say 'we already have too many AI tools'",
             },
             expected_output=(
                 "Score AI trends with deflated opportunity ratings reflecting "
@@ -1222,18 +1222,18 @@ def _generate_adversarial_examples() -> list[GoldenExample]:
     adversarial.append(
         GoldenExample(
             prompt_name="zorven-wf1-cia-analysis",
-            agent_code="CIA",
+            agent_code="cia",
             input_context={
-                "context.brand_name": "OpenLedger",
-                "context.industry": "Financial Services",
-                "context.target_audience": "Crypto-native DeFi users",
-                "context.brand_voice": "Transparent and technical",
-                "context.product_description": "Decentralized lending protocol",
-                "context.query": "Analyze stealth-mode competitors",
-                "context.competitors": "Three pre-launch stealth competitors with no public data",
-                "context.audience_data": "Crypto community on Discord and Twitter",
-                "context.trends": "DeFi regulatory uncertainty increasing",
-                "context.feedback_data": "Community speculation only, no verified data",
+                "context_brand_name": "OpenLedger",
+                "context_industry": "Financial Services",
+                "context_target_audience": "Crypto-native DeFi users",
+                "context_brand_voice": "Transparent and technical",
+                "context_product_description": "Decentralized lending protocol",
+                "context_query": "Analyze stealth-mode competitors",
+                "context_competitors": "Three pre-launch stealth competitors with no public data",
+                "context_audience_data": "Crypto community on Discord and Twitter",
+                "context_trends": "DeFi regulatory uncertainty increasing",
+                "context_feedback_data": "Community speculation only, no verified data",
             },
             expected_output=(
                 "Acknowledge intelligence gaps for stealth competitors, use "
