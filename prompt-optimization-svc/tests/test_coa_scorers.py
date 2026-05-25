@@ -257,6 +257,31 @@ class TestGuardrailCompliance:
         )
         assert result.name == "guardrail_compliance"
 
+    def test_ig_failure_ignored(self):
+        """IG rules are not PG/OG — should not trigger zero-tolerance."""
+        out = _coa_output(
+            guardrail_report={
+                "results": [
+                    {
+                        "passed": False,
+                        "rule_id": "IG-03",
+                        "message": "Low spend",
+                        "action": "warn",
+                    },
+                    {
+                        "passed": True,
+                        "rule_id": "PG-01",
+                        "message": "OK",
+                        "action": "allow",
+                    },
+                ],
+                "all_passed": False,
+                "blocked": False,
+            }
+        )
+        result = guardrail_compliance(inputs="test", outputs=out, expectations=None)
+        assert result.value == 1.0  # IG failure ignored, PG passed
+
     def test_non_dict_result_entries_skipped(self):
         out = _coa_output(
             guardrail_report={
@@ -336,14 +361,28 @@ class TestDataGrounding:
         result = data_grounding(inputs="test", outputs=out, expectations=None)
         assert result.value == 0.0
 
-    def test_rationale_with_numbers(self):
+    def test_rationale_with_matching_numbers(self):
         out = _coa_output(
             recommendations=[
-                _rec(rationale="CPA is $45.00, which is 1.8x the target of $25.")
+                _rec(rationale="CPA is $45.0, which exceeds our $100 daily budget.")
             ]
         )
         result = data_grounding(inputs="test", outputs=out, expectations=None)
         assert result.value == 1.0
+
+    def test_rationale_with_fabricated_numbers(self):
+        """AC-2: rationale citing numbers not in current_values gets partial credit."""
+        out = _coa_output(
+            recommendations=[
+                _rec(
+                    current_values={"cpa": 45.0, "daily_budget": 100.0},
+                    rationale="CPA is $999, which is terrible.",
+                )
+            ]
+        )
+        result = data_grounding(inputs="test", outputs=out, expectations=None)
+        # 999 doesn't match any metric — partial credit only
+        assert result.value < 1.0
 
 
 # ── prioritization_quality tests (AC-3) ──

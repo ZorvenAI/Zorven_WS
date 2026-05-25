@@ -36,9 +36,33 @@ def _has_numeric_metrics(values: dict) -> bool:
     return False
 
 
-def _rationale_cites_numbers(rationale: str) -> bool:
-    """Check if rationale text includes specific numeric citations."""
-    return bool(NUMBER_PATTERN.search(rationale))
+def _extract_numbers(text: str) -> set[float]:
+    """Extract all numeric values from text."""
+    return {float(m) for m in NUMBER_PATTERN.findall(text)}
+
+
+def _rationale_cites_metrics(rationale: str, metrics: dict) -> bool:
+    """Check if rationale cites numbers that match current_values metrics.
+
+    At least one number in the rationale must match (within 0.5% tolerance)
+    a numeric value from current_values to count as grounded.
+    """
+    rationale_numbers = _extract_numbers(rationale)
+    if not rationale_numbers:
+        return False
+
+    metric_values = {float(v) for v in metrics.values() if isinstance(v, (int, float))}
+    if not metric_values:
+        return False
+
+    for rn in rationale_numbers:
+        for mv in metric_values:
+            if mv == 0:
+                if rn == 0:
+                    return True
+            elif abs(rn - mv) / abs(mv) <= 0.005:
+                return True
+    return False
 
 
 @scorer(name="data_grounding")
@@ -83,17 +107,19 @@ def data_grounding(*, inputs, outputs, expectations=None):
         rationale = rec.get("rationale", "")
 
         has_metrics = isinstance(current, dict) and _has_numeric_metrics(current)
-        has_citations = isinstance(rationale, str) and _rationale_cites_numbers(
-            rationale
+        cites_actual = (
+            isinstance(current, dict)
+            and isinstance(rationale, str)
+            and _rationale_cites_metrics(rationale, current)
         )
 
-        if has_metrics and has_citations:
+        if has_metrics and cites_actual:
             grounded += 1
         elif has_metrics:
-            # Metrics present but rationale doesn't cite them — partial credit
+            # Metrics present but rationale cites unrelated/no numbers — partial
             grounded += 0.5
             issues.append(
-                f"rec[{i}]: metrics present but rationale lacks numeric citations"
+                f"rec[{i}]: rationale numbers don't match current_values metrics"
             )
         else:
             issues.append(f"rec[{i}]: missing numeric metrics in current_values")

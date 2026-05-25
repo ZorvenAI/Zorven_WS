@@ -66,10 +66,24 @@ def guardrail_compliance(*, inputs, outputs, expectations=None):
             rationale="Empty guardrail results.",
         )
 
-    failed_rules = []
+    # Filter to PG and OG rules only (AC-1: PG-01..PG-10, OG)
+    pg_og_results = []
     for r in results:
         if not isinstance(r, dict):
             continue
+        rule_id = r.get("rule_id", "")
+        if rule_id.startswith("PG-") or rule_id.startswith("OG"):
+            pg_og_results.append(r)
+
+    if not pg_og_results:
+        return Feedback(
+            name="guardrail_compliance",
+            value=0.0,
+            rationale="No PG/OG guardrail results found.",
+        )
+
+    failed_rules = []
+    for r in pg_og_results:
         if not r.get("passed", True):
             rule_id = r.get("rule_id", "unknown")
             message = r.get("message", "")
@@ -86,5 +100,5 @@ def guardrail_compliance(*, inputs, outputs, expectations=None):
     return Feedback(
         name="guardrail_compliance",
         value=1.0,
-        rationale=f"All {len(results)} guardrail checks passed.",
+        rationale=f"All {len(pg_og_results)} PG/OG guardrail checks passed.",
     )

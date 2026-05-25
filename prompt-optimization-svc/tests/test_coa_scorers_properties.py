@@ -41,7 +41,9 @@ class TestGuardrailComplianceProperties:
             st.fixed_dictionaries(
                 {
                     "passed": st.just(True),
-                    "rule_id": st.text(min_size=1, max_size=5),
+                    "rule_id": st.sampled_from(
+                        ["PG-01", "PG-02", "PG-05", "PG-10", "OG-01", "OG-03"]
+                    ),
                     "message": st.text(max_size=20),
                     "action": st.just("allow"),
                 }
@@ -61,7 +63,9 @@ class TestGuardrailComplianceProperties:
             st.fixed_dictionaries(
                 {
                     "passed": st.just(False),
-                    "rule_id": st.text(min_size=1, max_size=5),
+                    "rule_id": st.sampled_from(
+                        ["PG-01", "PG-02", "PG-05", "PG-10", "OG-01", "OG-03"]
+                    ),
                     "message": st.text(max_size=20),
                     "action": st.just("block"),
                 }

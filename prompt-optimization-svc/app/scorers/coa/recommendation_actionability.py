@@ -84,7 +84,7 @@ def recommendation_actionability(*, inputs, outputs, expectations=None):
             if field in ("current_values", "proposed_values"):
                 if not isinstance(val, dict):
                     missing.append(field)
-            elif not val:
+            elif not isinstance(val, str) or not val.strip():
                 missing.append(field)
 
         action_type = rec.get("action_type", "")
