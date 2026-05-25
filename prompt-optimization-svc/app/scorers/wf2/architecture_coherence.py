@@ -93,10 +93,14 @@ def architecture_coherence(*, inputs, outputs, expectations=None):
     naming = data.get("naming_hierarchy")
     if isinstance(naming, dict):
         consistency = naming.get("consistency_score")
-        if isinstance(consistency, (int, float)) and 0.0 <= float(consistency) <= 1.0:
+        if isinstance(consistency, (int, float)) and float(consistency) >= 0:
+            # Normalize 0-100 to 0-1 (also accepts 0-1 directly)
+            val = float(consistency)
+            normalized = val / 100.0 if val > 1.0 else val
+            normalized = min(normalized, 1.0)
             valid_count += 1
             details.append(
-                f"naming_hierarchy valid (consistency_score={float(consistency):.2f})"
+                f"naming_hierarchy valid (consistency_score={normalized:.2f})"
             )
         else:
             details.append("naming_hierarchy.consistency_score invalid or out of range")

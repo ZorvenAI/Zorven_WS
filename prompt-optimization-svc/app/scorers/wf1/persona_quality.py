@@ -56,7 +56,7 @@ def persona_quality(*, inputs, outputs, expectations=None):
             if not isinstance(p, dict):
                 continue
             has_demographics = isinstance(p.get("demographics"), dict)
-            has_psychographics = p.get("psychographics") is not None
+            has_psychographics = isinstance(p.get("psychographics"), dict)
             if has_demographics and has_psychographics:
                 complete += 1
         persona_score = complete / len(personas)

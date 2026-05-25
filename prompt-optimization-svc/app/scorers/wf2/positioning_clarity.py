@@ -66,8 +66,11 @@ def positioning_clarity(*, inputs, outputs, expectations=None):
     canvas = data.get("canvas")
     if isinstance(canvas, dict):
         fit_score = canvas.get("fit_score")
-        if isinstance(fit_score, (int, float)) and 0.0 <= float(fit_score) <= 1.0:
-            canvas_score = float(fit_score)
+        if isinstance(fit_score, (int, float)) and float(fit_score) >= 0:
+            val = float(fit_score)
+            # Normalize 0-100 to 0-1 (also accepts 0-1 directly)
+            canvas_score = val / 100.0 if val > 1.0 else val
+            canvas_score = min(canvas_score, 1.0)
             details.append(f"canvas.fit_score={canvas_score:.2f}")
         else:
             details.append("canvas.fit_score invalid or out of range")
@@ -78,8 +81,11 @@ def positioning_clarity(*, inputs, outputs, expectations=None):
     diff = data.get("differentiation")
     if isinstance(diff, dict):
         overall = diff.get("overall_differentiation_score")
-        if isinstance(overall, (int, float)):
-            differentiation_score = min(max(float(overall), 0.0), 1.0)
+        if isinstance(overall, (int, float)) and float(overall) >= 0:
+            val = float(overall)
+            # Normalize 0-100 to 0-1 (also accepts 0-1 directly)
+            differentiation_score = val / 100.0 if val > 1.0 else val
+            differentiation_score = min(differentiation_score, 1.0)
             details.append(
                 f"differentiation.overall_differentiation_score={differentiation_score:.2f}"
             )

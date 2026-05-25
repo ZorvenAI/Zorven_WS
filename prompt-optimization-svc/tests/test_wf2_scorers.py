@@ -28,14 +28,14 @@ def _positioning_output(**overrides) -> str:
         "canvas": overrides.get(
             "canvas",
             {
-                "fit_score": 0.92,
+                "fit_score": 92,
                 "elements": ["value_prop", "differentiator"],
             },
         ),
         "differentiation": overrides.get(
             "differentiation",
             {
-                "overall_differentiation_score": 0.88,
+                "overall_differentiation_score": 72,
                 "factors": ["AI-native", "multi-tenant"],
             },
         ),
@@ -60,7 +60,7 @@ def _architecture_output(**overrides) -> str:
         "hierarchy": overrides.get(
             "hierarchy",
             {
-                "root": "Zorven",
+                "root": {"name": "Zorven", "type": "master_brand"},
                 "total_depth": 3,
                 "branches": ["Platform", "Services"],
             },
@@ -68,7 +68,7 @@ def _architecture_output(**overrides) -> str:
         "naming_hierarchy": overrides.get(
             "naming_hierarchy",
             {
-                "consistency_score": 0.85,
+                "consistency_score": 85,
                 "naming_pattern": "parent_endorsed",
             },
         ),
@@ -181,7 +181,7 @@ class TestPositioningClarity:
         result = positioning_clarity(
             inputs="test", outputs=_positioning_output(), expectations=None
         )
-        assert result.value >= 0.9
+        assert result.value >= 0.8
 
     def test_perfect_scores(self):
         out = _positioning_output(
@@ -231,7 +231,7 @@ class TestPositioningClarity:
     def test_dict_input(self):
         data = json.loads(_positioning_output())
         result = positioning_clarity(inputs="test", outputs=data, expectations=None)
-        assert result.value >= 0.9
+        assert result.value >= 0.8
 
     def test_non_dict_recommended_positioning(self):
         out = _positioning_output(recommended_positioning="just a string")
@@ -327,10 +327,18 @@ class TestArchitectureCoherence:
         result = architecture_coherence(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
-    def test_naming_consistency_out_of_range(self):
-        out = _architecture_output(naming_hierarchy={"consistency_score": 1.5})
+    def test_naming_consistency_negative(self):
+        out = _architecture_output(naming_hierarchy={"consistency_score": -5})
         result = architecture_coherence(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
+
+    def test_naming_consistency_100_scale(self):
+        """consistency_score on 0-100 scale should normalize to 0-1."""
+        out = _architecture_output(
+            naming_hierarchy={"consistency_score": 85, "naming_pattern": "endorsed"}
+        )
+        result = architecture_coherence(inputs="test", outputs=out, expectations=None)
+        assert result.value == 1.0  # valid component
 
     def test_none_output(self):
         result = architecture_coherence(inputs="test", outputs=None, expectations=None)
