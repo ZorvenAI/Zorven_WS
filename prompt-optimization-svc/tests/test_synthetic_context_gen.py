@@ -2,7 +2,6 @@
 
 import pytest
 
-from app.datasets.golden_seed import INDUSTRIES
 from .conftest import requires_anthropic
 
 
@@ -170,8 +169,9 @@ class TestSyntheticContextGenerate:
             ("SaaS/Technology", "new", "Drive signups"),
             ("E-commerce/Retail", "emerging", "Increase sales"),
         ]
-        examples = gen.generate_batch(tuples=tuples)
+        examples, errors = gen.generate_batch(tuples=tuples)
         assert len(examples) == 2
+        assert len(errors) == 0
         assert all(e.source == "synthetic" for e in examples)
 
     @requires_anthropic

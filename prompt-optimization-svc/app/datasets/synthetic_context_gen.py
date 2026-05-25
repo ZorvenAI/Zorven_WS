@@ -12,6 +12,8 @@ import anthropic
 
 from app.datasets.golden_seed import INDUSTRIES, GoldenExample
 
+VALID_MATURITIES = {"new", "emerging", "established"}
+
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
@@ -68,7 +70,7 @@ class SyntheticContextGenerator:
         industry: str,
         brand_maturity: str,
         objective: str,
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Generate a single synthetic brand profile.
 
         Args:
@@ -77,8 +79,18 @@ class SyntheticContextGenerator:
             objective: Business objective (e.g., "Drive trial signups").
 
         Returns:
-            Dict with context_ prefixed keys for GEPA train_data.
+            Tuple of (context dict with context_ keys, raw profile dict).
+
+        Raises:
+            ValueError: If industry or brand_maturity is not in the canonical set.
         """
+        if industry not in INDUSTRIES:
+            raise ValueError(f"Unknown industry '{industry}'. Valid: {INDUSTRIES}")
+        if brand_maturity not in VALID_MATURITIES:
+            raise ValueError(
+                f"Unknown brand_maturity '{brand_maturity}'. "
+                f"Valid: {sorted(VALID_MATURITIES)}"
+            )
         prompt = GENERATION_PROMPT.format(
             industry=industry,
             brand_maturity=brand_maturity,
@@ -162,7 +174,7 @@ class SyntheticContextGenerator:
         tuples: list[tuple[str, str, str]],
         prompt_name: str = "zorven-wf1-mra-system",
         agent_code: str = "mra",
-    ) -> list[GoldenExample]:
+    ) -> tuple[list[GoldenExample], list[str]]:
         """Generate multiple GoldenExamples from (industry, maturity, objective) tuples.
 
         Args:
@@ -171,9 +183,11 @@ class SyntheticContextGenerator:
             agent_code: Default agent code for generated examples.
 
         Returns:
-            List of GoldenExamples with source="synthetic".
+            Tuple of (examples list, errors list). Errors list contains
+            string descriptions of any failures.
         """
         examples = []
+        errors = []
         for industry, maturity, objective in tuples:
             try:
                 example = self.generate_example(
@@ -185,11 +199,7 @@ class SyntheticContextGenerator:
                 )
                 examples.append(example)
             except Exception as exc:
-                logger.error(
-                    "Failed to generate synthetic context for " "(%s, %s, %s): %s",
-                    industry,
-                    maturity,
-                    objective,
-                    exc,
-                )
-        return examples
+                error_msg = f"({industry}, {maturity}, {objective}): {exc}"
+                errors.append(error_msg)
+                logger.error("Failed to generate synthetic context: %s", error_msg)
+        return examples, errors

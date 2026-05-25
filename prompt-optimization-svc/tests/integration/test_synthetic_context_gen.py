@@ -67,12 +67,13 @@ class TestSyntheticGeneratorIntegration:
         from app.datasets.synthetic_context_gen import SyntheticContextGenerator
 
         gen = SyntheticContextGenerator(api_key=settings.ANTHROPIC_API_KEY)
-        examples = gen.generate_batch(
+        examples, errors = gen.generate_batch(
             tuples=[
                 ("Healthcare/Wellness", "new", "Patient acquisition"),
                 ("Financial Services", "established", "Wealth management"),
             ],
         )
         assert len(examples) == 2
+        assert len(errors) == 0
         assert all(e.source == "synthetic" for e in examples)
         assert all("context_brand_name" in e.input_context for e in examples)

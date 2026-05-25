@@ -21,6 +21,8 @@ from app.api.schemas import (
     PromptTransitionRequest,
     PromptTransitionResponse,
     SeedResponse,
+    SyntheticGenerateRequest,
+    SyntheticGenerateResponse,
 )
 from app.logic.lifecycle import (
     InvalidTransitionError,
@@ -455,10 +457,11 @@ async def get_dataset_stats():
     )
 
 
-@router.post("/v1/datasets/generate", response_model=None)
-async def generate_synthetic_datasets(request: "SyntheticGenerateRequest"):
+@router.post("/v1/datasets/generate", response_model=SyntheticGenerateResponse)
+async def generate_synthetic_datasets(request: SyntheticGenerateRequest):
     """Generate synthetic brand profiles using Claude Sonnet 4."""
-    from app.api.schemas import SyntheticGenerateRequest, SyntheticGenerateResponse
+    import anyio
+
     from app.core.config import settings
     from app.datasets.synthetic_context_gen import SyntheticContextGenerator
 
@@ -472,10 +475,14 @@ async def generate_synthetic_datasets(request: "SyntheticGenerateRequest"):
     tuples = [
         (request.industry, request.brand_maturity, request.objective)
     ] * request.count
-    examples = generator.generate_batch(
-        tuples=tuples,
-        prompt_name=request.prompt_name,
-        agent_code=request.agent_code,
+
+    # Offload blocking Anthropic calls to threadpool
+    examples, errors = await anyio.to_thread.run_sync(
+        lambda: generator.generate_batch(
+            tuples=tuples,
+            prompt_name=request.prompt_name,
+            agent_code=request.agent_code,
+        )
     )
 
     return SyntheticGenerateResponse(

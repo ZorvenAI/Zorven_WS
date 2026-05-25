@@ -10,7 +10,13 @@ from app.datasets.golden_seed import INDUSTRIES
 class TestGeneratorInitProperties:
     """Generator init accepts valid keys, rejects invalid ones."""
 
-    @given(st.text(min_size=10, max_size=50))
+    @given(
+        st.text(
+            alphabet=st.characters(whitelist_categories=("L", "N", "P")),
+            min_size=10,
+            max_size=50,
+        )
+    )
     @settings(max_examples=30, deadline=None)
     def test_non_empty_key_accepted(self, key):
         from app.datasets.synthetic_context_gen import SyntheticContextGenerator

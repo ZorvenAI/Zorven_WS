@@ -1,6 +1,6 @@
 """Pydantic request/response models for prompt-optimization-svc."""
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -249,8 +249,8 @@ class SyntheticGenerateRequest(BaseModel):
     """Request for POST /v1/datasets/generate."""
 
     industry: str = Field(..., description="Industry vertical")
-    brand_maturity: str = Field(
-        default="new", description="new | emerging | established"
+    brand_maturity: Literal["new", "emerging", "established"] = Field(
+        default="new", description="Brand stage"
     )
     objective: str = Field(
         default="Drive brand awareness", description="Business objective"
