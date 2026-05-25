@@ -453,3 +453,42 @@ async def get_dataset_stats():
         industry_count=len(industries),
         total=len(GOLDEN_EXAMPLES),
     )
+
+
+@router.post("/v1/datasets/generate", response_model=None)
+async def generate_synthetic_datasets(request: "SyntheticGenerateRequest"):
+    """Generate synthetic brand profiles using Claude Sonnet 4."""
+    from app.api.schemas import SyntheticGenerateRequest, SyntheticGenerateResponse
+    from app.core.config import settings
+    from app.datasets.synthetic_context_gen import SyntheticContextGenerator
+
+    if not settings.ANTHROPIC_API_KEY:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Anthropic API key not configured"},
+        )
+
+    generator = SyntheticContextGenerator(api_key=settings.ANTHROPIC_API_KEY)
+    tuples = [
+        (request.industry, request.brand_maturity, request.objective)
+    ] * request.count
+    examples = generator.generate_batch(
+        tuples=tuples,
+        prompt_name=request.prompt_name,
+        agent_code=request.agent_code,
+    )
+
+    return SyntheticGenerateResponse(
+        examples=[
+            {
+                "prompt_name": e.prompt_name,
+                "agent_code": e.agent_code,
+                "input_context": e.input_context,
+                "expected_output": e.expected_output,
+                "source": e.source,
+                "metadata_extra": e.metadata_extra,
+            }
+            for e in examples
+        ],
+        total=len(examples),
+    )
