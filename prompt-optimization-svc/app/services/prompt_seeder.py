@@ -3,7 +3,7 @@
 import logging
 from dataclasses import dataclass
 
-from app.registries.prompt_catalog import PROMPT_CATALOG, CatalogEntry
+from app.registries.prompt_catalog import PROMPT_CATALOG
 from app.services.mlflow_registry import MLflowPromptRegistry
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ class SeedResult:
     created: int = 0
     skipped: int = 0
     errors: int = 0
-    details: list[str] = None
+    details: list[str] = None  # type: ignore[assignment]
 
     def __post_init__(self):
         if self.details is None:

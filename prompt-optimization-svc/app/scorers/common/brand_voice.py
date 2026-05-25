@@ -4,8 +4,8 @@ Uses an Anthropic Claude LLM judge with a 0-5 rubric mapped to 0.0-1.0.
 The rubric evaluates brand voice consistency in model output.
 """
 
+import json
 import logging
-import re
 
 import anthropic
 
@@ -63,6 +63,13 @@ def brand_voice(*, inputs, outputs, expectations=None):
             rationale="Empty output — cannot evaluate brand voice.",
         )
 
+    if not settings.ANTHROPIC_API_KEY:
+        return Feedback(
+            name="brand_voice",
+            value=0.0,
+            rationale="Anthropic API key not configured — cannot evaluate brand voice.",
+        )
+
     voice_description = DEFAULT_BRAND_VOICE
     if expectations and isinstance(expectations, dict):
         voice_description = expectations.get("brand_voice", DEFAULT_BRAND_VOICE)
@@ -82,22 +89,19 @@ def brand_voice(*, inputs, outputs, expectations=None):
 
     response_text = response.content[0].text.strip()
 
-    # Parse the score from the JSON response
-    score_match = re.search(r'"score"\s*:\s*(\d)', response_text)
-    if score_match:
-        raw_score = int(score_match.group(1))
+    # Parse the JSON response from the LLM judge
+    try:
+        parsed = json.loads(response_text)
+        raw_score = int(parsed.get("score", 0))
         raw_score = max(0, min(5, raw_score))
-    else:
+        justification = parsed.get("justification", response_text)
+    except (json.JSONDecodeError, ValueError, TypeError):
         logger.warning(
-            "Could not parse brand voice score from LLM response: %s",
+            "Could not parse brand voice JSON from LLM response: %s",
             response_text,
         )
         raw_score = 0
-
-    justification_match = re.search(r'"justification"\s*:\s*"([^"]*)"', response_text)
-    justification = (
-        justification_match.group(1) if justification_match else response_text
-    )
+        justification = f"Parse error — raw response: {response_text}"
 
     normalized_score = round(raw_score / 5.0, 2)
 

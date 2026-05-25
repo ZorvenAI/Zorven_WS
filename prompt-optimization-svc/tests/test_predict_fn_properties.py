@@ -1,6 +1,5 @@
 """Hypothesis property tests for make_predict_fn (US-018)."""
 
-
 from hypothesis import given, settings as hyp_settings
 from hypothesis import strategies as st
 
@@ -9,12 +8,14 @@ from .conftest import MLFLOW_URI
 
 from .conftest import ANTHROPIC_API_KEY
 
-_prompt_names = st.sampled_from([
-    "zorven-wf1-mra-system",
-    "zorven-wf1-cia-analysis",
-    "zorven-wf2-bpa-positioning",
-    "zorven-wf3-cga-profiling",
-])
+_prompt_names = st.sampled_from(
+    [
+        "zorven-wf1-mra-system",
+        "zorven-wf1-cia-analysis",
+        "zorven-wf2-bpa-positioning",
+        "zorven-wf3-cga-profiling",
+    ]
+)
 
 
 class TestPredictFnProperties:
@@ -35,7 +36,8 @@ class TestPredictFnProperties:
     @hyp_settings(max_examples=5)
     def test_factory_metadata_matches(self, prompt_name, model):
         fn = make_predict_fn(
-            prompt_name, model=model,
+            prompt_name,
+            model=model,
             mlflow_tracking_uri=MLFLOW_URI,
             anthropic_api_key=ANTHROPIC_API_KEY or "placeholder",
         )

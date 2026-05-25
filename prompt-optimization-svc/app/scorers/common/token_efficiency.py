@@ -18,8 +18,9 @@ CHARS_PER_TOKEN = 4
 # Maximum acceptable output/input token ratio before penalty starts
 MAX_RATIO = 10.0
 
-# Minimum expected output tokens (avoid penalizing short outputs)
-MIN_OUTPUT_TOKENS = 10
+# Minimum input token count for ratio calculation (avoids division
+# by near-zero when input is very short)
+MIN_INPUT_TOKENS_FOR_RATIO = 10
 
 
 @scorer(name="token_efficiency")
@@ -48,7 +49,7 @@ def token_efficiency(*, inputs, outputs, expectations=None):
     input_text = str(inputs) if inputs else ""
 
     output_tokens = max(len(output_text) / CHARS_PER_TOKEN, 1)
-    input_tokens = max(len(input_text) / CHARS_PER_TOKEN, MIN_OUTPUT_TOKENS)
+    input_tokens = max(len(input_text) / CHARS_PER_TOKEN, MIN_INPUT_TOKENS_FOR_RATIO)
 
     ratio = output_tokens / input_tokens
 

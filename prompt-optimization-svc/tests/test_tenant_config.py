@@ -3,18 +3,38 @@
 import pytest
 
 from app.cache.prompt_cache import PromptCacheManager
-from app.cache.tenant_config import DEFAULT_TTL, MAX_TTL, MIN_TTL, TenantConfigManager, clamp_ttl
+from app.cache.tenant_config import (
+    DEFAULT_TTL,
+    MAX_TTL,
+    MIN_TTL,
+    TenantConfigManager,
+    clamp_ttl,
+)
 from .conftest import REDIS_URL, requires_redis
 
 
 class TestClampTTL:
-    def test_below_min(self): assert clamp_ttl(5) == MIN_TTL
-    def test_zero(self): assert clamp_ttl(0) == MIN_TTL
-    def test_negative(self): assert clamp_ttl(-100) == MIN_TTL
-    def test_above_max(self): assert clamp_ttl(5000) == MAX_TTL
-    def test_exactly_min(self): assert clamp_ttl(10) == 10
-    def test_exactly_max(self): assert clamp_ttl(3600) == 3600
-    def test_within_range(self): assert clamp_ttl(600) == 600
+    def test_below_min(self):
+        assert clamp_ttl(5) == MIN_TTL
+
+    def test_zero(self):
+        assert clamp_ttl(0) == MIN_TTL
+
+    def test_negative(self):
+        assert clamp_ttl(-100) == MIN_TTL
+
+    def test_above_max(self):
+        assert clamp_ttl(5000) == MAX_TTL
+
+    def test_exactly_min(self):
+        assert clamp_ttl(10) == 10
+
+    def test_exactly_max(self):
+        assert clamp_ttl(3600) == 3600
+
+    def test_within_range(self):
+        assert clamp_ttl(600) == 600
+
     def test_constants(self):
         assert MIN_TTL == 10
         assert MAX_TTL == 3600
