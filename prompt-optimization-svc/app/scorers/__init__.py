@@ -1,5 +1,12 @@
 """Scorer library for GEPA prompt optimization (§5.1, §5.2)."""
 
+from app.scorers.caa import (
+    CAA_SCORERS,
+    budget_rationality,
+    funnel_coverage,
+    structure_validity,
+    targeting_quality,
+)
 from app.scorers.cga import (
     CGA_SCORERS,
     brand_voice_match,
@@ -20,6 +27,7 @@ COMMON_SCORERS = [json_compliance, pii_safety, token_efficiency, brand_voice]
 __all__ = [
     "COMMON_SCORERS",
     "CGA_SCORERS",
+    "CAA_SCORERS",
     "json_compliance",
     "pii_safety",
     "token_efficiency",
@@ -29,4 +37,8 @@ __all__ = [
     "variant_diversity",
     "brand_voice_match",
     "cta_effectiveness",
+    "structure_validity",
+    "budget_rationality",
+    "funnel_coverage",
+    "targeting_quality",
 ]
