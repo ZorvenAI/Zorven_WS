@@ -131,6 +131,25 @@ async def register_prompt(
             message="Prompt registered (MLflow not connected — stub mode)",
         )
     try:
+        # AC-3: Validate placeholders against context variable registry
+        agent_code = request.metadata.get("agent_code", "")
+        warning_msg = ""
+        if agent_code:
+            from app.registries.context_variables import (
+                validate_template_against_registry,
+            )
+
+            violations = validate_template_against_registry(
+                request.template, agent_code
+            )
+            if violations:
+                warning_msg = f"Registry warnings: {'; '.join(violations)}"
+                logger.warning(
+                    "Prompt %s has undeclared placeholders: %s",
+                    request.name,
+                    violations,
+                )
+
         info = mlflow_registry.register_prompt(
             name=request.name,
             template=request.template,
@@ -140,6 +159,7 @@ async def register_prompt(
             name=info.name,
             version=info.version,
             status="registered",
+            message=warning_msg,
         )
     except Exception as exc:
         logger.error("Failed to register prompt %s: %s", request.name, exc)
