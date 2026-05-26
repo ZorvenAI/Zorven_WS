@@ -1,6 +1,6 @@
 """Pydantic request/response models for prompt-optimization-svc."""
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -243,3 +243,27 @@ class DatasetSeedResponse(BaseModel):
     skipped: int = 0
     errors: int = 0
     details: list[str] = Field(default_factory=list)
+
+
+class SyntheticGenerateRequest(BaseModel):
+    """Request for POST /v1/datasets/generate."""
+
+    industry: str = Field(..., description="Industry vertical")
+    brand_maturity: Literal["new", "emerging", "established"] = Field(
+        default="new", description="Brand stage"
+    )
+    objective: str = Field(
+        default="Drive brand awareness", description="Business objective"
+    )
+    prompt_name: str = Field(
+        default="zorven-wf1-mra-system", description="Target prompt"
+    )
+    agent_code: str = Field(default="mra", description="Agent code")
+    count: int = Field(default=1, ge=1, le=10, description="Number to generate")
+
+
+class SyntheticGenerateResponse(BaseModel):
+    """Response for POST /v1/datasets/generate."""
+
+    examples: list[dict[str, Any]] = Field(default_factory=list)
+    total: int = 0
