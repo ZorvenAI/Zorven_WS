@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
 
+    # Celery
+    CELERY_BROKER_URL: str = "redis://localhost:6379/26"
+
+    # Mining
+    MINING_QUALITY_THRESHOLD: float = 0.8
+    MINING_LOOKBACK_DAYS: int = 7
+
     # Logging
     LOG_LEVEL: str = "INFO"
 
