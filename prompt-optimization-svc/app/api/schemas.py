@@ -267,3 +267,18 @@ class SyntheticGenerateResponse(BaseModel):
 
     examples: list[dict[str, Any]] = Field(default_factory=list)
     total: int = 0
+
+
+class DatasetSizeConfigRequest(BaseModel):
+    """Request for PUT /v1/config/dataset-size."""
+
+    size: int = Field(..., ge=3, le=50, description="Dataset size [3, 50]")
+
+
+class DatasetSizeConfigResponse(BaseModel):
+    """Response for dataset size configuration."""
+
+    tenant_id: str = ""
+    size: int = 10
+    min_size: int = 3
+    max_size: int = 50

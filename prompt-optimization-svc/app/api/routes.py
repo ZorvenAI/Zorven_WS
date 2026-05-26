@@ -499,3 +499,66 @@ async def generate_synthetic_datasets(request: SyntheticGenerateRequest):
         ],
         total=len(examples),
     )
+
+
+@router.get("/v1/config/dataset-size", response_model=None)
+async def get_dataset_size(
+    x_tenant_id: str = Header(default=None, alias="X-Tenant-ID"),
+):
+    """Get the golden dataset size limit for a tenant."""
+    from app.api.schemas import DatasetSizeConfigResponse
+    from app.cache.prompt_cache import PromptCacheManager
+    from app.cache.tenant_config import (
+        MAX_DATASET_SIZE,
+        MIN_DATASET_SIZE,
+        TenantConfigManager,
+    )
+    from app.core.config import settings
+
+    cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
+    await cache.connect()
+    try:
+        mgr = TenantConfigManager(cache)
+        size = await mgr.get_golden_dataset_size(x_tenant_id)
+        return DatasetSizeConfigResponse(
+            tenant_id=x_tenant_id or "default",
+            size=size,
+            min_size=MIN_DATASET_SIZE,
+            max_size=MAX_DATASET_SIZE,
+        )
+    finally:
+        await cache.close()
+
+
+@router.put("/v1/config/dataset-size", response_model=None)
+async def set_dataset_size(
+    request: "DatasetSizeConfigRequest",
+    x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
+):
+    """Set the golden dataset size limit for a tenant (AC-3: validates [3, 50])."""
+    from app.api.schemas import (
+        DatasetSizeConfigRequest,
+        DatasetSizeConfigResponse,
+    )
+    from app.cache.prompt_cache import PromptCacheManager
+    from app.cache.tenant_config import (
+        MAX_DATASET_SIZE,
+        MIN_DATASET_SIZE,
+        TenantConfigManager,
+    )
+    from app.core.config import settings
+
+    cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
+    await cache.connect()
+    try:
+        mgr = TenantConfigManager(cache)
+        await mgr.set_golden_dataset_size(x_tenant_id, request.size)
+        size = await mgr.get_golden_dataset_size(x_tenant_id)
+        return DatasetSizeConfigResponse(
+            tenant_id=x_tenant_id,
+            size=size,
+            min_size=MIN_DATASET_SIZE,
+            max_size=MAX_DATASET_SIZE,
+        )
+    finally:
+        await cache.close()
