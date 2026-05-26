@@ -159,7 +159,7 @@ async def register_prompt(
             name=info.name,
             version=info.version,
             status="registered",
-            message=warning_msg if warning_msg else None,
+            message=warning_msg,
         )
     except Exception as exc:
         logger.error("Failed to register prompt %s: %s", request.name, exc)
