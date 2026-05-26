@@ -68,7 +68,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         "prompt-optimization-svc starting on %s:%d", settings.HOST, settings.PORT
     )
 
-    # 0. Run database migrations
+    # 0. Load context variable registry into memory
+    from app.registries.context_variables import CONTEXT_REGISTRY
+
+    logger.info(
+        "Context variable registry loaded: %d variables across all agents",
+        len(CONTEXT_REGISTRY),
+    )
+
+    # 0b. Run database migrations
     _run_migrations()
 
     # 1. Redis (general cache)
