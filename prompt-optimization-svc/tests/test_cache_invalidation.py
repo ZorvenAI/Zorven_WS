@@ -125,5 +125,5 @@ class TestMainPyWiring:
             with open(path) as f:
                 content = f.read()
             assert (
-                "invalidator" in content.lower() or "cache_invalidator" in content
-            ), f"{svc_dir}: main.py does not reference invalidator"
+                "PromptCacheInvalidator" in content
+            ), f"{svc_dir}: main.py does not import PromptCacheInvalidator"
