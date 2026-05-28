@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     MINING_QUALITY_THRESHOLD: float = 0.8
     MINING_LOOKBACK_DAYS: int = 7
 
+    # Re-optimization trigger
+    REOPT_QUALITY_THRESHOLD: float = 0.7
+    REOPT_DEBOUNCE_HOURS: int = 24
+
     # Canary
     CANARY_REGRESSION_THRESHOLD: float = 0.05
     CANARY_METRICS_TTL_DAYS: int = 30
