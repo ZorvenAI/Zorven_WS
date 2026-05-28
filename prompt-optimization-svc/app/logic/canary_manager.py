@@ -5,7 +5,6 @@ Auto-rollbacks on >5% scorer regression. Covers all 15 agents.
 """
 
 import hashlib
-import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -204,11 +203,12 @@ class CanaryManager:
         if regression > threshold:
             logger.error(
                 "ADMIN ALERT: Canary regression detected for %s: "
-                "%.2f%% > %.2f%% threshold. Triggering rollback.",
+                "%.2f%% > %.2f%% threshold. Triggering auto-rollback.",
                 prompt_name,
                 regression * 100,
                 threshold * 100,
             )
+            await self.rollback_canary(prompt_name)
             return regression
 
         return None
@@ -216,15 +216,36 @@ class CanaryManager:
     async def rollback_canary(self, prompt_name: str) -> bool:
         """Roll back a canary deployment (AC-3).
 
-        Clears canary state and logs ADMIN alert.
+        Transitions the prompt version to ROLLED_BACK via the lifecycle
+        manager, clears canary state from Redis, and logs ADMIN alert.
         """
-        r = await self.prompt_cache.connect()
-        key = CANARY_STATE_KEY.format(name=prompt_name)
-
         state = await self.get_canary_state(prompt_name)
         if state is None:
             return False
 
+        # Transition prompt lifecycle to ROLLED_BACK
+        try:
+            from app.logic.lifecycle import PromptLifecycleManager, PromptState
+
+            lifecycle = PromptLifecycleManager(
+                mlflow_registry=None, prompt_cache=self.prompt_cache
+            )
+            lifecycle.rollback(
+                prompt_name,
+                state.canary_version,
+                PromptState.CANARY,
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed to transition %s v%d to ROLLED_BACK: %s",
+                prompt_name,
+                state.canary_version,
+                exc,
+            )
+
+        # Clear canary state from Redis
+        r = await self.prompt_cache.connect()
+        key = CANARY_STATE_KEY.format(name=prompt_name)
         await r.delete(key)
 
         logger.error(
