@@ -34,7 +34,7 @@ VALID_TRANSITIONS: dict[PromptState, set[PromptState]] = {
     PromptState.STAGING: {PromptState.CANARY, PromptState.REJECTED},
     PromptState.CANARY: {PromptState.PRODUCTION, PromptState.ROLLED_BACK},
     PromptState.PRODUCTION: {PromptState.ARCHIVED, PromptState.ROLLED_BACK},
-    PromptState.ARCHIVED: set(),
+    PromptState.ARCHIVED: {PromptState.PRODUCTION},
     PromptState.REJECTED: set(),
     PromptState.ROLLED_BACK: set(),
     PromptState.TENANT_OVERRIDE: {PromptState.ARCHIVED},
