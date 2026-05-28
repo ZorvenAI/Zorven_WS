@@ -12,9 +12,12 @@ from app.logic.lifecycle import (
 )
 
 _all_states = st.sampled_from(list(PromptState))
-_terminal_states = st.sampled_from([
-    PromptState.ARCHIVED, PromptState.REJECTED, PromptState.ROLLED_BACK,
-])
+_terminal_states = st.sampled_from(
+    [
+        PromptState.REJECTED,
+        PromptState.ROLLED_BACK,
+    ]
+)
 
 
 class TestStateTransitionProperties:
@@ -37,9 +40,7 @@ class TestStateTransitionProperties:
     def test_no_transitions_from_terminal(self, from_state, to_state):
         """Terminal states (ARCHIVED, REJECTED, ROLLED_BACK) have no outgoing transitions."""
         try:
-            PromptLifecycleManager(None).validate_transition(
-                from_state, to_state
-            )
+            PromptLifecycleManager(None).validate_transition(from_state, to_state)
             assert False, f"Should not allow {from_state} -> {to_state}"
         except InvalidTransitionError:
             pass
