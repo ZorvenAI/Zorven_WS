@@ -1,5 +1,6 @@
 """Unit tests for candidate validation (US-032, OPT-03/OPT-04)."""
 
+from app.core.config import settings
 from app.logic.candidate_validator import (
     ValidationResult,
     compute_aggregate_score,
@@ -174,18 +175,56 @@ class TestValidateCandidate:
         assert len(result.scorer_regressions) == 2
 
 
+class TestMissingScorerKeys:
+    """Missing candidate scorers treated as regressions."""
+
+    def test_missing_candidate_scorer_treated_as_zero(self):
+        """Missing scorer drops aggregate → REJECTED."""
+        prod = {"s1": 0.50, "s2": 0.80}
+        cand = {"s1": 0.90}  # s2 missing → treated as 0.0, aggregate drops
+        result = validate_candidate(cand, prod)
+        assert result.decision == "REJECTED"
+
+    def test_missing_candidate_scorer_regression_detected(self):
+        """When aggregate still passes, missing scorer triggers PENDING_APPROVAL."""
+        prod = {"s1": 0.30, "s2": 0.10}
+        cand = {"s1": 0.90}  # s2 missing=0.0, but aggregate improves vastly
+        result = validate_candidate(cand, prod)
+        # s2 regressed from 0.10 to 0.0 = 100% regression
+        assert result.decision == "PENDING_APPROVAL"
+        assert "s2" in result.scorer_regressions
+
+    def test_extra_candidate_scorer_ignored(self):
+        prod = {"s1": 0.70}
+        cand = {"s1": 0.80, "s2": 0.90}  # s2 extra, not in production
+        result = validate_candidate(cand, prod)
+        # Aggregate computed over production keys only
+        assert result.decision == "CANARY"
+
+
+class TestDefaultsFromSettings:
+    """Defaults should come from settings, not hardcoded."""
+
+    def test_split_holdout_uses_settings_default(self):
+        examples = list(range(100))
+        train, holdout = split_holdout(examples)
+        expected = int(100 * settings.VALIDATION_HOLDOUT_PCT)
+        assert len(holdout) == expected
+
+    def test_validate_uses_settings_thresholds(self):
+        # Verify defaults match settings
+        prod = {"s1": 0.80}
+        cand = {"s1": 0.85}  # 6.25% > 5%
+        result = validate_candidate(cand, prod)
+        assert result.decision == "CANARY"
+
+
 class TestConfigConstants:
     def test_holdout_pct(self):
-        from app.core.config import settings
-
         assert settings.VALIDATION_HOLDOUT_PCT == 0.2
 
     def test_improvement_threshold(self):
-        from app.core.config import settings
-
         assert settings.VALIDATION_IMPROVEMENT_THRESHOLD == 0.05
 
     def test_regression_threshold(self):
-        from app.core.config import settings
-
         assert settings.VALIDATION_REGRESSION_THRESHOLD == 0.03

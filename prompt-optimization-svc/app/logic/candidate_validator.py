@@ -9,10 +9,15 @@ PENDING_APPROVAL for human review.
 import logging
 import random
 from dataclasses import dataclass, field
+from typing import Optional, TypeVar
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 VALID_DECISIONS = ("CANARY", "REJECTED", "PENDING_APPROVAL")
+
+T = TypeVar("T")
 
 
 @dataclass
@@ -29,22 +34,25 @@ class ValidationResult:
 
 
 def split_holdout(
-    examples: list,
-    holdout_pct: float = 0.2,
+    examples: list[T],
+    holdout_pct: Optional[float] = None,
     seed: int = 42,
-) -> tuple[list, list]:
+) -> tuple[list[T], list[T]]:
     """Split examples into train and holdout sets.
 
     Uses a deterministic shuffle for reproducibility.
 
     Args:
         examples: Full list of examples.
-        holdout_pct: Fraction to hold out (default 20%, AC-1).
+        holdout_pct: Fraction to hold out. Defaults to settings.VALIDATION_HOLDOUT_PCT.
         seed: Random seed for reproducibility.
 
     Returns:
         Tuple of (train, holdout) lists.
     """
+    if holdout_pct is None:
+        holdout_pct = settings.VALIDATION_HOLDOUT_PCT
+
     if not examples:
         return [], []
 
@@ -76,22 +84,44 @@ def compute_aggregate_score(scores: dict[str, float]) -> float:
 def validate_candidate(
     candidate_scores: dict[str, float],
     production_scores: dict[str, float],
-    improvement_threshold: float = 0.05,
-    regression_threshold: float = 0.03,
+    improvement_threshold: Optional[float] = None,
+    regression_threshold: Optional[float] = None,
 ) -> ValidationResult:
     """Validate a GEPA candidate against current production scores.
+
+    Requires matching scorer keys — missing candidate scorers are
+    treated as regressions (score=0.0), and missing production scorers
+    are excluded from the comparison.
 
     Args:
         candidate_scores: Per-scorer scores for the candidate.
         production_scores: Per-scorer scores for current production.
-        improvement_threshold: Min aggregate improvement (OPT-03, default 5%).
-        regression_threshold: Max individual regression (OPT-04, default 3%).
+        improvement_threshold: Min aggregate improvement (OPT-03).
+            Defaults to settings.VALIDATION_IMPROVEMENT_THRESHOLD.
+        regression_threshold: Max individual regression (OPT-04).
+            Defaults to settings.VALIDATION_REGRESSION_THRESHOLD.
 
     Returns:
         ValidationResult with decision: CANARY, REJECTED, or PENDING_APPROVAL.
     """
-    candidate_agg = compute_aggregate_score(candidate_scores)
-    production_agg = compute_aggregate_score(production_scores)
+    if improvement_threshold is None:
+        improvement_threshold = settings.VALIDATION_IMPROVEMENT_THRESHOLD
+    if regression_threshold is None:
+        regression_threshold = settings.VALIDATION_REGRESSION_THRESHOLD
+
+    # Ensure candidate has all production scorers — treat missing as 0.0
+    all_scorers = set(production_scores.keys())
+    normalized_candidate = dict(candidate_scores)
+    for scorer_name in all_scorers:
+        if scorer_name not in normalized_candidate:
+            normalized_candidate[scorer_name] = 0.0
+
+    # Compute aggregates over production scorer set only
+    prod_subset = {k: production_scores[k] for k in all_scorers}
+    cand_subset = {k: normalized_candidate[k] for k in all_scorers}
+
+    candidate_agg = compute_aggregate_score(cand_subset) if cand_subset else 0.0
+    production_agg = compute_aggregate_score(prod_subset) if prod_subset else 0.0
 
     # Compute aggregate improvement
     if production_agg > 0:
@@ -118,10 +148,9 @@ def validate_candidate(
 
     # AC-3: Check individual scorer regressions (OPT-04)
     regressions: dict[str, float] = {}
-    common_scorers = set(candidate_scores.keys()) & set(production_scores.keys())
-    for scorer_name in common_scorers:
+    for scorer_name in all_scorers:
         prod_score = production_scores[scorer_name]
-        cand_score = candidate_scores[scorer_name]
+        cand_score = normalized_candidate[scorer_name]
         if prod_score > 0:
             regression = (prod_score - cand_score) / prod_score
             if regression > regression_threshold:
