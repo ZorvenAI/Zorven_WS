@@ -282,3 +282,28 @@ class DatasetSizeConfigResponse(BaseModel):
     size: int = 10
     min_size: int = 3
     max_size: int = 50
+
+
+# ── Approval schemas ──
+
+
+class ApprovalRequest(BaseModel):
+    """Request for POST /v1/optimize/runs/{run_id}/approve."""
+
+    approved_by: str = Field(..., description="User/role approving the run")
+
+
+class RejectionRequest(BaseModel):
+    """Request for POST /v1/optimize/runs/{run_id}/reject."""
+
+    approved_by: str = Field(..., description="User/role rejecting the run")
+    reason: str = Field(..., description="Rejection reason")
+
+
+class ApprovalResponse(BaseModel):
+    """Response for approval/rejection actions."""
+
+    run_id: str
+    decision: str  # "approved" | "rejected"
+    approved_by: str
+    decided_at: str = ""

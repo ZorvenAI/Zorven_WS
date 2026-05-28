@@ -23,6 +23,9 @@ from app.api.schemas import (
     SeedResponse,
     SyntheticGenerateRequest,
     SyntheticGenerateResponse,
+    ApprovalRequest,
+    ApprovalResponse,
+    RejectionRequest,
 )
 from app.logic.lifecycle import (
     InvalidTransitionError,
@@ -582,3 +585,44 @@ async def set_dataset_size(
         )
     finally:
         await cache.close()
+
+
+@router.post("/v1/optimize/runs/{run_id}/approve", response_model=ApprovalResponse)
+async def approve_optimization_run(run_id: str, request: ApprovalRequest):
+    """Approve a PENDING_APPROVAL optimization run for canary (AC-3)."""
+    from app.logic.approval_gate import approve_run
+    from app.logic.run_lifecycle import RunLifecycleManager
+
+    mgr = RunLifecycleManager()
+    decision = await approve_run(
+        run_id=run_id,
+        approved_by=request.approved_by,
+        lifecycle_manager=mgr,
+    )
+    return ApprovalResponse(
+        run_id=decision.run_id,
+        decision=decision.decision,
+        approved_by=decision.approved_by,
+        decided_at=decision.decided_at.isoformat(),
+    )
+
+
+@router.post("/v1/optimize/runs/{run_id}/reject", response_model=ApprovalResponse)
+async def reject_optimization_run(run_id: str, request: RejectionRequest):
+    """Reject a PENDING_APPROVAL optimization run (AC-3)."""
+    from app.logic.approval_gate import reject_run
+    from app.logic.run_lifecycle import RunLifecycleManager
+
+    mgr = RunLifecycleManager()
+    decision = await reject_run(
+        run_id=run_id,
+        approved_by=request.approved_by,
+        reason=request.reason,
+        lifecycle_manager=mgr,
+    )
+    return ApprovalResponse(
+        run_id=decision.run_id,
+        decision=decision.decision,
+        approved_by=decision.approved_by,
+        decided_at=decision.decided_at.isoformat(),
+    )
