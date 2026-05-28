@@ -38,12 +38,12 @@ class TestLifecycleTransitionValid:
     def test_archived_to_production(self):
         from app.logic.lifecycle import PromptLifecycleManager, PromptState
 
-        mgr = PromptLifecycleManager()
+        mgr = PromptLifecycleManager(None)
         # Should not raise
         mgr.validate_transition(PromptState.ARCHIVED, PromptState.PRODUCTION)
 
     def test_production_to_archived(self):
         from app.logic.lifecycle import PromptLifecycleManager, PromptState
 
-        mgr = PromptLifecycleManager()
+        mgr = PromptLifecycleManager(None)
         mgr.validate_transition(PromptState.PRODUCTION, PromptState.ARCHIVED)

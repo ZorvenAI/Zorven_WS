@@ -20,12 +20,12 @@ class TestArchiveRetention:
         recent = datetime.now(timezone.utc) - timedelta(days=10)
         assert is_within_retention_window(recent) is True
 
-    def test_within_window_at_boundary(self):
-        boundary = datetime.now(timezone.utc) - timedelta(days=29)
+    def test_within_window_at_29_days(self):
+        boundary = datetime.now(timezone.utc) - timedelta(days=29, hours=23)
         assert is_within_retention_window(boundary) is True
 
-    def test_outside_window(self):
-        old = datetime.now(timezone.utc) - timedelta(days=31)
+    def test_just_outside_30_days(self):
+        old = datetime.now(timezone.utc) - timedelta(days=30, hours=1)
         assert is_within_retention_window(old) is False
 
     def test_none_archived_at(self):

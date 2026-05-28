@@ -38,7 +38,7 @@ class TestStateTransitionProperties:
     @given(from_state=_terminal_states, to_state=_all_states)
     @hyp_settings(max_examples=30)
     def test_no_transitions_from_terminal(self, from_state, to_state):
-        """Terminal states (ARCHIVED, REJECTED, ROLLED_BACK) have no outgoing transitions."""
+        """Terminal states (REJECTED, ROLLED_BACK) have no outgoing transitions."""
         try:
             PromptLifecycleManager(None).validate_transition(from_state, to_state)
             assert False, f"Should not allow {from_state} -> {to_state}"

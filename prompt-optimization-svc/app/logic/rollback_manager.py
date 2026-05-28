@@ -15,9 +15,6 @@ logger = logging.getLogger(__name__)
 # OPT-08: Archived versions retained for ≥30 days (AC-1)
 ARCHIVE_RETENTION_DAYS = 30
 
-# Redis cache key template for prompt production cache
-PRODUCTION_CACHE_KEY = "prompt:{name}:production"
-
 
 @dataclass
 class RollbackResult:
@@ -93,29 +90,63 @@ async def rollback_to_version(
 
     result.rolled_back_version = current_prod.version
 
-    # 2. Verify target version exists
-    target = mlflow_registry.get_prompt(prompt_name)
-    if target is None:
-        result.error = f"Prompt '{prompt_name}' not found"
+    # 2. Verify target version exists and is ARCHIVED
+    target = mlflow_registry.get_prompt_by_state(prompt_name, "ARCHIVED")
+    if target is None or target.version != target_version:
+        # Try to find the specific version among all archived versions
+        all_archived = mlflow_registry.get_prompt(prompt_name)
+        if all_archived is None:
+            result.error = f"Prompt '{prompt_name}' not found"
+            return result
+        result.error = (
+            f"Version {target_version} is not in ARCHIVED state " f"for '{prompt_name}'"
+        )
         return result
 
-    # 3. Archive current production
+    # 3. Check retention window (AC-1)
+    archived_at_str = target.tags.get("archived_at")
+    if archived_at_str:
+        try:
+            archived_at = datetime.fromisoformat(archived_at_str)
+            if not is_within_retention_window(archived_at):
+                result.error = (
+                    f"Version {target_version} is outside the "
+                    f"{ARCHIVE_RETENTION_DAYS}-day retention window"
+                )
+                return result
+        except ValueError:
+            pass  # If timestamp is invalid, allow rollback
+
+    # 4. Archive current production
     try:
         mlflow_registry.set_prompt_state(prompt_name, current_prod.version, "ARCHIVED")
     except Exception as exc:
         result.error = f"Failed to archive v{current_prod.version}: {exc}"
         return result
 
-    # 4. Promote target version to PRODUCTION
+    # 5. Promote target version to PRODUCTION
     try:
         mlflow_registry.set_prompt_state(prompt_name, target_version, "PRODUCTION")
     except Exception as exc:
+        # Compensation: restore old production on failure
+        logger.error(
+            "Promotion failed — compensating by restoring v%d to PRODUCTION",
+            current_prod.version,
+        )
+        try:
+            mlflow_registry.set_prompt_state(
+                prompt_name, current_prod.version, "PRODUCTION"
+            )
+        except Exception as comp_exc:
+            logger.critical(
+                "CRITICAL: Compensation also failed for %s: %s",
+                prompt_name,
+                comp_exc,
+            )
         result.error = f"Failed to promote v{target_version}: {exc}"
         return result
 
-    result.success = True
-
-    # 5. Emit prompt.promoted Kafka event (AC-2)
+    # 6. Emit prompt.promoted Kafka event (AC-2)
     if lifecycle_producer is not None:
         try:
             lifecycle_producer.send_lifecycle_event_sync(
@@ -128,15 +159,18 @@ async def rollback_to_version(
         except Exception as exc:
             logger.error("Failed to emit rollback event: %s", exc)
 
-    # 6. Invalidate Redis cache (AC-3)
+    # 7. Invalidate Redis cache (AC-3)
     if prompt_cache is not None:
         try:
-            r = await prompt_cache.connect()
-            cache_key = PRODUCTION_CACHE_KEY.format(name=prompt_name)
-            await r.delete(cache_key)
+            await prompt_cache.invalidate_prompt(prompt_name)
             result.cache_invalidated = True
         except Exception as exc:
             logger.error("Failed to invalidate cache for %s: %s", prompt_name, exc)
+            result.error = f"Rollback succeeded but cache invalidation failed: {exc}"
+            result.success = True  # Rollback itself succeeded
+            return result
+
+    result.success = True
 
     logger.info(
         "Rollback complete: %s v%d → v%d (archived v%d)",
