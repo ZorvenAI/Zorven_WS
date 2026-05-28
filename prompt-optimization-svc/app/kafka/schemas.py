@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ── Lifecycle event type constants ──
 
@@ -54,8 +54,25 @@ class PromptLifecycleEvent(BaseModel):
     )
     schema_version: str = Field(
         default=SCHEMA_VERSION,
-        description="Schema version header (AC-3)",
+        description="Schema version header (AC-3), pinned to 1.0",
     )
+
+    @field_validator("correlation_id")
+    @classmethod
+    def correlation_id_non_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("correlation_id must be non-empty (AC-4)")
+        return v
+
+    @field_validator("schema_version")
+    @classmethod
+    def schema_version_pinned(cls, v: str) -> str:
+        if v != SCHEMA_VERSION:
+            raise ValueError(
+                f"schema_version must be '{SCHEMA_VERSION}', got '{v}' (AC-3)"
+            )
+        return v
+
     timestamp: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )

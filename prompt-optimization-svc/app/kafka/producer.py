@@ -224,7 +224,9 @@ class LifecycleProducer:
             to_state=to_state,
             tenant_id=tenant_id,
             agent_code=agent_code,
-            **({"correlation_id": correlation_id} if correlation_id else {}),
+            **(
+                {"correlation_id": correlation_id} if correlation_id is not None else {}
+            ),
         )
 
         # Use correlation_id as message key for idempotent dedup (AC-4)

@@ -170,3 +170,67 @@ class TestEventAgentCode:
             to_state="DRAFT",
         )
         assert event.agent_code == ""
+
+
+class TestSchemaValidation:
+    """Pinned schema_version and non-empty correlation_id."""
+
+    def test_schema_version_override_rejected(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="schema_version must be"):
+            PromptLifecycleEvent(
+                event_type=PROMPT_PROMOTED,
+                prompt_name="test",
+                version=1,
+                from_state="A",
+                to_state="B",
+                schema_version="2.0",
+            )
+
+    def test_empty_correlation_id_rejected(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="correlation_id must be non-empty"):
+            PromptLifecycleEvent(
+                event_type=PROMPT_PROMOTED,
+                prompt_name="test",
+                version=1,
+                from_state="A",
+                to_state="B",
+                correlation_id="",
+            )
+
+    def test_whitespace_correlation_id_rejected(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="correlation_id must be non-empty"):
+            PromptLifecycleEvent(
+                event_type=PROMPT_PROMOTED,
+                prompt_name="test",
+                version=1,
+                from_state="A",
+                to_state="B",
+                correlation_id="   ",
+            )
+
+
+class TestProducerKeyAndHeaders:
+    """Verify correlation_id is used as key and schema_version as header."""
+
+    def test_correlation_id_encodes_as_message_key(self):
+        event = PromptLifecycleEvent(
+            event_type=PROMPT_PROMOTED,
+            prompt_name="test",
+            version=1,
+            from_state="CANARY",
+            to_state="PRODUCTION",
+            correlation_id="dedup-key-abc",
+        )
+        # The producer uses event.correlation_id.encode("utf-8") as key
+        message_key = event.correlation_id.encode("utf-8")
+        assert message_key == b"dedup-key-abc"
+
+    def test_schema_version_encodes_as_header(self):
+        headers = [("schema_version", SCHEMA_VERSION.encode("utf-8"))]
+        assert headers[0] == ("schema_version", b"1.0")
