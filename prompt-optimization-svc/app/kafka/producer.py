@@ -195,11 +195,27 @@ class LifecycleProducer:
         from_state: str,
         to_state: str,
         tenant_id: Optional[str] = None,
+        agent_code: str = "",
+        correlation_id: Optional[str] = None,
     ) -> None:
-        """Emit a lifecycle event (fire-and-forget, sync wrapper)."""
+        """Emit a lifecycle event (fire-and-forget, sync wrapper).
+
+        Args:
+            event_type: Event type constant (e.g., PROMPT_PROMOTED).
+            prompt_name: Affected prompt name.
+            version: Prompt version.
+            from_state: Previous state.
+            to_state: New state.
+            tenant_id: Tenant ID (optional).
+            agent_code: Agent code for routing.
+            correlation_id: Unique ID for dedup (AC-4). Auto-generated if None.
+        """
         if self._producer is None:
             logger.debug("LifecycleProducer not connected, skipping: %s", event_type)
             return
+
+        from app.kafka.schemas import SCHEMA_VERSION
+
         event = PromptLifecycleEvent(
             event_type=event_type,
             prompt_name=prompt_name,
@@ -207,18 +223,29 @@ class LifecycleProducer:
             from_state=from_state,
             to_state=to_state,
             tenant_id=tenant_id,
+            agent_code=agent_code,
+            **(
+                {"correlation_id": correlation_id} if correlation_id is not None else {}
+            ),
         )
+
+        # Use correlation_id as message key for idempotent dedup (AC-4)
+        message_key = event.correlation_id.encode("utf-8")
+        headers = [("schema_version", SCHEMA_VERSION.encode("utf-8"))]
+
         try:
             import asyncio
 
             loop = asyncio.get_event_loop()
+            coro = self._producer.send_and_wait(
+                self.TOPIC,
+                event.model_dump(),
+                key=message_key,
+                headers=headers,
+            )
             if loop.is_running():
-                loop.create_task(
-                    self._producer.send_and_wait(self.TOPIC, event.model_dump())
-                )
+                loop.create_task(coro)
             else:
-                loop.run_until_complete(
-                    self._producer.send_and_wait(self.TOPIC, event.model_dump())
-                )
+                loop.run_until_complete(coro)
         except Exception as exc:
             logger.warning("Failed to send lifecycle event: %s", exc)
