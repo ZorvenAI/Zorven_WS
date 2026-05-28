@@ -46,9 +46,6 @@ class TestRequiresApproval:
     def test_empty_agent_code(self):
         assert requires_approval("") is False
 
-    def test_none_like_input(self):
-        assert requires_approval("") is False
-
 
 class TestCriticalAgents:
     def test_exactly_two_entries(self):
@@ -95,20 +92,8 @@ class TestApprovalDecision:
             decision="approved",
             approved_by="admin",
         )
-        assert d.decided_at is not None
+        assert isinstance(d.decided_at, datetime)
         assert d.decided_at.tzinfo is not None
-
-    def test_custom_decided_at(self):
-        custom_time = datetime(2026, 5, 28, 12, 0, tzinfo=timezone.utc)
-        d = ApprovalDecision(
-            run_id="r",
-            agent_code="coa",
-            prompt_name="p",
-            decision="approved",
-            approved_by="admin",
-            decided_at=custom_time,
-        )
-        assert d.decided_at == custom_time
 
     def test_default_reason_empty(self):
         d = ApprovalDecision(

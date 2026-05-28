@@ -5,9 +5,8 @@ OWNER/ADMIN approval through the approve/reject API.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
 
 from app.logic.run_lifecycle import RunLifecycleManager, RunState
 
@@ -44,11 +43,7 @@ class ApprovalDecision:
     decision: str  # "approved" | "rejected"
     approved_by: str
     reason: str = ""
-    decided_at: datetime = None  # type: ignore[assignment]
-
-    def __post_init__(self):
-        if self.decided_at is None:
-            self.decided_at = datetime.now(timezone.utc)
+    decided_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 async def approve_run(

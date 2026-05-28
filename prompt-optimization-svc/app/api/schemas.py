@@ -304,6 +304,6 @@ class ApprovalResponse(BaseModel):
     """Response for approval/rejection actions."""
 
     run_id: str
-    decision: str  # "approved" | "rejected"
+    decision: Literal["approved", "rejected"]
     approved_by: str
-    decided_at: str = ""
+    decided_at: str
