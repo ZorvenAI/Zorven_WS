@@ -21,6 +21,7 @@ from app.services.bsa_executor import BSAExecutor
 from app.services.context_loader import BSAContextLoader
 from app.services.gcs_client import GCSClient
 from app.prompts.loader import AgentPromptClient
+from app.prompts.invalidator import PromptCacheInvalidator
 
 logger = logging.getLogger(__name__)
 
@@ -105,11 +106,20 @@ async def lifespan(app: FastAPI):
         mlflow_uri=settings.MLFLOW_TRACKING_URI,
     )
     await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
     app.state.prompt_loader = prompt_loader
 
     yield
 
     # Teardown
+    await cache_invalidator.stop()
+    await prompt_loader.stop()
     await trace_producer.stop()
     await audit_producer.stop()
     await redis_manager.close()

@@ -23,6 +23,8 @@ from app.rbac.engine import RBACEngine
 from app.services.apa_executor import APAExecutor
 from app.services.api_clients import TavilySearchClient, WebScraperClient
 from app.skills.registry import SkillRegistry
+from app.prompts.loader import AgentPromptClient
+from app.prompts.invalidator import PromptCacheInvalidator
 
 logger = logging.getLogger(__name__)
 
@@ -221,10 +223,25 @@ async def lifespan(app: FastAPI):
         scan_consumer is not None,
     )
 
+    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
     yield
 
     # Shutdown
     logger.info("Shutting down Audience Persona Agent service")
+    await cache_invalidator.stop()
+    await prompt_loader.stop()
     if scan_consumer:
         await scan_consumer.stop()
     await executor.close()
