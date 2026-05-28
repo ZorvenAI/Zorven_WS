@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     MINING_QUALITY_THRESHOLD: float = 0.8
     MINING_LOOKBACK_DAYS: int = 7
 
+    # Canary
+    CANARY_REGRESSION_THRESHOLD: float = 0.05
+    CANARY_METRICS_TTL_DAYS: int = 30
+
     # Validation (OPT-03/OPT-04)
     VALIDATION_HOLDOUT_PCT: float = 0.2
     VALIDATION_IMPROVEMENT_THRESHOLD: float = 0.05  # 5% minimum improvement
