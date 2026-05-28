@@ -20,6 +20,7 @@ from app.services.baa_analyzer import BAAAnalyzer
 from app.services.baa_executor import BAAExecutor
 from app.services.context_loader import BAAContextLoader
 from app.prompts.loader import AgentPromptClient
+from app.prompts.invalidator import PromptCacheInvalidator
 
 logger = logging.getLogger(__name__)
 
@@ -109,11 +110,19 @@ async def lifespan(app: FastAPI):
         mlflow_uri=settings.MLFLOW_TRACKING_URI,
     )
     await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
     routes.prompt_loader = prompt_loader
 
     yield
 
     # Shutdown
+    await cache_invalidator.stop()
     await prompt_loader.stop()
     logger.info("Shutting down Brand Architecture Agent service")
     await executor.close()
