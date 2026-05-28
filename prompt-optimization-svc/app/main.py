@@ -120,6 +120,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     routes.mlflow_registry = registry
     routes.lifecycle_manager = lcm
 
+    # 7. Campaign completion trigger consumer
+    from app.kafka.campaign_trigger import CampaignCompletionTrigger
+
+    campaign_trigger = CampaignCompletionTrigger(
+        bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
+        prompt_cache=prompt_cache,
+    )
+    await campaign_trigger.start()
+
     logger.info(
         "Service initialized — MLflow=%s, Redis=%s, PromptCache=%s, Kafka=%s",
         settings.MLFLOW_TRACKING_URI,
@@ -130,6 +139,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # Shutdown
+    await campaign_trigger.stop()
     await lifecycle_producer.stop()
     await trace_producer.stop()
     await audit_producer.stop()

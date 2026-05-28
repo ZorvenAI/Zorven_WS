@@ -8,11 +8,15 @@ from .conftest import REDIS_URL, requires_redis
 
 @requires_redis
 class TestDebounceWithRedis:
-    """AC-1: Debounce set/check via real Redis."""
+    """AC-1: Atomic debounce via real Redis."""
 
-    async def test_debounce_set_and_check(self, real_redis):
+    async def test_atomic_debounce_acquire_and_check(self, real_redis):
         from app.cache.prompt_cache import PromptCacheManager
-        from app.logic.debounce import clear_debounce, is_debounced, set_debounce
+        from app.logic.debounce import (
+            clear_debounce,
+            is_debounced,
+            try_acquire_debounce,
+        )
 
         cache = PromptCacheManager(redis_url=REDIS_URL)
         await cache.connect()
@@ -23,9 +27,12 @@ class TestDebounceWithRedis:
             # Initially not debounced
             assert await is_debounced(cache, tenant, agent) is False
 
-            # Set debounce
-            await set_debounce(cache, tenant, agent)
+            # First acquire succeeds
+            assert await try_acquire_debounce(cache, tenant, agent) is True
             assert await is_debounced(cache, tenant, agent) is True
+
+            # Second acquire fails (already debounced)
+            assert await try_acquire_debounce(cache, tenant, agent) is False
 
             # Clear
             await clear_debounce(cache, tenant, agent)
@@ -37,14 +44,18 @@ class TestDebounceWithRedis:
 
     async def test_different_agents_independent(self, real_redis):
         from app.cache.prompt_cache import PromptCacheManager
-        from app.logic.debounce import clear_debounce, is_debounced, set_debounce
+        from app.logic.debounce import (
+            clear_debounce,
+            is_debounced,
+            try_acquire_debounce,
+        )
 
         cache = PromptCacheManager(redis_url=REDIS_URL)
         await cache.connect()
         try:
             tenant = "__test_debounce_ind"
 
-            await set_debounce(cache, tenant, "cga")
+            assert await try_acquire_debounce(cache, tenant, "cga") is True
             assert await is_debounced(cache, tenant, "cga") is True
             assert await is_debounced(cache, tenant, "coa") is False
         finally:
