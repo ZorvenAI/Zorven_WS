@@ -177,10 +177,21 @@ class BrandAssetUploadSerializer(serializers.Serializer):
         if value.size > max_size:
             raise serializers.ValidationError("File size cannot exceed 50MB")
 
-        # File type validation
+        # File type validation — MIME types must match what the view and
+        # validator function accept
         allowed_types = {
-            "image": ["image/jpeg", "image/png", "image/gif", "image/webp"],
-            "video": ["video/mp4", "video/avi", "video/mov"],
+            "image": [
+                "image/jpeg",
+                "image/png",
+                "image/gif",
+                "image/webp",
+                "image/svg+xml",
+                "image/bmp",
+                "image/tiff",
+                "image/heic",
+                "image/heif",
+            ],
+            "video": ["video/mp4", "video/quicktime", "video/x-msvideo"],
             "document": [
                 "application/pdf",
                 "application/msword",

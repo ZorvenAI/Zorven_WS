@@ -153,12 +153,18 @@ def validate_file_upload(
     # Check file extension matches content type
     extension = file.name.split(".")[-1].lower() if "." in file.name else ""
     expected_extensions = {
-        "image/jpeg": ["jpg", "jpeg"],
+        "image/jpeg": ["jpg", "jpeg", "jfif"],
         "image/png": ["png"],
         "image/gif": ["gif"],
         "image/webp": ["webp"],
+        "image/svg+xml": ["svg"],
+        "image/bmp": ["bmp"],
+        "image/tiff": ["tif", "tiff"],
+        "image/heic": ["heic"],
+        "image/heif": ["heif"],
         "video/mp4": ["mp4"],
         "video/quicktime": ["mov"],
+        "video/x-msvideo": ["avi"],
         "application/pdf": ["pdf"],
         "application/msword": ["doc"],
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
