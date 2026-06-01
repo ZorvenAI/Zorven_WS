@@ -91,8 +91,16 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
         # Check if tenant already has a company (OneToOneField constraint)
         if Company.objects.filter(tenant=tenant).exists():
-            raise ValueError(
-                f"Tenant {tenant.name} already has a company. Cannot create another."
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError(
+                {
+                    "error": "duplicate_company",
+                    "message": (
+                        f"Tenant {tenant.name} already has a company. "
+                        "Use PATCH to update instead of POST to create."
+                    ),
+                }
             )
 
         # Save company with tenant
