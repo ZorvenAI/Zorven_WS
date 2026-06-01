@@ -346,11 +346,10 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                     "Set REQUIRE_GCS_UPLOAD=True in production."
                 )
         except Exception:
-            logger.exception("GCS upload failed for onboarding PDF")
-            return Response(
-                {"error": "Failed to upload PDF. Please try again later."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            logger.exception("GCS upload failed for onboarding PDF (bucket=%s)", raw_bucket)
+            # Don't return 500 — create the asset record anyway so the
+            # onboarding flow isn't blocked by a GCS outage.
+            gcs_uploaded = False
 
         # Upsert: replace existing onboarding_data.pdf asset if present
         existing_asset = BrandAsset.objects.filter(
@@ -874,11 +873,15 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                     "is not stored. Set REQUIRE_GCS_UPLOAD=True in production."
                 )
         except Exception as e:
-            logger.error(f"GCS upload failed: {str(e)}")
-            return Response(
-                {"error": f"Failed to upload file: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            logger.error(
+                "GCS upload failed for %s (bucket=%s): %s",
+                safe_filename,
+                raw_bucket,
+                e,
             )
+            # Don't return 500 — create the asset record so the user
+            # sees the file and can retry pipeline processing later.
+            gcs_uploaded = False
 
         # Handle replacement of existing asset
         actual_bucket = raw_bucket
