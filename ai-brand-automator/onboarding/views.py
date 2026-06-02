@@ -344,9 +344,13 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                         "GCS not configured (DEBUG mode) — onboarding PDF "
                         "not stored."
                     )
-        except Exception:
+        except Exception as e:
             logger.exception(
                 "GCS upload failed for onboarding PDF (bucket=%s)", raw_bucket
+            )
+            return Response(
+                {"error": f"Failed to store onboarding PDF: {e}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         # Upsert: replace existing onboarding_data.pdf asset if present
@@ -883,11 +887,10 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                     "created but file is not stored."
                 )
         except Exception as e:
-            logger.error(
-                "GCS upload failed for %s (bucket=%s): %s",
+            logger.exception(
+                "GCS upload failed for %s (bucket=%s)",
                 safe_filename,
                 raw_bucket,
-                e,
             )
             return Response(
                 {
