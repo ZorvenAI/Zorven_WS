@@ -92,8 +92,20 @@ class GCSService:
 
         if self.client:
             self.bucket = self.client.bucket(self.bucket_name)
+            logger.info(
+                "GCS service initialized: project=%s bucket=%s",
+                self.project_id,
+                self.bucket_name,
+            )
         else:
             self.bucket = None
+            logger.error(
+                "GCS service NOT available — file uploads will fail. "
+                "Set GCS_CREDENTIALS_JSON env var with the service account "
+                "JSON to enable file storage. (bucket=%s, project=%s)",
+                self.bucket_name,
+                self.project_id,
+            )
 
     def get_bucket(self, bucket_name=None):
         """Return a GCS bucket object.
