@@ -80,18 +80,29 @@ class GCSService:
         self.credentials_path = settings.GS_CREDENTIALS_PATH
 
         # Initialize GCS client
+        self._init_error = None
         try:
             credentials = self._resolve_credentials()
             self.client = storage.Client(
                 credentials=credentials, project=self.project_id
             )
         except Exception as e:
-            # Fallback: create a mock client for development
+            self._init_error = str(e)
+            # Use print() because logging may not be configured yet
+            # at module import time
+            print(
+                f"[GCS] WARNING: Initialization failed: {e}. "
+                f"File uploads will not work."
+            )
             logger.warning("GCS initialization failed: %s. Using mock service.", e)
             self.client = None
 
         if self.client:
             self.bucket = self.client.bucket(self.bucket_name)
+            print(
+                f"[GCS] OK: project={self.project_id} "
+                f"bucket={self.bucket_name}"
+            )
             logger.info(
                 "GCS service initialized: project=%s bucket=%s",
                 self.project_id,
@@ -99,12 +110,18 @@ class GCSService:
             )
         else:
             self.bucket = None
+            print(
+                f"[GCS] ERROR: GCS not available. "
+                f"bucket={self.bucket_name} project={self.project_id} "
+                f"error={self._init_error}"
+            )
             logger.error(
                 "GCS service NOT available — file uploads will fail. "
-                "Set GCS_CREDENTIALS_JSON env var with the service account "
-                "JSON to enable file storage. (bucket=%s, project=%s)",
+                "Set GCS_CREDENTIALS_JSON env var. (bucket=%s, project=%s, "
+                "error=%s)",
                 self.bucket_name,
                 self.project_id,
+                self._init_error,
             )
 
     def get_bucket(self, bucket_name=None):
@@ -128,28 +145,29 @@ class GCSService:
         # 1. Inline JSON from environment variable (Railway / Heroku / CI)
         creds_json = os.environ.get("GCS_CREDENTIALS_JSON", "").strip()
         if creds_json:
-            logger.info("Loading GCS credentials from GCS_CREDENTIALS_JSON env var")
+            print(f"[GCS] Loading credentials from GCS_CREDENTIALS_JSON ({len(creds_json)} chars)")
             try:
                 info = json.loads(creds_json)
-                return service_account.Credentials.from_service_account_info(
+                creds = service_account.Credentials.from_service_account_info(
                     info, scopes=GCS_SCOPES
                 )
+                print(f"[GCS] Credentials loaded: {info.get('client_email', '?')}")
+                return creds
             except (json.JSONDecodeError, ValueError) as e:
+                print(f"[GCS] Invalid GCS_CREDENTIALS_JSON: {e}")
                 logger.warning(
-                    "Invalid GCS_CREDENTIALS_JSON env var; falling back to "
-                    "file/ADC credentials: %s",
-                    e,
+                    "Invalid GCS_CREDENTIALS_JSON env var; falling back: %s", e
                 )
 
         # 2. Service account key file on disk (local development)
         if self.credentials_path and os.path.exists(self.credentials_path):
-            logger.info("Loading GCS credentials from file: %s", self.credentials_path)
+            print(f"[GCS] Loading credentials from file: {self.credentials_path}")
             return service_account.Credentials.from_service_account_file(
                 self.credentials_path, scopes=GCS_SCOPES
             )
 
         # 3. Fall back to Application Default Credentials (with explicit scopes)
-        logger.info("No explicit GCS credentials found, using ADC")
+        print("[GCS] No explicit credentials found, trying ADC")
         credentials, project = google.auth.default(scopes=GCS_SCOPES)
         return credentials
 
