@@ -334,22 +334,24 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 )
                 gcs_uploaded = True
             else:
-                require_gcs = getattr(settings, "REQUIRE_GCS_UPLOAD", False)
-                if require_gcs:
-                    logger.error("GCS is required but not configured")
-                    return Response(
-                        {"error": "File storage is not configured"},
-                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                if not settings.DEBUG:
+                    logger.error(
+                        "GCS_CREDENTIALS_JSON not configured — cannot store "
+                        "onboarding PDF. Set the env var on Railway."
                     )
-                logger.warning(
-                    "GCS not configured — onboarding PDF not stored. "
-                    "Set REQUIRE_GCS_UPLOAD=True in production."
-                )
-        except Exception:
-            logger.exception("GCS upload failed for onboarding PDF (bucket=%s)", raw_bucket)
-            # Don't return 500 — create the asset record anyway so the
-            # onboarding flow isn't blocked by a GCS outage.
-            gcs_uploaded = False
+                else:
+                    logger.warning(
+                        "GCS not configured (DEBUG mode) — onboarding PDF "
+                        "not stored."
+                    )
+        except Exception as e:
+            logger.exception(
+                "GCS upload failed for onboarding PDF (bucket=%s)", raw_bucket
+            )
+            return Response(
+                {"error": f"Failed to store onboarding PDF: {e}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         # Upsert: replace existing onboarding_data.pdf asset if present
         existing_asset = BrandAsset.objects.filter(
@@ -863,28 +865,42 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 )
                 gcs_uploaded = True
             else:
-                # GCS not configured - check if we should fail or allow for dev/testing
-                require_gcs = getattr(settings, "REQUIRE_GCS_UPLOAD", False)
-                if require_gcs:
-                    logger.error("GCS is required but not configured")
+                # GCS client is None — credentials not configured
+                if not settings.DEBUG:
+                    # Production: fail clearly so the operator fixes env vars
+                    logger.error(
+                        "GCS_CREDENTIALS_JSON not configured — cannot upload "
+                        "files. Set the GCS_CREDENTIALS_JSON environment "
+                        "variable with the service account JSON."
+                    )
                     return Response(
-                        {"error": "File storage is not configured"},
+                        {
+                            "error": (
+                                "File storage is not configured. Please contact "
+                                "your administrator to set up GCS credentials."
+                            )
+                        },
                         status=status.HTTP_503_SERVICE_UNAVAILABLE,
                     )
                 logger.warning(
-                    "GCS not configured, asset record will be created but file "
-                    "is not stored. Set REQUIRE_GCS_UPLOAD=True in production."
+                    "GCS not configured (DEBUG mode), asset record will be "
+                    "created but file is not stored."
                 )
         except Exception as e:
-            logger.error(
-                "GCS upload failed for %s (bucket=%s): %s",
+            logger.exception(
+                "GCS upload failed for %s (bucket=%s)",
                 safe_filename,
                 raw_bucket,
-                e,
             )
-            # Don't return 500 — create the asset record so the user
-            # sees the file and can retry pipeline processing later.
-            gcs_uploaded = False
+            return Response(
+                {
+                    "error": (
+                        f"Failed to upload file to storage: {e}. "
+                        "Please try again or contact your administrator."
+                    )
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         # Handle replacement of existing asset
         actual_bucket = raw_bucket
