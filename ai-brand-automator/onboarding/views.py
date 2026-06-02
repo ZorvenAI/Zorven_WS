@@ -768,26 +768,11 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         file = serializer.validated_data["file"]
         file_type = serializer.validated_data["file_type"]
 
-        # Define allowed file types — must cover everything the frontend
-        # accept="image/*,.pdf,.doc,.docx,.txt,video/*" allows
-        allowed_types = [
-            "image/jpeg",
-            "image/png",
-            "image/gif",
-            "image/webp",
-            "image/svg+xml",
-            "image/bmp",
-            "image/tiff",
-            "image/heic",
-            "image/heif",
-            "video/mp4",
-            "video/quicktime",
-            "video/x-msvideo",
-            "application/pdf",
-            "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "text/plain",
-        ]
+        # Centralized allowed types from brand_automator.validators
+        # (single source of truth for serializer, view, and validator)
+        from brand_automator.validators import ALLOWED_UPLOAD_TYPES
+
+        allowed_types = ALLOWED_UPLOAD_TYPES
 
         # Validate file
         validation_result = validate_file_upload(file, allowed_types, max_size_mb=50)
