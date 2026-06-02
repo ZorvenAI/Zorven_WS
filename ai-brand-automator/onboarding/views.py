@@ -760,28 +760,31 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         """Upload a brand asset file"""
         serializer = BrandAssetUploadSerializer(data=request.data)
         if not serializer.is_valid():
+            logger.warning(
+                "Asset upload validation failed: %s", serializer.errors
+            )
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         file = serializer.validated_data["file"]
         file_type = serializer.validated_data["file_type"]
 
-        # Define allowed file types
-        allowed_types = [
-            "image/jpeg",
-            "image/png",
-            "image/gif",
-            "image/webp",
-            "video/mp4",
-            "video/quicktime",
-            "application/pdf",
-            "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "text/plain",
-        ]
+        # Centralized allowed types from brand_automator.validators
+        # (single source of truth for serializer, view, and validator)
+        from brand_automator.validators import ALLOWED_UPLOAD_TYPES
+
+        allowed_types = ALLOWED_UPLOAD_TYPES
 
         # Validate file
         validation_result = validate_file_upload(file, allowed_types, max_size_mb=50)
         if not validation_result["valid"]:
+            logger.warning(
+                "Asset upload file validation failed: file=%s content_type=%s "
+                "size=%s error=%s",
+                file.name,
+                file.content_type,
+                file.size,
+                validation_result["error"],
+            )
             return Response(
                 {"error": validation_result["error"]},
                 status=status.HTTP_400_BAD_REQUEST,

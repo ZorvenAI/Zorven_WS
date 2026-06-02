@@ -177,17 +177,17 @@ class BrandAssetUploadSerializer(serializers.Serializer):
         if value.size > max_size:
             raise serializers.ValidationError("File size cannot exceed 50MB")
 
-        # File type validation
+        # Centralized allowed types from brand_automator.validators
+        from brand_automator.validators import (
+            ALLOWED_DOCUMENT_TYPES,
+            ALLOWED_IMAGE_TYPES,
+            ALLOWED_VIDEO_TYPES,
+        )
+
         allowed_types = {
-            "image": ["image/jpeg", "image/png", "image/gif", "image/webp"],
-            "video": ["video/mp4", "video/avi", "video/mov"],
-            "document": [
-                "application/pdf",
-                "application/msword",
-                "application/vnd.openxmlformats-officedocument."
-                "wordprocessingml.document",
-                "text/plain",
-            ],
+            "image": ALLOWED_IMAGE_TYPES,
+            "video": ALLOWED_VIDEO_TYPES,
+            "document": ALLOWED_DOCUMENT_TYPES,
         }
 
         file_type = self.initial_data.get("file_type")
