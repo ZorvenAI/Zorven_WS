@@ -70,6 +70,7 @@ class ZorvenGepaOptimizer:
             scorers: List of MLflow scorers for evaluation.
             agent_code: Agent code for budget lookup (e.g., "cga").
             max_metric_calls: Override budget (None = use §4.3 default).
+            tenant_id: Tenant ID for experiment namespacing (None = global).
 
         Returns:
             OptimizationResult with best candidate and run metadata.

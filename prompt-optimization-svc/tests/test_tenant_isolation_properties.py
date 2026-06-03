@@ -25,9 +25,9 @@ class TestExperimentNameProperties:
         name = get_mlflow_experiment_name(tenant_id)
         assert "prompt-optimization" in name
 
-    @given(st.text(min_size=1, max_size=30))
+    @given(st.from_regex(r"[A-Za-z0-9_\-]{1,30}", fullmatch=True))
     @settings(max_examples=50, deadline=None)
-    def test_tenant_name_always_longer_than_default(self, tenant_id):
+    def test_safe_tenant_name_always_longer_than_default(self, tenant_id):
         name = get_mlflow_experiment_name(tenant_id)
         default = get_mlflow_experiment_name(None)
         assert len(name) > len(default)

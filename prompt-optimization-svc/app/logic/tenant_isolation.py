@@ -7,33 +7,44 @@ experiments, golden datasets, and GEPA reflection traces.
 
 import logging
 import re
-from typing import Optional
+from typing import Optional, TypeVar
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_EXPERIMENT = "prompt-optimization"
 TENANT_EXPERIMENT_TEMPLATE = "prompt-optimization-tenant-{tenant_id}"
 
+# Only allow safe characters in experiment names
+_SAFE_ID_PATTERN = re.compile(r"[^A-Za-z0-9_\-]")
+
+T = TypeVar("T")
+
 
 def get_mlflow_experiment_name(tenant_id: Optional[str] = None) -> str:
     """Get tenant-scoped MLflow experiment name (AC-1).
+
+    Sanitizes tenant_id to MLflow-safe characters [A-Za-z0-9_-].
+    Falls back to global experiment if sanitized ID is empty.
 
     Args:
         tenant_id: Tenant identifier, or None for global.
 
     Returns:
         Experiment name: "prompt-optimization" for global,
-        "prompt-optimization-tenant-{tid}" for tenant-scoped.
+        "prompt-optimization-tenant-{sanitized_tid}" for tenant-scoped.
     """
     if not tenant_id:
         return DEFAULT_EXPERIMENT
-    return TENANT_EXPERIMENT_TEMPLATE.format(tenant_id=tenant_id)
+    sanitized = _SAFE_ID_PATTERN.sub("", tenant_id)
+    if not sanitized:
+        return DEFAULT_EXPERIMENT
+    return TENANT_EXPERIMENT_TEMPLATE.format(tenant_id=sanitized)
 
 
 def filter_golden_examples_by_tenant(
-    examples: list,
+    examples: list[T],
     tenant_id: Optional[str] = None,
-) -> list:
+) -> list[T]:
     """Filter golden examples by tenant isolation (AC-2).
 
     Returns examples belonging to the specified tenant plus
@@ -47,7 +58,7 @@ def filter_golden_examples_by_tenant(
     Returns:
         Filtered list of examples.
     """
-    result = []
+    result: list[T] = []
     for ex in examples:
         ex_tenant = getattr(ex, "tenant_id", None)
         if ex_tenant is None:
@@ -83,7 +94,6 @@ def validate_no_cross_tenant_data(
         return True
 
     # Check for explicit tenant_id references in the context
-    # Pattern: tenant_id or tenant: followed by an ID-like string
     tenant_pattern = re.compile(
         r"tenant[_\-]?id[\"'\s:=]+([a-zA-Z0-9_\-]+)", re.IGNORECASE
     )
@@ -99,16 +109,19 @@ def validate_no_cross_tenant_data(
             )
             return False
 
-    # If we have a list of known tenant IDs, check for any of them
+    # If we have a list of known tenant IDs, use word-boundary regex
+    # to avoid false positives (e.g., "t1" matching inside "t10")
     if all_tenant_ids:
         for other_tid in all_tenant_ids:
-            if other_tid != tenant_id and other_tid in reflection_context:
-                logger.warning(
-                    "Cross-tenant data detected: tenant '%s' found in "
-                    "context for tenant '%s'",
-                    other_tid,
-                    tenant_id,
-                )
-                return False
+            if other_tid != tenant_id:
+                boundary_pattern = re.compile(r"\b" + re.escape(other_tid) + r"\b")
+                if boundary_pattern.search(reflection_context):
+                    logger.warning(
+                        "Cross-tenant data detected: tenant '%s' found in "
+                        "context for tenant '%s'",
+                        other_tid,
+                        tenant_id,
+                    )
+                    return False
 
     return True

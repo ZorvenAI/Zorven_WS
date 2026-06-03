@@ -1,11 +1,10 @@
 """Unit tests for tenant isolation enforcement (US-040, OPT-10)."""
 
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 from app.logic.tenant_isolation import (
     DEFAULT_EXPERIMENT,
-    TENANT_EXPERIMENT_TEMPLATE,
     filter_golden_examples_by_tenant,
     get_mlflow_experiment_name,
     validate_no_cross_tenant_data,
