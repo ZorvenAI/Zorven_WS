@@ -1,12 +1,13 @@
 """RBAC permission matrix for prompt optimization (§11.1).
 
-Enforces OWNER/ADMIN/EDITOR/VIEWER role matrix across all
-endpoints. Provides a FastAPI dependency for role-based access.
+Defines the OWNER/ADMIN/EDITOR/VIEWER role matrix and provides
+a FastAPI dependency for role-based access control. Endpoints
+wire this dependency via Depends(require_permission(...)).
 """
 
 import logging
 from enum import Enum
-from typing import Optional
+from typing import Callable, Coroutine, Optional
 
 from fastapi import Header, HTTPException
 
@@ -132,7 +133,9 @@ def resolve_role(role_header: Optional[str]) -> Role:
         return Role.VIEWER
 
 
-def require_permission(permission: Permission):
+def require_permission(
+    permission: Permission,
+) -> Callable[..., Coroutine[None, None, Decision]]:
     """FastAPI dependency that enforces RBAC (AC-1, AC-2, AC-3).
 
     Extracts user role from X-User-Role header, checks against

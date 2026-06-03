@@ -3,8 +3,6 @@
 AC-4: Tests cover every cell of the matrix (4 roles × 9 permissions = 36 cells).
 """
 
-import pytest
-
 from app.auth.rbac import (
     Decision,
     Permission,

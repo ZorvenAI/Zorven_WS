@@ -1,5 +1,7 @@
 """Integration tests for RBAC (US-042)."""
 
+import pytest
+
 from app.auth.rbac import (
     Decision,
     Permission,
@@ -9,6 +11,7 @@ from app.auth.rbac import (
 )
 
 
+@pytest.mark.integration
 class TestFullMatrix:
     """Validate every cell of the permission matrix."""
 
