@@ -48,12 +48,8 @@ class ZorvenGepaOptimizer:
         reflection_model: Optional[str] = None,
         mlflow_tracking_uri: Optional[str] = None,
     ) -> None:
-        self.reflection_model = (
-            reflection_model or self.DEFAULT_REFLECTION_MODEL
-        )
-        self.mlflow_tracking_uri = (
-            mlflow_tracking_uri or settings.MLFLOW_TRACKING_URI
-        )
+        self.reflection_model = reflection_model or self.DEFAULT_REFLECTION_MODEL
+        self.mlflow_tracking_uri = mlflow_tracking_uri or settings.MLFLOW_TRACKING_URI
 
     def optimize(
         self,
@@ -63,6 +59,7 @@ class ZorvenGepaOptimizer:
         scorers: list[Any],
         agent_code: str,
         max_metric_calls: Optional[int] = None,
+        tenant_id: Optional[str] = None,
     ) -> OptimizationResult:
         """Run a GEPA optimization with Zorven defaults.
 
@@ -73,11 +70,14 @@ class ZorvenGepaOptimizer:
             scorers: List of MLflow scorers for evaluation.
             agent_code: Agent code for budget lookup (e.g., "cga").
             max_metric_calls: Override budget (None = use §4.3 default).
+            tenant_id: Tenant ID for experiment namespacing (None = global).
 
         Returns:
             OptimizationResult with best candidate and run metadata.
         """
-        budget = max_metric_calls if max_metric_calls is not None else get_budget(agent_code)
+        budget = (
+            max_metric_calls if max_metric_calls is not None else get_budget(agent_code)
+        )
         start_time = time.monotonic()
 
         logger.info(
@@ -98,7 +98,10 @@ class ZorvenGepaOptimizer:
         try:
             import mlflow
 
+            from app.logic.tenant_isolation import get_mlflow_experiment_name
+
             mlflow.set_tracking_uri(self.mlflow_tracking_uri)
+            mlflow.set_experiment(get_mlflow_experiment_name(tenant_id))
 
             from mlflow.genai.optimize import optimize_prompts
             from mlflow.genai.optimize.optimizers import (
