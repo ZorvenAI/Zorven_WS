@@ -26,6 +26,8 @@ from app.api.schemas import (
     ApprovalRequest,
     ApprovalResponse,
     RejectionRequest,
+    TenantOverrideRequest,
+    TenantOverrideResponse,
 )
 from app.logic.lifecycle import (
     InvalidTransitionError,
@@ -680,6 +682,80 @@ async def reject_optimization_run(run_id: str, request: RejectionRequest):
             decision=decision.decision,
             approved_by=decision.approved_by,
             decided_at=decision.decided_at.isoformat(),
+        )
+    finally:
+        await cache.close()
+
+
+@router.post(
+    "/v1/prompts/{name}/tenant-overrides",
+    response_model=TenantOverrideResponse,
+)
+async def create_tenant_override_endpoint(name: str, request: TenantOverrideRequest):
+    """Create a tenant-specific prompt override (AC-1: OWNER only)."""
+    from app.logic.tenant_override import create_tenant_override
+
+    result = await create_tenant_override(
+        prompt_name=name,
+        tenant_id=request.tenant_id,
+        template=request.template,
+        mlflow_registry=mlflow_registry,
+    )
+    return TenantOverrideResponse(**result)
+
+
+@router.get(
+    "/v1/prompts/{name}/tenant-overrides/{tenant_id}",
+    response_model=None,
+)
+async def get_tenant_override_endpoint(name: str, tenant_id: str):
+    """Get a tenant-specific prompt override."""
+    from app.logic.tenant_override import get_tenant_override
+
+    result = await get_tenant_override(
+        prompt_name=name,
+        tenant_id=tenant_id,
+        mlflow_registry=mlflow_registry,
+    )
+    if result is None:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"No tenant override for '{name}' tenant '{tenant_id}'"},
+        )
+    return TenantOverrideResponse(**result)
+
+
+@router.delete(
+    "/v1/prompts/{name}/tenant-overrides/{tenant_id}",
+    response_model=None,
+)
+async def delete_tenant_override_endpoint(name: str, tenant_id: str):
+    """Delete a tenant-specific prompt override (AC-1, AC-3)."""
+    from app.cache.prompt_cache import PromptCacheManager
+    from app.core.config import settings
+    from app.logic.tenant_override import delete_tenant_override
+
+    cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
+    await cache.connect()
+    try:
+        deleted = await delete_tenant_override(
+            prompt_name=name,
+            tenant_id=tenant_id,
+            mlflow_registry=mlflow_registry,
+            prompt_cache=cache,
+        )
+        if not deleted:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "detail": f"No tenant override for '{name}' tenant '{tenant_id}'"
+                },
+            )
+        return JSONResponse(
+            status_code=200,
+            content={
+                "detail": f"Tenant override deleted for '{name}' tenant '{tenant_id}'"
+            },
         )
     finally:
         await cache.close()

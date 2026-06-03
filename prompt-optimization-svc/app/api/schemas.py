@@ -307,3 +307,23 @@ class ApprovalResponse(BaseModel):
     decision: Literal["approved", "rejected"]
     approved_by: str
     decided_at: str
+
+
+# ── Tenant override schemas ──
+
+
+class TenantOverrideRequest(BaseModel):
+    """Request for POST /v1/prompts/{name}/tenant-overrides."""
+
+    template: str = Field(..., min_length=1, description="Override prompt template")
+    tenant_id: str = Field(..., min_length=1, description="Tenant identifier")
+
+
+class TenantOverrideResponse(BaseModel):
+    """Response for tenant override operations."""
+
+    prompt_name: str
+    tenant_id: str
+    version: int = 0
+    template: str = ""
+    state: str = "TENANT_OVERRIDE"
