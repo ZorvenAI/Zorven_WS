@@ -10,6 +10,7 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 TENANT_CACHE_KEY = "prompt:{name}:tenant:{tenant_id}"
+DEFAULT_CACHE_TTL_SECONDS = 300  # 5 minutes, matches prompt cache default
 
 
 async def create_tenant_override(
@@ -50,12 +51,12 @@ async def create_tenant_override(
         )
         version = info.version
 
-    # Cache in Redis for fast resolution
+    # Cache in Redis for fast resolution (with TTL to prevent stale entries)
     if prompt_cache is not None:
         try:
             r = await prompt_cache.connect()
             key = TENANT_CACHE_KEY.format(name=prompt_name, tenant_id=tenant_id)
-            await r.set(key, template)
+            await r.set(key, template, ex=DEFAULT_CACHE_TTL_SECONDS)
         except Exception as exc:
             logger.warning("Failed to cache tenant override: %s", exc)
 
@@ -101,6 +102,7 @@ async def delete_tenant_override(
         True if override was found and deleted.
     """
     found = False
+    archived_version = 0
 
     # Archive the MLflow version
     if mlflow_registry is not None:
@@ -109,6 +111,7 @@ async def delete_tenant_override(
         )
         if override is not None:
             mlflow_registry.set_prompt_state(prompt_name, override.version, "ARCHIVED")
+            archived_version = override.version
             found = True
 
     # Delete Redis cache key (AC-3)
@@ -122,12 +125,12 @@ async def delete_tenant_override(
         except Exception as exc:
             logger.warning("Failed to delete tenant cache: %s", exc)
 
-    # Emit Kafka event
-    if lifecycle_producer is not None and found:
+    # Emit Kafka event only when an MLflow version was actually archived
+    if lifecycle_producer is not None and archived_version > 0:
         lifecycle_producer.send_lifecycle_event_sync(
             event_type="prompt.tenant_override.deleted",
             prompt_name=prompt_name,
-            version=0,
+            version=archived_version,
             from_state="TENANT_OVERRIDE",
             to_state="ARCHIVED",
             tenant_id=tenant_id,

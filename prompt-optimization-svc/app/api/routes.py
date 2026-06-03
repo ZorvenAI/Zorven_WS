@@ -691,22 +691,41 @@ async def reject_optimization_run(run_id: str, request: RejectionRequest):
     "/v1/prompts/{name}/tenant-overrides",
     response_model=TenantOverrideResponse,
 )
-async def create_tenant_override_endpoint(name: str, request: TenantOverrideRequest):
+async def create_tenant_override_endpoint(
+    name: str,
+    request: TenantOverrideRequest,
+    x_tenant_id: str = Header(default="", alias="X-Tenant-ID"),
+):
     """Create a tenant-specific prompt override (AC-1: OWNER only)."""
+    from app.cache.prompt_cache import PromptCacheManager
+    from app.core.config import settings
     from app.logic.tenant_override import create_tenant_override
 
-    result = await create_tenant_override(
-        prompt_name=name,
-        tenant_id=request.tenant_id,
-        template=request.template,
-        mlflow_registry=mlflow_registry,
-    )
-    return TenantOverrideResponse(**result)
+    # Verify tenant_id matches the authenticated tenant
+    if x_tenant_id and request.tenant_id != x_tenant_id:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "tenant_id in body must match X-Tenant-ID header"},
+        )
+
+    cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
+    await cache.connect()
+    try:
+        result = await create_tenant_override(
+            prompt_name=name,
+            tenant_id=request.tenant_id,
+            template=request.template,
+            mlflow_registry=mlflow_registry,
+            prompt_cache=cache,
+        )
+        return TenantOverrideResponse(**result)
+    finally:
+        await cache.close()
 
 
 @router.get(
     "/v1/prompts/{name}/tenant-overrides/{tenant_id}",
-    response_model=None,
+    response_model=TenantOverrideResponse,
 )
 async def get_tenant_override_endpoint(name: str, tenant_id: str):
     """Get a tenant-specific prompt override."""
@@ -727,7 +746,6 @@ async def get_tenant_override_endpoint(name: str, tenant_id: str):
 
 @router.delete(
     "/v1/prompts/{name}/tenant-overrides/{tenant_id}",
-    response_model=None,
 )
 async def delete_tenant_override_endpoint(name: str, tenant_id: str):
     """Delete a tenant-specific prompt override (AC-1, AC-3)."""
