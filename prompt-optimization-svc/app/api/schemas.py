@@ -327,3 +327,30 @@ class TenantOverrideResponse(BaseModel):
     version: int = 0
     template: str = ""
     state: str = "TENANT_OVERRIDE"
+
+
+class TenantOptimizationConfig(BaseModel):
+    """Full tenant optimization configuration."""
+
+    tenant_id: str = ""
+    prompt_optimization_enabled: bool = True
+    prompt_auto_promotion: bool = True
+    prompt_optimization_model: str = "claude-sonnet-4-6"
+    prompt_optimization_budget: int = 200
+    prompt_promotion_threshold: float = 0.05
+    prompt_cache_ttl_seconds: int = 300
+    golden_dataset_default_size: int = 10
+    wf3_optimization_schedule: str = "monthly"
+
+
+class TenantConfigUpdateRequest(BaseModel):
+    """Partial update for tenant optimization config."""
+
+    prompt_optimization_enabled: Optional[bool] = None
+    prompt_auto_promotion: Optional[bool] = None
+    prompt_optimization_model: Optional[str] = None
+    prompt_optimization_budget: Optional[int] = None
+    prompt_promotion_threshold: Optional[float] = None
+    prompt_cache_ttl_seconds: Optional[int] = None
+    golden_dataset_default_size: Optional[int] = None
+    wf3_optimization_schedule: Optional[str] = None

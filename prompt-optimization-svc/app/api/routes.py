@@ -777,3 +777,87 @@ async def delete_tenant_override_endpoint(name: str, tenant_id: str):
         )
     finally:
         await cache.close()
+
+
+@router.get("/v1/config/tenant/{tenant_id}", response_model=None)
+async def get_tenant_config(tenant_id: str):
+    """Get all tenant optimization configuration keys (AC-2: defaults applied)."""
+    from app.api.schemas import TenantOptimizationConfig
+    from app.cache.prompt_cache import PromptCacheManager
+    from app.cache.tenant_config import TenantConfigManager
+    from app.core.config import settings
+
+    cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
+    await cache.connect()
+    try:
+        mgr = TenantConfigManager(cache)
+        return TenantOptimizationConfig(
+            tenant_id=tenant_id,
+            prompt_optimization_enabled=await mgr.get_optimization_enabled(tenant_id),
+            prompt_auto_promotion=await mgr.get_auto_promotion(tenant_id),
+            prompt_optimization_model=await mgr.get_optimization_model(tenant_id),
+            prompt_optimization_budget=await mgr.get_optimization_budget(tenant_id),
+            prompt_promotion_threshold=await mgr.get_promotion_threshold(tenant_id),
+            prompt_cache_ttl_seconds=await mgr.get_prompt_cache_ttl(tenant_id),
+            golden_dataset_default_size=await mgr.get_golden_dataset_size(tenant_id),
+            wf3_optimization_schedule=await mgr.get_optimization_schedule(tenant_id),
+        )
+    finally:
+        await cache.close()
+
+
+@router.put("/v1/config/tenant/{tenant_id}", response_model=None)
+async def update_tenant_config(tenant_id: str, request: "TenantConfigUpdateRequest"):
+    """Update tenant optimization configuration keys."""
+    from app.api.schemas import TenantConfigUpdateRequest, TenantOptimizationConfig
+    from app.cache.prompt_cache import PromptCacheManager
+    from app.cache.tenant_config import TenantConfigManager
+    from app.core.config import settings
+
+    cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
+    await cache.connect()
+    try:
+        mgr = TenantConfigManager(cache)
+        if request.prompt_optimization_enabled is not None:
+            await mgr.set_optimization_enabled(
+                tenant_id, request.prompt_optimization_enabled
+            )
+        if request.prompt_auto_promotion is not None:
+            await mgr.set_auto_promotion(tenant_id, request.prompt_auto_promotion)
+        if request.prompt_optimization_model is not None:
+            await mgr.set_optimization_model(
+                tenant_id, request.prompt_optimization_model
+            )
+        if request.prompt_optimization_budget is not None:
+            await mgr.set_optimization_budget(
+                tenant_id, request.prompt_optimization_budget
+            )
+        if request.prompt_promotion_threshold is not None:
+            await mgr.set_promotion_threshold(
+                tenant_id, request.prompt_promotion_threshold
+            )
+        if request.prompt_cache_ttl_seconds is not None:
+            await mgr.set_prompt_cache_ttl(tenant_id, request.prompt_cache_ttl_seconds)
+        if request.golden_dataset_default_size is not None:
+            await mgr.set_golden_dataset_size(
+                tenant_id, request.golden_dataset_default_size
+            )
+        if request.wf3_optimization_schedule is not None:
+            await mgr.set_optimization_schedule(
+                tenant_id, request.wf3_optimization_schedule
+            )
+
+        # Return updated config
+        return TenantOptimizationConfig(
+            tenant_id=tenant_id,
+            prompt_optimization_enabled=await mgr.get_optimization_enabled(tenant_id),
+            prompt_auto_promotion=await mgr.get_auto_promotion(tenant_id),
+            prompt_optimization_model=await mgr.get_optimization_model(tenant_id),
+            prompt_optimization_budget=await mgr.get_optimization_budget(tenant_id),
+            prompt_promotion_threshold=await mgr.get_promotion_threshold(tenant_id),
+            prompt_cache_ttl_seconds=await mgr.get_prompt_cache_ttl(tenant_id),
+            golden_dataset_default_size=await mgr.get_golden_dataset_size(tenant_id),
+            wf3_optimization_schedule=await mgr.get_optimization_schedule(tenant_id),
+        )
+    finally:
+        await cache.close()
