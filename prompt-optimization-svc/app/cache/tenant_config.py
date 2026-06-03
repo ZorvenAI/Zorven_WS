@@ -1,6 +1,8 @@
 """Tenant-configurable optimization settings (§10.2).
 
-All keys follow pattern: tenant:{tid}:config.<key_name>
+Each key is stored as an individual Redis string at:
+    tenant:{tid}:config.<key_name>
+
 Defaults from §10.2 and §20.1 applied when keys are missing.
 """
 
@@ -214,7 +216,10 @@ class TenantConfigManager:
             if value is None:
                 return DEFAULT_OPTIMIZATION_BUDGET
             return clamp_optimization_budget(int(value))
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Failed to read optimization budget for %s: %s", tenant_id, exc
+            )
             return DEFAULT_OPTIMIZATION_BUDGET
 
     async def set_optimization_budget(self, tenant_id: str, budget: int) -> None:
@@ -233,7 +238,10 @@ class TenantConfigManager:
             if value is None:
                 return DEFAULT_PROMOTION_THRESHOLD
             return max(0.0, min(1.0, float(value)))
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Failed to read promotion threshold for %s: %s", tenant_id, exc
+            )
             return DEFAULT_PROMOTION_THRESHOLD
 
     async def set_promotion_threshold(self, tenant_id: str, threshold: float) -> None:
@@ -243,7 +251,8 @@ class TenantConfigManager:
     # --- WF3 optimization schedule ---
 
     async def get_optimization_schedule(self, tenant_id: Optional[str] = None) -> str:
-        return await self._get_str(self.SCHEDULE_KEY, tenant_id, DEFAULT_SCHEDULE)
+        raw = await self._get_str(self.SCHEDULE_KEY, tenant_id, DEFAULT_SCHEDULE)
+        return validate_schedule(raw)
 
     async def set_optimization_schedule(self, tenant_id: str, schedule: str) -> None:
         validated = validate_schedule(schedule)

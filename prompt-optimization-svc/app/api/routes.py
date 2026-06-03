@@ -780,12 +780,21 @@ async def delete_tenant_override_endpoint(name: str, tenant_id: str):
 
 
 @router.get("/v1/config/tenant/{tenant_id}", response_model=None)
-async def get_tenant_config(tenant_id: str):
+async def get_tenant_config(
+    tenant_id: str,
+    x_tenant_id: str = Header(default="", alias="X-Tenant-ID"),
+):
     """Get all tenant optimization configuration keys (AC-2: defaults applied)."""
     from app.api.schemas import TenantOptimizationConfig
     from app.cache.prompt_cache import PromptCacheManager
     from app.cache.tenant_config import TenantConfigManager
     from app.core.config import settings
+
+    if x_tenant_id and tenant_id != x_tenant_id:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Cannot read another tenant's configuration"},
+        )
 
     cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
     await cache.connect()
@@ -807,9 +816,19 @@ async def get_tenant_config(tenant_id: str):
 
 
 @router.put("/v1/config/tenant/{tenant_id}", response_model=None)
-async def update_tenant_config(tenant_id: str, request: "TenantConfigUpdateRequest"):
+async def update_tenant_config(
+    tenant_id: str,
+    request: "TenantConfigUpdateRequest",
+    x_tenant_id: str = Header(default="", alias="X-Tenant-ID"),
+):
     """Update tenant optimization configuration keys."""
     from app.api.schemas import TenantConfigUpdateRequest, TenantOptimizationConfig
+
+    if x_tenant_id and tenant_id != x_tenant_id:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Cannot modify another tenant's configuration"},
+        )
     from app.cache.prompt_cache import PromptCacheManager
     from app.cache.tenant_config import TenantConfigManager
     from app.core.config import settings
