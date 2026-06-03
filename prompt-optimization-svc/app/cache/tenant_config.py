@@ -1,7 +1,9 @@
-"""Tenant-configurable prompt cache TTL (§10.2).
+"""Tenant-configurable optimization settings (§10.2).
 
-Redis key: tenant:<tid>:config.prompt_cache_ttl_seconds
-Clamped to [10, 3600] with 300s default.
+Each key is stored as an individual Redis string at:
+    tenant:{tid}:config.<key_name>
+
+Defaults from §10.2 and §20.1 applied when keys are missing.
 """
 
 import logging
@@ -11,13 +13,34 @@ from app.cache.prompt_cache import PromptCacheManager
 
 logger = logging.getLogger(__name__)
 
+# Prompt cache TTL
 DEFAULT_TTL = 300
 MIN_TTL = 10
 MAX_TTL = 3600
 
+# Golden dataset size
 DEFAULT_DATASET_SIZE = 10
 MIN_DATASET_SIZE = 3
 MAX_DATASET_SIZE = 50
+
+# Optimization enabled/auto-promotion
+DEFAULT_OPTIMIZATION_ENABLED = True
+DEFAULT_AUTO_PROMOTION = True
+
+# Optimization model
+DEFAULT_OPTIMIZATION_MODEL = "claude-sonnet-4-6"
+
+# Optimization budget (max_metric_calls)
+DEFAULT_OPTIMIZATION_BUDGET = 200
+MIN_OPTIMIZATION_BUDGET = 50
+MAX_OPTIMIZATION_BUDGET = 1000
+
+# Promotion threshold
+DEFAULT_PROMOTION_THRESHOLD = 0.05
+
+# WF3 optimization schedule
+VALID_SCHEDULES = ("on-demand", "biweekly", "monthly", "quarterly")
+DEFAULT_SCHEDULE = "monthly"
 
 
 def clamp_ttl(ttl: int) -> int:
@@ -30,11 +53,29 @@ def clamp_dataset_size(size: int) -> int:
     return max(MIN_DATASET_SIZE, min(MAX_DATASET_SIZE, size))
 
 
+def clamp_optimization_budget(budget: int) -> int:
+    """Clamp optimization budget to [MIN, MAX] inclusive."""
+    return max(MIN_OPTIMIZATION_BUDGET, min(MAX_OPTIMIZATION_BUDGET, budget))
+
+
+def validate_schedule(schedule: str) -> str:
+    """Validate schedule against allowed values. Returns default if invalid."""
+    if schedule in VALID_SCHEDULES:
+        return schedule
+    return DEFAULT_SCHEDULE
+
+
 class TenantConfigManager:
     """Read/write per-tenant configuration from Redis."""
 
     CONFIG_KEY_TEMPLATE = "tenant:{tenant_id}:config.prompt_cache_ttl_seconds"
     DATASET_SIZE_KEY_TEMPLATE = "tenant:{tenant_id}:config.golden_dataset_default_size"
+    OPT_ENABLED_KEY = "tenant:{tenant_id}:config.prompt_optimization_enabled"
+    AUTO_PROMOTION_KEY = "tenant:{tenant_id}:config.prompt_auto_promotion"
+    OPT_MODEL_KEY = "tenant:{tenant_id}:config.prompt_optimization_model"
+    OPT_BUDGET_KEY = "tenant:{tenant_id}:config.prompt_optimization_budget"
+    PROMOTION_THRESHOLD_KEY = "tenant:{tenant_id}:config.prompt_promotion_threshold"
+    SCHEDULE_KEY = "tenant:{tenant_id}:config.wf3_optimization_schedule"
 
     def __init__(self, prompt_cache: PromptCacheManager) -> None:
         self.prompt_cache = prompt_cache
@@ -129,6 +170,133 @@ class TenantConfigManager:
         except Exception as exc:
             logger.warning(
                 "Failed to set tenant dataset size for %s: %s",
+                tenant_id,
+                exc,
+            )
+
+    # --- Optimization enabled ---
+
+    async def get_optimization_enabled(self, tenant_id: Optional[str] = None) -> bool:
+        return await self._get_bool(
+            self.OPT_ENABLED_KEY, tenant_id, DEFAULT_OPTIMIZATION_ENABLED
+        )
+
+    async def set_optimization_enabled(self, tenant_id: str, enabled: bool) -> None:
+        await self._set_value(self.OPT_ENABLED_KEY, tenant_id, str(enabled).lower())
+
+    # --- Auto promotion ---
+
+    async def get_auto_promotion(self, tenant_id: Optional[str] = None) -> bool:
+        return await self._get_bool(
+            self.AUTO_PROMOTION_KEY, tenant_id, DEFAULT_AUTO_PROMOTION
+        )
+
+    async def set_auto_promotion(self, tenant_id: str, enabled: bool) -> None:
+        await self._set_value(self.AUTO_PROMOTION_KEY, tenant_id, str(enabled).lower())
+
+    # --- Optimization model ---
+
+    async def get_optimization_model(self, tenant_id: Optional[str] = None) -> str:
+        return await self._get_str(
+            self.OPT_MODEL_KEY, tenant_id, DEFAULT_OPTIMIZATION_MODEL
+        )
+
+    async def set_optimization_model(self, tenant_id: str, model: str) -> None:
+        await self._set_value(self.OPT_MODEL_KEY, tenant_id, model)
+
+    # --- Optimization budget ---
+
+    async def get_optimization_budget(self, tenant_id: Optional[str] = None) -> int:
+        if not tenant_id:
+            return DEFAULT_OPTIMIZATION_BUDGET
+        try:
+            r = await self.prompt_cache.connect()
+            key = self.OPT_BUDGET_KEY.format(tenant_id=tenant_id)
+            value = await r.get(key)
+            if value is None:
+                return DEFAULT_OPTIMIZATION_BUDGET
+            return clamp_optimization_budget(int(value))
+        except Exception as exc:
+            logger.warning(
+                "Failed to read optimization budget for %s: %s", tenant_id, exc
+            )
+            return DEFAULT_OPTIMIZATION_BUDGET
+
+    async def set_optimization_budget(self, tenant_id: str, budget: int) -> None:
+        clamped = clamp_optimization_budget(budget)
+        await self._set_value(self.OPT_BUDGET_KEY, tenant_id, str(clamped))
+
+    # --- Promotion threshold ---
+
+    async def get_promotion_threshold(self, tenant_id: Optional[str] = None) -> float:
+        if not tenant_id:
+            return DEFAULT_PROMOTION_THRESHOLD
+        try:
+            r = await self.prompt_cache.connect()
+            key = self.PROMOTION_THRESHOLD_KEY.format(tenant_id=tenant_id)
+            value = await r.get(key)
+            if value is None:
+                return DEFAULT_PROMOTION_THRESHOLD
+            return max(0.0, min(1.0, float(value)))
+        except Exception as exc:
+            logger.warning(
+                "Failed to read promotion threshold for %s: %s", tenant_id, exc
+            )
+            return DEFAULT_PROMOTION_THRESHOLD
+
+    async def set_promotion_threshold(self, tenant_id: str, threshold: float) -> None:
+        clamped = max(0.0, min(1.0, threshold))
+        await self._set_value(self.PROMOTION_THRESHOLD_KEY, tenant_id, str(clamped))
+
+    # --- WF3 optimization schedule ---
+
+    async def get_optimization_schedule(self, tenant_id: Optional[str] = None) -> str:
+        raw = await self._get_str(self.SCHEDULE_KEY, tenant_id, DEFAULT_SCHEDULE)
+        return validate_schedule(raw)
+
+    async def set_optimization_schedule(self, tenant_id: str, schedule: str) -> None:
+        validated = validate_schedule(schedule)
+        await self._set_value(self.SCHEDULE_KEY, tenant_id, validated)
+
+    # --- Private helpers ---
+
+    async def _get_bool(
+        self, key_template: str, tenant_id: Optional[str], default: bool
+    ) -> bool:
+        if not tenant_id:
+            return default
+        try:
+            r = await self.prompt_cache.connect()
+            key = key_template.format(tenant_id=tenant_id)
+            value = await r.get(key)
+            if value is None:
+                return default
+            return value.lower() in ("true", "1", "yes")
+        except Exception:
+            return default
+
+    async def _get_str(
+        self, key_template: str, tenant_id: Optional[str], default: str
+    ) -> str:
+        if not tenant_id:
+            return default
+        try:
+            r = await self.prompt_cache.connect()
+            key = key_template.format(tenant_id=tenant_id)
+            value = await r.get(key)
+            return value if value is not None else default
+        except Exception:
+            return default
+
+    async def _set_value(self, key_template: str, tenant_id: str, value: str) -> None:
+        try:
+            r = await self.prompt_cache.connect()
+            key = key_template.format(tenant_id=tenant_id)
+            await r.set(key, value)
+        except Exception as exc:
+            logger.warning(
+                "Failed to set tenant config %s for %s: %s",
+                key_template.split(".")[-1],
                 tenant_id,
                 exc,
             )
