@@ -3,7 +3,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header
 from fastapi.responses import JSONResponse
 
 from fastapi import Query
@@ -458,7 +458,6 @@ async def optimize_agent(
 
 @router.post("/v1/optimize/all", response_model=None)
 async def optimize_all(
-    request: Request,
     x_user_role: str = Header(default="", alias="X-User-Role"),
 ):
     """AC-1: Trigger platform-wide optimization — OWNER only."""

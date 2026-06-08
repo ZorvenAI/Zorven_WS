@@ -32,9 +32,8 @@ async def seeded_run(client):
 
     run_id = "integration-test-run-001"
     cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
-    await cache.connect()
+    r = await cache.connect()
     try:
-        r = await cache.connect()
         key = f"prompt:optimization:progress:{run_id}"
         await r.hset(
             key,

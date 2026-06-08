@@ -1,8 +1,10 @@
 """Unit tests for RBAC enforcement on §13.2 optimization endpoints (US-044).
 
 Validates that each optimization endpoint correctly enforces its RBAC
-permission. Since lifespan is disabled (ASGITransport), endpoints that
-pass RBAC return 503/404/422 — the key assertion is:
+permission. Lifespan is disabled (ASGITransport), so endpoints backed by
+Redis/MLflow return 503/404 when RBAC passes, while endpoints that read
+only from in-memory registries (optimize/agent, optimize/all) return 200.
+The key assertion across all tests is:
   - DENY roles get 403
   - ALLOW/ESCALATE roles do NOT get 403
 """
