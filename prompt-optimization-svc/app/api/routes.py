@@ -715,12 +715,16 @@ async def generate_synthetic_datasets(
 # ── §13.3 Dataset CRUD + Mine endpoints ──
 
 
-@router.get("/v1/datasets/{agent_code}", response_model=None)
+VALID_SOURCES = {"manual", "synthetic", "mined", "adversarial"}
+
+
+@router.get("/v1/datasets/{agent_code}", response_model=GoldenDatasetListResponse)
 async def list_datasets(
     agent_code: str,
     page: int = Query(default=1, ge=1, description="Page number"),
     page_size: int = Query(default=50, ge=1, le=100, description="Page size"),
     source: Optional[str] = Query(default=None, description="Filter by source"),
+    x_tenant_id: str = Header(default=None, alias="X-Tenant-ID"),
     decision: Decision = Depends(require_permission(Permission.VIEW)),
 ):
     """AC-3: List golden dataset entries for an agent with pagination and filtering."""
@@ -736,11 +740,23 @@ async def list_datasets(
             content={"detail": f"Unknown agent_code: '{agent_code}'"},
         )
 
+    if source is not None and source not in VALID_SOURCES:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": f"Invalid source '{source}'. "
+                f"Valid values: {', '.join(sorted(VALID_SOURCES))}"
+            },
+        )
+
     async with async_session_factory() as session:
         base_filter = [
             GoldenDataset.agent_code == agent_code,
             GoldenDataset.active.is_(True),
         ]
+        # Tenant isolation: show global rows + tenant-scoped rows
+        if x_tenant_id:
+            base_filter.append(GoldenDataset.tenant_id.in_([x_tenant_id, None]))
         if source is not None:
             base_filter.append(GoldenDataset.source == source)
 
@@ -781,10 +797,15 @@ async def list_datasets(
     )
 
 
-@router.post("/v1/datasets/{agent_code}", response_model=None, status_code=201)
+@router.post(
+    "/v1/datasets/{agent_code}",
+    response_model=GoldenDatasetResponse,
+    status_code=201,
+)
 async def create_dataset_entry(
     agent_code: str,
     request: GoldenDatasetCreateRequest,
+    x_tenant_id: str = Header(default=None, alias="X-Tenant-ID"),
     decision: Decision = Depends(require_permission(Permission.REGISTER)),
 ):
     """Create a golden dataset entry for an agent."""
@@ -798,11 +819,19 @@ async def create_dataset_entry(
             content={"detail": f"Unknown agent_code: '{agent_code}'"},
         )
 
+    # Tenant isolation: body tenant_id must match header if both provided
+    effective_tenant = request.tenant_id or x_tenant_id
+    if x_tenant_id and request.tenant_id and request.tenant_id != x_tenant_id:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "tenant_id in body must match X-Tenant-ID header"},
+        )
+
     async with async_session_factory() as session:
         entry = GoldenDataset(
             prompt_name=request.prompt_name,
             agent_code=agent_code,
-            tenant_id=request.tenant_id,
+            tenant_id=effective_tenant,
             input_context=request.input_context,
             expected_output=request.expected_output,
             source=request.source,
@@ -830,7 +859,11 @@ async def create_dataset_entry(
         )
 
 
-@router.post("/v1/datasets/{agent_code}/mine", response_model=None, status_code=202)
+@router.post(
+    "/v1/datasets/{agent_code}/mine",
+    response_model=MiningTriggerResponse,
+    status_code=202,
+)
 async def trigger_mining(
     agent_code: str,
     decision: Decision = Depends(require_permission(Permission.TRIGGER_OPTIMIZATION)),
@@ -846,21 +879,32 @@ async def trigger_mining(
 
     from app.tasks.mine_golden_examples import mine_golden_examples
 
-    task = mine_golden_examples.delay()
+    try:
+        task = mine_golden_examples.delay()
+    except Exception as exc:
+        logger.error("Failed to enqueue mining task: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Mining task broker unavailable"},
+        )
 
     return MiningTriggerResponse(
         task_id=task.id,
         agent_code=agent_code,
         status="ACCEPTED",
-        message=f"Mining task queued for agent '{agent_code}'",
+        message=f"Platform-wide mining task queued (triggered via {agent_code})",
     )
 
 
-@router.put("/v1/datasets/{agent_code}/{entry_id}", response_model=None)
+@router.put(
+    "/v1/datasets/{agent_code}/{entry_id}",
+    response_model=GoldenDatasetResponse,
+)
 async def update_dataset_entry(
     agent_code: str,
     entry_id: int,
     request: GoldenDatasetUpdateRequest,
+    x_tenant_id: str = Header(default=None, alias="X-Tenant-ID"),
     decision: Decision = Depends(require_permission(Permission.REGISTER)),
 ):
     """Update a golden dataset entry."""
@@ -877,11 +921,14 @@ async def update_dataset_entry(
         )
 
     async with async_session_factory() as session:
-        stmt = select(GoldenDataset).where(
+        filters = [
             GoldenDataset.id == entry_id,
             GoldenDataset.agent_code == agent_code,
             GoldenDataset.active.is_(True),
-        )
+        ]
+        if x_tenant_id:
+            filters.append(GoldenDataset.tenant_id.in_([x_tenant_id, None]))
+        stmt = select(GoldenDataset).where(*filters)
         row = (await session.execute(stmt)).scalar_one_or_none()
         if row is None:
             return JSONResponse(
@@ -917,6 +964,7 @@ async def update_dataset_entry(
 async def delete_dataset_entry(
     agent_code: str,
     entry_id: int,
+    x_tenant_id: str = Header(default=None, alias="X-Tenant-ID"),
     decision: Decision = Depends(require_permission(Permission.MODIFY_CONFIG)),
 ):
     """AC-1: Soft-delete a golden dataset entry (sets active=false)."""
@@ -933,11 +981,14 @@ async def delete_dataset_entry(
         )
 
     async with async_session_factory() as session:
-        stmt = select(GoldenDataset).where(
+        filters = [
             GoldenDataset.id == entry_id,
             GoldenDataset.agent_code == agent_code,
             GoldenDataset.active.is_(True),
-        )
+        ]
+        if x_tenant_id:
+            filters.append(GoldenDataset.tenant_id.in_([x_tenant_id, None]))
+        stmt = select(GoldenDataset).where(*filters)
         row = (await session.execute(stmt)).scalar_one_or_none()
         if row is None:
             return JSONResponse(

@@ -24,7 +24,6 @@ async def api_client():
 
 VALID_CREATE_BODY = {
     "prompt_name": "zorven-wf1-mra-system",
-    "agent_code": "mra",
     "input_context": {"context_brand_name": "Test"},
     "expected_output": "Test output",
     "source": "manual",

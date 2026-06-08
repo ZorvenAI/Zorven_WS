@@ -66,19 +66,20 @@ async def cleanup_entries():
             await session.commit()
 
 
-async def _create_entry(client, agent_code="mra", source="manual", suffix=""):
+async def _create_entry(
+    client, agent_code="mra", source="manual", suffix="", headers=None
+):
     """Helper to create a test dataset entry."""
     resp = await client.post(
         f"/v1/datasets/{agent_code}",
         json={
             "prompt_name": f"zorven-wf1-{agent_code}-test{suffix}",
-            "agent_code": agent_code,
             "input_context": {"context_brand_name": "IntegrationTest"},
             "expected_output": f"Test output {suffix}",
             "source": source,
             "metadata_extra": {"industry": "Tech", "test": True},
         },
-        headers=ADMIN_HEADERS,
+        headers=headers or EDITOR_HEADERS,
     )
     return resp
 
@@ -219,7 +220,6 @@ class TestDatasetCRUDIntegration:
             "/v1/datasets/mra",
             json={
                 "prompt_name": "zorven-wf1-mra-test",
-                "agent_code": "mra",
                 "input_context": {"context_brand_name": "Test"},
                 "expected_output": "Test",
             },
@@ -231,7 +231,7 @@ class TestDatasetCRUDIntegration:
     @pytest.mark.asyncio
     async def test_editor_blocked_from_delete(self, client, cleanup_entries):
         """Editor cannot delete dataset entries (MODIFY_CONFIG is ADMIN+)."""
-        resp = await _create_entry(client, suffix="-edblock")
+        resp = await _create_entry(client, suffix="-edblock", headers=ADMIN_HEADERS)
         entry_id = resp.json()["id"]
         cleanup_entries.append(entry_id)
 
@@ -243,6 +243,21 @@ class TestDatasetCRUDIntegration:
 
 @pytest.mark.integration
 class TestMineTriggerIntegration:
+    @requires_postgres
+    @pytest.mark.asyncio
+    async def test_mine_trigger_returns_202(self, client):
+        """AC-2: Valid POST /mine returns 202 with task_id and message."""
+        resp = await client.post("/v1/datasets/mra/mine", headers=ADMIN_HEADERS)
+        # 202 if Celery broker is reachable, 503 if not
+        if resp.status_code == 503:
+            pytest.skip("Celery broker not available")
+        assert resp.status_code == 202
+        data = resp.json()
+        assert data["agent_code"] == "mra"
+        assert data["status"] == "ACCEPTED"
+        assert data["task_id"] != ""
+        assert "message" in data
+
     @requires_postgres
     @pytest.mark.asyncio
     async def test_mine_unknown_agent_returns_404(self, client):

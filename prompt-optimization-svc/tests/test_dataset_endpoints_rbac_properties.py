@@ -31,7 +31,6 @@ SECTION_13_3_ENDPOINTS = [
         Permission.REGISTER,
         {
             "prompt_name": "zorven-wf1-mra-system",
-            "agent_code": "mra",
             "input_context": {"context_brand_name": "Test"},
             "expected_output": "Test output",
             "source": "manual",
@@ -152,7 +151,6 @@ class TestDatasetRbacProperties:
             "/v1/datasets/mra",
             json={
                 "prompt_name": "zorven-wf1-mra-system",
-                "agent_code": "mra",
                 "input_context": {"context_brand_name": "Test"},
                 "expected_output": "Test output",
             },

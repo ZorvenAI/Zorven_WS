@@ -249,7 +249,6 @@ class GoldenDatasetCreateRequest(BaseModel):
     """Request body for POST /v1/datasets/{agent_code}."""
 
     prompt_name: str = Field(..., description="Prompt name")
-    agent_code: str = Field(..., description="Agent code")
     input_context: dict[str, Any] = Field(..., description="Context dict")
     expected_output: str = Field(..., description="Golden example output")
     source: Literal["manual", "synthetic", "mined", "adversarial"] = Field(
