@@ -245,6 +245,36 @@ class RunListResponse(BaseModel):
 # ── Golden Dataset schemas ──
 
 
+class GoldenDatasetCreateRequest(BaseModel):
+    """Request body for POST /v1/datasets/{agent_code}."""
+
+    prompt_name: str = Field(..., description="Prompt name")
+    agent_code: str = Field(..., description="Agent code")
+    input_context: dict[str, Any] = Field(..., description="Context dict")
+    expected_output: str = Field(..., description="Golden example output")
+    source: Literal["manual", "synthetic", "mined", "adversarial"] = Field(
+        default="manual", description="Example source"
+    )
+    quality_score: Optional[float] = Field(default=None, description="Quality score")
+    metadata_extra: dict[str, Any] = Field(
+        default_factory=dict, description="Extra metadata"
+    )
+    tenant_id: Optional[str] = Field(
+        default=None, description="Tenant ID (null = global)"
+    )
+
+
+class GoldenDatasetUpdateRequest(BaseModel):
+    """Request body for PUT /v1/datasets/{agent_code}/{entry_id}."""
+
+    prompt_name: Optional[str] = None
+    input_context: Optional[dict[str, Any]] = None
+    expected_output: Optional[str] = None
+    source: Optional[Literal["manual", "synthetic", "mined", "adversarial"]] = None
+    quality_score: Optional[float] = None
+    metadata_extra: Optional[dict[str, Any]] = None
+
+
 class GoldenDatasetResponse(BaseModel):
     """Response for a single golden dataset entry."""
 
@@ -254,6 +284,30 @@ class GoldenDatasetResponse(BaseModel):
     source: str
     metadata_extra: dict[str, Any] = Field(default_factory=dict)
     active: bool = True
+    tenant_id: Optional[str] = None
+    input_context: dict[str, Any] = Field(default_factory=dict)
+    expected_output: Optional[str] = None
+    quality_score: Optional[float] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class GoldenDatasetListResponse(BaseModel):
+    """Paginated response for GET /v1/datasets/{agent_code}."""
+
+    items: list[GoldenDatasetResponse] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 50
+
+
+class MiningTriggerResponse(BaseModel):
+    """Response for POST /v1/datasets/{agent_code}/mine (202)."""
+
+    task_id: str = ""
+    agent_code: str
+    status: str = "ACCEPTED"
+    message: str = ""
 
 
 class DatasetStatsResponse(BaseModel):

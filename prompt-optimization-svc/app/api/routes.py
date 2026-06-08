@@ -9,10 +9,17 @@ from fastapi.responses import JSONResponse
 from fastapi import Query
 
 from app.api.schemas import (
-    JointOptimizationResponse,
+    ApprovalRequest,
+    ApprovalResponse,
     ExecuteRequest,
     ExecuteResponse,
+    GoldenDatasetCreateRequest,
+    GoldenDatasetListResponse,
+    GoldenDatasetResponse,
+    GoldenDatasetUpdateRequest,
     HealthResponse,
+    JointOptimizationResponse,
+    MiningTriggerResponse,
     PlatformOptimizationResponse,
     ProductionPromptResponse,
     PromptDetailResponse,
@@ -23,13 +30,11 @@ from app.api.schemas import (
     PromptSummary,
     PromptTransitionRequest,
     PromptTransitionResponse,
+    RejectionRequest,
     SeedResponse,
     SingleAgentOptimizationResponse,
     SyntheticGenerateRequest,
     SyntheticGenerateResponse,
-    ApprovalRequest,
-    ApprovalResponse,
-    RejectionRequest,
     TenantOverrideRequest,
     TenantOverrideResponse,
 )
@@ -617,7 +622,9 @@ async def optimize(
 
 
 @router.post("/v1/datasets/seed", response_model=None)
-async def seed_golden_datasets():
+async def seed_golden_datasets(
+    decision: Decision = Depends(require_permission(Permission.REGISTER)),
+):
     """Seed golden evaluation datasets into PostgreSQL."""
     from app.api.schemas import DatasetSeedResponse
     from app.datasets.seeder import seed_golden_datasets as do_seed
@@ -633,7 +640,9 @@ async def seed_golden_datasets():
 
 
 @router.get("/v1/datasets/stats", response_model=None)
-async def get_dataset_stats():
+async def get_dataset_stats(
+    decision: Decision = Depends(require_permission(Permission.VIEW)),
+):
     """Get golden dataset statistics per agent and source."""
     from collections import Counter
 
@@ -657,7 +666,10 @@ async def get_dataset_stats():
 
 
 @router.post("/v1/datasets/generate", response_model=SyntheticGenerateResponse)
-async def generate_synthetic_datasets(request: SyntheticGenerateRequest):
+async def generate_synthetic_datasets(
+    request: SyntheticGenerateRequest,
+    decision: Decision = Depends(require_permission(Permission.REGISTER)),
+):
     """Generate synthetic brand profiles using Claude Sonnet 4."""
     import anyio
 
@@ -700,9 +712,252 @@ async def generate_synthetic_datasets(request: SyntheticGenerateRequest):
     )
 
 
+# ── §13.3 Dataset CRUD + Mine endpoints ──
+
+
+@router.get("/v1/datasets/{agent_code}", response_model=None)
+async def list_datasets(
+    agent_code: str,
+    page: int = Query(default=1, ge=1, description="Page number"),
+    page_size: int = Query(default=50, ge=1, le=100, description="Page size"),
+    source: Optional[str] = Query(default=None, description="Filter by source"),
+    decision: Decision = Depends(require_permission(Permission.VIEW)),
+):
+    """AC-3: List golden dataset entries for an agent with pagination and filtering."""
+    from sqlalchemy import func, select
+
+    from app.models.database import async_session_factory
+    from app.models.golden_dataset import GoldenDataset
+    from app.registries.prompt_catalog import AGENT_PORTS
+
+    if agent_code not in AGENT_PORTS:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"Unknown agent_code: '{agent_code}'"},
+        )
+
+    async with async_session_factory() as session:
+        base_filter = [
+            GoldenDataset.agent_code == agent_code,
+            GoldenDataset.active.is_(True),
+        ]
+        if source is not None:
+            base_filter.append(GoldenDataset.source == source)
+
+        # Total count
+        count_stmt = select(func.count(GoldenDataset.id)).where(*base_filter)
+        total = (await session.execute(count_stmt)).scalar() or 0
+
+        # Paginated results
+        stmt = (
+            select(GoldenDataset)
+            .where(*base_filter)
+            .order_by(GoldenDataset.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        rows = (await session.execute(stmt)).scalars().all()
+
+        items = [
+            GoldenDatasetResponse(
+                id=row.id,
+                prompt_name=row.prompt_name,
+                agent_code=row.agent_code,
+                source=row.source,
+                metadata_extra=row.metadata_extra or {},
+                active=row.active,
+                tenant_id=row.tenant_id,
+                input_context=row.input_context or {},
+                expected_output=row.expected_output,
+                quality_score=row.quality_score,
+                created_at=row.created_at.isoformat() if row.created_at else None,
+                updated_at=row.updated_at.isoformat() if row.updated_at else None,
+            )
+            for row in rows
+        ]
+
+    return GoldenDatasetListResponse(
+        items=items, total=total, page=page, page_size=page_size
+    )
+
+
+@router.post("/v1/datasets/{agent_code}", response_model=None, status_code=201)
+async def create_dataset_entry(
+    agent_code: str,
+    request: GoldenDatasetCreateRequest,
+    decision: Decision = Depends(require_permission(Permission.REGISTER)),
+):
+    """Create a golden dataset entry for an agent."""
+    from app.models.database import async_session_factory
+    from app.models.golden_dataset import GoldenDataset
+    from app.registries.prompt_catalog import AGENT_PORTS
+
+    if agent_code not in AGENT_PORTS:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"Unknown agent_code: '{agent_code}'"},
+        )
+
+    async with async_session_factory() as session:
+        entry = GoldenDataset(
+            prompt_name=request.prompt_name,
+            agent_code=agent_code,
+            tenant_id=request.tenant_id,
+            input_context=request.input_context,
+            expected_output=request.expected_output,
+            source=request.source,
+            quality_score=request.quality_score,
+            active=True,
+            metadata_extra=request.metadata_extra,
+        )
+        session.add(entry)
+        await session.commit()
+        await session.refresh(entry)
+
+        return GoldenDatasetResponse(
+            id=entry.id,
+            prompt_name=entry.prompt_name,
+            agent_code=entry.agent_code,
+            source=entry.source,
+            metadata_extra=entry.metadata_extra or {},
+            active=entry.active,
+            tenant_id=entry.tenant_id,
+            input_context=entry.input_context or {},
+            expected_output=entry.expected_output,
+            quality_score=entry.quality_score,
+            created_at=entry.created_at.isoformat() if entry.created_at else None,
+            updated_at=entry.updated_at.isoformat() if entry.updated_at else None,
+        )
+
+
+@router.post("/v1/datasets/{agent_code}/mine", response_model=None, status_code=202)
+async def trigger_mining(
+    agent_code: str,
+    decision: Decision = Depends(require_permission(Permission.TRIGGER_OPTIMIZATION)),
+):
+    """AC-2: Trigger golden dataset mining task, returns 202."""
+    from app.registries.prompt_catalog import AGENT_PORTS
+
+    if agent_code not in AGENT_PORTS:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"Unknown agent_code: '{agent_code}'"},
+        )
+
+    from app.tasks.mine_golden_examples import mine_golden_examples
+
+    task = mine_golden_examples.delay()
+
+    return MiningTriggerResponse(
+        task_id=task.id,
+        agent_code=agent_code,
+        status="ACCEPTED",
+        message=f"Mining task queued for agent '{agent_code}'",
+    )
+
+
+@router.put("/v1/datasets/{agent_code}/{entry_id}", response_model=None)
+async def update_dataset_entry(
+    agent_code: str,
+    entry_id: int,
+    request: GoldenDatasetUpdateRequest,
+    decision: Decision = Depends(require_permission(Permission.REGISTER)),
+):
+    """Update a golden dataset entry."""
+    from sqlalchemy import select
+
+    from app.models.database import async_session_factory
+    from app.models.golden_dataset import GoldenDataset
+    from app.registries.prompt_catalog import AGENT_PORTS
+
+    if agent_code not in AGENT_PORTS:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"Unknown agent_code: '{agent_code}'"},
+        )
+
+    async with async_session_factory() as session:
+        stmt = select(GoldenDataset).where(
+            GoldenDataset.id == entry_id,
+            GoldenDataset.agent_code == agent_code,
+            GoldenDataset.active.is_(True),
+        )
+        row = (await session.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Dataset entry {entry_id} not found"},
+            )
+
+        # Apply partial update
+        update_data = request.model_dump(exclude_none=True)
+        for field_name, value in update_data.items():
+            setattr(row, field_name, value)
+
+        await session.commit()
+        await session.refresh(row)
+
+        return GoldenDatasetResponse(
+            id=row.id,
+            prompt_name=row.prompt_name,
+            agent_code=row.agent_code,
+            source=row.source,
+            metadata_extra=row.metadata_extra or {},
+            active=row.active,
+            tenant_id=row.tenant_id,
+            input_context=row.input_context or {},
+            expected_output=row.expected_output,
+            quality_score=row.quality_score,
+            created_at=row.created_at.isoformat() if row.created_at else None,
+            updated_at=row.updated_at.isoformat() if row.updated_at else None,
+        )
+
+
+@router.delete("/v1/datasets/{agent_code}/{entry_id}", response_model=None)
+async def delete_dataset_entry(
+    agent_code: str,
+    entry_id: int,
+    decision: Decision = Depends(require_permission(Permission.MODIFY_CONFIG)),
+):
+    """AC-1: Soft-delete a golden dataset entry (sets active=false)."""
+    from sqlalchemy import select
+
+    from app.models.database import async_session_factory
+    from app.models.golden_dataset import GoldenDataset
+    from app.registries.prompt_catalog import AGENT_PORTS
+
+    if agent_code not in AGENT_PORTS:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"Unknown agent_code: '{agent_code}'"},
+        )
+
+    async with async_session_factory() as session:
+        stmt = select(GoldenDataset).where(
+            GoldenDataset.id == entry_id,
+            GoldenDataset.agent_code == agent_code,
+            GoldenDataset.active.is_(True),
+        )
+        row = (await session.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Dataset entry {entry_id} not found"},
+            )
+
+        row.active = False
+        await session.commit()
+
+    return JSONResponse(
+        status_code=200,
+        content={"detail": f"Dataset entry {entry_id} deactivated"},
+    )
+
+
 @router.get("/v1/config/dataset-size", response_model=None)
 async def get_dataset_size(
     x_tenant_id: str = Header(default=None, alias="X-Tenant-ID"),
+    decision: Decision = Depends(require_permission(Permission.VIEW)),
 ):
     """Get the golden dataset size limit for a tenant."""
     from app.api.schemas import DatasetSizeConfigResponse
@@ -733,6 +988,7 @@ async def get_dataset_size(
 async def set_dataset_size(
     request: "DatasetSizeConfigRequest",
     x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
+    decision: Decision = Depends(require_permission(Permission.MODIFY_CONFIG)),
 ):
     """Set the golden dataset size limit for a tenant (AC-3: validates [3, 50])."""
     from app.api.schemas import (
