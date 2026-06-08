@@ -66,6 +66,19 @@ class MLflowPromptRegistry:
         except Exception:
             return None
 
+    def get_prompt_version(self, name: str, version: int) -> Optional[PromptInfo]:
+        """Get a specific version of a prompt. Returns None if not found."""
+        try:
+            pv = self.client.get_prompt_version(name, version)
+            return PromptInfo(
+                name=name,
+                version=int(pv.version),
+                template=pv.template,
+                tags=pv.tags or {},
+            )
+        except Exception:
+            return None
+
     def prompt_exists(self, name: str) -> bool:
         """Check if a prompt is already registered."""
         return self.get_prompt(name) is not None

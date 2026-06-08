@@ -3,7 +3,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Header, Request
+from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse
 
 from app.api.schemas import (
@@ -29,6 +29,7 @@ from app.api.schemas import (
     TenantOverrideRequest,
     TenantOverrideResponse,
 )
+from app.auth.rbac import Decision, Permission, require_permission
 from app.logic.lifecycle import (
     InvalidTransitionError,
     PromptLifecycleManager,
@@ -56,7 +57,9 @@ async def health() -> HealthResponse:
 
 
 @router.get("/v1/prompts", response_model=None)
-async def list_prompts():
+async def list_prompts(
+    decision: Decision = Depends(require_permission(Permission.VIEW)),
+):
     """List all registered prompts with summary info."""
     if mlflow_registry is None:
         return JSONResponse(
@@ -87,7 +90,10 @@ async def list_prompts():
 
 
 @router.get("/v1/prompts/{name}", response_model=None)
-async def get_prompt_detail(name: str):
+async def get_prompt_detail(
+    name: str,
+    decision: Decision = Depends(require_permission(Permission.VIEW)),
+):
     """Get full prompt detail with metadata (AC-2)."""
     if mlflow_registry is None:
         return JSONResponse(status_code=503, content={"detail": "Not initialized"})
@@ -122,10 +128,52 @@ async def get_prompt_detail(name: str):
     )
 
 
+@router.get("/v1/prompts/{name}/versions/{version}", response_model=None)
+async def get_prompt_version(
+    name: str,
+    version: int,
+    decision: Decision = Depends(require_permission(Permission.VIEW)),
+):
+    """Get specific prompt version with template and metadata (§13.1)."""
+    if mlflow_registry is None:
+        return JSONResponse(status_code=503, content={"detail": "Not initialized"})
+    info = mlflow_registry.get_prompt_version(name, version)
+    if info is None:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"Prompt '{name}' version {version} not found"},
+        )
+
+    tags = info.tags
+    metadata = PromptMetadata(
+        workflow=tags.get("workflow", ""),
+        agent_code=tags.get("agent_code", ""),
+        agent_port=int(tags.get("agent_port", "0")),
+        skill=tags.get("skill", ""),
+        model_target=tags.get("model_target", "claude-sonnet-4-6"),
+        optimization_group=tags.get("optimization_group", ""),
+        tenant_overridable=tags.get("tenant_overridable", "true").lower()
+        in ("true", "1", "yes"),
+        optimization_priority=tags.get("optimization_priority", "MEDIUM"),
+        last_optimized=tags.get("last_optimized") or None,
+        optimization_run_id=tags.get("optimization_run_id") or None,
+    )
+
+    return PromptDetailResponse(
+        name=info.name,
+        version=info.version,
+        template=info.template,
+        state=tags.get("state", "DRAFT"),
+        metadata=metadata,
+        tags=tags,
+    )
+
+
 @router.post("/v1/prompts", response_model=PromptRegistrationResponse)
 async def register_prompt(
     request: PromptRegistrationRequest,
     x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
+    decision: Decision = Depends(require_permission(Permission.REGISTER)),
 ) -> PromptRegistrationResponse:
     """Register a prompt template in MLflow Prompt Registry."""
     if mlflow_registry is None:
@@ -198,6 +246,7 @@ async def promote_prompt(
     version: int,
     request: PromptTransitionRequest,
     x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
+    decision: Decision = Depends(require_permission(Permission.PROMOTE)),
 ) -> PromptTransitionResponse:
     """Promote a prompt version to the next lifecycle state."""
     if lifecycle_manager is None:
@@ -284,6 +333,7 @@ async def rollback_prompt(
     name: str,
     version: int,
     x_tenant_id: str = Header(default=None, alias="X-Tenant-ID"),
+    decision: Decision = Depends(require_permission(Permission.ROLLBACK)),
 ) -> PromptTransitionResponse:
     """Roll back a CANARY or PRODUCTION version."""
     if lifecycle_manager is None:
@@ -747,7 +797,11 @@ async def get_tenant_override_endpoint(name: str, tenant_id: str):
 @router.delete(
     "/v1/prompts/{name}/tenant-overrides/{tenant_id}",
 )
-async def delete_tenant_override_endpoint(name: str, tenant_id: str):
+async def delete_tenant_override_endpoint(
+    name: str,
+    tenant_id: str,
+    decision: Decision = Depends(require_permission(Permission.DELETE_OVERRIDE)),
+):
     """Delete a tenant-specific prompt override (AC-1, AC-3)."""
     from app.cache.prompt_cache import PromptCacheManager
     from app.core.config import settings
