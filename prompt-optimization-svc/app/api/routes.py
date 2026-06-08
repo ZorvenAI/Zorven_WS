@@ -3,14 +3,17 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header
 from fastapi.responses import JSONResponse
+
+from fastapi import Query
 
 from app.api.schemas import (
     JointOptimizationResponse,
     ExecuteRequest,
     ExecuteResponse,
     HealthResponse,
+    PlatformOptimizationResponse,
     ProductionPromptResponse,
     PromptDetailResponse,
     PromptListResponse,
@@ -21,6 +24,7 @@ from app.api.schemas import (
     PromptTransitionRequest,
     PromptTransitionResponse,
     SeedResponse,
+    SingleAgentOptimizationResponse,
     SyntheticGenerateRequest,
     SyntheticGenerateResponse,
     ApprovalRequest,
@@ -29,7 +33,7 @@ from app.api.schemas import (
     TenantOverrideRequest,
     TenantOverrideResponse,
 )
-from app.auth.rbac import Decision, Permission, require_permission
+from app.auth.rbac import Decision, Permission, Role, require_permission, resolve_role
 from app.logic.lifecycle import (
     InvalidTransitionError,
     PromptLifecycleManager,
@@ -41,6 +45,17 @@ from app.services.mlflow_registry import MLflowPromptRegistry
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _float_or_none(value) -> Optional[float]:
+    """Safely convert a Redis hash value to float or None."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
 
 # Module-level dependencies — initialized in main.py lifespan
 health_checker: Optional[HealthChecker] = None
@@ -394,8 +409,11 @@ async def get_production_prompt(
 
 
 @router.post("/v1/optimize/group/{group_name}", response_model=None)
-async def optimize_group(group_name: str):
-    """Trigger joint optimization for a prompt group (US-019)."""
+async def optimize_group(
+    group_name: str,
+    decision: Decision = Depends(require_permission(Permission.TRIGGER_OPTIMIZATION)),
+):
+    """Trigger joint optimization for a prompt group (§13.2)."""
     from app.registries.optimization_groups import get_group
 
     try:
@@ -409,9 +427,70 @@ async def optimize_group(group_name: str):
     )
 
 
+@router.post("/v1/optimize/agent/{agent_code}", response_model=None)
+async def optimize_agent(
+    agent_code: str,
+    decision: Decision = Depends(require_permission(Permission.TRIGGER_OPTIMIZATION)),
+):
+    """Trigger optimization for all prompts of a single agent (§13.2)."""
+    from app.registries.prompt_catalog import AGENT_PORTS, PROMPT_CATALOG
+
+    if agent_code not in AGENT_PORTS:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"Unknown agent_code: '{agent_code}'"},
+        )
+
+    # Find all prompts for this agent
+    agent_prompts = [
+        entry.name
+        for entry in PROMPT_CATALOG
+        if entry.tags.get("agent_code") == agent_code
+    ]
+
+    return SingleAgentOptimizationResponse(
+        agent_code=agent_code,
+        prompt_count=len(agent_prompts),
+        state="QUEUED",
+        message=f"Optimization queued for {len(agent_prompts)} prompt(s)",
+    )
+
+
+@router.post("/v1/optimize/all", response_model=None)
+async def optimize_all(
+    x_user_role: str = Header(default="", alias="X-User-Role"),
+):
+    """AC-1: Trigger platform-wide optimization — OWNER only."""
+    from app.registries.optimization_groups import OPTIMIZATION_GROUPS
+    from app.registries.prompt_catalog import PROMPT_CATALOG
+
+    # OWNER-only enforcement (AC-1)
+    role = resolve_role(x_user_role)
+    if role != Role.OWNER:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Platform-wide optimization requires OWNER role"},
+        )
+
+    total_prompts = len(PROMPT_CATALOG)
+    group_names = list(OPTIMIZATION_GROUPS.keys())
+
+    return PlatformOptimizationResponse(
+        groups_triggered=len(group_names),
+        total_prompts=total_prompts,
+        runs=group_names,
+        message=f"Platform-wide optimization queued: {len(group_names)} groups, "
+        f"{total_prompts} prompts",
+    )
+
+
 @router.get("/v1/optimize/runs", response_model=None)
-async def list_optimization_runs():
-    """AC-4: List active optimization runs from Redis progress hashes."""
+async def list_optimization_runs(
+    page: int = Query(default=1, ge=1, description="Page number"),
+    page_size: int = Query(default=50, ge=1, le=100, description="Page size"),
+    decision: Decision = Depends(require_permission(Permission.VIEW)),
+):
+    """AC-2: List optimization runs with status, metrics, and cost (paginated)."""
     from app.api.schemas import RunListResponse, RunStatusResponse
     from app.cache.prompt_cache import PromptCacheManager
     from app.core.config import settings
@@ -419,29 +498,46 @@ async def list_optimization_runs():
     cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
     await cache.connect()
     try:
-        runs = []
+        all_runs = []
         r = await cache.connect()
         async for key in r.scan_iter(match="prompt:optimization:progress:*"):
             run_id = key.split(":")[-1]
             progress = await cache.get_optimization_progress(run_id)
             if progress:
-                runs.append(
+                all_runs.append(
                     RunStatusResponse(
                         run_id=run_id,
                         state=progress.get("state", "UNKNOWN"),
                         prompt_name=progress.get("prompt_name", ""),
                         agent_code=progress.get("agent_code", ""),
                         updated_at=progress.get("updated_at"),
+                        score_before=_float_or_none(progress.get("score_before")),
+                        score_after=_float_or_none(progress.get("score_after")),
+                        improvement=_float_or_none(progress.get("improvement")),
+                        cost_usd=_float_or_none(progress.get("cost_usd")),
                     )
                 )
-        return RunListResponse(runs=runs, total=len(runs))
+        total = len(all_runs)
+        start = (page - 1) * page_size
+        end = start + page_size
+        return RunListResponse(
+            runs=all_runs[start:end],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
     finally:
         await cache.close()
 
 
 @router.get("/v1/optimize/runs/{run_id}", response_model=None)
-async def get_optimization_run(run_id: str):
-    """Get optimization run detail from Redis progress hash."""
+async def get_optimization_run(
+    run_id: str,
+    decision: Decision = Depends(require_permission(Permission.VIEW)),
+):
+    """AC-3: Get optimization run detail with GEPA traces and reflection prompts."""
+    import json
+
     from app.api.schemas import RunStatusResponse
     from app.cache.prompt_cache import PromptCacheManager
     from app.core.config import settings
@@ -455,6 +551,28 @@ async def get_optimization_run(run_id: str):
                 status_code=404,
                 content={"detail": "Run not found"},
             )
+
+        # AC-3: Parse GEPA traces and reflection prompts from Redis
+        raw_traces = progress.get("gepa_traces", "[]")
+        if isinstance(raw_traces, str):
+            try:
+                gepa_traces = json.loads(raw_traces)
+            except (json.JSONDecodeError, TypeError):
+                gepa_traces = []
+        else:
+            gepa_traces = raw_traces if isinstance(raw_traces, list) else []
+
+        raw_reflections = progress.get("reflection_prompts", "[]")
+        if isinstance(raw_reflections, str):
+            try:
+                reflection_prompts = json.loads(raw_reflections)
+            except (json.JSONDecodeError, TypeError):
+                reflection_prompts = []
+        else:
+            reflection_prompts = (
+                raw_reflections if isinstance(raw_reflections, list) else []
+            )
+
         return RunStatusResponse(
             run_id=run_id,
             state=progress.get("state", "UNKNOWN"),
@@ -463,6 +581,12 @@ async def get_optimization_run(run_id: str):
             error_message=progress.get("error_message", ""),
             deferred_until=progress.get("deferred_until"),
             updated_at=progress.get("updated_at"),
+            score_before=_float_or_none(progress.get("score_before")),
+            score_after=_float_or_none(progress.get("score_after")),
+            improvement=_float_or_none(progress.get("improvement")),
+            cost_usd=_float_or_none(progress.get("cost_usd")),
+            gepa_traces=gepa_traces,
+            reflection_prompts=reflection_prompts,
         )
     finally:
         await cache.close()
@@ -640,7 +764,11 @@ async def set_dataset_size(
 
 
 @router.post("/v1/optimize/runs/{run_id}/approve", response_model=ApprovalResponse)
-async def approve_optimization_run(run_id: str, request: ApprovalRequest):
+async def approve_optimization_run(
+    run_id: str,
+    request: ApprovalRequest,
+    decision: Decision = Depends(require_permission(Permission.APPROVE)),
+):
     """Approve a PENDING_APPROVAL optimization run for canary (AC-3)."""
     from app.cache.prompt_cache import PromptCacheManager
     from app.core.config import settings
@@ -689,7 +817,11 @@ async def approve_optimization_run(run_id: str, request: ApprovalRequest):
 
 
 @router.post("/v1/optimize/runs/{run_id}/reject", response_model=ApprovalResponse)
-async def reject_optimization_run(run_id: str, request: RejectionRequest):
+async def reject_optimization_run(
+    run_id: str,
+    request: RejectionRequest,
+    decision: Decision = Depends(require_permission(Permission.APPROVE)),
+):
     """Reject a PENDING_APPROVAL optimization run (AC-3)."""
     from app.cache.prompt_cache import PromptCacheManager
     from app.core.config import settings

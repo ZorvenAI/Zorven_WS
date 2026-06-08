@@ -194,8 +194,27 @@ class JointOptimizationResponse(BaseModel):
     error: Optional[str] = None
 
 
+class SingleAgentOptimizationResponse(BaseModel):
+    """Response for POST /v1/optimize/agent/{agent_code}."""
+
+    agent_code: str
+    prompt_count: int = 0
+    run_id: str = ""
+    state: str = "QUEUED"
+    message: str = ""
+
+
+class PlatformOptimizationResponse(BaseModel):
+    """Response for POST /v1/optimize/all."""
+
+    groups_triggered: int = 0
+    total_prompts: int = 0
+    runs: list[str] = Field(default_factory=list)
+    message: str = ""
+
+
 class RunStatusResponse(BaseModel):
-    """Response for GET /v1/optimize/runs/{run_id}."""
+    """Response for GET /v1/optimize/runs/{run_id} (AC-2, AC-3)."""
 
     run_id: str
     state: str
@@ -204,13 +223,23 @@ class RunStatusResponse(BaseModel):
     error_message: str = ""
     deferred_until: Optional[str] = None
     updated_at: Optional[str] = None
+    # AC-2: metrics and cost
+    score_before: Optional[float] = None
+    score_after: Optional[float] = None
+    improvement: Optional[float] = None
+    cost_usd: Optional[float] = None
+    # AC-3: GEPA traces with reflection prompts
+    gepa_traces: list[dict[str, Any]] = Field(default_factory=list)
+    reflection_prompts: list[str] = Field(default_factory=list)
 
 
 class RunListResponse(BaseModel):
-    """Response for GET /v1/optimize/runs."""
+    """Response for GET /v1/optimize/runs (AC-2: paginated)."""
 
     runs: list[RunStatusResponse]
     total: int
+    page: int = 1
+    page_size: int = 50
 
 
 # ── Golden Dataset schemas ──
