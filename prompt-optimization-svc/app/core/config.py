@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     CANARY_REGRESSION_THRESHOLD: float = 0.05
     CANARY_METRICS_TTL_DAYS: int = 30
 
+    # Health check (§14.1)
+    HEALTH_CHECK_REGRESSION_THRESHOLD: float = 0.10  # 10% regression triggers re-opt
+
     # Validation (OPT-03/OPT-04)
     VALIDATION_HOLDOUT_PCT: float = 0.2
     VALIDATION_IMPROVEMENT_THRESHOLD: float = 0.05  # 5% minimum improvement
