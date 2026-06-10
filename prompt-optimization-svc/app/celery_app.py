@@ -45,18 +45,17 @@ celery_app.conf.beat_schedule = {
         },
     },
     # Monthly: 2nd Sunday 06:00 UTC (02:00 ET)
+    # Note: crontab day_of_week + day_of_month uses OR semantics,
+    # so we fire every Sunday and let the task self-guard via date check.
     "optimize-wf1-pipeline-monthly": {
         "task": "app.tasks.optimize_wf1_pipeline.optimize_wf1_pipeline",
-        "schedule": crontab(
-            hour=6, minute=0, day_of_week="sunday", day_of_month="8-14"
-        ),
+        "schedule": crontab(hour=6, minute=0, day_of_week="sunday"),
     },
     # Monthly: 3rd Sunday 06:00 UTC (02:00 ET)
+    # Same OR semantics workaround — task self-guards for 3rd Sunday.
     "optimize-wf2-pipeline-monthly": {
         "task": "app.tasks.optimize_wf2_pipeline.optimize_wf2_pipeline",
-        "schedule": crontab(
-            hour=6, minute=0, day_of_week="sunday", day_of_month="15-21"
-        ),
+        "schedule": crontab(hour=6, minute=0, day_of_week="sunday"),
     },
     # Weekly (Sunday): task self-skips based on tenant schedule config (AC-2)
     "optimize-wf3-creative-pipeline": {

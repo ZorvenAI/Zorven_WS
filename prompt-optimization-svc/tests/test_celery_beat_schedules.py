@@ -9,8 +9,8 @@ NO mocks — all tests use real imports and real Celery app configuration.
 
 from datetime import datetime, timezone
 
-from celery.schedules import crontab
-
+from app.tasks.optimize_wf1_pipeline import _is_2nd_sunday
+from app.tasks.optimize_wf2_pipeline import _is_3rd_sunday
 from app.tasks.optimize_wf3_pipeline import should_run_wf3_schedule
 from app.tasks.prompt_health_check import _check_regression, _get_reopt_task_name
 
@@ -125,7 +125,7 @@ class TestWf1PipelineSchedule:
         entry = celery_app.conf.beat_schedule["optimize-wf1-pipeline-monthly"]
         assert entry["task"] == "app.tasks.optimize_wf1_pipeline.optimize_wf1_pipeline"
 
-    def test_2nd_sunday_06_utc(self):
+    def test_sunday_06_utc(self):
         from app.celery_app import celery_app
 
         entry = celery_app.conf.beat_schedule["optimize-wf1-pipeline-monthly"]
@@ -134,12 +134,21 @@ class TestWf1PipelineSchedule:
         assert schedule.minute == {0}
         assert schedule.day_of_week == {0}  # Sunday
 
-    def test_day_of_month_8_to_14(self):
-        from app.celery_app import celery_app
+    def test_2nd_sunday_guard_accepts(self):
+        # June 14, 2026 is a Sunday, day 14 (2nd week: 8-14)
+        dt = datetime(2026, 6, 14, 6, 0, tzinfo=timezone.utc)
+        assert dt.weekday() == 6
+        assert _is_2nd_sunday(dt) is True
 
-        entry = celery_app.conf.beat_schedule["optimize-wf1-pipeline-monthly"]
-        schedule = entry["schedule"]
-        assert schedule.day_of_month == {8, 9, 10, 11, 12, 13, 14}
+    def test_2nd_sunday_guard_rejects_1st_sunday(self):
+        # June 7, 2026 is a Sunday, day 7 (1st week: 1-7)
+        dt = datetime(2026, 6, 7, 6, 0, tzinfo=timezone.utc)
+        assert _is_2nd_sunday(dt) is False
+
+    def test_2nd_sunday_guard_rejects_non_sunday(self):
+        # June 10, 2026 is a Wednesday, day 10 (in 8-14 range but not Sunday)
+        dt = datetime(2026, 6, 10, 6, 0, tzinfo=timezone.utc)
+        assert _is_2nd_sunday(dt) is False
 
 
 # ── WF2 Pipeline Schedule ──
@@ -152,7 +161,7 @@ class TestWf2PipelineSchedule:
         entry = celery_app.conf.beat_schedule["optimize-wf2-pipeline-monthly"]
         assert entry["task"] == "app.tasks.optimize_wf2_pipeline.optimize_wf2_pipeline"
 
-    def test_3rd_sunday_06_utc(self):
+    def test_sunday_06_utc(self):
         from app.celery_app import celery_app
 
         entry = celery_app.conf.beat_schedule["optimize-wf2-pipeline-monthly"]
@@ -161,12 +170,21 @@ class TestWf2PipelineSchedule:
         assert schedule.minute == {0}
         assert schedule.day_of_week == {0}  # Sunday
 
-    def test_day_of_month_15_to_21(self):
-        from app.celery_app import celery_app
+    def test_3rd_sunday_guard_accepts(self):
+        # June 21, 2026 is a Sunday, day 21 (3rd week: 15-21)
+        dt = datetime(2026, 6, 21, 6, 0, tzinfo=timezone.utc)
+        assert dt.weekday() == 6
+        assert _is_3rd_sunday(dt) is True
 
-        entry = celery_app.conf.beat_schedule["optimize-wf2-pipeline-monthly"]
-        schedule = entry["schedule"]
-        assert schedule.day_of_month == {15, 16, 17, 18, 19, 20, 21}
+    def test_3rd_sunday_guard_rejects_2nd_sunday(self):
+        # June 14, 2026 is a Sunday, day 14 (2nd week: 8-14)
+        dt = datetime(2026, 6, 14, 6, 0, tzinfo=timezone.utc)
+        assert _is_3rd_sunday(dt) is False
+
+    def test_3rd_sunday_guard_rejects_non_sunday(self):
+        # June 17, 2026 is a Wednesday, day 17 (in 15-21 range but not Sunday)
+        dt = datetime(2026, 6, 17, 6, 0, tzinfo=timezone.utc)
+        assert _is_3rd_sunday(dt) is False
 
 
 # ── WF3 Creative Pipeline Schedule ──
@@ -339,6 +357,7 @@ class TestWf3ScheduleLogic:
     def test_monthly_first_sunday_runs(self):
         # June 7, 2026 is a Sunday and day <= 7
         now = datetime(2026, 6, 7, 6, 0, tzinfo=timezone.utc)
+        assert now.weekday() == 6  # Confirm it's Sunday
         assert should_run_wf3_schedule("monthly", now) is True
 
     def test_monthly_later_sunday_skips(self):
@@ -346,19 +365,32 @@ class TestWf3ScheduleLogic:
         now = datetime(2026, 6, 14, 6, 0, tzinfo=timezone.utc)
         assert should_run_wf3_schedule("monthly", now) is False
 
+    def test_monthly_non_sunday_in_first_week_skips(self):
+        # June 3, 2026 is a Wednesday, day <= 7 but not Sunday
+        now = datetime(2026, 6, 3, 6, 0, tzinfo=timezone.utc)
+        assert now.weekday() != 6
+        assert should_run_wf3_schedule("monthly", now) is False
+
     def test_quarterly_q1_first_sunday_runs(self):
         # January 4, 2026 is a Sunday in Q1 start month, day <= 7
         now = datetime(2026, 1, 4, 6, 0, tzinfo=timezone.utc)
+        assert now.weekday() == 6  # Confirm it's Sunday
         assert should_run_wf3_schedule("quarterly", now) is True
 
     def test_quarterly_non_q_month_skips(self):
-        # June is not a quarter start month
+        # June 7, 2026 is a Sunday but June is not a quarter start month
         now = datetime(2026, 6, 7, 6, 0, tzinfo=timezone.utc)
         assert should_run_wf3_schedule("quarterly", now) is False
 
     def test_quarterly_q_month_later_day_skips(self):
         # April 12, 2026 — Q2 start month but day > 7
         now = datetime(2026, 4, 12, 6, 0, tzinfo=timezone.utc)
+        assert should_run_wf3_schedule("quarterly", now) is False
+
+    def test_quarterly_q_month_non_sunday_skips(self):
+        # April 1, 2026 is a Wednesday — Q2 start, day <= 7, but not Sunday
+        now = datetime(2026, 4, 1, 6, 0, tzinfo=timezone.utc)
+        assert now.weekday() != 6
         assert should_run_wf3_schedule("quarterly", now) is False
 
     def test_unknown_schedule_skips(self):

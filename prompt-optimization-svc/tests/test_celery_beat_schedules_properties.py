@@ -6,7 +6,6 @@ schedule logic using property-based testing.
 
 from datetime import datetime, timezone
 
-import pytest
 from celery.schedules import crontab
 from hypothesis import given, settings as hypothesis_settings
 from hypothesis import strategies as st
