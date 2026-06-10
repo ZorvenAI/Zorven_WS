@@ -1289,10 +1289,12 @@ async def get_tenant_config(
             content={"detail": "Cannot read another tenant's configuration"},
         )
 
+    from app.models.database import async_session_factory
+
     cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
     await cache.connect()
     try:
-        mgr = TenantConfigManager(cache)
+        mgr = TenantConfigManager(cache, db_session_factory=async_session_factory)
         return TenantOptimizationConfig(
             tenant_id=tenant_id,
             prompt_optimization_enabled=await mgr.get_optimization_enabled(tenant_id),
@@ -1325,11 +1327,12 @@ async def update_tenant_config(
     from app.cache.prompt_cache import PromptCacheManager
     from app.cache.tenant_config import TenantConfigManager
     from app.core.config import settings
+    from app.models.database import async_session_factory
 
     cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
     await cache.connect()
     try:
-        mgr = TenantConfigManager(cache)
+        mgr = TenantConfigManager(cache, db_session_factory=async_session_factory)
         if request.prompt_optimization_enabled is not None:
             await mgr.set_optimization_enabled(
                 tenant_id, request.prompt_optimization_enabled

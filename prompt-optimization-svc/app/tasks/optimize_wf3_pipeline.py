@@ -4,9 +4,9 @@ Two tasks:
 - optimize_wf3_creative_pipeline: CAA + CGA + ADPUB (wf3-creative-pipeline)
 - optimize_wf3_optimization_loop: COA + ILA (wf3-optimization-loop)
 
-Both are scheduled weekly via Beat but self-skip based on the global
-wf3_optimization_schedule default from TenantConfigManager (currently
-'monthly' per §10.2). Per-tenant schedule overrides are handled in US-047.
+Both are scheduled weekly via Beat but self-skip based on the effective
+WF3 optimization schedule. The effective schedule is the most aggressive
+schedule across all tenants (US-047): biweekly > monthly > quarterly > on-demand.
 
 Schedule options: on-demand, biweekly, monthly, quarterly.
 """
@@ -24,6 +24,9 @@ WF3_OPTLOOP_GROUP = "wf3-optimization-loop"
 
 # Quarter start months
 _QUARTER_START_MONTHS = {1, 4, 7, 10}
+
+# Schedule priority: lower number = more aggressive (US-047)
+SCHEDULE_PRIORITY = {"biweekly": 0, "monthly": 1, "quarterly": 2, "on-demand": 3}
 
 
 def should_run_wf3_schedule(schedule: str, now: datetime) -> bool:
@@ -58,20 +61,28 @@ def should_run_wf3_schedule(schedule: str, now: datetime) -> bool:
     return False
 
 
-def _get_global_schedule() -> str:
-    """Read the global WF3 optimization schedule via TenantConfigManager.
+def _get_effective_schedule() -> str:
+    """Read the most aggressive WF3 schedule across all tenants (US-047).
 
-    Calls TenantConfigManager.get_optimization_schedule(tenant_id=None)
-    which returns the DEFAULT_SCHEDULE constant without hitting Redis.
-    Per-tenant Redis lookups are added in US-047.
+    Scans all tenant schedule configs from Redis and returns the most
+    aggressive one (biweekly > monthly > quarterly > on-demand).
+    Falls back to DEFAULT_SCHEDULE if no tenants have custom schedules.
     """
     from app.cache.prompt_cache import PromptCacheManager
-    from app.cache.tenant_config import TenantConfigManager
+    from app.cache.tenant_config import DEFAULT_SCHEDULE, TenantConfigManager
     from app.core.config import settings
 
     cache = PromptCacheManager(settings.PROMPT_CACHE_REDIS_URL)
     mgr = TenantConfigManager(prompt_cache=cache)
-    return asyncio.run(mgr.get_optimization_schedule(tenant_id=None))
+    schedules = asyncio.run(mgr.get_all_tenant_schedules())
+
+    if not schedules:
+        return DEFAULT_SCHEDULE
+
+    return min(
+        schedules.values(),
+        key=lambda s: SCHEDULE_PRIORITY.get(s, 3),
+    )
 
 
 @celery_app.task(
@@ -81,11 +92,11 @@ def _get_global_schedule() -> str:
 def optimize_wf3_creative_pipeline(self):
     """Optimize the WF3 creative pipeline group (CAA + CGA + ADPUB).
 
-    Fires weekly via Beat; self-skips based on global schedule config (AC-2).
+    Fires weekly via Beat; self-skips based on effective per-tenant schedule (US-047).
     """
     from app.registries.optimization_groups import get_group
 
-    schedule = _get_global_schedule()
+    schedule = _get_effective_schedule()
     now = datetime.now(timezone.utc)
 
     if not should_run_wf3_schedule(schedule, now):
@@ -131,12 +142,12 @@ def optimize_wf3_creative_pipeline(self):
 def optimize_wf3_optimization_loop(self):
     """Optimize the WF3 optimization loop group (COA + ILA).
 
-    Fires weekly via Beat; self-skips based on global schedule config (AC-2).
+    Fires weekly via Beat; self-skips based on effective per-tenant schedule (US-047).
     Inherits the same schedule as wf3_creative_pipeline per §14.1.
     """
     from app.registries.optimization_groups import get_group
 
-    schedule = _get_global_schedule()
+    schedule = _get_effective_schedule()
     now = datetime.now(timezone.utc)
 
     if not should_run_wf3_schedule(schedule, now):

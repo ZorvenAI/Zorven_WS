@@ -1,4 +1,4 @@
-"""Unit tests for tenant configuration keys (US-041)."""
+"""Unit tests for tenant configuration keys (US-041, US-047)."""
 
 from app.cache.tenant_config import (
     DEFAULT_AUTO_PROMOTION,
@@ -11,6 +11,7 @@ from app.cache.tenant_config import (
     MIN_OPTIMIZATION_BUDGET,
     VALID_SCHEDULES,
     clamp_optimization_budget,
+    strict_validate_schedule,
     validate_schedule,
 )
 
@@ -107,3 +108,25 @@ class TestSchemas:
         assert req.prompt_optimization_enabled is False
         assert req.wf3_optimization_schedule == "quarterly"
         assert req.prompt_optimization_model is None
+
+
+class TestStrictScheduleValidation:
+    """US-047 AC-3: strict validation raises on invalid values."""
+
+    def test_valid_values_pass(self):
+        for sched in VALID_SCHEDULES:
+            assert strict_validate_schedule(sched) == sched
+
+    def test_invalid_raises_value_error(self):
+        try:
+            strict_validate_schedule("hourly")
+            assert False, "Expected ValueError"
+        except ValueError as exc:
+            assert "hourly" in str(exc)
+
+    def test_empty_raises_value_error(self):
+        try:
+            strict_validate_schedule("")
+            assert False, "Expected ValueError"
+        except ValueError:
+            pass
