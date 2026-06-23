@@ -26,7 +26,7 @@ class TestTenantConfigModel:
         assert TenantConfig.__tablename__ == "tenant_configs"
 
     def test_schema(self):
-        assert TenantConfig.__table_args__[-1]["schema"] == "prompt_optimization"
+        assert TenantConfig.__table_args__["schema"] == "prompt_optimization"
 
     def test_has_tenant_id_column(self):
         col = TenantConfig.__table__.columns["tenant_id"]
@@ -201,10 +201,11 @@ class TestManagerBackwardCompat:
     def test_constructor_with_db_session_factory(self):
         from app.cache.prompt_cache import PromptCacheManager
         from app.cache.tenant_config import TenantConfigManager
+        from app.models.database import async_session_factory
 
         cache = PromptCacheManager(redis_url="redis://localhost:6379/2")
-        mgr = TenantConfigManager(cache, db_session_factory="fake_factory")
-        assert mgr.db_session_factory == "fake_factory"
+        mgr = TenantConfigManager(cache, db_session_factory=async_session_factory)
+        assert mgr.db_session_factory is async_session_factory
 
     def test_prompt_cache_attribute(self):
         from app.cache.prompt_cache import PromptCacheManager

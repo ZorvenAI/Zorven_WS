@@ -443,11 +443,6 @@ class TenantConfigUpdateRequest(BaseModel):
         """Reject invalid schedule values with 400 (US-047 AC-3)."""
         if v is None:
             return v
-        from app.cache.tenant_config import VALID_SCHEDULES
+        from app.cache.tenant_config import strict_validate_schedule
 
-        if v not in VALID_SCHEDULES:
-            raise ValueError(
-                f"Invalid schedule '{v}'. "
-                f"Must be one of: {', '.join(VALID_SCHEDULES)}"
-            )
-        return v
+        return strict_validate_schedule(v)

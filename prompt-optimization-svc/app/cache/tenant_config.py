@@ -13,7 +13,12 @@ and re-warms the Redis cache.
 import logging
 from typing import Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from app.cache.prompt_cache import PromptCacheManager
+
+# Type alias for the async session factory from app.models.database
+AsyncSessionFactory = async_sessionmaker[AsyncSession]
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +101,9 @@ class TenantConfigManager:
     SCHEDULE_KEY = "tenant:{tenant_id}:config.wf3_optimization_schedule"
 
     def __init__(
-        self, prompt_cache: PromptCacheManager, db_session_factory=None
+        self,
+        prompt_cache: PromptCacheManager,
+        db_session_factory: Optional[AsyncSessionFactory] = None,
     ) -> None:
         self.prompt_cache = prompt_cache
         self.db_session_factory = db_session_factory
@@ -271,10 +278,13 @@ class TenantConfigManager:
 
     # --- WF3 optimization schedule ---
 
+    # Sentinel for Redis miss detection without changing _get_str signature
+    _REDIS_MISS = ""
+
     async def get_optimization_schedule(self, tenant_id: Optional[str] = None) -> str:
         """Get optimization schedule, falling back to PostgreSQL on Redis miss."""
-        raw = await self._get_str(self.SCHEDULE_KEY, tenant_id, None)
-        if raw is not None:
+        raw = await self._get_str(self.SCHEDULE_KEY, tenant_id, self._REDIS_MISS)
+        if raw != self._REDIS_MISS:
             return validate_schedule(raw)
 
         # Redis miss — try PostgreSQL fallback (US-047 AC-1)
@@ -336,11 +346,8 @@ class TenantConfigManager:
             return default
 
     async def _get_str(
-        self,
-        key_template: str,
-        tenant_id: Optional[str],
-        default: Optional[str],
-    ) -> Optional[str]:
+        self, key_template: str, tenant_id: Optional[str], default: str
+    ) -> str:
         if not tenant_id:
             return default
         try:
@@ -369,6 +376,8 @@ class TenantConfigManager:
     async def _upsert_schedule_to_pg(self, tenant_id: str, schedule: str) -> None:
         """Upsert tenant schedule to PostgreSQL source-of-truth."""
         try:
+            from datetime import datetime, timezone
+
             from sqlalchemy.dialects.postgresql import insert
 
             from app.models.tenant_config import TenantConfig
@@ -380,7 +389,10 @@ class TenantConfigManager:
                 )
                 stmt = stmt.on_conflict_do_update(
                     index_elements=["tenant_id"],
-                    set_={"wf3_optimization_schedule": schedule},
+                    set_={
+                        "wf3_optimization_schedule": schedule,
+                        "updated_at": datetime.now(timezone.utc),
+                    },
                 )
                 await session.execute(stmt)
                 await session.commit()

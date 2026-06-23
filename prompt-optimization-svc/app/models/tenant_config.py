@@ -6,7 +6,7 @@ Redis remains the hot path; PostgreSQL is the fallback and audit record.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Index, String, text
+from sqlalchemy import DateTime, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -18,10 +18,7 @@ class TenantConfig(Base):
     """Per-tenant optimization configuration persisted to PostgreSQL."""
 
     __tablename__ = "tenant_configs"
-    __table_args__ = (
-        Index("idx_tenant_config_tenant_id", "tenant_id", unique=True),
-        {"schema": SCHEMA},
-    )
+    __table_args__ = {"schema": SCHEMA}
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     tenant_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)

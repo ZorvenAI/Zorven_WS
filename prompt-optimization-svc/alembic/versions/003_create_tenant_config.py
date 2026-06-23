@@ -46,19 +46,6 @@ def upgrade() -> None:
         schema=SCHEMA,
     )
 
-    op.create_index(
-        "idx_tenant_config_tenant_id",
-        "tenant_configs",
-        ["tenant_id"],
-        unique=True,
-        schema=SCHEMA,
-    )
-
 
 def downgrade() -> None:
-    op.drop_index(
-        "idx_tenant_config_tenant_id",
-        table_name="tenant_configs",
-        schema=SCHEMA,
-    )
     op.drop_table("tenant_configs", schema=SCHEMA)

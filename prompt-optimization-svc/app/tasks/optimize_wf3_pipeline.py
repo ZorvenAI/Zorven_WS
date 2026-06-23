@@ -72,9 +72,16 @@ def _get_effective_schedule() -> str:
     from app.cache.tenant_config import DEFAULT_SCHEDULE, TenantConfigManager
     from app.core.config import settings
 
-    cache = PromptCacheManager(settings.PROMPT_CACHE_REDIS_URL)
-    mgr = TenantConfigManager(prompt_cache=cache)
-    schedules = asyncio.run(mgr.get_all_tenant_schedules())
+    async def _scan() -> dict[str, str]:
+        cache = PromptCacheManager(settings.PROMPT_CACHE_REDIS_URL)
+        await cache.connect()
+        try:
+            mgr = TenantConfigManager(prompt_cache=cache)
+            return await mgr.get_all_tenant_schedules()
+        finally:
+            await cache.close()
+
+    schedules = asyncio.run(_scan())
 
     if not schedules:
         return DEFAULT_SCHEDULE
