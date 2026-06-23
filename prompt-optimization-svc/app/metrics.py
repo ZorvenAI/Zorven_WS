@@ -16,7 +16,7 @@ PROMPT_LOAD_LATENCY = Histogram(
 )
 
 PROMPT_CACHE_HIT = Counter(
-    "poi_prompt_cache_hit_total",
+    "poi_prompt_cache_hit",
     "Prompt cache hit/miss count by tier and result",
     ["tier", "result"],
 )
@@ -61,7 +61,7 @@ MLFLOW_HEALTH = Gauge(
 # ── §19.1 Fallback usage ──
 
 PROMPT_FALLBACK_USAGE = Counter(
-    "poi_prompt_fallback_usage_total",
+    "poi_prompt_fallback_usage",
     "Prompt fallback template usage count",
     ["name"],
 )

@@ -13,8 +13,8 @@ groups:
           description: "p95 cache hit latency is {{ $value }}ms (threshold: 5ms)"
 
       - alert: HighOptimizationCost
-        expr: poi_optimization_run_cost_usd_sum / poi_optimization_run_cost_usd_count > 25
-        for: 1m
+        expr: rate(poi_optimization_run_cost_usd_sum[5m]) / rate(poi_optimization_run_cost_usd_count[5m]) > 25
+        for: 5m
         labels:
           severity: warning
           service: prompt-optimization-svc
