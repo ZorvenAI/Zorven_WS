@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     VALIDATION_IMPROVEMENT_THRESHOLD: float = 0.05  # 5% minimum improvement
     VALIDATION_REGRESSION_THRESHOLD: float = 0.03  # 3% max individual regression
 
+    # Cost cap (OPT-02)
+    OPTIMIZATION_COST_CAP_USD: float = 25.0
+
+    # Length sanity (OPT-06)
+    LENGTH_MULTIPLIER_LIMIT: float = 3.0
+
     # Logging
     LOG_LEVEL: str = "INFO"
 
