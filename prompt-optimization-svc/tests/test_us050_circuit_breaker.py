@@ -4,7 +4,6 @@ Tests the MLflowCircuitBreaker state machine, rollback window helper,
 auto-rollback regression detection, and config constants. NO mocks.
 """
 
-import time
 from datetime import datetime, timedelta, timezone
 
 from app.core.config import settings

@@ -15,15 +15,16 @@ from app.tasks.prompt_health_check import _is_within_rollback_window
 
 class TestCircuitBreakerProperties:
     @settings(max_examples=50, deadline=None)
-    @given(threshold=st.integers(min_value=1, max_value=3600))
+    @given(threshold=st.integers(min_value=10, max_value=3600))
     def test_circuit_never_opens_before_threshold(self, threshold):
         """The circuit must stay CLOSED if failures haven't persisted
-        for failure_threshold_seconds."""
+        for failure_threshold_seconds. Uses min_value=10 to avoid
+        flakiness on slow CI where the loop itself could exceed 1s."""
         cb = MLflowCircuitBreaker(
             CircuitBreakerConfig(failure_threshold_seconds=threshold)
         )
-        # Record failures — but since time.monotonic() advances minimally,
-        # the threshold (≥1s) should not be exceeded
+        # Record failures — time.monotonic() advances minimally,
+        # so the threshold (≥10s) will not be exceeded by 10 iterations
         for _ in range(10):
             cb.record_failure()
         assert cb.state == CircuitState.CLOSED

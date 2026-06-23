@@ -159,7 +159,11 @@ class ZorvenPromptLoader:
                             tenant_id=tenant_id or "",
                         ).observe(elapsed_ms)
                         return template
-                    # AC-3: Missing tenant override silently falls through
+                    # MLflow returned None — either prompt not found or
+                    # MLflow is down (registry swallows exceptions).
+                    # Record as failure so the circuit breaker can detect
+                    # sustained MLflow unavailability.
+                    self.circuit_breaker.record_failure()
                     logger.debug("Tier 2 MISS (MLflow): %s", name)
                     PROMPT_CACHE_HIT.labels(tier="tier2_mlflow", result="miss").inc()
                 except Exception as exc:
