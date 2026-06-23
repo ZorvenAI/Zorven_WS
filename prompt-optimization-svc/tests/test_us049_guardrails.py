@@ -330,11 +330,34 @@ class TestRunCandidateGuardrails:
         ids = [r.guardrail_id for r in chain.results]
         assert "OPT-10" in ids
 
+    def test_tenant_isolation_runs_with_empty_reflection_context(self):
+        """OPT-10 should run even when reflection_context is empty string."""
+        chain = run_candidate_guardrails(
+            candidate_text="safe prompt",
+            base_text="safe base",
+            current_cost_usd=0.0,
+            tenant_id="t1",
+            reflection_context="",
+        )
+        ids = [r.guardrail_id for r in chain.results]
+        assert "OPT-10" in ids
+
     def test_tenant_isolation_skipped_when_no_tenant(self):
         chain = run_candidate_guardrails(
             candidate_text="safe prompt",
             base_text="safe base",
             current_cost_usd=0.0,
+        )
+        ids = [r.guardrail_id for r in chain.results]
+        assert "OPT-10" not in ids
+
+    def test_tenant_isolation_skipped_when_reflection_context_is_none(self):
+        chain = run_candidate_guardrails(
+            candidate_text="safe prompt",
+            base_text="safe base",
+            current_cost_usd=0.0,
+            tenant_id="t1",
+            reflection_context=None,
         )
         ids = [r.guardrail_id for r in chain.results]
         assert "OPT-10" not in ids

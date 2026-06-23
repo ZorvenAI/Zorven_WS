@@ -349,7 +349,7 @@ def run_candidate_guardrails(
         return _build_chain_result(results)
 
     # OPT-10: Tenant isolation (only if tenant context provided)
-    if tenant_id and reflection_context:
+    if tenant_id and reflection_context is not None:
         r = check_tenant_isolation(reflection_context, tenant_id, all_tenant_ids)
         results.append(r)
 
