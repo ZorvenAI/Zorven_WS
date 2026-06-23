@@ -106,8 +106,21 @@ class MLflowPromptRegistry:
             return None
 
     def set_prompt_state(self, name: str, version: int, state: str) -> None:
-        """Update the state tag on a prompt version."""
+        """Update the state tag on a prompt version.
+
+        When promoting to PRODUCTION, also writes a ``promoted_at``
+        ISO-8601 timestamp tag for auto-rollback window tracking (§17.2).
+        """
         self.client.set_prompt_version_tag(name, version, "state", state)
+        if state == "PRODUCTION":
+            from datetime import datetime, timezone
+
+            self.client.set_prompt_version_tag(
+                name,
+                version,
+                "promoted_at",
+                datetime.now(timezone.utc).isoformat(),
+            )
         logger.info("State updated: %s v%d → %s", name, version, state)
 
     def get_prompt_by_state(

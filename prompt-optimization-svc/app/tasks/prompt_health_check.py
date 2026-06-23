@@ -1,9 +1,13 @@
-"""Celery task: daily prompt health check (§14.1).
+"""Celery task: daily prompt health check (§14.1, §17.2).
 
 Scheduled via Beat: Daily 10:00 UTC (06:00 ET) per §14.1.
 
 AC-3: Verifies all PRODUCTION prompts are loadable from MLflow
 and triggers re-optimization on >10% scorer regression.
+
+§17.2 Auto-rollback (US-050): When regression >15% is detected within
+48 hours of promotion, automatically rolls back to the previous
+ARCHIVED version and alerts ADMIN.
 
 Regression detection checks two sources for score data:
 1. MLflow prompt version tag 'score_after' (set by optimization pipeline
@@ -16,9 +20,11 @@ primarily validates prompt loadability and cacheability.
 
 import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
 
 from app.celery_app import celery_app
 from app.core.config import settings
+from app.metrics import AUTO_ROLLBACK_TOTAL
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +46,55 @@ def _get_reopt_task_name(prompt_name: str) -> str | None:
         if prompt_name.startswith(prefix):
             return task_name
     return None
+
+
+def _is_within_rollback_window(
+    promoted_at_str: str | None,
+    window_hours: int,
+) -> bool:
+    """Check if a prompt was promoted within the rollback window.
+
+    Args:
+        promoted_at_str: ISO-8601 timestamp of promotion (from MLflow tag).
+        window_hours: Maximum hours since promotion for auto-rollback.
+
+    Returns:
+        True if promotion is within the window. False if None or invalid.
+    """
+    if promoted_at_str is None:
+        return False
+    try:
+        promoted_at = datetime.fromisoformat(promoted_at_str)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours)
+        return promoted_at >= cutoff
+    except (ValueError, TypeError):
+        return False
+
+
+def _find_previous_archived_version(
+    registry,
+    prompt_name: str,
+    current_version: int,
+) -> int | None:
+    """Find the highest ARCHIVED version below current_version.
+
+    Used to determine the rollback target for auto-rollback.
+    """
+    try:
+        versions = registry.client.search_prompt_versions(prompt_name)
+        archived = []
+        for pv in versions:
+            tags = pv.tags or {}
+            if tags.get("state") == "ARCHIVED" and int(pv.version) < current_version:
+                archived.append(int(pv.version))
+        return max(archived) if archived else None
+    except Exception as exc:
+        logger.error(
+            "Failed to find previous archived version for %s: %s",
+            prompt_name,
+            exc,
+        )
+        return None
 
 
 def _check_regression(score_after: float | None, threshold: float) -> bool:
@@ -105,23 +160,27 @@ def _get_latest_run_score(prompt_name: str) -> float | None:
     name="app.tasks.prompt_health_check.prompt_health_check",
 )
 def prompt_health_check(self):
-    """Verify all PRODUCTION prompts are loadable and performing (AC-3).
+    """Verify all PRODUCTION prompts are loadable and performing (AC-3, §17.2).
 
     1. Lists all registered prompts from MLflow
     2. Checks each PRODUCTION prompt is loadable
     3. Checks score_after tag or OptimizationRun metrics for regression
-    4. Triggers re-optimization if >10% regression detected
+    4. Auto-rollback if >15% regression within 48h of promotion (US-050)
+    5. Triggers re-optimization if >10% regression detected
     """
     from app.services.mlflow_registry import MLflowPromptRegistry
 
     registry = MLflowPromptRegistry(tracking_uri=settings.MLFLOW_TRACKING_URI)
 
     threshold = settings.HEALTH_CHECK_REGRESSION_THRESHOLD
+    auto_rollback_threshold = settings.AUTO_ROLLBACK_REGRESSION_THRESHOLD
+    rollback_window_hours = settings.AUTO_ROLLBACK_WINDOW_HOURS
     result = {
         "checked": 0,
         "healthy": 0,
         "degraded": 0,
         "reopt_triggered": 0,
+        "rollback_triggered": 0,
         "not_loadable": 0,
         "details": [],
     }
@@ -189,9 +248,61 @@ def prompt_health_check(self):
             )
             result["degraded"] += 1
             result["details"].append(
-                f"{name} v{prod_info.version}: " f"regression score={score_after:.3f}"
+                f"{name} v{prod_info.version}: regression score={score_after:.3f}"
             )
 
+            # §17.2 Auto-rollback: >15% regression within 48h of promotion
+            promoted_at_str = prod_info.tags.get("promoted_at")
+            if _check_regression(
+                score_after, auto_rollback_threshold
+            ) and _is_within_rollback_window(promoted_at_str, rollback_window_hours):
+                prev_version = _find_previous_archived_version(
+                    registry, name, prod_info.version
+                )
+                if prev_version is not None:
+                    try:
+                        from app.cache.prompt_cache import PromptCacheManager
+                        from app.logic.rollback_manager import rollback_to_version
+
+                        async def _do_rollback():
+                            cache_mgr = PromptCacheManager(
+                                redis_url=settings.PROMPT_CACHE_REDIS_URL
+                            )
+                            await cache_mgr.connect()
+                            try:
+                                return await rollback_to_version(
+                                    prompt_name=name,
+                                    target_version=prev_version,
+                                    mlflow_registry=registry,
+                                    prompt_cache=cache_mgr,
+                                )
+                            finally:
+                                await cache_mgr.close()
+
+                        rb_result = asyncio.run(_do_rollback())
+                        if rb_result.success:
+                            logger.error(
+                                "ADMIN ALERT: Auto-rollback triggered for "
+                                "%s v%d → v%d (regression %.1f%% within "
+                                "%dh of promotion)",
+                                name,
+                                prod_info.version,
+                                prev_version,
+                                (1.0 - score_after) * 100,
+                                rollback_window_hours,
+                            )
+                            AUTO_ROLLBACK_TOTAL.labels(prompt_name=name).inc()
+                            result["rollback_triggered"] += 1
+                        else:
+                            logger.error(
+                                "ADMIN ALERT: Auto-rollback FAILED for " "%s: %s",
+                                name,
+                                rb_result.error,
+                            )
+                    except Exception as exc:
+                        logger.error("Auto-rollback exception for %s: %s", name, exc)
+
+            # Always trigger re-optimization for any regression >10%
             task_name = _get_reopt_task_name(name)
             if task_name and task_name not in triggered_tasks:
                 try:
@@ -214,11 +325,12 @@ def prompt_health_check(self):
 
     logger.info(
         "Health check complete: checked=%d, healthy=%d, degraded=%d, "
-        "reopt_triggered=%d",
+        "reopt_triggered=%d, rollback_triggered=%d",
         result["checked"],
         result["healthy"],
         result["degraded"],
         result["reopt_triggered"],
+        result["rollback_triggered"],
     )
 
     # Limit details for Celery result backend
