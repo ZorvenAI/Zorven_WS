@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.api.schemas import DependencyStatus, HealthResponse
 from app.core.config import settings
+from app.metrics import MLFLOW_HEALTH
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,11 @@ class HealthChecker:
                 resp = await client.get(f"{settings.MLFLOW_TRACKING_URI}/health")
                 latency = (time.monotonic() - start) * 1000
                 if resp.status_code == 200:
+                    MLFLOW_HEALTH.set(1.0)
                     return DependencyStatus(
                         name="mlflow", status="up", latency_ms=round(latency, 1)
                     )
+                MLFLOW_HEALTH.set(0.0)
                 return DependencyStatus(
                     name="mlflow",
                     status="down",
@@ -44,6 +47,7 @@ class HealthChecker:
                 )
         except Exception as exc:
             latency = (time.monotonic() - start) * 1000
+            MLFLOW_HEALTH.set(0.0)
             return DependencyStatus(
                 name="mlflow",
                 status="down",

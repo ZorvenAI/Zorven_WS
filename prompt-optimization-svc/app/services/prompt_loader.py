@@ -9,10 +9,12 @@ Resolution order:
 import asyncio
 import logging
 import re
+import time
 from typing import Any, Optional
 
 from app.cache.prompt_cache import PromptCacheManager
 from app.cache.tenant_config import DEFAULT_TTL, TenantConfigManager
+from app.metrics import PROMPT_CACHE_HIT, PROMPT_FALLBACK_USAGE, PROMPT_LOAD_LATENCY
 from app.services.mlflow_registry import MLflowPromptRegistry
 
 logger = logging.getLogger(__name__)
@@ -74,6 +76,7 @@ class ZorvenPromptLoader:
                 "All tiers failed for prompt '%s' — using fallback",
                 name,
             )
+            PROMPT_FALLBACK_USAGE.labels(name=name).inc()
             template = fallback_template
 
         return self._format(template, variables)
@@ -85,21 +88,32 @@ class ZorvenPromptLoader:
         ttl: Optional[int],
     ) -> Optional[str]:
         """Resolve prompt template through three tiers."""
+        t0 = time.monotonic()
+        resolved_tier = "tier3_fallback"
+
         # --- Tier 1: Redis cache (AC-1: tenant override first) ---
         if tenant_id:
-            cached = await self.prompt_cache.get_prompt(
-                name, tenant_id=tenant_id
-            )
+            cached = await self.prompt_cache.get_prompt(name, tenant_id=tenant_id)
             if cached is not None:
-                logger.debug(
-                    "Tier 1 HIT (tenant): %s tenant=%s", name, tenant_id
-                )
+                logger.debug("Tier 1 HIT (tenant): %s tenant=%s", name, tenant_id)
+                PROMPT_CACHE_HIT.labels(tier="tier1_tenant", result="hit").inc()
+                elapsed_ms = (time.monotonic() - t0) * 1000
+                PROMPT_LOAD_LATENCY.labels(
+                    name=name, tier="tier1_tenant", tenant_id=tenant_id or ""
+                ).observe(elapsed_ms)
                 return cached
+            PROMPT_CACHE_HIT.labels(tier="tier1_tenant", result="miss").inc()
 
         cached = await self.prompt_cache.get_prompt(name)
         if cached is not None:
             logger.debug("Tier 1 HIT (production): %s", name)
+            PROMPT_CACHE_HIT.labels(tier="tier1_production", result="hit").inc()
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            PROMPT_LOAD_LATENCY.labels(
+                name=name, tier="tier1_production", tenant_id=tenant_id or ""
+            ).observe(elapsed_ms)
             return cached
+        PROMPT_CACHE_HIT.labels(tier="tier1_production", result="miss").inc()
 
         # --- Tier 2: MLflow API (lifecycle-aware) ---
         if self.mlflow_registry is not None:
@@ -109,6 +123,7 @@ class ZorvenPromptLoader:
                 )
                 if template is not None:
                     logger.debug("Tier 2 HIT (MLflow): %s", name)
+                    PROMPT_CACHE_HIT.labels(tier="tier2_mlflow", result="hit").inc()
                     resolved_ttl = await self._resolve_ttl(ttl, tenant_id)
                     await self.prompt_cache.set_prompt(
                         name,
@@ -116,21 +131,28 @@ class ZorvenPromptLoader:
                         ttl=resolved_ttl,
                         tenant_id=resolved_tenant,
                     )
+                    elapsed_ms = (time.monotonic() - t0) * 1000
+                    PROMPT_LOAD_LATENCY.labels(
+                        name=name,
+                        tier="tier2_mlflow",
+                        tenant_id=tenant_id or "",
+                    ).observe(elapsed_ms)
                     return template
                 # AC-3: Missing tenant override silently falls through
                 logger.debug("Tier 2 MISS (MLflow): %s", name)
+                PROMPT_CACHE_HIT.labels(tier="tier2_mlflow", result="miss").inc()
             except Exception as exc:
                 # Only log warnings for actual errors, not "not found"
-                logger.warning(
-                    "Tier 2 ERROR (MLflow) for prompt '%s': %s", name, exc
-                )
+                logger.warning("Tier 2 ERROR (MLflow) for prompt '%s': %s", name, exc)
 
         # --- Tier 3: fallback (handled by caller) ---
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        PROMPT_LOAD_LATENCY.labels(
+            name=name, tier=resolved_tier, tenant_id=tenant_id or ""
+        ).observe(elapsed_ms)
         return None
 
-    async def _resolve_ttl(
-        self, ttl: Optional[int], tenant_id: Optional[str]
-    ) -> int:
+    async def _resolve_ttl(self, ttl: Optional[int], tenant_id: Optional[str]) -> int:
         """Resolve cache TTL: explicit > tenant config > default."""
         if ttl is not None:
             return ttl
@@ -154,9 +176,7 @@ class ZorvenPromptLoader:
         if tenant_id:
             # AC-2: Try tenant-specific named prompt first
             tenant_prompt_name = f"{name}-tenant-{tenant_id}"
-            template = self.mlflow_registry.load_prompt_template(
-                tenant_prompt_name
-            )
+            template = self.mlflow_registry.load_prompt_template(tenant_prompt_name)
             if template is not None:
                 return template, tenant_id
 
@@ -180,9 +200,7 @@ class ZorvenPromptLoader:
         template = self.mlflow_registry.load_prompt_template(name)
         return template, None
 
-    def _format(
-        self, template: str, variables: Optional[dict[str, Any]]
-    ) -> str:
+    def _format(self, template: str, variables: Optional[dict[str, Any]]) -> str:
         """Format a template with variables (AC-4).
 
         Uses single-pass regex substitution to safely replace
