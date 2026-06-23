@@ -4,12 +4,21 @@ Each key is stored as an individual Redis string at:
     tenant:{tid}:config.<key_name>
 
 Defaults from §10.2 and §20.1 applied when keys are missing.
+
+US-047: Schedule choices are dual-written to Redis (hot path) and
+PostgreSQL (source-of-truth). On Redis miss, falls back to PostgreSQL
+and re-warms the Redis cache.
 """
 
 import logging
 from typing import Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from app.cache.prompt_cache import PromptCacheManager
+
+# Type alias for the async session factory from app.models.database
+AsyncSessionFactory = async_sessionmaker[AsyncSession]
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +74,20 @@ def validate_schedule(schedule: str) -> str:
     return DEFAULT_SCHEDULE
 
 
+def strict_validate_schedule(schedule: str) -> str:
+    """Validate schedule, raising ValueError for invalid values (AC-3).
+
+    Unlike validate_schedule() which silently falls back to default,
+    this raises so the API layer can return HTTP 400.
+    """
+    if schedule in VALID_SCHEDULES:
+        return schedule
+    raise ValueError(
+        f"Invalid schedule '{schedule}'. "
+        f"Must be one of: {', '.join(VALID_SCHEDULES)}"
+    )
+
+
 class TenantConfigManager:
     """Read/write per-tenant configuration from Redis."""
 
@@ -77,8 +100,13 @@ class TenantConfigManager:
     PROMOTION_THRESHOLD_KEY = "tenant:{tenant_id}:config.prompt_promotion_threshold"
     SCHEDULE_KEY = "tenant:{tenant_id}:config.wf3_optimization_schedule"
 
-    def __init__(self, prompt_cache: PromptCacheManager) -> None:
+    def __init__(
+        self,
+        prompt_cache: PromptCacheManager,
+        db_session_factory: Optional[AsyncSessionFactory] = None,
+    ) -> None:
         self.prompt_cache = prompt_cache
+        self.db_session_factory = db_session_factory
 
     async def get_prompt_cache_ttl(self, tenant_id: Optional[str] = None) -> int:
         """Get the prompt cache TTL for a tenant.
@@ -250,13 +278,55 @@ class TenantConfigManager:
 
     # --- WF3 optimization schedule ---
 
+    # Sentinel for Redis miss detection without changing _get_str signature
+    _REDIS_MISS = ""
+
     async def get_optimization_schedule(self, tenant_id: Optional[str] = None) -> str:
-        raw = await self._get_str(self.SCHEDULE_KEY, tenant_id, DEFAULT_SCHEDULE)
-        return validate_schedule(raw)
+        """Get optimization schedule, falling back to PostgreSQL on Redis miss."""
+        raw = await self._get_str(self.SCHEDULE_KEY, tenant_id, self._REDIS_MISS)
+        if raw != self._REDIS_MISS:
+            return validate_schedule(raw)
+
+        # Redis miss — try PostgreSQL fallback (US-047 AC-1)
+        if tenant_id and self.db_session_factory:
+            pg_value = await self._get_schedule_from_pg(tenant_id)
+            if pg_value is not None:
+                # Re-warm Redis cache
+                await self._set_value(self.SCHEDULE_KEY, tenant_id, pg_value)
+                return validate_schedule(pg_value)
+
+        return DEFAULT_SCHEDULE
 
     async def set_optimization_schedule(self, tenant_id: str, schedule: str) -> None:
+        """Persist schedule to Redis and PostgreSQL (US-047 AC-1)."""
         validated = validate_schedule(schedule)
         await self._set_value(self.SCHEDULE_KEY, tenant_id, validated)
+
+        # Dual-write to PostgreSQL if db_session_factory is available
+        if self.db_session_factory:
+            await self._upsert_schedule_to_pg(tenant_id, validated)
+
+    async def get_all_tenant_schedules(self) -> dict[str, str]:
+        """Read all tenant schedules from Redis via SCAN (US-047 AC-2).
+
+        Returns a dict mapping tenant_id to schedule value.
+        Used by WF3 tasks to determine the most aggressive schedule.
+        """
+        result: dict[str, str] = {}
+        try:
+            r = await self.prompt_cache.connect()
+            pattern = "tenant:*:config.wf3_optimization_schedule"
+            async for key in r.scan_iter(match=pattern):
+                # Extract tenant_id from key: tenant:{tid}:config.wf3_...
+                parts = key.split(":")
+                if len(parts) >= 2:
+                    tid = parts[1]
+                    value = await r.get(key)
+                    if value:
+                        result[tid] = validate_schedule(value)
+        except Exception as exc:
+            logger.warning("Failed to scan tenant schedules: %s", exc)
+        return result
 
     # --- Private helpers ---
 
@@ -300,3 +370,57 @@ class TenantConfigManager:
                 tenant_id,
                 exc,
             )
+
+    # --- PostgreSQL helpers (US-047) ---
+
+    async def _upsert_schedule_to_pg(self, tenant_id: str, schedule: str) -> None:
+        """Upsert tenant schedule to PostgreSQL source-of-truth."""
+        try:
+            from datetime import datetime, timezone
+
+            from sqlalchemy.dialects.postgresql import insert
+
+            from app.models.tenant_config import TenantConfig
+
+            async with self.db_session_factory() as session:
+                stmt = insert(TenantConfig).values(
+                    tenant_id=tenant_id,
+                    wf3_optimization_schedule=schedule,
+                )
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["tenant_id"],
+                    set_={
+                        "wf3_optimization_schedule": schedule,
+                        "updated_at": datetime.now(timezone.utc),
+                    },
+                )
+                await session.execute(stmt)
+                await session.commit()
+        except Exception as exc:
+            logger.warning(
+                "Failed to upsert schedule to PostgreSQL for %s: %s",
+                tenant_id,
+                exc,
+            )
+
+    async def _get_schedule_from_pg(self, tenant_id: str) -> Optional[str]:
+        """Read tenant schedule from PostgreSQL fallback."""
+        try:
+            from sqlalchemy import select
+
+            from app.models.tenant_config import TenantConfig
+
+            async with self.db_session_factory() as session:
+                stmt = select(TenantConfig.wf3_optimization_schedule).where(
+                    TenantConfig.tenant_id == tenant_id
+                )
+                result = await session.execute(stmt)
+                row = result.scalar_one_or_none()
+                return row
+        except Exception as exc:
+            logger.warning(
+                "Failed to read schedule from PostgreSQL for %s: %s",
+                tenant_id,
+                exc,
+            )
+            return None

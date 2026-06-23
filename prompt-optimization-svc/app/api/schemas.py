@@ -436,3 +436,13 @@ class TenantConfigUpdateRequest(BaseModel):
     prompt_cache_ttl_seconds: Optional[int] = None
     golden_dataset_default_size: Optional[int] = None
     wf3_optimization_schedule: Optional[str] = None
+
+    @field_validator("wf3_optimization_schedule")
+    @classmethod
+    def validate_wf3_schedule(cls, v: str | None) -> str | None:
+        """Reject invalid schedule values with 400 (US-047 AC-3)."""
+        if v is None:
+            return v
+        from app.cache.tenant_config import strict_validate_schedule
+
+        return strict_validate_schedule(v)
