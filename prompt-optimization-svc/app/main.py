@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_client import make_asgi_app
 
 from app.api.routes import router
 from app.cache.prompt_cache import PromptCacheManager
@@ -184,3 +185,7 @@ async def validation_exception_handler(
 
 
 app.include_router(router)
+
+# Prometheus metrics endpoint (US-048, AC-1)
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
