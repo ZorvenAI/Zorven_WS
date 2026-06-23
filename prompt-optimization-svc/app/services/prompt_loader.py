@@ -14,6 +14,8 @@ from typing import Any, Optional
 
 from app.cache.prompt_cache import PromptCacheManager
 from app.cache.tenant_config import DEFAULT_TTL, TenantConfigManager
+from app.core.config import settings
+from app.logic.circuit_breaker import CircuitBreakerConfig, MLflowCircuitBreaker
 from app.metrics import PROMPT_CACHE_HIT, PROMPT_FALLBACK_USAGE, PROMPT_LOAD_LATENCY
 from app.services.mlflow_registry import MLflowPromptRegistry
 
@@ -24,6 +26,14 @@ _MLFLOW_VAR_PATTERN = re.compile(r"\{\{(\w[\w.]*)\}\}")
 
 # Single-pass placeholder pattern for safe substitution
 _PLACEHOLDER_PATTERN = re.compile(r"\{([\w.]+)\}")
+
+# Module-level singleton — shared across all loader instances in this process
+_default_circuit_breaker = MLflowCircuitBreaker(
+    CircuitBreakerConfig(
+        failure_threshold_seconds=settings.CIRCUIT_BREAKER_FAILURE_THRESHOLD_SECONDS,
+        half_open_interval_seconds=settings.CIRCUIT_BREAKER_HALF_OPEN_INTERVAL_SECONDS,
+    )
+)
 
 
 def _convert_mlflow_template(template: str) -> str:
@@ -43,10 +53,14 @@ class ZorvenPromptLoader:
         prompt_cache: PromptCacheManager,
         mlflow_registry: Optional[MLflowPromptRegistry] = None,
         tenant_config: Optional[TenantConfigManager] = None,
+        circuit_breaker: Optional[MLflowCircuitBreaker] = None,
     ) -> None:
         self.prompt_cache = prompt_cache
         self.mlflow_registry = mlflow_registry
         self.tenant_config = tenant_config
+        self.circuit_breaker = (
+            circuit_breaker if circuit_breaker is not None else _default_circuit_breaker
+        )
 
     async def load(
         self,
@@ -115,35 +129,44 @@ class ZorvenPromptLoader:
             return cached
         PROMPT_CACHE_HIT.labels(tier="tier1_production", result="miss").inc()
 
-        # --- Tier 2: MLflow API (lifecycle-aware) ---
+        # --- Tier 2: MLflow API (lifecycle-aware, circuit-breaker protected) ---
         if self.mlflow_registry is not None:
-            try:
-                template, resolved_tenant = await asyncio.to_thread(
-                    self._mlflow_resolve, name, tenant_id
-                )
-                if template is not None:
-                    logger.debug("Tier 2 HIT (MLflow): %s", name)
-                    PROMPT_CACHE_HIT.labels(tier="tier2_mlflow", result="hit").inc()
-                    resolved_ttl = await self._resolve_ttl(ttl, tenant_id)
-                    await self.prompt_cache.set_prompt(
-                        name,
-                        template,
-                        ttl=resolved_ttl,
-                        tenant_id=resolved_tenant,
+            if not self.circuit_breaker.should_allow_request():
+                logger.debug("Circuit breaker OPEN — skipping MLflow for %s", name)
+                PROMPT_CACHE_HIT.labels(
+                    tier="tier2_mlflow", result="circuit_open"
+                ).inc()
+            else:
+                try:
+                    template, resolved_tenant = await asyncio.to_thread(
+                        self._mlflow_resolve, name, tenant_id
                     )
-                    elapsed_ms = (time.monotonic() - t0) * 1000
-                    PROMPT_LOAD_LATENCY.labels(
-                        name=name,
-                        tier="tier2_mlflow",
-                        tenant_id=tenant_id or "",
-                    ).observe(elapsed_ms)
-                    return template
-                # AC-3: Missing tenant override silently falls through
-                logger.debug("Tier 2 MISS (MLflow): %s", name)
-                PROMPT_CACHE_HIT.labels(tier="tier2_mlflow", result="miss").inc()
-            except Exception as exc:
-                # Only log warnings for actual errors, not "not found"
-                logger.warning("Tier 2 ERROR (MLflow) for prompt '%s': %s", name, exc)
+                    if template is not None:
+                        self.circuit_breaker.record_success()
+                        logger.debug("Tier 2 HIT (MLflow): %s", name)
+                        PROMPT_CACHE_HIT.labels(tier="tier2_mlflow", result="hit").inc()
+                        resolved_ttl = await self._resolve_ttl(ttl, tenant_id)
+                        await self.prompt_cache.set_prompt(
+                            name,
+                            template,
+                            ttl=resolved_ttl,
+                            tenant_id=resolved_tenant,
+                        )
+                        elapsed_ms = (time.monotonic() - t0) * 1000
+                        PROMPT_LOAD_LATENCY.labels(
+                            name=name,
+                            tier="tier2_mlflow",
+                            tenant_id=tenant_id or "",
+                        ).observe(elapsed_ms)
+                        return template
+                    # AC-3: Missing tenant override silently falls through
+                    logger.debug("Tier 2 MISS (MLflow): %s", name)
+                    PROMPT_CACHE_HIT.labels(tier="tier2_mlflow", result="miss").inc()
+                except Exception as exc:
+                    self.circuit_breaker.record_failure()
+                    logger.warning(
+                        "Tier 2 ERROR (MLflow) for prompt '%s': %s", name, exc
+                    )
 
         # --- Tier 3: fallback (handled by caller) ---
         elapsed_ms = (time.monotonic() - t0) * 1000

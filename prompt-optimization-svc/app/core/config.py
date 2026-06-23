@@ -65,6 +65,14 @@ class Settings(BaseSettings):
     # Length sanity (OPT-06)
     LENGTH_MULTIPLIER_LIMIT: float = 3.0
 
+    # Circuit breaker (§17.2)
+    CIRCUIT_BREAKER_FAILURE_THRESHOLD_SECONDS: int = 300  # 5 min
+    CIRCUIT_BREAKER_HALF_OPEN_INTERVAL_SECONDS: int = 60  # probe every 60s
+
+    # Auto-rollback (§17.2)
+    AUTO_ROLLBACK_REGRESSION_THRESHOLD: float = 0.15  # 15%
+    AUTO_ROLLBACK_WINDOW_HOURS: int = 48
+
     # Logging
     LOG_LEVEL: str = "INFO"
 

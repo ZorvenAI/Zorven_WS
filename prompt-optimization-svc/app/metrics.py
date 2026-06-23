@@ -66,6 +66,21 @@ PROMPT_FALLBACK_USAGE = Counter(
     ["name"],
 )
 
+# ── §17.2 Circuit breaker ──
+
+CIRCUIT_BREAKER_STATE = Gauge(
+    "poi_circuit_breaker_state",
+    "MLflow circuit breaker state (0=CLOSED, 1=OPEN, 2=HALF_OPEN)",
+)
+
+# ── §17.2 Auto-rollback ──
+
+AUTO_ROLLBACK_TOTAL = Counter(
+    "poi_auto_rollback",
+    "Auto-rollback events triggered by health check",
+    ["prompt_name"],
+)
+
 # ── AC-2: Alert threshold constants per §19.1 ──
 
 ALERT_CACHE_HIT_P95_MS = 5.0
