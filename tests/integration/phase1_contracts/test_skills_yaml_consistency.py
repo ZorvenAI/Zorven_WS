@@ -142,7 +142,7 @@ class TestSkillsYamlConsistency:
         assert missing == [], f"Missing skills.yaml files: {missing}"
 
     def test_global_skill_id_uniqueness(self):
-        """No duplicate skill_ids across ALL ~169 skills in 15 services."""
+        """No duplicate skill_ids across ALL 179 skills in 15 services."""
         seen: dict[str, str] = {}  # skill_id -> service
         duplicates = []
         for svc, skill in _all_skills():

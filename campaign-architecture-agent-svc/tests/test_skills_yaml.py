@@ -6,7 +6,7 @@ from typing import Optional
 
 import pytest
 import yaml
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 
 VALID_ROLES = {"OWNER", "ADMIN", "EDITOR", "VIEWER"}
 SKILL_ID_PATTERN = re.compile(r"^SKL-[A-Za-z0-9]+-\d{2}[a-z]?$")

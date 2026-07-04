@@ -71,8 +71,8 @@ class SkillOutputField(BaseModel):
     @field_validator("max_length")
     @classmethod
     def validate_max_length(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None and v < 0:
-            raise ValueError(f"max_length must be >= 0, got {v}")
+        if v is not None and v <= 0:
+            raise ValueError(f"max_length must be positive, got {v}")
         return v
 
 
@@ -147,7 +147,7 @@ valid_output_fields = st.lists(
         field=valid_field_names,
         type=valid_field_types,
         description=st.one_of(st.none(), st.text(min_size=1, max_size=100)),
-        max_length=st.one_of(st.none(), st.integers(min_value=0, max_value=1000)),
+        max_length=st.one_of(st.none(), st.integers(min_value=1, max_value=1000)),
     ),
     min_size=1,
     max_size=5,
@@ -309,7 +309,7 @@ class TestSkillDefinitionProperties:
         field_name=valid_field_names,
         field_type=valid_field_types,
         description=st.one_of(st.none(), st.text(min_size=1, max_size=100)),
-        max_length=st.one_of(st.none(), st.integers(min_value=0, max_value=10000)),
+        max_length=st.one_of(st.none(), st.integers(min_value=1, max_value=10000)),
     )
     @settings(max_examples=30)
     def test_valid_output_field_validates(
