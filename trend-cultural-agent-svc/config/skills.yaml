@@ -1,0 +1,358 @@
+# Trend & Cultural Insights Agent (TCIA) — Skill Registry
+# Source: app/skills/skl_tcia_*.py SkillMeta definitions
+# Default idempotent=true, default timeout_ms=30000 per models.py (dataclass)
+
+skills:
+  - skill_id: SKL-TCIA-01
+    name: social_trend_scanner
+    description: "Scan social media platforms for trending topics"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+        description: "previous_outputs.market_research, competitor_intelligence, audience_persona for context"
+    output_schema:
+      - field: trends
+        type: array
+        description: "Trending topics with platform, engagement metrics, velocity"
+      - field: sources
+        type: array
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-TCIA-02
+    name: cultural_shift_monitor
+    description: "Monitor cultural shifts across domains"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: cultural_shifts
+        type: array
+        description: "Identified cultural shifts with domain, direction, evidence"
+      - field: sources
+        type: array
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-TCIA-03
+    name: viral_content_analyzer
+    description: "Analyze viral content formats and amplification mechanics"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: viral_patterns
+        type: array
+        description: "Viral content formats, amplification mechanics, shareability factors"
+      - field: sources
+        type: array
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-TCIA-04
+    name: generational_preference_tracker
+    description: "Track generational behaviors and brand expectations"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: generational_insights
+        type: array
+        description: "Per-generation behaviors, brand expectations, platform preferences"
+      - field: sources
+        type: array
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-TCIA-05
+    name: slang_language_tracker
+    description: "Track emerging slang and language evolution with sensitivity scoring"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: slang_terms
+        type: array
+        description: "Emerging slang with origin, usage context, sensitivity score, brand safety"
+      - field: sources
+        type: array
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-TCIA-06
+    name: rag_context_retrieval
+    description: "Retrieve prior trend reports from RAG for historical comparison"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: raw_context
+        type: string
+        description: "Retrieved RAG context text"
+      - field: sources
+        type: array
+    timeout_ms: 10000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-TCIA-07
+    name: cultural_relevance_scorer
+    description: "4-dimension cultural relevance scoring via Claude"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: scored_trends
+        type: array
+        description: "Trends with 4-dimension scores (audience_alignment, competitive_landscape, brand_fit, momentum)"
+      - field: total_score
+        type: float
+        description: "Composite 0-100 score"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-TCIA-08
+    name: trend_persona_mapper
+    description: "Map trends to APA personas with affinity and content angles"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+        description: "previous_outputs.audience_persona provides personas for mapping"
+    output_schema:
+      - field: trend_persona_mappings
+        type: array
+        description: "Per-trend persona affinities, content angles, platform recommendations"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-TCIA-09
+    name: opportunity_alert_generator
+    description: "Generate opportunity alerts for trends above threshold"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: alerts
+        type: array
+        description: "Opportunity alerts with trend, score, urgency, recommended actions"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-TCIA-10
+    name: trend_report_synthesizer
+    description: "Synthesize comprehensive trend report with strategic recommendations"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: executive_summary
+        type: string
+      - field: trend_analysis
+        type: array
+      - field: cultural_relevance_scores
+        type: array
+      - field: strategic_recommendations
+        type: array
+      - field: confidence_score
+        type: float
+    timeout_ms: 90000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-TCIA-11
+    name: trend_report_persister
+    description: "Persist trend reports to GCS, RAG, and emit alerts"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: persisted
+        type: boolean
+      - field: gcs_path
+        type: string
+      - field: registry_updated
+        type: boolean
+      - field: alerts_emitted
+        type: integer
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: true
+
+  - skill_id: SKL-TCIA-12
+    name: human_escalation
+    description: "Escalate to human review when confidence is low or harmful content detected"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: escalated
+        type: boolean
+      - field: reason
+        type: string
+    timeout_ms: 5000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true

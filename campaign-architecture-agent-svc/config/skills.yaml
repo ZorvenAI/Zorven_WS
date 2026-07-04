@@ -1,0 +1,356 @@
+# campaign-architecture-agent-svc skill registry
+# WF3 Agent 3.1 — Meta Ads campaign architecture design
+# 12 skills (SKL-CAA-01..12)
+# Source: app/logic/ modules + CLAUDE.md skill table
+
+skills:
+  # ── Research Phase (SKL-CAA-01..05) ──────────────────────────────────────────
+  - skill_id: SKL-CAA-01
+    name: strategy_context_loader
+    description: "Load WF1 + WF2 + Company context via parallel HTTP calls to Django analytics endpoints"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: wf1_context
+        type: object
+        description: "WF1 analytics context (APA + CIA minimum)"
+      - field: wf2_context
+        type: object
+        description: "WF2 strategy context (BPA minimum + BPV + NTA + BSA)"
+      - field: company_context
+        type: object
+        description: "Company model data"
+      - field: baa_context
+        type: object
+        description: "Optional brand architecture context"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-CAA-02
+    name: market_benchmark_researcher
+    description: "Fetch industry benchmarks via Tavily web search with 24h cache"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: benchmarks
+        type: object
+        description: "Industry benchmark data (CPA, CTR, ROAS ranges)"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-CAA-03
+    name: competitor_ad_analyzer
+    description: "Analyze competitor ad strategies via Tavily search with 12h cache"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: competitor_ads
+        type: object
+        description: "Competitor ad intelligence (formats, positioning, spend estimates)"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-CAA-04
+    name: odoo_customer_loader
+    description: "Load optional Odoo CRM customer data for audience enrichment"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: customer_data
+        type: object
+        description: "Odoo CRM customer segments and attributes"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-CAA-05
+    name: rag_intelligence_retriever
+    description: "Retrieve prior campaign learnings from RAG vector store (Vertex AI)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: rag_learnings
+        type: object
+        description: "Prior campaign learnings from intelligence loop"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # ── Synthesis Phase (SKL-CAA-06..10) ─────────────────────────────────────────
+  - skill_id: SKL-CAA-06
+    name: funnel_objective_mapper
+    description: "Map marketing funnel stages to Meta campaign objectives (AWARENESS, CONSIDERATION, CONVERSION)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: funnel_map
+        type: object
+        description: "Funnel-to-objective mapping with KPI targets per stage"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-CAA-07
+    name: audience_targeting_builder
+    description: "Build Meta-compatible audience targeting specs from APA personas and Odoo customer data"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: targeting_specs
+        type: array
+        description: "Meta Ads targeting specifications per audience segment"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-CAA-08
+    name: placement_budget_builder
+    description: "Build placement strategy and budget allocation with CBO/ABO recommendation"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: placement_strategy
+        type: object
+        description: "Placement selection and allocation"
+      - field: budget_allocation
+        type: object
+        description: "Budget allocation across ad sets (must sum to 100% +/-1%)"
+      - field: cbo_abo_recommendation
+        type: string
+        description: "CBO or ABO recommendation with rationale"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-CAA-09
+    name: ab_test_planner
+    description: "Design A/B test plan with variable isolation and sample size calculations"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: test_plan
+        type: object
+        description: "A/B test plan with variants, variables, and sample sizes"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-CAA-10
+    name: blueprint_synthesizer
+    description: "Synthesize complete CampaignBlueprint (Meta API-compatible) via Claude Sonnet 4"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: campaign_blueprint
+        type: object
+        description: "Complete Meta API-compatible campaign blueprint"
+      - field: confidence_score
+        type: number
+        description: "Blueprint confidence score (0.0-1.0)"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  # ── Persist Phase (SKL-CAA-11..12) ───────────────────────────────────────────
+  - skill_id: SKL-CAA-11
+    name: blueprint_persister
+    description: "Persist campaign blueprint to Redis cache and GCS object storage"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: gcs_uri
+        type: string
+        description: "GCS URI of persisted blueprint"
+      - field: cache_key
+        type: string
+        description: "Redis cache key for blueprint"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: true
+
+  - skill_id: SKL-CAA-12
+    name: human_escalation
+    description: "Escalate to human review when blueprint confidence < 0.7 threshold"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: escalation_id
+        type: string
+        description: "Unique escalation request identifier"
+      - field: escalation_reason
+        type: string
+        description: "Reason for escalation"
+    timeout_ms: 10000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true

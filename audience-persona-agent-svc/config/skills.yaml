@@ -1,0 +1,448 @@
+# Audience Persona Agent (APA) — Skill Registry
+# Source: app/skills/*.py SkillMeta definitions
+# Default idempotent=true, default timeout_ms=30000 per models.py
+# Odoo skills (05b, 05c) only registered when APA_ODOO_ENABLED=true
+
+skills:
+  - skill_id: SKL-APA-01
+    name: audience_landscape_research
+    description: >-
+      Research target audience demographics, segments, and customer
+      profiles via web search. Seeds from MRA market_overview when available.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+        description: "previous_outputs.market_research.market_overview seeds research"
+    output_schema:
+      - field: audience_data
+        type: array
+        description: "Demographic segments, customer profiles from web search"
+      - field: sources
+        type: array
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-APA-02
+    name: forum_community_miner
+    description: >-
+      Search Reddit, Quora, and industry forums for pain points,
+      community language patterns, and sentiment signals.
+      Respects robots.txt (PG-09).
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: forum_insights
+        type: array
+        description: "Pain points, language patterns, sentiment from community forums"
+      - field: sources
+        type: array
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-APA-03
+    name: social_listening_analyzer
+    description: >-
+      Search for social media behavior patterns, platform preferences,
+      content consumption habits, and influencer engagement patterns.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: social_behavior
+        type: object
+        description: "Platform preferences, content habits, influencer engagement patterns"
+      - field: sources
+        type: array
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-APA-04
+    name: buyer_role_extractor
+    description: >-
+      Identify decision makers, influencers, champions, blockers,
+      and end users in B2B buying committees.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: buyer_roles
+        type: array
+        description: "B2B buying committee roles with titles, influence, objections"
+      - field: sources
+        type: array
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-APA-05
+    name: review_needs_miner
+    description: >-
+      Search G2, Capterra, TrustRadius, and general review sites
+      for customer needs, objections, and decision criteria.
+      Seeded by CIA competitor list when available.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+        description: "previous_outputs.competitor_intelligence seeds competitor list"
+    output_schema:
+      - field: customer_needs
+        type: array
+        description: "Needs, objections, decision criteria from review sites"
+      - field: sources
+        type: array
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-APA-05b
+    name: odoo_survey_data_extractor
+    description: >-
+      Extract survey responses via Odoo XML-RPC. Aggregates
+      demographics, satisfaction scores, and NPS from survey data.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: survey_data
+        type: object
+        description: "Aggregated demographics, satisfaction scores, NPS from Odoo surveys"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-APA-05c
+    name: odoo_crm_customer_extractor
+    description: >-
+      Extract CRM customer data via Odoo XML-RPC. Groups by
+      industry, country, and company size. Sets has_sufficient_data
+      when customer_count >= 10 for CRM-grounded persona naming.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: crm_segments
+        type: array
+        description: "Customer segments grouped by industry, country, company size"
+      - field: has_sufficient_data
+        type: boolean
+        description: "True when customer_count >= 10"
+      - field: customer_count
+        type: integer
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-APA-06
+    name: rag_context_retrieval
+    description: >-
+      Retrieves prior audience persona analyses from tenant RAG store
+      for historical context and evolution tracking.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: raw_context
+        type: string
+        description: "Retrieved RAG context text"
+      - field: sources
+        type: array
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-APA-07
+    name: demographic_profile_builder
+    description: >-
+      Build structured demographic profiles (age, gender, income,
+      education, location, job titles, company size) from research data
+      using Claude Sonnet 4.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: demographic_profiles
+        type: array
+        description: "Structured profiles with age, gender, income, education, location, job titles"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-APA-08
+    name: psychographic_behavioral_profiler
+    description: >-
+      Build psychographic profiles (values, interests, personality,
+      media habits, decision style) and behavioral patterns using
+      Claude Sonnet 4.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: psychographic_profiles
+        type: array
+        description: "Values, interests, personality, media habits, decision style per segment"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-APA-09
+    name: persona_synthesizer
+    description: >-
+      Synthesize and differentiate buyer personas from demographic,
+      psychographic, and behavioral data. CRM-first naming when
+      sufficient customer data is available.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: personas
+        type: array
+        description: "Synthesized buyer personas with segment labels, not fictional names"
+      - field: data_source
+        type: string
+        description: "crm_grounded or research_based"
+      - field: differentiation_matrix
+        type: object
+    timeout_ms: 90000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-APA-10
+    name: buying_journey_mapper
+    description: >-
+      Map 6-stage buying journey per persona: Awareness, Consideration,
+      Evaluation, Decision, Onboarding, Advocacy. Includes touchpoints,
+      emotional states, and content recommendations.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: journey_maps
+        type: array
+        description: "Per-persona 6-stage journey with touchpoints, emotions, content recs"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-APA-11
+    name: persona_report_persister
+    description: >-
+      Persist persona report to GCS, index in RAG store, and update
+      persona registry. Creates version snapshots for evolution detection.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: persisted
+        type: boolean
+      - field: gcs_path
+        type: string
+      - field: registry_updated
+        type: boolean
+      - field: version
+        type: integer
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: false
+
+  - skill_id: SKL-APA-12
+    name: human_escalation
+    description: >-
+      Request human review when confidence is low, RBAC requires
+      escalation, or age-appropriate content check triggers (OG-08).
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: escalated
+        type: boolean
+      - field: reason
+        type: string
+    timeout_ms: 10000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
