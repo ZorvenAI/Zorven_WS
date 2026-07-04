@@ -1,0 +1,372 @@
+# Competitor Intelligence Agent (CIA) — Skill Registry
+# Source: app/skills/*.py SkillMeta definitions
+# Default idempotent=true, default timeout_ms=30000 per models.py
+
+skills:
+  - skill_id: SKL-CIA-01
+    name: competitor_discovery_search
+    description: >-
+      Discover competitors via web search. Uses MRA competitive_landscape
+      as seed hints when available from upstream pipeline.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+        description: "previous_outputs.market_research.competitive_landscape seeds discovery"
+    output_schema:
+      - field: competitors
+        type: array
+        description: "Discovered competitor names, domains, and descriptions"
+      - field: sources
+        type: array
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-CIA-02
+    name: competitor_website_profiler
+    description: >-
+      Profile competitor websites: homepage messaging, pricing tiers,
+      team size signals, feature lists. Max 5 pages per domain (PG-09).
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: profiles
+        type: array
+        description: "Per-competitor website profile with messaging, features, team signals"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-CIA-03
+    name: social_media_analyzer
+    description: >-
+      Assess competitor social presence: follower counts, posting cadence,
+      engagement rates, content strategy patterns.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: social_profiles
+        type: array
+        description: "Per-competitor social media presence analysis"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-CIA-04
+    name: customer_review_aggregator
+    description: >-
+      Aggregate customer reviews from G2, Capterra, Trustpilot.
+      Extract average rating, sentiment, praise/complaint themes.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: reviews
+        type: array
+        description: "Per-competitor review aggregation with ratings, sentiment, themes"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-CIA-05
+    name: pricing_strategy_extractor
+    description: >-
+      Extract pricing intelligence: model type, tier names, prices,
+      feature gating, billing frequency.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: pricing_data
+        type: array
+        description: "Per-competitor pricing model, tiers, features, billing info"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-CIA-06
+    name: market_share_estimator
+    description: >-
+      Estimate market share via multi-source proxies: web traffic,
+      employee count, funding data, review volume. Uses MRA's
+      market_sizing for TAM/SAM baseline when available.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+        description: "previous_outputs.market_research.market_sizing provides TAM/SAM baseline"
+    output_schema:
+      - field: market_share_estimates
+        type: array
+        description: "Per-competitor estimated share with proxy sources and confidence"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-CIA-07
+    name: rag_context_retrieval
+    description: >-
+      Retrieves prior competitive analyses from tenant RAG store
+      for historical context and trend comparison.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: raw_context
+        type: string
+        description: "Retrieved RAG context text"
+      - field: sources
+        type: array
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-CIA-08
+    name: swot_analysis_generator
+    description: >-
+      Generate evidence-grounded SWOT analyses per competitor
+      using Claude Sonnet 4. Every claim cites source URLs.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: swot_analyses
+        type: array
+        description: "Per-competitor SWOT with strengths, weaknesses, opportunities, threats and citations"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-CIA-09
+    name: positioning_gap_analyzer
+    description: >-
+      Cross-competitor positioning analysis: gap identification,
+      white-space opportunities, differentiation scoring via Claude.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: positioning_gaps
+        type: array
+        description: "Identified positioning gaps and white-space opportunities"
+      - field: differentiation_scores
+        type: array
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-CIA-10
+    name: competitive_benchmarking_synthesizer
+    description: >-
+      Final benchmarking report: executive summary, competitor matrix,
+      key findings, strategic recommendations via Claude Sonnet 4.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: executive_summary
+        type: string
+      - field: competitor_matrix
+        type: object
+      - field: key_findings
+        type: array
+      - field: strategic_recommendations
+        type: array
+      - field: confidence_score
+        type: float
+    timeout_ms: 90000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-CIA-11
+    name: competitor_report_persister
+    description: >-
+      Persist competitive intelligence report to GCS,
+      index in RAG store, and update competitor registry.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: persisted
+        type: boolean
+      - field: gcs_path
+        type: string
+      - field: registry_updated
+        type: boolean
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: false
+
+  - skill_id: SKL-CIA-12
+    name: human_escalation
+    description: >-
+      Request human review when confidence is low, RBAC requires
+      escalation, or automated analysis is uncertain.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: escalated
+        type: boolean
+      - field: reason
+        type: string
+    timeout_ms: 10000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true

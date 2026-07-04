@@ -1,0 +1,407 @@
+# campaign-optimization-agent-svc skill registry
+# WF3 Agent 3.4 — Continuous Meta Ads campaign optimization
+# 13 skills (SKL-COA-01..07, 09..11, 13; note: 08 and 12 are unused/reserved)
+# SAFETY-CRITICAL: This agent modifies live ad spend. 24 guardrails enforce safety thresholds.
+# Source: app/services/ modules + CLAUDE.md skill table
+
+skills:
+  # ── Discovery Phase (SKL-COA-01) ─────────────────────────────────────────────
+  - skill_id: SKL-COA-01
+    name: campaign_discovery
+    description: "Discover active campaigns from Django registry filtered by campaign age range"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: active_campaigns
+        type: array
+        description: "List of active campaigns with registry metadata"
+      - field: campaign_count
+        type: integer
+        description: "Number of active campaigns discovered"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # ── Insights Phase (SKL-COA-02) ──────────────────────────────────────────────
+  - skill_id: SKL-COA-02
+    name: meta_insights_client
+    description: "Fetch campaign performance data from Meta Insights API (impressions, spend, conversions, CTR)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: insights
+        type: object
+        description: "Meta Insights data (impressions, spend, CPA, ROAS, CTR, frequency)"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # ── Analysis Phase (SKL-COA-03..05) ──────────────────────────────────────────
+  - skill_id: SKL-COA-03
+    name: performance_analyzer
+    description: "Analyze CPA, ROAS, CTR trends and identify performance anomalies"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: performance_analysis
+        type: object
+        description: "CPA/ROAS/CTR trend analysis with anomaly flags"
+      - field: performance_score
+        type: number
+        description: "Overall performance score (0.0-1.0)"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-COA-04
+    name: fatigue_detector
+    description: "Detect creative fatigue via rolling 3-day CTR decline vs peak CTR"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: fatigue_signals
+        type: array
+        description: "Per-ad fatigue indicators (CTR decline %, frequency)"
+      - field: refresh_candidates
+        type: array
+        description: "Ads recommended for creative refresh"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-COA-05
+    name: budget_analyzer
+    description: "Analyze budget reallocation opportunities and dayparting patterns"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: reallocation_plan
+        type: object
+        description: "Budget reallocation recommendations across ad sets"
+      - field: dayparting_insights
+        type: object
+        description: "Hour-of-day performance patterns"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # ── Recommend Phase (SKL-COA-06) ─────────────────────────────────────────────
+  - skill_id: SKL-COA-06
+    name: recommendation_generator
+    description: "Generate optimization recommendations with action, rationale, and projected impact"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: recommendations
+        type: array
+        description: "Prioritized optimization recommendations"
+      - field: autonomous_actions
+        type: array
+        description: "Actions safe for autonomous execution (within guardrails)"
+      - field: manual_actions
+        type: array
+        description: "Actions requiring human approval"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  # ── Execute Phase (SKL-COA-07) ───────────────────────────────────────────────
+  - skill_id: SKL-COA-07
+    name: autonomous_executor
+    description: "Execute approved optimization actions within guardrails via Meta Management API (budget +20%/-50% limits, max 10 actions/day)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: executed_actions
+        type: array
+        description: "Actions successfully executed on Meta"
+      - field: skipped_actions
+        type: array
+        description: "Actions skipped due to guardrail violations"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: false
+
+  # ── Creative Refresh Phase (SKL-COA-08) ───────────────────────────────────────
+  - skill_id: SKL-COA-08
+    name: creative_refresh_requester
+    description: "Request creative refresh from CGA for fatigued ads via agent.optimization.creative_refresh Kafka topic (rate-limited: 7-day cooldown per ad)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: refresh_requests
+        type: array
+        description: "Creative refresh requests sent to CGA"
+      - field: request_count
+        type: integer
+        description: "Number of refresh requests dispatched"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  # ── Approve Phase (SKL-COA-09) ───────────────────────────────────────────────
+  - skill_id: SKL-COA-09
+    name: approval_handler
+    description: "Process human approval/rejection/modification of optimization recommendations (RBAC: VIEWER denied, EDITOR escalated)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: approval_status
+        type: string
+        description: "approved | rejected | modified | escalated"
+      - field: approved_actions
+        type: array
+        description: "Actions approved for execution"
+    timeout_ms: 10000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: true
+
+  # ── Verify Phase (SKL-COA-10) ────────────────────────────────────────────────
+  - skill_id: SKL-COA-10
+    name: optimization_verifier
+    description: "Verify Meta API writes via read-back confirmation of executed optimization actions"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: verification_passed
+        type: boolean
+        description: "Whether all actions verified successfully"
+      - field: verification_results
+        type: array
+        description: "Per-action verification details"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # ── Persist Phase (SKL-COA-11) ───────────────────────────────────────────────
+  - skill_id: SKL-COA-11
+    name: optimization_persister
+    description: "Persist optimization outcomes and emit callbacks to Django backend"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: persisted
+        type: boolean
+        description: "Whether outcomes were persisted successfully"
+      - field: callback_status
+        type: string
+        description: "Django callback result"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: true
+
+  # ── Escalation Phase (SKL-COA-12) ─────────────────────────────────────────────
+  - skill_id: SKL-COA-12
+    name: human_escalation
+    description: "Escalate to human review when circuit breaker trips, guardrail violations exceed threshold, or campaign-level changes detected"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: escalation_id
+        type: string
+        description: "Unique escalation request identifier"
+      - field: escalation_reason
+        type: string
+        description: "Reason for escalation"
+    timeout_ms: 10000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # ── Report Phase (SKL-COA-13) ────────────────────────────────────────────────
+  - skill_id: SKL-COA-13
+    name: reporter
+    description: "Generate campaign performance reports with Claude Sonnet 4 analysis narratives"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: report
+        type: object
+        description: "Performance report with metrics, trends, and narrative"
+      - field: report_period
+        type: string
+        description: "Report time period"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true

@@ -1,0 +1,299 @@
+skills:
+  # Phase 1 - Research (parallel)
+  - skill_id: SKL-NTA-01
+    name: Brand Context Loader
+    description: "Load brand context from BAA hierarchy for sub-brand naming constraints"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-NTA-02
+    name: Audience Psychology Analyzer
+    description: "Analyze audience psychographics for name resonance"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-NTA-03
+    name: Competitive Naming Analyzer
+    description: "Analyze competitor naming patterns, identify white space"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-NTA-04
+    name: Identity Seed Loader
+    description: "Load identity/values from BPV (Aaker dimensions, archetype, values)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-NTA-05
+    name: RAG Retriever
+    description: "Retrieve relevant naming docs from Vertex AI RAG"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # Phase 2 - Availability Checking
+  - skill_id: SKL-NTA-06
+    name: Domain Checker
+    description: "DNS lookup for .com/.io/.co availability"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-NTA-07
+    name: Social Handle Checker
+    description: "HTTP HEAD for Twitter/Instagram/LinkedIn handle availability"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-NTA-08
+    name: Trademark Searcher
+    description: "Tavily web search for existing trademark conflicts"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # Phase 3 - Name Generation
+  - skill_id: SKL-NTA-09
+    name: Name Generator
+    description: "Build Claude system/user prompt for name generation"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-NTA-10
+    name: Name Scorer
+    description: "Multi-dimensional scoring: linguistic, memorability, availability, strategy alignment"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  # Phase 4 - Tagline Synthesis
+  - skill_id: SKL-NTA-11
+    name: Tagline Synthesizer
+    description: "Build Claude prompt for tagline generation for shortlisted names"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-NTA-12
+    name: Naming Brief Builder
+    description: "Compile final naming brief document"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  # Phase 5 - Persist + Escalation
+  - skill_id: SKL-NTA-13
+    name: Naming Persister
+    description: "Persist naming results to Django Redis cache + GCS + RAG"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: false
+
+  - skill_id: SKL-NTA-14
+    name: Human Escalation
+    description: "Confidence threshold check for human review"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 10000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: false

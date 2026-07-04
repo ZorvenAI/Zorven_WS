@@ -1,0 +1,376 @@
+# ad-publishing-agent-svc skill registry
+# WF3 Agent 3.3 — Meta Ads publishing + human approval gate
+# 12 skills (SKL-APA33-01..12)
+# SAFETY-CRITICAL: This agent spends real money. SKL-APA33-08 is a mandatory human approval gate.
+# Source: app/services/ + app/logic/ modules + CLAUDE.md skill table
+
+skills:
+  # ── Context Phase (SKL-APA33-01..02) ─────────────────────────────────────────
+  - skill_id: SKL-APA33-01
+    name: context_loader
+    description: "Load CAA blueprint + CGA creative packages + APA personas + Company model + Meta credentials from previous_outputs"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: caa_blueprint
+        type: object
+        description: "Campaign architecture blueprint"
+      - field: cga_packages
+        type: array
+        description: "Creative packages per audience x funnel"
+      - field: personas
+        type: array
+        description: "APA audience personas"
+      - field: company
+        type: object
+        description: "Company model data"
+      - field: meta_credentials
+        type: object
+        description: "Meta API credentials (access_token, ad_account_id)"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-APA33-02
+    name: account_validator
+    description: "Validate Meta Ads account credentials and permissions via Meta API"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: account_valid
+        type: boolean
+        description: "Whether Meta account is valid and has required permissions"
+      - field: account_info
+        type: object
+        description: "Account details (currency, timezone, spend cap)"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # ── Campaign Phase (SKL-APA33-03..04) ────────────────────────────────────────
+  - skill_id: SKL-APA33-03
+    name: campaign_creator
+    description: "Create Meta Ads campaign in PAUSED state with objective and special ad category"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: campaign_id
+        type: string
+        description: "Meta campaign ID (created in PAUSED state)"
+      - field: campaign_status
+        type: string
+        description: "Campaign status (always PAUSED at creation)"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: false
+
+  - skill_id: SKL-APA33-04
+    name: ad_set_creator
+    description: "Create ad sets with budget, schedule, and placement configuration"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: ad_set_ids
+        type: array
+        description: "Created Meta ad set IDs"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: false
+
+  # ── Targeting Phase (SKL-APA33-05) ───────────────────────────────────────────
+  - skill_id: SKL-APA33-05
+    name: targeting_translator
+    description: "Translate APA personas to Meta targeting specs via Claude Sonnet 4 + rule-based fallback"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: targeting_specs
+        type: array
+        description: "Meta-compatible targeting specifications per ad set"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  # ── Creative Phase (SKL-APA33-06..07) ────────────────────────────────────────
+  - skill_id: SKL-APA33-06
+    name: creative_uploader
+    description: "Upload creative images from GCS to Meta Ads account"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: image_hashes
+        type: array
+        description: "Meta image hashes for uploaded creatives"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: false
+
+  - skill_id: SKL-APA33-07
+    name: ad_assembler
+    description: "Assemble ads from uploaded creatives + copy + targeting and generate previews"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: ad_ids
+        type: array
+        description: "Created Meta ad IDs"
+      - field: preview_urls
+        type: array
+        description: "Ad preview URLs for human review"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: false
+
+  # ── Approval Phase (SKL-APA33-08) ───────────────────────────────────────────
+  - skill_id: SKL-APA33-08
+    name: human_approval_gate
+    description: "MANDATORY human approval gate — no ad goes live without explicit human confirmation. RBAC enforced (VIEWER denied, EDITOR escalated, ADMIN approves). 24h TTL."
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: approval_id
+        type: string
+        description: "Unique approval request ID"
+      - field: approval_status
+        type: string
+        description: "awaiting_approval | approved | rejected | expired"
+      - field: expires_at
+        type: string
+        description: "ISO 8601 expiry timestamp (24h TTL)"
+    timeout_ms: 10000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: true
+
+  # ── Publish Phase (SKL-APA33-09..10) ─────────────────────────────────────────
+  - skill_id: SKL-APA33-09
+    name: meta_publisher
+    description: "Activate approved campaign + ad sets on Meta Ads (PAUSED -> ACTIVE). Production requires double-confirm."
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: campaign_status
+        type: string
+        description: "Final campaign status (ACTIVE)"
+      - field: activated_entities
+        type: object
+        description: "Count of activated campaigns, ad sets, ads"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: false
+
+  - skill_id: SKL-APA33-10
+    name: entity_verifier
+    description: "Verify published Meta entities are live and delivering (read-back verification)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: verification_passed
+        type: boolean
+        description: "Whether all entities verified successfully"
+      - field: entity_statuses
+        type: object
+        description: "Per-entity verification results"
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # ── Registry Phase (SKL-APA33-11..12) ────────────────────────────────────────
+  - skill_id: SKL-APA33-11
+    name: registry_writer
+    description: "Write campaign registry to Django backend for COA optimization tracking"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: registry_id
+        type: string
+        description: "Django campaign registry record ID"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: true
+
+  - skill_id: SKL-APA33-12
+    name: human_escalation
+    description: "Escalate publishing failures with rollback context (circuit breaker trips, verification failures)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: escalation_id
+        type: string
+        description: "Unique escalation request identifier"
+      - field: escalation_reason
+        type: string
+        description: "Reason for escalation"
+      - field: rollback_summary
+        type: object
+        description: "Summary of rolled-back entities (if any)"
+    timeout_ms: 10000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true

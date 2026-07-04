@@ -1,0 +1,171 @@
+# intelligence-loop-agent-svc skill registry
+# WF3.5 — Intelligence Loop Agent (ILA)
+# 5 synthetic skills (SKL-ILA-01..05) mapping to IntelligenceExtractor logical phases
+# This service uses an IntelligenceExtractor pattern, NOT discrete skill modules.
+# These synthetic skills represent the logical phases of the extraction pipeline.
+# Source: app/services/extractor.py + CLAUDE.md architecture
+
+skills:
+  # ── Extract Phase (SKL-ILA-01) ───────────────────────────────────────────────
+  - skill_id: SKL-ILA-01
+    name: learning_extractor
+    description: "Extract optimization learnings from COA events, CAA blueprints, CGA packages, and Meta Insights via Claude Sonnet 4"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: learnings
+        type: array
+        description: "Extracted strategic learnings with confidence scores"
+      - field: learning_count
+        type: integer
+        description: "Number of learnings extracted"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # ── Contradiction Detection Phase (SKL-ILA-02) ──────────────────────────────
+  - skill_id: SKL-ILA-02
+    name: contradiction_detector
+    description: "Detect contradictions across campaigns (e.g., conflicting audience insights, opposing budget recommendations)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: contradictions
+        type: array
+        description: "Detected contradictions with severity and resolution suggestions"
+      - field: contradiction_count
+        type: integer
+        description: "Number of contradictions detected"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # ── Persist Phase (SKL-ILA-03) ───────────────────────────────────────────────
+  - skill_id: SKL-ILA-03
+    name: insight_persister
+    description: "Persist intelligence report and learnings to Django backend via /api/v1/intelligence-loop/ingest/"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: persisted
+        type: boolean
+        description: "Whether the report was persisted to Django"
+      - field: report_id
+        type: string
+        description: "Django CampaignIntelligence record ID"
+      - field: learning_record_ids
+        type: array
+        description: "Django LearningRecord IDs created"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: true
+
+  # ── RAG Indexing Phase (SKL-ILA-04) ──────────────────────────────────────────
+  - skill_id: SKL-ILA-04
+    name: rag_indexer
+    description: "Index learnings into RAG vector store via Django LearningDocument post_save signal (Vertex AI per-tenant data stores)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: indexed
+        type: boolean
+        description: "Whether learnings were queued for RAG indexing"
+      - field: document_ids
+        type: array
+        description: "LearningDocument IDs queued for Vertex AI sync"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: true
+
+  # ── Re-optimization Trigger Phase (SKL-ILA-05) ──────────────────────────────
+  - skill_id: SKL-ILA-05
+    name: reoptimization_trigger
+    description: "Evaluate and trigger re-optimization runs for WF1/WF2/WF3 when confidence >= ILA_MIN_CONFIDENCE_AUTO_TRIGGER. WF2 always routes through human approval queue."
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: triggered
+        type: boolean
+        description: "Whether a re-optimization was triggered"
+      - field: trigger_targets
+        type: array
+        description: "Workflows targeted (wf1, wf2, wf3)"
+      - field: wf2_approval_required
+        type: boolean
+        description: "Whether WF2 trigger requires human approval (always true)"
+      - field: mode
+        type: string
+        description: "Operating mode (store_only or auto_trigger)"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true

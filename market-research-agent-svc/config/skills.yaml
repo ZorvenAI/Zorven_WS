@@ -1,0 +1,269 @@
+# Market Research Agent (MRA) — Skill Registry
+# Source: app/skills/*.py SkillMeta definitions
+# Default idempotent=true, default timeout_ms=30000 per models.py
+
+skills:
+  - skill_id: SKL-MRA-01
+    name: web_market_search
+    description: "Web search for market data, reports, and news articles"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: query
+        type: string
+      - field: results
+        type: array
+        description: "Tavily search results with title, url, content"
+      - field: sources
+        type: array
+        description: "Source references with type, title, url"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-MRA-02
+    name: industry_data_extraction
+    description: "Extract structured industry data from web sources"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: industry_data
+        type: object
+        description: "Structured industry metrics and data points"
+      - field: sources
+        type: array
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-MRA-03
+    name: market_analysis_synthesis
+    description: "LLM synthesis of raw data into structured market analysis"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: market_overview
+        type: string
+      - field: market_sizing
+        type: object
+        description: "TAM, SAM, SOM estimates"
+      - field: competitive_landscape
+        type: array
+        description: "Competitor entries with name, description, market_position"
+      - field: industry_trends
+        type: array
+      - field: findings
+        type: array
+      - field: recommendations
+        type: array
+      - field: confidence_score
+        type: float
+      - field: methodology_notes
+        type: array
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-MRA-04
+    name: economic_indicator_lookup
+    description: "Fetch economic indicators (GDP, inflation, etc.) from World Bank"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: economic_indicators
+        type: object
+        description: "Keyed by indicator_country, e.g. gdp_WLD with latest_value and latest_date"
+      - field: sources
+        type: array
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-MRA-05
+    name: rag_context_retrieval
+    description: "Retrieve context from RAG vector store via rag-uploader-agent-service"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: raw_context
+        type: string
+        description: "Retrieved RAG context text"
+      - field: sources
+        type: array
+    timeout_ms: 15000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-MRA-06
+    name: research_report_generator
+    description: "Generate structured research reports from analysis findings"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: query
+        type: string
+      - field: market_overview
+        type: string
+      - field: market_sizing
+        type: object
+      - field: competitive_landscape
+        type: array
+      - field: industry_trends
+        type: array
+      - field: economic_indicators
+        type: object
+      - field: sources
+        type: array
+      - field: findings
+        type: array
+      - field: recommendations
+        type: array
+      - field: raw_context
+        type: string
+      - field: confidence_score
+        type: float
+      - field: methodology_notes
+        type: array
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-MRA-07
+    name: rag_store_indexer
+    description: "Index research content into RAG vector store"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: indexed
+        type: boolean
+      - field: document_id
+        type: string
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-MRA-08
+    name: human_escalation
+    description: "Escalate to human review via Kafka event"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: escalated
+        type: boolean
+      - field: reason
+        type: string
+    timeout_ms: 5000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: false

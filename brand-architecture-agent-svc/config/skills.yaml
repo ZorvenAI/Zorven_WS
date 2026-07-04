@@ -1,0 +1,255 @@
+skills:
+  # Phase 1 - Research (parallel)
+  - skill_id: SKL-BAA-01
+    name: competitor_arch_analyzer
+    description: "Analyze competitor brand architecture patterns from CIA data"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-BAA-02
+    name: audience_alignment
+    description: "Align APA + VoCA personas with BPA needs hierarchy"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-BAA-03
+    name: portfolio_loader
+    description: "Load Company model + Odoo product portfolio"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-BAA-04
+    name: positioning_loader
+    description: "Load BPA positioning strategy as architecture input"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-BAA-05
+    name: rag_retriever
+    description: "Retrieve prior architecture docs from RAG store"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # Phase 2 - Architecture Design (sequential)
+  - skill_id: SKL-BAA-06
+    name: model_recommender
+    description: "Score 5 architecture models (4 dims x 0-25 = 0-100)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-BAA-07
+    name: hierarchy_builder
+    description: "Build brand hierarchy tree (JSON for React Flow)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-BAA-08
+    name: naming_designer
+    description: "Design naming patterns + consistency scoring"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-BAA-09
+    name: growth_planner
+    description: "Plan phased portfolio growth roadmap"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-BAA-10
+    name: strategy_synthesizer
+    description: "Assemble capstone architecture strategy document"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  # Phase 3 - Persist + Escalation
+  - skill_id: SKL-BAA-11
+    name: strategy_persister
+    description: "Persist strategy to GCS + RAG + Redis registry"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: false
+
+  - skill_id: SKL-BAA-12
+    name: human_escalation
+    description: "Evaluate escalation triggers (low confidence, misalignment)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+    output_schema: []
+    timeout_ms: 10000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: false
