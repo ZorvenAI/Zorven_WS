@@ -652,6 +652,8 @@ services:
     container_name: ai-brand-automator-market-research-agent
     environment:
       - MRA_REDIS_URL=redis://redis:6379/11
+      - MRA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - MRA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - MRA_KAFKA_BOOTSTRAP_SERVERS=${MRA_KAFKA_BOOTSTRAP_SERVERS:-}
       - MRA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - MRA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
@@ -693,6 +695,8 @@ services:
     container_name: ai-brand-automator-competitor-intel-agent
     environment:
       - CIA_REDIS_URL=redis://redis:6379/12
+      - CIA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - CIA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - CIA_KAFKA_BOOTSTRAP_SERVERS=${CIA_KAFKA_BOOTSTRAP_SERVERS:-}
       - CIA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - CIA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
@@ -737,6 +741,8 @@ services:
     container_name: ai-brand-automator-audience-persona-agent
     environment:
       - APA_REDIS_URL=redis://redis:6379/13
+      - APA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - APA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - APA_KAFKA_BOOTSTRAP_SERVERS=${APA_KAFKA_BOOTSTRAP_SERVERS:-}
       - APA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - APA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
@@ -783,6 +789,8 @@ services:
     container_name: ai-brand-automator-trend-cultural-agent
     environment:
       - TCIA_REDIS_URL=redis://redis:6379/14
+      - TCIA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - TCIA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - TCIA_KAFKA_BOOTSTRAP_SERVERS=${TCIA_KAFKA_BOOTSTRAP_SERVERS:-}
       - TCIA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - TCIA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
@@ -831,6 +839,8 @@ services:
     container_name: ai-brand-automator-voc-agent
     environment:
       - VOCA_REDIS_URL=redis://redis:6379/15
+      - VOCA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - VOCA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - VOCA_KAFKA_BOOTSTRAP_SERVERS=${VOCA_KAFKA_BOOTSTRAP_SERVERS:-}
       - VOCA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - VOCA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
@@ -1268,6 +1278,8 @@ services:
     container_name: ai-brand-automator-brand-positioning
     environment:
       - BPA_REDIS_URL=redis://redis:6379/16
+      - BPA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BPA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - BPA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - BPA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - BPA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
@@ -1305,6 +1317,8 @@ services:
     container_name: ai-brand-automator-brand-architecture
     environment:
       - BAA_REDIS_URL=redis://redis:6379/17
+      - BAA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BAA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - BAA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - BAA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - BAA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
@@ -1342,6 +1356,8 @@ services:
     container_name: ai-brand-automator-brand-personality
     environment:
       - BPV_REDIS_URL=redis://redis:6379/18
+      - BPV_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BPV_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - BPV_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - BPV_TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - BPV_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
@@ -1379,6 +1395,8 @@ services:
     container_name: ai-brand-automator-brand-naming
     environment:
       - NTA_REDIS_URL=redis://redis:6379/19
+      - NTA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - NTA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - NTA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - NTA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - NTA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
@@ -1416,6 +1434,8 @@ services:
     container_name: ai-brand-automator-brand-story
     environment:
       - BSA_REDIS_URL=redis://redis:6379/20
+      - BSA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BSA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - BSA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - BSA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - BSA_BACKEND_URL=http://backend:8001
@@ -1454,6 +1474,8 @@ services:
     container_name: ai-brand-automator-campaign-architecture
     environment:
       - CAA_REDIS_URL=redis://redis:6379/21
+      - CAA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - CAA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - CAA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - CAA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - CAA_BACKEND_URL=http://backend:8001
@@ -1493,7 +1515,9 @@ services:
       dockerfile: Dockerfile
     container_name: ai-brand-automator-creative-generation
     environment:
-      - CGA_REDIS_URL=redis://redis:6379/22  # DB index 22 (--databases 23 = DBs 0-22)
+      - CGA_REDIS_URL=redis://redis:6379/22
+      - CGA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - CGA_MLFLOW_TRACKING_URI=http://mlflow-server:5000  # DB index 22 (--databases 23 = DBs 0-22)
       - CGA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - CGA_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - CGA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
@@ -1534,6 +1558,8 @@ services:
     container_name: ai-brand-automator-ad-publishing
     environment:
       - ADPUB_REDIS_URL=redis://redis:6379/23
+      - ADPUB_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - ADPUB_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - ADPUB_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - ADPUB_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - ADPUB_BACKEND_URL=http://backend:8001
@@ -1569,6 +1595,8 @@ services:
     container_name: ai-brand-automator-campaign-optimization
     environment:
       - COA_REDIS_URL=redis://redis:6379/24
+      - COA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - COA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - COA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - COA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - COA_BACKEND_URL=http://backend:8001
@@ -1603,6 +1631,8 @@ services:
     container_name: ai-brand-automator-intelligence-loop
     environment:
       - ILA_REDIS_URL=redis://redis:6379/25
+      - ILA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - ILA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - ILA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - ILA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - ILA_BACKEND_URL=http://backend:8001
@@ -1693,6 +1723,7 @@ services:
     container_name: ai-brand-automator-prompt-optimization
     environment:
       - POI_REDIS_URL=redis://redis:6379/26
+      - POI_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
       - POI_KAFKA_BOOTSTRAP_SERVERS=${POI_KAFKA_BOOTSTRAP_SERVERS:-}
       - POI_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - POI_MLFLOW_TRACKING_URI=http://mlflow-server:5000
@@ -1701,6 +1732,7 @@ services:
       - POI_HOST=0.0.0.0
       - POI_PORT=8110
       - POI_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - POI_JWT_SECRET=${SECRET_KEY:-dev-secret-key-change-in-production}
       - POI_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
     expose:
       - "8110"

@@ -83,11 +83,20 @@ class Tenant(TenantMixin):
     )
 
     def get_raw_bucket(self):
-        """Resolve GCS raw bucket: tenant-specific or shared default."""
+        """Resolve GCS raw bucket: tenant-specific or shared default.
+
+        Falls back to GS_BUCKET_NAME (the same bucket the GCS service uses)
+        so uploads don't target a non-existent bucket.
+        """
         if self.gcs_raw_bucket:
             return self.gcs_raw_bucket
         from django.conf import settings
 
+        # Primary: use the GCS service's bucket (GS_BUCKET_NAME)
+        gs_bucket = getattr(settings, "GS_BUCKET_NAME", "")
+        if gs_bucket:
+            return gs_bucket
+        # Fallback: DATA_INGESTION pipeline config
         pipeline_cfg = getattr(settings, "DATA_INGESTION", {})
         return pipeline_cfg.get("GCP_BUCKET_NAME", "onboarding-bucket1")
 

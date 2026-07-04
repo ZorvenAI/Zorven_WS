@@ -246,7 +246,7 @@ Schema-based via `django-tenants`. All models have a nullable `tenant` FK. Most 
 
 ### Redis Database Allocation
 
-DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery, DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent, DB 16: Brand Positioning, DB 17: Brand Architecture, DB 18: Brand Personality, DB 19: Brand Naming, DB 20: Brand Story, DB 21: Campaign Architecture, DB 22: Creative Generation, DB 23: Ad Publishing, DB 24: Campaign Optimization, DB 25: Intelligence Loop Agent (WF3.5), DB 26: Prompt Optimization. Requires `databases 27` in redis.conf and `--databases 27` in docker-compose — if a service fails with `ERR DB index is out of range`, bump the Redis `databases` setting.
+DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery + Prompt Cache (shared, key-prefix isolated), DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent, DB 16: Brand Positioning, DB 17: Brand Architecture, DB 18: Brand Personality, DB 19: Brand Naming, DB 20: Brand Story, DB 21: Campaign Architecture, DB 22: Creative Generation, DB 23: Ad Publishing, DB 24: Campaign Optimization, DB 25: Intelligence Loop Agent (WF3.5), DB 26: Prompt Optimization. Requires `databases 27` in redis.conf and `--databases 27` in docker-compose — if a service fails with `ERR DB index is out of range`, bump the Redis `databases` setting.
 
 ### Microservice Layout Convention
 

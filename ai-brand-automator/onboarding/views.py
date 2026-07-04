@@ -91,8 +91,16 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
         # Check if tenant already has a company (OneToOneField constraint)
         if Company.objects.filter(tenant=tenant).exists():
-            raise ValueError(
-                f"Tenant {tenant.name} already has a company. Cannot create another."
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError(
+                {
+                    "error": "duplicate_company",
+                    "message": (
+                        f"Tenant {tenant.name} already has a company. "
+                        "Use PATCH to update instead of POST to create."
+                    ),
+                }
             )
 
         # Save company with tenant
@@ -326,21 +334,22 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 )
                 gcs_uploaded = True
             else:
-                require_gcs = getattr(settings, "REQUIRE_GCS_UPLOAD", False)
-                if require_gcs:
-                    logger.error("GCS is required but not configured")
-                    return Response(
-                        {"error": "File storage is not configured"},
-                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                if not settings.DEBUG:
+                    logger.error(
+                        "GCS_CREDENTIALS_JSON not configured — cannot store "
+                        "onboarding PDF. Set the env var on Railway."
                     )
-                logger.warning(
-                    "GCS not configured — onboarding PDF not stored. "
-                    "Set REQUIRE_GCS_UPLOAD=True in production."
-                )
-        except Exception:
-            logger.exception("GCS upload failed for onboarding PDF")
+                else:
+                    logger.warning(
+                        "GCS not configured (DEBUG mode) — onboarding PDF "
+                        "not stored."
+                    )
+        except Exception as e:
+            logger.exception(
+                "GCS upload failed for onboarding PDF (bucket=%s)", raw_bucket
+            )
             return Response(
-                {"error": "Failed to upload PDF. Please try again later."},
+                {"error": f"Failed to store onboarding PDF: {e}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -753,28 +762,31 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         """Upload a brand asset file"""
         serializer = BrandAssetUploadSerializer(data=request.data)
         if not serializer.is_valid():
+            logger.warning(
+                "Asset upload validation failed: %s", serializer.errors
+            )
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         file = serializer.validated_data["file"]
         file_type = serializer.validated_data["file_type"]
 
-        # Define allowed file types
-        allowed_types = [
-            "image/jpeg",
-            "image/png",
-            "image/gif",
-            "image/webp",
-            "video/mp4",
-            "video/quicktime",
-            "application/pdf",
-            "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "text/plain",
-        ]
+        # Centralized allowed types from brand_automator.validators
+        # (single source of truth for serializer, view, and validator)
+        from brand_automator.validators import ALLOWED_UPLOAD_TYPES
+
+        allowed_types = ALLOWED_UPLOAD_TYPES
 
         # Validate file
         validation_result = validate_file_upload(file, allowed_types, max_size_mb=50)
         if not validation_result["valid"]:
+            logger.warning(
+                "Asset upload file validation failed: file=%s content_type=%s "
+                "size=%s error=%s",
+                file.name,
+                file.content_type,
+                file.size,
+                validation_result["error"],
+            )
             return Response(
                 {"error": validation_result["error"]},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -853,22 +865,40 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 )
                 gcs_uploaded = True
             else:
-                # GCS not configured - check if we should fail or allow for dev/testing
-                require_gcs = getattr(settings, "REQUIRE_GCS_UPLOAD", False)
-                if require_gcs:
-                    logger.error("GCS is required but not configured")
+                # GCS client is None — credentials not configured
+                if not settings.DEBUG:
+                    # Production: fail clearly so the operator fixes env vars
+                    logger.error(
+                        "GCS_CREDENTIALS_JSON not configured — cannot upload "
+                        "files. Set the GCS_CREDENTIALS_JSON environment "
+                        "variable with the service account JSON."
+                    )
                     return Response(
-                        {"error": "File storage is not configured"},
+                        {
+                            "error": (
+                                "File storage is not configured. Please contact "
+                                "your administrator to set up GCS credentials."
+                            )
+                        },
                         status=status.HTTP_503_SERVICE_UNAVAILABLE,
                     )
                 logger.warning(
-                    "GCS not configured, asset record will be created but file "
-                    "is not stored. Set REQUIRE_GCS_UPLOAD=True in production."
+                    "GCS not configured (DEBUG mode), asset record will be "
+                    "created but file is not stored."
                 )
         except Exception as e:
-            logger.error(f"GCS upload failed: {str(e)}")
+            logger.exception(
+                "GCS upload failed for %s (bucket=%s)",
+                safe_filename,
+                raw_bucket,
+            )
             return Response(
-                {"error": f"Failed to upload file: {str(e)}"},
+                {
+                    "error": (
+                        f"Failed to upload file to storage: {e}. "
+                        "Please try again or contact your administrator."
+                    )
+                },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
