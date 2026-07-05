@@ -17,6 +17,7 @@ from app.registries.optimization_groups import (
 )
 from app.services.gepa_optimizer import OptimizationResult, ZorvenGepaOptimizer
 from app.services.mlflow_registry import MLflowPromptRegistry
+from app.services.reflection_context_enricher import ReflectionContextEnricher
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,12 @@ class JointOptimizer:
         gepa_optimizer: ZorvenGepaOptimizer,
         registry: Optional[MLflowPromptRegistry] = None,
         lifecycle_manager: Optional[PromptLifecycleManager] = None,
+        reflection_enricher: Optional[ReflectionContextEnricher] = None,
     ) -> None:
         self.gepa = gepa_optimizer
         self.registry = registry
         self.lifecycle_manager = lifecycle_manager
+        self.reflection_enricher = reflection_enricher
 
     def optimize_group(
         self,
@@ -63,14 +66,10 @@ class JointOptimizer:
         try:
             group = get_group(group_name)
         except KeyError as exc:
-            return JointOptimizationResult(
-                group_name=group_name, error=str(exc)
-            )
+            return JointOptimizationResult(group_name=group_name, error=str(exc))
 
         # Build prompt URIs for all prompts in the group
-        prompt_uris = [
-            f"prompts:/{name}" for name in group.prompt_names
-        ]
+        prompt_uris = [f"prompts:/{name}" for name in group.prompt_names]
 
         logger.info(
             "Starting joint optimization: group=%s, prompts=%d, agents=%s",
@@ -85,6 +84,15 @@ class JointOptimizer:
 
         max_budget = max(get_budget(a) for a in group.agent_codes)
         primary_agent = group.agent_codes[0]
+
+        # US-055: Enrich GEPA reflection context with skill metadata
+        gepa_kwargs = None
+        if self.reflection_enricher is not None:
+            gepa_kwargs = self.reflection_enricher.enrich_gepa_kwargs(
+                agent_code=primary_agent,
+                prompt_names=group.prompt_names,
+            )
+
         opt_result = self.gepa.optimize(
             prompt_uris=prompt_uris,
             predict_fn=predict_fn,
@@ -92,14 +100,14 @@ class JointOptimizer:
             scorers=scorers,
             agent_code=primary_agent,
             max_metric_calls=max_budget,
+            gepa_kwargs=gepa_kwargs,
         )
 
         return JointOptimizationResult(
             group_name=group_name,
             mlflow_run_id=opt_result.mlflow_run_id,
             prompt_results={
-                name: opt_result.best_prompt
-                for name in group.prompt_names
+                name: opt_result.best_prompt for name in group.prompt_names
             },
             overall_score=opt_result.best_score,
             candidates_evaluated=opt_result.candidates_evaluated,
@@ -140,26 +148,24 @@ class JointOptimizer:
                     f"not found in registry"
                 )
                 return result
-            current_state = PromptState(
-                info.tags.get("state", "DRAFT")
-            )
-            prompt_snapshots.append(
-                (prompt_name, info.version, current_state)
-            )
+            current_state = PromptState(info.tags.get("state", "DRAFT"))
+            prompt_snapshots.append((prompt_name, info.version, current_state))
 
         # Promote all as a coherent set
         promoted: list[tuple[str, int, PromptState]] = []
         try:
             for name, version, from_state in prompt_snapshots:
                 self.lifecycle_manager.transition(
-                    name, version, from_state, PromptState.CANARY,
+                    name,
+                    version,
+                    from_state,
+                    PromptState.CANARY,
                 )
                 promoted.append((name, version, from_state))
 
             result.promoted_as_set = True
             logger.info(
-                "Group '%s' promoted to CANARY as coherent set: "
-                "%d prompts",
+                "Group '%s' promoted to CANARY as coherent set: " "%d prompts",
                 group_name,
                 len(promoted),
             )
@@ -173,9 +179,7 @@ class JointOptimizer:
             )
             for name, version, _ in promoted:
                 try:
-                    self.lifecycle_manager.rollback(
-                        name, version, PromptState.CANARY
-                    )
+                    self.lifecycle_manager.rollback(name, version, PromptState.CANARY)
                 except Exception:
                     pass
             result.promoted_as_set = False
