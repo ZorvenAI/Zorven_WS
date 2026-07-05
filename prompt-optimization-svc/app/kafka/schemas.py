@@ -89,12 +89,31 @@ class SchemaChangeEvent(BaseModel):
     changes: list[dict[str, Any]] = Field(..., description="List of SchemaChange dicts")
     correlation_id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
-        description="Unique event ID for dedup",
+        description="Unique event ID for dedup (AC-4)",
     )
-    schema_version: str = Field(default=SCHEMA_VERSION)
+    schema_version: str = Field(
+        default=SCHEMA_VERSION,
+        description="Schema version header (AC-3), pinned to 1.0",
+    )
     timestamp: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+
+    @field_validator("correlation_id")
+    @classmethod
+    def correlation_id_non_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("correlation_id must be non-empty (AC-4)")
+        return v
+
+    @field_validator("schema_version")
+    @classmethod
+    def schema_version_pinned(cls, v: str) -> str:
+        if v != SCHEMA_VERSION:
+            raise ValueError(
+                f"schema_version must be '{SCHEMA_VERSION}', got '{v}' (AC-3)"
+            )
+        return v
 
 
 class AuditEvent(BaseModel):

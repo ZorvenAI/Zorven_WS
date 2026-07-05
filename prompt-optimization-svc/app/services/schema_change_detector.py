@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
-from app.registries.skill_definitions import SkillDefinition, SkillOutputField
+from app.registries.skill_definitions import SkillOutputField
 from app.services.skill_registry_reader import SkillRegistryReader
 
 logger = logging.getLogger(__name__)

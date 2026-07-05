@@ -37,7 +37,7 @@ class SchemaSnapshot(Base):
         nullable=False,
         comment="Agent code, e.g. mra, cga",
     )
-    schema_json: Mapped[dict] = mapped_column(
+    schema_json: Mapped[list] = mapped_column(
         JSON,
         nullable=False,
         comment="Serialized list[SkillOutputField] at snapshot time",
