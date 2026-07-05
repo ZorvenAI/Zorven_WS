@@ -70,8 +70,7 @@ class TestGetSkillForPrompt:
     def test_matches_system_slug(self, reader):
         """'system' prompts may not have a matching skill — returns None is ok."""
         result = reader.get_skill_for_prompt("mra", "zorven-wf1-mra-system")
-        # system prompts are not expected to match a skill
-        # result can be None or a SkillDefinition
+        assert result is None or hasattr(result, "skill_id")
 
     def test_no_match_returns_none(self, reader):
         result = reader.get_skill_for_prompt("mra", "zorven-wf1-mra-nonexistentslug")
@@ -79,6 +78,11 @@ class TestGetSkillForPrompt:
 
     def test_invalid_prompt_name_returns_none(self, reader):
         result = reader.get_skill_for_prompt("mra", "not-a-valid-prompt")
+        assert result is None
+
+    def test_agent_code_mismatch_returns_none(self, reader):
+        """Prompt with embedded agent 'bpa' should not match when agent_code='mra'."""
+        result = reader.get_skill_for_prompt("mra", "zorven-wf2-bpa-positioning")
         assert result is None
 
     def test_matches_positioning_slug(self, reader):

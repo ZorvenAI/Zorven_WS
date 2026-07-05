@@ -8,7 +8,6 @@ ID and prompt-name slug matching for the GEPA optimization pipeline.
 from __future__ import annotations
 
 import re
-from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -70,10 +69,15 @@ class SkillRegistryReader:
             return self._cache[agent_code]
 
         path = self._skill_path(agent_code)
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             raw = yaml.safe_load(f)
 
-        skills_file = SkillsFile(**raw)
+        if not isinstance(raw, dict):
+            raise ValueError(
+                f"Expected a YAML mapping in {path}, got {type(raw).__name__}"
+            )
+
+        skills_file = SkillsFile.model_validate(raw)
         self._cache[agent_code] = skills_file
         return skills_file
 
@@ -93,11 +97,19 @@ class SkillRegistryReader:
         Prompt naming convention: zorven-wf{N}-{agent_code}-{skill_slug}
         Example: 'zorven-wf1-mra-synthesis' → slug='synthesis'
 
-        The slug is matched against skill.name using case-insensitive
-        substring matching.
+        The embedded agent code in the prompt name must match the provided
+        agent_code parameter. The slug is then matched against skill.name
+        using case-insensitive substring matching.
         """
-        slug = extract_slug(prompt_name)
-        if slug is None:
+        match = PROMPT_NAME_PATTERN.match(prompt_name)
+        if match is None:
+            return None
+
+        embedded_agent = match.group(1)
+        slug = match.group(2)
+
+        # Verify the prompt's embedded agent matches the requested agent
+        if embedded_agent != agent_code:
             return None
 
         skills_file = self.load_skills(agent_code)
