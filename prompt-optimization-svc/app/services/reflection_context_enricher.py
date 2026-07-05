@@ -38,29 +38,42 @@ class ReflectionContextEnricher:
     def __init__(self, skill_registry_reader: SkillRegistryReader) -> None:
         self._reader = skill_registry_reader
 
-    def build_task_description(self, agent_code: str, prompt_names: list[str]) -> str:
+    def build_task_description(
+        self,
+        agent_code: str | list[str],
+        prompt_names: list[str],
+    ) -> str:
         """Build a task description from skill metadata for all prompts.
 
         Resolves each prompt to its skill, extracts output_schema constraints
         (field names, types, max_lengths, required flags, enum_values), and
         formats a structured context block.
 
+        Args:
+            agent_code: Single agent code or list of agent codes. When a list
+                is provided, each prompt is resolved against every agent code,
+                supporting joint optimization groups spanning multiple agents.
+            prompt_names: Prompt names to resolve to skills.
+
         Returns empty string if no skills resolve.
         """
-        skill_sections: list[str] = []
-        seen_skill_ids: set[str] = set()
+        agent_codes = [agent_code] if isinstance(agent_code, str) else list(agent_code)
+        resolved: dict[str, SkillDefinition] = {}
 
         for prompt_name in prompt_names:
-            skill = self._reader.get_skill_for_prompt(agent_code, prompt_name)
-            if skill is None:
-                continue
-            if skill.skill_id in seen_skill_ids:
-                continue
-            seen_skill_ids.add(skill.skill_id)
-            skill_sections.append(self._format_skill_context(skill))
+            for ac in agent_codes:
+                skill = self._reader.get_skill_for_prompt(ac, prompt_name)
+                if skill is not None and skill.skill_id not in resolved:
+                    resolved[skill.skill_id] = skill
+                    break
 
-        if not skill_sections:
+        if not resolved:
             return ""
+
+        # Sort by skill_id for deterministic output
+        skill_sections = [
+            self._format_skill_context(resolved[sid]) for sid in sorted(resolved)
+        ]
 
         parts = [_PREAMBLE, ""]
         parts.extend(skill_sections)
@@ -89,15 +102,15 @@ class ReflectionContextEnricher:
 
     def enrich_gepa_kwargs(
         self,
-        agent_code: str,
+        agent_code: str | list[str],
         prompt_names: list[str],
         existing_kwargs: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """Build gepa_kwargs dict with task_description from skill metadata.
 
         Merges with existing_kwargs if provided. Does not overwrite an
-        existing task_description key. Returns empty dict if no skills
-        resolve (no-op enrichment).
+        existing task_description key. Returns existing_kwargs unchanged
+        if no skills resolve or if task_description is already set.
         """
         merged = dict(existing_kwargs) if existing_kwargs else {}
 

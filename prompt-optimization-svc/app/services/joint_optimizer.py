@@ -86,10 +86,12 @@ class JointOptimizer:
         primary_agent = group.agent_codes[0]
 
         # US-055: Enrich GEPA reflection context with skill metadata
+        # Pass all agent codes so prompts from every agent in the group
+        # contribute schema metadata, not just the primary agent.
         gepa_kwargs = None
         if self.reflection_enricher is not None:
             gepa_kwargs = self.reflection_enricher.enrich_gepa_kwargs(
-                agent_code=primary_agent,
+                agent_code=group.agent_codes,
                 prompt_names=group.prompt_names,
             )
 
