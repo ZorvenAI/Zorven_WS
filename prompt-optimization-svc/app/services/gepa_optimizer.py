@@ -60,6 +60,7 @@ class ZorvenGepaOptimizer:
         agent_code: str,
         max_metric_calls: Optional[int] = None,
         tenant_id: Optional[str] = None,
+        gepa_kwargs: Optional[dict[str, Any]] = None,
     ) -> OptimizationResult:
         """Run a GEPA optimization with Zorven defaults.
 
@@ -71,6 +72,8 @@ class ZorvenGepaOptimizer:
             agent_code: Agent code for budget lookup (e.g., "cga").
             max_metric_calls: Override budget (None = use §4.3 default).
             tenant_id: Tenant ID for experiment namespacing (None = global).
+            gepa_kwargs: Additional kwargs passed to GepaPromptOptimizer
+                (e.g., task_description for reflection context enrichment).
 
         Returns:
             OptimizationResult with best candidate and run metadata.
@@ -112,6 +115,7 @@ class ZorvenGepaOptimizer:
             gepa = GepaPromptOptimizer(
                 reflection_model=self.reflection_model,
                 max_metric_calls=budget,
+                gepa_kwargs=gepa_kwargs,
             )
 
             # Run optimization with MLflow tracking (AC-3)
