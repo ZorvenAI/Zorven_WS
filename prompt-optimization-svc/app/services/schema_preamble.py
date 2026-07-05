@@ -82,14 +82,19 @@ class SchemaPreambleGenerator:
         """Prepend the preamble to a prompt template.
 
         If a preamble already exists in the template, it is replaced.
+        The content portion is stripped to ensure idempotent injection.
         """
-        stripped = self.strip(prompt_template)
-        return preamble + "\n\n" + stripped
+        if self.is_protected(prompt_template):
+            content = _PREAMBLE_PATTERN.sub("", prompt_template).strip()
+        else:
+            content = prompt_template.strip()
+        return preamble + "\n\n" + content
 
     def strip(self, prompt_text: str) -> str:
         """Remove the preamble section from prompt text."""
+        if not self.is_protected(prompt_text):
+            return prompt_text
         result = _PREAMBLE_PATTERN.sub("", prompt_text)
-        # Clean up leading/trailing whitespace left by removal
         return result.strip()
 
     def extract(self, prompt_text: str) -> Optional[str]:
@@ -100,8 +105,8 @@ class SchemaPreambleGenerator:
         return None
 
     def is_protected(self, prompt_text: str) -> bool:
-        """Check if prompt text contains a schema preamble."""
-        return PREAMBLE_START in prompt_text and PREAMBLE_END in prompt_text
+        """Check if prompt text contains a valid schema preamble block."""
+        return self.extract(prompt_text) is not None
 
     def has_changed(self, prompt_text: str, skill: SkillDefinition) -> bool:
         """Check if the embedded preamble differs from current skill schema.
