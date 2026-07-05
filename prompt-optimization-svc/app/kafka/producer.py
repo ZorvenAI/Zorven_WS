@@ -4,7 +4,12 @@ import json
 import logging
 from typing import Any, Optional
 
-from app.kafka.schemas import AuditEvent, PromptLifecycleEvent, TraceEvent
+from app.kafka.schemas import (
+    AuditEvent,
+    PromptLifecycleEvent,
+    SchemaChangeEvent,
+    TraceEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -249,3 +254,53 @@ class LifecycleProducer:
                 loop.run_until_complete(coro)
         except Exception as exc:
             logger.warning("Failed to send lifecycle event: %s", exc)
+
+    def send_schema_change_event_sync(
+        self,
+        prompt_name: str,
+        agent_code: str,
+        skill_id: str,
+        changes: list[dict],
+    ) -> None:
+        """Emit a schema change detected event (US-056, fire-and-forget).
+
+        Args:
+            prompt_name: Affected prompt name.
+            agent_code: Agent code.
+            skill_id: Skill ID where schema changed.
+            changes: List of SchemaChange dicts.
+        """
+        if self._producer is None:
+            logger.debug(
+                "LifecycleProducer not connected, skipping schema change event"
+            )
+            return
+
+        from app.kafka.schemas import SCHEMA_VERSION
+
+        event = SchemaChangeEvent(
+            prompt_name=prompt_name,
+            agent_code=agent_code,
+            skill_id=skill_id,
+            changes=changes,
+        )
+
+        message_key = event.correlation_id.encode("utf-8")
+        headers = [("schema_version", SCHEMA_VERSION.encode("utf-8"))]
+
+        try:
+            import asyncio
+
+            loop = asyncio.get_event_loop()
+            coro = self._producer.send_and_wait(
+                self.TOPIC,
+                event.model_dump(),
+                key=message_key,
+                headers=headers,
+            )
+            if loop.is_running():
+                loop.create_task(coro)
+            else:
+                loop.run_until_complete(coro)
+        except Exception as exc:
+            logger.warning("Failed to send schema change event: %s", exc)

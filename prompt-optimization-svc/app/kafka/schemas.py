@@ -17,6 +17,7 @@ PROMPT_ROLLED_BACK = "prompt.rolled_back"
 PROMPT_REJECTED = "prompt.rejected"
 OPTIMIZATION_RUN_APPROVED = "optimization.run.approved"
 OPTIMIZATION_RUN_REJECTED = "optimization.run.approval_rejected"
+SCHEMA_CHANGE_DETECTED = "prompt.schema_change_detected"
 
 SCHEMA_VERSION = "1.0"
 
@@ -73,6 +74,24 @@ class PromptLifecycleEvent(BaseModel):
             )
         return v
 
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class SchemaChangeEvent(BaseModel):
+    """Event emitted when skill schema changes are detected (US-056)."""
+
+    event_type: str = Field(default=SCHEMA_CHANGE_DETECTED)
+    prompt_name: str = Field(...)
+    agent_code: str = Field(...)
+    skill_id: str = Field(...)
+    changes: list[dict[str, Any]] = Field(..., description="List of SchemaChange dicts")
+    correlation_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description="Unique event ID for dedup",
+    )
+    schema_version: str = Field(default=SCHEMA_VERSION)
     timestamp: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
