@@ -32,6 +32,7 @@ python_files = ["test_*.py"]
 markers = [
     "integration: integration tests requiring Redis (deselect with '-m not integration')",
     "property: property-based tests using Hypothesis",
+    "e2e: end-to-end tests covering full optimization pipeline (US-060)",
 ]
 
 [tool.coverage.run]
