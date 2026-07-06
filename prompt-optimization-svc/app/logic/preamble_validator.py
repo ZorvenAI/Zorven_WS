@@ -242,6 +242,18 @@ def validate_preamble_protection(
 
     for field_name, orig_field in orig_input_map.items():
         if field_name not in mutated_input_map:
+            # Required input field removed entirely — weakening
+            if orig_field["required"]:
+                result.required_relaxed.append(
+                    {
+                        "field": field_name,
+                        "original": True,
+                        "mutated": None,
+                    }
+                )
+                result.violation_reasons.append(
+                    f"Required input field '{field_name}' removed from preamble"
+                )
             continue
         if orig_field["required"] and not mutated_input_map[field_name]["required"]:
             result.required_relaxed.append(

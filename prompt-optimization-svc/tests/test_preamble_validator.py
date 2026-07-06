@@ -307,6 +307,22 @@ class TestValidatePreambleProtection:
                     return
         pytest.skip("No matching output row found in CGA preamble")
 
+    def test_required_input_field_removed(self, preamble_template, mra_skill):
+        # Remove a required input field row entirely
+        for inp in mra_skill.input_schema:
+            if inp.get("required", True):
+                field_name = inp.get("field", inp.get("name", "unknown"))
+                row = f"| {field_name} | {inp.get('type', 'string')} | yes |"
+                if row in preamble_template:
+                    mutated = preamble_template.replace(row + "\n", "", 1)
+                    result = validate_preamble_protection(preamble_template, mutated)
+                    assert result.valid is False
+                    assert len(result.required_relaxed) >= 1
+                    assert result.required_relaxed[0]["field"] == field_name
+                    assert result.required_relaxed[0]["mutated"] is None
+                    return
+        pytest.skip("No required input fields found in MRA skill")
+
     def test_required_made_optional(self, preamble_template, mra_skill):
         # Find a required input field and make it optional
         for inp in mra_skill.input_schema:

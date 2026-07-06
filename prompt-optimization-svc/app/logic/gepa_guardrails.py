@@ -7,10 +7,7 @@ placeholder invariance (OPT-11) and schema preamble protection (OPT-12).
 import logging
 
 from app.logic.guardrails import GuardrailResult
-from app.logic.preamble_validator import (
-    PreambleProtectionResult,
-    validate_preamble_protection,
-)
+from app.logic.preamble_validator import validate_preamble_protection
 from app.logic.placeholder_validator import (
     PlaceholderInvarianceResult,
     validate_placeholder_invariance,
