@@ -6,50 +6,11 @@ schedule behavior with real Redis tenant config.
 Run with: pytest tests/integration/test_celery_beat_schedules.py -v -m integration
 """
 
-import os
-
 import pytest
 
-
-def _redis_available() -> bool:
-    """Check if Redis is reachable."""
-    redis_url = os.environ.get("POI_PROMPT_CACHE_REDIS_URL", "")
-    if not redis_url:
-        return False
-    try:
-        import redis
-
-        r = redis.from_url(redis_url)
-        r.ping()
-        r.close()
-        return True
-    except Exception:
-        return False
-
-
-def _mlflow_available() -> bool:
-    """Check if MLflow is reachable."""
-    mlflow_uri = os.environ.get("POI_MLFLOW_TRACKING_URI", "")
-    if not mlflow_uri:
-        return False
-    try:
-        import httpx
-
-        resp = httpx.get(f"{mlflow_uri}/health", timeout=5)
-        return resp.status_code == 200
-    except Exception:
-        return False
-
-
-requires_redis = pytest.mark.skipif(
-    not _redis_available(),
-    reason="Redis not available (set POI_PROMPT_CACHE_REDIS_URL)",
-)
-
-requires_mlflow = pytest.mark.skipif(
-    not _mlflow_available(),
-    reason="MLflow not available (set POI_MLFLOW_TRACKING_URI)",
-)
+# No-op markers — testcontainers always provides real services (US-059).
+requires_redis = pytest.mark.integration
+requires_mlflow = pytest.mark.integration
 
 
 @pytest.mark.integration

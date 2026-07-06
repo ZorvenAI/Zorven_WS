@@ -12,45 +12,37 @@ import pytest
 import redis.asyncio as aioredis
 from httpx import ASGITransport, AsyncClient
 
+
+def pytest_configure(config):
+    """Load testcontainer fixtures only when integration tests may run.
+
+    When the user runs ``pytest -m "not integration"``, Docker containers
+    are not needed so we skip loading the testcontainer plugin.
+    """
+    markexpr = getattr(config.option, "markexpr", "") or ""
+    if "not integration" in markexpr:
+        return
+    try:
+        config.pluginmanager.import_plugin("conftest_testcontainers")
+    except Exception:
+        # testcontainers not installed or Docker unavailable — integration
+        # tests will fail at fixture resolution time with a clear message.
+        pass
+
+
 REDIS_URL = os.environ.get(
     "POI_PROMPT_CACHE_REDIS_URL",
     os.environ.get("POI_REDIS_URL", "redis://localhost:6379/2"),
 )
-MLFLOW_URI = os.environ.get(
-    "POI_MLFLOW_TRACKING_URI", "http://localhost:5000"
-)
+MLFLOW_URI = os.environ.get("POI_MLFLOW_TRACKING_URI", "http://localhost:5000")
 ANTHROPIC_API_KEY = os.environ.get("POI_ANTHROPIC_API_KEY", "")
 
 
-def _redis_available() -> bool:
-    import redis as sync_redis
-    try:
-        r = sync_redis.from_url(REDIS_URL)
-        r.ping()
-        r.close()
-        return True
-    except Exception:
-        return False
+# No-op markers — testcontainers always provides real Redis and MLflow.
+# Kept as aliases so existing test imports continue to work.
+requires_redis = pytest.mark.integration
+requires_mlflow = pytest.mark.integration
 
-
-def _mlflow_available() -> bool:
-    try:
-        import httpx
-        resp = httpx.get(f"{MLFLOW_URI}/health", timeout=5)
-        return resp.status_code == 200
-    except Exception:
-        return False
-
-
-REDIS_AVAILABLE = _redis_available()
-MLFLOW_AVAILABLE = _mlflow_available()
-
-requires_redis = pytest.mark.skipif(
-    not REDIS_AVAILABLE, reason=f"Redis not available at {REDIS_URL}"
-)
-requires_mlflow = pytest.mark.skipif(
-    not MLFLOW_AVAILABLE, reason=f"MLflow not available at {MLFLOW_URI}"
-)
 requires_anthropic = pytest.mark.skipif(
     not ANTHROPIC_API_KEY, reason="POI_ANTHROPIC_API_KEY not set"
 )
@@ -62,9 +54,12 @@ async def real_redis():
     r = aioredis.from_url(REDIS_URL, decode_responses=True)
     yield r
     # Targeted cleanup — only test-prefixed keys
-    for pattern in ("prompt:__test*", "tenant:__test*",
-                    "prompt:optimization:lock:__test*",
-                    "prompt:optimization:progress:__test*"):
+    for pattern in (
+        "prompt:__test*",
+        "tenant:__test*",
+        "prompt:optimization:lock:__test*",
+        "prompt:optimization:progress:__test*",
+    ):
         async for key in r.scan_iter(match=pattern):
             await r.delete(key)
     await r.aclose()
@@ -76,7 +71,5 @@ async def api_client():
     from app.main import app
 
     transport = ASGITransport(app=app, raise_app_exceptions=False)
-    async with AsyncClient(
-        transport=transport, base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
