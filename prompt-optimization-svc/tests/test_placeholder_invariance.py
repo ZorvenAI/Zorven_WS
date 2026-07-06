@@ -137,3 +137,45 @@ class TestCheckGepaMutation:
         assert accepted is True
         assert result.removed == set()
         assert result.added == set()
+
+
+class TestPlaceholderEdgeCases:
+    """Edge case tests for placeholder extraction and invariance."""
+
+    def test_nested_braces_not_treated_as_placeholder(self):
+        """Triple braces like {{{x}}} — inner double-brace matched, not outer."""
+        from app.logic.placeholder_validator import extract_placeholders
+
+        # Python-style single-brace inside double braces
+        result = extract_placeholders("{{not_a_placeholder}}")
+        # Double brace pattern matches {{not_a_placeholder}} → "not_a_placeholder"
+        assert "not_a_placeholder" in result
+
+    def test_placeholder_in_code_block(self):
+        """Placeholders inside backtick code blocks are still extracted."""
+        template = "```\n{context.brand_name}\n```"
+        result = validate_placeholder_invariance(template, template)
+        assert result.valid is True
+        assert result.original_count == 1
+
+    def test_duplicate_placeholders_deduplicated(self):
+        """Same placeholder appearing twice only counted once."""
+        from app.logic.placeholder_validator import extract_placeholders
+
+        placeholders = extract_placeholders(
+            "{context.brand_name} and {context.brand_name} again"
+        )
+        assert len(placeholders) == 1
+        assert "context.brand_name" in placeholders
+
+    def test_empty_templates_valid(self):
+        result = validate_placeholder_invariance("", "")
+        assert result.valid is True
+        assert result.original_count == 0
+        assert result.mutated_count == 0
+
+    def test_whitespace_only_templates_valid(self):
+        result = validate_placeholder_invariance("   \n\t  ", "  \n  ")
+        assert result.valid is True
+        assert result.original_count == 0
+        assert result.mutated_count == 0
