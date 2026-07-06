@@ -46,12 +46,14 @@ class TestRunbookProperties:
                 # Mermaid format: FROM --> TO or FROM → TO
                 from_name = from_state.value
                 to_name = to_state.value
-                if (
-                    f"{from_name} --> {to_name}" not in self.runbook_content
-                    and f"{from_name} | {to_name}" not in self.runbook_content
-                    and f"| {from_name} | {to_name}" not in self.runbook_content
-                    and f"{to_name}" not in self.runbook_content
-                ):
+                # Check Mermaid diagram edge or transition table row
+                has_mermaid_edge = f"{from_name} --> {to_name}" in self.runbook_content
+                has_table_row = (
+                    f"| {from_name} |" in self.runbook_content
+                    and f"{to_name}"
+                    in self.runbook_content.split(f"| {from_name} |")[-1].split("\n")[0]
+                )
+                if not has_mermaid_edge and not has_table_row:
                     missing.append(f"{from_name} -> {to_name}")
 
         assert (

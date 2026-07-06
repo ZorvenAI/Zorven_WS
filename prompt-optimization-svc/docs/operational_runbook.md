@@ -125,8 +125,8 @@ stateDiagram-v2
 # Triggers invalidate_prompt() which deletes production + all tenant overrides
 curl -X DELETE http://localhost:8110/v1/prompts/<name>/cache
 
-# Via Redis CLI (manual)
-redis-cli -n 2 KEYS "prompt:<name>:*" | xargs redis-cli -n 2 DEL
+# Via Redis CLI (manual, uses SCAN to avoid blocking)
+redis-cli -n 2 --scan --pattern "prompt:<name>:*" | xargs redis-cli -n 2 DEL
 ```
 
 **Flush all cached prompts (emergency):**
@@ -456,7 +456,7 @@ When regression > 15% is detected within 48 hours of promotion:
 curl http://localhost:8110/metrics | grep poi_auto_rollback
 
 # Check health check results (Celery result backend)
-redis-cli -n 26 KEYS "celery-task-meta-*" | head -5
+redis-cli -n 26 --scan --pattern "celery-task-meta-*" | head -5
 ```
 
 ---
