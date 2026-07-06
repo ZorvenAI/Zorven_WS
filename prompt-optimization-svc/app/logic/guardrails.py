@@ -323,11 +323,15 @@ def run_candidate_guardrails(
     tenant_id: Optional[str] = None,
     reflection_context: Optional[str] = None,
     all_tenant_ids: Optional[list[str]] = None,
+    prompt_id: Optional[str] = None,
+    optimization_run_id: Optional[str] = None,
 ) -> GuardrailChainResult:
-    """Run OPT-02, OPT-06, OPT-09, OPT-10 on a candidate.
+    """Run OPT-02, OPT-06, OPT-09, OPT-10, OPT-12 on a candidate.
 
     Short-circuits on first failure.
     """
+    from app.logic.gepa_guardrails import check_preamble_protection
+
     results: list[GuardrailResult] = []
 
     # OPT-02: Cost cap
@@ -352,5 +356,19 @@ def run_candidate_guardrails(
     if tenant_id and reflection_context is not None:
         r = check_tenant_isolation(reflection_context, tenant_id, all_tenant_ids)
         results.append(r)
+        if not r.passed:
+            return _build_chain_result(results)
+
+    # OPT-12: Schema preamble protection
+    r = check_preamble_protection(
+        base_text,
+        candidate_text,
+        tenant_id=tenant_id,
+        prompt_id=prompt_id,
+        optimization_run_id=optimization_run_id,
+    )
+    results.append(r)
+    if not r.passed:
+        return _build_chain_result(results)
 
     return _build_chain_result(results)
