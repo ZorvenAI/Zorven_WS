@@ -142,14 +142,21 @@ class TestCheckGepaMutation:
 class TestPlaceholderEdgeCases:
     """Edge case tests for placeholder extraction and invariance."""
 
-    def test_nested_braces_not_treated_as_placeholder(self):
-        """Triple braces like {{{x}}} — inner double-brace matched, not outer."""
+    def test_triple_braces_extracts_inner_double(self):
+        """Triple braces {{{x}}} — double-brace pattern extracts inner match."""
         from app.logic.placeholder_validator import extract_placeholders
 
-        # Python-style single-brace inside double braces
-        result = extract_placeholders("{{not_a_placeholder}}")
-        # Double brace pattern matches {{not_a_placeholder}} → "not_a_placeholder"
-        assert "not_a_placeholder" in result
+        # {{{context.brand_name}}} has {{context.brand_name}} inside
+        result = extract_placeholders("{{{context.brand_name}}}")
+        assert "context.brand_name" in result
+
+    def test_double_braces_are_mlflow_placeholders(self):
+        """Normal {{x}} double-brace syntax is recognized as MLflow placeholder."""
+        from app.logic.placeholder_validator import extract_placeholders
+
+        result = extract_placeholders("Hello {{context.industry}}")
+        assert "context.industry" in result
+        assert len(result) == 1
 
     def test_placeholder_in_code_block(self):
         """Placeholders inside backtick code blocks are still extracted."""
