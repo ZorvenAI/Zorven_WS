@@ -31,7 +31,16 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 markers = [
     "integration: integration tests requiring Redis (deselect with '-m not integration')",
+    "property: property-based tests using Hypothesis",
 ]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["alembic/*"]
+
+[tool.coverage.report]
+fail_under = 60
+show_missing = true
 
 [tool.mypy]
 python_version = "3.12"
