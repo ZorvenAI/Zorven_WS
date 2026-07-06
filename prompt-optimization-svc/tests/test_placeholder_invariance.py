@@ -137,3 +137,52 @@ class TestCheckGepaMutation:
         assert accepted is True
         assert result.removed == set()
         assert result.added == set()
+
+
+class TestPlaceholderEdgeCases:
+    """Edge case tests for placeholder extraction and invariance."""
+
+    def test_triple_braces_extracts_inner_double(self):
+        """Triple braces {{{x}}} — double-brace pattern extracts inner match."""
+        from app.logic.placeholder_validator import extract_placeholders
+
+        # {{{context.brand_name}}} has {{context.brand_name}} inside
+        result = extract_placeholders("{{{context.brand_name}}}")
+        assert "context.brand_name" in result
+
+    def test_double_braces_are_mlflow_placeholders(self):
+        """Normal {{x}} double-brace syntax is recognized as MLflow placeholder."""
+        from app.logic.placeholder_validator import extract_placeholders
+
+        result = extract_placeholders("Hello {{context.industry}}")
+        assert "context.industry" in result
+        assert len(result) == 1
+
+    def test_placeholder_in_code_block(self):
+        """Placeholders inside backtick code blocks are still extracted."""
+        template = "```\n{context.brand_name}\n```"
+        result = validate_placeholder_invariance(template, template)
+        assert result.valid is True
+        assert result.original_count == 1
+
+    def test_duplicate_placeholders_deduplicated(self):
+        """Same placeholder appearing twice only counted once."""
+        from app.logic.placeholder_validator import extract_placeholders
+
+        placeholders = extract_placeholders(
+            "{context.brand_name} and {context.brand_name} again"
+        )
+        assert len(placeholders) == 1
+        assert "context.brand_name" in placeholders
+
+    def test_empty_templates_valid(self):
+        result = validate_placeholder_invariance("", "")
+        assert result.valid is True
+        assert result.original_count == 0
+        assert result.mutated_count == 0
+
+    def test_whitespace_only_templates_valid(self):
+        result = validate_placeholder_invariance("   \n\t  ", "  \n  ")
+        assert result.valid is True
+        assert result.original_count == 0
+        assert result.mutated_count == 0

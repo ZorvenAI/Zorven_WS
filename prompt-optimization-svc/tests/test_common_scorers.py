@@ -225,6 +225,25 @@ class TestTokenEfficiency:
         )
         assert "tokens" in result.rationale
 
+    def test_very_short_output_high_efficiency(self):
+        result = token_efficiency(
+            inputs="Explain the theory of relativity in detail with examples.",
+            outputs="E=mc²",
+            expectations=None,
+        )
+        assert result.value == 1.0
+
+    def test_optimal_ratio_moderate_score(self):
+        # Output ~5x input length — should be in mid-range
+        short_input = "Summarize this."
+        moderate_output = "word " * 50
+        result = token_efficiency(
+            inputs=short_input,
+            outputs=moderate_output,
+            expectations=None,
+        )
+        assert 0.0 <= result.value <= 1.0
+
 
 class TestBrandVoice:
     """AC-3: brand_voice uses LLM judge with 0-5 rubric mapped to 0-1."""
@@ -273,6 +292,56 @@ class TestBrandVoice:
         result = brand_voice(inputs="test", outputs="", expectations=None)
         assert result.value == 0.0
         assert "Empty" in result.rationale
+
+    def test_brand_voice_none_output_returns_zero(self):
+        from app.scorers.common.brand_voice import brand_voice
+
+        result = brand_voice(inputs="test", outputs=None, expectations=None)
+        assert result.value == 0.0
+
+    def test_brand_voice_empty_string_returns_zero(self):
+        from app.scorers.common.brand_voice import brand_voice
+
+        result = brand_voice(inputs="test", outputs="", expectations=None)
+        assert result.value == 0.0
+
+    def test_brand_voice_whitespace_output_returns_zero(self):
+        from app.scorers.common.brand_voice import brand_voice
+
+        result = brand_voice(inputs="test", outputs="   \n\t  ", expectations=None)
+        assert result.value == 0.0
+
+    def test_brand_voice_none_output_rationale_mentions_empty(self):
+        from app.scorers.common.brand_voice import brand_voice
+
+        result = brand_voice(inputs="test", outputs=None, expectations=None)
+        assert "Empty" in result.rationale or "empty" in result.rationale.lower()
+
+    def test_brand_voice_name_is_correct(self):
+        from app.scorers.common.brand_voice import brand_voice
+
+        result = brand_voice(inputs="test", outputs=None, expectations=None)
+        assert result.name == "brand_voice"
+
+    def test_brand_voice_value_range_on_empty(self):
+        from app.scorers.common.brand_voice import brand_voice
+
+        result = brand_voice(inputs="test", outputs="", expectations=None)
+        assert 0.0 <= result.value <= 1.0
+
+    def test_brand_voice_rationale_is_string(self):
+        from app.scorers.common.brand_voice import brand_voice
+
+        result = brand_voice(inputs="test", outputs=None, expectations=None)
+        assert isinstance(result.rationale, str)
+        assert len(result.rationale) > 0
+
+    def test_brand_voice_default_voice_constant(self):
+        from app.scorers.common.brand_voice import DEFAULT_BRAND_VOICE
+
+        assert "Professional" in DEFAULT_BRAND_VOICE
+        assert isinstance(DEFAULT_BRAND_VOICE, str)
+        assert len(DEFAULT_BRAND_VOICE) > 20
 
 
 class TestScorerSignatureConformance:
