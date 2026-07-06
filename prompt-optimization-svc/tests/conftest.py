@@ -12,6 +12,24 @@ import pytest
 import redis.asyncio as aioredis
 from httpx import ASGITransport, AsyncClient
 
+
+def pytest_configure(config):
+    """Load testcontainer fixtures only when integration tests may run.
+
+    When the user runs ``pytest -m "not integration"``, Docker containers
+    are not needed so we skip loading the testcontainer plugin.
+    """
+    markexpr = getattr(config.option, "markexpr", "") or ""
+    if "not integration" in markexpr:
+        return
+    try:
+        config.pluginmanager.import_plugin("conftest_testcontainers")
+    except Exception:
+        # testcontainers not installed or Docker unavailable — integration
+        # tests will fail at fixture resolution time with a clear message.
+        pass
+
+
 REDIS_URL = os.environ.get(
     "POI_PROMPT_CACHE_REDIS_URL",
     os.environ.get("POI_REDIS_URL", "redis://localhost:6379/2"),

@@ -4,6 +4,7 @@ Validates that testcontainer-managed services (Redis, PostgreSQL, Kafka,
 MLflow) are healthy and that POI_* environment variables point to them.
 """
 
+import asyncio
 import os
 
 import pytest
@@ -17,7 +18,8 @@ class TestTestcontainersInfrastructure:
         """Redis container is reachable and responds to PING."""
         import redis
 
-        url = os.environ.get("POI_PROMPT_CACHE_REDIS_URL", "redis://localhost:6379/2")
+        url = os.environ.get("POI_PROMPT_CACHE_REDIS_URL", "")
+        assert url, "POI_PROMPT_CACHE_REDIS_URL must be set by testcontainers"
         r = redis.from_url(url)
         assert r.ping() is True
         r.close()
@@ -26,10 +28,8 @@ class TestTestcontainersInfrastructure:
         """PostgreSQL container accepts connections and runs queries."""
         from sqlalchemy import create_engine, text
 
-        url = os.environ.get(
-            "POI_DATABASE_URL",
-            "postgresql://mlflow:mlflow@localhost:5432/mlflow",
-        )
+        url = os.environ.get("POI_DATABASE_URL", "")
+        assert url, "POI_DATABASE_URL must be set by testcontainers"
         engine = create_engine(url)
         with engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
@@ -38,24 +38,27 @@ class TestTestcontainersInfrastructure:
 
     def test_kafka_container_accepts_connections(self):
         """Kafka container bootstrap server is reachable."""
-        from kafka import KafkaProducer
+        from aiokafka import AIOKafkaProducer
 
         bootstrap = os.environ.get("POI_KAFKA_BOOTSTRAP_SERVERS", "")
-        if not bootstrap:
-            pytest.skip("POI_KAFKA_BOOTSTRAP_SERVERS not set")
+        assert bootstrap, "POI_KAFKA_BOOTSTRAP_SERVERS must be set by testcontainers"
 
-        producer = KafkaProducer(
-            bootstrap_servers=bootstrap,
-            request_timeout_ms=5000,
-        )
-        assert producer.bootstrap_connected()
-        producer.close()
+        async def _check():
+            producer = AIOKafkaProducer(bootstrap_servers=bootstrap)
+            await producer.start()
+            connected = producer.client._connected
+            await producer.stop()
+            return connected
+
+        result = asyncio.get_event_loop().run_until_complete(_check())
+        assert result is True
 
     def test_mlflow_server_health_endpoint(self):
         """MLflow /health endpoint returns 200."""
         import httpx
 
-        uri = os.environ.get("POI_MLFLOW_TRACKING_URI", "http://localhost:5000")
+        uri = os.environ.get("POI_MLFLOW_TRACKING_URI", "")
+        assert uri, "POI_MLFLOW_TRACKING_URI must be set by testcontainers"
         resp = httpx.get(f"{uri}/health", timeout=5)
         assert resp.status_code == 200
 
@@ -65,9 +68,8 @@ class TestTestcontainersInfrastructure:
         import redis
 
         # Redis 7 check — INFO server contains redis_version:7.*
-        redis_url = os.environ.get(
-            "POI_PROMPT_CACHE_REDIS_URL", "redis://localhost:6379/2"
-        )
+        redis_url = os.environ.get("POI_PROMPT_CACHE_REDIS_URL", "")
+        assert redis_url, "POI_PROMPT_CACHE_REDIS_URL must be set by testcontainers"
         r = redis.from_url(redis_url)
         info = r.info("server")
         assert info["redis_version"].startswith(
@@ -78,10 +80,8 @@ class TestTestcontainersInfrastructure:
         # PostgreSQL 15 check — via server_version
         from sqlalchemy import create_engine, text
 
-        pg_url = os.environ.get(
-            "POI_DATABASE_URL",
-            "postgresql://mlflow:mlflow@localhost:5432/mlflow",
-        )
+        pg_url = os.environ.get("POI_DATABASE_URL", "")
+        assert pg_url, "POI_DATABASE_URL must be set by testcontainers"
         engine = create_engine(pg_url)
         with engine.connect() as conn:
             result = conn.execute(text("SHOW server_version"))
@@ -89,8 +89,9 @@ class TestTestcontainersInfrastructure:
             assert version.startswith("15"), f"Expected PostgreSQL 15.x, got {version}"
         engine.dispose()
 
-        # MLflow version check — /health or /version returns successfully
-        mlflow_uri = os.environ.get("POI_MLFLOW_TRACKING_URI", "http://localhost:5000")
+        # MLflow version check — /health returns successfully
+        mlflow_uri = os.environ.get("POI_MLFLOW_TRACKING_URI", "")
+        assert mlflow_uri, "POI_MLFLOW_TRACKING_URI must be set by testcontainers"
         resp = httpx.get(f"{mlflow_uri}/health", timeout=5)
         assert resp.status_code == 200
 
