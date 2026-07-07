@@ -107,9 +107,7 @@ class RecommendationGenerator:
                     },
                     proposed_values={"action": "request_creative_refresh"},
                     reason="creative_fatigue",
-                    priority=(
-                        "high" if ad.confidence == "HIGH" else "medium"
-                    ),
+                    priority=("high" if ad.confidence == "HIGH" else "medium"),
                     now=now,
                     expires=expires,
                 )
@@ -130,11 +128,7 @@ class RecommendationGenerator:
                         "daily_budget": budget_rec.proposed_budget,
                     },
                     reason=budget_rec.reason,
-                    priority=(
-                        "high"
-                        if abs(budget_rec.change_pct) > 30
-                        else "medium"
-                    ),
+                    priority=("high" if abs(budget_rec.change_pct) > 30 else "medium"),
                     now=now,
                     expires=expires,
                 )
@@ -145,7 +139,12 @@ class RecommendationGenerator:
             try:
                 await self._enrich_rationales(recommendations, campaign)
             except Exception as exc:
-                logger.warning("Rationale enrichment failed: %s", exc)
+                logger.error(
+                    "Rationale enrichment failed (%s): %s",
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
+                )
 
         logger.info(
             "Generated %d recommendations for campaign %s",

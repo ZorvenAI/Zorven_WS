@@ -39,7 +39,7 @@ class AnthropicClient:
             )
             return json.loads(text)
         except json.JSONDecodeError:
-            logger.warning("Claude returned non-JSON, attempting extraction")
+            logger.error("Claude returned non-JSON, attempting extraction")
             text = response.content[0].text
             start = text.find("{")
             end = text.rfind("}") + 1
@@ -47,5 +47,10 @@ class AnthropicClient:
                 return json.loads(text[start:end])
             return {"raw_response": text}
         except Exception as exc:
-            logger.error("Claude API error: %s", exc)
+            logger.error(
+                "Claude API error (%s): %s",
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
             raise

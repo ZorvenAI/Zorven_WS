@@ -294,7 +294,7 @@ class VoCStrategyBridge(BaseSkill):
             )
 
         except Exception as exc:
-            logger.warning("VoC strategy bridge synthesis failed: %s", exc)
+            logger.error("VoC strategy bridge synthesis failed: %s", exc, exc_info=True)
             return SkillResult(
                 skill_id=self.meta.skill_id,
                 success=False,

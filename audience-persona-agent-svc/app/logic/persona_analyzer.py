@@ -610,7 +610,7 @@ class PersonaAnalyzer:
             logger.warning("LLM circuit open during synthesis")
             return self._stub_synthesis(prompt, skill_results)
         except Exception:
-            logger.warning("Synthesis failed", exc_info=True)
+            logger.error("Synthesis failed", exc_info=True)
             return self._stub_synthesis(prompt, skill_results)
 
     @staticmethod

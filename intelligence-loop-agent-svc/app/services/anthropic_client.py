@@ -29,11 +29,20 @@ class AnthropicClient:
         self._temperature = temperature
         self._client: Any = None
         if api_key and anthropic is not None:
+            masked = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) >= 8 else "****"
+            logger.info(
+                "Anthropic key present: masked=%s, length=%d, model=%s",
+                masked,
+                len(api_key),
+                model,
+            )
             try:
                 self._client = anthropic.AsyncAnthropic(api_key=api_key)
                 logger.info("Anthropic client initialized (model=%s)", model)
             except Exception as exc:
                 logger.warning("Anthropic init failed (fail-open): %s", exc)
+        else:
+            logger.warning("Set ILA_ANTHROPIC_API_KEY on Railway for live results")
 
     @property
     def enabled(self) -> bool:
@@ -66,12 +75,14 @@ class AnthropicClient:
             parsed = _safe_json_loads(text)
             logger.info(
                 "Claude raw response: text_len=%d, parsed_keys=%s, learnings_count=%d, text=%s",
-                len(text), list(parsed.keys()), len(parsed.get("learnings", [])),
+                len(text),
+                list(parsed.keys()),
+                len(parsed.get("learnings", [])),
                 text[:1000],
             )
             return parsed
         except Exception as exc:
-            logger.warning("Anthropic call failed (fail-open): %s", exc)
+            logger.error("Anthropic call failed (fail-open): %s", exc, exc_info=True)
             return {}
 
 

@@ -257,3 +257,139 @@ MRA_RAG_ENABLED=false
 MRA_RAG_SERVICE_URL=http://rag-uploader-agent.railway.internal:8070
 MRA_CONFIDENCE_THRESHOLD=0.7
 MRA_TOKEN_BUDGET_PER_SESSION=50000
+
+# =============================================================================
+# Competitor Intelligence Agent (CIA_ prefix, Redis DB 12)
+# =============================================================================
+CIA_REDIS_URL=<railway-redis-url>/12
+CIA_KAFKA_BOOTSTRAP_SERVERS=
+CIA_ANTHROPIC_API_KEY=<anthropic-api-key>
+CIA_TAVILY_API_KEY=<tavily-api-key>
+CIA_LLM_MODEL=claude-sonnet-4-5-20250929
+CIA_LOG_LEVEL=INFO
+CIA_RBAC_ENABLED=true
+CIA_RAG_ENABLED=false
+CIA_RAG_SERVICE_URL=http://rag-uploader-agent.railway.internal:8070
+
+# =============================================================================
+# Audience Persona Agent (APA_ prefix, Redis DB 13)
+# =============================================================================
+APA_REDIS_URL=<railway-redis-url>/13
+APA_KAFKA_BOOTSTRAP_SERVERS=
+APA_ANTHROPIC_API_KEY=<anthropic-api-key>
+APA_TAVILY_API_KEY=<tavily-api-key>
+APA_LLM_MODEL=claude-sonnet-4-5-20250929
+APA_LOG_LEVEL=INFO
+APA_RBAC_ENABLED=true
+APA_RAG_ENABLED=false
+APA_RAG_SERVICE_URL=http://rag-uploader-agent.railway.internal:8070
+
+# =============================================================================
+# Trend & Cultural Insights Agent (TCIA_ prefix, Redis DB 14)
+# =============================================================================
+TCIA_REDIS_URL=<railway-redis-url>/14
+TCIA_KAFKA_BOOTSTRAP_SERVERS=
+TCIA_ANTHROPIC_API_KEY=<anthropic-api-key>
+TCIA_TAVILY_API_KEY=<tavily-api-key>
+TCIA_LLM_MODEL=claude-sonnet-4-5-20250929
+TCIA_LOG_LEVEL=INFO
+
+# =============================================================================
+# Voice of Customer Agent (VOCA_ prefix, Redis DB 15)
+# =============================================================================
+VOCA_REDIS_URL=<railway-redis-url>/15
+VOCA_KAFKA_BOOTSTRAP_SERVERS=
+VOCA_ANTHROPIC_API_KEY=<anthropic-api-key>
+VOCA_TAVILY_API_KEY=<tavily-api-key>
+VOCA_LLM_MODEL=claude-sonnet-4-5-20250929
+VOCA_LOG_LEVEL=INFO
+
+# =============================================================================
+# Brand Positioning Agent (BPA_ prefix, Redis DB 16)
+# =============================================================================
+BPA_REDIS_URL=<railway-redis-url>/16
+BPA_KAFKA_BOOTSTRAP_SERVERS=
+BPA_ANTHROPIC_API_KEY=<anthropic-api-key>
+BPA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+BPA_LOG_LEVEL=INFO
+
+# =============================================================================
+# Brand Architecture Agent (BAA_ prefix, Redis DB 17)
+# =============================================================================
+BAA_REDIS_URL=<railway-redis-url>/17
+BAA_KAFKA_BOOTSTRAP_SERVERS=
+BAA_ANTHROPIC_API_KEY=<anthropic-api-key>
+BAA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+BAA_LOG_LEVEL=INFO
+
+# =============================================================================
+# Brand Personality Agent (BPV_ prefix, Redis DB 18)
+# =============================================================================
+BPV_REDIS_URL=<railway-redis-url>/18
+BPV_KAFKA_BOOTSTRAP_SERVERS=
+BPV_ANTHROPIC_API_KEY=<anthropic-api-key>
+BPV_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+BPV_LOG_LEVEL=INFO
+
+# =============================================================================
+# Brand Naming Agent (NTA_ prefix, Redis DB 19)
+# =============================================================================
+NTA_REDIS_URL=<railway-redis-url>/19
+NTA_KAFKA_BOOTSTRAP_SERVERS=
+NTA_ANTHROPIC_API_KEY=<anthropic-api-key>
+NTA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+NTA_LOG_LEVEL=INFO
+
+# =============================================================================
+# Brand Story Agent (BSA_ prefix, Redis DB 20)
+# =============================================================================
+BSA_REDIS_URL=<railway-redis-url>/20
+BSA_KAFKA_BOOTSTRAP_SERVERS=
+BSA_ANTHROPIC_API_KEY=<anthropic-api-key>
+BSA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+BSA_LOG_LEVEL=INFO
+
+# =============================================================================
+# Campaign Architecture Agent (CAA_ prefix, Redis DB 21)
+# =============================================================================
+CAA_REDIS_URL=<railway-redis-url>/21
+CAA_KAFKA_BOOTSTRAP_SERVERS=
+CAA_ANTHROPIC_API_KEY=<anthropic-api-key>
+CAA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+CAA_LOG_LEVEL=INFO
+
+# =============================================================================
+# Creative Generation Agent (CGA_ prefix, Redis DB 22)
+# =============================================================================
+CGA_REDIS_URL=<railway-redis-url>/22
+CGA_KAFKA_BOOTSTRAP_SERVERS=
+CGA_ANTHROPIC_API_KEY=<anthropic-api-key>
+CGA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+CGA_LOG_LEVEL=INFO
+
+# =============================================================================
+# Ad Publishing Agent (ADPUB_ prefix, Redis DB 23)
+# =============================================================================
+ADPUB_REDIS_URL=<railway-redis-url>/23
+ADPUB_KAFKA_BOOTSTRAP_SERVERS=
+ADPUB_ANTHROPIC_API_KEY=<anthropic-api-key>
+ADPUB_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+ADPUB_LOG_LEVEL=INFO
+
+# =============================================================================
+# Campaign Optimization Agent (COA_ prefix, Redis DB 24)
+# =============================================================================
+COA_REDIS_URL=<railway-redis-url>/24
+COA_KAFKA_BOOTSTRAP_SERVERS=
+COA_ANTHROPIC_API_KEY=<anthropic-api-key>
+COA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+COA_LOG_LEVEL=INFO
+
+# =============================================================================
+# Intelligence Loop Agent (ILA_ prefix, Redis DB 25)
+# =============================================================================
+ILA_REDIS_URL=<railway-redis-url>/25
+ILA_KAFKA_BOOTSTRAP_SERVERS=
+ILA_ANTHROPIC_API_KEY=<anthropic-api-key>
+ILA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+ILA_LOG_LEVEL=INFO

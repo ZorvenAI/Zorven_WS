@@ -45,19 +45,23 @@ async def lifespan(app: FastAPI):
 
     # 3. Anthropic client (lazy)
     anthropic_client = None
-    if settings.ANTHROPIC_API_KEY:
+    api_key = settings.ANTHROPIC_API_KEY
+    if api_key:
         try:
             import anthropic
 
-            anthropic_client = anthropic.AsyncAnthropic(
-                api_key=settings.ANTHROPIC_API_KEY
-            )
+            anthropic_client = anthropic.AsyncAnthropic(api_key=api_key)
             logger.info(
-                "Anthropic client initialized (model=%s)",
+                "Anthropic client initialized (key=%s...%s, length=%d, model=%s)",
+                api_key[:4],
+                api_key[-4:],
+                len(api_key),
                 settings.ANTHROPIC_MODEL,
             )
         except Exception as exc:
             logger.warning("Failed to initialize Anthropic client: %s", exc)
+    else:
+        logger.warning("Set BAA_ANTHROPIC_API_KEY on Railway for live results")
 
     # 4. Anthropic wrapper
     from app.services.anthropic_client import AnthropicClient
@@ -102,7 +106,6 @@ async def lifespan(app: FastAPI):
         bool(anthropic_client),
         settings.BACKEND_URL,
     )
-
 
     # Prompt loader (ZorvenPromptLoader integration)
     prompt_loader = AgentPromptClient(
