@@ -50,8 +50,9 @@ class PromptCacheInvalidator:
                 self.TOPIC,
                 self.GROUP_ID,
             )
-        except (Exception, asyncio.TimeoutError) as exc:
+        except Exception as exc:
             logger.warning("PromptCacheInvalidator failed: %s — no-op mode", exc)
+            self._consumer = None
 
     async def stop(self) -> None:
         """Stop the consumer and background task."""
@@ -65,7 +66,7 @@ class PromptCacheInvalidator:
         if self._consumer is not None:
             try:
                 await self._consumer.stop()
-            except (Exception, asyncio.TimeoutError) as exc:
+            except Exception as exc:
                 logger.warning("Error stopping PromptCacheInvalidator: %s", exc)
             self._consumer = None
 
@@ -76,7 +77,7 @@ class PromptCacheInvalidator:
                 await self.handle_event(msg.value)
         except asyncio.CancelledError:
             pass
-        except (Exception, asyncio.TimeoutError) as exc:
+        except Exception as exc:
             logger.error("PromptCacheInvalidator consume error: %s", exc)
 
     async def handle_event(self, event: dict) -> None:
@@ -100,5 +101,5 @@ class PromptCacheInvalidator:
                                 len(keys),
                                 prompt_name,
                             )
-                except (Exception, asyncio.TimeoutError) as exc:
+                except Exception as exc:
                     logger.warning("Cache invalidation failed: %s", exc)
