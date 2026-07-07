@@ -22,6 +22,8 @@ from app.services.caa_executor import CAAExecutor
 from app.services.context_loader import CAAContextLoader
 from app.services.gcs_client import GCSClient
 from app.services.tavily_client import TavilyClient
+from app.prompts.loader import AgentPromptClient
+from app.prompts.invalidator import PromptCacheInvalidator
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +114,25 @@ async def lifespan(app: FastAPI):
 
     logger.info("Campaign Architecture Agent service ready")
 
+
+    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
     yield
 
     # Teardown
+    await cache_invalidator.stop()
+    await prompt_loader.stop()
     await trace_producer.stop()
     await audit_producer.stop()
     await redis_manager.close()

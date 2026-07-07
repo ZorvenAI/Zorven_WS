@@ -40,6 +40,8 @@ from app.skills.rag_store_indexer import RAGStoreIndexer
 from app.skills.registry import SkillRegistry
 from app.skills.research_report_generator import ResearchReportGenerator
 from app.skills.web_market_search import WebMarketSearch
+from app.prompts.loader import AgentPromptClient
+from app.prompts.invalidator import PromptCacheInvalidator
 
 logger = logging.getLogger(__name__)
 
@@ -170,9 +172,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         len(circuit_breakers),
     )
 
+    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
     yield
 
     # Shutdown
+    await cache_invalidator.stop()
+    await prompt_loader.stop()
     await executor.close()
     if anthropic_client:
         try:

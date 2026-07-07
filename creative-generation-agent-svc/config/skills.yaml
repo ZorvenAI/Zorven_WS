@@ -1,0 +1,396 @@
+# creative-generation-agent-svc skill registry
+# WF3 Agent 3.2 — AI ad creative generation (images + copy)
+# 12 skills (SKL-CGA-01..05, 07..14; SKL-CGA-06 deferred)
+# Source: app/logic/ modules + CLAUDE.md skill table
+
+skills:
+  # ── Research Phase (SKL-CGA-01..03) ──────────────────────────────────────────
+  - skill_id: SKL-CGA-01
+    name: creative_context_loader
+    description: "Load CAA blueprint + WF1 + WF2 + Company context via parallel HTTP calls"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: caa_blueprint
+        type: object
+        description: "Campaign blueprint with creative briefs per audience x funnel"
+      - field: wf1_context
+        type: object
+        description: "WF1 APA persona data"
+      - field: wf2_context
+        type: object
+        description: "WF2 strategy context (BPV voice, BPA positioning, NTA name/tagline, BSA story)"
+      - field: company_context
+        type: object
+        description: "Company model (colors, logo, industry)"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-CGA-02
+    name: audience_creative_profiler
+    description: "Profile audience creative preferences via Claude Sonnet 4 analysis"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: creative_profiles
+        type: array
+        description: "Per-audience creative preference profiles"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-CGA-03
+    name: creative_learnings_loader
+    description: "Load prior creative performance learnings from RAG / intelligence loop"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: creative_learnings
+        type: object
+        description: "Prior creative performance data and learnings"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # ── Image Generation Phase (SKL-CGA-04..05) ─────────────────────────────────
+  - skill_id: SKL-CGA-04
+    name: image_prompt_builder
+    description: "Build Nano Banana 2 image generation prompts from brand context and creative briefs"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: image_prompts
+        type: array
+        description: "Structured prompts for Nano Banana 2 image generation"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-CGA-05
+    name: image_generator
+    description: "Generate AI ad images via Nano Banana 2 (google-genai SDK) in 3 aspect ratios (1:1, 9:16, 16:9)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: generated_images
+        type: array
+        description: "Generated image URLs (GCS) per audience x funnel x aspect ratio"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: false
+
+  # NOTE: SKL-CGA-06 is deferred — reserved for future image editing/variation
+
+  # ── Copy Generation Phase (SKL-CGA-07..10) ──────────────────────────────────
+  - skill_id: SKL-CGA-07
+    name: hook_generator
+    description: "Generate attention-grabbing ad hooks per audience x funnel stage"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: hooks
+        type: array
+        description: "Ad hooks per audience x funnel"
+      - field: headline
+        type: string
+        description: "Ad headline (max 40 characters)"
+        max_length: 40
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-CGA-08
+    name: primary_copy_generator
+    description: "Generate primary ad copy text per audience x funnel stage"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: primary_texts
+        type: array
+        description: "Primary ad copy texts per audience x funnel"
+      - field: primary_text
+        type: string
+        description: "Primary text body (max 125 characters)"
+        max_length: 125
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-CGA-09
+    name: cta_generator
+    description: "Generate call-to-action buttons from Meta CTA enum per audience x funnel"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: ctas
+        type: array
+        description: "CTA selections per audience x funnel"
+      - field: description
+        type: string
+        description: "CTA description text (max 30 characters)"
+        max_length: 30
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-CGA-10
+    name: copy_compliance_checker
+    description: "Check ad copy against Meta Ads compliance policies (prohibited claims, character limits)"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: compliance_results
+        type: array
+        description: "Per-copy compliance check results"
+      - field: all_compliant
+        type: boolean
+        description: "Whether all copy passed compliance"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  # ── Assembly Phase (SKL-CGA-11..12) ──────────────────────────────────────────
+  - skill_id: SKL-CGA-11
+    name: visual_copy_assembler
+    description: "Pair generated images with ad copy into visual-copy assemblies"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: assemblies
+        type: array
+        description: "Visual-copy paired assemblies per audience x funnel"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-CGA-12
+    name: creative_package_synthesizer
+    description: "Synthesize complete creative packages with A/B variants for Meta Ads"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: creative_packages
+        type: array
+        description: "Complete creative packages per audience x funnel"
+      - field: confidence_score
+        type: number
+        description: "Package confidence score (0.0-1.0)"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  # ── Persist Phase (SKL-CGA-13..14) ──────────────────────────────────────────
+  - skill_id: SKL-CGA-13
+    name: creative_persister
+    description: "Persist creative images and packages to GCS and metadata to Redis"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: gcs_uris
+        type: array
+        description: "GCS URIs of persisted creative assets"
+      - field: cache_keys
+        type: array
+        description: "Redis cache keys for creative metadata"
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: true
+
+  - skill_id: SKL-CGA-14
+    name: human_escalation
+    description: "Escalate to human review when creative package confidence < 0.7 threshold"
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: previous_outputs
+        type: object
+        required: true
+      - field: config
+        type: object
+        required: false
+    output_schema:
+      - field: escalation_id
+        type: string
+        description: "Unique escalation request identifier"
+      - field: escalation_reason
+        type: string
+        description: "Reason for escalation"
+    timeout_ms: 10000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true

@@ -1,0 +1,53 @@
+# Prometheus alerting rules for prompt-optimization-svc (US-048, AC-2, §19.1)
+groups:
+  - name: prompt_optimization
+    rules:
+      - alert: HighCacheLatency
+        expr: histogram_quantile(0.95, rate(poi_prompt_load_latency_ms_bucket{tier="tier1_production"}[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: prompt-optimization-svc
+        annotations:
+          summary: "Prompt cache p95 latency exceeds 5ms"
+          description: "p95 cache hit latency is {{ $value }}ms (threshold: 5ms)"
+
+      - alert: HighOptimizationCost
+        expr: rate(poi_optimization_run_cost_usd_sum[5m]) / rate(poi_optimization_run_cost_usd_count[5m]) > 25
+        for: 5m
+        labels:
+          severity: warning
+          service: prompt-optimization-svc
+        annotations:
+          summary: "Average optimization cost exceeds $25 per agent"
+          description: "Average optimization run cost is ${{ $value }} (threshold: $25)"
+
+      - alert: ScorerRegression
+        expr: poi_scorer_regression_pct > 10
+        for: 1m
+        labels:
+          severity: critical
+          service: prompt-optimization-svc
+        annotations:
+          summary: "Scorer regression exceeds 10%"
+          description: "Scorer regression for {{ $labels.agent_code }}/{{ $labels.prompt_name }} is {{ $value }}%"
+
+      - alert: MLflowDown
+        expr: poi_mlflow_server_health == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: prompt-optimization-svc
+        annotations:
+          summary: "MLflow server is down"
+          description: "MLflow health check has been failing for >2 minutes"
+
+      - alert: HighFallbackUsage
+        expr: rate(poi_prompt_fallback_usage_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: prompt-optimization-svc
+        annotations:
+          summary: "High prompt fallback usage"
+          description: "Fallback template usage rate is {{ $value }}/s for prompt {{ $labels.name }}"

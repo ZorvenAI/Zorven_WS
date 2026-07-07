@@ -117,7 +117,8 @@ class Company(models.Model):
         verbose_name_plural = "Companies"
 
     def __str__(self):
-        return f"{self.name} ({self.tenant.name})"
+        tenant_name = self.tenant.name if self.tenant else "no-tenant"
+        return f"{self.name} ({tenant_name})"
 
     @property
     def formatted_address(self):

@@ -19,6 +19,8 @@ from app.messaging.kafka_producer import AuditProducer, TraceProducer
 from app.services.bpv_analyzer import BPVAnalyzer
 from app.services.bpv_executor import BPVExecutor
 from app.services.context_loader import BPVContextLoader
+from app.prompts.loader import AgentPromptClient
+from app.prompts.invalidator import PromptCacheInvalidator
 
 logger = logging.getLogger(__name__)
 
@@ -83,9 +85,27 @@ async def lifespan(app: FastAPI):
 
     logger.info("Brand Personality Agent service ready")
 
+
+    # Prompt loader (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
+    app.state.prompt_loader = prompt_loader
+
     yield
 
     # Teardown
+    await cache_invalidator.stop()
+    await prompt_loader.stop()
     await trace_producer.stop()
     await audit_producer.stop()
     await redis_manager.close()

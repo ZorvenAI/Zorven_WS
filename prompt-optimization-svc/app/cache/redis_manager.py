@@ -21,9 +21,7 @@ class RedisManager:
     async def connect(self) -> aioredis.Redis:
         """Initialize and return the Redis connection."""
         if self._redis is None:
-            self._redis = aioredis.from_url(
-                self.redis_url, decode_responses=True
-            )
+            self._redis = aioredis.from_url(self.redis_url, decode_responses=True)
         return self._redis
 
     async def _get_redis(self) -> aioredis.Redis:
@@ -46,9 +44,7 @@ class RedisManager:
         """Generate MD5 hash for cache keys."""
         return hashlib.md5(value.encode()).hexdigest()
 
-    async def get_cached_result(
-        self, cache_key: str
-    ) -> Optional[dict[str, Any]]:
+    async def get_cached_result(self, cache_key: str) -> Optional[dict[str, Any]]:
         """Get cached result. Returns None on any error (fail-open)."""
         try:
             r = await self._get_redis()
@@ -79,9 +75,7 @@ class RedisManager:
         except Exception as exc:
             logger.warning("Redis set error: %s", exc)
 
-    async def check_rate_limit(
-        self, tenant_id: str, limit: int = 10
-    ) -> bool:
+    async def check_rate_limit(self, tenant_id: str, limit: int = 10) -> bool:
         """Check per-tenant rate limit. Returns True if allowed (fail-open)."""
         try:
             r = await self._get_redis()

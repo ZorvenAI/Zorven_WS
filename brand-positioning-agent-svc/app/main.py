@@ -19,6 +19,8 @@ from app.messaging.kafka_producer import AuditProducer, EventProducer, TraceProd
 from app.services.bpa_analyzer import BPAAnalyzer
 from app.services.bpa_executor import BPAExecutor
 from app.services.wf1_loader import WF1ContextLoader
+from app.prompts.loader import AgentPromptClient
+from app.prompts.invalidator import PromptCacheInvalidator
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +103,27 @@ async def lifespan(app: FastAPI):
         settings.BACKEND_URL,
     )
 
+
+    # Prompt loader (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
+    routes.prompt_loader = prompt_loader
+
     yield
 
     # Shutdown
+    await cache_invalidator.stop()
+    await prompt_loader.stop()
     logger.info("Shutting down Brand Positioning Agent service")
     await executor.close()
     await event_producer.stop()

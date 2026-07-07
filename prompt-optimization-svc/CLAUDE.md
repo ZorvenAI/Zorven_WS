@@ -31,6 +31,7 @@ app/
 POI_MLFLOW_TRACKING_URI=http://mlflow-server:5000
 POI_DATABASE_URL=postgresql://mlflow:mlflow@mlflow-db:5432/mlflow
 POI_REDIS_URL=redis://localhost:6379/26
+POI_PROMPT_CACHE_REDIS_URL=redis://localhost:6379/2
 POI_KAFKA_BOOTSTRAP_SERVERS=    # Empty = disabled
 POI_ANTHROPIC_API_KEY=
 POI_HOST=0.0.0.0
@@ -53,6 +54,22 @@ pytest tests/ -m "not integration" -v
 # Format
 black app/ tests/
 ```
+
+## Database Migrations (Alembic)
+
+Uses `prompt_optimization` PostgreSQL schema within the shared MLflow database.
+
+```bash
+alembic upgrade head           # Apply all migrations
+alembic downgrade -1           # Rollback last migration
+alembic downgrade base         # Rollback all migrations
+alembic revision -m "desc"     # Create new migration (manual)
+alembic revision --autogenerate -m "desc"  # Auto-detect model changes
+alembic current                # Show current revision
+alembic history                # Show migration history
+```
+
+Migrations run automatically on service startup via `_run_migrations()` in `main.py`.
 
 ## Health Endpoint
 

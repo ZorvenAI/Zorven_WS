@@ -21,8 +21,11 @@ class Settings(BaseSettings):
     # PostgreSQL (shared with MLflow backend store)
     DATABASE_URL: str = "postgresql://mlflow:mlflow@mlflow-db:5432/mlflow"
 
-    # Redis (DB 26)
+    # Redis (DB 26 — general service cache/rate-limiting)
     REDIS_URL: str = "redis://localhost:6379/26"
+
+    # Redis (DB 2 — prompt cache, optimization locks, progress tracking)
+    PROMPT_CACHE_REDIS_URL: str = "redis://localhost:6379/2"
 
     # Kafka
     KAFKA_BOOTSTRAP_SERVERS: str = ""
@@ -33,11 +36,49 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
 
+    # Celery
+    CELERY_BROKER_URL: str = "redis://localhost:6379/26"
+
+    # Mining
+    MINING_QUALITY_THRESHOLD: float = 0.8
+    MINING_LOOKBACK_DAYS: int = 7
+
+    # Re-optimization trigger
+    REOPT_QUALITY_THRESHOLD: float = 0.7
+    REOPT_DEBOUNCE_HOURS: int = 24
+
+    # Canary
+    CANARY_REGRESSION_THRESHOLD: float = 0.05
+    CANARY_METRICS_TTL_DAYS: int = 30
+
+    # Health check (§14.1)
+    HEALTH_CHECK_REGRESSION_THRESHOLD: float = 0.10  # 10% regression triggers re-opt
+
+    # Validation (OPT-03/OPT-04)
+    VALIDATION_HOLDOUT_PCT: float = 0.2
+    VALIDATION_IMPROVEMENT_THRESHOLD: float = 0.05  # 5% minimum improvement
+    VALIDATION_REGRESSION_THRESHOLD: float = 0.03  # 3% max individual regression
+
+    # Cost cap (OPT-02)
+    OPTIMIZATION_COST_CAP_USD: float = 25.0
+
+    # Length sanity (OPT-06)
+    LENGTH_MULTIPLIER_LIMIT: float = 3.0
+
+    # Circuit breaker (§17.2)
+    CIRCUIT_BREAKER_FAILURE_THRESHOLD_SECONDS: int = 300  # 5 min
+    CIRCUIT_BREAKER_HALF_OPEN_INTERVAL_SECONDS: int = 60  # probe every 60s
+
+    # Auto-rollback (§17.2)
+    AUTO_ROLLBACK_REGRESSION_THRESHOLD: float = 0.15  # 15%
+    AUTO_ROLLBACK_WINDOW_HOURS: int = 48
+
     # Logging
     LOG_LEVEL: str = "INFO"
 
     # Service auth
     SERVICE_TOKEN: str = ""
+    JWT_SECRET: str = ""
 
 
 settings = Settings()

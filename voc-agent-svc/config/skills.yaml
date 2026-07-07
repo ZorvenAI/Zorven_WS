@@ -1,0 +1,489 @@
+# Voice of Customer Agent (VoCA) — Skill Registry
+# Source: app/skills/*.py SkillMeta definitions
+# Default idempotent=true, default timeout_ms=30000 per models.py
+# Odoo skills (01-04) only active in Full Mode (VOCA_ODOO_ENABLED=true)
+
+skills:
+  - skill_id: SKL-VoCA-01
+    name: odoo_helpdesk_extractor
+    description: >-
+      Extract support tickets from Odoo (project.task for Community,
+      helpdesk.ticket for Enterprise). Customer IDs are SHA-256 hashed.
+      Returns TicketFeedback list for downstream theme clustering.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: tickets
+        type: array
+        description: "TicketFeedback list with hashed customer_id, subject, body, priority, state"
+      - field: ticket_count
+        type: integer
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-VoCA-02
+    name: odoo_survey_extractor
+    description: >-
+      Extract survey responses via Odoo XML-RPC. Auto-detects NPS
+      questions (numerical_box with 0-10 scale). Returns a
+      SurveyFeedbackProfile with NPS/non-NPS separation.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: survey_profile
+        type: object
+        description: "SurveyFeedbackProfile with NPS and non-NPS response separation"
+      - field: nps_detected
+        type: boolean
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-VoCA-03
+    name: odoo_chatter_extractor
+    description: >-
+      Extract customer-authored chatter messages from Odoo CRM
+      (crm.lead, sale.order, res.partner). Filters out internal
+      notes and system notifications. Returns ChatterFeedback list.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: chatter_messages
+        type: array
+        description: "ChatterFeedback list with model, res_id, body, author_hash"
+      - field: message_count
+        type: integer
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-VoCA-04
+    name: odoo_customer_segment_linker
+    description: >-
+      Link feedback partner_id (hashed) to APA persona segments
+      from previous_outputs.audience_persona. In-memory mapping,
+      no Odoo calls. Lower confidence in External-Only Mode.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+        description: "previous_outputs.audience_persona provides persona segments for linking"
+    output_schema:
+      - field: segment_mappings
+        type: object
+        description: "Hashed partner_id to persona segment mapping"
+      - field: match_confidence
+        type: float
+    timeout_ms: 15000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-VoCA-05
+    name: external_review_miner
+    description: >-
+      Mines the tenant's OWN product reviews from G2, Capterra,
+      Trustpilot, and Google Reviews. Extracts ratings, pros, cons,
+      and sentiment signals from verified and unverified reviews.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: reviews
+        type: array
+        description: "Extracted reviews with source, rating, pros, cons, sentiment"
+      - field: review_count
+        type: integer
+      - field: sources
+        type: array
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-VoCA-06
+    name: social_feedback_collector
+    description: >-
+      Collects brand mentions and customer feedback from
+      Twitter/X, LinkedIn, Reddit, Instagram, and Facebook.
+      Cross-references with TCIA trend data when available.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+        description: "previous_outputs.trend_cultural_insights provides trend context"
+    output_schema:
+      - field: social_feedback
+        type: array
+        description: "Brand mentions with platform, content, sentiment, engagement"
+      - field: sources
+        type: array
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-VoCA-07
+    name: forum_discussion_miner
+    description: >-
+      Mines Reddit, Quora, and industry forums for unprompted
+      opinions, feature requests, and complaints. Extracts
+      thread context, upvotes, and categorizes feedback type.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: forum_feedback
+        type: array
+        description: "Forum posts with thread context, upvotes, feedback type categorization"
+      - field: sources
+        type: array
+    timeout_ms: 45000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-VoCA-08
+    name: rag_context_retrieval
+    description: >-
+      Retrieves prior VoC reports and historical feedback data
+      from the tenant-scoped RAG store for longitudinal analysis
+      and trend comparison.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: raw_context
+        type: string
+        description: "Retrieved RAG context text"
+      - field: sources
+        type: array
+    timeout_ms: 30000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+
+  - skill_id: SKL-VoCA-09
+    name: sentiment_analyzer
+    description: >-
+      Multi-dimensional sentiment analysis: overall, per-channel,
+      per-persona, trend over time, emotion detection. Computes
+      data coverage score and labels channel provenance.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: overall_sentiment
+        type: object
+        description: "Aggregate sentiment with score, label, confidence"
+      - field: channel_sentiment
+        type: array
+        description: "Per-channel sentiment breakdown"
+      - field: persona_sentiment
+        type: array
+        description: "Per-persona sentiment mapping"
+      - field: emotion_detection
+        type: object
+      - field: data_coverage_score
+        type: float
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-VoCA-10
+    name: theme_cluster_builder
+    description: >-
+      Hierarchical theme clustering: top-level themes with sub-themes,
+      feedback counts, sentiment distributions, severity scores,
+      anonymized representative quotes, CIA competitor correlation,
+      and MRA market context.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+        description: "previous_outputs.competitor_intelligence and market_research for correlation"
+    output_schema:
+      - field: theme_clusters
+        type: array
+        description: "Hierarchical themes with sub-themes, counts, sentiment, severity, quotes"
+      - field: competitor_correlation
+        type: object
+      - field: market_context
+        type: object
+    timeout_ms: 90000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-VoCA-11
+    name: nps_trend_analyzer
+    description: >-
+      NPS trend analysis: Full mode uses Odoo survey data for
+      longitudinal trends and driver decomposition. External-Only
+      mode derives proxy NPS from review star ratings.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: nps_score
+        type: float
+        description: "Current NPS (-100 to 100)"
+      - field: nps_trend
+        type: array
+        description: "Historical NPS data points"
+      - field: promoters_pct
+        type: float
+      - field: detractors_pct
+        type: float
+      - field: driver_decomposition
+        type: array
+      - field: data_source
+        type: string
+        description: "odoo_survey or review_proxy"
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-VoCA-12
+    name: voc_strategy_bridge
+    description: >-
+      Capstone skill: cross-references all VoC data with MRA, CIA,
+      APA, TCIA to produce pain point priority matrix, VoC health
+      score (0-100, tenant-configurable weights), strategic
+      recommendations, and Odoo onboarding guidance.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+        description: "Consumes all 4 upstream agents: market_research, competitor_intelligence, audience_persona, trend_cultural_insights"
+    output_schema:
+      - field: pain_point_matrix
+        type: array
+        description: "Priority-ranked pain points with severity, frequency, business impact"
+      - field: voc_health_score
+        type: float
+        description: "Composite 0-100 score with configurable NPS/sentiment/coverage weights"
+      - field: strategic_recommendations
+        type: array
+      - field: odoo_guidance
+        type: object
+        description: "Odoo onboarding and process improvement recommendations"
+    timeout_ms: 120000
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+
+  - skill_id: SKL-VoCA-13
+    name: voc_report_persister
+    description: >-
+      Persist VoC reports to GCS, update feedback registry in Redis
+      (themes, sentiment daily, NPS monthly, coverage score), index
+      in RAG, and emit VoC insight alerts to Kafka voc-insights-topic.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: persisted
+        type: boolean
+      - field: gcs_path
+        type: string
+      - field: registry_updated
+        type: boolean
+      - field: alerts_emitted
+        type: integer
+    timeout_ms: 60000
+    allowed_roles: [OWNER, ADMIN]
+    idempotent: false
+
+  - skill_id: SKL-VoCA-14
+    name: human_escalation
+    description: >-
+      Trigger human escalation for critical negative sentiment,
+      NPS drop >10 points, PII leak, or insufficient data.
+      Emits escalation details to voc-audit-topic via AuditProducer.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    output_schema:
+      - field: escalated
+        type: boolean
+      - field: reason
+        type: string
+    timeout_ms: 10000
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true

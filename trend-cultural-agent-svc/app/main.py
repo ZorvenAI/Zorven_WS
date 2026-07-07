@@ -35,6 +35,8 @@ from app.skills.skl_tcia_09_opportunity_alert_generator import OpportunityAlertG
 from app.skills.skl_tcia_10_trend_report_synthesizer import TrendReportSynthesizer
 from app.skills.skl_tcia_11_trend_report_persister import TrendReportPersister
 from app.skills.skl_tcia_12_human_escalation import HumanEscalation
+from app.prompts.loader import AgentPromptClient
+from app.prompts.invalidator import PromptCacheInvalidator
 
 logger = logging.getLogger(__name__)
 
@@ -193,10 +195,25 @@ async def lifespan(app: FastAPI):
         "enabled" if odoo_client else "disabled",
     )
 
+    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
     yield
 
     # ── SHUTDOWN ──
     logger.info("Shutting down TCIA...")
+    await cache_invalidator.stop()
+    await prompt_loader.stop()
     if kafka_consumer:
         await kafka_consumer.stop()
     await trace_producer.stop()

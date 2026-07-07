@@ -15,6 +15,7 @@ router = APIRouter()
 
 # Module-level executor, injected from main.py lifespan
 executor: BAAExecutor | None = None
+prompt_loader = None
 
 
 @router.get("/health")

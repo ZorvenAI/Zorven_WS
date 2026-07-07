@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Download spaCy model for Presidio PII detection (with fallback)
 RUN python -m spacy download en_core_web_sm || echo "spaCy model download failed, PII will use regex fallback"
 
+COPY config/ config/
 COPY app/ app/
 
 EXPOSE 8023

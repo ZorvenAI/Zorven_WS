@@ -9,6 +9,58 @@ import bleach
 from typing import Any, Dict, List
 import logging
 
+
+# ── Canonical allowed MIME types and extensions for file uploads ──
+# Single source of truth — used by serializer, view, and validator.
+# NOTE: image/svg+xml is NOT included because SVG can embed scripts.
+# SVG uploads require dedicated sanitization before being allowed.
+
+ALLOWED_IMAGE_TYPES = [
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "image/bmp",
+    "image/tiff",
+    "image/heic",
+    "image/heif",
+]
+
+ALLOWED_VIDEO_TYPES = [
+    "video/mp4",
+    "video/quicktime",
+    "video/x-msvideo",
+]
+
+ALLOWED_DOCUMENT_TYPES = [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+]
+
+ALLOWED_UPLOAD_TYPES = ALLOWED_IMAGE_TYPES + ALLOWED_VIDEO_TYPES + ALLOWED_DOCUMENT_TYPES
+
+EXPECTED_EXTENSIONS = {
+    "image/jpeg": ["jpg", "jpeg", "jfif"],
+    "image/png": ["png"],
+    "image/gif": ["gif"],
+    "image/webp": ["webp"],
+    "image/bmp": ["bmp"],
+    "image/tiff": ["tif", "tiff"],
+    "image/heic": ["heic"],
+    "image/heif": ["heif"],
+    "video/mp4": ["mp4"],
+    "video/quicktime": ["mov"],
+    "video/x-msvideo": ["avi"],
+    "application/pdf": ["pdf"],
+    "application/msword": ["doc"],
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
+        "docx"
+    ],
+    "text/plain": ["txt"],
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -152,23 +204,9 @@ def validate_file_upload(
 
     # Check file extension matches content type
     extension = file.name.split(".")[-1].lower() if "." in file.name else ""
-    expected_extensions = {
-        "image/jpeg": ["jpg", "jpeg"],
-        "image/png": ["png"],
-        "image/gif": ["gif"],
-        "image/webp": ["webp"],
-        "video/mp4": ["mp4"],
-        "video/quicktime": ["mov"],
-        "application/pdf": ["pdf"],
-        "application/msword": ["doc"],
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
-            "docx"
-        ],
-        "text/plain": ["txt"],
-    }
 
-    if file_type in expected_extensions:
-        if extension not in expected_extensions[file_type]:
+    if file_type in EXPECTED_EXTENSIONS:
+        if extension not in EXPECTED_EXTENSIONS[file_type]:
             result["valid"] = False
             result[
                 "error"
