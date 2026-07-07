@@ -7278,8 +7278,13 @@ export default function ResultDashboard({
 
 
   // ── Detect market research data ──────────────────────────────────
+  // Check top-level (promoted by ManagerNode) first, then node_payloads fallback
+  const mraNodePayloads = (resultData.node_payloads as Record<string, Record<string, unknown>> | undefined) ??
+    (resultData.node_results as Record<string, Record<string, unknown>> | undefined);
+  const mraPayload = mraNodePayloads?.market_research;
   const hasMarketResearch =
-    resultData.market_sizing != null || resultData.market_overview != null;
+    resultData.market_sizing != null || resultData.market_overview != null ||
+    mraPayload?.market_sizing != null || mraPayload?.market_overview != null;
 
   // ── Detect competitor intelligence data ────────────────────────
   const hasCompetitorIntelligence =
@@ -7841,6 +7846,23 @@ export default function ResultDashboard({
     'node_payloads',
     'node_results',
     'node_outputs',
+    // Pipeline state keys — should never render as "Other sections"
+    'tenant_context',
+    'input_context',
+    'input_prompt',
+    'config',
+    'previous_outputs',
+    'global_config',
+    'callback_url',
+    'job_id',
+    'tenant_id',
+    'cancelled',
+    'error',
+    'error_message',
+    'progress',
+    'resolved_manifest_id',
+    'brand_context_preamble',
+    'brand_context_preamble_compact',
     // Noise from agent echoes
     'query',
     'sources',
@@ -7864,6 +7886,20 @@ export default function ResultDashboard({
           chatSessionId={chatSessionId}
         />
       </div>
+
+      {/* Pipeline error banner */}
+      {(resultData.error != null || resultData.error_message != null) && (() => {
+        const msg = typeof resultData.error_message === 'string'
+          ? resultData.error_message
+          : typeof resultData.error === 'string'
+            ? resultData.error
+            : 'An error occurred during pipeline execution.';
+        return (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
+            <p className="text-sm font-medium text-red-400">{msg}</p>
+          </div>
+        );
+      })()}
 
       {/* Score badge (only when meaningful, i.e. > 0, and not market research) */}
       {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandArchitecture && !hasBrandPersonality && score !== undefined && score > 0 && (
@@ -7891,11 +7927,11 @@ export default function ResultDashboard({
       {hasBrandDiscovery && (
         <BrandDiscoverySection
           hasMarketResearch={hasMarketResearch}
-          marketOverview={resultData.market_overview as string | undefined}
-          marketSizing={resultData.market_sizing as Record<string, unknown> | undefined}
-          competitiveLandscape={resultData.competitive_landscape as CompetitorEntry[] | undefined}
-          industryTrends={resultData.industry_trends as string[] | undefined}
-          economicIndicators={resultData.economic_indicators as Record<string, unknown> | undefined}
+          marketOverview={(resultData.market_overview ?? mraPayload?.market_overview) as string | undefined}
+          marketSizing={(resultData.market_sizing ?? mraPayload?.market_sizing) as Record<string, unknown> | undefined}
+          competitiveLandscape={(resultData.competitive_landscape ?? mraPayload?.competitive_landscape) as CompetitorEntry[] | undefined}
+          industryTrends={(resultData.industry_trends ?? mraPayload?.industry_trends) as string[] | undefined}
+          economicIndicators={(resultData.economic_indicators ?? mraPayload?.economic_indicators) as Record<string, unknown> | undefined}
           hasCompetitorIntelligence={hasCompetitorIntelligence}
           ciaExecutiveSummary={resultData.executive_summary as string | undefined}
           competitors={resultData.competitors as CIACompetitorProfile[] | undefined}
@@ -7937,12 +7973,12 @@ export default function ResultDashboard({
       {/* ── Single-agent fallbacks (when only 1 WF1 agent ran) ────── */}
       {!hasBrandDiscovery && hasMarketResearch && (
         <MarketResearchSection
-          marketOverview={resultData.market_overview as string | undefined}
-          marketSizing={resultData.market_sizing as Record<string, unknown> | undefined}
-          competitiveLandscape={resultData.competitive_landscape as CompetitorEntry[] | undefined}
-          industryTrends={resultData.industry_trends as string[] | undefined}
-          economicIndicators={resultData.economic_indicators as Record<string, unknown> | undefined}
-          sources={resultData.sources as SourceEntry[] | undefined}
+          marketOverview={(resultData.market_overview ?? mraPayload?.market_overview) as string | undefined}
+          marketSizing={(resultData.market_sizing ?? mraPayload?.market_sizing) as Record<string, unknown> | undefined}
+          competitiveLandscape={(resultData.competitive_landscape ?? mraPayload?.competitive_landscape) as CompetitorEntry[] | undefined}
+          industryTrends={(resultData.industry_trends ?? mraPayload?.industry_trends) as string[] | undefined}
+          economicIndicators={(resultData.economic_indicators ?? mraPayload?.economic_indicators) as Record<string, unknown> | undefined}
+          sources={(resultData.sources ?? mraPayload?.sources) as SourceEntry[] | undefined}
           confidenceScore={((resultData.confidence_scores as Record<string, number> | undefined)?.market_research ?? resultData.confidence_score) as number | undefined}
           findings={findings}
           recommendations={recommendations}
