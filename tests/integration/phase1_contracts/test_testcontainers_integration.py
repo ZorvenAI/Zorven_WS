@@ -9,8 +9,14 @@ import os
 
 import pytest
 
+_SKIP_REASON = (
+    "Requires testcontainers infrastructure — " "POI_PROMPT_CACHE_REDIS_URL not set"
+)
+_HAS_TESTCONTAINERS = bool(os.environ.get("POI_PROMPT_CACHE_REDIS_URL"))
+
 
 @pytest.mark.integration
+@pytest.mark.skipif(not _HAS_TESTCONTAINERS, reason=_SKIP_REASON)
 class TestTestcontainersInfrastructure:
     """Validate testcontainer infrastructure is healthy."""
 

@@ -43,7 +43,7 @@ class PromptCacheInvalidator:
                 auto_offset_reset="latest",
                 value_deserializer=lambda v: json.loads(v.decode("utf-8")),
             )
-            await self._consumer.start()
+            await asyncio.wait_for(self._consumer.start(), timeout=10.0)
             self._task = asyncio.create_task(self._consume_loop())
             logger.info(
                 "PromptCacheInvalidator started (topic=%s, group=%s)",
@@ -52,6 +52,7 @@ class PromptCacheInvalidator:
             )
         except Exception as exc:
             logger.warning("PromptCacheInvalidator failed: %s — no-op mode", exc)
+            self._consumer = None
 
     async def stop(self) -> None:
         """Stop the consumer and background task."""
@@ -91,9 +92,7 @@ class PromptCacheInvalidator:
                     r = self.prompt_loader._redis
                     if r:
                         keys = []
-                        async for key in r.scan_iter(
-                            match=f"prompt:{prompt_name}:*"
-                        ):
+                        async for key in r.scan_iter(match=f"prompt:{prompt_name}:*"):
                             keys.append(key)
                         if keys:
                             await r.delete(*keys)
