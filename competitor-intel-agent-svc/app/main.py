@@ -58,7 +58,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize API clients
     tavily_client = TavilySearchClient(
-        settings.TAVILY_API_KEY, redis_manager,
+        settings.TAVILY_API_KEY,
+        redis_manager,
         mcp_server_url=settings.TAVILY_MCP_SERVER_URL,
     )
     web_scraper = WebScraperClient(max_pages_per_domain=settings.MAX_PAGES_PER_DOMAIN)
@@ -71,19 +72,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize Anthropic client (lazy - only if API key present)
     anthropic_client = None
-    if settings.ANTHROPIC_API_KEY:
+    api_key = settings.ANTHROPIC_API_KEY
+    if api_key:
+        masked = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "***"
+        logger.info(
+            "CIA_ANTHROPIC_API_KEY loaded (%s, %d chars), model=%s",
+            masked,
+            len(api_key),
+            settings.LLM_MODEL,
+        )
         try:
             import anthropic
 
             anthropic_client = anthropic.AsyncAnthropic(
-                api_key=settings.ANTHROPIC_API_KEY,
+                api_key=api_key,
                 timeout=120.0,
             )
             logger.info("Anthropic client initialized - live LLM mode")
         except Exception as exc:
             logger.warning("Failed to initialize Anthropic client: %s", exc)
     else:
-        logger.warning("No Anthropic API key - running in stub mode")
+        logger.warning(
+            "No Anthropic API key - running in stub mode. "
+            "Set CIA_ANTHROPIC_API_KEY on Railway for live results."
+        )
 
     # Initialize circuit breakers
     circuit_breakers = create_circuit_breakers(settings)
@@ -118,20 +130,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     skill_registry.register(
         SWOTAnalysisGenerator(
-            anthropic_client, settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE, settings.LLM_MAX_TOKENS,
+            anthropic_client,
+            settings.LLM_MODEL,
+            settings.LLM_TEMPERATURE,
+            settings.LLM_MAX_TOKENS,
         )
     )
     skill_registry.register(
         PositioningGapAnalyzer(
-            anthropic_client, settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE, settings.LLM_MAX_TOKENS,
+            anthropic_client,
+            settings.LLM_MODEL,
+            settings.LLM_TEMPERATURE,
+            settings.LLM_MAX_TOKENS,
         )
     )
     skill_registry.register(
         CompetitiveBenchmarkingSynthesizer(
-            anthropic_client, settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE, settings.LLM_MAX_TOKENS,
+            anthropic_client,
+            settings.LLM_MODEL,
+            settings.LLM_TEMPERATURE,
+            settings.LLM_MAX_TOKENS,
         )
     )
 
@@ -253,9 +271,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        origin.strip()
-        for origin in settings.CORS_ORIGINS.split(",")
-        if origin.strip()
+        origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()
     ],
     allow_credentials=True,
     allow_methods=["*"],

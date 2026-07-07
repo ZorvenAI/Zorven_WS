@@ -316,9 +316,7 @@ class MarketResearcher:
             )
 
         # ── REFLECT — Synthesize via Claude (RBAC: requires SKL-MRA-03 access) ──
-        synthesis_allowed = self.rbac_engine.check_permission(
-            "SKL-MRA-03", user_role
-        )
+        synthesis_allowed = self.rbac_engine.check_permission("SKL-MRA-03", user_role)
         if synthesis_allowed.decision == "ALLOW":
             logger.info("REFLECT phase starting — synthesizing findings")
             synthesis = await self._synthesize(
@@ -328,10 +326,16 @@ class MarketResearcher:
             logger.info("REFLECT phase skipped — role %s denied SKL-MRA-03", user_role)
             synthesis = {
                 "overview": raw_context[:500] if raw_context else "",
-                "findings": [r.data.get("summary", "") for r in skill_results.values() if r.success and r.data.get("summary")],
+                "findings": [
+                    r.data.get("summary", "")
+                    for r in skill_results.values()
+                    if r.success and r.data.get("summary")
+                ],
                 "recommendations": [],
                 "confidence": 0.4,
-                "methodology": ["LLM synthesis skipped (insufficient role permissions)"],
+                "methodology": [
+                    "LLM synthesis skipped (insufficient role permissions)"
+                ],
             }
 
         # Build response
@@ -471,7 +475,8 @@ class MarketResearcher:
             if not plan["skill_sequence"]:
                 # Fallback must also be filtered by available skills
                 plan["skill_sequence"] = [
-                    s for s in default_plan["skill_sequence"]
+                    s
+                    for s in default_plan["skill_sequence"]
                     if s in available_skill_ids
                 ]
 
@@ -786,5 +791,10 @@ class MarketResearcher:
             synthesis = json.loads(content)
             return synthesis
         except Exception as exc:
-            logger.warning("Failed to synthesize via Claude: %s", exc)
+            logger.error(
+                "Failed to synthesize via Claude: %s — %s",
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
             return default_synthesis

@@ -47,8 +47,7 @@ async def lifespan(app: FastAPI):
     """Initialize and teardown all dependencies."""
     setup_logging()
     logger.info(
-        "Starting Campaign Optimization Agent on port %d "
-        "(sandbox=%s)",
+        "Starting Campaign Optimization Agent on port %d " "(sandbox=%s)",
         settings.PORT,
         settings.META_ADS_SANDBOX_MODE,
     )
@@ -68,22 +67,26 @@ async def lifespan(app: FastAPI):
     # 3. Anthropic client (Claude Sonnet 4 for analysis narratives)
     anthropic_client = None
     llm_wrapper = None
-    if settings.ANTHROPIC_API_KEY:
+    api_key = settings.ANTHROPIC_API_KEY
+    if api_key:
         try:
             import anthropic
 
-            anthropic_client = anthropic.AsyncAnthropic(
-                api_key=settings.ANTHROPIC_API_KEY
-            )
+            anthropic_client = anthropic.AsyncAnthropic(api_key=api_key)
             llm_wrapper = AnthropicClient(
                 anthropic_client, model=settings.ANTHROPIC_MODEL
             )
+            masked = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "***"
             logger.info(
-                "Anthropic client initialized (model: %s)",
+                "Anthropic client initialized (model: %s, key: %s, len: %d)",
                 settings.ANTHROPIC_MODEL,
+                masked,
+                len(api_key),
             )
         except Exception as exc:
             logger.warning("Anthropic client init failed: %s", exc)
+    else:
+        logger.warning("Set COA_ANTHROPIC_API_KEY on Railway for live results")
 
     # 4. Event emitter
     event_emitter = EventEmitter(audit_producer)
@@ -136,7 +139,6 @@ async def lifespan(app: FastAPI):
 
     logger.info("Campaign Optimization Agent service ready")
 
-
     # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
     prompt_loader = AgentPromptClient(
         critical_agent=True,
@@ -174,9 +176,7 @@ app = FastAPI(
 )
 
 # CORS
-origins = [
-    o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()
-]
+origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

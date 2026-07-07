@@ -220,9 +220,11 @@ class BAAAnalyzer:
 
         # Detect parse failure (raw_text key present means JSON parsing failed)
         if "raw_text" in result and "recommendation" not in result:
-            logger.warning(
-                "Claude returned unparseable response for tenant %s",
+            logger.error(
+                "Claude returned unparseable response for tenant %s "
+                "(raw_text length=%d)",
                 tenant_id,
+                len(result.get("raw_text", "")),
             )
             return {
                 "recommendation": {},

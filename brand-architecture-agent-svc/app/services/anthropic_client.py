@@ -67,7 +67,7 @@ class AnthropicClient:
                     except json.JSONDecodeError:
                         pass
 
-                logger.warning(
+                logger.error(
                     "Failed to parse JSON from Claude response "
                     "(length=%d, preview=%.200s)",
                     len(raw_text),
@@ -82,7 +82,12 @@ class AnthropicClient:
                     "confidence_score": 0.0,
                 }
         except Exception as exc:
-            logger.error("Anthropic API call failed: %s", exc)
+            logger.error(
+                "Anthropic API call failed (%s): %s",
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
             return {
                 "findings": [f"LLM API call failed: {str(exc)[:100]}"],
                 "confidence_score": 0.0,
@@ -110,5 +115,10 @@ class AnthropicClient:
             )
             return response.content[0].text
         except Exception as exc:
-            logger.error("Anthropic API call failed: %s", exc)
+            logger.error(
+                "Anthropic API call failed (%s): %s",
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
             return ""

@@ -75,13 +75,9 @@ class TargetingTranslator:
         categories = special_ad_categories or []
 
         if self._llm is None:
-            targeting = self._fallback_translation(
-                persona, categories, placements
-            )
+            targeting = self._fallback_translation(persona, categories, placements)
         else:
-            user_prompt = self._build_prompt(
-                persona, industry, categories, placements
-            )
+            user_prompt = self._build_prompt(persona, industry, categories, placements)
             try:
                 targeting = await self._llm.generate_json(
                     system_prompt=TARGETING_SYSTEM_PROMPT,
@@ -89,19 +85,17 @@ class TargetingTranslator:
                     temperature=0.2,
                 )
             except Exception as exc:
-                logger.warning(
-                    "LLM targeting translation failed, using fallback: %s",
+                logger.error(
+                    "LLM targeting translation failed (%s), " "using fallback: %s",
+                    type(exc).__name__,
                     exc,
+                    exc_info=True,
                 )
-                targeting = self._fallback_translation(
-                    persona, categories, placements
-                )
+                targeting = self._fallback_translation(persona, categories, placements)
 
         # Enforce Special Ad Category restrictions
         if categories:
-            targeting = self._apply_category_restrictions(
-                targeting, categories
-            )
+            targeting = self._apply_category_restrictions(targeting, categories)
 
         # Validate minimum fields
         warnings = self._validate_targeting(targeting)
@@ -140,12 +134,8 @@ class TargetingTranslator:
 
         parts = [
             f"Industry: {industry}" if industry else "",
-            f"Special Ad Categories: {', '.join(categories)}"
-            if categories
-            else "",
-            f"Requested placements: {', '.join(placements)}"
-            if placements
-            else "",
+            f"Special Ad Categories: {', '.join(categories)}" if categories else "",
+            f"Requested placements: {', '.join(placements)}" if placements else "",
             f"Persona:\n{json.dumps(persona, indent=2)}",
         ]
         return "\n\n".join(p for p in parts if p)
@@ -184,12 +174,12 @@ class TargetingTranslator:
 
         # Map interests as estimated
         for interest in persona.get("interests", []):
-            name = interest if isinstance(interest, str) else interest.get(
-                "name", str(interest)
+            name = (
+                interest
+                if isinstance(interest, str)
+                else interest.get("name", str(interest))
             )
-            targeting["interests"].append(
-                {"name": name, "estimated": True}
-            )
+            targeting["interests"].append({"name": name, "estimated": True})
 
         # Placements
         if placements:
@@ -205,9 +195,7 @@ class TargetingTranslator:
                 if p in placement_map:
                     platform, position = placement_map[p]
                     platforms.add(platform)
-                    positions.setdefault(
-                        f"{platform}_positions", []
-                    ).append(position)
+                    positions.setdefault(f"{platform}_positions", []).append(position)
             if platforms:
                 targeting["publisher_platforms"] = sorted(platforms)
             targeting.update(positions)
@@ -221,7 +209,9 @@ class TargetingTranslator:
     ) -> dict[str, Any]:
         """Remove restricted targeting for Special Ad Categories."""
         restricted = {
-            "HOUSING", "CREDIT", "EMPLOYMENT",
+            "HOUSING",
+            "CREDIT",
+            "EMPLOYMENT",
             "EMPLOYMENT_OPPORTUNITY",
             "HOUSING_OPPORTUNITY",
             "CREDIT_OPPORTUNITY",
@@ -248,7 +238,6 @@ class TargetingTranslator:
             warnings.append("No geo targeting specified")
         if not targeting.get("interests") and not targeting.get("behaviors"):
             warnings.append(
-                "No interest or behavior targeting — audience may be "
-                "too broad"
+                "No interest or behavior targeting — audience may be " "too broad"
             )
         return warnings

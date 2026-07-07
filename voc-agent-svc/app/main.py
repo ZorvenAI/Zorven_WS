@@ -33,18 +33,14 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Initialize and teardown all dependencies."""
     setup_logging()
-    logger.info(
-        "Starting Voice of Customer Agent service on port %d", settings.PORT
-    )
+    logger.info("Starting Voice of Customer Agent service on port %d", settings.PORT)
 
     # 1. Redis
     redis_manager = RedisManager()
     await redis_manager.connect()
 
     # 2. API clients
-    tavily_client = TavilySearchClient(
-        mcp_server_url=settings.TAVILY_MCP_SERVER_URL
-    )
+    tavily_client = TavilySearchClient(mcp_server_url=settings.TAVILY_MCP_SERVER_URL)
     web_scraper = WebScraperClient()
     await web_scraper.start()
 
@@ -58,19 +54,27 @@ async def lifespan(app: FastAPI):
 
     # 4. Anthropic client (lazy)
     anthropic_client = None
-    if settings.ANTHROPIC_API_KEY:
+    api_key = settings.ANTHROPIC_API_KEY
+    if api_key:
+        masked = f"{api_key[:4]}...{api_key[-4:]}"
+        logger.info(
+            "Anthropic API key detected: %s (length=%d, model=%s)",
+            masked,
+            len(api_key),
+            settings.LLM_MODEL,
+        )
         try:
             import anthropic
 
-            anthropic_client = anthropic.AsyncAnthropic(
-                api_key=settings.ANTHROPIC_API_KEY
-            )
+            anthropic_client = anthropic.AsyncAnthropic(api_key=api_key)
             logger.info(
                 "Anthropic client initialized (model=%s)",
                 settings.LLM_MODEL,
             )
         except Exception as exc:
             logger.warning("Failed to initialize Anthropic client: %s", exc)
+    else:
+        logger.info("Set VOCA_ANTHROPIC_API_KEY on Railway for live results")
 
     # 5. Circuit breakers
     breakers = create_breakers(settings)
@@ -88,9 +92,7 @@ async def lifespan(app: FastAPI):
     skill_registry.register(SocialFeedbackCollector(tavily_client))
     skill_registry.register(ForumDiscussionMiner(tavily_client, web_scraper))
     skill_registry.register(
-        RAGContextRetrieval(
-            settings.RAG_SERVICE_URL, bool(settings.RAG_SERVICE_URL)
-        )
+        RAGContextRetrieval(settings.RAG_SERVICE_URL, bool(settings.RAG_SERVICE_URL))
     )
 
     # Odoo skills (SKL-VoCA-01..04) — conditionally registered
@@ -110,15 +112,9 @@ async def lifespan(app: FastAPI):
             username=settings.ODOO_USERNAME,
             password=settings.ODOO_PASSWORD,
         )
-        skill_registry.register(
-            OdooHelpdeskExtractor(odoo_client, redis_manager)
-        )
-        skill_registry.register(
-            OdooSurveyExtractor(odoo_client, redis_manager)
-        )
-        skill_registry.register(
-            OdooChatterExtractor(odoo_client, redis_manager)
-        )
+        skill_registry.register(OdooHelpdeskExtractor(odoo_client, redis_manager))
+        skill_registry.register(OdooSurveyExtractor(odoo_client, redis_manager))
+        skill_registry.register(OdooChatterExtractor(odoo_client, redis_manager))
         skill_registry.register(OdooCustomerSegmentLinker())
         logger.info("Odoo skills registered (01-04)")
 

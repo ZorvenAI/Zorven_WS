@@ -44,18 +44,23 @@ async def lifespan(app: FastAPI):
 
     # 3. Anthropic client (lazy)
     anthropic_client = None
-    if settings.ANTHROPIC_API_KEY:
+    api_key = settings.ANTHROPIC_API_KEY
+    if api_key:
         try:
             import anthropic
 
-            anthropic_client = anthropic.AsyncAnthropic(
-                api_key=settings.ANTHROPIC_API_KEY
-            )
+            anthropic_client = anthropic.AsyncAnthropic(api_key=api_key)
             logger.info(
-                "Anthropic client initialized (model: %s)", settings.ANTHROPIC_MODEL
+                "Anthropic client initialized (key=%s...%s, length=%d, model=%s)",
+                api_key[:4],
+                api_key[-4:],
+                len(api_key),
+                settings.ANTHROPIC_MODEL,
             )
         except Exception as exc:
             logger.warning("Anthropic client init failed: %s", exc)
+    else:
+        logger.warning("Set BSA_ANTHROPIC_API_KEY on Railway for live results")
 
     # 4. GCS client
     gcs_client = GCSClient(
@@ -98,7 +103,6 @@ async def lifespan(app: FastAPI):
     app.state.redis_manager = redis_manager
 
     logger.info("Brand Story Agent service ready")
-
 
     # Prompt loader (ZorvenPromptLoader integration)
     prompt_loader = AgentPromptClient(

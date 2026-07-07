@@ -15,7 +15,11 @@ import logging
 import uuid
 from typing import Any, Optional
 
-from app.api.schemas import CompetitorIntelligenceResponse, CompetitorProfile, SourceItem
+from app.api.schemas import (
+    CompetitorIntelligenceResponse,
+    CompetitorProfile,
+    SourceItem,
+)
 from app.circuit_breaker.breaker import CircuitBreaker, CircuitBreakerOpen
 from app.events.catalog import EventCatalog, EventEmitter
 from app.logic.guardrails import (
@@ -254,8 +258,12 @@ class CompetitorAnalyzer:
 
             # Build input data based on skill type
             input_data = self._build_skill_input(
-                skill_id, plan, sanitized_prompt, skill_results,
-                mra_output, previous_outputs,
+                skill_id,
+                plan,
+                sanitized_prompt,
+                skill_results,
+                mra_output,
+                previous_outputs,
             )
 
             # Execute with circuit breaker
@@ -310,9 +318,7 @@ class CompetitorAnalyzer:
                 sanitized_prompt, raw_context, skill_context_text, mra_output
             )
         else:
-            logger.info(
-                "REFLECT phase skipped - role %s denied SKL-CIA-10", user_role
-            )
+            logger.info("REFLECT phase skipped - role %s denied SKL-CIA-10", user_role)
             synthesis = {
                 "executive_summary": raw_context[:500] if raw_context else "",
                 "findings": [
@@ -341,9 +347,7 @@ class CompetitorAnalyzer:
         # Also populate from competitor profile SWOT data if still empty
         if not swot_analyses:
             swot_analyses = [
-                {"competitor": c.name, **c.swot}
-                for c in competitors
-                if c.swot
+                {"competitor": c.name, **c.swot} for c in competitors if c.swot
             ]
 
         # Extract benchmarking report: prefer synthesis, fall back to skill
@@ -693,8 +697,7 @@ class CompetitorAnalyzer:
                     parts.append("## Website Profiles\n")
                     for p in profiles:
                         parts.append(
-                            f"### {p.get('name', 'N/A')}\n"
-                            f"{p.get('summary', '')}\n"
+                            f"### {p.get('name', 'N/A')}\n" f"{p.get('summary', '')}\n"
                         )
 
             # Social Media Analyzer (SKL-CIA-03)
@@ -703,7 +706,9 @@ class CompetitorAnalyzer:
                 if social:
                     parts.append("## Social Media Analysis\n")
                     for s in social:
-                        parts.append(f"### {s.get('name', 'N/A')}\n{s.get('summary', '')}\n")
+                        parts.append(
+                            f"### {s.get('name', 'N/A')}\n{s.get('summary', '')}\n"
+                        )
 
             # Review Aggregator (SKL-CIA-04)
             elif skill_id == "SKL-CIA-04":
@@ -711,7 +716,9 @@ class CompetitorAnalyzer:
                 if reviews:
                     parts.append("## Customer Reviews\n")
                     for r in reviews:
-                        parts.append(f"### {r.get('name', 'N/A')}\n{r.get('summary', '')}\n")
+                        parts.append(
+                            f"### {r.get('name', 'N/A')}\n{r.get('summary', '')}\n"
+                        )
 
             # Pricing Extractor (SKL-CIA-05)
             elif skill_id == "SKL-CIA-05":
@@ -719,7 +726,9 @@ class CompetitorAnalyzer:
                 if pricing:
                     parts.append("## Pricing Analysis\n")
                     for p in pricing:
-                        parts.append(f"### {p.get('name', 'N/A')}\n{p.get('summary', '')}\n")
+                        parts.append(
+                            f"### {p.get('name', 'N/A')}\n{p.get('summary', '')}\n"
+                        )
 
             # Market Share (SKL-CIA-06)
             elif skill_id == "SKL-CIA-06":
@@ -875,17 +884,13 @@ class CompetitorAnalyzer:
         try:
             system = _SYNTHESIS_SYSTEM_PROMPT
             if skill_context:
-                system += (
-                    f"\n\nAdditional methodology context:\n{skill_context[:2000]}"
-                )
+                system += f"\n\nAdditional methodology context:\n{skill_context[:2000]}"
 
             user_message = f"Competitive intelligence query: {prompt}\n\n"
             if mra_output:
                 mra_summary = mra_output.get("market_overview", "")[:1000]
                 if mra_summary:
-                    user_message += (
-                        f"Market research context:\n{mra_summary}\n\n"
-                    )
+                    user_message += f"Market research context:\n{mra_summary}\n\n"
             user_message += f"Raw competitive data:\n{raw_context[:30000]}"
 
             message = await self._anthropic_client.messages.create(
@@ -912,5 +917,10 @@ class CompetitorAnalyzer:
             synthesis = json.loads(content)
             return synthesis
         except Exception as exc:
-            logger.warning("Failed to synthesize via Claude: %s", exc)
+            logger.error(
+                "Failed to synthesize via Claude (%s): %s",
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
             return default_synthesis

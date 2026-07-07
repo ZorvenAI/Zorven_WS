@@ -66,7 +66,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize API clients
     tavily_client = TavilySearchClient(
-        settings.TAVILY_API_KEY, redis_manager,
+        settings.TAVILY_API_KEY,
+        redis_manager,
         mcp_server_url=settings.TAVILY_MCP_SERVER_URL,
     )
     world_bank_client = WorldBankClient(settings.WORLD_BANK_BASE_URL, redis_manager)
@@ -80,19 +81,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize Anthropic client (lazy — only if API key present)
     anthropic_client = None
-    if settings.ANTHROPIC_API_KEY:
+    api_key = settings.ANTHROPIC_API_KEY
+    if api_key:
+        masked = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "***"
+        logger.info(
+            "MRA_ANTHROPIC_API_KEY loaded (%s, %d chars), model=%s",
+            masked,
+            len(api_key),
+            settings.LLM_MODEL,
+        )
         try:
             import anthropic
 
             anthropic_client = anthropic.AsyncAnthropic(
-                api_key=settings.ANTHROPIC_API_KEY,
+                api_key=api_key,
                 timeout=120.0,
             )
             logger.info("Anthropic client initialized — live LLM mode")
         except Exception as exc:
             logger.warning("Failed to initialize Anthropic client: %s", exc)
     else:
-        logger.warning("No Anthropic API key — running in stub mode")
+        logger.warning(
+            "No Anthropic API key — running in stub mode. "
+            "Set MRA_ANTHROPIC_API_KEY on Railway for live results."
+        )
 
     # Initialize circuit breakers
     circuit_breakers = create_circuit_breakers(settings)

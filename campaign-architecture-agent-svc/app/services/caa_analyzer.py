@@ -199,7 +199,12 @@ class CAAAnalyzer:
             try:
                 call1_result = await self._llm.generate_json(call1_system, call1_user)
             except Exception as exc:
-                logger.error("Claude call 1 failed: %s", exc)
+                logger.error(
+                    "Claude call 1 failed (%s): %s",
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
+                )
                 call1_result = {}
 
         # Plan guardrails on call 1 output — defensive type checks
@@ -258,7 +263,12 @@ class CAAAnalyzer:
             try:
                 call2_result = await self._llm.generate_json(call2_system, call2_user)
             except Exception as exc:
-                logger.error("Claude call 2 failed: %s", exc)
+                logger.error(
+                    "Claude call 2 failed (%s): %s",
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
+                )
                 call2_result = {}
 
         await self._events.emit(

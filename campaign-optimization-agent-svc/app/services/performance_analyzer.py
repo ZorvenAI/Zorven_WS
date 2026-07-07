@@ -92,12 +92,8 @@ class PerformanceAnalyzer:
 
         # Aggregate health
         red = sum(1 for a in ad_set_analyses if a.overall_health == "RED")
-        yellow = sum(
-            1 for a in ad_set_analyses if a.overall_health == "YELLOW"
-        )
-        green = sum(
-            1 for a in ad_set_analyses if a.overall_health == "GREEN"
-        )
+        yellow = sum(1 for a in ad_set_analyses if a.overall_health == "YELLOW")
+        green = sum(1 for a in ad_set_analyses if a.overall_health == "GREEN")
 
         if red > len(ad_set_analyses) * 0.5:
             overall = "RED"
@@ -114,7 +110,12 @@ class PerformanceAnalyzer:
                     campaign, insights, ad_set_analyses, overall
                 )
             except Exception as exc:
-                logger.warning("Narrative generation failed: %s", exc)
+                logger.error(
+                    "Narrative generation failed (%s): %s",
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
+                )
 
         return CampaignAnalysis(
             campaign_id=campaign.campaign_id,
@@ -181,21 +182,14 @@ class PerformanceAnalyzer:
         freq_status = "HIGH" if frequency > 3.0 else "OK"
         if frequency > 3.0:
             recommendations.append(
-                f"Frequency {frequency:.1f} is high. "
-                f"Consider creative refresh."
+                f"Frequency {frequency:.1f} is high. " f"Consider creative refresh."
             )
 
         # Spend pacing
-        spend_pct = (
-            (ad_set.spend / total_spend * 100)
-            if total_spend > 0
-            else 0
-        )
+        spend_pct = (ad_set.spend / total_spend * 100) if total_spend > 0 else 0
         if spend_pct > 60:
             pacing_status = "OVERSPENDING"
-            recommendations.append(
-                f"Ad set consuming {spend_pct:.0f}% of total spend."
-            )
+            recommendations.append(f"Ad set consuming {spend_pct:.0f}% of total spend.")
         elif spend_pct < 10 and len(recommendations) == 0:
             pacing_status = "UNDERSPENDING"
         else:

@@ -59,9 +59,21 @@ async def lifespan(app: FastAPI):
             anthropic_client = anthropic.AsyncAnthropic(
                 api_key=settings.ANTHROPIC_API_KEY
             )
-            logger.info("Anthropic client initialized (model=%s)", settings.LLM_MODEL)
+            key = settings.ANTHROPIC_API_KEY
+            masked = f"{key[:4]}...{key[-4:]}" if len(key) > 8 else "***"
+            logger.info(
+                "Anthropic client initialized (key=%s, length=%d, model=%s)",
+                masked,
+                len(key),
+                settings.LLM_MODEL,
+            )
         except Exception as exc:
             logger.warning("Failed to initialize Anthropic client: %s", exc)
+    else:
+        logger.error(
+            "ANTHROPIC_API_KEY is not set — LLM skills will run in stub mode. "
+            "Set APA_ANTHROPIC_API_KEY on Railway"
+        )
 
     # 5. Circuit breakers
     breakers = create_breakers(settings)

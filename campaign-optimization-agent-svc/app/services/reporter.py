@@ -110,8 +110,11 @@ class Reporter:
                 self._breaker.record_success()
             except Exception as exc:
                 self._breaker.record_failure()
-                logger.warning(
-                    "Report narrative generation failed: %s", exc
+                logger.error(
+                    "Report narrative generation failed (%s): %s",
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
                 )
 
         if not narrative:

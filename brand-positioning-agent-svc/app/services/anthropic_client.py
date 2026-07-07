@@ -58,7 +58,12 @@ class AnthropicClient:
             logger.warning("Failed to parse JSON from Claude response")
             return {"raw_text": response.content[0].text if response else ""}
         except Exception as exc:
-            logger.error("Anthropic API call failed: %s", exc)
+            logger.error(
+                "Anthropic API call failed (%s): %s",
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
             return {}
 
     async def generate_text(
@@ -83,5 +88,10 @@ class AnthropicClient:
             )
             return response.content[0].text
         except Exception as exc:
-            logger.error("Anthropic API call failed: %s", exc)
+            logger.error(
+                "Anthropic API call failed (%s): %s",
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
             return ""

@@ -32,9 +32,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Initialize and teardown all dependencies."""
     setup_logging()
-    logger.info(
-        "Starting Creative Generation Agent service on port %d", settings.PORT
-    )
+    logger.info("Starting Creative Generation Agent service on port %d", settings.PORT)
 
     # 1. Redis
     redis_manager = RedisManager()
@@ -48,18 +46,23 @@ async def lifespan(app: FastAPI):
 
     # 3. Anthropic client (lazy — for copy generation)
     anthropic_client = None
-    if settings.ANTHROPIC_API_KEY:
+    api_key = settings.ANTHROPIC_API_KEY
+    if api_key:
         try:
             import anthropic
 
-            anthropic_client = anthropic.AsyncAnthropic(
-                api_key=settings.ANTHROPIC_API_KEY
-            )
+            anthropic_client = anthropic.AsyncAnthropic(api_key=api_key)
+            masked = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "***"
             logger.info(
-                "Anthropic client initialized (model: %s)", settings.ANTHROPIC_MODEL
+                "Anthropic client initialized (model: %s, key: %s, len: %d)",
+                settings.ANTHROPIC_MODEL,
+                masked,
+                len(api_key),
             )
         except Exception as exc:
             logger.warning("Anthropic client init failed: %s", exc)
+    else:
+        logger.warning("Set CGA_ANTHROPIC_API_KEY on Railway for live results")
 
     # 4. Nano Banana 2 image generation client
     image_gen_client = create_image_gen_client()
@@ -106,7 +109,6 @@ async def lifespan(app: FastAPI):
     app.state.redis_manager = redis_manager
 
     logger.info("Creative Generation Agent service ready")
-
 
     # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
     prompt_loader = AgentPromptClient(
