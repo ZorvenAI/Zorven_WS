@@ -11,6 +11,7 @@ Usage in an agent service:
     await loader.stop()
 """
 
+import asyncio
 import logging
 import re
 from typing import Any, Optional
@@ -46,9 +47,11 @@ class AgentPromptClient:
         """Initialize Redis and HTTP connections."""
         try:
             self._redis = aioredis.from_url(
-                self.redis_url, decode_responses=True
+                self.redis_url,
+                decode_responses=True,
+                socket_connect_timeout=5,
             )
-            await self._redis.ping()
+            await asyncio.wait_for(self._redis.ping(), timeout=5.0)
             logger.info("Prompt cache connected: %s", self.redis_url)
         except Exception as exc:
             logger.warning("Prompt cache unavailable: %s", exc)
@@ -56,9 +59,7 @@ class AgentPromptClient:
 
         if self.mlflow_uri:
             try:
-                self._http = httpx.AsyncClient(
-                    base_url=self.mlflow_uri, timeout=5.0
-                )
+                self._http = httpx.AsyncClient(base_url=self.mlflow_uri, timeout=5.0)
                 resp = await self._http.get("/health")
                 if resp.status_code == 200:
                     logger.info("MLflow connected: %s", self.mlflow_uri)
@@ -72,7 +73,9 @@ class AgentPromptClient:
                     await self._http.aclose()
                 self._http = None
         else:
-            logger.info("MLflow URI not configured — prompt loader in fallback-only mode")
+            logger.info(
+                "MLflow URI not configured — prompt loader in fallback-only mode"
+            )
 
         logger.info("Prompt loader initialized")
 
@@ -127,9 +130,7 @@ class AgentPromptClient:
 
     # --- Tier 1: Redis cache ---
 
-    async def _cache_get(
-        self, name: str, tenant_id: Optional[str]
-    ) -> Optional[str]:
+    async def _cache_get(self, name: str, tenant_id: Optional[str]) -> Optional[str]:
         if self._redis is None:
             return None
         try:
@@ -163,17 +164,13 @@ class AgentPromptClient:
 
     # --- Tier 2: MLflow REST API ---
 
-    async def _mlflow_get(
-        self, name: str, tenant_id: Optional[str]
-    ) -> Optional[str]:
+    async def _mlflow_get(self, name: str, tenant_id: Optional[str]) -> Optional[str]:
         if self._http is None:
             return None
         try:
             # Try tenant-specific named prompt first
             if tenant_id:
-                template = await self._fetch_prompt(
-                    f"{name}-tenant-{tenant_id}"
-                )
+                template = await self._fetch_prompt(f"{name}-tenant-{tenant_id}")
                 if template is not None:
                     return template
 
@@ -224,9 +221,7 @@ class AgentPromptClient:
                     )
                     if ver_resp.status_code == 200:
                         ver_data = ver_resp.json()
-                        return ver_data.get("prompt_version", {}).get(
-                            "template"
-                        )
+                        return ver_data.get("prompt_version", {}).get("template")
             return None
         except Exception:
             return None
@@ -234,9 +229,7 @@ class AgentPromptClient:
     # --- Template formatting ---
 
     @staticmethod
-    def _format(
-        template: str, variables: Optional[dict[str, Any]]
-    ) -> str:
+    def _format(template: str, variables: Optional[dict[str, Any]]) -> str:
         if not template or not variables:
             return template
 

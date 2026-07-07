@@ -43,14 +43,14 @@ class PromptCacheInvalidator:
                 auto_offset_reset="latest",
                 value_deserializer=lambda v: json.loads(v.decode("utf-8")),
             )
-            await self._consumer.start()
+            await asyncio.wait_for(self._consumer.start(), timeout=10.0)
             self._task = asyncio.create_task(self._consume_loop())
             logger.info(
                 "PromptCacheInvalidator started (topic=%s, group=%s)",
                 self.TOPIC,
                 self.GROUP_ID,
             )
-        except Exception as exc:
+        except (Exception, asyncio.TimeoutError) as exc:
             logger.warning("PromptCacheInvalidator failed: %s — no-op mode", exc)
 
     async def stop(self) -> None:
@@ -65,7 +65,7 @@ class PromptCacheInvalidator:
         if self._consumer is not None:
             try:
                 await self._consumer.stop()
-            except Exception as exc:
+            except (Exception, asyncio.TimeoutError) as exc:
                 logger.warning("Error stopping PromptCacheInvalidator: %s", exc)
             self._consumer = None
 
@@ -76,7 +76,7 @@ class PromptCacheInvalidator:
                 await self.handle_event(msg.value)
         except asyncio.CancelledError:
             pass
-        except Exception as exc:
+        except (Exception, asyncio.TimeoutError) as exc:
             logger.error("PromptCacheInvalidator consume error: %s", exc)
 
     async def handle_event(self, event: dict) -> None:
@@ -92,9 +92,7 @@ class PromptCacheInvalidator:
                     if r:
                         deleted = 0
                         batch = []
-                        async for key in r.scan_iter(
-                            match=f"prompt:{prompt_name}:*"
-                        ):
+                        async for key in r.scan_iter(match=f"prompt:{prompt_name}:*"):
                             batch.append(key)
                             if len(batch) >= 100:
                                 await r.delete(*batch)
@@ -109,5 +107,5 @@ class PromptCacheInvalidator:
                                 deleted,
                                 prompt_name,
                             )
-                except Exception as exc:
+                except (Exception, asyncio.TimeoutError) as exc:
                     logger.warning("Cache invalidation failed: %s", exc)
