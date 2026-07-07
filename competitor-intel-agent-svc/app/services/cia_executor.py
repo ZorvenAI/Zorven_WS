@@ -82,12 +82,18 @@ class CIAExecutor:
             previous_outputs=request.previous_outputs,
         )
 
-        # 3. Cache result
-        if self.redis_manager:
+        # 3. Cache result (skip stub/fallback results to avoid poisoning cache)
+        if self.redis_manager and result.confidence_score > 0.5:
             await self.redis_manager.set_cached_result(
                 cache_key,
                 result.model_dump(),
                 ttl=settings.RESULT_CACHE_TTL,
+            )
+        elif self.redis_manager and result.confidence_score <= 0.5:
+            logger.warning(
+                "Skipping cache for low-confidence result (%.0f%%) — "
+                "likely stub mode",
+                result.confidence_score * 100,
             )
 
         # 4. Audit event
