@@ -7887,6 +7887,20 @@ export default function ResultDashboard({
         />
       </div>
 
+      {/* Pipeline error banner */}
+      {(resultData.error != null || resultData.error_message != null) && (() => {
+        const msg = typeof resultData.error_message === 'string'
+          ? resultData.error_message
+          : typeof resultData.error === 'string'
+            ? resultData.error
+            : 'An error occurred during pipeline execution.';
+        return (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
+            <p className="text-sm font-medium text-red-400">{msg}</p>
+          </div>
+        );
+      })()}
+
       {/* Score badge (only when meaningful, i.e. > 0, and not market research) */}
       {!hasBrandDiscovery && !hasMarketResearch && !hasCompetitorIntelligence && !hasAudiencePersona && !hasTrendCultural && !hasVoiceOfCustomer && !hasBrandArchitecture && !hasBrandPersonality && score !== undefined && score > 0 && (
         <div className="flex items-center gap-2">

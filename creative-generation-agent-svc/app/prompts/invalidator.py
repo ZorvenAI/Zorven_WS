@@ -52,6 +52,11 @@ class PromptCacheInvalidator:
             )
         except Exception as exc:
             logger.warning("PromptCacheInvalidator failed: %s — no-op mode", exc)
+            if self._consumer is not None:
+                try:
+                    await self._consumer.stop()
+                except Exception:
+                    pass
             self._consumer = None
 
     async def stop(self) -> None:
@@ -91,14 +96,21 @@ class PromptCacheInvalidator:
                 try:
                     r = self.prompt_loader._redis
                     if r:
-                        keys = []
+                        deleted = 0
+                        batch = []
                         async for key in r.scan_iter(match=f"prompt:{prompt_name}:*"):
-                            keys.append(key)
-                        if keys:
-                            await r.delete(*keys)
+                            batch.append(key)
+                            if len(batch) >= 100:
+                                await r.delete(*batch)
+                                deleted += len(batch)
+                                batch = []
+                        if batch:
+                            await r.delete(*batch)
+                            deleted += len(batch)
+                        if deleted:
                             logger.info(
                                 "Invalidated %d cache keys for %s",
-                                len(keys),
+                                deleted,
                                 prompt_name,
                             )
                 except Exception as exc:

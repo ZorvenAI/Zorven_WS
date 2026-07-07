@@ -52,6 +52,11 @@ class PromptCacheInvalidator:
             )
         except Exception as exc:
             logger.warning("PromptCacheInvalidator failed: %s — no-op mode", exc)
+            if self._consumer is not None:
+                try:
+                    await self._consumer.stop()
+                except Exception:
+                    pass
             self._consumer = None
 
     async def stop(self) -> None:
