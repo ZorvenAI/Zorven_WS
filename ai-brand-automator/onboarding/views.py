@@ -762,9 +762,7 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         """Upload a brand asset file"""
         serializer = BrandAssetUploadSerializer(data=request.data)
         if not serializer.is_valid():
-            logger.warning(
-                "Asset upload validation failed: %s", serializer.errors
-            )
+            logger.warning("Asset upload validation failed: %s", serializer.errors)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         file = serializer.validated_data["file"]

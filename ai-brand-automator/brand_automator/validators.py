@@ -39,7 +39,9 @@ ALLOWED_DOCUMENT_TYPES = [
     "text/plain",
 ]
 
-ALLOWED_UPLOAD_TYPES = ALLOWED_IMAGE_TYPES + ALLOWED_VIDEO_TYPES + ALLOWED_DOCUMENT_TYPES
+ALLOWED_UPLOAD_TYPES = (
+    ALLOWED_IMAGE_TYPES + ALLOWED_VIDEO_TYPES + ALLOWED_DOCUMENT_TYPES
+)
 
 EXPECTED_EXTENSIONS = {
     "image/jpeg": ["jpg", "jpeg", "jfif"],
@@ -55,9 +57,7 @@ EXPECTED_EXTENSIONS = {
     "video/x-msvideo": ["avi"],
     "application/pdf": ["pdf"],
     "application/msword": ["doc"],
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
-        "docx"
-    ],
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["docx"],
     "text/plain": ["txt"],
 }
 
