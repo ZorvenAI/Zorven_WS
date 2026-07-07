@@ -108,7 +108,11 @@ case "${PROCESS_TYPE:-web}" in
     ;;
   worker)
     echo "=== Starting Celery worker ==="
-    exec celery -A brand_automator worker -Q celery,high_priority,low_priority -l info --concurrency=2
+    exec celery -A brand_automator worker -Q celery,high_priority -l info --concurrency=2
+    ;;
+  low-priority-worker)
+    echo "=== Starting Celery low-priority worker ==="
+    exec celery -A brand_automator worker -Q low_priority -l info --concurrency=2
     ;;
   orchestration-worker)
     echo "=== Starting Celery orchestration worker ==="
