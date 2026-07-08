@@ -22,7 +22,6 @@ class AnthropicClient:
         system_prompt: str,
         user_prompt: str,
         max_tokens: int = 4096,
-        temperature: float = 0.3,
     ) -> str:
         """Send a prompt and return the text response."""
         if self._client is None:
@@ -31,7 +30,6 @@ class AnthropicClient:
             response = await self._client.messages.create(
                 model=self.model,
                 max_tokens=max_tokens,
-                temperature=temperature,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )
@@ -45,11 +43,10 @@ class AnthropicClient:
         system_prompt: str,
         user_prompt: str,
         max_tokens: int = 4096,
-        temperature: float = 0.3,
     ) -> dict[str, Any]:
         """Send a prompt and parse the response as JSON."""
         text = await self.generate(
-            system_prompt, user_prompt, max_tokens, temperature
+            system_prompt, user_prompt, max_tokens
         )
         if not text:
             return {}

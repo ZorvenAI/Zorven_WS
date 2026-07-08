@@ -17,19 +17,16 @@ class AnthropicClient:
         self,
         client: Any,
         model: str,
-        temperature: float,
         max_tokens: int,
     ) -> None:
         self._client = client
         self._model = model
-        self._temperature = temperature
         self._max_tokens = max_tokens
 
     async def generate_json(
         self,
         system_prompt: str,
         user_prompt: str,
-        temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> dict[str, Any]:
         """Send a prompt to Claude and parse the JSON response."""
@@ -41,7 +38,6 @@ class AnthropicClient:
             response = await self._client.messages.create(
                 model=self._model,
                 max_tokens=max_tokens or self._max_tokens,
-                temperature=temperature or self._temperature,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )
@@ -70,7 +66,6 @@ class AnthropicClient:
         self,
         system_prompt: str,
         user_prompt: str,
-        temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
         """Send a prompt to Claude and return raw text response."""
@@ -82,7 +77,6 @@ class AnthropicClient:
             response = await self._client.messages.create(
                 model=self._model,
                 max_tokens=max_tokens or self._max_tokens,
-                temperature=temperature or self._temperature,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )

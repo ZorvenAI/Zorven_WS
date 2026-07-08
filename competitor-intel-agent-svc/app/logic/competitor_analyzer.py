@@ -98,7 +98,6 @@ class CompetitorAnalyzer:
         event_emitter: EventEmitter,
         anthropic_client: Any = None,
         model: str = "claude-sonnet-5",
-        temperature: float = 0.3,
         max_tokens: int = 4096,
         prompt_loader: Any = None,
     ) -> None:
@@ -112,7 +111,6 @@ class CompetitorAnalyzer:
         self._anthropic_client = anthropic_client
         self._prompt_loader = prompt_loader
         self.model = model
-        self.temperature = temperature
         self.max_tokens = max_tokens
         self._session_tokens = 0
 
@@ -500,7 +498,6 @@ class CompetitorAnalyzer:
             message = await self._anthropic_client.messages.create(
                 model=self.model,
                 max_tokens=1024,
-                temperature=self.temperature,
                 system=system,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -933,7 +930,6 @@ class CompetitorAnalyzer:
             message = await self._anthropic_client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
-                temperature=self.temperature,
                 system=system,
                 messages=[{"role": "user", "content": user_message}],
             )

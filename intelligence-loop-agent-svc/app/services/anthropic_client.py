@@ -23,10 +23,8 @@ class AnthropicClient:
         self,
         api_key: str | None,
         model: str = "claude-sonnet-5",
-        temperature: float = 0.2,
     ) -> None:
         self._model = model
-        self._temperature = temperature
         self._client: Any = None
         if api_key and anthropic is not None:
             masked = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) >= 8 else "****"
@@ -65,7 +63,6 @@ class AnthropicClient:
             msg = await self._client.messages.create(
                 model=self._model,
                 max_tokens=max_tokens,
-                temperature=self._temperature,
                 system=system,
                 messages=[{"role": "user", "content": user}],
             )

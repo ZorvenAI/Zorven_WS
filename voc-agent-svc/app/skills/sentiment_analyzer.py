@@ -104,13 +104,11 @@ class SentimentAnalyzer(BaseSkill):
         self,
         anthropic_client: Any = None,
         model: str = "claude-sonnet-5",
-        temperature: float = 0.3,
         max_tokens: int = 16384,
         prompt_loader: Any = None,
     ) -> None:
         self._client = anthropic_client
         self.model = model
-        self.temperature = temperature
         self.max_tokens = max_tokens
         self._prompt_loader = prompt_loader
 
@@ -175,7 +173,6 @@ class SentimentAnalyzer(BaseSkill):
             response = await self._client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
-                temperature=self.temperature,
                 system=system_msg,
                 messages=[
                     {

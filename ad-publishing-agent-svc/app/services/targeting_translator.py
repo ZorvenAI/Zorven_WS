@@ -95,7 +95,6 @@ class TargetingTranslator:
                 targeting = await self._llm.generate_json(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
-                    temperature=0.2,
                 )
             except Exception as exc:
                 logger.error(

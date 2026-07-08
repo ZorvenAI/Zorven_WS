@@ -69,7 +69,6 @@ async def lifespan(app: FastAPI):
     llm_client = AnthropicClient(
         client=anthropic_client,
         model=settings.ANTHROPIC_MODEL,
-        temperature=settings.ANTHROPIC_TEMPERATURE,
         max_tokens=settings.ANTHROPIC_MAX_TOKENS,
     )
 

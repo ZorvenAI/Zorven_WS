@@ -28,7 +28,6 @@ def make_predict_fn(
     mlflow_tracking_uri: Optional[str] = None,
     anthropic_api_key: Optional[str] = None,
     max_tokens: int = 4096,
-    temperature: float = 0.3,
 ) -> Callable[..., str]:
     """Create a predict function for GEPA optimization.
 
@@ -38,7 +37,6 @@ def make_predict_fn(
         mlflow_tracking_uri: MLflow server URI (default from settings).
         anthropic_api_key: Anthropic API key (default from settings).
         max_tokens: Max tokens for Anthropic response.
-        temperature: Sampling temperature.
 
     Returns:
         A callable(**kwargs) -> str that loads the prompt, formats it,
@@ -109,7 +107,6 @@ def make_predict_fn(
             message = client.messages.create(
                 model=model,
                 max_tokens=max_tokens,
-                temperature=temperature,
                 messages=[{"role": "user", "content": formatted_prompt}],
             )
 
