@@ -382,7 +382,7 @@ class BPAAnalyzer:
             "confidence_score": 0.0,
             "wf1_context_used": False,
             "execution_time_ms": elapsed_ms,
-            "findings": ["LLM unavailable — stub response returned"],
+            "findings": ["STUB MODE: BPA_ANTHROPIC_API_KEY is not configured. Set the environment variable and redeploy."],
             "recommendations": [],
             "sources": [],
         }

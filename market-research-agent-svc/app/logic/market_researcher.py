@@ -770,11 +770,26 @@ class MarketResearcher:
         }
 
         if self._anthropic_client is None:
-            logger.info("No Anthropic client — returning default synthesis")
+            logger.warning(
+                "STUB MODE: No Anthropic client — MRA_ANTHROPIC_API_KEY is not set. "
+                "All results will be low-confidence stubs."
+            )
+            default_synthesis["findings"] = [
+                "STUB MODE: MRA_ANTHROPIC_API_KEY is not configured on this deployment. "
+                "Set the environment variable and redeploy for real LLM-powered results."
+            ]
             return default_synthesis
 
         if not raw_context.strip():
-            logger.warning("No raw context for synthesis")
+            logger.warning(
+                "No raw context for synthesis — all data-gathering skills returned empty. "
+                "Check MRA_TAVILY_API_KEY and MRA_GNEWS_API_KEY."
+            )
+            default_synthesis["findings"] = [
+                "DATA COLLECTION FAILED: All research skills returned empty results. "
+                "Likely causes: MRA_TAVILY_API_KEY not set (web search disabled), "
+                "MRA_GNEWS_API_KEY not set (news disabled), or external APIs unreachable."
+            ]
             return default_synthesis
 
         try:

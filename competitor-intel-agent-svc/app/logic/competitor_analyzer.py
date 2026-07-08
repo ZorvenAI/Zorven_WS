@@ -895,10 +895,18 @@ class CompetitorAnalyzer:
 
         if self._anthropic_client is None:
             logger.info("No Anthropic client - returning default synthesis")
+            default_synthesis["findings"] = [
+                "STUB MODE: CIA_ANTHROPIC_API_KEY is not configured "
+                "on this deployment."
+            ]
             return default_synthesis
 
         if not raw_context.strip():
             logger.warning("No raw context for synthesis")
+            default_synthesis["findings"] = [
+                "DATA COLLECTION FAILED: All research skills returned "
+                "empty results. Check CIA_TAVILY_API_KEY."
+            ]
             return default_synthesis
 
         try:

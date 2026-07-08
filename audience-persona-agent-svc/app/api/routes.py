@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Header
 
 from app.api.auth import verify_service_token
 from app.api.schemas import AudiencePersonaResponse, ExecuteRequest
+from app.core.config import settings
 from app.services.apa_executor import APAExecutor
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,38 @@ executor: APAExecutor | None = None
 async def health() -> dict[str, str]:
     """Health check endpoint (no auth required)."""
     return {"status": "ok", "service": "audience-persona-agent"}
+
+
+@router.get("/health/diagnostics")
+async def diagnostics() -> dict:
+    """Detailed diagnostics — helps debug stub mode / low confidence on Railway."""
+    api_key = settings.ANTHROPIC_API_KEY
+    tavily_key = settings.TAVILY_API_KEY
+
+    has_anthropic = bool(api_key and len(api_key) > 8)
+    has_tavily = bool(tavily_key and len(tavily_key) > 4)
+
+    issues: list[str] = []
+    if not has_anthropic:
+        issues.append(
+            "APA_ANTHROPIC_API_KEY is missing — running in STUB MODE"
+        )
+    if not has_tavily:
+        issues.append(
+            "APA_TAVILY_API_KEY is missing — web search disabled"
+        )
+
+    return {
+        "service": "audience-persona-agent",
+        "mode": "LIVE" if has_anthropic else "STUB",
+        "model": settings.LLM_MODEL,
+        "keys_configured": {
+            "APA_ANTHROPIC_API_KEY": has_anthropic,
+            "APA_TAVILY_API_KEY": has_tavily,
+        },
+        "issues": issues,
+        "executor_initialized": executor is not None,
+    }
 
 
 async def _execute_analysis(

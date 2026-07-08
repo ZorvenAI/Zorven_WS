@@ -70,6 +70,9 @@ class TrendReportSynthesizer(BaseSkill):
         start = time.monotonic()
 
         if not self._anthropic:
+            logger.warning(
+                "STUB MODE: TCIA_ANTHROPIC_API_KEY is not configured"
+            )
             return self._stub_result(input_data, start)
 
         if self._prompt_loader:
@@ -207,8 +210,10 @@ class TrendReportSynthesizer(BaseSkill):
             data={
                 "trend_report": {
                     "executive_summary": (
-                        "Trend analysis completed (stub mode). "
-                        f"{len(scored)} trends identified."
+                        "STUB MODE: TCIA_ANTHROPIC_API_KEY is not "
+                        "configured on this deployment. "
+                        f"{len(scored)} trends identified but not "
+                        "synthesized."
                     ),
                     "trend_scorecard": scored,
                     "new_trends": [],

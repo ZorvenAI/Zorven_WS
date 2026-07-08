@@ -474,7 +474,7 @@ class BSAAnalyzer:
             "narrative_package": {},
             "wf2_strategy_summary": {},
             "confidence_score": 0.0,
-            "findings": ["LLM unavailable — narrative analysis requires Claude"],
+            "findings": ["STUB MODE: BSA_ANTHROPIC_API_KEY is not configured. Set the environment variable and redeploy."],
             "recommendations": [],
             "sources": [],
             "wf1_context_used": wf1_used,

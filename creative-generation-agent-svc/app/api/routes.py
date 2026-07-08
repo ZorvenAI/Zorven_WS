@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Header, Request
 
 from app.api.auth import verify_service_token
 from app.api.schemas import ExecuteRequest
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,31 @@ router = APIRouter()
 async def health():
     """Health check — no auth required."""
     return {"status": "ok", "service": "creative-generation-agent"}
+
+
+@router.get("/health/diagnostics")
+async def diagnostics(request: Request) -> dict:
+    """Detailed diagnostics — helps debug stub mode / low confidence on Railway."""
+    api_key = settings.ANTHROPIC_API_KEY
+
+    has_anthropic = bool(api_key and len(api_key) > 8)
+
+    issues = []
+    if not has_anthropic:
+        issues.append("CGA_ANTHROPIC_API_KEY is missing — running in STUB MODE")
+
+    executor = getattr(request.app.state, "executor", None)
+
+    return {
+        "service": "creative-generation-agent",
+        "mode": "LIVE" if has_anthropic else "STUB",
+        "model": settings.ANTHROPIC_MODEL,
+        "keys_configured": {
+            "CGA_ANTHROPIC_API_KEY": has_anthropic,
+        },
+        "issues": issues,
+        "executor_initialized": executor is not None,
+    }
 
 
 @router.post("/v1/execute")
@@ -112,7 +138,11 @@ def _stub_response(prompt: str) -> dict[str, Any]:
         "compliance_pass_rate": 0.0,
         "creative_quality_score": 0.0,
         "confidence_score": 0.0,
-        "findings": ["CGA executor not initialized (API keys missing?)"],
+        "findings": [
+            "STUB MODE: CGA executor not initialized — "
+            "CGA_ANTHROPIC_API_KEY is missing or invalid. "
+            "Hit /health/diagnostics for details."
+        ],
         "recommendations": [],
         "sources": [],
         "caa_context_used": False,

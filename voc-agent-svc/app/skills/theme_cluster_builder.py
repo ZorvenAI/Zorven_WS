@@ -238,7 +238,7 @@ class ThemeClusterBuilder(BaseSkill):
                 "themes": [],
                 "total_feedback_analyzed": 0,
                 "clustering_method": "stub",
-                "message": "LLM not available — theme clustering skipped",
+                "message": "STUB MODE: VOCA_ANTHROPIC_API_KEY is not configured on this deployment.",
             },
             duration_ms=(time.monotonic() - start) * 1000,
         )

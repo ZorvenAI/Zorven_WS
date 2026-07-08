@@ -18,6 +18,7 @@ from app.api.schemas import (
     ExecuteRequest,
     HealthResponse,
 )
+from app.core.config import settings
 from app.services.cia_executor import CIAExecutor
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,38 @@ async def _execute_analysis(
 async def health() -> HealthResponse:
     """Health check endpoint."""
     return HealthResponse()
+
+
+@router.get("/health/diagnostics")
+async def diagnostics() -> dict:
+    """Detailed diagnostics — helps debug stub mode / low confidence on Railway."""
+    api_key = settings.ANTHROPIC_API_KEY
+    tavily_key = settings.TAVILY_API_KEY
+
+    has_anthropic = bool(api_key and len(api_key) > 8)
+    has_tavily = bool(tavily_key and len(tavily_key) > 4)
+
+    issues: list[str] = []
+    if not has_anthropic:
+        issues.append(
+            "CIA_ANTHROPIC_API_KEY is missing — running in STUB MODE"
+        )
+    if not has_tavily:
+        issues.append(
+            "CIA_TAVILY_API_KEY is missing — web search disabled"
+        )
+
+    return {
+        "service": "competitor-intel-agent",
+        "mode": "LIVE" if has_anthropic else "STUB",
+        "model": settings.LLM_MODEL,
+        "keys_configured": {
+            "CIA_ANTHROPIC_API_KEY": has_anthropic,
+            "CIA_TAVILY_API_KEY": has_tavily,
+        },
+        "issues": issues,
+        "executor_initialized": executor is not None,
+    }
 
 
 @router.post(

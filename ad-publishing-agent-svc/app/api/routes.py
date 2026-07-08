@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Header, Request
 
 from app.api.auth import verify_service_token
 from app.api.schemas import ApprovalRequest, ExecuteRequest
+from app.core.config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -24,6 +25,31 @@ logger = logging.getLogger(__name__)
 async def health():
     """Liveness probe."""
     return {"status": "ok", "service": "ad-publishing-agent"}
+
+
+@router.get("/health/diagnostics")
+async def diagnostics(request: Request) -> dict:
+    """Detailed diagnostics — helps debug stub mode / low confidence on Railway."""
+    api_key = settings.ANTHROPIC_API_KEY
+
+    has_anthropic = bool(api_key and len(api_key) > 8)
+
+    issues = []
+    if not has_anthropic:
+        issues.append("ADPUB_ANTHROPIC_API_KEY is missing — running in STUB MODE")
+
+    executor = getattr(request.app.state, "executor", None)
+
+    return {
+        "service": "ad-publishing-agent",
+        "mode": "LIVE" if has_anthropic else "STUB",
+        "model": settings.ANTHROPIC_MODEL,
+        "keys_configured": {
+            "ADPUB_ANTHROPIC_API_KEY": has_anthropic,
+        },
+        "issues": issues,
+        "executor_initialized": executor is not None,
+    }
 
 
 @router.post("/v1/execute")
@@ -59,12 +85,11 @@ async def execute(
             "is_production": False,
             "sandbox_mode": True,
             "findings": [
-                "Ad Publishing Agent not fully initialized. "
-                "Returning stub response."
+                "STUB MODE: Ad Publishing Agent executor not initialized — "
+                "ADPUB_ANTHROPIC_API_KEY is missing or invalid. "
+                "Hit /health/diagnostics for details."
             ],
-            "recommendations": [
-                "Check service logs for initialization errors."
-            ],
+            "recommendations": ["Check service logs for initialization errors."],
             "execution_time_ms": 0,
         }
 

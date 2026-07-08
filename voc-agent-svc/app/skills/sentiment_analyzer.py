@@ -289,7 +289,7 @@ class SentimentAnalyzer(BaseSkill):
                 "persona_sentiments": {},
                 "trend_direction": "insufficient_data",
                 "data_coverage_score": coverage,
-                "message": "LLM not available — stub sentiment returned",
+                "message": "STUB MODE: VOCA_ANTHROPIC_API_KEY is not configured on this deployment.",
             },
             duration_ms=(time.monotonic() - start) * 1000,
         )

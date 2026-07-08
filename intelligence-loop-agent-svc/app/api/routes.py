@@ -18,6 +18,31 @@ async def health() -> HealthResponse:
     return HealthResponse(service=settings.SERVICE_NAME)
 
 
+@router.get("/health/diagnostics")
+async def diagnostics(request: Request) -> dict:
+    """Detailed diagnostics — helps debug stub mode / low confidence on Railway."""
+    api_key = settings.ANTHROPIC_API_KEY
+
+    has_anthropic = bool(api_key and len(api_key) > 8)
+
+    issues = []
+    if not has_anthropic:
+        issues.append("ILA_ANTHROPIC_API_KEY is missing — running in STUB MODE")
+
+    extractor = getattr(request.app.state, "extractor", None)
+
+    return {
+        "service": "intelligence-loop-agent",
+        "mode": "LIVE" if has_anthropic else "STUB",
+        "model": settings.ANTHROPIC_MODEL,
+        "keys_configured": {
+            "ILA_ANTHROPIC_API_KEY": has_anthropic,
+        },
+        "issues": issues,
+        "executor_initialized": extractor is not None,
+    }
+
+
 @router.post(
     "/v1/execute",
     response_model=ExecuteResponse,
@@ -34,9 +59,7 @@ async def execute(payload: ExecuteRequest, request: Request) -> ExecuteResponse:
     if not is_first:
         logger.info("Duplicate execute job_id=%s — returning skipped", payload.job_id)
 
-    await redis_manager.mark_status(
-        payload.tenant_id or "", payload.job_id, "running"
-    )
+    await redis_manager.mark_status(payload.tenant_id or "", payload.job_id, "running")
 
     report = await extractor.extract(
         job_id=payload.job_id,
