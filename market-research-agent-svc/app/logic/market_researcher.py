@@ -452,7 +452,7 @@ class MarketResearcher:
                     "zorven-wf1-mra-planning",
                     tenant_id=tenant_id or None,
                     variables={
-                        "context.available_skills": skills_text,
+                        "available_skills": skills_text,
                     },
                     fallback=FALLBACK_PLANNING,
                 )

@@ -26,10 +26,17 @@ Analysis skills (always sequential):
 - SKL-APA-09: Persona synthesizer/differentiator
 - SKL-APA-10: Buying journey mapper
 
+Additional Odoo skills (if available):
+{odoo_skills}
+
+Upstream pipeline context:
+{upstream_hints}
+
 Rules:
 - Research skills run in parallel, analysis sequentially
 - Always include SKL-APA-07 and SKL-APA-09 at minimum
 - Include SKL-APA-10 if journey mapping is requested
+- If Odoo skills are listed above, include them in the research phase
 
 Return a JSON array of skill IDs in execution order. \
 Research skills first, then analysis skills."""

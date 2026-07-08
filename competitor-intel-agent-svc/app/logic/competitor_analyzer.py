@@ -477,7 +477,7 @@ class CompetitorAnalyzer:
                 system = await self._prompt_loader.load(
                     "zorven-wf1-cia-planning",
                     tenant_id=tenant_id or None,
-                    variables={"context.available_skills": skills_text},
+                    variables={"available_skills": skills_text},
                     fallback=FALLBACK_PLANNING,
                 )
             else:
