@@ -228,32 +228,59 @@ class VoCStrategyBridge(BaseSkill):
                     tenant_id=context.tenant_id or None,
                     variables={
                         "brand_query": prompt[:500],
+                        "context.brand_query": prompt[:500],
                         "operating_mode": operating_mode,
+                        "context.operating_mode": operating_mode,
                         "sentiment_data": json.dumps(
+                            sentiment_data, default=str
+                        )[:5000],
+                        "context.sentiment_data": json.dumps(
                             sentiment_data, default=str
                         )[:5000],
                         "theme_data": json.dumps(
                             theme_data, default=str
                         )[:5000],
+                        "context.theme_data": json.dumps(
+                            theme_data, default=str
+                        )[:5000],
                         "nps_data": json.dumps(
+                            nps_data, default=str
+                        )[:3000],
+                        "context.nps_data": json.dumps(
                             nps_data, default=str
                         )[:3000],
                         "mra_context": json.dumps(
                             mra_context, default=str
                         )[:3000],
+                        "context.mra_context": json.dumps(
+                            mra_context, default=str
+                        )[:3000],
                         "cia_context": json.dumps(
+                            cia_context, default=str
+                        )[:3000],
+                        "context.cia_context": json.dumps(
                             cia_context, default=str
                         )[:3000],
                         "apa_context": json.dumps(
                             apa_context, default=str
                         )[:3000],
+                        "context.apa_context": json.dumps(
+                            apa_context, default=str
+                        )[:3000],
                         "tcia_context": json.dumps(
                             tcia_context, default=str
                         )[:3000],
+                        "context.tcia_context": json.dumps(
+                            tcia_context, default=str
+                        )[:3000],
                         "nps_weight": str(int(nps_w * 100)),
+                        "context.nps_weight": str(int(nps_w * 100)),
                         "sentiment_weight": str(int(sent_w * 100)),
+                        "context.sentiment_weight": str(int(sent_w * 100)),
                         "theme_weight": str(int(theme_w * 100)),
+                        "context.theme_weight": str(int(theme_w * 100)),
                         "skill_context": skill_context_text[:1500],
+                        "context.skill_context": skill_context_text[:1500],
                     },
                     fallback=FALLBACK_STRATEGY_BRIDGE,
                 )

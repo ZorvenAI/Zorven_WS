@@ -106,9 +106,13 @@ class CulturalRelevanceScorer(BaseSkill):
                 tenant_id=context.tenant_id or None,
                 variables={
                     "trends": json.dumps(trends[:25], default=str)[:4000],
+                    "context.trends": json.dumps(trends[:25], default=str)[:4000],
                     "personas": json.dumps(personas[:5], default=str)[:2000],
+                    "context.personas": json.dumps(personas[:5], default=str)[:2000],
                     "competitors": json.dumps(competitors, default=str)[:2000],
+                    "context.competitors": json.dumps(competitors, default=str)[:2000],
                     "market": json.dumps(market, default=str)[:2000],
+                    "context.market": json.dumps(market, default=str)[:2000],
                 },
                 fallback=FALLBACK_SCORING,
             )

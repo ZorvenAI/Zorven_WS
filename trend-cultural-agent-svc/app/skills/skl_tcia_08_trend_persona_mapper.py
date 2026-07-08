@@ -86,8 +86,15 @@ class TrendPersonaMapper(BaseSkill):
                     "scored_trends": json.dumps(
                         scored_trends[:15], default=str
                     )[:3000],
+                    "context.scored_trends": json.dumps(
+                        scored_trends[:15], default=str
+                    )[:3000],
                     "personas": json.dumps(personas[:5], default=str)[:2000],
+                    "context.personas": json.dumps(personas[:5], default=str)[:2000],
                     "generational_insights": json.dumps(
+                        generational_insights[:4], default=str
+                    )[:2000],
+                    "context.generational_insights": json.dumps(
                         generational_insights[:4], default=str
                     )[:2000],
                 },

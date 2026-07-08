@@ -146,16 +146,27 @@ class ThemeClusterBuilder(BaseSkill):
                     tenant_id=context.tenant_id or None,
                     variables={
                         "brand_query": prompt[:500],
+                        "context.brand_query": prompt[:500],
                         "feedback_data": json.dumps(
+                            feedback_data, default=str
+                        )[:12000],
+                        "context.feedback_data": json.dumps(
                             feedback_data, default=str
                         )[:12000],
                         "cia_context": json.dumps(
                             cia_context, default=str
                         )[:3000],
+                        "context.cia_context": json.dumps(
+                            cia_context, default=str
+                        )[:3000],
                         "mra_context": json.dumps(
                             mra_context, default=str
                         )[:3000],
+                        "context.mra_context": json.dumps(
+                            mra_context, default=str
+                        )[:3000],
                         "skill_context": skill_context_text[:1500],
+                        "context.skill_context": skill_context_text[:1500],
                     },
                     fallback=FALLBACK_THEME_CLUSTERING,
                 )
