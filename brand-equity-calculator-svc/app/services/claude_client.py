@@ -162,7 +162,9 @@ class ClaudeClient:
             messages=[{"role": "user", "content": _build_user_prompt(request)}],
         )
 
-        raw_text = next(b.text for b in message.content if b.type == "text")
+        raw_text = next((b.text for b in message.content if b.type == "text"), None)
+        if raw_text is None:
+            raise ValueError("Claude returned no text content block")
         cleaned = _strip_code_fences(raw_text)
 
         try:
