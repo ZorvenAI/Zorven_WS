@@ -109,6 +109,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize circuit breakers
     circuit_breakers = create_circuit_breakers(settings)
 
+    # Prompt loader + cache invalidator (must init before skills that use it)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
     # Initialize skill registry with all 8 skills
     skill_registry = SkillRegistry()
     skill_registry.register(WebMarketSearch(tavily_client, news_client))
@@ -149,19 +162,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     input_guardrails = InputGuardrails(redis_manager, settings)
     plan_guardrails = PlanToolGuardrails(rbac_engine, settings)
     output_guardrails = OutputGuardrails(settings)
-
-    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
-    prompt_loader = AgentPromptClient(
-        redis_url=settings.PROMPT_CACHE_REDIS_URL,
-        mlflow_uri=settings.MLFLOW_TRACKING_URI,
-    )
-    await prompt_loader.start()
-
-    cache_invalidator = PromptCacheInvalidator(
-        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
-        prompt_loader=prompt_loader,
-    )
-    await cache_invalidator.start()
 
     # Initialize market researcher (skill-based PAOR engine)
     researcher = MarketResearcher(
