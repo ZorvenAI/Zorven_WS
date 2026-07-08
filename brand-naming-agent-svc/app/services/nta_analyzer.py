@@ -437,7 +437,7 @@ class NTAAnalyzer:
             "availability_results": {},
             "scoring_summary": {},
             "confidence_score": 0.0,
-            "findings": ["LLM unavailable — naming analysis requires Claude"],
+            "findings": ["STUB MODE: NTA_ANTHROPIC_API_KEY is not configured. Set the environment variable and redeploy."],
             "recommendations": [],
             "sources": [],
             "wf1_context_used": wf1_used,

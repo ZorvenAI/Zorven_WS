@@ -91,6 +91,9 @@ class CulturalRelevanceScorer(BaseSkill):
         start = time.monotonic()
 
         if not self._anthropic:
+            logger.warning(
+                "STUB MODE: TCIA_ANTHROPIC_API_KEY is not configured"
+            )
             return self._stub_result(input_data, start)
 
         trends = input_data.get("trends", [])
@@ -174,7 +177,7 @@ class CulturalRelevanceScorer(BaseSkill):
                     "brand_fit": 12,
                     "momentum": 13,
                     "recommendation": "monitor",
-                    "rationale": "Stub score (LLM unavailable)",
+                    "rationale": "STUB MODE: TCIA_ANTHROPIC_API_KEY is not configured on this deployment.",
                     "citations": [],
                     "platforms": [],
                 }

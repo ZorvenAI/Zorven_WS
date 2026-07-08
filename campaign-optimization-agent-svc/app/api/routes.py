@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, Request
 
 from app.api.auth import verify_service_token
+from app.core.config import settings
 from app.api.schemas import (
     ApprovalRequest,
     ApprovalResponse,
@@ -54,6 +55,31 @@ async def health(request: Request) -> HealthResponse:
     )
 
 
+@router.get("/health/diagnostics")
+async def diagnostics(request: Request) -> dict:
+    """Detailed diagnostics — helps debug stub mode / low confidence on Railway."""
+    api_key = settings.ANTHROPIC_API_KEY
+
+    has_anthropic = bool(api_key and len(api_key) > 8)
+
+    issues = []
+    if not has_anthropic:
+        issues.append("COA_ANTHROPIC_API_KEY is missing — running in STUB MODE")
+
+    executor = getattr(request.app.state, "executor", None)
+
+    return {
+        "service": "campaign-optimization-agent",
+        "mode": "LIVE" if has_anthropic else "STUB",
+        "model": settings.ANTHROPIC_MODEL,
+        "keys_configured": {
+            "COA_ANTHROPIC_API_KEY": has_anthropic,
+        },
+        "issues": issues,
+        "executor_initialized": executor is not None,
+    }
+
+
 @router.get("/v1/campaigns/{campaign_id}/recommendations")
 async def list_recommendations(
     campaign_id: str,
@@ -85,9 +111,7 @@ async def approve_recommendation(
     """Approve a single recommendation."""
     approval_handler = getattr(request.app.state, "approval_handler", None)
     if approval_handler is None:
-        return ApprovalResponse(
-            recommendation_id=rec_id, status="error"
-        )
+        return ApprovalResponse(recommendation_id=rec_id, status="error")
     try:
         result = await approval_handler.approve_recommendation(
             rec_id=rec_id,
@@ -102,9 +126,7 @@ async def approve_recommendation(
         )
     except Exception as exc:
         logger.error("Failed to approve recommendation %s: %s", rec_id, exc)
-        return ApprovalResponse(
-            recommendation_id=rec_id, status="error"
-        )
+        return ApprovalResponse(recommendation_id=rec_id, status="error")
 
 
 @router.post("/v1/recommendations/{rec_id}/reject")
@@ -118,9 +140,7 @@ async def reject_recommendation(
     """Reject a single recommendation."""
     approval_handler = getattr(request.app.state, "approval_handler", None)
     if approval_handler is None:
-        return ApprovalResponse(
-            recommendation_id=rec_id, status="error"
-        )
+        return ApprovalResponse(recommendation_id=rec_id, status="error")
     try:
         reason = payload.feedback if payload else ""
         rejected_by = payload.approved_by if payload else "api"
@@ -136,9 +156,7 @@ async def reject_recommendation(
         )
     except Exception as exc:
         logger.error("Failed to reject recommendation %s: %s", rec_id, exc)
-        return ApprovalResponse(
-            recommendation_id=rec_id, status="error"
-        )
+        return ApprovalResponse(recommendation_id=rec_id, status="error")
 
 
 @router.post("/v1/recommendations/{rec_id}/modify")
@@ -152,9 +170,7 @@ async def modify_recommendation(
     """Modify and approve a recommendation."""
     approval_handler = getattr(request.app.state, "approval_handler", None)
     if approval_handler is None:
-        return ApprovalResponse(
-            recommendation_id=rec_id, status="error"
-        )
+        return ApprovalResponse(recommendation_id=rec_id, status="error")
     try:
         result = await approval_handler.modify_recommendation(
             rec_id=rec_id,
@@ -169,9 +185,7 @@ async def modify_recommendation(
         )
     except Exception as exc:
         logger.error("Failed to modify recommendation %s: %s", rec_id, exc)
-        return ApprovalResponse(
-            recommendation_id=rec_id, status="error"
-        )
+        return ApprovalResponse(recommendation_id=rec_id, status="error")
 
 
 @router.post("/v1/recommendations/batch-approve")
@@ -226,9 +240,7 @@ async def get_campaign_performance(
             trends=perf.get("trends", {}),
         )
     except Exception as exc:
-        logger.error(
-            "Failed to get performance for %s: %s", campaign_id, exc
-        )
+        logger.error("Failed to get performance for %s: %s", campaign_id, exc)
         return CampaignPerformanceResponse(campaign_id=campaign_id)
 
 
@@ -253,20 +265,14 @@ async def execute(
     # Extract campaign info from ad_publishing output
     ad_pub = previous_outputs.get("ad_publishing", {})
     result_data = ad_pub.get("result_data", {})
-    campaign_id = (
-        result_data.get("campaign_id")
-        or ad_pub.get("campaign_id")
-        or ""
-    )
+    campaign_id = result_data.get("campaign_id") or ad_pub.get("campaign_id") or ""
     campaign_name = (
         result_data.get("campaign_name")
         or ad_pub.get("campaign_name")
         or "Unknown Campaign"
     )
     meta_campaign_id = (
-        result_data.get("meta_campaign_id")
-        or ad_pub.get("meta_campaign_id")
-        or ""
+        result_data.get("meta_campaign_id") or ad_pub.get("meta_campaign_id") or ""
     )
 
     # Register campaign for optimization via Django backend
@@ -282,7 +288,8 @@ async def execute(
         except Exception as exc:
             logger.warning(
                 "Could not register campaign %s for optimization: %s",
-                campaign_id, exc,
+                campaign_id,
+                exc,
             )
 
     # Trigger initial optimization tick for this campaign
@@ -370,9 +377,7 @@ async def trigger_tick(
                 return {
                     "tick_id": result.get("tick_id", task.id),
                     "status": "completed",
-                    "campaigns_processed": result.get(
-                        "campaigns_processed", 0
-                    ),
+                    "campaigns_processed": result.get("campaigns_processed", 0),
                     "recommendations_generated": result.get(
                         "recommendations_generated", 0
                     ),

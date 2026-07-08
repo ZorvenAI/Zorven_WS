@@ -425,7 +425,7 @@ class VoCStrategyBridge(BaseSkill):
             ),
             "cross_agent_insights": {},
             "strategic_recommendations": [],
-            "message": "LLM not available — strategy bridge skipped",
+            "message": "STUB MODE: VOCA_ANTHROPIC_API_KEY is not configured on this deployment.",
         }
 
         return SkillResult(

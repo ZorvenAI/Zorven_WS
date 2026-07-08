@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, Request
 
 from app.api.auth import verify_service_token
+from app.core.config import settings
 from app.api.schemas import ExecuteRequest
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,31 @@ router = APIRouter()
 async def health():
     """Health check — no auth required."""
     return {"status": "ok", "service": "brand-story-agent"}
+
+
+@router.get("/health/diagnostics")
+async def diagnostics(request: Request) -> dict:
+    """Detailed diagnostics — helps debug stub mode / low confidence on Railway."""
+    api_key = settings.ANTHROPIC_API_KEY
+
+    has_anthropic = bool(api_key and len(api_key) > 8)
+
+    issues = []
+    if not has_anthropic:
+        issues.append("BSA_ANTHROPIC_API_KEY is missing — running in STUB MODE")
+
+    executor = getattr(request.app.state, "executor", None)
+
+    return {
+        "service": "brand-story-agent",
+        "mode": "LIVE" if has_anthropic else "STUB",
+        "model": settings.ANTHROPIC_MODEL,
+        "keys_configured": {
+            "BSA_ANTHROPIC_API_KEY": has_anthropic,
+        },
+        "issues": issues,
+        "executor_initialized": executor is not None,
+    }
 
 
 @router.post("/v1/execute")
@@ -106,7 +132,7 @@ def _stub_response(prompt: str) -> dict[str, Any]:
         "narrative_package": {},
         "wf2_strategy_summary": {},
         "confidence_score": 0.0,
-        "findings": ["BSA executor not initialized (LLM key missing?)"],
+        "findings": ["STUB MODE: BSA_ANTHROPIC_API_KEY is not configured. Set the environment variable and redeploy."],
         "recommendations": [],
         "sources": [],
         "wf1_context_used": False,

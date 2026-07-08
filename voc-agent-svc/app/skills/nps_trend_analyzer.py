@@ -260,7 +260,7 @@ class NPSTrendAnalyzer(BaseSkill):
             "drivers": [],
             "detractor_themes": [],
             "data_source": data_source,
-            "message": "LLM not available — NPS analysis skipped",
+            "message": "STUB MODE: VOCA_ANTHROPIC_API_KEY is not configured on this deployment.",
         }
 
         if not nps_available:

@@ -556,7 +556,12 @@ class PersonaAnalyzer:
     ) -> dict[str, Any]:
         """Use Claude to synthesize personas and journey maps."""
         if not self._anthropic:
-            return self._stub_synthesis(prompt, skill_results)
+            stub = self._stub_synthesis(prompt, skill_results)
+            stub["findings"] = [
+                "STUB MODE: APA_ANTHROPIC_API_KEY is not configured "
+                "on this deployment."
+            ]
+            return stub
 
         try:
             mra_context = ""
@@ -656,10 +661,20 @@ class PersonaAnalyzer:
 
         except CircuitOpenError:
             logger.warning("LLM circuit open during synthesis")
-            return self._stub_synthesis(prompt, skill_results)
+            stub = self._stub_synthesis(prompt, skill_results)
+            stub["findings"] = [
+                "STUB MODE: LLM circuit breaker is open — "
+                "APA_ANTHROPIC_API_KEY may be misconfigured."
+            ]
+            return stub
         except Exception:
             logger.error("Synthesis failed", exc_info=True)
-            return self._stub_synthesis(prompt, skill_results)
+            stub = self._stub_synthesis(prompt, skill_results)
+            stub["findings"] = [
+                "STUB MODE: LLM synthesis failed unexpectedly. "
+                "Check APA_ANTHROPIC_API_KEY configuration."
+            ]
+            return stub
 
     @staticmethod
     def _stub_synthesis(

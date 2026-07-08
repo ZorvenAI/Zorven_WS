@@ -397,7 +397,7 @@ class BPVAnalyzer:
             "voice_matrix": {},
             "character_brief": {},
             "confidence_score": 0.0,
-            "findings": ["LLM unavailable — personality analysis requires Claude"],
+            "findings": ["STUB MODE: BPV_ANTHROPIC_API_KEY is not configured. Set the environment variable and redeploy."],
             "recommendations": [],
             "sources": [],
             "wf1_context_used": wf1_used,
