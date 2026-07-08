@@ -43,10 +43,20 @@ class TCIAExecutor:
         # 2. Cache check
         cached = await self._redis.get_cached_result(prompt, config, tenant_id)
         if cached:
-            await self._trace.send_step(
-                job_id, "Cache hit, returning cached result", "COMPLETED"
-            )
-            return cached
+            cached_confidence = cached.get("confidence_score", 0)
+            if cached_confidence > 0.5:
+                await self._trace.send_step(
+                    job_id,
+                    f"Cache hit (confidence={cached_confidence:.0%}), returning cached result",
+                    "COMPLETED",
+                )
+                return cached
+            else:
+                logger.warning(
+                    "Ignoring stale low-confidence cache (%.0f%%) for job %s",
+                    cached_confidence * 100,
+                    job_id,
+                )
 
         # 3. Execute analysis
         try:
