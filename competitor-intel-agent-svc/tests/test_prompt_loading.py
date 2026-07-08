@@ -46,6 +46,7 @@ class TestAgentPromptClient:
         c = AgentPromptClient(
             redis_url="redis://localhost:6379/2",
             mlflow_uri="http://localhost:5000",
+            fallback_only=False,
         )
         c._redis = AsyncMock()
         c._http = AsyncMock()

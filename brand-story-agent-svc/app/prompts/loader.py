@@ -37,11 +37,13 @@ class AgentPromptClient:
         mlflow_uri: str = "http://mlflow-server:5000",
         default_ttl: int = 300,
         critical_agent: bool = False,
+        fallback_only: bool = True,
     ) -> None:
         self.redis_url = redis_url
         self.mlflow_uri = mlflow_uri
         self.default_ttl = default_ttl
         self.critical_agent = critical_agent
+        self.fallback_only = fallback_only
         self._redis: Optional[aioredis.Redis] = None
         self._http: Optional[httpx.AsyncClient] = None
 
@@ -110,6 +112,11 @@ class AgentPromptClient:
         Returns:
             Formatted prompt string.
         """
+        # Fallback-only mode: bypass Redis cache and MLflow entirely.
+        # Guarantees behavior identical to pre-prompt-loader code.
+        if self.fallback_only:
+            return self._format(fallback, variables) if fallback else ""
+
         resolve_ttl = self.default_ttl if ttl is None else ttl
         template = None
 
