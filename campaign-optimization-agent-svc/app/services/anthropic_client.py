@@ -33,7 +33,9 @@ class AnthropicClient:
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )
-            return response.content[0].text
+            return next(
+                b.text for b in response.content if b.type == "text"
+            )
         except Exception as exc:
             logger.error("Anthropic generate failed: %s", exc)
             return ""

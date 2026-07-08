@@ -121,7 +121,7 @@ class TrendPersonaMapper(BaseSkill):
                 )
             else:
                 response = await self._anthropic.messages.create(**llm_kwargs)
-            text = response.content[0].text.strip()
+            text = next(b.text for b in response.content if b.type == "text").strip()
             matrix = self._parse_json_response(text)
             tokens_used = (
                 response.usage.input_tokens + response.usage.output_tokens

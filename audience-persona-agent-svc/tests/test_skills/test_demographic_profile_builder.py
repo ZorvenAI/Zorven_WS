@@ -20,7 +20,7 @@ def _mock_anthropic(response_data=None):
     }
     mock_client = AsyncMock()
     mock_message = MagicMock()
-    mock_message.content = [MagicMock(text=json.dumps(data))]
+    mock_message.content = [MagicMock(text=json.dumps(data), type="text")]
     mock_message.usage = MagicMock(input_tokens=100, output_tokens=200)
     mock_client.messages.create = AsyncMock(return_value=mock_message)
     return mock_client

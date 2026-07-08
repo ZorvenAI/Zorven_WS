@@ -475,7 +475,9 @@ class MarketResearcher:
                     tokens_used, "input_tokens", 0
                 ) + getattr(tokens_used, "output_tokens", 0)
 
-            content = message.content[0].text.strip()
+            content = next(
+                b.text for b in message.content if b.type == "text"
+            ).strip()
             if content.startswith("```"):
                 content = content.split("```")[1]
                 if content.startswith("json"):
@@ -821,7 +823,9 @@ class MarketResearcher:
                     tokens_used, "input_tokens", 0
                 ) + getattr(tokens_used, "output_tokens", 0)
 
-            content = message.content[0].text.strip()
+            content = next(
+                b.text for b in message.content if b.type == "text"
+            ).strip()
             if content.startswith("```"):
                 content = content.split("```")[1]
                 if content.startswith("json"):

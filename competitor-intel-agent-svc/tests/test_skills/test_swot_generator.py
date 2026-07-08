@@ -34,7 +34,8 @@ class TestSWOTGenerator:
         mock_message = MagicMock()
         mock_message.content = [
             MagicMock(
-                text='{"swot_analyses": [{"competitor": "Acme", "slug": "acme", "strengths": ["Strong brand"], "weaknesses": ["High price"], "opportunities": ["AI growth"], "threats": ["New entrants"], "confidence_score": 0.8, "citations": ["https://acme.com"]}]}'
+                text='{"swot_analyses": [{"competitor": "Acme", "slug": "acme", "strengths": ["Strong brand"], "weaknesses": ["High price"], "opportunities": ["AI growth"], "threats": ["New entrants"], "confidence_score": 0.8, "citations": ["https://acme.com"]}]}',
+                type="text",
             )
         ]
         mock_message.usage = MagicMock(input_tokens=500, output_tokens=300)

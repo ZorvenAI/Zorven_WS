@@ -55,7 +55,7 @@ class TestBenchmarkingSynthesizer:
         import json
 
         mock_message = MagicMock()
-        mock_message.content = [MagicMock(text=json.dumps(report))]
+        mock_message.content = [MagicMock(text=json.dumps(report), type="text")]
         mock_message.usage = MagicMock(input_tokens=800, output_tokens=600)
 
         mock_client = MagicMock()

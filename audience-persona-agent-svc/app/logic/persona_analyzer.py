@@ -347,7 +347,7 @@ class PersonaAnalyzer:
                     f"Plan persona research for: {prompt}",
                 )
 
-            text = response.content[0].text
+            text = next(b.text for b in response.content if b.type == "text")
             # Extract JSON array
             if "```" in text:
                 text = text.split("```")[1]
@@ -640,7 +640,7 @@ class PersonaAnalyzer:
                     user_message,
                 )
 
-            text = response.content[0].text
+            text = next(b.text for b in response.content if b.type == "text")
             tokens = getattr(response.usage, "output_tokens", 0) + getattr(
                 response.usage, "input_tokens", 0
             )

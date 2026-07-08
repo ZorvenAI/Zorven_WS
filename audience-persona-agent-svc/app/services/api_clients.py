@@ -88,7 +88,7 @@ class TavilySearchClient:
                                 error_text += item.text
                     raise RuntimeError(f"MCP tool error: {error_text}")
 
-                raw = json.loads(result.content[0].text)
+                raw = json.loads(next(b.text for b in result.content if b.type == "text"))
                 return [
                     {
                         "title": r.get("title", ""),

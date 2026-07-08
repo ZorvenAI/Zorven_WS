@@ -93,7 +93,10 @@ class TavilySearchClient:
                                 error_text += item.text
                     raise RuntimeError(f"MCP tool error: {error_text}")
 
-                raw = json.loads(result.content[0].text)
+                text = next((b.text for b in result.content if b.type == "text"), None)
+                if text is None:
+                    raise RuntimeError("MCP tool returned no text content block")
+                raw = json.loads(text)
                 return [
                     {
                         "title": r.get("title", ""),

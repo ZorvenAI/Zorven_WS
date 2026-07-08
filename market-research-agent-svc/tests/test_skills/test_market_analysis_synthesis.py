@@ -33,7 +33,8 @@ class TestMarketAnalysisSynthesis:
         mock_msg = MagicMock()
         mock_msg.content = [
             MagicMock(
-                text='{"analysis": "Test", "findings": ["f1"], "recommendations": ["r1"], "confidence_score": 0.8, "citations": []}'
+                type="text",
+                text='{"analysis": "Test", "findings": ["f1"], "recommendations": ["r1"], "confidence_score": 0.8, "citations": []}',
             )
         ]
         mock_msg.usage = MagicMock(input_tokens=100, output_tokens=200)

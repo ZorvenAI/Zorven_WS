@@ -42,7 +42,9 @@ class AnthropicClient:
                 messages=[{"role": "user", "content": user_prompt}],
             )
 
-            text = response.content[0].text
+            text = next(
+                b.text for b in response.content if b.type == "text"
+            )
             # Try to extract JSON from response
             if "```json" in text:
                 text = text.split("```json")[1].split("```")[0].strip()
@@ -52,7 +54,14 @@ class AnthropicClient:
             return json.loads(text)
         except json.JSONDecodeError:
             logger.warning("Failed to parse JSON from Claude response")
-            return {"raw_text": response.content[0].text if response else ""}
+            return {
+                "raw_text": next(
+                    (b.text for b in response.content if b.type == "text"),
+                    "",
+                )
+                if response
+                else ""
+            }
         except Exception as exc:
             logger.error(
                 "Anthropic API call failed (%s): %s",
@@ -80,7 +89,9 @@ class AnthropicClient:
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )
-            return response.content[0].text
+            return next(
+                b.text for b in response.content if b.type == "text"
+            )
         except Exception as exc:
             logger.error(
                 "Anthropic API call failed (%s): %s",

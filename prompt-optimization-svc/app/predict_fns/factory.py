@@ -110,9 +110,12 @@ def make_predict_fn(
                 messages=[{"role": "user", "content": formatted_prompt}],
             )
 
-            # AC-3: Return the model's first content block text
+            # AC-3: Return the model's first text content block
             if message.content and len(message.content) > 0:
-                return message.content[0].text
+                return next(
+                    (b.text for b in message.content if b.type == "text"),
+                    "",
+                )
 
             return ""
 

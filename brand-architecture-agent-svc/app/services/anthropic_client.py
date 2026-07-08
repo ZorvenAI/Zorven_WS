@@ -42,7 +42,9 @@ class AnthropicClient:
                 messages=[{"role": "user", "content": user_prompt}],
             )
 
-            raw_text = response.content[0].text
+            raw_text = next(
+                b.text for b in response.content if b.type == "text"
+            )
             text = raw_text
 
             # Try to extract JSON from code fences
@@ -107,7 +109,9 @@ class AnthropicClient:
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )
-            return response.content[0].text
+            return next(
+                b.text for b in response.content if b.type == "text"
+            )
         except Exception as exc:
             logger.error(
                 "Anthropic API call failed (%s): %s",

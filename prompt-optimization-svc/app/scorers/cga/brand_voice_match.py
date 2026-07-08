@@ -129,7 +129,9 @@ def brand_voice_match(*, inputs, outputs, expectations=None):
         messages=[{"role": "user", "content": prompt}],
     )
 
-    response_text = response.content[0].text.strip()
+    response_text = next(
+        b.text for b in response.content if b.type == "text"
+    ).strip()
 
     try:
         parsed = json.loads(response_text)
