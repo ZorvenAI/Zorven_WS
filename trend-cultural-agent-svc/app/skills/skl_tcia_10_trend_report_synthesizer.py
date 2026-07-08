@@ -163,7 +163,7 @@ class TrendReportSynthesizer(BaseSkill):
 
         try:
             llm_kwargs = dict(
-                model="claude-sonnet-4-5-20250929",
+                model="claude-sonnet-5",
                 max_tokens=8192,
                 temperature=0.3,
                 messages=[{"role": "user", "content": prompt}],

@@ -39,7 +39,7 @@ class Settings(BaseSettings):
 
     # LLM — Claude Sonnet 4
     ANTHROPIC_API_KEY: str = ""
-    LLM_MODEL: str = "claude-sonnet-4-5-20250929"
+    LLM_MODEL: str = "claude-sonnet-5"
     LLM_TEMPERATURE: float = 0.3
     LLM_MAX_TOKENS: int = 4096
 

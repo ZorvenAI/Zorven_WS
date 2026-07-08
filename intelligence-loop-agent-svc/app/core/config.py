@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # Anthropic Claude Sonnet 4 (learning extraction)
     ANTHROPIC_API_KEY: str = ""
-    ANTHROPIC_MODEL: str = "claude-sonnet-4-5-20250929"
+    ANTHROPIC_MODEL: str = "claude-sonnet-5"
     ANTHROPIC_TEMPERATURE: float = 0.2
 
     # Kafka (optional)

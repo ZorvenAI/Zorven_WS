@@ -47,7 +47,7 @@ class ResearchReportGenerator(BaseSkill):
     def __init__(
         self,
         anthropic_client: Any = None,
-        model: str = "claude-sonnet-4-5-20250929",
+        model: str = "claude-sonnet-5",
         max_tokens: int = 4096,
         prompt_loader: Any = None,
     ) -> None:

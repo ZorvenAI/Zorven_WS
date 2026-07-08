@@ -71,13 +71,25 @@ class BAAExecutor:
         # Check cache
         cached = await self._redis.get_cached_result(prompt, config, tenant_id)
         if cached:
-            logger.info("Cache hit for job %s", job_id)
-            await self._trace.send_trace(
-                job_id=job_id,
-                status="completed",
-                message="Result served from cache",
-            )
-            return cached
+            cached_confidence = cached.get("confidence_score", 0)
+            if cached_confidence > 0.5:
+                logger.info(
+                    "Cache hit for job %s (confidence=%.0f%%)",
+                    job_id,
+                    cached_confidence * 100,
+                )
+                await self._trace.send_trace(
+                    job_id=job_id,
+                    status="completed",
+                    message="Result served from cache",
+                )
+                return cached
+            else:
+                logger.warning(
+                    "Ignoring stale low-confidence cache (%.0f%%) for job %s",
+                    cached_confidence * 100,
+                    job_id,
+                )
 
         try:
             # Load all contexts in parallel

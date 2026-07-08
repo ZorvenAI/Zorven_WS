@@ -22,7 +22,7 @@ class AnthropicClient:
     def __init__(
         self,
         api_key: str | None,
-        model: str = "claude-sonnet-4-5-20250929",
+        model: str = "claude-sonnet-5",
         temperature: float = 0.2,
     ) -> None:
         self._model = model

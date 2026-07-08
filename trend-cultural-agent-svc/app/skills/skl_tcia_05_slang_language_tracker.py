@@ -279,7 +279,7 @@ class SlangLanguageTracker(BaseSkill):
             f"Return ONLY the JSON array, no markdown fences."
         )
         call_kwargs = {
-            "model": "claude-sonnet-4-5-20250929",
+            "model": "claude-sonnet-5",
             "max_tokens": 2000,
             "messages": [{"role": "user", "content": prompt}],
         }
@@ -327,14 +327,14 @@ class SlangLanguageTracker(BaseSkill):
             call_fn = self._anthropic.messages.create
             if self._cb_llm:
                 call_fn_wrapped = lambda: self._anthropic.messages.create(
-                    model="claude-sonnet-4-5-20250929",
+                    model="claude-sonnet-5",
                     max_tokens=10,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 response = await self._cb_llm.call(call_fn_wrapped)
             else:
                 response = await self._anthropic.messages.create(
-                    model="claude-sonnet-4-5-20250929",
+                    model="claude-sonnet-5",
                     max_tokens=10,
                     messages=[{"role": "user", "content": prompt}],
                 )

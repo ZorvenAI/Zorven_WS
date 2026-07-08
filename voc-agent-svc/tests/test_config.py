@@ -11,7 +11,7 @@ def test_default_settings():
     s = Settings()
     assert s.PORT == 8025
     assert s.REDIS_URL == "redis://localhost:6379/15"
-    assert s.LLM_MODEL == "claude-sonnet-4-5-20250929"
+    assert s.LLM_MODEL == "claude-sonnet-5"
     assert s.LLM_TEMPERATURE == 0.3
     assert s.LLM_MAX_TOKENS == 16384
     assert s.TOKEN_BUDGET_PER_SESSION == 100000
