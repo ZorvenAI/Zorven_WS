@@ -128,7 +128,9 @@ class PersonaSynthesizer(BaseSkill):
                     tenant_id=context.tenant_id or None,
                     fallback=FALLBACK_PERSONA_SYNTHESIS,
                 )
-                system = system.format(max_personas=max_personas)
+                system = system.replace(
+                    "{max_personas}", str(max_personas)
+                )
             else:
                 system = _SYSTEM_PROMPT.format(max_personas=max_personas)
             skill_context = context.skill_context_text

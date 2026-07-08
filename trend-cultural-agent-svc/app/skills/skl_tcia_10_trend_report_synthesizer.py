@@ -82,26 +82,51 @@ class TrendReportSynthesizer(BaseSkill):
                     "scored_trends": json.dumps(
                         input_data.get("scored_trends", [])[:15], default=str
                     )[:3000],
+                    "context.scored_trends": json.dumps(
+                        input_data.get("scored_trends", [])[:15], default=str
+                    )[:3000],
                     "persona_matrix": json.dumps(
+                        input_data.get("trend_persona_matrix", {}), default=str
+                    )[:2000],
+                    "context.persona_matrix": json.dumps(
                         input_data.get("trend_persona_matrix", {}), default=str
                     )[:2000],
                     "alerts": json.dumps(
                         input_data.get("alerts", [])[:5], default=str
                     )[:1000],
+                    "context.alerts": json.dumps(
+                        input_data.get("alerts", [])[:5], default=str
+                    )[:1000],
                     "viral_patterns": json.dumps(
+                        input_data.get("viral_patterns", {}), default=str
+                    )[:1000],
+                    "context.viral_patterns": json.dumps(
                         input_data.get("viral_patterns", {}), default=str
                     )[:1000],
                     "cultural_shifts": json.dumps(
                         input_data.get("cultural_shifts", [])[:5], default=str
                     )[:2000],
+                    "context.cultural_shifts": json.dumps(
+                        input_data.get("cultural_shifts", [])[:5], default=str
+                    )[:2000],
                     "generational_insights": json.dumps(
+                        input_data.get("generational_insights", [])[:4], default=str
+                    )[:2000],
+                    "context.generational_insights": json.dumps(
                         input_data.get("generational_insights", [])[:4], default=str
                     )[:2000],
                     "language_trends": json.dumps(
                         input_data.get("language_trends", {}), default=str
                     )[:1000],
+                    "context.language_trends": json.dumps(
+                        input_data.get("language_trends", {}), default=str
+                    )[:1000],
                     "report_type": input_data.get("report_type", "on_demand"),
+                    "context.report_type": input_data.get("report_type", "on_demand"),
                     "rag_context": json.dumps(
+                        input_data.get("rag_context", {}), default=str
+                    )[:1000],
+                    "context.rag_context": json.dumps(
                         input_data.get("rag_context", {}), default=str
                     )[:1000],
                 },

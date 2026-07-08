@@ -143,14 +143,23 @@ class SentimentAnalyzer(BaseSkill):
                     tenant_id=context.tenant_id or None,
                     variables={
                         "brand_query": prompt[:500],
+                        "context.brand_query": prompt[:500],
                         "operating_mode": operating_mode,
+                        "context.operating_mode": operating_mode,
                         "feedback_data": json.dumps(
+                            feedback_data, default=str
+                        )[:12000],
+                        "context.feedback_data": json.dumps(
                             feedback_data, default=str
                         )[:12000],
                         "persona_context": json.dumps(
                             persona_context, default=str
                         )[:3000],
+                        "context.persona_context": json.dumps(
+                            persona_context, default=str
+                        )[:3000],
                         "skill_context": skill_context_text[:1500],
+                        "context.skill_context": skill_context_text[:1500],
                     },
                     fallback=FALLBACK_SENTIMENT,
                 )

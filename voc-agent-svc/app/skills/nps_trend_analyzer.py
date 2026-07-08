@@ -140,17 +140,29 @@ class NPSTrendAnalyzer(BaseSkill):
                     tenant_id=context.tenant_id or None,
                     variables={
                         "brand_query": prompt[:500],
+                        "context.brand_query": prompt[:500],
                         "operating_mode": operating_mode,
+                        "context.operating_mode": operating_mode,
                         "survey_data": json.dumps(
+                            survey_data, default=str
+                        )[:8000],
+                        "context.survey_data": json.dumps(
                             survey_data, default=str
                         )[:8000],
                         "review_data": json.dumps(
                             review_data, default=str
                         )[:5000],
+                        "context.review_data": json.dumps(
+                            review_data, default=str
+                        )[:5000],
                         "historical_nps": json.dumps(
                             historical_nps, default=str
                         )[:3000],
+                        "context.historical_nps": json.dumps(
+                            historical_nps, default=str
+                        )[:3000],
                         "skill_context": skill_context_text[:1500],
+                        "context.skill_context": skill_context_text[:1500],
                     },
                     fallback=FALLBACK_NPS,
                 )
