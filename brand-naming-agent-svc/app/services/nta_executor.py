@@ -78,9 +78,21 @@ class NTAExecutor:
             prompt_hash = RedisManager.hash_prompt(prompt)
             cached = await self._redis.get_cached_result(tenant_id, prompt_hash)
             if cached:
-                logger.info("Cache hit for tenant %s", tenant_id)
-                result = cached
-                return result
+                cached_confidence = cached.get("confidence_score", 0)
+                if cached_confidence > 0.5:
+                    logger.info(
+                        "Cache hit for tenant %s (confidence=%.0f%%)",
+                        tenant_id,
+                        cached_confidence * 100,
+                    )
+                    result = cached
+                    return result
+                else:
+                    logger.warning(
+                        "Ignoring stale low-confidence cache (%.0f%%) for tenant %s",
+                        cached_confidence * 100,
+                        tenant_id,
+                    )
 
             # Load contexts in parallel
             contexts = await self._context.load_all(tenant_id)

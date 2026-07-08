@@ -55,9 +55,16 @@ class CIAExecutor:
         if self.redis_manager:
             cached = await self.redis_manager.get_cached_result(cache_key)
             if cached:
-                logger.info("Cache HIT for tenant %s", tenant_id)
-                await self._emit_trace(job_id, "Returning cached analysis results")
-                return CompetitorIntelligenceResponse(**cached)
+                cached_confidence = cached.get("confidence_score", 0)
+                if cached_confidence > 0.5:
+                    logger.info("Cache HIT for tenant %s (confidence=%.0f%%)", tenant_id, cached_confidence * 100)
+                    await self._emit_trace(job_id, "Returning cached analysis results")
+                    return CompetitorIntelligenceResponse(**cached)
+                else:
+                    logger.warning(
+                        "Ignoring stale low-confidence cache (%.0f%%) for tenant %s",
+                        cached_confidence * 100, tenant_id,
+                    )
 
         # 2. Delegate to analyzer (handles 3-layer guardrails, RBAC, skills)
         logger.info(

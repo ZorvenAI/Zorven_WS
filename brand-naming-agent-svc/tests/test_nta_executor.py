@@ -85,7 +85,7 @@ class TestExecutorCacheFlow:
     ):
         """When cache has a result, analyzer is NOT called."""
         mock_redis_manager.get_cached_result = AsyncMock(
-            return_value={"cached": True, "name_candidates": []}
+            return_value={"cached": True, "name_candidates": [], "confidence_score": 0.85}
         )
         result = await executor.execute(
             prompt="test",
