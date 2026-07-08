@@ -154,7 +154,7 @@ class PsychographicBehavioralProfiler(BaseSkill):
             )
 
             tokens_used = _count_tokens(message)
-            content = _parse_json_response(message.content[0].text)
+            content = _parse_json_response(next(b.text for b in message.content if b.type == "text"))
 
             return SkillResult(
                 skill_id=self.meta.skill_id,

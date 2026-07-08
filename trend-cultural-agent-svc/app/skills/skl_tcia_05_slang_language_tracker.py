@@ -290,7 +290,7 @@ class SlangLanguageTracker(BaseSkill):
         else:
             response = await self._anthropic.messages.create(**call_kwargs)
 
-        text = response.content[0].text.strip()
+        text = next(b.text for b in response.content if b.type == "text").strip()
         # Strip markdown fences if present
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
@@ -338,7 +338,7 @@ class SlangLanguageTracker(BaseSkill):
                     max_tokens=10,
                     messages=[{"role": "user", "content": prompt}],
                 )
-            text = response.content[0].text.strip().upper()
+            text = next(b.text for b in response.content if b.type == "text").strip().upper()
             return "SENSITIVE" in text
         except Exception as exc:
             logger.warning("LLM sensitivity judge error: %s", exc)

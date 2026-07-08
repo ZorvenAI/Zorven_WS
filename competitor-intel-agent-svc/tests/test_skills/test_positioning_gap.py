@@ -33,7 +33,8 @@ class TestPositioningGapAnalyzer:
         mock_message = MagicMock()
         mock_message.content = [
             MagicMock(
-                text='{"positioning_map": {"x_axis": "Price", "y_axis": "Features", "positions": [{"competitor": "Acme", "x": 0.7, "y": 0.8}]}, "positioning_gaps": [{"dimension": "SMB pricing", "gap_description": "No affordable tier for small businesses", "opportunity_score": 8, "evidence": ["Pricing data shows..."], "gap_type": "price"}], "differentiation_dimensions": [{"dimension": "AI features", "leader": "Acme", "laggard": "Beta", "gap_size": "large"}]}'
+                text='{"positioning_map": {"x_axis": "Price", "y_axis": "Features", "positions": [{"competitor": "Acme", "x": 0.7, "y": 0.8}]}, "positioning_gaps": [{"dimension": "SMB pricing", "gap_description": "No affordable tier for small businesses", "opportunity_score": 8, "evidence": ["Pricing data shows..."], "gap_type": "price"}], "differentiation_dimensions": [{"dimension": "AI features", "leader": "Acme", "laggard": "Beta", "gap_size": "large"}]}',
+                type="text",
             )
         ]
         mock_message.usage = MagicMock(input_tokens=600, output_tokens=400)

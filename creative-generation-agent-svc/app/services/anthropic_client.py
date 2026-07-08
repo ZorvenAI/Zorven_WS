@@ -130,7 +130,9 @@ class AnthropicClient:
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )
-            text = response.content[0].text
+            text = next(
+                b.text for b in response.content if b.type == "text"
+            )
             stop_reason = getattr(response, "stop_reason", None)
             logger.debug(
                 "Claude response: %d input, %d output tokens, stop_reason=%s",

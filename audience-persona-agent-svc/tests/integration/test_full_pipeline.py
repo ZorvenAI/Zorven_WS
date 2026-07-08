@@ -27,7 +27,7 @@ def _mock_tavily_result():
 
 def _mock_anthropic_response(data: dict):
     mock_msg = MagicMock()
-    mock_msg.content = [MagicMock(text=json.dumps(data))]
+    mock_msg.content = [MagicMock(text=json.dumps(data), type="text")]
     mock_msg.usage = MagicMock(input_tokens=500, output_tokens=800)
     return mock_msg
 

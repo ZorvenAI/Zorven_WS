@@ -109,7 +109,12 @@ class SearchEngine:
                                 error_text += item.text
                     raise RuntimeError(f"MCP tool error: {error_text}")
 
-                raw = json.loads(result.content[0].text)
+                raw_text = next(
+                    item.text
+                    for item in result.content
+                    if getattr(item, "type", None) == "text"
+                )
+                raw = json.loads(raw_text)
                 results = []
                 for item in raw.get("results", raw if isinstance(raw, list) else []):
                     results.append(

@@ -162,7 +162,7 @@ class ClaudeClient:
             messages=[{"role": "user", "content": _build_user_prompt(request)}],
         )
 
-        raw_text = message.content[0].text
+        raw_text = next(b.text for b in message.content if b.type == "text")
         cleaned = _strip_code_fences(raw_text)
 
         try:

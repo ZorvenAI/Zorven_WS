@@ -87,7 +87,9 @@ def brand_voice(*, inputs, outputs, expectations=None):
         messages=[{"role": "user", "content": prompt}],
     )
 
-    response_text = response.content[0].text.strip()
+    response_text = next(
+        b.text for b in response.content if b.type == "text"
+    ).strip()
 
     # Parse the JSON response from the LLM judge
     try:

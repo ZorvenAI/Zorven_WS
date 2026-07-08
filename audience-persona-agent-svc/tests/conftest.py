@@ -104,7 +104,7 @@ def mock_anthropic_client():
 
     def _create_response(data: dict):
         mock_msg = MagicMock()
-        mock_msg.content = [MagicMock(text=json.dumps(data))]
+        mock_msg.content = [MagicMock(text=json.dumps(data), type="text")]
         mock_msg.usage = MagicMock(input_tokens=200, output_tokens=400)
         return mock_msg
 

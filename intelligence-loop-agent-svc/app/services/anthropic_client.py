@@ -23,10 +23,6 @@ class AnthropicClient:
         self,
         api_key: str | None,
         model: str = "claude-sonnet-5",
-<<<<<<< HEAD
-=======
-        temperature: float = 0.2,
->>>>>>> origin/main
     ) -> None:
         self._model = model
         self._client: Any = None

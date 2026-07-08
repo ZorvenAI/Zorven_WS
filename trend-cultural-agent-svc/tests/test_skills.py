@@ -286,7 +286,7 @@ class TestCulturalRelevanceScorer:
             }
         ]
         mock_msg = MagicMock()
-        mock_msg.content = [MagicMock(text=json.dumps(scored))]
+        mock_msg.content = [MagicMock(text=json.dumps(scored), type="text")]
         mock_msg.usage = MagicMock(input_tokens=500, output_tokens=300)
         self.anthropic.messages.create = AsyncMock(return_value=mock_msg)
 
@@ -348,7 +348,7 @@ class TestCulturalRelevanceScorer:
         )
         mock_msg = MagicMock()
         mock_msg.content = [
-            MagicMock(text=f"```json\n{scored_json}\n```")
+            MagicMock(text=f"```json\n{scored_json}\n```", type="text")
         ]
         mock_msg.usage = MagicMock(input_tokens=100, output_tokens=100)
         self.anthropic.messages.create = AsyncMock(return_value=mock_msg)

@@ -192,7 +192,7 @@ class NPSTrendAnalyzer(BaseSkill):
                 ],
             )
 
-            text = response.content[0].text.strip()
+            text = next(b.text for b in response.content if b.type == "text").strip()
             parsed = self._parse_json_response(text)
             tokens_used = self._count_tokens(response)
 
