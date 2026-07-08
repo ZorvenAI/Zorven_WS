@@ -250,7 +250,7 @@ MRA_KAFKA_BOOTSTRAP_SERVERS=
 MRA_ANTHROPIC_API_KEY=<anthropic-api-key>
 MRA_TAVILY_API_KEY=<tavily-api-key>
 MRA_GNEWS_API_KEY=<gnews-api-key>
-MRA_LLM_MODEL=claude-sonnet-4-5-20250929
+MRA_LLM_MODEL=claude-sonnet-5
 MRA_LOG_LEVEL=INFO
 MRA_RBAC_ENABLED=true
 MRA_RAG_ENABLED=false
@@ -265,7 +265,7 @@ CIA_REDIS_URL=<railway-redis-url>/12
 CIA_KAFKA_BOOTSTRAP_SERVERS=
 CIA_ANTHROPIC_API_KEY=<anthropic-api-key>
 CIA_TAVILY_API_KEY=<tavily-api-key>
-CIA_LLM_MODEL=claude-sonnet-4-5-20250929
+CIA_LLM_MODEL=claude-sonnet-5
 CIA_LOG_LEVEL=INFO
 CIA_RBAC_ENABLED=true
 CIA_RAG_ENABLED=false
@@ -278,7 +278,7 @@ APA_REDIS_URL=<railway-redis-url>/13
 APA_KAFKA_BOOTSTRAP_SERVERS=
 APA_ANTHROPIC_API_KEY=<anthropic-api-key>
 APA_TAVILY_API_KEY=<tavily-api-key>
-APA_LLM_MODEL=claude-sonnet-4-5-20250929
+APA_LLM_MODEL=claude-sonnet-5
 APA_LOG_LEVEL=INFO
 APA_RBAC_ENABLED=true
 APA_RAG_ENABLED=false
@@ -291,7 +291,7 @@ TCIA_REDIS_URL=<railway-redis-url>/14
 TCIA_KAFKA_BOOTSTRAP_SERVERS=
 TCIA_ANTHROPIC_API_KEY=<anthropic-api-key>
 TCIA_TAVILY_API_KEY=<tavily-api-key>
-TCIA_LLM_MODEL=claude-sonnet-4-5-20250929
+TCIA_LLM_MODEL=claude-sonnet-5
 TCIA_LOG_LEVEL=INFO
 
 # =============================================================================
@@ -301,7 +301,7 @@ VOCA_REDIS_URL=<railway-redis-url>/15
 VOCA_KAFKA_BOOTSTRAP_SERVERS=
 VOCA_ANTHROPIC_API_KEY=<anthropic-api-key>
 VOCA_TAVILY_API_KEY=<tavily-api-key>
-VOCA_LLM_MODEL=claude-sonnet-4-5-20250929
+VOCA_LLM_MODEL=claude-sonnet-5
 VOCA_LOG_LEVEL=INFO
 
 # =============================================================================
@@ -310,7 +310,7 @@ VOCA_LOG_LEVEL=INFO
 BPA_REDIS_URL=<railway-redis-url>/16
 BPA_KAFKA_BOOTSTRAP_SERVERS=
 BPA_ANTHROPIC_API_KEY=<anthropic-api-key>
-BPA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+BPA_ANTHROPIC_MODEL=claude-sonnet-5
 BPA_LOG_LEVEL=INFO
 
 # =============================================================================
@@ -319,7 +319,7 @@ BPA_LOG_LEVEL=INFO
 BAA_REDIS_URL=<railway-redis-url>/17
 BAA_KAFKA_BOOTSTRAP_SERVERS=
 BAA_ANTHROPIC_API_KEY=<anthropic-api-key>
-BAA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+BAA_ANTHROPIC_MODEL=claude-sonnet-5
 BAA_LOG_LEVEL=INFO
 
 # =============================================================================
@@ -328,7 +328,7 @@ BAA_LOG_LEVEL=INFO
 BPV_REDIS_URL=<railway-redis-url>/18
 BPV_KAFKA_BOOTSTRAP_SERVERS=
 BPV_ANTHROPIC_API_KEY=<anthropic-api-key>
-BPV_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+BPV_ANTHROPIC_MODEL=claude-sonnet-5
 BPV_LOG_LEVEL=INFO
 
 # =============================================================================
@@ -337,7 +337,7 @@ BPV_LOG_LEVEL=INFO
 NTA_REDIS_URL=<railway-redis-url>/19
 NTA_KAFKA_BOOTSTRAP_SERVERS=
 NTA_ANTHROPIC_API_KEY=<anthropic-api-key>
-NTA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+NTA_ANTHROPIC_MODEL=claude-sonnet-5
 NTA_LOG_LEVEL=INFO
 
 # =============================================================================
@@ -346,7 +346,7 @@ NTA_LOG_LEVEL=INFO
 BSA_REDIS_URL=<railway-redis-url>/20
 BSA_KAFKA_BOOTSTRAP_SERVERS=
 BSA_ANTHROPIC_API_KEY=<anthropic-api-key>
-BSA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+BSA_ANTHROPIC_MODEL=claude-sonnet-5
 BSA_LOG_LEVEL=INFO
 
 # =============================================================================
@@ -355,7 +355,7 @@ BSA_LOG_LEVEL=INFO
 CAA_REDIS_URL=<railway-redis-url>/21
 CAA_KAFKA_BOOTSTRAP_SERVERS=
 CAA_ANTHROPIC_API_KEY=<anthropic-api-key>
-CAA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+CAA_ANTHROPIC_MODEL=claude-sonnet-5
 CAA_LOG_LEVEL=INFO
 
 # =============================================================================
@@ -364,7 +364,7 @@ CAA_LOG_LEVEL=INFO
 CGA_REDIS_URL=<railway-redis-url>/22
 CGA_KAFKA_BOOTSTRAP_SERVERS=
 CGA_ANTHROPIC_API_KEY=<anthropic-api-key>
-CGA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+CGA_ANTHROPIC_MODEL=claude-sonnet-5
 CGA_LOG_LEVEL=INFO
 
 # =============================================================================
@@ -373,7 +373,7 @@ CGA_LOG_LEVEL=INFO
 ADPUB_REDIS_URL=<railway-redis-url>/23
 ADPUB_KAFKA_BOOTSTRAP_SERVERS=
 ADPUB_ANTHROPIC_API_KEY=<anthropic-api-key>
-ADPUB_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+ADPUB_ANTHROPIC_MODEL=claude-sonnet-5
 ADPUB_LOG_LEVEL=INFO
 
 # =============================================================================
@@ -382,7 +382,7 @@ ADPUB_LOG_LEVEL=INFO
 COA_REDIS_URL=<railway-redis-url>/24
 COA_KAFKA_BOOTSTRAP_SERVERS=
 COA_ANTHROPIC_API_KEY=<anthropic-api-key>
-COA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+COA_ANTHROPIC_MODEL=claude-sonnet-5
 COA_LOG_LEVEL=INFO
 
 # =============================================================================
@@ -391,5 +391,5 @@ COA_LOG_LEVEL=INFO
 ILA_REDIS_URL=<railway-redis-url>/25
 ILA_KAFKA_BOOTSTRAP_SERVERS=
 ILA_ANTHROPIC_API_KEY=<anthropic-api-key>
-ILA_ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+ILA_ANTHROPIC_MODEL=claude-sonnet-5
 ILA_LOG_LEVEL=INFO

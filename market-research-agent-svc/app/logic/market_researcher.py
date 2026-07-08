@@ -91,7 +91,7 @@ class MarketResearcher:
         output_guardrails: OutputGuardrails,
         event_emitter: EventEmitter,
         anthropic_client: Any = None,
-        model: str = "claude-sonnet-4-5-20250929",
+        model: str = "claude-sonnet-5",
         temperature: float = 0.3,
         max_tokens: int = 4096,
         prompt_loader: Any = None,

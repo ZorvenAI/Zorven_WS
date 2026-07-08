@@ -60,7 +60,7 @@ class TestSettingsDefaults:
 
     def test_llm_model_claude_sonnet_4(self):
         s = Settings()
-        assert "claude-sonnet-4" in s.LLM_MODEL
+        assert "claude-sonnet-5" in s.LLM_MODEL
 
     def test_llm_temperature_conservative(self):
         s = Settings()
