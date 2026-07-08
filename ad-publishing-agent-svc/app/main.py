@@ -71,38 +71,56 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("Set ADPUB_ANTHROPIC_API_KEY on Railway for live results")
 
-    # 4. LLM wrapper + targeting translator
+    # 4. Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    # Initialized before TargetingTranslator so it can be injected.
+    prompt_loader = AgentPromptClient(
+        critical_agent=True,
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
+    # 5. LLM wrapper + targeting translator
     from app.services.anthropic_client import AnthropicClient
 
     llm_wrapper = AnthropicClient(anthropic_client) if anthropic_client else None
-    targeting_translator = TargetingTranslator(llm_client=llm_wrapper)
+    targeting_translator = TargetingTranslator(
+        llm_client=llm_wrapper,
+        prompt_loader=prompt_loader,
+    )
 
-    # 5. Meta API client
+    # 6. Meta API client
     meta_client = MetaApiClient(
         api_version=settings.META_API_VERSION,
         sandbox_mode=settings.META_ADS_SANDBOX_MODE,
     )
 
-    # 6. Event emitter
+    # 7. Event emitter
     event_emitter = EventEmitter(audit_producer)
 
-    # 7. Context loader
+    # 8. Context loader
     context_loader = AdPubContextLoader()
 
-    # 8. Approval manager
+    # 9. Approval manager
     approval_manager = ApprovalManager(
         redis_manager=redis_manager,
         expiry_seconds=settings.APPROVAL_EXPIRY_SECONDS,
     )
 
-    # 9. Analyzer (7-phase publishing engine)
+    # 10. Analyzer (7-phase publishing engine)
     analyzer = AdPubAnalyzer(
         meta_client=meta_client,
         targeting_translator=targeting_translator,
         event_emitter=event_emitter,
     )
 
-    # 10. Executor
+    # 11. Executor
     executor = AdPubExecutor(
         analyzer=analyzer,
         approval_manager=approval_manager,
@@ -122,20 +140,6 @@ async def lifespan(app: FastAPI):
     app.state.redis_manager = redis_manager
 
     logger.info("Ad Publishing Agent service ready")
-
-    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
-    prompt_loader = AgentPromptClient(
-        critical_agent=True,
-        redis_url=settings.PROMPT_CACHE_REDIS_URL,
-        mlflow_uri=settings.MLFLOW_TRACKING_URI,
-    )
-    await prompt_loader.start()
-
-    cache_invalidator = PromptCacheInvalidator(
-        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
-        prompt_loader=prompt_loader,
-    )
-    await cache_invalidator.start()
 
     yield
 

@@ -119,6 +119,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             model=settings.LLM_MODEL,
             temperature=settings.LLM_TEMPERATURE,
             max_tokens=settings.LLM_MAX_TOKENS,
+            prompt_loader=prompt_loader,
         )
     )
     skill_registry.register(EconomicIndicatorLookup(world_bank_client))
@@ -130,6 +131,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             anthropic_client=anthropic_client,
             model=settings.LLM_MODEL,
             max_tokens=settings.LLM_MAX_TOKENS,
+            prompt_loader=prompt_loader,
         )
     )
     skill_registry.register(
@@ -148,6 +150,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     plan_guardrails = PlanToolGuardrails(rbac_engine, settings)
     output_guardrails = OutputGuardrails(settings)
 
+    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
     # Initialize market researcher (skill-based PAOR engine)
     researcher = MarketResearcher(
         skill_registry=skill_registry,
@@ -161,6 +176,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         model=settings.LLM_MODEL,
         temperature=settings.LLM_TEMPERATURE,
         max_tokens=settings.LLM_MAX_TOKENS,
+        prompt_loader=prompt_loader,
     )
 
     # Initialize executor (thin wrapper — guardrails handled by MarketResearcher)
@@ -183,19 +199,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.RBAC_ENABLED,
         len(circuit_breakers),
     )
-
-    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
-    prompt_loader = AgentPromptClient(
-        redis_url=settings.PROMPT_CACHE_REDIS_URL,
-        mlflow_uri=settings.MLFLOW_TRACKING_URI,
-    )
-    await prompt_loader.start()
-
-    cache_invalidator = PromptCacheInvalidator(
-        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
-        prompt_loader=prompt_loader,
-    )
-    await cache_invalidator.start()
 
     yield
 

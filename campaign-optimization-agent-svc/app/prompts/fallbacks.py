@@ -1,26 +1,32 @@
 """Fallback prompts for COA — CRITICAL agent (manages ad spend).
 
-AC-2: Fallback triggers HIGH-severity warning.
+These are verbatim copies of the system prompts currently used in production.
+They serve as the last-resort fallback when both Redis cache and MLflow are
+unavailable. The prompt-optimization-svc (MLflow) is the primary source of
+truth; these fallbacks ensure zero-downtime degradation.
+
+AC-2: Fallback triggers HIGH-severity warning (critical_agent=True).
 """
 
-CRITICAL_AGENT = True  # AC-2: HIGH-severity warning on fallback
-
-FALLBACK_SYSTEM = (
-    "You are a Meta Ads optimization specialist. Analyze campaign "
-    "performance, generate optimization recommendations, and manage "
-    "spend guardrails. Follow PG-01 planner-guided decision framework."
-)
-FALLBACK_OPTIMIZATION = (
-    "Analyze Meta Ads performance. Identify underperforming ad sets, "
-    "creative fatigue, and budget reallocation opportunities. Respond "
-    "with valid JSON."
-)
+# Verbatim copy of system string from RecommendationGenerator._enrich_rationales()
+# in recommendation_generator.py
 FALLBACK_RECOMMENDATION = (
-    "Generate actionable optimization recommendations. Prioritize by "
-    "impact and rank kill/scale/test actions. Respond with valid JSON."
+    "You are a Meta Ads optimization specialist. Generate a "
+    "brief, actionable rationale (2-3 sentences) for each "
+    "optimization action. Include the expected impact."
 )
+
+# Verbatim copy of system string from Reporter._generate_narrative()
+# in reporter.py
+FALLBACK_REPORTER = (
+    "You are a Meta Ads performance analyst. Generate a concise "
+    "performance report (4-6 sentences) covering: overall campaign "
+    "health, key metrics vs typical benchmarks, top and bottom "
+    "performing ad sets, trends, and recommended next steps."
+)
+
+# Map catalog names -> fallback constants for programmatic lookup
 FALLBACK_MAP = {
-    "zorven-wf3-coa-system": FALLBACK_SYSTEM,
-    "zorven-wf3-coa-optimization": FALLBACK_OPTIMIZATION,
     "zorven-wf3-coa-recommendation": FALLBACK_RECOMMENDATION,
+    "zorven-wf3-coa-reporter": FALLBACK_REPORTER,
 }

@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.logic.parser import parse_claude_response
 from app.logic.prompts import SYSTEM_PROMPT, build_user_prompt
 from app.logic.scoring import adjust_confidence, detect_contradictions
+from app.prompts.fallbacks import FALLBACK_EXTRACTION
 from app.services.anthropic_client import AnthropicClient
 from app.services.django_client import DjangoClient
 
@@ -31,6 +32,7 @@ class IntelligenceExtractor:
         self,
         django_client: DjangoClient | None = None,
         anthropic_client: AnthropicClient | None = None,
+        prompt_loader: Any = None,
     ) -> None:
         self._django = django_client or DjangoClient()
         self._claude = anthropic_client or AnthropicClient(
@@ -38,6 +40,7 @@ class IntelligenceExtractor:
             model=settings.ANTHROPIC_MODEL,
             temperature=settings.ANTHROPIC_TEMPERATURE,
         )
+        self._prompt_loader = prompt_loader
 
     async def extract(
         self,
@@ -205,7 +208,14 @@ class IntelligenceExtractor:
         if not self._claude.enabled or not campaign_ctx:
             return "", []
         user = build_user_prompt(campaign_ctx)
-        raw = await self._claude.complete_json(system=SYSTEM_PROMPT, user=user)
+        if self._prompt_loader is not None:
+            system = await self._prompt_loader.load(
+                "zorven-wf3-ila-extraction",
+                fallback=FALLBACK_EXTRACTION,
+            )
+        else:
+            system = SYSTEM_PROMPT
+        raw = await self._claude.complete_json(system=system, user=user)
         if not raw:
             return "", []
         return parse_claude_response(raw)

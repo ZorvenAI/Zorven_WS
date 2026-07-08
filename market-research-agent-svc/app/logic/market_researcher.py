@@ -94,6 +94,7 @@ class MarketResearcher:
         model: str = "claude-sonnet-4-5-20250929",
         temperature: float = 0.3,
         max_tokens: int = 4096,
+        prompt_loader: Any = None,
         # Legacy clients for backward-compatible data compilation
         tavily_client: Optional[TavilySearchClient] = None,
         world_bank_client: Optional[WorldBankClient] = None,
@@ -107,6 +108,7 @@ class MarketResearcher:
         self.output_guardrails = output_guardrails
         self.events = event_emitter
         self._anthropic_client = anthropic_client
+        self._prompt_loader = prompt_loader
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -180,7 +182,8 @@ class MarketResearcher:
         logger.info("PLAN phase starting for: %s", sanitized_prompt[:100])
         available_skill_ids = self.rbac_engine.get_allowed_skills(user_role)
         plan = await self._plan_research(
-            sanitized_prompt, available_skill_ids, skill_context_text
+            sanitized_prompt, available_skill_ids, skill_context_text,
+            tenant_id=tenant_id,
         )
 
         # EVT-004: Plan created
@@ -320,7 +323,8 @@ class MarketResearcher:
         if synthesis_allowed.decision == "ALLOW":
             logger.info("REFLECT phase starting — synthesizing findings")
             synthesis = await self._synthesize(
-                sanitized_prompt, raw_context, skill_context_text, geo_hint
+                sanitized_prompt, raw_context, skill_context_text, geo_hint,
+                tenant_id=tenant_id,
             )
         else:
             logger.info("REFLECT phase skipped — role %s denied SKL-MRA-03", user_role)
@@ -411,6 +415,7 @@ class MarketResearcher:
         prompt: str,
         available_skill_ids: list[str],
         skill_context: str = "",
+        tenant_id: str = "",
     ) -> dict[str, Any]:
         """Use Claude to decompose the research query into a skill plan."""
         # Build skill descriptions for the planner
@@ -439,9 +444,22 @@ class MarketResearcher:
             return default_plan
 
         try:
-            system = _PLAN_SYSTEM_PROMPT.format(
-                available_skills="\n".join(skill_descriptions)
-            )
+            skills_text = "\n".join(skill_descriptions)
+            if self._prompt_loader:
+                from app.prompts.fallbacks import FALLBACK_PLANNING
+
+                system = await self._prompt_loader.load(
+                    "zorven-wf1-mra-planning",
+                    tenant_id=tenant_id or None,
+                    variables={
+                        "context.available_skills": skills_text,
+                    },
+                    fallback=FALLBACK_PLANNING,
+                )
+            else:
+                system = _PLAN_SYSTEM_PROMPT.format(
+                    available_skills=skills_text
+                )
             if skill_context:
                 system += f"\n\nAdditional context:\n{skill_context[:2000]}"
 
@@ -736,6 +754,7 @@ class MarketResearcher:
         raw_context: str,
         skill_context: str = "",
         geo_hint: str = "",
+        tenant_id: str = "",
     ) -> dict[str, Any]:
         """Use Claude to synthesize research findings."""
         default_synthesis = {
@@ -758,7 +777,16 @@ class MarketResearcher:
             return default_synthesis
 
         try:
-            system = _SYNTHESIS_SYSTEM_PROMPT
+            if self._prompt_loader:
+                from app.prompts.fallbacks import FALLBACK_SYNTHESIS
+
+                system = await self._prompt_loader.load(
+                    "zorven-wf1-mra-synthesis",
+                    tenant_id=tenant_id or None,
+                    fallback=FALLBACK_SYNTHESIS,
+                )
+            else:
+                system = _SYNTHESIS_SYSTEM_PROMPT
             if skill_context:
                 system += f"\n\nAdditional methodology context:\n{skill_context[:2000]}"
 

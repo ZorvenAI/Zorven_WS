@@ -48,11 +48,13 @@ class MarketAnalysisSynthesis(BaseSkill):
         model: str = "claude-sonnet-4-5-20250929",
         temperature: float = 0.3,
         max_tokens: int = 4096,
+        prompt_loader: Any = None,
     ) -> None:
         self._client = anthropic_client
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self._prompt_loader = prompt_loader
 
     async def execute(self, input_data: dict, context: SkillContext) -> SkillResult:
         """
@@ -95,7 +97,16 @@ class MarketAnalysisSynthesis(BaseSkill):
 
         try:
             skill_hint = context.skill_context_text or ""
-            system = _SYNTHESIS_SYSTEM
+            if self._prompt_loader:
+                from app.prompts.fallbacks import FALLBACK_SKILL_SYNTHESIS
+
+                system = await self._prompt_loader.load(
+                    "zorven-wf1-mra-skill-synthesis",
+                    tenant_id=context.tenant_id or None,
+                    fallback=FALLBACK_SKILL_SYNTHESIS,
+                )
+            else:
+                system = _SYNTHESIS_SYSTEM
             if skill_hint:
                 system += f"\n\nAdditional context:\n{skill_hint[:2000]}"
 

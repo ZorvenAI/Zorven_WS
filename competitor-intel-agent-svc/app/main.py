@@ -100,6 +100,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize circuit breakers
     circuit_breakers = create_circuit_breakers(settings)
 
+    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    # Must be initialized before analyzer and LLM skills so they can receive it.
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
     # Initialize skill registry — register read skills (SKL-CIA-01 through 07)
     skill_registry = SkillRegistry()
 
@@ -134,6 +148,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             settings.LLM_MODEL,
             settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
+            prompt_loader=prompt_loader,
         )
     )
     skill_registry.register(
@@ -142,6 +157,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             settings.LLM_MODEL,
             settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
+            prompt_loader=prompt_loader,
         )
     )
     skill_registry.register(
@@ -150,6 +166,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             settings.LLM_MODEL,
             settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
+            prompt_loader=prompt_loader,
         )
     )
 
@@ -190,6 +207,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         model=settings.LLM_MODEL,
         temperature=settings.LLM_TEMPERATURE,
         max_tokens=settings.LLM_MAX_TOKENS,
+        prompt_loader=prompt_loader,
     )
 
     # Initialize executor (thin wrapper - guardrails handled by analyzer)
@@ -227,19 +245,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         len(circuit_breakers),
         scan_consumer is not None,
     )
-
-    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
-    prompt_loader = AgentPromptClient(
-        redis_url=settings.PROMPT_CACHE_REDIS_URL,
-        mlflow_uri=settings.MLFLOW_TRACKING_URI,
-    )
-    await prompt_loader.start()
-
-    cache_invalidator = PromptCacheInvalidator(
-        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
-        prompt_loader=prompt_loader,
-    )
-    await cache_invalidator.start()
 
     yield
 

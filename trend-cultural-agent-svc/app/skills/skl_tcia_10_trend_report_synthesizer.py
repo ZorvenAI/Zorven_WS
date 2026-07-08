@@ -55,10 +55,14 @@ class TrendReportSynthesizer(BaseSkill):
     )
 
     def __init__(
-        self, anthropic_client: Any = None, cb_llm: Any = None
+        self,
+        anthropic_client: Any = None,
+        cb_llm: Any = None,
+        prompt_loader: Any = None,
     ) -> None:
         self._anthropic = anthropic_client
         self._cb_llm = cb_llm
+        self._prompt_loader = prompt_loader
 
     async def execute(
         self, input_data: dict[str, Any], context: SkillContext
@@ -68,33 +72,69 @@ class TrendReportSynthesizer(BaseSkill):
         if not self._anthropic:
             return self._stub_result(input_data, start)
 
-        prompt = _SYNTHESIS_PROMPT.format(
-            scored_trends=json.dumps(
-                input_data.get("scored_trends", [])[:15], default=str
-            )[:3000],
-            persona_matrix=json.dumps(
-                input_data.get("trend_persona_matrix", {}), default=str
-            )[:2000],
-            alerts=json.dumps(
-                input_data.get("alerts", [])[:5], default=str
-            )[:1000],
-            viral_patterns=json.dumps(
-                input_data.get("viral_patterns", {}), default=str
-            )[:1000],
-            cultural_shifts=json.dumps(
-                input_data.get("cultural_shifts", [])[:5], default=str
-            )[:2000],
-            generational_insights=json.dumps(
-                input_data.get("generational_insights", [])[:4], default=str
-            )[:2000],
-            language_trends=json.dumps(
-                input_data.get("language_trends", {}), default=str
-            )[:1000],
-            report_type=input_data.get("report_type", "on_demand"),
-            rag_context=json.dumps(
-                input_data.get("rag_context", {}), default=str
-            )[:1000],
-        )
+        if self._prompt_loader:
+            from app.prompts.fallbacks import FALLBACK_REPORT_SYNTHESIS
+
+            prompt = await self._prompt_loader.load(
+                "zorven-wf1-tcia-report-synthesis",
+                tenant_id=context.tenant_id or None,
+                variables={
+                    "scored_trends": json.dumps(
+                        input_data.get("scored_trends", [])[:15], default=str
+                    )[:3000],
+                    "persona_matrix": json.dumps(
+                        input_data.get("trend_persona_matrix", {}), default=str
+                    )[:2000],
+                    "alerts": json.dumps(
+                        input_data.get("alerts", [])[:5], default=str
+                    )[:1000],
+                    "viral_patterns": json.dumps(
+                        input_data.get("viral_patterns", {}), default=str
+                    )[:1000],
+                    "cultural_shifts": json.dumps(
+                        input_data.get("cultural_shifts", [])[:5], default=str
+                    )[:2000],
+                    "generational_insights": json.dumps(
+                        input_data.get("generational_insights", [])[:4], default=str
+                    )[:2000],
+                    "language_trends": json.dumps(
+                        input_data.get("language_trends", {}), default=str
+                    )[:1000],
+                    "report_type": input_data.get("report_type", "on_demand"),
+                    "rag_context": json.dumps(
+                        input_data.get("rag_context", {}), default=str
+                    )[:1000],
+                },
+                fallback=FALLBACK_REPORT_SYNTHESIS,
+            )
+        else:
+            prompt = _SYNTHESIS_PROMPT.format(
+                scored_trends=json.dumps(
+                    input_data.get("scored_trends", [])[:15], default=str
+                )[:3000],
+                persona_matrix=json.dumps(
+                    input_data.get("trend_persona_matrix", {}), default=str
+                )[:2000],
+                alerts=json.dumps(
+                    input_data.get("alerts", [])[:5], default=str
+                )[:1000],
+                viral_patterns=json.dumps(
+                    input_data.get("viral_patterns", {}), default=str
+                )[:1000],
+                cultural_shifts=json.dumps(
+                    input_data.get("cultural_shifts", [])[:5], default=str
+                )[:2000],
+                generational_insights=json.dumps(
+                    input_data.get("generational_insights", [])[:4], default=str
+                )[:2000],
+                language_trends=json.dumps(
+                    input_data.get("language_trends", {}), default=str
+                )[:1000],
+                report_type=input_data.get("report_type", "on_demand"),
+                rag_context=json.dumps(
+                    input_data.get("rag_context", {}), default=str
+                )[:1000],
+            )
 
         try:
             llm_kwargs = dict(

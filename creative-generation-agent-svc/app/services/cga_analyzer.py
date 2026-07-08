@@ -46,6 +46,11 @@ from app.logic.image_prompt_builder import ImagePromptBuilder
 from app.logic.primary_copy_generator import PrimaryCopyGenerator
 from app.logic.visual_copy_assembler import VisualCopyAssembler
 from app.messaging.event_emitter import EventEmitter, EventType
+from app.prompts.fallbacks import (
+    FALLBACK_COMPLIANCE,
+    FALLBACK_COPYWRITING,
+    FALLBACK_CREATIVE_DIRECTOR,
+)
 from app.services.anthropic_client import AnthropicClient
 from app.services.gcs_client import GCSClient
 
@@ -62,12 +67,14 @@ class CGAAnalyzer:
         event_emitter: EventEmitter,
         gcs_client: GCSClient | None = None,
         redis_manager: RedisManager | None = None,
+        prompt_loader: Any = None,
     ):
         self._llm = anthropic_client
         self._image_gen = image_gen_client
         self._events = event_emitter
         self._gcs = gcs_client
         self._redis = redis_manager
+        self._prompt_loader = prompt_loader
 
         # Skills
         self._context_loader = CreativeContextLoader()
@@ -171,24 +178,32 @@ class CGAAnalyzer:
         brand_desc = creative_context.get("company", {}).get("description", "")
         brand_industry = creative_context.get("company", {}).get("industry", "")
 
-        call1_system = (
-            "You are a creative director for Meta Ads campaigns"
-        )
-        if brand_name:
-            call1_system += f" for {brand_name}"
-            if brand_industry:
-                call1_system += f", a {brand_industry} brand"
-        call1_system += (
-            ". Given brand context, audience personas, and campaign "
-            "architecture, generate creative profiles for each audience x "
-            "funnel combination and detailed AI image generation prompts.\n\n"
-            "CRITICAL: Every image prompt MUST be specific to this brand and "
-            "its products/services. The images will be used as actual brand "
-            "assets for social media and ad campaigns. Generic stock imagery "
-            "is unacceptable.\n\n"
-            "Respond with a JSON object containing: creative_profiles, "
-            "image_prompts, findings, recommendations, sources."
-        )
+        if self._prompt_loader is not None:
+            call1_system = await self._prompt_loader.load(
+                "zorven-wf3-cga-creative-director",
+                tenant_id=tenant_id,
+                fallback=FALLBACK_CREATIVE_DIRECTOR,
+            )
+        else:
+            # Brand-specific construction when no catalog is available
+            call1_system = (
+                "You are a creative director for Meta Ads campaigns"
+            )
+            if brand_name:
+                call1_system += f" for {brand_name}"
+                if brand_industry:
+                    call1_system += f", a {brand_industry} brand"
+            call1_system += (
+                ". Given brand context, audience personas, and campaign "
+                "architecture, generate creative profiles for each audience x "
+                "funnel combination and detailed AI image generation prompts.\n\n"
+                "CRITICAL: Every image prompt MUST be specific to this brand and "
+                "its products/services. The images will be used as actual brand "
+                "assets for social media and ad campaigns. Generic stock imagery "
+                "is unacceptable.\n\n"
+                "Respond with a JSON object containing: creative_profiles, "
+                "image_prompts, findings, recommendations, sources."
+            )
         call1_user = (
             f"## Campaign Brief\n{prompt}\n\n"
             f"{profiler_section}\n\n"
@@ -315,13 +330,14 @@ class CGAAnalyzer:
             creative_context
         )
 
-        call2_system = (
-            "You are an expert Meta Ads copywriter writing in the brand voice. "
-            "Generate high-converting ad copy: hooks, primary text (in 3 length "
-            "tiers), and CTAs for each audience x funnel combination.\n\n"
-            "Respond with a JSON object containing: hooks, primary_copy, ctas, "
-            "findings, recommendations."
-        )
+        if self._prompt_loader is not None:
+            call2_system = await self._prompt_loader.load(
+                "zorven-wf3-cga-copywriting",
+                tenant_id=tenant_id,
+                fallback=FALLBACK_COPYWRITING,
+            )
+        else:
+            call2_system = FALLBACK_COPYWRITING
         call2_user = (
             f"## Campaign Brief\n{prompt}\n\n"
             f"{hook_section}\n\n"
@@ -364,15 +380,14 @@ class CGAAnalyzer:
             creative_context
         )
 
-        call3_system = (
-            "You are a Meta Ads compliance reviewer and creative assembler. "
-            "Check all copy for Meta Advertising Standards compliance, pair "
-            "images with copy to create complete ad units, and assemble the "
-            "final CampaignCreativePackage.\n\n"
-            "Respond with a JSON object containing: compliance_results, "
-            "creative_units, ad_set_packages, creative_quality_score, "
-            "confidence_score, findings, recommendations, sources."
-        )
+        if self._prompt_loader is not None:
+            call3_system = await self._prompt_loader.load(
+                "zorven-wf3-cga-compliance",
+                tenant_id=tenant_id,
+                fallback=FALLBACK_COMPLIANCE,
+            )
+        else:
+            call3_system = FALLBACK_COMPLIANCE
 
         # Build context with all generated assets
         # Strip data/thumbnail URIs from images for LLM — only metadata needed

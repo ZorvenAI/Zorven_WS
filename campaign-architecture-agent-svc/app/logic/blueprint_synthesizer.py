@@ -8,11 +8,26 @@ import json
 import logging
 from typing import Any
 
+from app.prompts.fallbacks import FALLBACK_BLUEPRINT_SYNTHESIS
+
 logger = logging.getLogger(__name__)
 
 
 class BlueprintSynthesizer:
     """Build capstone blueprint synthesis system prompt."""
+
+    def __init__(self, prompt_loader: Any = None) -> None:
+        self._prompt_loader = prompt_loader
+
+    async def get_system_prompt(self, tenant_id: str = "") -> str:
+        """Load system prompt from catalog with fallback."""
+        if self._prompt_loader is not None:
+            return await self._prompt_loader.load(
+                "zorven-wf3-caa-blueprint-synthesis",
+                tenant_id=tenant_id or None,
+                fallback=FALLBACK_BLUEPRINT_SYNTHESIS,
+            )
+        return FALLBACK_BLUEPRINT_SYNTHESIS
 
     def build_system_prompt(self) -> str:
         """Build the system prompt for Claude call 2 (blueprint assembly)."""

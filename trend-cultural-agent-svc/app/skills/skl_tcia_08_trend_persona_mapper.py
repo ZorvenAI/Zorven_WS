@@ -50,10 +50,14 @@ class TrendPersonaMapper(BaseSkill):
     )
 
     def __init__(
-        self, anthropic_client: Any = None, cb_llm: Any = None
+        self,
+        anthropic_client: Any = None,
+        cb_llm: Any = None,
+        prompt_loader: Any = None,
     ) -> None:
         self._anthropic = anthropic_client
         self._cb_llm = cb_llm
+        self._prompt_loader = prompt_loader
 
     async def execute(
         self, input_data: dict[str, Any], context: SkillContext
@@ -72,13 +76,31 @@ class TrendPersonaMapper(BaseSkill):
                 duration_ms=(time.monotonic() - start) * 1000,
             )
 
-        prompt = _MAPPING_PROMPT.format(
-            scored_trends=json.dumps(scored_trends[:15], default=str)[:3000],
-            personas=json.dumps(personas[:5], default=str)[:2000],
-            generational_insights=json.dumps(
-                generational_insights[:4], default=str
-            )[:2000],
-        )
+        if self._prompt_loader:
+            from app.prompts.fallbacks import FALLBACK_PERSONA_MAPPING
+
+            prompt = await self._prompt_loader.load(
+                "zorven-wf1-tcia-persona-mapping",
+                tenant_id=context.tenant_id or None,
+                variables={
+                    "scored_trends": json.dumps(
+                        scored_trends[:15], default=str
+                    )[:3000],
+                    "personas": json.dumps(personas[:5], default=str)[:2000],
+                    "generational_insights": json.dumps(
+                        generational_insights[:4], default=str
+                    )[:2000],
+                },
+                fallback=FALLBACK_PERSONA_MAPPING,
+            )
+        else:
+            prompt = _MAPPING_PROMPT.format(
+                scored_trends=json.dumps(scored_trends[:15], default=str)[:3000],
+                personas=json.dumps(personas[:5], default=str)[:2000],
+                generational_insights=json.dumps(
+                    generational_insights[:4], default=str
+                )[:2000],
+            )
 
         try:
             llm_kwargs = dict(

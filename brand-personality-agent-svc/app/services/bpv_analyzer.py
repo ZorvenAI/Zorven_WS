@@ -36,9 +36,11 @@ class BPVAnalyzer:
         self,
         anthropic_client: AnthropicClient | None,
         event_emitter: EventEmitter,
+        prompt_loader: Any = None,
     ):
         self._llm = anthropic_client
         self._events = event_emitter
+        self._prompt_loader = prompt_loader
         # Skills
         self._audience_psychology = AudiencePsychologyAnalyzer()
         self._brand_perception = BrandPerceptionAnalyzer()
@@ -109,7 +111,16 @@ class BPVAnalyzer:
             {"phase": "design"},
         )
 
-        system_prompt = self._build_system_prompt()
+        if self._prompt_loader:
+            from app.prompts.fallbacks import FALLBACK_PERSONALITY
+
+            system_prompt = await self._prompt_loader.load(
+                "zorven-wf2-bpv-personality",
+                tenant_id=tenant_id or None,
+                fallback=FALLBACK_PERSONALITY,
+            )
+        else:
+            system_prompt = self._build_system_prompt()
         user_prompt = self._build_user_prompt(
             prompt, context, audience_psych, brand_perception,
             identity_seed, rag_docs,

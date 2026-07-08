@@ -106,11 +106,13 @@ class SentimentAnalyzer(BaseSkill):
         model: str = "claude-sonnet-4-5-20250929",
         temperature: float = 0.3,
         max_tokens: int = 16384,
+        prompt_loader: Any = None,
     ) -> None:
         self._client = anthropic_client
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self._prompt_loader = prompt_loader
 
     async def execute(
         self, input_data: dict[str, Any], context: SkillContext
@@ -133,13 +135,33 @@ class SentimentAnalyzer(BaseSkill):
 
         try:
             skill_context_text = context.skill_context_text or ""
-            system_msg = _SYSTEM_PROMPT.format(
-                brand_query=prompt[:500],
-                operating_mode=operating_mode,
-                feedback_data=json.dumps(feedback_data, default=str)[:12000],
-                persona_context=json.dumps(persona_context, default=str)[:3000],
-                skill_context=skill_context_text[:1500],
-            )
+            if self._prompt_loader:
+                from app.prompts.fallbacks import FALLBACK_SENTIMENT
+
+                system_msg = await self._prompt_loader.load(
+                    "zorven-wf1-voca-sentiment-analysis",
+                    tenant_id=context.tenant_id or None,
+                    variables={
+                        "brand_query": prompt[:500],
+                        "operating_mode": operating_mode,
+                        "feedback_data": json.dumps(
+                            feedback_data, default=str
+                        )[:12000],
+                        "persona_context": json.dumps(
+                            persona_context, default=str
+                        )[:3000],
+                        "skill_context": skill_context_text[:1500],
+                    },
+                    fallback=FALLBACK_SENTIMENT,
+                )
+            else:
+                system_msg = _SYSTEM_PROMPT.format(
+                    brand_query=prompt[:500],
+                    operating_mode=operating_mode,
+                    feedback_data=json.dumps(feedback_data, default=str)[:12000],
+                    persona_context=json.dumps(persona_context, default=str)[:3000],
+                    skill_context=skill_context_text[:1500],
+                )
 
             response = await self._client.messages.create(
                 model=self.model,

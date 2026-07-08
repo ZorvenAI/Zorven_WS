@@ -68,12 +68,14 @@ class PersonaAnalyzer:
         circuit_breakers: dict[str, CircuitBreaker],
         event_emitter: EventEmitter,
         anthropic_client: Any = None,
+        prompt_loader: Any = None,
     ) -> None:
         self._registry = skill_registry
         self._guardrails = guardrails
         self._breakers = circuit_breakers
         self._events = event_emitter
         self._anthropic = anthropic_client
+        self._prompt_loader = prompt_loader
 
     async def analyze(
         self,
@@ -257,48 +259,78 @@ class PersonaAnalyzer:
             has_cia = "competitor_intelligence" in previous_outputs
             odoo_enabled = settings.ODOO_ENABLED
 
-            system_prompt = (
-                "You are a persona research planner. Given a user query, "
-                "select which research and analysis skills to execute.\n\n"
-                "Available research skills:\n"
-                "- SKL-APA-01: Audience landscape research (Tavily web search)\n"
-                "- SKL-APA-02: Forum/community mining\n"
-                "- SKL-APA-03: Social listening analysis\n"
-                "- SKL-APA-04: Buyer role extraction\n"
-                "- SKL-APA-05: Review/needs mining\n"
-                "- SKL-APA-06: RAG context retrieval\n"
-            )
-            if odoo_enabled:
-                system_prompt += (
+            if self._prompt_loader:
+                from app.prompts.fallbacks import FALLBACK_PLANNING
+
+                odoo_skills_text = (
                     "- SKL-APA-05b: Odoo survey data extraction\n"
                     "- SKL-APA-05c: Odoo CRM customer extraction\n"
+                    if odoo_enabled
+                    else ""
                 )
-            system_prompt += (
-                "\nAnalysis skills (always sequential):\n"
-                "- SKL-APA-07: Demographic profile builder\n"
-                "- SKL-APA-08: Psychographic/behavioral profiler\n"
-                "- SKL-APA-09: Persona synthesizer/differentiator\n"
-                "- SKL-APA-10: Buying journey mapper\n\n"
-                "Rules:\n"
-                "- Research skills run in parallel, analysis sequentially\n"
-                "- Always include SKL-APA-07 and SKL-APA-09 at minimum\n"
-                "- Include SKL-APA-10 if journey mapping is requested\n"
-            )
-            if has_mra:
+                upstream_hints = ""
+                if has_mra:
+                    upstream_hints += (
+                        "- MRA data available: skip SKL-APA-01 unless deeper "
+                        "audience-specific research needed\n"
+                    )
+                if has_cia:
+                    upstream_hints += (
+                        "- CIA data available: use for competitor audience "
+                        "comparison in SKL-APA-08/09\n"
+                    )
+                system_prompt = await self._prompt_loader.load(
+                    "zorven-wf1-apa-planning",
+                    tenant_id=tenant_id or None,
+                    variables={
+                        "context.odoo_skills": odoo_skills_text,
+                        "context.upstream_hints": upstream_hints,
+                    },
+                    fallback=FALLBACK_PLANNING,
+                )
+            else:
+                system_prompt = (
+                    "You are a persona research planner. Given a user query, "
+                    "select which research and analysis skills to execute.\n\n"
+                    "Available research skills:\n"
+                    "- SKL-APA-01: Audience landscape research (Tavily web search)\n"
+                    "- SKL-APA-02: Forum/community mining\n"
+                    "- SKL-APA-03: Social listening analysis\n"
+                    "- SKL-APA-04: Buyer role extraction\n"
+                    "- SKL-APA-05: Review/needs mining\n"
+                    "- SKL-APA-06: RAG context retrieval\n"
+                )
+                if odoo_enabled:
+                    system_prompt += (
+                        "- SKL-APA-05b: Odoo survey data extraction\n"
+                        "- SKL-APA-05c: Odoo CRM customer extraction\n"
+                    )
                 system_prompt += (
-                    "- MRA data available: skip SKL-APA-01 unless deeper "
-                    "audience-specific research needed\n"
+                    "\nAnalysis skills (always sequential):\n"
+                    "- SKL-APA-07: Demographic profile builder\n"
+                    "- SKL-APA-08: Psychographic/behavioral profiler\n"
+                    "- SKL-APA-09: Persona synthesizer/differentiator\n"
+                    "- SKL-APA-10: Buying journey mapper\n\n"
+                    "Rules:\n"
+                    "- Research skills run in parallel, analysis sequentially\n"
+                    "- Always include SKL-APA-07 and SKL-APA-09 at minimum\n"
+                    "- Include SKL-APA-10 if journey mapping is requested\n"
                 )
-            if has_cia:
-                system_prompt += (
-                    "- CIA data available: use for competitor audience "
-                    "comparison in SKL-APA-08/09\n"
-                )
+                if has_mra:
+                    system_prompt += (
+                        "- MRA data available: skip SKL-APA-01 unless deeper "
+                        "audience-specific research needed\n"
+                    )
+                if has_cia:
+                    system_prompt += (
+                        "- CIA data available: use for competitor audience "
+                        "comparison in SKL-APA-08/09\n"
+                    )
 
-            system_prompt += (
-                "\nReturn a JSON array of skill IDs in execution order. "
-                "Research skills first, then analysis skills."
-            )
+                system_prompt += (
+                    "\nReturn a JSON array of skill IDs in execution order. "
+                    "Research skills first, then analysis skills."
+                )
 
             breaker = self._breakers.get("llm")
             if breaker:
@@ -545,25 +577,39 @@ class PersonaAnalyzer:
 
             max_personas = min(settings.MAX_PERSONAS, settings.MAX_PERSONAS_LIMIT)
 
-            system_prompt = (
-                "You are an expert audience research analyst. Synthesize "
-                "the research data into structured buyer personas.\n\n"
-                "Requirements:\n"
-                f"- Generate up to {max_personas} distinct personas\n"
-                "- Each persona must have: slug, segment_label, demographics, "
-                "psychographics, pain_points, motivations, objections, "
-                "preferred_channels, priority_score, narrative, confidence_score\n"
-                "- NEVER use fictional human names for personas. Use "
-                "descriptive segment labels (e.g., 'Enterprise Decision Maker', "
-                "'Growth-Stage Startup Founder')\n"
-                "- Include buying journey maps with stages: Awareness, "
-                "Consideration, Evaluation, Decision, Onboarding, Advocacy\n"
-                "- Cite sources for all claims\n"
-                "- Flag low-confidence claims\n\n"
-                "Return valid JSON with keys: personas, journey_maps, "
-                "segment_matrix, executive_summary, findings, recommendations, "
-                "confidence_score, methodology_notes"
-            )
+            if self._prompt_loader:
+                from app.prompts.fallbacks import FALLBACK_SYNTHESIS
+
+                system_prompt = await self._prompt_loader.load(
+                    "zorven-wf1-apa-synthesis",
+                    tenant_id=tenant_id or None,
+                    fallback=FALLBACK_SYNTHESIS,
+                )
+                # Inject max_personas into the loaded prompt
+                system_prompt = system_prompt.replace(
+                    "up to 5 distinct personas",
+                    f"up to {max_personas} distinct personas",
+                )
+            else:
+                system_prompt = (
+                    "You are an expert audience research analyst. Synthesize "
+                    "the research data into structured buyer personas.\n\n"
+                    "Requirements:\n"
+                    f"- Generate up to {max_personas} distinct personas\n"
+                    "- Each persona must have: slug, segment_label, demographics, "
+                    "psychographics, pain_points, motivations, objections, "
+                    "preferred_channels, priority_score, narrative, confidence_score\n"
+                    "- NEVER use fictional human names for personas. Use "
+                    "descriptive segment labels (e.g., 'Enterprise Decision Maker', "
+                    "'Growth-Stage Startup Founder')\n"
+                    "- Include buying journey maps with stages: Awareness, "
+                    "Consideration, Evaluation, Decision, Onboarding, Advocacy\n"
+                    "- Cite sources for all claims\n"
+                    "- Flag low-confidence claims\n\n"
+                    "Return valid JSON with keys: personas, journey_maps, "
+                    "segment_matrix, executive_summary, findings, recommendations, "
+                    "confidence_score, methodology_notes"
+                )
 
             if skill_context:
                 system_prompt += f"\n\nMethodology guidance:\n{skill_context}"
