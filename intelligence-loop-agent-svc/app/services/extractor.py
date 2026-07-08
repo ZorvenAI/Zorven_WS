@@ -38,7 +38,6 @@ class IntelligenceExtractor:
         self._claude = anthropic_client or AnthropicClient(
             api_key=settings.ANTHROPIC_API_KEY,
             model=settings.ANTHROPIC_MODEL,
-            temperature=settings.ANTHROPIC_TEMPERATURE,
         )
         self._prompt_loader = prompt_loader
 

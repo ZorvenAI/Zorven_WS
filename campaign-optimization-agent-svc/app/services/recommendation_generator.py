@@ -216,7 +216,7 @@ class RecommendationGenerator:
             )
             try:
                 rationale = await self._llm.generate(
-                    system, user, max_tokens=256, temperature=0.3
+                    system, user, max_tokens=256
                 )
                 rec["rationale"] = rationale
             except Exception:

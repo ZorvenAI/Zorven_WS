@@ -146,7 +146,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         SWOTAnalysisGenerator(
             anthropic_client,
             settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
             prompt_loader=prompt_loader,
         )
@@ -155,7 +154,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         PositioningGapAnalyzer(
             anthropic_client,
             settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
             prompt_loader=prompt_loader,
         )
@@ -164,7 +162,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         CompetitiveBenchmarkingSynthesizer(
             anthropic_client,
             settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
             prompt_loader=prompt_loader,
         )
@@ -205,7 +202,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         event_emitter=event_emitter,
         anthropic_client=anthropic_client,
         model=settings.LLM_MODEL,
-        temperature=settings.LLM_TEMPERATURE,
         max_tokens=settings.LLM_MAX_TOKENS,
         prompt_loader=prompt_loader,
     )

@@ -141,7 +141,6 @@ async def lifespan(app: FastAPI):
         SentimentAnalyzer(
             anthropic_client,
             settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
             prompt_loader=prompt_loader,
         )
@@ -150,7 +149,6 @@ async def lifespan(app: FastAPI):
         ThemeClusterBuilder(
             anthropic_client,
             settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
             prompt_loader=prompt_loader,
         )
@@ -159,7 +157,6 @@ async def lifespan(app: FastAPI):
         NPSTrendAnalyzer(
             anthropic_client,
             settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
             prompt_loader=prompt_loader,
         )
@@ -168,7 +165,6 @@ async def lifespan(app: FastAPI):
         VoCStrategyBridge(
             anthropic_client,
             settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
             settings,
             prompt_loader=prompt_loader,

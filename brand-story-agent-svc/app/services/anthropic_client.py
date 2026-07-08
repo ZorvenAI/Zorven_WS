@@ -20,14 +20,12 @@ class AnthropicClient:
         system_prompt: str,
         user_prompt: str,
         max_tokens: int | None = None,
-        temperature: float | None = None,
     ) -> dict[str, Any]:
         """Generate a JSON response from Claude."""
         try:
             response = await self._client.messages.create(
                 model=settings.ANTHROPIC_MODEL,
                 max_tokens=max_tokens or settings.ANTHROPIC_MAX_TOKENS,
-                temperature=temperature or settings.ANTHROPIC_TEMPERATURE,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )

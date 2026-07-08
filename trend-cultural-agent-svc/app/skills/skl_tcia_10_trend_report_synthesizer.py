@@ -168,7 +168,6 @@ class TrendReportSynthesizer(BaseSkill):
             llm_kwargs = dict(
                 model="claude-sonnet-5",
                 max_tokens=8192,
-                temperature=0.3,
                 messages=[{"role": "user", "content": prompt}],
             )
             if self._cb_llm:

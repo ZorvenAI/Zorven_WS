@@ -140,7 +140,6 @@ async def lifespan(app: FastAPI):
         DemographicProfileBuilder(
             anthropic_client,
             settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
             prompt_loader=prompt_loader,
         )
@@ -149,7 +148,6 @@ async def lifespan(app: FastAPI):
         PsychographicBehavioralProfiler(
             anthropic_client,
             settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
             prompt_loader=prompt_loader,
         )
@@ -158,7 +156,6 @@ async def lifespan(app: FastAPI):
         PersonaSynthesizer(
             anthropic_client,
             settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
             prompt_loader=prompt_loader,
         )
@@ -167,7 +164,6 @@ async def lifespan(app: FastAPI):
         BuyingJourneyMapper(
             anthropic_client,
             settings.LLM_MODEL,
-            settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
             prompt_loader=prompt_loader,
         )
