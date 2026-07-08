@@ -285,6 +285,8 @@ class PersonaAnalyzer:
                     variables={
                         "odoo_skills": odoo_skills_text,
                         "upstream_hints": upstream_hints,
+                        "context.odoo_skills": odoo_skills_text,
+                        "context.upstream_hints": upstream_hints,
                     },
                     fallback=FALLBACK_PLANNING,
                 )
