@@ -65,12 +65,14 @@ class VoCAAnalyzer:
         circuit_breakers: dict[str, Any],
         event_emitter: EventEmitter,
         anthropic_client: Any = None,
+        prompt_loader: Any = None,
     ) -> None:
         self._skills = skill_registry
         self._guardrails = guardrails
         self._breakers = circuit_breakers
         self._events = event_emitter
         self._anthropic = anthropic_client
+        self._prompt_loader = prompt_loader
 
     async def analyze(
         self,

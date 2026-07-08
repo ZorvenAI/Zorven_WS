@@ -11,6 +11,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from app.prompts.fallbacks import FALLBACK_RECOMMENDATION
 from app.services.anthropic_client import AnthropicClient
 from app.services.budget_analyzer import BudgetAnalysis
 from app.services.fatigue_detector import FatigueReport
@@ -25,8 +26,13 @@ REC_TTL_HOURS = 48
 class RecommendationGenerator:
     """Generates optimization recommendations from analysis results."""
 
-    def __init__(self, llm_client: AnthropicClient | None = None):
+    def __init__(
+        self,
+        llm_client: AnthropicClient | None = None,
+        prompt_loader: Any = None,
+    ):
         self._llm = llm_client
+        self._prompt_loader = prompt_loader
 
     async def generate_recommendations(
         self,
@@ -192,11 +198,13 @@ class RecommendationGenerator:
         campaign: Any,
     ):
         """Use Claude to generate human-readable rationales."""
-        system = (
-            "You are a Meta Ads optimization specialist. Generate a "
-            "brief, actionable rationale (2-3 sentences) for each "
-            "optimization action. Include the expected impact."
-        )
+        if self._prompt_loader is not None:
+            system = await self._prompt_loader.load(
+                "zorven-wf3-coa-recommendation",
+                fallback=FALLBACK_RECOMMENDATION,
+            )
+        else:
+            system = FALLBACK_RECOMMENDATION
         for rec in recommendations:
             user = (
                 f"Campaign: {campaign.campaign_name}\n"

@@ -8,6 +8,7 @@ API format. Handles Special Ad Category restrictions.
 import logging
 from typing import Any
 
+from app.prompts.fallbacks import FALLBACK_PUBLISHING
 from app.services.anthropic_client import AnthropicClient
 
 logger = logging.getLogger(__name__)
@@ -45,8 +46,13 @@ Rules:
 class TargetingTranslator:
     """Translates persona profiles into Meta Ads targeting specs."""
 
-    def __init__(self, llm_client: AnthropicClient | None = None):
+    def __init__(
+        self,
+        llm_client: AnthropicClient | None = None,
+        prompt_loader: Any = None,
+    ):
         self._llm = llm_client
+        self._prompt_loader = prompt_loader
 
     async def translate(
         self,
@@ -78,9 +84,16 @@ class TargetingTranslator:
             targeting = self._fallback_translation(persona, categories, placements)
         else:
             user_prompt = self._build_prompt(persona, industry, categories, placements)
+            if self._prompt_loader is not None:
+                system_prompt = await self._prompt_loader.load(
+                    "zorven-wf3-adpub-publishing",
+                    fallback=FALLBACK_PUBLISHING,
+                )
+            else:
+                system_prompt = TARGETING_SYSTEM_PROMPT
             try:
                 targeting = await self._llm.generate_json(
-                    system_prompt=TARGETING_SYSTEM_PROMPT,
+                    system_prompt=system_prompt,
                     user_prompt=user_prompt,
                     temperature=0.2,
                 )

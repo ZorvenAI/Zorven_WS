@@ -40,19 +40,9 @@ async def lifespan(app: FastAPI):
     app.state.redis_manager = redis_manager
     app.state.audit_producer = audit
     app.state.event_producer = events
-    django_client = DjangoClient()
-    extractor = IntelligenceExtractor(django_client=django_client)
-
-    consumer = IlaKafkaConsumer(extractor=extractor)
-    await consumer.start()
-
-    app.state.django_client = django_client
-    app.state.extractor = extractor
-    app.state.kafka_consumer = consumer
-
-    logger.info("Intelligence Loop Agent ready")
 
     # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    # Initialized before IntelligenceExtractor so it can be injected.
     prompt_loader = AgentPromptClient(
         redis_url=settings.PROMPT_CACHE_REDIS_URL,
         mlflow_uri=settings.MLFLOW_TRACKING_URI,
@@ -64,6 +54,21 @@ async def lifespan(app: FastAPI):
         prompt_loader=prompt_loader,
     )
     await cache_invalidator.start()
+
+    django_client = DjangoClient()
+    extractor = IntelligenceExtractor(
+        django_client=django_client,
+        prompt_loader=prompt_loader,
+    )
+
+    consumer = IlaKafkaConsumer(extractor=extractor)
+    await consumer.start()
+
+    app.state.django_client = django_client
+    app.state.extractor = extractor
+    app.state.kafka_consumer = consumer
+
+    logger.info("Intelligence Loop Agent ready")
 
     yield
 

@@ -151,12 +151,14 @@ class VoCStrategyBridge(BaseSkill):
         temperature: float = 0.3,
         max_tokens: int = 16384,
         settings: Any = None,
+        prompt_loader: Any = None,
     ) -> None:
         self._client = anthropic_client
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
         self._settings = settings
+        self._prompt_loader = prompt_loader
 
     async def execute(
         self, input_data: dict[str, Any], context: SkillContext
@@ -218,21 +220,59 @@ class VoCStrategyBridge(BaseSkill):
 
         try:
             skill_context_text = context.skill_context_text or ""
-            system_msg = _SYSTEM_PROMPT.format(
-                brand_query=prompt[:500],
-                operating_mode=operating_mode,
-                sentiment_data=json.dumps(sentiment_data, default=str)[:5000],
-                theme_data=json.dumps(theme_data, default=str)[:5000],
-                nps_data=json.dumps(nps_data, default=str)[:3000],
-                mra_context=json.dumps(mra_context, default=str)[:3000],
-                cia_context=json.dumps(cia_context, default=str)[:3000],
-                apa_context=json.dumps(apa_context, default=str)[:3000],
-                tcia_context=json.dumps(tcia_context, default=str)[:3000],
-                nps_weight=int(nps_w * 100),
-                sentiment_weight=int(sent_w * 100),
-                theme_weight=int(theme_w * 100),
-                skill_context=skill_context_text[:1500],
-            )
+            if self._prompt_loader:
+                from app.prompts.fallbacks import FALLBACK_STRATEGY_BRIDGE
+
+                system_msg = await self._prompt_loader.load(
+                    "zorven-wf1-voca-strategy-bridge",
+                    tenant_id=context.tenant_id or None,
+                    variables={
+                        "brand_query": prompt[:500],
+                        "operating_mode": operating_mode,
+                        "sentiment_data": json.dumps(
+                            sentiment_data, default=str
+                        )[:5000],
+                        "theme_data": json.dumps(
+                            theme_data, default=str
+                        )[:5000],
+                        "nps_data": json.dumps(
+                            nps_data, default=str
+                        )[:3000],
+                        "mra_context": json.dumps(
+                            mra_context, default=str
+                        )[:3000],
+                        "cia_context": json.dumps(
+                            cia_context, default=str
+                        )[:3000],
+                        "apa_context": json.dumps(
+                            apa_context, default=str
+                        )[:3000],
+                        "tcia_context": json.dumps(
+                            tcia_context, default=str
+                        )[:3000],
+                        "nps_weight": str(int(nps_w * 100)),
+                        "sentiment_weight": str(int(sent_w * 100)),
+                        "theme_weight": str(int(theme_w * 100)),
+                        "skill_context": skill_context_text[:1500],
+                    },
+                    fallback=FALLBACK_STRATEGY_BRIDGE,
+                )
+            else:
+                system_msg = _SYSTEM_PROMPT.format(
+                    brand_query=prompt[:500],
+                    operating_mode=operating_mode,
+                    sentiment_data=json.dumps(sentiment_data, default=str)[:5000],
+                    theme_data=json.dumps(theme_data, default=str)[:5000],
+                    nps_data=json.dumps(nps_data, default=str)[:3000],
+                    mra_context=json.dumps(mra_context, default=str)[:3000],
+                    cia_context=json.dumps(cia_context, default=str)[:3000],
+                    apa_context=json.dumps(apa_context, default=str)[:3000],
+                    tcia_context=json.dumps(tcia_context, default=str)[:3000],
+                    nps_weight=int(nps_w * 100),
+                    sentiment_weight=int(sent_w * 100),
+                    theme_weight=int(theme_w * 100),
+                    skill_context=skill_context_text[:1500],
+                )
 
             response = await self._client.messages.create(
                 model=self.model,

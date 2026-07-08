@@ -101,7 +101,22 @@ async def lifespan(app: FastAPI):
         sandbox_mode=settings.META_ADS_SANDBOX_MODE,
     )
 
-    # 6. Service instances
+    # 6. Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    # Initialized before service instances that use prompts.
+    prompt_loader = AgentPromptClient(
+        critical_agent=True,
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
+    # 7. Service instances
     callback_client = CallbackClient()
     campaign_discovery = CampaignDiscovery(redis_manager=redis_manager)
     verifier = OptimizationVerifier()
@@ -123,8 +138,14 @@ async def lifespan(app: FastAPI):
     analyzer = PerformanceAnalyzer(llm_client=llm_wrapper)
     fatigue_detector = FatigueDetector()
     budget_analyzer = BudgetAnalyzer()
-    rec_generator = RecommendationGenerator(llm_client=llm_wrapper)
-    reporter = Reporter(llm_client=llm_wrapper)
+    rec_generator = RecommendationGenerator(
+        llm_client=llm_wrapper,
+        prompt_loader=prompt_loader,
+    )
+    reporter = Reporter(
+        llm_client=llm_wrapper,
+        prompt_loader=prompt_loader,
+    )
 
     # Store in app state for route access
     app.state.redis_manager = redis_manager
@@ -138,20 +159,6 @@ async def lifespan(app: FastAPI):
     app.state.callback_client = callback_client
 
     logger.info("Campaign Optimization Agent service ready")
-
-    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
-    prompt_loader = AgentPromptClient(
-        critical_agent=True,
-        redis_url=settings.PROMPT_CACHE_REDIS_URL,
-        mlflow_uri=settings.MLFLOW_TRACKING_URI,
-    )
-    await prompt_loader.start()
-
-    cache_invalidator = PromptCacheInvalidator(
-        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
-        prompt_loader=prompt_loader,
-    )
-    await cache_invalidator.start()
 
     yield
 

@@ -23,9 +23,11 @@ class BAAAnalyzer:
         self,
         anthropic_client: AnthropicClient | None,
         event_emitter: EventEmitter,
+        prompt_loader: Any = None,
     ) -> None:
         self._llm = anthropic_client
         self._events = event_emitter
+        self._prompt_loader = prompt_loader
 
     async def analyze(
         self,
@@ -213,7 +215,18 @@ class BAAAnalyzer:
         skill_context: str,
     ) -> dict[str, Any]:
         """Phase 2: Architecture Design — generate via Claude."""
-        system_prompt = self._build_system_prompt(skill_context)
+        if self._prompt_loader:
+            from app.prompts.fallbacks import FALLBACK_HIERARCHY
+
+            system_prompt = await self._prompt_loader.load(
+                "zorven-wf2-baa-hierarchy",
+                tenant_id=tenant_id or None,
+                fallback=FALLBACK_HIERARCHY,
+            )
+            if skill_context:
+                system_prompt += f"\n\nAdditional context:\n{skill_context}"
+        else:
+            system_prompt = self._build_system_prompt(skill_context)
         user_prompt = self._build_user_prompt(prompt, context, research)
 
         result = await self._llm.generate_json(system_prompt, user_prompt)

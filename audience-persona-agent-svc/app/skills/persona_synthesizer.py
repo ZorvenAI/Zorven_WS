@@ -70,11 +70,13 @@ class PersonaSynthesizer(BaseSkill):
         model: str = "claude-sonnet-4-5-20250929",
         temperature: float = 0.3,
         max_tokens: int = 16384,
+        prompt_loader: Any = None,
     ) -> None:
         self._client = anthropic_client
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self._prompt_loader = prompt_loader
 
     async def execute(self, input_data: dict, context: SkillContext) -> SkillResult:
         """
@@ -118,7 +120,17 @@ class PersonaSynthesizer(BaseSkill):
 
         try:
             max_personas = min(settings.MAX_PERSONAS, settings.MAX_PERSONAS_LIMIT)
-            system = _SYSTEM_PROMPT.format(max_personas=max_personas)
+            if self._prompt_loader:
+                from app.prompts.fallbacks import FALLBACK_PERSONA_SYNTHESIS
+
+                system = await self._prompt_loader.load(
+                    "zorven-wf1-apa-persona-synthesis",
+                    tenant_id=context.tenant_id or None,
+                    fallback=FALLBACK_PERSONA_SYNTHESIS,
+                )
+                system = system.format(max_personas=max_personas)
+            else:
+                system = _SYSTEM_PROMPT.format(max_personas=max_personas)
             skill_context = context.skill_context_text
             if skill_context:
                 system += f"\n\nMethodology:\n{skill_context[:1500]}"

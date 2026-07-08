@@ -24,9 +24,11 @@ class BPAAnalyzer:
         self,
         anthropic_client: AnthropicClient | None,
         event_emitter: EventEmitter,
+        prompt_loader: Any = None,
     ) -> None:
         self._llm = anthropic_client
         self._events = event_emitter
+        self._prompt_loader = prompt_loader
 
     async def analyze(
         self,
@@ -192,7 +194,18 @@ class BPAAnalyzer:
     ) -> dict[str, Any]:
         """Phase 2: Synthesis — generate positioning via Claude."""
         # Build comprehensive prompt for Claude
-        system_prompt = self._build_system_prompt(skill_context)
+        if self._prompt_loader:
+            from app.prompts.fallbacks import FALLBACK_POSITIONING
+
+            system_prompt = await self._prompt_loader.load(
+                "zorven-wf2-bpa-positioning",
+                tenant_id=tenant_id or None,
+                fallback=FALLBACK_POSITIONING,
+            )
+            if skill_context:
+                system_prompt += f"\n\nAdditional context:\n{skill_context}"
+        else:
+            system_prompt = self._build_system_prompt(skill_context)
         user_prompt = self._build_user_prompt(
             prompt, context, research, candidate_count, map_count
         )

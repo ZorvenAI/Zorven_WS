@@ -65,11 +65,13 @@ class PositioningGapAnalyzer(BaseSkill):
         model: str = "claude-sonnet-4-5-20250929",
         temperature: float = 0.3,
         max_tokens: int = 4096,
+        prompt_loader: Any = None,
     ) -> None:
         self._client = anthropic_client
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self._prompt_loader = prompt_loader
 
     async def execute(self, input_data: dict, context: SkillContext) -> SkillResult:
         """
@@ -112,7 +114,16 @@ class PositioningGapAnalyzer(BaseSkill):
             )
 
         try:
-            system = _POSITIONING_SYSTEM_PROMPT
+            if self._prompt_loader:
+                from app.prompts.fallbacks import FALLBACK_POSITIONING_GAP
+
+                system = await self._prompt_loader.load(
+                    "zorven-wf1-cia-positioning-gap",
+                    tenant_id=context.tenant_id or None,
+                    fallback=FALLBACK_POSITIONING_GAP,
+                )
+            else:
+                system = _POSITIONING_SYSTEM_PROMPT
             skill_context = context.skill_context_text
             if skill_context:
                 system += f"\n\nMethodology:\n{skill_context[:1500]}"

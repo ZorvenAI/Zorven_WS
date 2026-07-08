@@ -36,9 +36,11 @@ class BSAAnalyzer:
         event_emitter: EventEmitter,
         gcs_client: GCSClient | None = None,
         redis_manager: RedisManager | None = None,
+        prompt_loader: Any = None,
     ):
         self._llm = anthropic_client
         self._events = event_emitter
+        self._prompt_loader = prompt_loader
         # Skills
         self._wf2_context = WF2StrategyContextLoader()
         self._audience_emotional = AudienceEmotionalSynthesizer()
@@ -136,7 +138,16 @@ class BSAAnalyzer:
             {"phase": "narrative_generation"},
         )
 
-        origin_system = self._origin_story.build_system_prompt()
+        if self._prompt_loader:
+            from app.prompts.fallbacks import FALLBACK_ORIGIN
+
+            origin_system = await self._prompt_loader.load(
+                "zorven-wf2-bsa-origin",
+                tenant_id=tenant_id or None,
+                fallback=FALLBACK_ORIGIN,
+            )
+        else:
+            origin_system = self._origin_story.build_system_prompt()
         origin_user = self._origin_story.build_user_prompt(
             prompt,
             context,
@@ -212,7 +223,16 @@ class BSAAnalyzer:
             origin_story,
         )
 
-        synthesis_system = self._synthesizer.build_system_prompt()
+        if self._prompt_loader:
+            from app.prompts.fallbacks import FALLBACK_NARRATIVE
+
+            synthesis_system = await self._prompt_loader.load(
+                "zorven-wf2-bsa-narrative",
+                tenant_id=tenant_id or None,
+                fallback=FALLBACK_NARRATIVE,
+            )
+        else:
+            synthesis_system = self._synthesizer.build_system_prompt()
         synthesis_user_prompt = (
             f"## BRAND NARRATIVE CONTEXT\n\n"
             f"Origin story: {_fmt(origin_story)}\n"

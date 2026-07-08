@@ -81,7 +81,20 @@ async def lifespan(app: FastAPI):
     # 7. Context loader
     context_loader = CGAContextLoader()
 
-    # 8. Analyzer
+    # 8. Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
+    # 9. Analyzer
     from app.services.anthropic_client import AnthropicClient
 
     llm_wrapper = AnthropicClient(anthropic_client) if anthropic_client else None
@@ -91,9 +104,10 @@ async def lifespan(app: FastAPI):
         event_emitter=event_emitter,
         gcs_client=gcs_client,
         redis_manager=redis_manager,
+        prompt_loader=prompt_loader,
     )
 
-    # 9. Executor
+    # 10. Executor
     executor = CGAExecutor(
         analyzer=analyzer,
         redis_manager=redis_manager,
@@ -109,19 +123,6 @@ async def lifespan(app: FastAPI):
     app.state.redis_manager = redis_manager
 
     logger.info("Creative Generation Agent service ready")
-
-    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
-    prompt_loader = AgentPromptClient(
-        redis_url=settings.PROMPT_CACHE_REDIS_URL,
-        mlflow_uri=settings.MLFLOW_TRACKING_URI,
-    )
-    await prompt_loader.start()
-
-    cache_invalidator = PromptCacheInvalidator(
-        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
-        prompt_loader=prompt_loader,
-    )
-    await cache_invalidator.start()
 
     yield
 

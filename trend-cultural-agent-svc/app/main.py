@@ -96,6 +96,19 @@ async def lifespan(app: FastAPI):
     # Circuit breakers
     circuit_breakers = create_breakers(settings)
 
+    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
     # Skill registry (all 12 skills)
     skill_registry = SkillRegistry()
     skill_registry.register(
@@ -127,16 +140,22 @@ async def lifespan(app: FastAPI):
         RAGContextRetrieval(settings.RAG_SERVICE_URL, circuit_breakers["rag_store"])
     )
     skill_registry.register(
-        CulturalRelevanceScorer(anthropic_client, circuit_breakers["llm"])
+        CulturalRelevanceScorer(
+            anthropic_client, circuit_breakers["llm"], prompt_loader=prompt_loader
+        )
     )
     skill_registry.register(
-        TrendPersonaMapper(anthropic_client, circuit_breakers["llm"])
+        TrendPersonaMapper(
+            anthropic_client, circuit_breakers["llm"], prompt_loader=prompt_loader
+        )
     )
     skill_registry.register(
         OpportunityAlertGenerator(anthropic_client, circuit_breakers["llm"])
     )
     skill_registry.register(
-        TrendReportSynthesizer(anthropic_client, circuit_breakers["llm"])
+        TrendReportSynthesizer(
+            anthropic_client, circuit_breakers["llm"], prompt_loader=prompt_loader
+        )
     )
     skill_registry.register(
         TrendReportPersister(
@@ -194,19 +213,6 @@ async def lifespan(app: FastAPI):
         "connected" if trace_producer._connected else "stub",
         "enabled" if odoo_client else "disabled",
     )
-
-    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
-    prompt_loader = AgentPromptClient(
-        redis_url=settings.PROMPT_CACHE_REDIS_URL,
-        mlflow_uri=settings.MLFLOW_TRACKING_URI,
-    )
-    await prompt_loader.start()
-
-    cache_invalidator = PromptCacheInvalidator(
-        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
-        prompt_loader=prompt_loader,
-    )
-    await cache_invalidator.start()
 
     yield
 

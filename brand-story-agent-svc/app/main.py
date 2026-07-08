@@ -76,7 +76,20 @@ async def lifespan(app: FastAPI):
     # 6. Context loader
     context_loader = BSAContextLoader()
 
-    # 7. Analyzer
+    # 7. Prompt loader (ZorvenPromptLoader integration) — init before analyzer
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
+    # 8. Analyzer
     from app.services.anthropic_client import AnthropicClient
 
     llm_wrapper = AnthropicClient(anthropic_client) if anthropic_client else None
@@ -85,9 +98,10 @@ async def lifespan(app: FastAPI):
         event_emitter=event_emitter,
         gcs_client=gcs_client,
         redis_manager=redis_manager,
+        prompt_loader=prompt_loader,
     )
 
-    # 8. Executor
+    # 9. Executor
     executor = BSAExecutor(
         analyzer=analyzer,
         redis_manager=redis_manager,
@@ -101,23 +115,9 @@ async def lifespan(app: FastAPI):
     # Store in app state for route access
     app.state.executor = executor
     app.state.redis_manager = redis_manager
+    app.state.prompt_loader = prompt_loader
 
     logger.info("Brand Story Agent service ready")
-
-    # Prompt loader (ZorvenPromptLoader integration)
-    prompt_loader = AgentPromptClient(
-        redis_url=settings.PROMPT_CACHE_REDIS_URL,
-        mlflow_uri=settings.MLFLOW_TRACKING_URI,
-    )
-    await prompt_loader.start()
-
-    cache_invalidator = PromptCacheInvalidator(
-        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
-        prompt_loader=prompt_loader,
-    )
-    await cache_invalidator.start()
-
-    app.state.prompt_loader = prompt_loader
 
     yield
 

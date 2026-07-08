@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.logic.circuit_breaker import get_breaker
+from app.prompts.fallbacks import FALLBACK_REPORTER
 from app.services.anthropic_client import AnthropicClient
 from app.services.meta_insights_client import CampaignInsights
 from app.services.performance_analyzer import CampaignAnalysis
@@ -34,9 +35,14 @@ class PerformanceReport:
 class Reporter:
     """Generates performance reports with optional LLM narratives."""
 
-    def __init__(self, llm_client: AnthropicClient | None = None):
+    def __init__(
+        self,
+        llm_client: AnthropicClient | None = None,
+        prompt_loader: Any = None,
+    ):
         self._llm = llm_client
         self._breaker = get_breaker("llm")
+        self._prompt_loader = prompt_loader
 
     async def generate_report(
         self,
@@ -151,12 +157,13 @@ class Reporter:
         bottom: list[dict],
     ) -> str:
         """Generate an LLM narrative report."""
-        system = (
-            "You are a Meta Ads performance analyst. Generate a concise "
-            "performance report (4-6 sentences) covering: overall campaign "
-            "health, key metrics vs typical benchmarks, top and bottom "
-            "performing ad sets, trends, and recommended next steps."
-        )
+        if self._prompt_loader is not None:
+            system = await self._prompt_loader.load(
+                "zorven-wf3-coa-reporter",
+                fallback=FALLBACK_REPORTER,
+            )
+        else:
+            system = FALLBACK_REPORTER
         user = (
             f"Campaign: {campaign.campaign_name}\n"
             f"Health: {analysis.overall_health}\n"

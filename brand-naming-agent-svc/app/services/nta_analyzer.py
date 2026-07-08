@@ -32,9 +32,11 @@ class NTAAnalyzer:
         self,
         anthropic_client: AnthropicClient | None,
         event_emitter: EventEmitter,
+        prompt_loader: Any = None,
     ):
         self._llm = anthropic_client
         self._events = event_emitter
+        self._prompt_loader = prompt_loader
         # Skills
         self._brand_context = BrandContextLoader()
         self._audience_psychology = AudiencePsychologyAnalyzer()
@@ -130,7 +132,16 @@ class NTAAnalyzer:
             {"phase": "name_generation"},
         )
 
-        name_system_prompt = self._name_generator.build_system_prompt()
+        if self._prompt_loader:
+            from app.prompts.fallbacks import FALLBACK_NAMING
+
+            name_system_prompt = await self._prompt_loader.load(
+                "zorven-wf2-nta-naming",
+                tenant_id=tenant_id or None,
+                fallback=FALLBACK_NAMING,
+            )
+        else:
+            name_system_prompt = self._name_generator.build_system_prompt()
         name_user_prompt = self._name_generator.build_user_prompt(
             prompt,
             context,
@@ -246,7 +257,16 @@ class NTAAnalyzer:
             {"phase": "tagline_synthesis"},
         )
 
-        tagline_system_prompt = self._tagline_synthesizer.build_system_prompt()
+        if self._prompt_loader:
+            from app.prompts.fallbacks import FALLBACK_TAGLINE
+
+            tagline_system_prompt = await self._prompt_loader.load(
+                "zorven-wf2-nta-tagline",
+                tenant_id=tenant_id or None,
+                fallback=FALLBACK_TAGLINE,
+            )
+        else:
+            tagline_system_prompt = self._tagline_synthesizer.build_system_prompt()
         tagline_user_prompt = self._tagline_synthesizer.build_user_prompt(
             prompt,
             shortlisted,

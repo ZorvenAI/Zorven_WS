@@ -67,32 +67,7 @@ async def lifespan(app: FastAPI):
     # 5. Context loader
     context_loader = NTAContextLoader()
 
-    # 6. Analyzer
-    from app.services.anthropic_client import AnthropicClient
-
-    llm_wrapper = AnthropicClient(anthropic_client) if anthropic_client else None
-    analyzer = NTAAnalyzer(
-        anthropic_client=llm_wrapper,
-        event_emitter=event_emitter,
-    )
-
-    # 7. Executor
-    executor = NTAExecutor(
-        analyzer=analyzer,
-        redis_manager=redis_manager,
-        trace_producer=trace_producer,
-        audit_producer=audit_producer,
-        event_emitter=event_emitter,
-        context_loader=context_loader,
-    )
-
-    # Store in app state for route access
-    app.state.executor = executor
-    app.state.redis_manager = redis_manager
-
-    logger.info("Naming & Tagline Agent service ready")
-
-    # Prompt loader (ZorvenPromptLoader integration)
+    # 6. Prompt loader (ZorvenPromptLoader integration) — init before analyzer
     prompt_loader = AgentPromptClient(
         redis_url=settings.PROMPT_CACHE_REDIS_URL,
         mlflow_uri=settings.MLFLOW_TRACKING_URI,
@@ -105,7 +80,32 @@ async def lifespan(app: FastAPI):
     )
     await cache_invalidator.start()
 
+    # 7. Analyzer
+    from app.services.anthropic_client import AnthropicClient
+
+    llm_wrapper = AnthropicClient(anthropic_client) if anthropic_client else None
+    analyzer = NTAAnalyzer(
+        anthropic_client=llm_wrapper,
+        event_emitter=event_emitter,
+        prompt_loader=prompt_loader,
+    )
+
+    # 8. Executor
+    executor = NTAExecutor(
+        analyzer=analyzer,
+        redis_manager=redis_manager,
+        trace_producer=trace_producer,
+        audit_producer=audit_producer,
+        event_emitter=event_emitter,
+        context_loader=context_loader,
+    )
+
+    # Store in app state for route access
+    app.state.executor = executor
+    app.state.redis_manager = redis_manager
     app.state.prompt_loader = prompt_loader
+
+    logger.info("Naming & Tagline Agent service ready")
 
     yield
 

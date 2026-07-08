@@ -69,10 +69,14 @@ class CulturalRelevanceScorer(BaseSkill):
     )
 
     def __init__(
-        self, anthropic_client: Any = None, cb_llm: Any = None
+        self,
+        anthropic_client: Any = None,
+        cb_llm: Any = None,
+        prompt_loader: Any = None,
     ) -> None:
         self._anthropic = anthropic_client
         self._cb_llm = cb_llm
+        self._prompt_loader = prompt_loader
         self._odoo_client: Any = None
         self._redis: Any = None
 
@@ -94,12 +98,27 @@ class CulturalRelevanceScorer(BaseSkill):
         competitors = input_data.get("competitor_landscape", {})
         market = input_data.get("market_context", {})
 
-        prompt = _SCORING_PROMPT.format(
-            trends=json.dumps(trends[:25], default=str)[:4000],
-            personas=json.dumps(personas[:5], default=str)[:2000],
-            competitors=json.dumps(competitors, default=str)[:2000],
-            market=json.dumps(market, default=str)[:2000],
-        )
+        if self._prompt_loader:
+            from app.prompts.fallbacks import FALLBACK_SCORING
+
+            prompt = await self._prompt_loader.load(
+                "zorven-wf1-tcia-scoring",
+                tenant_id=context.tenant_id or None,
+                variables={
+                    "trends": json.dumps(trends[:25], default=str)[:4000],
+                    "personas": json.dumps(personas[:5], default=str)[:2000],
+                    "competitors": json.dumps(competitors, default=str)[:2000],
+                    "market": json.dumps(market, default=str)[:2000],
+                },
+                fallback=FALLBACK_SCORING,
+            )
+        else:
+            prompt = _SCORING_PROMPT.format(
+                trends=json.dumps(trends[:25], default=str)[:4000],
+                personas=json.dumps(personas[:5], default=str)[:2000],
+                competitors=json.dumps(competitors, default=str)[:2000],
+                market=json.dumps(market, default=str)[:2000],
+            )
 
         try:
             llm_kwargs = dict(

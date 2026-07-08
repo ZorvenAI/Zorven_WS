@@ -75,10 +75,23 @@ async def lifespan(app: FastAPI):
             "Set APA_ANTHROPIC_API_KEY on Railway"
         )
 
-    # 5. Circuit breakers
+    # 5. Prompt loader + cache invalidator (ZorvenPromptLoader integration)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    )
+    await prompt_loader.start()
+
+    cache_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
+        prompt_loader=prompt_loader,
+    )
+    await cache_invalidator.start()
+
+    # 6. Circuit breakers
     breakers = create_breakers(settings)
 
-    # 6. Skill registry — register all 14 skills
+    # 7. Skill registry — register all 14 skills
     skill_registry = SkillRegistry()
 
     # Phase 1: Research skills (SKL-APA-01 through 06) — parallel execution
@@ -129,6 +142,7 @@ async def lifespan(app: FastAPI):
             settings.LLM_MODEL,
             settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
+            prompt_loader=prompt_loader,
         )
     )
     skill_registry.register(
@@ -137,6 +151,7 @@ async def lifespan(app: FastAPI):
             settings.LLM_MODEL,
             settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
+            prompt_loader=prompt_loader,
         )
     )
     skill_registry.register(
@@ -145,6 +160,7 @@ async def lifespan(app: FastAPI):
             settings.LLM_MODEL,
             settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
+            prompt_loader=prompt_loader,
         )
     )
     skill_registry.register(
@@ -153,6 +169,7 @@ async def lifespan(app: FastAPI):
             settings.LLM_MODEL,
             settings.LLM_TEMPERATURE,
             settings.LLM_MAX_TOKENS,
+            prompt_loader=prompt_loader,
         )
     )
 
@@ -200,6 +217,7 @@ async def lifespan(app: FastAPI):
         circuit_breakers=breakers,
         event_emitter=event_emitter,
         anthropic_client=anthropic_client,
+        prompt_loader=prompt_loader,
     )
 
     # 11. APAExecutor
@@ -234,19 +252,6 @@ async def lifespan(app: FastAPI):
         settings.ODOO_ENABLED,
         scan_consumer is not None,
     )
-
-    # Prompt loader + cache invalidator (ZorvenPromptLoader integration)
-    prompt_loader = AgentPromptClient(
-        redis_url=settings.PROMPT_CACHE_REDIS_URL,
-        mlflow_uri=settings.MLFLOW_TRACKING_URI,
-    )
-    await prompt_loader.start()
-
-    cache_invalidator = PromptCacheInvalidator(
-        bootstrap_servers=getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", ""),
-        prompt_loader=prompt_loader,
-    )
-    await cache_invalidator.start()
 
     yield
 

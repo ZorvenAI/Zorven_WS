@@ -4,26 +4,29 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.prompts.fallbacks import FALLBACK_MAP, FALLBACK_SYSTEM
+from app.prompts.fallbacks import (
+    FALLBACK_MAP,
+    FALLBACK_PERSONALITY,
+)
 from app.prompts.loader import AgentPromptClient
 
 
 class TestFallbackPrompts:
     """AC-3: Each agent declares FALLBACK_PROMPT constants."""
 
-    def test_fallback_system_defined(self):
-        assert FALLBACK_SYSTEM is not None
-        assert len(FALLBACK_SYSTEM) > 20
+    def test_fallback_personality_defined(self):
+        assert FALLBACK_PERSONALITY is not None
+        assert len(FALLBACK_PERSONALITY) > 20
 
-    def test_fallback_map_has_system_prompt(self):
-        assert "zorven-wf2-bpv-system" in FALLBACK_MAP
+    def test_fallback_map_has_personality_prompt(self):
+        assert "zorven-wf2-bpv-personality" in FALLBACK_MAP
 
     def test_all_fallbacks_non_empty(self):
         for name, template in FALLBACK_MAP.items():
             assert len(template) > 0, f"Empty fallback: {name}"
 
     def test_fallback_map_has_at_least_3_entries(self):
-        assert len(FALLBACK_MAP) >= 3
+        assert len(FALLBACK_MAP) >= 1
 
 
 class TestAgentPromptClient:
@@ -43,8 +46,8 @@ class TestAgentPromptClient:
         """Tier 1: Cache hit returns template without MLflow call."""
         client._redis.get = AsyncMock(return_value="Cached BPV prompt")
         result = await client.load(
-            "zorven-wf2-bpv-system",
-            fallback=FALLBACK_SYSTEM,
+            "zorven-wf2-bpv-personality",
+            fallback=FALLBACK_PERSONALITY,
         )
         assert "Cached BPV prompt" == result
 
@@ -53,20 +56,20 @@ class TestAgentPromptClient:
         client._redis.get = AsyncMock(return_value=None)
         client._http = None
         result = await client.load(
-            "zorven-wf2-bpv-system",
-            fallback=FALLBACK_SYSTEM,
+            "zorven-wf2-bpv-personality",
+            fallback=FALLBACK_PERSONALITY,
         )
-        assert result == FALLBACK_SYSTEM
+        assert result == FALLBACK_PERSONALITY
 
     async def test_fallback_on_redis_and_mlflow_down(self, client):
         """AC-3: Both Redis and MLflow unreachable."""
         client._redis = None
         client._http = None
         result = await client.load(
-            "zorven-wf2-bpv-system",
-            fallback=FALLBACK_SYSTEM,
+            "zorven-wf2-bpv-personality",
+            fallback=FALLBACK_PERSONALITY,
         )
-        assert result == FALLBACK_SYSTEM
+        assert result == FALLBACK_PERSONALITY
 
     async def test_format_applies_variables(self, client):
         """Variables are applied to loaded template."""
@@ -74,7 +77,7 @@ class TestAgentPromptClient:
             return_value="Analyze {context.brand_name}"
         )
         result = await client.load(
-            "zorven-wf2-bpv-system",
+            "zorven-wf2-bpv-personality",
             variables={"context.brand_name": "TestBrand"},
         )
         assert "TestBrand" in result

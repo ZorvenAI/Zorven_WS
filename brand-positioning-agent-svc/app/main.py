@@ -82,32 +82,7 @@ async def lifespan(app: FastAPI):
         service_token=settings.BACKEND_SERVICE_TOKEN,
     )
 
-    # 7. BPA Analyzer (PAOR engine)
-    analyzer = BPAAnalyzer(
-        anthropic_client=llm_client,
-        event_emitter=event_emitter,
-    )
-
-    # 8. BPA Executor
-    executor = BPAExecutor(
-        analyzer=analyzer,
-        redis_manager=redis_manager,
-        trace_producer=trace_producer,
-        audit_producer=audit_producer,
-        event_emitter=event_emitter,
-        wf1_loader=wf1_loader,
-    )
-
-    # Inject executor into routes
-    routes.executor = executor
-
-    logger.info(
-        "BPA initialized: Anthropic=%s, WF1 backend=%s",
-        bool(anthropic_client),
-        settings.BACKEND_URL,
-    )
-
-    # Prompt loader (ZorvenPromptLoader integration)
+    # 7. Prompt loader (ZorvenPromptLoader integration) — init before analyzer
     prompt_loader = AgentPromptClient(
         redis_url=settings.PROMPT_CACHE_REDIS_URL,
         mlflow_uri=settings.MLFLOW_TRACKING_URI,
@@ -120,7 +95,32 @@ async def lifespan(app: FastAPI):
     )
     await cache_invalidator.start()
 
+    # 8. BPA Analyzer (PAOR engine)
+    analyzer = BPAAnalyzer(
+        anthropic_client=llm_client,
+        event_emitter=event_emitter,
+        prompt_loader=prompt_loader,
+    )
+
+    # 9. BPA Executor
+    executor = BPAExecutor(
+        analyzer=analyzer,
+        redis_manager=redis_manager,
+        trace_producer=trace_producer,
+        audit_producer=audit_producer,
+        event_emitter=event_emitter,
+        wf1_loader=wf1_loader,
+    )
+
+    # Inject executor into routes
+    routes.executor = executor
     routes.prompt_loader = prompt_loader
+
+    logger.info(
+        "BPA initialized: Anthropic=%s, WF1 backend=%s",
+        bool(anthropic_client),
+        settings.BACKEND_URL,
+    )
 
     yield
 

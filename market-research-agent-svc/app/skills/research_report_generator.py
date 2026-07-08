@@ -49,10 +49,12 @@ class ResearchReportGenerator(BaseSkill):
         anthropic_client: Any = None,
         model: str = "claude-sonnet-4-5-20250929",
         max_tokens: int = 4096,
+        prompt_loader: Any = None,
     ) -> None:
         self._client = anthropic_client
         self.model = model
         self.max_tokens = max_tokens
+        self._prompt_loader = prompt_loader
 
     async def execute(self, input_data: dict, context: SkillContext) -> SkillResult:
         """
@@ -105,11 +107,22 @@ class ResearchReportGenerator(BaseSkill):
                 f"Analysis:\n{analysis[:20000]}"
             )
 
+            if self._prompt_loader:
+                from app.prompts.fallbacks import FALLBACK_SKILL_REPORT
+
+                report_system = await self._prompt_loader.load(
+                    "zorven-wf1-mra-skill-report",
+                    tenant_id=context.tenant_id or None,
+                    fallback=FALLBACK_SKILL_REPORT,
+                )
+            else:
+                report_system = _REPORT_SYSTEM
+
             message = await self._client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
                 temperature=0.3,
-                system=_REPORT_SYSTEM,
+                system=report_system,
                 messages=[{"role": "user", "content": user_msg}],
             )
 

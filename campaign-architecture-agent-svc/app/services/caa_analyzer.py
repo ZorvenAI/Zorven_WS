@@ -28,6 +28,7 @@ from app.logic.placement_budget_builder import PlacementBudgetBuilder
 from app.logic.rag_intelligence_retriever import RAGIntelligenceRetriever
 from app.logic.strategy_context_loader import StrategyContextLoader
 from app.messaging.event_emitter import EventEmitter, EventType
+from app.prompts.fallbacks import FALLBACK_BLUEPRINT
 from app.services.anthropic_client import AnthropicClient
 from app.services.gcs_client import GCSClient
 from app.services.tavily_client import TavilyClient
@@ -45,12 +46,14 @@ class CAAAnalyzer:
         gcs_client: GCSClient | None = None,
         redis_manager: RedisManager | None = None,
         tavily_client: TavilyClient | None = None,
+        prompt_loader: Any = None,
     ):
         self._llm = anthropic_client
         self._events = event_emitter
         self._gcs = gcs_client
         self._redis = redis_manager
         self._tavily = tavily_client
+        self._prompt_loader = prompt_loader
 
         # Research skills
         self._strategy_ctx = StrategyContextLoader()
@@ -64,7 +67,7 @@ class CAAAnalyzer:
         self._audience_builder = AudienceTargetingBuilder()
         self._placement_builder = PlacementBudgetBuilder()
         self._test_planner = ABTestPlanner()
-        self._blueprint_synth = BlueprintSynthesizer()
+        self._blueprint_synth = BlueprintSynthesizer(prompt_loader=prompt_loader)
 
         # Escalation
         self._escalation = HumanEscalation()
@@ -169,14 +172,14 @@ class CAAAnalyzer:
             strategy_ctx, budget, benchmark_data
         )
 
-        call1_system = (
-            "You are a Meta Ads campaign architect. Analyze the provided "
-            "brand and market context to design the campaign's funnel "
-            "strategy, audience targeting, and placement/budget allocation.\n\n"
-            "Output a single JSON object with keys: funnel_map, "
-            "targeting_specs, placement_budget, kpi_targets.\n\n"
-            "Return ONLY valid JSON, no markdown or commentary."
-        )
+        if self._prompt_loader is not None:
+            call1_system = await self._prompt_loader.load(
+                "zorven-wf3-caa-blueprint",
+                tenant_id=tenant_id,
+                fallback=FALLBACK_BLUEPRINT,
+            )
+        else:
+            call1_system = FALLBACK_BLUEPRINT
         call1_user = (
             f"# Campaign Architecture Request\n\n"
             f"User request: {prompt}\n\n"
@@ -248,7 +251,7 @@ class CAAAnalyzer:
         benchmark_section = self._benchmark.build_prompt_section(benchmark_data)
         competitor_section = self._competitor.build_prompt_section(competitor_data)
 
-        call2_system = self._blueprint_synth.build_system_prompt()
+        call2_system = await self._blueprint_synth.get_system_prompt(tenant_id)
         call2_user = self._blueprint_synth.build_user_prompt(
             call1_result=call1_result,
             test_plan_section=test_section,
