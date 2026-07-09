@@ -113,6 +113,7 @@ class TrendPersonaMapper(BaseSkill):
             llm_kwargs = dict(
                 model="claude-sonnet-5",
                 max_tokens=4096,
+                thinking={"type": "disabled"},
                 messages=[{"role": "user", "content": prompt}],
             )
             if self._cb_llm:

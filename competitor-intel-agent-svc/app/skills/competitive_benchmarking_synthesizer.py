@@ -131,6 +131,7 @@ class CompetitiveBenchmarkingSynthesizer(BaseSkill):
             message = await self._client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
+                thinking={"type": "disabled"},
                 system=system,
                 messages=[{"role": "user", "content": user_message}],
             )

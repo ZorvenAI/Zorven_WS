@@ -107,6 +107,7 @@ def make_predict_fn(
             message = client.messages.create(
                 model=model,
                 max_tokens=max_tokens,
+                thinking={"type": "disabled"},
                 messages=[{"role": "user", "content": formatted_prompt}],
             )
 

@@ -100,6 +100,7 @@ class SyntheticContextGenerator:
         response = self.client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=500,
+            thinking={"type": "disabled"},
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
         )

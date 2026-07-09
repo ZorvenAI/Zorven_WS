@@ -121,6 +121,7 @@ class ResearchReportGenerator(BaseSkill):
             message = await self._client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
+                thinking={"type": "disabled"},
                 system=report_system,
                 messages=[{"role": "user", "content": user_msg}],
             )

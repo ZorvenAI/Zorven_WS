@@ -281,6 +281,7 @@ class SlangLanguageTracker(BaseSkill):
         call_kwargs = {
             "model": "claude-sonnet-5",
             "max_tokens": 2000,
+            "thinking": {"type": "disabled"},
             "messages": [{"role": "user", "content": prompt}],
         }
         if self._cb_llm:
@@ -329,6 +330,7 @@ class SlangLanguageTracker(BaseSkill):
                 call_fn_wrapped = lambda: self._anthropic.messages.create(
                     model="claude-sonnet-5",
                     max_tokens=10,
+                    thinking={"type": "disabled"},
                     messages=[{"role": "user", "content": prompt}],
                 )
                 response = await self._cb_llm.call(call_fn_wrapped)
@@ -336,6 +338,7 @@ class SlangLanguageTracker(BaseSkill):
                 response = await self._anthropic.messages.create(
                     model="claude-sonnet-5",
                     max_tokens=10,
+                    thinking={"type": "disabled"},
                     messages=[{"role": "user", "content": prompt}],
                 )
             text = next(b.text for b in response.content if b.type == "text").strip().upper()

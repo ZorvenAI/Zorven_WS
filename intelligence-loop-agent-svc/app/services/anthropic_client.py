@@ -63,6 +63,7 @@ class AnthropicClient:
             msg = await self._client.messages.create(
                 model=self._model,
                 max_tokens=max_tokens,
+                thinking={"type": "disabled"},
                 system=system,
                 messages=[{"role": "user", "content": user}],
             )

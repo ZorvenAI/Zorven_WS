@@ -498,6 +498,7 @@ class CompetitorAnalyzer:
             message = await self._anthropic_client.messages.create(
                 model=self.model,
                 max_tokens=1024,
+                thinking={"type": "disabled"},
                 system=system,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -930,6 +931,7 @@ class CompetitorAnalyzer:
             message = await self._anthropic_client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
+                thinking={"type": "disabled"},
                 system=system,
                 messages=[{"role": "user", "content": user_message}],
             )

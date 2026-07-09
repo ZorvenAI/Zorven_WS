@@ -84,6 +84,7 @@ def brand_voice(*, inputs, outputs, expectations=None):
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=200,
+        thinking={"type": "disabled"},
         messages=[{"role": "user", "content": prompt}],
     )
 
