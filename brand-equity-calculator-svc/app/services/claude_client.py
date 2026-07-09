@@ -169,7 +169,7 @@ class ClaudeClient:
         cleaned = _strip_code_fences(raw_text)
 
         try:
-            result = json.loads(cleaned)
+            result = json.loads(cleaned, strict=False)
         except json.JSONDecodeError as exc:
             logger.error(
                 "Failed to parse Claude response as JSON: %s\nRaw: %s",

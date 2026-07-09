@@ -354,7 +354,7 @@ class PersonaAnalyzer:
                 if text.startswith("json"):
                     text = text[4:]
                 text = text.strip()
-            skill_ids = json.loads(text)
+            skill_ids = json.loads(text, strict=False)
             if isinstance(skill_ids, list):
                 # Filter to valid IDs
                 valid = [
@@ -653,7 +653,7 @@ class PersonaAnalyzer:
                 text = text.strip()
 
             try:
-                result = json.loads(text)
+                result = json.loads(text, strict=False)
             except json.JSONDecodeError:
                 result = _repair_truncated_json(text)
             result["_tokens_used"] = tokens
@@ -845,7 +845,7 @@ def _repair_truncated_json(text: str) -> dict:
             candidate += "]" * max(open_brackets, 0)
             candidate += "}" * max(open_braces, 0)
             try:
-                result = json.loads(candidate)
+                result = json.loads(candidate, strict=False)
                 if isinstance(result, dict):
                     logger.warning(
                         "Repaired truncated JSON (%d chars trimmed)",

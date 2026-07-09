@@ -55,14 +55,14 @@ class AnthropicClient:
                 text = text.split("```")[1].split("```")[0].strip()
 
             try:
-                return json.loads(text)
+                return json.loads(text, strict=False)
             except json.JSONDecodeError:
                 # Try finding JSON object boundaries as fallback
                 start = raw_text.find("{")
                 end = raw_text.rfind("}")
                 if start != -1 and end > start:
                     try:
-                        return json.loads(raw_text[start : end + 1])
+                        return json.loads(raw_text[start : end + 1], strict=False)
                     except json.JSONDecodeError:
                         pass
 

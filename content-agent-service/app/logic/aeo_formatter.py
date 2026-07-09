@@ -70,7 +70,7 @@ class AEOFormatter:
 
             import json
 
-            data = json.loads(text)
+            data = json.loads(text, strict=False)
             faq_items = data.get("faq_items", [])[:5]
 
             structured_data = self._build_jsonld(faq_items)

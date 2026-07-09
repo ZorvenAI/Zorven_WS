@@ -49,7 +49,7 @@ class AnthropicClient:
                 response.usage.input_tokens,
                 response.usage.output_tokens,
             )
-            parsed = json.loads(text)
+            parsed = json.loads(text, strict=False)
             return _ensure_dict(parsed)
         except json.JSONDecodeError:
             logger.warning("Claude returned non-JSON, attempting extraction")
@@ -59,7 +59,7 @@ class AnthropicClient:
             start = text.find("{")
             end = text.rfind("}") + 1
             if start >= 0 and end > start:
-                parsed = json.loads(text[start:end])
+                parsed = json.loads(text[start:end], strict=False)
                 result = _ensure_dict(parsed)
                 logger.info(
                     "Extracted JSON keys: %s (type=%s)",

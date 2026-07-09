@@ -140,7 +140,7 @@ class ResearchReportGenerator(BaseSkill):
                     content = content[4:]
                 content = content.strip()
 
-            report_data = json.loads(content)
+            report_data = json.loads(content, strict=False)
 
             return SkillResult(
                 skill_id=self.meta.skill_id,

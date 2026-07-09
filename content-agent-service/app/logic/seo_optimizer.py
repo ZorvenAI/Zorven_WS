@@ -75,7 +75,7 @@ class SEOOptimizer:
 
             import json
 
-            data = json.loads(text)
+            data = json.loads(text, strict=False)
 
             # Enforce constraints
             meta_title = str(data.get("meta_title", topic))[:60]

@@ -148,7 +148,7 @@ class AnthropicClient:
                     max_tokens or settings.ANTHROPIC_MAX_TOKENS,
                 )
             try:
-                return _ensure_dict(json.loads(text))
+                return _ensure_dict(json.loads(text, strict=False))
             except json.JSONDecodeError:
                 pass
 
@@ -159,7 +159,7 @@ class AnthropicClient:
             )
             candidate = _strip_fences(text)
             try:
-                return _ensure_dict(json.loads(candidate))
+                return _ensure_dict(json.loads(candidate, strict=False))
             except json.JSONDecodeError:
                 pass
 
@@ -170,7 +170,7 @@ class AnthropicClient:
                     ("balanced+repair", _repair_json(balanced)),
                 ):
                     try:
-                        parsed = json.loads(attempt_text)
+                        parsed = json.loads(attempt_text, strict=False)
                         result = _ensure_dict(parsed)
                         logger.info(
                             "Extracted JSON via %s: keys=%s (type=%s)",
@@ -188,7 +188,7 @@ class AnthropicClient:
                         )
             # Last-ditch: repair the whole candidate
             try:
-                parsed = json.loads(_repair_json(candidate))
+                parsed = json.loads(_repair_json(candidate, strict=False))
                 result = _ensure_dict(parsed)
                 logger.info(
                     "Extracted JSON via full-repair: keys=%s",

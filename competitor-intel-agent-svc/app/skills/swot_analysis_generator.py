@@ -152,7 +152,7 @@ def _parse_json_response(text: str) -> dict:
         if text.startswith("json"):
             text = text[4:]
         text = text.strip()
-    return json.loads(text)
+    return json.loads(text, strict=False)
 
 
 def _count_tokens(message: Any) -> int:

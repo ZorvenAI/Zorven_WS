@@ -295,7 +295,7 @@ class SlangLanguageTracker(BaseSkill):
         # Strip markdown fences if present
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-        terms = _json.loads(text)
+        terms = _json.loads(text, strict=False)
         if not isinstance(terms, list):
             return []
 

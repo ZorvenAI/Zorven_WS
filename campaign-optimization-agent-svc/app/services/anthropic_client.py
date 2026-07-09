@@ -59,7 +59,7 @@ class AnthropicClient:
                 text = text.split("```json")[1].split("```")[0].strip()
             elif "```" in text:
                 text = text.split("```")[1].split("```")[0].strip()
-            return json.loads(text)
+            return json.loads(text, strict=False)
         except (json.JSONDecodeError, IndexError) as exc:
             logger.warning("Failed to parse LLM JSON response: %s", exc)
             return {"raw_text": text, "parse_error": str(exc)}

@@ -98,7 +98,7 @@ def _safe_json_loads(text: str) -> dict[str, Any]:
             cleaned = cleaned[:-3].strip()
     # Try direct parse
     try:
-        return json.loads(cleaned)
+        return json.loads(cleaned, strict=False)
     except json.JSONDecodeError:
         pass
     # Last resort: extract first {...} block
@@ -106,7 +106,7 @@ def _safe_json_loads(text: str) -> dict[str, Any]:
     end = cleaned.rfind("}")
     if start != -1 and end != -1 and end > start:
         try:
-            return json.loads(cleaned[start : end + 1])
+            return json.loads(cleaned[start : end + 1], strict=False)
         except json.JSONDecodeError:
             pass
     logger.warning("Could not parse Anthropic JSON response")

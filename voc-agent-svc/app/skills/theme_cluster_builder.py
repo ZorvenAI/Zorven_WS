@@ -256,7 +256,7 @@ class ThemeClusterBuilder(BaseSkill):
                     json_lines.append(line)
             text = "\n".join(json_lines)
         try:
-            result = json.loads(text)
+            result = json.loads(text, strict=False)
             if isinstance(result, dict):
                 return result
             return {}
