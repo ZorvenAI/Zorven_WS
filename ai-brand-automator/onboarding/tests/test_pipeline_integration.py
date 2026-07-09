@@ -143,7 +143,7 @@ class TestCompanyRAGExportFlow:
 
     def test_company_document_build_complete(self):
         """Build company document with all fields populated."""
-        from onboarding.tasks import _build_company_document
+        from rag_index.services.db_sync_service import DbSyncService
 
         tenant = create_test_tenant()
         company = Company.objects.create(
@@ -155,16 +155,14 @@ class TestCompanyRAGExportFlow:
             values="Innovation, Quality",
         )
 
-        doc = _build_company_document(company)
+        doc = DbSyncService().build_document("Company", company)
 
         # Verify document structure
         assert doc["document_type"] == "company_profile"
-        assert doc["tenant_id"] == str(tenant.id)
-        assert doc["company_id"] == company.id
-        assert doc["source"] == "onboarding_service"
+        assert doc["metadata"]["company_id"] == str(company.id)
 
         # Verify content includes all text fields
-        content = doc["content"]
+        content = doc["extracted_text"]
         assert "RAG Export Company" in content
         assert "test company for RAG" in content
         assert "Technology" in content

@@ -143,7 +143,7 @@ class TestPipelineServiceProperties:
         self, db, company_name, description, industry
     ):
         """Company document should always include company name in content."""
-        from onboarding.tasks import _build_company_document
+        from rag_index.services.db_sync_service import DbSyncService
 
         tenant = create_test_tenant()
         company = Company.objects.create(
@@ -153,12 +153,12 @@ class TestPipelineServiceProperties:
             industry=industry,
         )
 
-        doc = _build_company_document(company)
+        doc = DbSyncService().build_document("Company", company)
 
         assert doc["document_type"] == "company_profile"
-        assert doc["company_id"] == company.id
+        assert doc["metadata"]["company_id"] == str(company.id)
         # Name should be in content
-        assert company.name in doc["content"]
+        assert company.name in doc["extracted_text"]
 
 
 @pytest.mark.django_db
