@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     LLM_MODEL: str = "claude-sonnet-5"
     LLM_TEMPERATURE: float = 0.3
-    LLM_MAX_TOKENS: int = 16384
+    LLM_MAX_TOKENS: int = 32768
 
     # Data sources
     TAVILY_API_KEY: str = ""
