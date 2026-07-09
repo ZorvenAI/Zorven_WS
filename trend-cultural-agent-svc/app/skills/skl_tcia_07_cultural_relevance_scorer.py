@@ -130,7 +130,7 @@ class CulturalRelevanceScorer(BaseSkill):
         try:
             llm_kwargs = dict(
                 model="claude-sonnet-5",
-                max_tokens=4096,
+                max_tokens=16384,
                 thinking={"type": "disabled"},
                 messages=[{"role": "user", "content": prompt}],
             )

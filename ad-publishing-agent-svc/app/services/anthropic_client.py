@@ -21,7 +21,7 @@ class AnthropicClient:
         self,
         system_prompt: str,
         user_prompt: str,
-        max_tokens: int = 4096,
+        max_tokens: int = 16384,
     ) -> str:
         """Send a prompt and return the text response."""
         if self._client is None:
@@ -39,7 +39,7 @@ class AnthropicClient:
         self,
         system_prompt: str,
         user_prompt: str,
-        max_tokens: int = 4096,
+        max_tokens: int = 16384,
     ) -> dict[str, Any]:
         """Send a prompt and parse the response as JSON."""
         text = await self.generate(

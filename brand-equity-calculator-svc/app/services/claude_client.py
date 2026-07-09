@@ -157,7 +157,7 @@ class ClaudeClient:
 
         message = await self._client.messages.create(
             model=settings.CLAUDE_MODEL,
-            max_tokens=4096,
+            max_tokens=16384,
             thinking={"type": "disabled"},
             system=ISO_20671_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": _build_user_prompt(request)}],
