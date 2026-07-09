@@ -737,6 +737,7 @@ class PersonaAnalyzer:
         return await self._anthropic.messages.create(
             model=settings.LLM_MODEL,
             max_tokens=settings.LLM_MAX_TOKENS,
+            thinking={"type": "disabled"},
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )

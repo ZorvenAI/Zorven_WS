@@ -26,6 +26,7 @@ class AnthropicClient:
             response = await self._client.messages.create(
                 model=settings.ANTHROPIC_MODEL,
                 max_tokens=max_tokens or settings.ANTHROPIC_MAX_TOKENS,
+                thinking={"type": "disabled"},
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )

@@ -38,6 +38,7 @@ class AnthropicClient:
             response = await self._client.messages.create(
                 model=self._model,
                 max_tokens=max_tokens or self._max_tokens,
+                thinking={"type": "disabled"},
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )
@@ -106,6 +107,7 @@ class AnthropicClient:
             response = await self._client.messages.create(
                 model=self._model,
                 max_tokens=max_tokens or self._max_tokens,
+                thinking={"type": "disabled"},
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )

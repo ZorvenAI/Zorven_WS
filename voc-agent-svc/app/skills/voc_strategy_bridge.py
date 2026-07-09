@@ -302,6 +302,7 @@ class VoCStrategyBridge(BaseSkill):
             response = await self._client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
+                thinking={"type": "disabled"},
                 system=system_msg,
                 messages=[
                     {
