@@ -77,7 +77,7 @@ class TestBrandNamingExtractor:
     def setup_method(self):
         self.extractor = BrandNamingExtractor()
 
-    @patch("analytics.extractors.brand_naming.MetricSnapshot")
+    @patch("analytics.extractors.base.MetricSnapshot")
     def test_extracts_all_metrics(self, MockSnapshot):
         MockSnapshot.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
         job = _mock_job(_full_nta_result())
@@ -96,7 +96,7 @@ class TestBrandNamingExtractor:
         assert "naming_confidence" in metric_names
         assert "naming_execution_time" in metric_names
 
-    @patch("analytics.extractors.brand_naming.MetricSnapshot")
+    @patch("analytics.extractors.base.MetricSnapshot")
     def test_candidates_count(self, MockSnapshot):
         MockSnapshot.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
         job = _mock_job(_full_nta_result())
@@ -107,7 +107,7 @@ class TestBrandNamingExtractor:
         )
         assert count_metric.metric_value == 2.0
 
-    @patch("analytics.extractors.brand_naming.MetricSnapshot")
+    @patch("analytics.extractors.base.MetricSnapshot")
     def test_top_score(self, MockSnapshot):
         MockSnapshot.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
         job = _mock_job(_full_nta_result())
@@ -116,7 +116,7 @@ class TestBrandNamingExtractor:
         top = next(m for m in metrics if m.metric_name == "naming_top_score")
         assert top.metric_value == 86.0
 
-    @patch("analytics.extractors.brand_naming.MetricSnapshot")
+    @patch("analytics.extractors.base.MetricSnapshot")
     def test_domain_available_pct(self, MockSnapshot):
         MockSnapshot.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
         job = _mock_job(_full_nta_result())
@@ -126,7 +126,7 @@ class TestBrandNamingExtractor:
         # 1 out of 2 have .com available → 50%
         assert pct.metric_value == 50.0
 
-    @patch("analytics.extractors.brand_naming.MetricSnapshot")
+    @patch("analytics.extractors.base.MetricSnapshot")
     def test_trademark_clear_pct(self, MockSnapshot):
         MockSnapshot.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
         job = _mock_job(_full_nta_result())
@@ -136,7 +136,7 @@ class TestBrandNamingExtractor:
         # 1 out of 2 are clear → 50%
         assert pct.metric_value == 50.0
 
-    @patch("analytics.extractors.brand_naming.MetricSnapshot")
+    @patch("analytics.extractors.base.MetricSnapshot")
     def test_confidence_normalized(self, MockSnapshot):
         MockSnapshot.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
         job = _mock_job(_full_nta_result())
@@ -146,7 +146,7 @@ class TestBrandNamingExtractor:
         # 0.82 * 100 = 82.0
         assert conf.metric_value == 82.0
 
-    @patch("analytics.extractors.brand_naming.MetricSnapshot")
+    @patch("analytics.extractors.base.MetricSnapshot")
     def test_empty_result_returns_minimal(self, MockSnapshot):
         MockSnapshot.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
         job = _mock_job({"node_results": {"brand_naming": {}}})
@@ -156,7 +156,7 @@ class TestBrandNamingExtractor:
         names = [m.metric_name for m in metrics]
         assert "naming_taglines_count" in names
 
-    @patch("analytics.extractors.brand_naming.MetricSnapshot")
+    @patch("analytics.extractors.base.MetricSnapshot")
     def test_fallback_to_direct_result(self, MockSnapshot):
         """When data is not under node_results, fall back to result_data."""
         MockSnapshot.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)

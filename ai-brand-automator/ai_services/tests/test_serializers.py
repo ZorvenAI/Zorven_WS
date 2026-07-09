@@ -112,6 +112,7 @@ class TestChatSessionSerializer:
             "last_activity",
             "last_message_preview",
             "message_count",
+            "is_pinned",
         }
         assert set(serializer.data.keys()) == expected_fields
 
@@ -304,6 +305,7 @@ class TestSessionAttachmentSerializer:
             "file_size",
             "pipeline_status",
             "created_at",
+            "thumbnail_url",
         }
         assert set(serializer.data.keys()) == expected
 
