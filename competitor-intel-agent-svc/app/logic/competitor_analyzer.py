@@ -516,7 +516,7 @@ class CompetitorAnalyzer:
                     content = content[4:]
                 content = content.strip()
 
-            plan = json.loads(content)
+            plan = json.loads(content, strict=False)
 
             # Ensure skill_sequence only contains available skills
             plan["skill_sequence"] = [
@@ -949,7 +949,7 @@ class CompetitorAnalyzer:
                     content = content[4:]
                 content = content.strip()
 
-            synthesis = json.loads(content)
+            synthesis = json.loads(content, strict=False)
             return synthesis
         except Exception as exc:
             logger.error(

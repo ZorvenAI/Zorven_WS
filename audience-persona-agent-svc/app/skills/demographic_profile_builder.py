@@ -173,7 +173,7 @@ def _parse_json_response(text: str) -> dict:
             text = text[4:]
         text = text.strip()
     try:
-        return json.loads(text)
+        return json.loads(text, strict=False)
     except json.JSONDecodeError:
         return _repair_truncated_json(text)
 
@@ -189,7 +189,7 @@ def _repair_truncated_json(text: str) -> dict:
             candidate += "]" * max(open_brackets, 0)
             candidate += "}" * max(open_braces, 0)
             try:
-                result = json.loads(candidate)
+                result = json.loads(candidate, strict=False)
                 if isinstance(result, dict):
                     logger.warning(
                         "Repaired truncated JSON (%d chars trimmed)",

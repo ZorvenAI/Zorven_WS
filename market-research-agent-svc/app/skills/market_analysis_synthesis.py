@@ -138,7 +138,7 @@ class MarketAnalysisSynthesis(BaseSkill):
                     content = content[4:]
                 content = content.strip()
 
-            synthesis = json.loads(content)
+            synthesis = json.loads(content, strict=False)
             synthesis["analysis_type"] = analysis_type
 
             return SkillResult(

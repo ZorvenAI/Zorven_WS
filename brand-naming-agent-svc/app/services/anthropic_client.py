@@ -38,7 +38,7 @@ class AnthropicClient:
                 response.usage.input_tokens,
                 response.usage.output_tokens,
             )
-            return json.loads(text)
+            return json.loads(text, strict=False)
         except json.JSONDecodeError:
             logger.error("Claude returned non-JSON, attempting extraction")
             text = next(
@@ -47,7 +47,7 @@ class AnthropicClient:
             start = text.find("{")
             end = text.rfind("}") + 1
             if start >= 0 and end > start:
-                return json.loads(text[start:end])
+                return json.loads(text[start:end], strict=False)
             return {"raw_response": text}
         except Exception as exc:
             logger.error(

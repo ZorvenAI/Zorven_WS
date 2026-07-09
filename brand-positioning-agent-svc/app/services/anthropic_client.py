@@ -52,7 +52,7 @@ class AnthropicClient:
             elif "```" in text:
                 text = text.split("```")[1].split("```")[0].strip()
 
-            return json.loads(text)
+            return json.loads(text, strict=False)
         except json.JSONDecodeError:
             logger.warning("Failed to parse JSON from Claude response")
             return {

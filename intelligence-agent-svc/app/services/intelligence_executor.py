@@ -618,7 +618,7 @@ class IntelligenceExecutor:
             if text.startswith("```"):
                 text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
 
-            data = _json.loads(text)
+            data = _json.loads(text, strict=False)
 
             # Validate required fields
             required = {
