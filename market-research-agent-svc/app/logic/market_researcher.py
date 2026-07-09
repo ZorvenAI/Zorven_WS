@@ -92,7 +92,7 @@ class MarketResearcher:
         event_emitter: EventEmitter,
         anthropic_client: Any = None,
         model: str = "claude-sonnet-5",
-        max_tokens: int = 16384,
+        max_tokens: int = 32768,
         prompt_loader: Any = None,
         # Legacy clients for backward-compatible data compilation
         tavily_client: Optional[TavilySearchClient] = None,
