@@ -2196,13 +2196,13 @@ function normalizeScore(v: number): number {
 
 function AudiencePersonaSection({
   executiveSummary,
-  personas,
-  journeyMaps,
-  segmentMatrix,
-  sources,
+  personas: rawPersonas,
+  journeyMaps: rawJourneyMaps,
+  segmentMatrix: rawSegmentMatrix,
+  sources: rawSources,
   confidenceScore,
-  findings,
-  recommendations,
+  findings: rawFindings,
+  recommendations: rawRecommendations,
 }: {
   executiveSummary?: string;
   personas?: PersonaProfileFE[];
@@ -2213,6 +2213,14 @@ function AudiencePersonaSection({
   findings?: string[];
   recommendations?: string[];
 }) {
+  // Defensive: ensure arrays are actually arrays (LLM data can be malformed)
+  const personas = Array.isArray(rawPersonas) ? rawPersonas : undefined;
+  const journeyMaps = Array.isArray(rawJourneyMaps) ? rawJourneyMaps : undefined;
+  const segmentMatrix = rawSegmentMatrix && typeof rawSegmentMatrix === 'object' && !Array.isArray(rawSegmentMatrix) ? rawSegmentMatrix : undefined;
+  const sources = Array.isArray(rawSources) ? rawSources : undefined;
+  const findings = Array.isArray(rawFindings) ? rawFindings : undefined;
+  const recommendations = Array.isArray(rawRecommendations) ? rawRecommendations : undefined;
+
   const [expandedPersona, setExpandedPersona] = useState<string | null>(null);
   const [expandedJourney, setExpandedJourney] = useState<string | null>(null);
 
@@ -2251,7 +2259,7 @@ function AudiencePersonaSection({
       </div>
 
       {/* Executive Summary */}
-      {executiveSummary && (
+      {executiveSummary && typeof executiveSummary === 'string' && (
         <section>
           <h5 className="font-heading text-xs font-semibold text-brand-silver/60 uppercase tracking-wider mb-2">
             Executive Summary
