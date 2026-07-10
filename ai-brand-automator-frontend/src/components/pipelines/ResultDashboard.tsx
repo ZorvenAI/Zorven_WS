@@ -2221,6 +2221,12 @@ function AudiencePersonaSection({
   const findings = Array.isArray(rawFindings) ? rawFindings : undefined;
   const recommendations = Array.isArray(rawRecommendations) ? rawRecommendations : undefined;
 
+  // Helper: coerce any value to an array — prevents .map() crash on strings/objects/null
+  const safeArr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+  // Helper: coerce to Record — prevents Object.entries() crash on non-objects
+  const safeObj = (v: unknown): Record<string, unknown> =>
+    v != null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+
   const [expandedPersona, setExpandedPersona] = useState<string | null>(null);
   const [expandedJourney, setExpandedJourney] = useState<string | null>(null);
 
@@ -2321,33 +2327,33 @@ function AudiencePersonaSection({
                   </div>
 
                   {/* Pain Points & Motivations (always visible) */}
-                  {Array.isArray(persona.pain_points) && persona.pain_points.length > 0 && (
+                  {safeArr(persona.pain_points).length > 0 && (
                     <div>
                       <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Pain Points</span>
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {persona.pain_points.slice(0, isExpanded ? undefined : 3).map((pp, i) => (
+                        {safeArr(persona.pain_points).slice(0, isExpanded ? undefined : 3).map((pp, i) => (
                           <span key={i} className="rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] text-red-400">
                             {displayValue(pp)}
                           </span>
                         ))}
-                        {!isExpanded && persona.pain_points.length > 3 && (
-                          <span className="text-[11px] text-brand-silver/40">+{persona.pain_points.length - 3} more</span>
+                        {!isExpanded && safeArr(persona.pain_points).length > 3 && (
+                          <span className="text-[11px] text-brand-silver/40">+{safeArr(persona.pain_points).length - 3} more</span>
                         )}
                       </div>
                     </div>
                   )}
 
-                  {Array.isArray(persona.motivations) && persona.motivations.length > 0 && (
+                  {safeArr(persona.motivations).length > 0 && (
                     <div>
                       <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Motivations</span>
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {persona.motivations.slice(0, isExpanded ? undefined : 3).map((m, i) => (
+                        {safeArr(persona.motivations).slice(0, isExpanded ? undefined : 3).map((m, i) => (
                           <span key={i} className="rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] text-green-400">
                             {displayValue(m)}
                           </span>
                         ))}
-                        {!isExpanded && persona.motivations.length > 3 && (
-                          <span className="text-[11px] text-brand-silver/40">+{persona.motivations.length - 3} more</span>
+                        {!isExpanded && safeArr(persona.motivations).length > 3 && (
+                          <span className="text-[11px] text-brand-silver/40">+{safeArr(persona.motivations).length - 3} more</span>
                         )}
                       </div>
                     </div>
@@ -2357,11 +2363,11 @@ function AudiencePersonaSection({
                   {isExpanded && (
                     <div className="space-y-3 pt-2 border-t border-white/5">
                       {/* Demographics Grid */}
-                      {persona.demographics && typeof persona.demographics === 'object' && !Array.isArray(persona.demographics) && Object.keys(persona.demographics).length > 0 && (
+                      {Object.keys(safeObj(persona.demographics)).length > 0 && (
                         <div>
                           <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Demographics</span>
                           <div className="grid grid-cols-2 gap-2 mt-1">
-                            {Object.entries(persona.demographics).map(([key, val]) => (
+                            {Object.entries(safeObj(persona.demographics)).map(([key, val]) => (
                               <div key={key} className="text-[11px]">
                                 <span className="text-brand-silver/50 capitalize">{key.replace(/_/g, ' ')}: </span>
                                 <span className="text-brand-silver">{displayValue(val)}</span>
@@ -2372,11 +2378,11 @@ function AudiencePersonaSection({
                       )}
 
                       {/* Psychographics */}
-                      {persona.psychographics && typeof persona.psychographics === 'object' && !Array.isArray(persona.psychographics) && Object.keys(persona.psychographics).length > 0 && (
+                      {Object.keys(safeObj(persona.psychographics)).length > 0 && (
                         <div>
                           <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Psychographics</span>
                           <div className="grid grid-cols-2 gap-2 mt-1">
-                            {Object.entries(persona.psychographics).map(([key, val]) => (
+                            {Object.entries(safeObj(persona.psychographics)).map(([key, val]) => (
                               <div key={key} className="text-[11px]">
                                 <span className="text-brand-silver/50 capitalize">{key.replace(/_/g, ' ')}: </span>
                                 <span className="text-brand-silver">{displayValue(val)}</span>
@@ -2387,11 +2393,11 @@ function AudiencePersonaSection({
                       )}
 
                       {/* Objections */}
-                      {Array.isArray(persona.objections) && persona.objections.length > 0 && (
+                      {safeArr(persona.objections).length > 0 && (
                         <div>
                           <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Objections</span>
                           <div className="flex flex-wrap gap-1 mt-1">
-                            {persona.objections.map((o, i) => (
+                            {safeArr(persona.objections).map((o, i) => (
                               <span key={i} className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-400">
                                 {displayValue(o)}
                               </span>
@@ -2401,11 +2407,11 @@ function AudiencePersonaSection({
                       )}
 
                       {/* Preferred Channels */}
-                      {Array.isArray(persona.preferred_channels) && persona.preferred_channels.length > 0 && (
+                      {safeArr(persona.preferred_channels).length > 0 && (
                         <div>
                           <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Preferred Channels</span>
                           <div className="flex flex-wrap gap-1 mt-1">
-                            {persona.preferred_channels.map((ch, i) => (
+                            {safeArr(persona.preferred_channels).map((ch, i) => (
                               <span key={i} className="rounded-full bg-brand-electric/10 px-2 py-0.5 text-[11px] text-brand-electric">
                                 {displayValue(ch)}
                               </span>
@@ -2471,7 +2477,9 @@ function AudiencePersonaSection({
 
                   {/* Stage Timeline */}
                   <div className="flex items-center gap-1 overflow-x-auto">
-                    {(journey.stages ?? []).map((stage, si) => (
+                    {safeArr(journey.stages).map((rawStage, si) => {
+                      const stage = safeObj(rawStage) as unknown as JourneyStageFE;
+                      return (
                       <div key={si} className="flex items-center">
                         <div className="flex flex-col items-center min-w-[80px]">
                           <span className="text-lg">
@@ -2486,17 +2494,20 @@ function AudiencePersonaSection({
                             </span>
                           )}
                         </div>
-                        {si < (journey.stages ?? []).length - 1 && (
+                        {si < safeArr(journey.stages).length - 1 && (
                           <div className="w-4 h-px bg-white/20 mx-0.5" />
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Expanded Stage Details */}
                   {isJExpanded && (
                     <div className="space-y-3 pt-2 border-t border-white/5">
-                      {(journey.stages ?? []).map((stage, si) => (
+                      {safeArr(journey.stages).map((rawStage, si) => {
+                        const stage = safeObj(rawStage) as unknown as JourneyStageFE;
+                        return (
                         <div key={si} className="rounded border border-white/5 bg-white/[0.02] p-3 space-y-2">
                           <div className="flex items-center gap-2">
                             <span>{stageEmojis[stage.name] || '📌'}</span>
@@ -2513,44 +2524,44 @@ function AudiencePersonaSection({
                           )}
 
                           <div className="grid grid-cols-2 gap-2">
-                            {stage.touchpoints && stage.touchpoints.length > 0 && (
+                            {safeArr(stage.touchpoints).length > 0 && (
                               <div>
                                 <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Touchpoints</span>
                                 <ul className="mt-0.5 space-y-0.5">
-                                  {stage.touchpoints.map((tp, ti) => (
+                                  {safeArr(stage.touchpoints).map((tp, ti) => (
                                     <li key={ti} className="text-[10px] text-brand-silver/60">• {displayValue(tp)}</li>
                                   ))}
                                 </ul>
                               </div>
                             )}
 
-                            {stage.info_needs && stage.info_needs.length > 0 && (
+                            {safeArr(stage.info_needs).length > 0 && (
                               <div>
                                 <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Info Needs</span>
                                 <ul className="mt-0.5 space-y-0.5">
-                                  {stage.info_needs.map((need, ni) => (
+                                  {safeArr(stage.info_needs).map((need, ni) => (
                                     <li key={ni} className="text-[10px] text-brand-silver/60">• {displayValue(need)}</li>
                                   ))}
                                 </ul>
                               </div>
                             )}
 
-                            {stage.decision_criteria && stage.decision_criteria.length > 0 && (
+                            {safeArr(stage.decision_criteria).length > 0 && (
                               <div>
                                 <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Decision Criteria</span>
                                 <ul className="mt-0.5 space-y-0.5">
-                                  {stage.decision_criteria.map((dc, di) => (
+                                  {safeArr(stage.decision_criteria).map((dc, di) => (
                                     <li key={di} className="text-[10px] text-brand-silver/60">• {displayValue(dc)}</li>
                                   ))}
                                 </ul>
                               </div>
                             )}
 
-                            {stage.content_recommendations && stage.content_recommendations.length > 0 && (
+                            {safeArr(stage.content_recommendations).length > 0 && (
                               <div>
                                 <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Content Recs</span>
                                 <ul className="mt-0.5 space-y-0.5">
-                                  {stage.content_recommendations.map((cr, ci) => (
+                                  {safeArr(stage.content_recommendations).map((cr, ci) => (
                                     <li key={ci} className="text-[10px] text-brand-silver/60">• {displayValue(cr)}</li>
                                   ))}
                                 </ul>
@@ -2558,29 +2569,29 @@ function AudiencePersonaSection({
                             )}
                           </div>
 
-                          {stage.objections && stage.objections.length > 0 && (
+                          {safeArr(stage.objections).length > 0 && (
                             <div>
                               <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Objections at this stage</span>
                               <div className="flex flex-wrap gap-1 mt-0.5">
-                                {stage.objections.map((obj, oi) => (
+                                {safeArr(stage.objections).map((obj, oi) => (
                                   <span key={oi} className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-400">{displayValue(obj)}</span>
                                 ))}
                               </div>
                             </div>
                           )}
 
-                          {stage.key_actions && stage.key_actions.length > 0 && (
+                          {safeArr(stage.key_actions).length > 0 && (
                             <div>
                               <span className="text-[9px] uppercase tracking-wider text-brand-silver/40">Key Actions</span>
                               <ul className="mt-0.5 space-y-0.5">
-                                {stage.key_actions.map((action, ai) => (
+                                {safeArr(stage.key_actions).map((action, ai) => (
                                   <li key={ai} className="text-[10px] text-brand-silver/60">• {displayValue(action)}</li>
                                 ))}
                               </ul>
                             </div>
                           )}
                         </div>
-                      ))}
+                        ); })}
                     </div>
                   )}
                 </div>
