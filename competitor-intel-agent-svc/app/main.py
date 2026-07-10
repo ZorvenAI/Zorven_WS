@@ -105,6 +105,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     prompt_loader = AgentPromptClient(
         redis_url=settings.PROMPT_CACHE_REDIS_URL,
         mlflow_uri=settings.MLFLOW_TRACKING_URI,
+        fallback_only=settings.PROMPT_FALLBACK_ONLY,
     )
     await prompt_loader.start()
 
