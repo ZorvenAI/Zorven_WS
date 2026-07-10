@@ -81,7 +81,12 @@ class AgentPromptClient:
                 "MLflow URI not configured — prompt loader in fallback-only mode"
             )
 
-        logger.info("Prompt loader initialized")
+        logger.info(
+            "Prompt loader initialized (fallback_only=%s, redis=%s, mlflow=%s)",
+            self.fallback_only,
+            self._redis is not None,
+            self._http is not None,
+        )
 
     async def stop(self) -> None:
         """Close connections."""
@@ -122,15 +127,19 @@ class AgentPromptClient:
 
         # Tier 1: Redis cache
         template = await self._cache_get(name, tenant_id)
+        if template is not None:
+            logger.info("Loaded prompt '%s' from Redis cache (tenant=%s)", name, tenant_id)
 
         # Tier 2: MLflow API
         if template is None:
             template = await self._mlflow_get(name, tenant_id)
             if template is not None:
+                logger.info("Loaded prompt '%s' from MLflow (tenant=%s)", name, tenant_id)
                 await self._cache_set(name, template, resolve_ttl, tenant_id)
 
         # Tier 3: Fallback
         if template is None:
+            logger.info("Prompt '%s' not found in cache/MLflow, using fallback (tenant=%s)", name, tenant_id)
             if fallback:
                 if self.critical_agent:
                     logger.warning(
