@@ -734,13 +734,14 @@ class PersonaAnalyzer:
         user_message: str,
     ) -> Any:
         """Call the Anthropic API."""
-        return await self._anthropic.messages.create(
+        async with self._anthropic.messages.stream(
             model=settings.LLM_MODEL,
             max_tokens=settings.LLM_MAX_TOKENS,
             thinking={"type": "disabled"},
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
-        )
+        ) as _stream:
+            return await _stream.get_final_message()
 
     # ── Error Response ──
 

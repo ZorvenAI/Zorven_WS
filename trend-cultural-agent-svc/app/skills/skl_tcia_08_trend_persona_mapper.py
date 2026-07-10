@@ -116,12 +116,18 @@ class TrendPersonaMapper(BaseSkill):
                 thinking={"type": "disabled"},
                 messages=[{"role": "user", "content": prompt}],
             )
+
+            async def _stream_create(**kwargs):
+                async with self._anthropic.messages.stream(**kwargs) as s:
+                    return await s.get_final_message()
+
             if self._cb_llm:
                 response = await self._cb_llm.call(
-                    self._anthropic.messages.create, **llm_kwargs
+                    _stream_create, **llm_kwargs
                 )
             else:
-                response = await self._anthropic.messages.create(**llm_kwargs)
+                async with self._anthropic.messages.stream(**llm_kwargs) as _stream:
+                    response = await _stream.get_final_message()
             text = next(b.text for b in response.content if b.type == "text").strip()
             matrix = self._parse_json_response(text)
             tokens_used = (

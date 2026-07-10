@@ -155,13 +155,14 @@ class ClaudeClient:
             request.company_name,
         )
 
-        message = await self._client.messages.create(
+        async with self._client.messages.stream(
             model=settings.CLAUDE_MODEL,
             max_tokens=16384,
             thinking={"type": "disabled"},
             system=ISO_20671_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": _build_user_prompt(request)}],
-        )
+        ) as _stream:
+            message = await _stream.get_final_message()
 
         raw_text = next((b.text for b in message.content if b.type == "text"), None)
         if raw_text is None:

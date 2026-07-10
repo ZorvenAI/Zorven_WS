@@ -146,13 +146,14 @@ class PsychographicBehavioralProfiler(BaseSkill):
                 if ctx:
                     user_message += f"Research ({skill_id}):\n{ctx[:2500]}\n\n"
 
-            message = await self._client.messages.create(
+            async with self._client.messages.stream(
                 model=self.model,
                 max_tokens=self.max_tokens,
                 thinking={"type": "disabled"},
                 system=system,
                 messages=[{"role": "user", "content": user_message[:30000]}],
-            )
+            ) as _stream:
+                message = await _stream.get_final_message()
 
             tokens_used = _count_tokens(message)
             content = _parse_json_response(next(b.text for b in message.content if b.type == "text"))
