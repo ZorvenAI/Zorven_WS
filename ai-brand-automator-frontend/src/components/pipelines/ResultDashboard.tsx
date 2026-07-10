@@ -1453,7 +1453,7 @@ interface BuyingJourneyMapFE {
   persona_slug?: string;
   persona_label?: string;
   total_estimated_cycle_days?: number;
-  stages: JourneyStageFE[];
+  stages?: JourneyStageFE[];
 }
 
 /* ── Trend & Cultural Insights Types ──────────────────────────── */
@@ -2462,7 +2462,7 @@ function AudiencePersonaSection({
 
                   {/* Stage Timeline */}
                   <div className="flex items-center gap-1 overflow-x-auto">
-                    {journey.stages.map((stage, si) => (
+                    {(journey.stages ?? []).map((stage, si) => (
                       <div key={si} className="flex items-center">
                         <div className="flex flex-col items-center min-w-[80px]">
                           <span className="text-lg">
@@ -2477,7 +2477,7 @@ function AudiencePersonaSection({
                             </span>
                           )}
                         </div>
-                        {si < journey.stages.length - 1 && (
+                        {si < (journey.stages ?? []).length - 1 && (
                           <div className="w-4 h-px bg-white/20 mx-0.5" />
                         )}
                       </div>
@@ -2487,7 +2487,7 @@ function AudiencePersonaSection({
                   {/* Expanded Stage Details */}
                   {isJExpanded && (
                     <div className="space-y-3 pt-2 border-t border-white/5">
-                      {journey.stages.map((stage, si) => (
+                      {(journey.stages ?? []).map((stage, si) => (
                         <div key={si} className="rounded border border-white/5 bg-white/[0.02] p-3 space-y-2">
                           <div className="flex items-center gap-2">
                             <span>{stageEmojis[stage.name] || '📌'}</span>
