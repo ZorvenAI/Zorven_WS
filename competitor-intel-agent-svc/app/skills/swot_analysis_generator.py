@@ -115,13 +115,14 @@ class SWOTAnalysisGenerator(BaseSkill):
                     user_message += f"Market context:\n{overview[:800]}\n\n"
             user_message += f"Competitor evidence:\n{raw_data[:25000]}"
 
-            message = await self._client.messages.create(
+            async with self._client.messages.stream(
                 model=self.model,
                 max_tokens=self.max_tokens,
                 thinking={"type": "disabled"},
                 system=system,
                 messages=[{"role": "user", "content": user_message}],
-            )
+            ) as _stream:
+                message = await _stream.get_final_message()
 
             tokens_used = _count_tokens(message)
             content = _parse_json_response(next(b.text for b in message.content if b.type == "text"))

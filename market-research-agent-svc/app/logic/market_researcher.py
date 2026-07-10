@@ -462,13 +462,14 @@ class MarketResearcher:
             if skill_context:
                 system += f"\n\nAdditional context:\n{skill_context[:2000]}"
 
-            message = await self._anthropic_client.messages.create(
+            async with self._anthropic_client.messages.stream(
                 model=self.model,
                 max_tokens=1024,
                 thinking={"type": "disabled"},
                 system=system,
                 messages=[{"role": "user", "content": prompt}],
-            )
+            ) as _stream:
+                message = await _stream.get_final_message()
 
             tokens_used = getattr(message, "usage", None)
             if tokens_used:
@@ -811,13 +812,14 @@ class MarketResearcher:
                 user_message += f"{geo_hint}\n\n"
             user_message += f"Raw research data:\n{raw_context[:30000]}"
 
-            message = await self._anthropic_client.messages.create(
+            async with self._anthropic_client.messages.stream(
                 model=self.model,
                 max_tokens=self.max_tokens,
                 thinking={"type": "disabled"},
                 system=system,
                 messages=[{"role": "user", "content": user_message}],
-            )
+            ) as _stream:
+                message = await _stream.get_final_message()
 
             tokens_used = getattr(message, "usage", None)
             if tokens_used:

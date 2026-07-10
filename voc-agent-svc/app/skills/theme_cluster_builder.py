@@ -177,7 +177,7 @@ class ThemeClusterBuilder(BaseSkill):
                     skill_context=skill_context_text[:1500],
                 )
 
-            response = await self._client.messages.create(
+            async with self._client.messages.stream(
                 model=self.model,
                 max_tokens=self.max_tokens,
                 thinking={"type": "disabled"},
@@ -192,7 +192,8 @@ class ThemeClusterBuilder(BaseSkill):
                         ),
                     }
                 ],
-            )
+            ) as _stream:
+                response = await _stream.get_final_message()
 
             text = next(b.text for b in response.content if b.type == "text").strip()
             parsed = self._parse_json_response(text)

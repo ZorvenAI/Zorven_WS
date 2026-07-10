@@ -284,12 +284,16 @@ class SlangLanguageTracker(BaseSkill):
             "thinking": {"type": "disabled"},
             "messages": [{"role": "user", "content": prompt}],
         }
+
+        async def _stream_create():
+            async with self._anthropic.messages.stream(**call_kwargs) as s:
+                return await s.get_final_message()
+
         if self._cb_llm:
-            response = await self._cb_llm.call(
-                lambda: self._anthropic.messages.create(**call_kwargs)
-            )
+            response = await self._cb_llm.call(_stream_create)
         else:
-            response = await self._anthropic.messages.create(**call_kwargs)
+            async with self._anthropic.messages.stream(**call_kwargs) as _stream:
+                response = await _stream.get_final_message()
 
         text = next(b.text for b in response.content if b.type == "text").strip()
         # Strip markdown fences if present
@@ -325,22 +329,22 @@ class SlangLanguageTracker(BaseSkill):
             f"Verdict:"
         )
         try:
-            call_fn = self._anthropic.messages.create
+            _judge_kwargs = {
+                "model": "claude-sonnet-5",
+                "max_tokens": 10,
+                "thinking": {"type": "disabled"},
+                "messages": [{"role": "user", "content": prompt}],
+            }
+
+            async def _stream_judge():
+                async with self._anthropic.messages.stream(**_judge_kwargs) as s:
+                    return await s.get_final_message()
+
             if self._cb_llm:
-                call_fn_wrapped = lambda: self._anthropic.messages.create(
-                    model="claude-sonnet-5",
-                    max_tokens=10,
-                    thinking={"type": "disabled"},
-                    messages=[{"role": "user", "content": prompt}],
-                )
-                response = await self._cb_llm.call(call_fn_wrapped)
+                response = await self._cb_llm.call(_stream_judge)
             else:
-                response = await self._anthropic.messages.create(
-                    model="claude-sonnet-5",
-                    max_tokens=10,
-                    thinking={"type": "disabled"},
-                    messages=[{"role": "user", "content": prompt}],
-                )
+                async with self._anthropic.messages.stream(**_judge_kwargs) as _stream:
+                    response = await _stream.get_final_message()
             text = next(b.text for b in response.content if b.type == "text").strip().upper()
             return "SENSITIVE" in text
         except Exception as exc:

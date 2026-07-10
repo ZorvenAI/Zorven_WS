@@ -60,13 +60,14 @@ class AnthropicClient:
         if not self._client:
             return {}
         try:
-            msg = await self._client.messages.create(
+            async with self._client.messages.stream(
                 model=self._model,
                 max_tokens=max_tokens,
                 thinking={"type": "disabled"},
                 system=system,
                 messages=[{"role": "user", "content": user}],
-            )
+            ) as _stream:
+                msg = await _stream.get_final_message()
             text = "".join(
                 block.text for block in msg.content if getattr(block, "text", None)
             )

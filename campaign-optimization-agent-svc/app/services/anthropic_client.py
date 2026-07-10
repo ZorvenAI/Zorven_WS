@@ -27,13 +27,14 @@ class AnthropicClient:
         if self._client is None:
             return ""
         try:
-            response = await self._client.messages.create(
+            async with self._client.messages.stream(
                 model=self.model,
                 max_tokens=max_tokens,
                 thinking={"type": "disabled"},
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
-            )
+            ) as _stream:
+                response = await _stream.get_final_message()
             return next(
                 b.text for b in response.content if b.type == "text"
             )

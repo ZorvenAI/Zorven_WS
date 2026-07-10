@@ -118,13 +118,14 @@ class ResearchReportGenerator(BaseSkill):
             else:
                 report_system = _REPORT_SYSTEM
 
-            message = await self._client.messages.create(
+            async with self._client.messages.stream(
                 model=self.model,
                 max_tokens=self.max_tokens,
                 thinking={"type": "disabled"},
                 system=report_system,
                 messages=[{"role": "user", "content": user_msg}],
-            )
+            ) as _stream:
+                message = await _stream.get_final_message()
 
             tokens_used = getattr(message, "usage", None)
             token_count = 0
@@ -140,7 +141,35 @@ class ResearchReportGenerator(BaseSkill):
                     content = content[4:]
                 content = content.strip()
 
-            report_data = json.loads(content, strict=False)
+            try:
+                report_data = json.loads(content, strict=False)
+            except json.JSONDecodeError:
+                # Fallback: try to find JSON object boundaries
+                start_idx = content.find("{")
+                end_idx = content.rfind("}")
+                if start_idx != -1 and end_idx > start_idx:
+                    try:
+                        report_data = json.loads(
+                            content[start_idx : end_idx + 1], strict=False
+                        )
+                    except json.JSONDecodeError:
+                        # Last resort: treat entire response as report text
+                        logger.warning(
+                            "Could not parse report JSON, using raw text"
+                        )
+                        report_data = {
+                            "report_text": content[:50000],
+                            "summary": content[:300],
+                            "word_count": len(content.split()),
+                            "sections": [],
+                        }
+                else:
+                    report_data = {
+                        "report_text": content[:50000],
+                        "summary": content[:300],
+                        "word_count": len(content.split()),
+                        "sections": [],
+                    }
 
             return SkillResult(
                 skill_id=self.meta.skill_id,

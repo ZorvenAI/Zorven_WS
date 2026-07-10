@@ -495,13 +495,14 @@ class CompetitorAnalyzer:
                         f"{mra_summary}"
                     )
 
-            message = await self._anthropic_client.messages.create(
+            async with self._anthropic_client.messages.stream(
                 model=self.model,
                 max_tokens=1024,
                 thinking={"type": "disabled"},
                 system=system,
                 messages=[{"role": "user", "content": prompt}],
-            )
+            ) as _stream:
+                message = await _stream.get_final_message()
 
             tokens_used = getattr(message, "usage", None)
             if tokens_used:
@@ -928,13 +929,14 @@ class CompetitorAnalyzer:
                     user_message += f"Market research context:\n{mra_summary}\n\n"
             user_message += f"Raw competitive data:\n{raw_context[:30000]}"
 
-            message = await self._anthropic_client.messages.create(
+            async with self._anthropic_client.messages.stream(
                 model=self.model,
                 max_tokens=self.max_tokens,
                 thinking={"type": "disabled"},
                 system=system,
                 messages=[{"role": "user", "content": user_message}],
-            )
+            ) as _stream:
+                message = await _stream.get_final_message()
 
             tokens_used = getattr(message, "usage", None)
             if tokens_used:
@@ -949,7 +951,26 @@ class CompetitorAnalyzer:
                     content = content[4:]
                 content = content.strip()
 
-            synthesis = json.loads(content, strict=False)
+            try:
+                synthesis = json.loads(content, strict=False)
+            except json.JSONDecodeError:
+                # Fallback: try to find JSON object boundaries
+                start_idx = content.find("{")
+                end_idx = content.rfind("}")
+                if start_idx != -1 and end_idx > start_idx:
+                    try:
+                        synthesis = json.loads(
+                            content[start_idx : end_idx + 1], strict=False
+                        )
+                    except json.JSONDecodeError:
+                        logger.warning(
+                            "Could not parse synthesis JSON, using raw text"
+                        )
+                        default_synthesis["executive_summary"] = content[:3000]
+                        return default_synthesis
+                else:
+                    default_synthesis["executive_summary"] = content[:3000]
+                    return default_synthesis
             return synthesis
         except Exception as exc:
             logger.error(

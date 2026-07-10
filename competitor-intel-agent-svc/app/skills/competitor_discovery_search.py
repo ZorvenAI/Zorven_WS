@@ -169,25 +169,51 @@ def _slugify(name: str) -> str:
 def _extract_company_hints(title: str, content: str) -> list[str]:
     """Extract potential company names from search result text.
 
-    Simple heuristic — looks for capitalized multi-word sequences
-    near competitor-related keywords.
+    Uses multiple heuristics:
+    1. Title splitting on common separators (|, -, –, —, ·, :)
+    2. "X vs Y" patterns
+    3. Capitalized proper noun sequences near competition keywords
     """
     import re
 
     hints: list[str] = []
-    text = f"{title} {content[:500]}"
-    # Look for "Company vs Company" or "Company - Description" patterns
-    vs_match = re.findall(r"([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*)\s+vs\.?\s+", text)
+
+    # Strategy 1: Extract business name from the title.
+    # Search result titles commonly follow "Business Name | Description",
+    # "Business Name - Location", "Business Name – Tagline" patterns.
+    if title:
+        # Split on common title separators and take the first segment
+        segments = re.split(r"\s*[|–—·]\s*|\s+-\s+", title)
+        first_segment = segments[0].strip() if segments else ""
+        # Only use it if it looks like a proper name (starts with uppercase,
+        # reasonable length, not a generic phrase)
+        if (
+            first_segment
+            and len(first_segment) > 2
+            and len(first_segment) < 60
+            and first_segment[0].isupper()
+        ):
+            hints.append(first_segment)
+
+    text = f"{title} {content[:800]}"
+
+    # Strategy 2: "Company vs Company" patterns
+    vs_match = re.findall(
+        r"([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+)*)\s+vs\.?\s+", text
+    )
     hints.extend(vs_match)
 
-    # Look for capitalized proper nouns near "competitor" keywords
-    comp_keywords = ["competitor", "alternative", "versus", "vs", "compared"]
+    # Strategy 3: Capitalized proper nouns near competition keywords
+    comp_keywords = [
+        "competitor", "alternative", "versus", "vs", "compared",
+        "restaurant", "pizzeria", "cafe", "shop", "store", "company",
+        "business", "brand", "firm",
+    ]
     for keyword in comp_keywords:
         if keyword.lower() in text.lower():
-            # Find nearby capitalized words
             nearby = re.findall(
-                r"([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+){0,2})",
-                text[:300],
+                r"([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){0,3})",
+                text[:800],
             )
             hints.extend(nearby)
             break
@@ -198,13 +224,27 @@ def _extract_company_hints(title: str, content: str) -> list[str]:
     stop_words = {
         "The", "This", "That", "What", "How", "Why", "Top", "Best",
         "New", "Free", "Get", "Our", "Your", "About", "Home",
+        "Here", "Find", "See", "View", "Read", "More", "All",
+        "Menu", "Order", "Online", "Review", "Reviews", "Yelp",
+        "Google", "Facebook", "Instagram", "TripAdvisor",
+        "Updated", "January", "February", "March", "April", "May",
+        "June", "July", "August", "September", "October", "November",
+        "December", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun",
     }
     for h in hints:
         h = h.strip()
-        if h and h not in seen and h not in stop_words and len(h) > 2:
+        h_lower = h.lower()
+        if (
+            h
+            and h not in seen
+            and h not in stop_words
+            and h_lower not in seen
+            and len(h) > 2
+        ):
             seen.add(h)
+            seen.add(h_lower)
             result.append(h)
-    return result[:5]
+    return result[:10]
 
 
 def _elapsed(start: float) -> float:

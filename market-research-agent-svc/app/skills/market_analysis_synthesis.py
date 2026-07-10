@@ -114,13 +114,14 @@ class MarketAnalysisSynthesis(BaseSkill):
                 f"Raw data:\n{raw_data[:30000]}"
             )
 
-            message = await self._client.messages.create(
+            async with self._client.messages.stream(
                 model=self.model,
                 max_tokens=self.max_tokens,
                 thinking={"type": "disabled"},
                 system=system,
                 messages=[{"role": "user", "content": user_msg}],
-            )
+            ) as _stream:
+                message = await _stream.get_final_message()
 
             tokens_used = getattr(message, "usage", None)
             token_count = 0
