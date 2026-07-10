@@ -37,6 +37,7 @@ import { linkFromChat } from '@/lib/workspace';
 import BrandEquityDashboard from './BrandEquityDashboard';
 import ApprovalPanel from './ApprovalPanel';
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 interface ResultDashboardProps {
   resultData: Record<string, unknown>;
@@ -2780,6 +2781,22 @@ interface VoCStrategyBridgeLocal {
   strategic_recommendations?: string[];
 }
 
+/* ── Section Error Fallback ──────────────────────────────────────── */
+
+function SectionErrorFallback({ section }: { section: string }) {
+  return (
+    <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-6 text-center">
+      <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+      <h4 className="text-sm font-semibold text-white mb-1">
+        Could not render {section}
+      </h4>
+      <p className="text-xs text-brand-silver/60">
+        The data for this section could not be displayed. Other sections are unaffected.
+      </p>
+    </div>
+  );
+}
+
 /* ── BrandDiscoverySection — tabbed container for WF1 agents ────── */
 
 type BrandDiscoveryTab = 'market_research' | 'competitor_intel' | 'audience_persona' | 'trend_cultural' | 'voice_of_customer';
@@ -2867,79 +2884,89 @@ function BrandDiscoverySection(props: BrandDiscoverySectionProps) {
 
       {/* Tab content */}
       {activeTab === 'market_research' && props.hasMarketResearch && (
-        <MarketResearchSection
-          marketOverview={props.marketOverview}
-          marketSizing={props.marketSizing}
-          competitiveLandscape={props.competitiveLandscape}
-          industryTrends={props.industryTrends}
-          economicIndicators={props.economicIndicators}
-          sources={props.sources}
-          confidenceScore={cs.market_research ?? props.confidenceScore}
-          findings={props.findings}
-          recommendations={props.recommendations}
-        />
+        <ErrorBoundary fallback={<SectionErrorFallback section="Market Research" />}>
+          <MarketResearchSection
+            marketOverview={props.marketOverview}
+            marketSizing={props.marketSizing}
+            competitiveLandscape={props.competitiveLandscape}
+            industryTrends={props.industryTrends}
+            economicIndicators={props.economicIndicators}
+            sources={props.sources}
+            confidenceScore={cs.market_research ?? props.confidenceScore}
+            findings={props.findings}
+            recommendations={props.recommendations}
+          />
+        </ErrorBoundary>
       )}
 
       {activeTab === 'competitor_intel' && props.hasCompetitorIntelligence && (
-        <CompetitorIntelligenceSection
-          executiveSummary={props.ciaExecutiveSummary}
-          competitors={props.competitors}
-          competitorMatrix={props.competitorMatrix}
-          swotAnalyses={props.swotAnalyses}
-          positioningGaps={props.positioningGaps}
-          benchmarkingReport={props.benchmarkingReport}
-          sources={props.sources}
-          confidenceScore={cs.competitor_intelligence ?? props.confidenceScore}
-          findings={props.findings}
-          recommendations={props.recommendations}
-        />
+        <ErrorBoundary fallback={<SectionErrorFallback section="Competitor Intelligence" />}>
+          <CompetitorIntelligenceSection
+            executiveSummary={props.ciaExecutiveSummary}
+            competitors={props.competitors}
+            competitorMatrix={props.competitorMatrix}
+            swotAnalyses={props.swotAnalyses}
+            positioningGaps={props.positioningGaps}
+            benchmarkingReport={props.benchmarkingReport}
+            sources={props.sources}
+            confidenceScore={cs.competitor_intelligence ?? props.confidenceScore}
+            findings={props.findings}
+            recommendations={props.recommendations}
+          />
+        </ErrorBoundary>
       )}
 
       {activeTab === 'audience_persona' && props.hasAudiencePersona && (
-        <AudiencePersonaSection
-          executiveSummary={props.apaExecutiveSummary}
-          personas={props.personas}
-          journeyMaps={props.journeyMaps}
-          segmentMatrix={props.segmentMatrix}
-          sources={props.sources}
-          confidenceScore={cs.audience_persona ?? props.confidenceScore}
-          findings={props.findings}
-          recommendations={props.recommendations}
-        />
+        <ErrorBoundary fallback={<SectionErrorFallback section="Audience Personas" />}>
+          <AudiencePersonaSection
+            executiveSummary={props.apaExecutiveSummary}
+            personas={props.personas}
+            journeyMaps={props.journeyMaps}
+            segmentMatrix={props.segmentMatrix}
+            sources={props.sources}
+            confidenceScore={cs.audience_persona ?? props.confidenceScore}
+            findings={props.findings}
+            recommendations={props.recommendations}
+          />
+        </ErrorBoundary>
       )}
 
       {activeTab === 'trend_cultural' && props.hasTrendCultural && (
-        <TrendCulturalSection
-          trendReport={props.trendReport}
-          scoredTrends={props.scoredTrends}
-          trendPersonaMatrix={props.trendPersonaMatrix}
-          opportunityAlerts={props.opportunityAlerts}
-          viralPatterns={props.viralPatterns}
-          culturalShifts={props.culturalShifts}
-          generationalInsights={props.generationalInsights}
-          languageTrends={props.languageTrends}
-          sources={props.sources}
-          confidenceScore={cs.trend_cultural ?? props.confidenceScore}
-          findings={props.findings}
-          recommendations={props.recommendations}
-        />
+        <ErrorBoundary fallback={<SectionErrorFallback section="Trends & Culture" />}>
+          <TrendCulturalSection
+            trendReport={props.trendReport}
+            scoredTrends={props.scoredTrends}
+            trendPersonaMatrix={props.trendPersonaMatrix}
+            opportunityAlerts={props.opportunityAlerts}
+            viralPatterns={props.viralPatterns}
+            culturalShifts={props.culturalShifts}
+            generationalInsights={props.generationalInsights}
+            languageTrends={props.languageTrends}
+            sources={props.sources}
+            confidenceScore={cs.trend_cultural ?? props.confidenceScore}
+            findings={props.findings}
+            recommendations={props.recommendations}
+          />
+        </ErrorBoundary>
       )}
 
       {activeTab === 'voice_of_customer' && props.hasVoiceOfCustomer && (
-        <VoiceOfCustomerSection
-          vocHealthScore={props.vocHealthScore}
-          operatingMode={props.operatingMode}
-          dataCoverageScore={props.dataCoverageScore}
-          sentiment={props.sentiment}
-          themes={props.themes}
-          npsAnalysis={props.npsAnalysis}
-          painPointMatrix={props.painPointMatrix}
-          strategyBridge={props.strategyBridge}
-          sources={props.sources}
-          confidenceScore={cs.voice_of_customer ?? props.confidenceScore}
-          findings={props.findings}
-          recommendations={props.recommendations}
-        />
+        <ErrorBoundary fallback={<SectionErrorFallback section="Voice of Customer" />}>
+          <VoiceOfCustomerSection
+            vocHealthScore={props.vocHealthScore}
+            operatingMode={props.operatingMode}
+            dataCoverageScore={props.dataCoverageScore}
+            sentiment={props.sentiment}
+            themes={props.themes}
+            npsAnalysis={props.npsAnalysis}
+            painPointMatrix={props.painPointMatrix}
+            strategyBridge={props.strategyBridge}
+            sources={props.sources}
+            confidenceScore={cs.voice_of_customer ?? props.confidenceScore}
+            findings={props.findings}
+            recommendations={props.recommendations}
+          />
+        </ErrorBoundary>
       )}
     </div>
   );
