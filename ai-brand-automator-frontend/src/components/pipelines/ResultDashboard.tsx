@@ -2213,9 +2213,9 @@ function AudiencePersonaSection({
   findings?: string[];
   recommendations?: string[];
 }) {
-  // Defensive: ensure arrays are actually arrays (LLM data can be malformed)
-  const personas = Array.isArray(rawPersonas) ? rawPersonas : undefined;
-  const journeyMaps = Array.isArray(rawJourneyMaps) ? rawJourneyMaps : undefined;
+  // Defensive: ensure arrays are actually arrays and contain objects (LLM data can be malformed)
+  const personas = Array.isArray(rawPersonas) ? rawPersonas.filter((p): p is PersonaProfileFE => p != null && typeof p === 'object' && !Array.isArray(p)) : undefined;
+  const journeyMaps = Array.isArray(rawJourneyMaps) ? rawJourneyMaps.filter((j): j is BuyingJourneyMapFE => j != null && typeof j === 'object' && !Array.isArray(j)) : undefined;
   const segmentMatrix = rawSegmentMatrix && typeof rawSegmentMatrix === 'object' && !Array.isArray(rawSegmentMatrix) ? rawSegmentMatrix : undefined;
   const sources = Array.isArray(rawSources) ? rawSources : undefined;
   const findings = Array.isArray(rawFindings) ? rawFindings : undefined;
@@ -2321,13 +2321,13 @@ function AudiencePersonaSection({
                   </div>
 
                   {/* Pain Points & Motivations (always visible) */}
-                  {persona.pain_points && persona.pain_points.length > 0 && (
+                  {Array.isArray(persona.pain_points) && persona.pain_points.length > 0 && (
                     <div>
                       <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Pain Points</span>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {persona.pain_points.slice(0, isExpanded ? undefined : 3).map((pp, i) => (
                           <span key={i} className="rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] text-red-400">
-                            {pp}
+                            {displayValue(pp)}
                           </span>
                         ))}
                         {!isExpanded && persona.pain_points.length > 3 && (
@@ -2337,13 +2337,13 @@ function AudiencePersonaSection({
                     </div>
                   )}
 
-                  {persona.motivations && persona.motivations.length > 0 && (
+                  {Array.isArray(persona.motivations) && persona.motivations.length > 0 && (
                     <div>
                       <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Motivations</span>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {persona.motivations.slice(0, isExpanded ? undefined : 3).map((m, i) => (
                           <span key={i} className="rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] text-green-400">
-                            {m}
+                            {displayValue(m)}
                           </span>
                         ))}
                         {!isExpanded && persona.motivations.length > 3 && (
@@ -2357,7 +2357,7 @@ function AudiencePersonaSection({
                   {isExpanded && (
                     <div className="space-y-3 pt-2 border-t border-white/5">
                       {/* Demographics Grid */}
-                      {persona.demographics && Object.keys(persona.demographics).length > 0 && (
+                      {persona.demographics && typeof persona.demographics === 'object' && !Array.isArray(persona.demographics) && Object.keys(persona.demographics).length > 0 && (
                         <div>
                           <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Demographics</span>
                           <div className="grid grid-cols-2 gap-2 mt-1">
@@ -2372,7 +2372,7 @@ function AudiencePersonaSection({
                       )}
 
                       {/* Psychographics */}
-                      {persona.psychographics && Object.keys(persona.psychographics).length > 0 && (
+                      {persona.psychographics && typeof persona.psychographics === 'object' && !Array.isArray(persona.psychographics) && Object.keys(persona.psychographics).length > 0 && (
                         <div>
                           <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Psychographics</span>
                           <div className="grid grid-cols-2 gap-2 mt-1">
@@ -2387,13 +2387,13 @@ function AudiencePersonaSection({
                       )}
 
                       {/* Objections */}
-                      {persona.objections && persona.objections.length > 0 && (
+                      {Array.isArray(persona.objections) && persona.objections.length > 0 && (
                         <div>
                           <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Objections</span>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {persona.objections.map((o, i) => (
                               <span key={i} className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-400">
-                                {o}
+                                {displayValue(o)}
                               </span>
                             ))}
                           </div>
@@ -2401,13 +2401,13 @@ function AudiencePersonaSection({
                       )}
 
                       {/* Preferred Channels */}
-                      {persona.preferred_channels && persona.preferred_channels.length > 0 && (
+                      {Array.isArray(persona.preferred_channels) && persona.preferred_channels.length > 0 && (
                         <div>
                           <span className="text-[10px] uppercase tracking-wider text-brand-silver/40">Preferred Channels</span>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {persona.preferred_channels.map((ch, i) => (
                               <span key={i} className="rounded-full bg-brand-electric/10 px-2 py-0.5 text-[11px] text-brand-electric">
-                                {ch}
+                                {displayValue(ch)}
                               </span>
                             ))}
                           </div>
