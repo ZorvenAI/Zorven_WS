@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # Prompt optimization
     PROMPT_CACHE_REDIS_URL: str = "redis://localhost:6379/2"
     MLFLOW_TRACKING_URI: str = "http://mlflow-server:5000"
+    PROMPT_FALLBACK_ONLY: bool = False
 
     # Service auth
     SERVICE_TOKEN: str = "dev-service-token"

@@ -107,6 +107,7 @@ async def lifespan(app: FastAPI):
         critical_agent=True,
         redis_url=settings.PROMPT_CACHE_REDIS_URL,
         mlflow_uri=settings.MLFLOW_TRACKING_URI,
+        fallback_only=settings.PROMPT_FALLBACK_ONLY,
     )
     await prompt_loader.start()
 
