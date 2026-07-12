@@ -216,7 +216,7 @@ class CGAAnalyzer:
             )
 
         call1_result = await self._llm.generate_json(
-            call1_system, call1_user, max_tokens=16384
+            call1_system, call1_user, max_tokens=32768
         )
 
         creative_profiles = call1_result.get("creative_profiles", [])
@@ -348,7 +348,7 @@ class CGAAnalyzer:
         )
 
         call2_result = await self._llm.generate_json(
-            call2_system, call2_user, max_tokens=16384
+            call2_system, call2_user, max_tokens=32768
         )
 
         hooks = call2_result.get("hooks", [])
@@ -419,7 +419,7 @@ class CGAAnalyzer:
         # token cap truncates mid-JSON on multi-ad-set campaigns, which used
         # to surface as empty ad_set_packages downstream. Give it headroom.
         call3_result = await self._llm.generate_json(
-            call3_system, call3_user, max_tokens=16384
+            call3_system, call3_user, max_tokens=32768
         )
 
         compliance_results = call3_result.get("compliance_results", [])

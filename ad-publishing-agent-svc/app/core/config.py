@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # Anthropic Claude Sonnet 4 (targeting translation)
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-5"
-    ANTHROPIC_MAX_TOKENS: int = 4096
+    ANTHROPIC_MAX_TOKENS: int = 32768
     ANTHROPIC_TEMPERATURE: float = 0.2  # Low for targeting precision
 
     # Meta Marketing API v21.0

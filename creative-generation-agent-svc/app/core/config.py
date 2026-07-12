@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # Anthropic Claude Sonnet 4 (copy generation + assembly)
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-5"
-    ANTHROPIC_MAX_TOKENS: int = 16384
+    ANTHROPIC_MAX_TOKENS: int = 32768
     ANTHROPIC_TEMPERATURE: float = 0.4
 
     # Nano Banana 2 image generation (google-genai)
