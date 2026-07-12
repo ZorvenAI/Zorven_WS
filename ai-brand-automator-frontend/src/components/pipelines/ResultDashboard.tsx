@@ -5565,16 +5565,22 @@ function VoiceOfCustomerSection({
     );
   }
 
+  const safeArr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+  const safeObj = (v: unknown): Record<string, unknown> =>
+    v != null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+
   const overallSentiment = sentiment?.overall_sentiment;
-  const emotionProfile = sentiment?.emotion_profile;
-  const channelSentiments = sentiment?.channel_sentiments ?? [];
-  const themeClusters = themes?.themes ?? [];
-  const painPoints = painPointMatrix?.pain_points ?? [];
+  const emotionProfile = sentiment?.emotion_profile != null && typeof sentiment.emotion_profile === 'object' && !Array.isArray(sentiment.emotion_profile) ? sentiment.emotion_profile : undefined;
+  const channelSentiments = safeArr(sentiment?.channel_sentiments) as Array<{
+    channel: string; provenance?: string; sentiment?: { positive?: number; neutral?: number; negative?: number }; feedback_count?: number; confidence?: number;
+  }>;
+  const themeClusters = safeArr(themes?.themes) as VoCThemeClusterLocal[];
+  const painPoints = safeArr(painPointMatrix?.pain_points) as VoCPainPointLocal[];
   const nps = npsAnalysis;
   const activeNps = nps?.nps_available ? nps?.current_nps : nps?.proxy_nps;
-  const execSummary = strategyBridge?.executive_summary;
-  const crossAgentInsights = strategyBridge?.cross_agent_insights;
-  const stratRecs = strategyBridge?.strategic_recommendations ?? recommendations ?? [];
+  const execSummary = typeof strategyBridge?.executive_summary === 'string' ? strategyBridge.executive_summary : undefined;
+  const crossAgentInsights = safeObj(strategyBridge?.cross_agent_insights) as Record<string, string>;
+  const stratRecs = safeArr(strategyBridge?.strategic_recommendations ?? recommendations) as string[];
 
   return (
     <div className="space-y-6">
@@ -5776,7 +5782,7 @@ function VoiceOfCustomerSection({
                   {isExpanded && (
                     <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
                       {/* Sub-themes */}
-                      {theme.sub_themes && theme.sub_themes.length > 0 && (
+                      {Array.isArray(theme.sub_themes) && theme.sub_themes.length > 0 && (
                         <div>
                           <span className="text-[10px] text-brand-silver/50 uppercase">Sub-themes</span>
                           <div className="flex flex-wrap gap-1 mt-1">
@@ -5789,7 +5795,7 @@ function VoiceOfCustomerSection({
                         </div>
                       )}
                       {/* Representative quotes */}
-                      {theme.representative_quotes && theme.representative_quotes.length > 0 && (
+                      {Array.isArray(theme.representative_quotes) && theme.representative_quotes.length > 0 && (
                         <div>
                           <span className="text-[10px] text-brand-silver/50 uppercase">Quotes</span>
                           {theme.representative_quotes.slice(0, 3).map((q, qi) => (
@@ -5856,7 +5862,7 @@ function VoiceOfCustomerSection({
               {nps.data_source && (
                 <p className="text-xs text-brand-silver/40 mt-1">Source: {nps.data_source}</p>
               )}
-              {nps.drivers && nps.drivers.length > 0 && (
+              {Array.isArray(nps.drivers) && nps.drivers.length > 0 && (
                 <div className="mt-3">
                   <span className="text-[10px] text-brand-silver/50 uppercase">NPS Drivers</span>
                   <div className="flex flex-wrap gap-1 mt-1">
@@ -5868,7 +5874,7 @@ function VoiceOfCustomerSection({
                   </div>
                 </div>
               )}
-              {nps.detractor_themes && nps.detractor_themes.length > 0 && (
+              {Array.isArray(nps.detractor_themes) && nps.detractor_themes.length > 0 && (
                 <div className="mt-2">
                   <span className="text-[10px] text-brand-silver/50 uppercase">Detractor Themes</span>
                   <div className="flex flex-wrap gap-1 mt-1">
@@ -5925,7 +5931,7 @@ function VoiceOfCustomerSection({
                     </td>
                     <td className="py-2 px-3">
                       <div className="flex flex-wrap gap-1">
-                        {pp.persona_impact?.slice(0, 3).map((p) => (
+                        {Array.isArray(pp.persona_impact) && pp.persona_impact.slice(0, 3).map((p) => (
                           <span key={p} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-brand-silver/60">
                             {p}
                           </span>
