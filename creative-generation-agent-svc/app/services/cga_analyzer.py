@@ -215,7 +215,9 @@ class CGAAnalyzer:
                 f"{json.dumps(learnings, default=str)[:2000]}\n"
             )
 
-        call1_result = await self._llm.generate_json(call1_system, call1_user)
+        call1_result = await self._llm.generate_json(
+            call1_system, call1_user, max_tokens=16384
+        )
 
         creative_profiles = call1_result.get("creative_profiles", [])
         image_prompts = call1_result.get("image_prompts", [])
@@ -345,7 +347,9 @@ class CGAAnalyzer:
             f"{cta_section}"
         )
 
-        call2_result = await self._llm.generate_json(call2_system, call2_user)
+        call2_result = await self._llm.generate_json(
+            call2_system, call2_user, max_tokens=16384
+        )
 
         hooks = call2_result.get("hooks", [])
         primary_copy = call2_result.get("primary_copy", [])
