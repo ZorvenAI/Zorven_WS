@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # LLM — Claude Sonnet 4
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-5"
-    ANTHROPIC_MAX_TOKENS: int = 8192
+    ANTHROPIC_MAX_TOKENS: int = 32768
     ANTHROPIC_TEMPERATURE: float = 0.4
 
     # Tavily (competitive research supplementation)

@@ -200,7 +200,9 @@ class CAAAnalyzer:
         call1_result = {}
         if self._llm:
             try:
-                call1_result = await self._llm.generate_json(call1_system, call1_user)
+                call1_result = await self._llm.generate_json(
+                    call1_system, call1_user, max_tokens=32768
+                )
             except Exception as exc:
                 logger.error(
                     "Claude call 1 failed (%s): %s",
@@ -264,7 +266,9 @@ class CAAAnalyzer:
         call2_result = {}
         if self._llm:
             try:
-                call2_result = await self._llm.generate_json(call2_system, call2_user)
+                call2_result = await self._llm.generate_json(
+                    call2_system, call2_user, max_tokens=32768
+                )
             except Exception as exc:
                 logger.error(
                     "Claude call 2 failed (%s): %s",
