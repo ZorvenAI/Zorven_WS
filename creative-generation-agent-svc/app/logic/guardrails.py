@@ -139,8 +139,12 @@ class PlanGuardrails:
 
         # Check hooks (<= 125 chars)
         for hook_set in copy_result.get("hooks", []):
+            if not isinstance(hook_set, dict):
+                continue
             ad_set = hook_set.get("ad_set_name", "unknown")
             for hook in hook_set.get("hooks", []):
+                if not isinstance(hook, dict):
+                    continue
                 text = hook.get("hook_text", "")
                 if len(text) > 125:
                     issues.append(
@@ -150,8 +154,12 @@ class PlanGuardrails:
 
         # Check primary copy lengths
         for copy_set in copy_result.get("primary_copy", []):
+            if not isinstance(copy_set, dict):
+                continue
             ad_set = copy_set.get("ad_set_name", "unknown")
             for variant in copy_set.get("variants", []):
+                if not isinstance(variant, dict):
+                    continue
                 vid = variant.get("variant_id", "")
 
                 short_text = variant.get("short", {}).get("text", "")
@@ -184,6 +192,8 @@ class PlanGuardrails:
             bp = blueprint
         expected: dict[str, int] = {}
         for ad_set in bp.get("ad_sets", []):
+            if not isinstance(ad_set, dict):
+                continue
             name = ad_set.get("name", "")
             count = ad_set.get("variant_count", 3)
             if name:
@@ -191,6 +201,8 @@ class PlanGuardrails:
 
         # Check hooks per ad set
         for hook_set in copy_result.get("hooks", []):
+            if not isinstance(hook_set, dict):
+                continue
             ad_set = hook_set.get("ad_set_name", "")
             actual = len(hook_set.get("hooks", []))
             min_expected = expected.get(ad_set, 3)
@@ -242,6 +254,8 @@ class OutputGuardrails:
         issues: list[str] = []
 
         for pkg in result.get("ad_set_packages", []):
+            if not isinstance(pkg, dict):
+                continue
             ad_set = pkg.get("ad_set_name", "unknown")
             compliance = pkg.get("compliance_results", [])
 
@@ -282,6 +296,8 @@ class OutputGuardrails:
             return issues
 
         for pkg in packages:
+            if not isinstance(pkg, dict):
+                continue
             ad_set = pkg.get("ad_set_name", "unknown")
 
             images = pkg.get("images", [])
