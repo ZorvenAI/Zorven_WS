@@ -66,19 +66,19 @@ class AgentPromptClient:
                 self._http = httpx.AsyncClient(base_url=self.mlflow_uri, timeout=5.0)
                 resp = await self._http.get("/health")
                 if resp.status_code == 200:
-                    logger.info("MLflow connected: %s", self.mlflow_uri)
+                    logger.info("Prompt service connected: %s", self.mlflow_uri)
                 else:
-                    logger.warning("MLflow unhealthy (%d) — disabled", resp.status_code)
+                    logger.warning("Prompt service unhealthy (%d) — disabled", resp.status_code)
                     await self._http.aclose()
                     self._http = None
             except Exception as exc:
-                logger.warning("MLflow unavailable: %s — disabled", exc)
+                logger.warning("Prompt service unavailable: %s — disabled", exc)
                 if self._http:
                     await self._http.aclose()
                 self._http = None
         else:
             logger.info(
-                "MLflow URI not configured — prompt loader in fallback-only mode"
+                "Prompt service URI not configured — prompt loader in fallback-only mode"
             )
 
         logger.info(
@@ -189,66 +189,42 @@ class AgentPromptClient:
         except Exception:
             pass
 
-    # --- Tier 2: MLflow REST API ---
+    # --- Tier 2: Prompt Optimization Service API ---
 
     async def _mlflow_get(self, name: str, tenant_id: Optional[str]) -> Optional[str]:
         if self._http is None:
             return None
         try:
-            # Try tenant-specific named prompt first
+            # Try tenant-specific prompt first
             if tenant_id:
-                template = await self._fetch_prompt(f"{name}-tenant-{tenant_id}")
+                template = await self._fetch_prompt(name, tenant_id=tenant_id)
                 if template is not None:
                     return template
 
-            # Try base prompt
+            # Try base prompt (no tenant override)
             return await self._fetch_prompt(name)
         except Exception as exc:
-            logger.warning("MLflow prompt fetch failed for '%s': %s", name, exc)
+            logger.warning("Prompt service fetch failed for '%s': %s", name, exc)
             return None
 
-    async def _fetch_prompt(self, name: str) -> Optional[str]:
-        """Fetch a prompt template from MLflow REST API.
+    async def _fetch_prompt(self, name: str, tenant_id: Optional[str] = None) -> Optional[str]:
+        """Fetch a prompt template from the prompt-optimization-svc API.
 
-        Prefers PRODUCTION-tagged versions over latest to match
-        the lifecycle-based resolution of ZorvenPromptLoader.
+        Calls GET /v1/prompts/{name}/production which returns the
+        PRODUCTION-state template directly.
         """
         try:
-            # Search for versions and prefer PRODUCTION state
-            resp = await self._http.get(
-                "/api/2.0/mlflow/prompts/versions/search",
-                params={"name": name},
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                versions = data.get("prompt_versions", [])
-                # Find PRODUCTION version first
-                for v in versions:
-                    tags = v.get("tags", {})
-                    if isinstance(tags, list):
-                        tag_dict = {t["key"]: t["value"] for t in tags}
-                    else:
-                        tag_dict = tags
-                    if tag_dict.get("state") == "PRODUCTION":
-                        return v.get("template")
+            headers = {}
+            if tenant_id:
+                headers["X-Tenant-ID"] = str(tenant_id)
 
-            # Fallback: get latest version if no PRODUCTION found
             resp = await self._http.get(
-                "/api/2.0/mlflow/prompts/get",
-                params={"name": name},
+                f"/v1/prompts/{name}/production",
+                headers=headers,
             )
             if resp.status_code == 200:
                 data = resp.json()
-                prompt = data.get("prompt", {})
-                latest = prompt.get("latest_version")
-                if latest:
-                    ver_resp = await self._http.get(
-                        "/api/2.0/mlflow/prompts/versions/get",
-                        params={"name": name, "version": latest},
-                    )
-                    if ver_resp.status_code == 200:
-                        ver_data = ver_resp.json()
-                        return ver_data.get("prompt_version", {}).get("template")
+                return data.get("template")
             return None
         except Exception:
             return None

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/23"
     # Prompt optimization
     PROMPT_CACHE_REDIS_URL: str = "redis://localhost:6379/2"
-    MLFLOW_TRACKING_URI: str = "http://mlflow-server:5000"
+    MLFLOW_TRACKING_URI: str = "http://prompt-optimization-svc:8110"
     PROMPT_FALLBACK_ONLY: bool = False
 
     # Anthropic Claude Sonnet 4 (targeting translation)

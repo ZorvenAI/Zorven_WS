@@ -836,7 +836,28 @@ class MarketResearcher:
                     content = content[4:]
                 content = content.strip()
 
-            synthesis = json.loads(content, strict=False)
+            # Handle extra text after JSON (e.g., Claude adding explanation)
+            try:
+                synthesis = json.loads(content, strict=False)
+            except json.JSONDecodeError:
+                # Try extracting first JSON object from content
+                brace_start = content.find("{")
+                if brace_start >= 0:
+                    depth = 0
+                    for i, ch in enumerate(content[brace_start:], brace_start):
+                        if ch == "{":
+                            depth += 1
+                        elif ch == "}":
+                            depth -= 1
+                            if depth == 0:
+                                synthesis = json.loads(
+                                    content[brace_start : i + 1], strict=False
+                                )
+                                break
+                    else:
+                        raise
+                else:
+                    raise
             return synthesis
         except Exception as exc:
             logger.error(
