@@ -5568,19 +5568,25 @@ function VoiceOfCustomerSection({
   const safeArr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
   const safeObj = (v: unknown): Record<string, unknown> =>
     v != null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  const safeNum = (v: unknown): number | undefined => {
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') { const n = Number(v); return isNaN(n) ? undefined : n; }
+    return undefined;
+  };
 
-  const overallSentiment = sentiment?.overall_sentiment;
-  const emotionProfile = sentiment?.emotion_profile != null && typeof sentiment.emotion_profile === 'object' && !Array.isArray(sentiment.emotion_profile) ? sentiment.emotion_profile : undefined;
-  const channelSentiments = safeArr(sentiment?.channel_sentiments) as Array<{
+  const overallSentiment = sentiment != null && typeof sentiment === 'object' && !Array.isArray(sentiment) ? (sentiment as VoCSentimentFELocal)?.overall_sentiment : undefined;
+  const emotionProfile = sentiment != null && typeof sentiment === 'object' && !Array.isArray(sentiment) && sentiment.emotion_profile != null && typeof sentiment.emotion_profile === 'object' && !Array.isArray(sentiment.emotion_profile) ? sentiment.emotion_profile : undefined;
+  const channelSentiments = safeArr(sentiment != null && typeof sentiment === 'object' && !Array.isArray(sentiment) ? (sentiment as VoCSentimentFELocal)?.channel_sentiments : undefined) as Array<{
     channel: string; provenance?: string; sentiment?: { positive?: number; neutral?: number; negative?: number }; feedback_count?: number; confidence?: number;
   }>;
-  const themeClusters = safeArr(themes?.themes) as VoCThemeClusterLocal[];
-  const painPoints = safeArr(painPointMatrix?.pain_points) as VoCPainPointLocal[];
-  const nps = npsAnalysis;
-  const activeNps = nps?.nps_available ? nps?.current_nps : nps?.proxy_nps;
-  const execSummary = typeof strategyBridge?.executive_summary === 'string' ? strategyBridge.executive_summary : undefined;
-  const crossAgentInsights = safeObj(strategyBridge?.cross_agent_insights) as Record<string, string>;
-  const stratRecs = safeArr(strategyBridge?.strategic_recommendations ?? recommendations) as string[];
+  const themeClusters = safeArr(themes != null && typeof themes === 'object' && !Array.isArray(themes) ? (themes as VoCThemeMapLocal)?.themes : undefined) as VoCThemeClusterLocal[];
+  const painPoints = safeArr(painPointMatrix != null && typeof painPointMatrix === 'object' && !Array.isArray(painPointMatrix) ? (painPointMatrix as { pain_points?: VoCPainPointLocal[] })?.pain_points : undefined) as VoCPainPointLocal[];
+  const nps = npsAnalysis != null && typeof npsAnalysis === 'object' && !Array.isArray(npsAnalysis) ? npsAnalysis : undefined;
+  const rawActiveNps = nps?.nps_available ? nps?.current_nps : nps?.proxy_nps;
+  const activeNps = rawActiveNps != null && typeof rawActiveNps === 'object' && !Array.isArray(rawActiveNps) ? rawActiveNps : undefined;
+  const execSummary = typeof strategyBridge === 'object' && strategyBridge != null && typeof (strategyBridge as VoCStrategyBridgeLocal)?.executive_summary === 'string' ? (strategyBridge as VoCStrategyBridgeLocal).executive_summary : undefined;
+  const crossAgentInsights = safeObj(typeof strategyBridge === 'object' && strategyBridge != null ? (strategyBridge as VoCStrategyBridgeLocal)?.cross_agent_insights : undefined) as Record<string, string>;
+  const stratRecs = safeArr(typeof strategyBridge === 'object' && strategyBridge != null ? (strategyBridge as VoCStrategyBridgeLocal)?.strategic_recommendations ?? recommendations : recommendations) as string[];
 
   return (
     <div className="space-y-6">
@@ -5763,9 +5769,9 @@ function VoiceOfCustomerSection({
                           {theme.feedback_count} mentions
                         </span>
                       )}
-                      {theme.severity_score != null && (
-                        <span className={`text-xs font-bold ${severityColor(theme.severity_score)}`}>
-                          {theme.severity_score.toFixed(1)}
+                      {safeNum(theme.severity_score) != null && (
+                        <span className={`text-xs font-bold ${severityColor(safeNum(theme.severity_score) as number)}`}>
+                          {(safeNum(theme.severity_score) as number).toFixed(1)}
                         </span>
                       )}
                     </div>
@@ -5786,7 +5792,7 @@ function VoiceOfCustomerSection({
                         <div>
                           <span className="text-[10px] text-brand-silver/50 uppercase">Sub-themes</span>
                           <div className="flex flex-wrap gap-1 mt-1">
-                            {theme.sub_themes.map((st, si) => (
+                            {theme.sub_themes.filter((st): st is NonNullable<typeof st> => st != null && typeof st === 'object').map((st, si) => (
                               <span key={si} className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-brand-silver/70">
                                 {st.name}{st.feedback_count ? ` (${st.feedback_count})` : ''}
                               </span>
@@ -5835,8 +5841,8 @@ function VoiceOfCustomerSection({
                   <div className="text-[10px] text-brand-silver/50 uppercase">
                     {nps.nps_available ? 'NPS Score' : 'Proxy NPS'}
                   </div>
-                  <div className={`text-2xl font-bold ${(activeNps.nps_score ?? 0) >= 50 ? 'text-green-400' : (activeNps.nps_score ?? 0) >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
-                    {activeNps.nps_score != null ? `${activeNps.nps_score >= 0 ? '+' : ''}${activeNps.nps_score.toFixed(0)}` : 'N/A'}
+                  <div className={`text-2xl font-bold ${(safeNum(activeNps.nps_score) ?? 0) >= 50 ? 'text-green-400' : (safeNum(activeNps.nps_score) ?? 0) >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                    {safeNum(activeNps.nps_score) != null ? `${(safeNum(activeNps.nps_score) as number) >= 0 ? '+' : ''}${(safeNum(activeNps.nps_score) as number).toFixed(0)}` : 'N/A'}
                   </div>
                 </div>
                 <div className="flex-1 grid grid-cols-3 gap-2 text-center">
@@ -5922,8 +5928,8 @@ function VoiceOfCustomerSection({
                     <td className="py-2 px-3 text-brand-silver/40">{i + 1}</td>
                     <td className="py-2 px-3 text-white font-medium">{pp.name}</td>
                     <td className="py-2 px-3 text-center">
-                      <span className={`font-bold ${severityColor(pp.severity ?? 0)}`}>
-                        {pp.severity?.toFixed(1)}
+                      <span className={`font-bold ${severityColor(safeNum(pp.severity) ?? 0)}`}>
+                        {safeNum(pp.severity) != null ? (safeNum(pp.severity) as number).toFixed(1) : '-'}
                       </span>
                     </td>
                     <td className="py-2 px-3 text-center text-brand-silver/70">
