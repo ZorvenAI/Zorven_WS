@@ -5580,7 +5580,7 @@ function VoiceOfCustomerSection({
     channel: string; provenance?: string; sentiment?: { positive?: number; neutral?: number; negative?: number }; feedback_count?: number; confidence?: number;
   }>;
   const themeClusters = safeArr(themes != null && typeof themes === 'object' && !Array.isArray(themes) ? (themes as VoCThemeMapLocal)?.themes : undefined) as VoCThemeClusterLocal[];
-  const painPoints = safeArr(painPointMatrix != null && typeof painPointMatrix === 'object' && !Array.isArray(painPointMatrix) ? (painPointMatrix as { pain_points?: VoCPainPointLocal[] })?.pain_points : undefined) as VoCPainPointLocal[];
+  const painPoints = safeArr(painPointMatrix != null && typeof painPointMatrix === 'object' && !Array.isArray(painPointMatrix) ? ((painPointMatrix as Record<string, unknown>)?.pain_points ?? (painPointMatrix as Record<string, unknown>)?.ranked_pain_points) : undefined) as VoCPainPointLocal[];
   const nps = npsAnalysis != null && typeof npsAnalysis === 'object' && !Array.isArray(npsAnalysis) ? npsAnalysis : undefined;
   const rawActiveNps = nps?.nps_available ? nps?.current_nps : nps?.proxy_nps;
   const activeNps = rawActiveNps != null && typeof rawActiveNps === 'object' && !Array.isArray(rawActiveNps) ? rawActiveNps : undefined;
