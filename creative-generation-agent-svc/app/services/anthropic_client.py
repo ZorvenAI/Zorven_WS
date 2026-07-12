@@ -189,7 +189,7 @@ class AnthropicClient:
                         )
             # Last-ditch: repair the whole candidate
             try:
-                parsed = json.loads(_repair_json(candidate, strict=False))
+                parsed = json.loads(_repair_json(candidate), strict=False)
                 result = _ensure_dict(parsed)
                 logger.info(
                     "Extracted JSON via full-repair: keys=%s",
