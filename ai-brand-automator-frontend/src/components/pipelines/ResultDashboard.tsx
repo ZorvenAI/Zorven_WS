@@ -2775,8 +2775,8 @@ interface VoCNPSLocal {
     nps_score?: number;
     total_responses?: number;
   };
-  drivers?: string[];
-  detractor_themes?: string[];
+  drivers?: (string | { driver?: string; relevance_note?: string })[];
+  detractor_themes?: (string | { theme?: string; explanation?: string })[];
   data_source?: string;
 }
 
@@ -5872,11 +5872,14 @@ function VoiceOfCustomerSection({
                 <div className="mt-3">
                   <span className="text-[10px] text-brand-silver/50 uppercase">NPS Drivers</span>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {nps.drivers.map((d) => (
-                      <span key={d} className="text-xs px-2 py-0.5 rounded-full bg-green-400/10 text-green-400/80">
-                        {d}
-                      </span>
-                    ))}
+                    {nps.drivers.map((d, i) => {
+                      const label = typeof d === 'string' ? d : (d as Record<string, unknown>)?.driver ?? JSON.stringify(d);
+                      return (
+                        <span key={String(label) + i} className="text-xs px-2 py-0.5 rounded-full bg-green-400/10 text-green-400/80">
+                          {String(label)}
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -5884,11 +5887,14 @@ function VoiceOfCustomerSection({
                 <div className="mt-2">
                   <span className="text-[10px] text-brand-silver/50 uppercase">Detractor Themes</span>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {nps.detractor_themes.map((d) => (
-                      <span key={d} className="text-xs px-2 py-0.5 rounded-full bg-red-400/10 text-red-400/80">
-                        {d}
-                      </span>
-                    ))}
+                    {nps.detractor_themes.map((d, i) => {
+                      const label = typeof d === 'string' ? d : (d as Record<string, unknown>)?.theme ?? JSON.stringify(d);
+                      return (
+                        <span key={String(label) + i} className="text-xs px-2 py-0.5 rounded-full bg-red-400/10 text-red-400/80">
+                          {String(label)}
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               )}
