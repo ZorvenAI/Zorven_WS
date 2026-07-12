@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from typing import Any
 
 from app.core.config import settings
@@ -18,6 +19,47 @@ def _ensure_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, list):
         return {"items": value}
     return {"raw_response": value}
+
+
+def _repair_json(text: str) -> dict[str, Any] | None:
+    """Attempt common JSON repairs on malformed text.
+
+    Returns parsed dict/list on success, None if all repairs fail.
+    """
+    # Repair 1: Remove trailing commas before } or ]
+    repaired = re.sub(r",\s*([}\]])", r"\1", text)
+    try:
+        return json.loads(repaired, strict=False)
+    except json.JSONDecodeError:
+        pass
+
+    # Repair 2: Fix missing commas between values
+    # Pattern: "value" followed by whitespace then "key" (missing comma)
+    repaired = re.sub(r'(")\s*\n\s*(")', r'\1,\n\2', repaired)
+    # Also handle: } followed by whitespace then { or "
+    repaired = re.sub(r"(})\s*\n\s*({)", r"\1,\n\2", repaired)
+    repaired = re.sub(r'(})\s*\n\s*(")', r'\1,\n\2', repaired)
+    # Handle: ] followed by whitespace then { or "
+    repaired = re.sub(r"(])\s*\n\s*({)", r"\1,\n\2", repaired)
+    try:
+        return json.loads(repaired, strict=False)
+    except json.JSONDecodeError:
+        pass
+
+    # Repair 3: Truncate at last valid closing brace if unterminated string
+    # Find the last } that produces valid JSON when we slice up to it
+    last_pos = len(repaired)
+    for _ in range(5):  # Try up to 5 truncation attempts
+        last_pos = repaired.rfind("}", 0, last_pos)
+        if last_pos < 0:
+            break
+        candidate = repaired[: last_pos + 1]
+        try:
+            return json.loads(candidate, strict=False)
+        except json.JSONDecodeError:
+            continue
+
+    return None
 
 
 class AnthropicClient:
@@ -50,6 +92,7 @@ class AnthropicClient:
                 response.usage.input_tokens,
                 response.usage.output_tokens,
             )
+            # Step 1: Try strict parse on full text
             parsed = json.loads(text, strict=False)
             return _ensure_dict(parsed)
         except json.JSONDecodeError:
@@ -59,8 +102,15 @@ class AnthropicClient:
             )
             start = text.find("{")
             end = text.rfind("}") + 1
-            if start >= 0 and end > start:
-                parsed = json.loads(text[start:end], strict=False)
+            if start < 0 or end <= start:
+                logger.warning("No JSON object found in response")
+                return {"raw_response": text}
+
+            extracted = text[start:end]
+
+            # Step 2: Try parsing the extracted block directly
+            try:
+                parsed = json.loads(extracted, strict=False)
                 result = _ensure_dict(parsed)
                 logger.info(
                     "Extracted JSON keys: %s (type=%s)",
@@ -68,7 +118,28 @@ class AnthropicClient:
                     type(parsed).__name__,
                 )
                 return result
-            logger.warning("No JSON object found in response")
+            except json.JSONDecodeError:
+                pass
+
+            # Step 3: Attempt repairs on extracted text
+            logger.warning(
+                "Extracted JSON is malformed, attempting repair "
+                "(%d chars)", len(extracted)
+            )
+            repaired = _repair_json(extracted)
+            if repaired is not None:
+                result = _ensure_dict(repaired)
+                logger.info(
+                    "Repaired JSON keys: %s (type=%s)",
+                    list(result.keys())[:10],
+                    type(repaired).__name__,
+                )
+                return result
+
+            # Step 4: All repairs failed
+            logger.warning(
+                "All JSON repair attempts failed, returning raw response"
+            )
             return {"raw_response": text}
         except Exception as exc:
             logger.error("Claude API error: %s", exc)
