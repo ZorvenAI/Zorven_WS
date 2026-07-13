@@ -18,6 +18,7 @@ sys.path.insert(0, str(REPO_ROOT / "prompt-optimization-svc"))
 from app.registries.prompt_catalog import PROMPT_CATALOG  # noqa: E402
 from app.services.skill_registry_reader import (  # noqa: E402
     AGENT_SERVICE_DIRS,
+    ALL_AGENT_CODES,
     SkillRegistryReader,
     extract_slug,
 )
@@ -71,7 +72,7 @@ class TestSkillRegistryReaderIntegration:
 
     def test_prompt_catalog_agent_codes_are_known(self, reader):
         """Every agent_code tag in PROMPT_CATALOG is a valid agent code."""
-        valid_codes = set(AGENT_SERVICE_DIRS.keys())
+        valid_codes = ALL_AGENT_CODES
         invalid = []
         for entry in PROMPT_CATALOG:
             agent_code = entry.tags.get("agent_code", "")

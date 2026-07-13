@@ -33,9 +33,14 @@ class BrandEquityExecutor:
         self,
         redis_manager: Optional[RedisManager] = None,
         claude_client: Any = None,
+        prompt_loader: Any = None,
     ) -> None:
         self.redis_manager = redis_manager
-        self.claude_client = ClaudeClient(claude_client) if claude_client else None
+        self.claude_client = (
+            ClaudeClient(claude_client, prompt_loader=prompt_loader)
+            if claude_client
+            else None
+        )
 
     async def calculate(
         self,

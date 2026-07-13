@@ -16,6 +16,7 @@ from app.api import routes
 from app.cache.redis_manager import RedisManager
 from app.core.config import settings
 from app.core.logging_config import setup_logging
+from app.prompts.loader import AgentPromptClient
 from app.services.brand_equity_executor import BrandEquityExecutor
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Redis (fail-open — service works without it, just no caching)
     redis_manager = RedisManager(settings.REDIS_URL)
+
+    # Prompt loader (three-tier: Redis cache -> MLflow -> fallback)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+        fallback_only=settings.PROMPT_FALLBACK_ONLY,
+    )
+    await prompt_loader.start()
 
     # Anthropic Claude client
     claude_client = None
@@ -54,12 +63,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     executor = BrandEquityExecutor(
         redis_manager=redis_manager,
         claude_client=claude_client,
+        prompt_loader=prompt_loader,
     )
     routes.executor = executor
     routes.redis_manager = redis_manager
 
     yield
 
+    await prompt_loader.stop()
     await redis_manager.close()
     routes.executor = None
     routes.redis_manager = None

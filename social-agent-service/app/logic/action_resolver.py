@@ -11,9 +11,13 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from app.prompts.fallbacks import FALLBACK_ACTION_RESOLVER
 from app.utils.prompt_sanitizer import sanitize_ai_prompt
+
+if TYPE_CHECKING:
+    from app.prompts.loader import AgentPromptClient
 
 logger = logging.getLogger(__name__)
 
@@ -104,8 +108,13 @@ class ResolvedAction:
 class ActionResolver:
     """Determines posting action from user prompt."""
 
-    def __init__(self, gemini_model: Any = None) -> None:
+    def __init__(
+        self,
+        gemini_model: Any = None,
+        prompt_loader: AgentPromptClient | None = None,
+    ) -> None:
         self._model = gemini_model
+        self._prompt_loader = prompt_loader
 
     async def resolve(self, prompt: str, platforms: list[str]) -> ResolvedAction:
         """Resolve the user's intended action from their prompt.
@@ -177,12 +186,13 @@ class ActionResolver:
             ]
         )
 
-        system_prompt = (
-            "You are a social media posting assistant. "
-            "Based on the user's message, determine whether they want to "
-            "publish immediately or schedule for later. "
-            "Call the appropriate function."
-        )
+        if self._prompt_loader is not None:
+            system_prompt = await self._prompt_loader.load(
+                "zorven-social-action-resolver",
+                fallback=FALLBACK_ACTION_RESOLVER,
+            )
+        else:
+            system_prompt = FALLBACK_ACTION_RESOLVER
 
         sanitized_prompt = sanitize_ai_prompt(prompt)
 

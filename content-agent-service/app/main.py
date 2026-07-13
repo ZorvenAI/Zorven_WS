@@ -24,6 +24,7 @@ from app.logic.blog_author import BlogAuthor
 from app.logic.geo_synthesizer import GEOSynthesizer
 from app.logic.seo_optimizer import SEOOptimizer
 from app.messaging.kafka_producer import ContentPublishedProducer, TraceProducer
+from app.prompts.loader import AgentPromptClient
 from app.services.content_executor import ContentExecutor
 from app.services.core_api_client import CoreApiClient
 from app.services.gcs_client import GCSClient
@@ -79,11 +80,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     published_producer = ContentPublishedProducer(settings.KAFKA_BOOTSTRAP_SERVERS)
     await published_producer.start()
 
+    # Initialize prompt loader
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+        fallback_only=settings.PROMPT_FALLBACK_ONLY,
+    )
+    await prompt_loader.start()
+
     # Initialize logic components
-    seo_optimizer = SEOOptimizer(gemini_model=gemini_model)
-    aeo_formatter = AEOFormatter(gemini_model=gemini_model)
+    seo_optimizer = SEOOptimizer(gemini_model=gemini_model, prompt_loader=prompt_loader)
+    aeo_formatter = AEOFormatter(gemini_model=gemini_model, prompt_loader=prompt_loader)
     geo_synthesizer = GEOSynthesizer()
-    blog_author = BlogAuthor(gemini_model=gemini_model)
+    blog_author = BlogAuthor(gemini_model=gemini_model, prompt_loader=prompt_loader)
 
     # Build executor
     executor = ContentExecutor(
@@ -103,6 +112,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Shutdown
     await executor.close()
+    await prompt_loader.stop()
     routes.executor = None
     logger.info("Content Agent shut down")
 

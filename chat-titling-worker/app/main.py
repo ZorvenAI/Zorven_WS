@@ -23,6 +23,7 @@ from app.core.logging_config import setup_logging
 from app.logic.handler import TitlingHandler
 from app.logic.title_generator import TitleGenerator
 from app.messaging.kafka_consumer import TitlingConsumer
+from app.prompts.loader import AgentPromptClient
 from app.services.api_client import CoreApiClient
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize Redis manager
     redis_manager = RedisManager(settings.REDIS_URL)
 
+    # Initialize prompt loader
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+        fallback_only=settings.PROMPT_FALLBACK_ONLY,
+    )
+    await prompt_loader.start()
+
     # Load skill context from skills directory (fail-open)
     skill_context = _load_skill_context()
 
@@ -83,6 +92,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         api_key=settings.GOOGLE_API_KEY,
         model_name=settings.GEMINI_MODEL,
         skill_context=skill_context,
+        prompt_loader=prompt_loader,
     )
 
     if settings.GOOGLE_API_KEY:
@@ -122,6 +132,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await consume_task
     except asyncio.CancelledError:
         pass
+    await prompt_loader.stop()
     await api_client.close()
     await redis_manager.close()
     routes.consumer = None

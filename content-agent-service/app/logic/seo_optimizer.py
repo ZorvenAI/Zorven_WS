@@ -9,8 +9,9 @@ import asyncio
 import logging
 import re
 from collections import Counter
-from typing import Any
+from typing import Any, Optional
 
+from app.prompts.fallbacks import FALLBACK_SEO_OPTIMIZER
 from app.utils.prompt_sanitizer import sanitize_ai_prompt
 
 logger = logging.getLogger(__name__)
@@ -19,8 +20,13 @@ logger = logging.getLogger(__name__)
 class SEOOptimizer:
     """Generates SEO metadata for blog content."""
 
-    def __init__(self, gemini_model: Any = None) -> None:
+    def __init__(
+        self,
+        gemini_model: Any = None,
+        prompt_loader: Optional[Any] = None,
+    ) -> None:
         self._model = gemini_model
+        self._prompt_loader = prompt_loader
 
     async def optimize(
         self,
@@ -47,14 +53,16 @@ class SEOOptimizer:
         safe_topic = sanitize_ai_prompt(topic)
         safe_context = sanitize_ai_prompt(research_context[:2000])
 
+        # Load system prompt from prompt-optimization-svc (or fallback)
+        system_prompt = FALLBACK_SEO_OPTIMIZER
+        if self._prompt_loader:
+            system_prompt = await self._prompt_loader.load(
+                "zorven-content-seo",
+                fallback=FALLBACK_SEO_OPTIMIZER,
+            )
+
         prompt = (
-            "You are an SEO expert. Analyze the following blog topic and research "
-            "context. Return ONLY valid JSON with these keys:\n"
-            '- "keywords": list of 5-8 target keywords\n'
-            '- "meta_title": SEO title (max 60 characters)\n'
-            '- "meta_description": meta description (max 160 characters)\n'
-            '- "headers": list of suggested H2 section headers\n'
-            '- "slug": URL-friendly slug\n\n'
+            f"{system_prompt}\n"
             f"Topic: {safe_topic}\n"
             f"Industry: {brand_persona.get('industry', 'General')}\n"
             f"Target Audience: {brand_persona.get('target_audience', '')}\n"
@@ -63,9 +71,7 @@ class SEOOptimizer:
         )
 
         try:
-            response = await asyncio.to_thread(
-                self._model.generate_content, prompt
-            )
+            response = await asyncio.to_thread(self._model.generate_content, prompt)
             text = response.text.strip()
 
             # Extract JSON from potential markdown code blocks
@@ -98,9 +104,29 @@ class SEOOptimizer:
         """Generate SEO data via word frequency analysis."""
         words = re.findall(r"\b[a-zA-Z]{3,}\b", topic.lower())
         stop_words = {
-            "the", "and", "for", "that", "this", "with", "from", "are",
-            "was", "were", "been", "have", "has", "our", "about", "can",
-            "will", "how", "what", "why", "who", "when", "where",
+            "the",
+            "and",
+            "for",
+            "that",
+            "this",
+            "with",
+            "from",
+            "are",
+            "was",
+            "were",
+            "been",
+            "have",
+            "has",
+            "our",
+            "about",
+            "can",
+            "will",
+            "how",
+            "what",
+            "why",
+            "who",
+            "when",
+            "where",
         }
         filtered = [w for w in words if w not in stop_words]
         freq = Counter(filtered)
@@ -138,4 +164,3 @@ class SEOOptimizer:
         slug = re.sub(r"[\s]+", "-", slug.strip())
         slug = re.sub(r"-+", "-", slug)
         return slug[:80]
-

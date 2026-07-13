@@ -18,6 +18,7 @@ from app.core.logging_config import setup_logging
 from app.logic.platform_adapter import PlatformAdapter
 from app.messaging.kafka_consumer import ContentPublishedConsumer
 from app.messaging.kafka_producer import SocialAuditProducer, TraceProducer
+from app.prompts.loader import AgentPromptClient
 from app.services.core_api_client import CoreApiClient
 from app.logic.action_resolver import ActionResolver
 from app.services.mcp_client import McpClient
@@ -58,9 +59,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         topic=settings.SOCIAL_AUDIT_TOPIC,
     )
 
+    # Prompt loader (must init before logic components that use it)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+        fallback_only=settings.PROMPT_FALLBACK_ONLY,
+    )
+    await prompt_loader.start()
+
     # Logic components
-    platform_adapter = PlatformAdapter(gemini_model=gemini_model)
-    action_resolver = ActionResolver(gemini_model=gemini_model)
+    platform_adapter = PlatformAdapter(
+        gemini_model=gemini_model, prompt_loader=prompt_loader
+    )
+    action_resolver = ActionResolver(
+        gemini_model=gemini_model, prompt_loader=prompt_loader
+    )
 
     # MCP client (optional)
     mcp_client = None
@@ -110,6 +123,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except asyncio.CancelledError:
             pass
 
+    await prompt_loader.stop()
     await executor.close()
     routes.executor = None
     logger.info("Social Agent shut down")

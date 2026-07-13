@@ -60,5 +60,11 @@ class Settings(BaseSettings):
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 10
 
+    # Prompt optimization (prompt-optimization-svc integration)
+    PROMPT_CACHE_REDIS_URL: str = "redis://localhost:6379/2"
+    MLFLOW_TRACKING_URI: str = "http://prompt-optimization-svc:8110"
+    PROMPT_CACHE_TTL: int = 300
+    PROMPT_FALLBACK_ONLY: bool = False
+
 
 settings = Settings()

@@ -7,7 +7,10 @@ keyword-based rule extraction.
 """
 
 import logging
-from typing import Any
+from typing import Any, Optional
+
+from app.prompts.fallbacks import FALLBACK_COMPETITIVE_GAP
+from app.prompts.loader import AgentPromptClient
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +46,12 @@ GAP_KEYWORDS = [
 
 class CompetitiveGapAnalyzer:
     """Identifies competitive gaps from discovery research findings."""
+
+    def __init__(
+        self,
+        prompt_loader: Optional[AgentPromptClient] = None,
+    ) -> None:
+        self.prompt_loader = prompt_loader
 
     async def analyze(
         self,
@@ -156,19 +165,22 @@ class CompetitiveGapAnalyzer:
         """AI-powered competitive gap analysis using Gemini."""
         try:
             findings_text = "\n".join(f"- {f}" for f in findings[:20])
-            prompt = (
-                "Analyze the following market research findings and identify:\n"
-                "1. Competitor strengths (list)\n"
-                "2. Competitor weaknesses (list)\n"
-                "3. Competitive gaps and opportunities (list)\n"
-                "4. Market opportunities for differentiation (list)\n\n"
-            )
-            if skill_context:
-                prompt += f"{skill_context}\n\n"
-            prompt += (
-                f"Findings:\n{findings_text}\n\n"
-                "Return a structured analysis with clear, actionable items."
-            )
+            skill_block = f"{skill_context}\n\n" if skill_context else ""
+
+            # Load prompt from prompt-optimization-svc (or fallback)
+            if self.prompt_loader:
+                prompt = await self.prompt_loader.load(
+                    "zorven-intelligence-competitive-gap",
+                    variables={
+                        "skill_context": skill_block,
+                        "findings_text": findings_text,
+                    },
+                    fallback=FALLBACK_COMPETITIVE_GAP,
+                )
+            else:
+                prompt = FALLBACK_COMPETITIVE_GAP.replace(
+                    "{skill_context}", skill_block
+                ).replace("{findings_text}", findings_text)
 
             model_name = config.get("model", "gemini-2.0-flash")
             model = gemini_client.GenerativeModel(model_name)

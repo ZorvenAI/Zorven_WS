@@ -5,6 +5,10 @@ import logging
 from typing import Any, Optional
 
 from app.agent.models import PlanOutput, ReflectionOutput, ToolCall
+from app.prompts.fallbacks import (
+    FALLBACK_PLAN_INSTRUCTIONS,
+    FALLBACK_REFLECT_INSTRUCTIONS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +20,12 @@ class GeminiClient:
         self,
         model_name: str = "gemini-2.0-flash",
         max_tool_calls_per_step: int = 5,
+        prompt_loader: Optional[Any] = None,
     ) -> None:
         self._model_name = model_name
         self._max_tool_calls_per_step = max_tool_calls_per_step
         self._model = None
+        self._prompt_loader = prompt_loader
 
     def _get_model(self) -> Any:
         """Lazy-load the Gemini model."""
@@ -41,7 +47,7 @@ class GeminiClient:
 
         Returns tool calls to execute or a final answer if the task is complete.
         """
-        system_prompt = self._build_plan_prompt(
+        system_prompt = await self._build_plan_prompt(
             persona_prompt=persona_prompt,
             skill_context=skill_context,
             observation_history=observation_history,
@@ -76,7 +82,7 @@ class GeminiClient:
         persona_prompt: str,
     ) -> ReflectionOutput:
         """Evaluate results and decide: done or re-plan."""
-        system_prompt = self._build_reflect_prompt(
+        system_prompt = await self._build_reflect_prompt(
             persona_prompt=persona_prompt,
             plan_thought=plan_thought,
             observations=observations,
@@ -139,7 +145,7 @@ class GeminiClient:
             logger.warning("Gemini persona classification failed: %s", exc)
             return None
 
-    def _build_plan_prompt(
+    async def _build_plan_prompt(
         self,
         persona_prompt: str,
         skill_context: str,
@@ -152,19 +158,19 @@ class GeminiClient:
             for t in available_tools
         )
 
+        # Load static plan instructions from prompt-optimization-svc
+        plan_instructions = FALLBACK_PLAN_INSTRUCTIONS
+        if self._prompt_loader:
+            plan_instructions = await self._prompt_loader.load(
+                name="zorven-odoo-worker-plan",
+                fallback=FALLBACK_PLAN_INSTRUCTIONS,
+            )
+
         parts = [
             persona_prompt,
             "",
             "## Available MCP Tools",
             tools_desc if tools_desc else "No tools available.",
-            "",
-            "## Odoo 19 Field Conventions",
-            "- To find customers: use domain [['customer_rank', '>', 0]] on res.partner",
-            "- To find suppliers: use domain [['supplier_rank', '>', 0]] on res.partner",
-            "- The 'customer' and 'is_customer' fields do NOT exist in Odoo 19",
-            "- For partners with email: add ['email', '!=', false] to domain",
-            "- Use odoo_search_read (not odoo_search) for reading records with fields",
-            "- When no filter is needed, use an empty domain: []",
             "",
         ]
 
@@ -176,37 +182,14 @@ class GeminiClient:
 
         parts.extend(
             [
-                "## Instructions",
-                "Analyze the user's request and decide what to do.",
-                "You MUST use the available MCP tools to query or modify Odoo data.",
-                "NEVER answer from memory or fabricate data — always call tools first.",
-                "Only set is_complete=true AFTER tool results have been observed "
-                "(i.e. there are previous observations above).",
-                "",
-                "Respond with a JSON object:",
-                "{",
-                '  "thought": "Your reasoning about what to do",',
-                '  "tool_calls": [{"tool_name": "...", "arguments": {...}}],',
-                '  "is_complete": false,',
-                '  "final_answer": ""',
-                "}",
-                "",
-                "Set is_complete=true and provide final_answer ONLY when previous "
-                "observations show the task is complete. If there are no previous "
-                "observations, you MUST call at least one tool.",
-                "",
-                "IMPORTANT:",
-                "- If previous observations show a tool FAILED, do NOT retry it.",
-                "- If a model 'doesn't exist', the module is not installed — skip it.",
-                "- For email campaigns, use marketing_create_campaign (NOT website_create_page).",
-                "- Summarize partial results if some steps fail.",
+                plan_instructions,
                 f"Maximum {self._max_tool_calls_per_step} tool calls per step.",
             ]
         )
 
         return "\n".join(parts)
 
-    def _build_reflect_prompt(
+    async def _build_reflect_prompt(
         self,
         persona_prompt: str,
         plan_thought: str,
@@ -215,29 +198,19 @@ class GeminiClient:
         """Build the system prompt for the REFLECT phase."""
         obs_text = json.dumps(observations, indent=2, default=str)
 
+        # Load static reflect instructions from prompt-optimization-svc
+        reflect_instructions = FALLBACK_REFLECT_INSTRUCTIONS
+        if self._prompt_loader:
+            reflect_instructions = await self._prompt_loader.load(
+                name="zorven-odoo-worker-reflect",
+                fallback=FALLBACK_REFLECT_INSTRUCTIONS,
+            )
+
         return (
             f"{persona_prompt}\n\n"
             f"## Plan\n{plan_thought}\n\n"
             f"## Tool Results\n{obs_text}\n\n"
-            "## Instructions\n"
-            "Evaluate the tool results. Respond with JSON:\n"
-            "{\n"
-            '  "reflection": "Your analysis of the results",\n'
-            '  "is_complete": true/false,\n'
-            '  "final_answer": "Summary for the user (if complete)",\n'
-            '  "next_actions": [{"tool_name": "...", "arguments": {...}}]\n'
-            "}\n\n"
-            "CRITICAL RULES:\n"
-            "- If a tool call FAILED, do NOT retry the same tool. Try a "
-            "different tool or approach instead.\n"
-            "- If an Odoo model 'doesn't exist', the module is not installed. "
-            "Do NOT retry — skip that step and proceed with what you can do.\n"
-            "- Set is_complete=true and summarize partial results if some "
-            "steps succeeded and others cannot be completed.\n"
-            "- For email campaigns use marketing_create_campaign, NOT "
-            "website_create_page.\n"
-            "- Set is_complete=true if the task is done or no further "
-            "actions are needed."
+            f"{reflect_instructions}"
         )
 
     def _parse_plan_response(self, text: str) -> PlanOutput:

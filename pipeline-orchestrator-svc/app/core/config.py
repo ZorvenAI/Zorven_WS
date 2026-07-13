@@ -89,5 +89,10 @@ class Settings(BaseSettings):
     AD_PUBLISHING_AGENT_URL: str = "http://ad-publishing-agent-svc:8043"
     CAMPAIGN_OPTIMIZATION_AGENT_URL: str = "http://campaign-optimization-agent-svc:8044"
 
+    # Prompt optimization (MLflow + Redis prompt cache)
+    PROMPT_CACHE_REDIS_URL: str = "redis://localhost:6379/2"
+    MLFLOW_TRACKING_URI: str = "http://prompt-optimization-svc:8110"
+    PROMPT_FALLBACK_ONLY: bool = False
+
 
 settings = Settings()

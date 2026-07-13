@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     # Redis connection
     REDIS_URL: str = "redis://localhost:6379/4"
 
+    # Prompt optimization
+    PROMPT_CACHE_REDIS_URL: str = "redis://localhost:6379/2"
+    MLFLOW_TRACKING_URI: str = "http://prompt-optimization-svc:8110"
+    PROMPT_FALLBACK_ONLY: bool = False
+
     # Kafka connection
     KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
     KAFKA_GROUP_ID: str = "titling-consumers"

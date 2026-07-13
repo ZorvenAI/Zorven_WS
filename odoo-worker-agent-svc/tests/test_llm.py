@@ -112,9 +112,9 @@ def test_max_tool_calls_enforced(gemini_client):
     assert len(result.tool_calls) <= 2
 
 
-def test_build_plan_prompt(gemini_client):
+async def test_build_plan_prompt(gemini_client):
     """Should build a well-structured plan prompt."""
-    prompt = gemini_client._build_plan_prompt(
+    prompt = await gemini_client._build_plan_prompt(
         persona_prompt="You are a Sales Manager.",
         skill_context="## Skills\n- Create orders",
         observation_history="",
