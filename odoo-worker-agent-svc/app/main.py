@@ -29,6 +29,7 @@ from app.skills.registry import SkillRegistry
 from app.skills.router import SkillRouter
 from app.agent.engine import AgentEngine
 from app.agent.llm import GeminiClient
+from app.prompts.loader import AgentPromptClient
 from app.rbac.preflight import RBACPreflight
 from app.rag.client import RAGClient
 from app.services.executor import WorkerExecutor
@@ -49,6 +50,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize Redis manager
     redis_manager = RedisManager(settings.REDIS_URL)
 
+    # Initialize prompt loader
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+        default_ttl=settings.PROMPT_CACHE_TTL,
+        fallback_only=settings.PROMPT_FALLBACK_ONLY,
+    )
+    await prompt_loader.start()
+
     # Initialize Gemini client (optional)
     gemini_client = None
     if settings.GOOGLE_API_KEY:
@@ -59,6 +69,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             gemini_client = GeminiClient(
                 model_name=settings.GEMINI_MODEL,
                 max_tool_calls_per_step=settings.MAX_TOOL_CALLS_PER_STEP,
+                prompt_loader=prompt_loader,
             )
             logger.info("Gemini AI configured (model: %s)", settings.GEMINI_MODEL)
         except Exception as exc:
@@ -135,6 +146,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await mcp_client.close()
     await trace_producer.stop()
     await audit_producer.stop()
+    await prompt_loader.stop()
     await redis_manager.close()
     routes.executor = None
     logger.info("Odoo Worker Agent shut down")

@@ -22,6 +22,7 @@ from app.logic.file_resolver import FileResolver
 from app.logic.ingestion_bridge import IngestionBridge
 from app.logic.smart_titler import SmartTitler
 from app.messaging.kafka_producer import IngestionProducer, TraceProducer
+from app.prompts.loader import AgentPromptClient
 from app.services.core_api_client import CoreApiClient
 from app.services.gcs_client import GCSClient
 from app.services.uploader_executor import UploaderExecutor
@@ -41,6 +42,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize Redis manager
     redis_manager = RedisManager(settings.REDIS_URL)
+
+    # Initialize prompt loader
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+        fallback_only=settings.PROMPT_FALLBACK_ONLY,
+    )
+    await prompt_loader.start()
 
     # Initialize Gemini client (optional — for SmartTitler)
     gemini_model = None
@@ -83,7 +92,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize logic components
     file_resolver = FileResolver()
-    smart_titler = SmartTitler(gemini_model=gemini_model)
+    smart_titler = SmartTitler(gemini_model=gemini_model, prompt_loader=prompt_loader)
     ingestion_bridge = IngestionBridge(ingestion_producer=ingestion_producer)
 
     # Build executor
@@ -101,6 +110,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # Shutdown
+    await prompt_loader.stop()
     await ingestion_producer.stop()
     await executor.close()
     routes.executor = None

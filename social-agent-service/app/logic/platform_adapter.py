@@ -5,10 +5,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.api.schemas import SocialPost
+from app.prompts.fallbacks import FALLBACK_PLATFORM_ANALYSIS
 from app.utils.prompt_sanitizer import sanitize_ai_prompt
+
+if TYPE_CHECKING:
+    from app.prompts.loader import AgentPromptClient
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +26,13 @@ INSTAGRAM_MAX_CHARS = 2200
 class PlatformAdapter:
     """Adapts blog content into platform-specific social posts."""
 
-    def __init__(self, gemini_model: Any = None) -> None:
+    def __init__(
+        self,
+        gemini_model: Any = None,
+        prompt_loader: AgentPromptClient | None = None,
+    ) -> None:
         self._model = gemini_model
+        self._prompt_loader = prompt_loader
 
     async def adapt(
         self,
@@ -79,7 +88,7 @@ class PlatformAdapter:
 
         sanitized_content = sanitize_ai_prompt(blog_content[:3000])
 
-        prompt = self._build_prompt(
+        prompt = await self._build_prompt(
             platform,
             sanitized_content,
             brand_name,
@@ -103,7 +112,7 @@ class PlatformAdapter:
 
         return self._build_post(platform, content, hashtags)
 
-    def _build_prompt(
+    async def _build_prompt(
         self,
         platform: str,
         content: str,
@@ -129,6 +138,9 @@ class PlatformAdapter:
         is_analysis = _is_analysis_content(content)
 
         if is_analysis:
+            base_instruction = await self._load_analysis_base_instruction(
+                brand_name, brand_voice
+            )
             return self._build_analysis_prompt(
                 platform,
                 content,
@@ -137,6 +149,7 @@ class PlatformAdapter:
                 keyword_str,
                 no_options,
                 skill_context=skill_context,
+                base_instruction=base_instruction,
             )
 
         prompts = {
@@ -184,6 +197,21 @@ class PlatformAdapter:
             base_prompt += f"\n\n{skill_context}"
         return base_prompt
 
+    async def _load_analysis_base_instruction(
+        self, brand_name: str, brand_voice: str
+    ) -> str:
+        """Load the analysis base instruction from prompt loader or fallback."""
+        if self._prompt_loader is not None:
+            template = await self._prompt_loader.load(
+                "zorven-social-platform-analysis",
+                variables={"brand_name": brand_name, "brand_voice": brand_voice},
+                fallback=FALLBACK_PLATFORM_ANALYSIS,
+            )
+            return template
+        return FALLBACK_PLATFORM_ANALYSIS.format(
+            brand_name=brand_name, brand_voice=brand_voice
+        )
+
     def _build_analysis_prompt(
         self,
         platform: str,
@@ -193,6 +221,7 @@ class PlatformAdapter:
         keyword_str: str,
         no_options: str,
         skill_context: str = "",
+        base_instruction: str = "",
     ) -> str:
         """Build prompts tailored for brand equity / analysis data."""
         limits = {
@@ -203,19 +232,10 @@ class PlatformAdapter:
         }
         char_limit = limits.get(platform, LINKEDIN_MAX_CHARS)
 
-        base_instruction = (
-            f"You are writing a social media post for {brand_name}. "
-            f"Use a {brand_voice} tone.\n\n"
-            "The data below contains brand valuation and strength metrics "
-            "from an ISO 10668 brand equity analysis. Transform these results "
-            "into an engaging social media post that highlights the key "
-            "achievements and business value.\n\n"
-            "Guidelines:\n"
-            "- Lead with a compelling insight or headline number\n"
-            "- Translate financial metrics into business impact language\n"
-            "- Include specific numbers (valuation, BSI score) naturally\n"
-            "- End with a forward-looking call to action\n"
-        )
+        if not base_instruction:
+            base_instruction = FALLBACK_PLATFORM_ANALYSIS.format(
+                brand_name=brand_name, brand_voice=brand_voice
+            )
 
         platform_specifics = {
             "linkedin": (

@@ -20,27 +20,35 @@ import google.generativeai as genai
 from app.core.config import settings
 from app.nodes.base import BaseNode
 from app.nodes.tools.vertex_search_tool import SearchChunk, VertexSearchTool
+from app.prompts.fallbacks import FALLBACK_DEFAULT_AGENT
 from app.state.schema import AgentState
 from app.utils.prompt_sanitizer import sanitize_ai_prompt
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = (
-    "You are the Zorven AI Assistant. You have access to the user's "
-    "uploaded documents and files. When answering questions, prioritize "
-    "information from the provided search results and attached files over "
-    "your own training data. Always cite your sources by referencing the "
-    "file names. If the search results don't contain relevant information, "
-    "be transparent and say so, then provide your best general knowledge "
-    "answer. Maintain a professional, helpful tone.\n\n"
-    "IMPORTANT: If the user's question includes tasks beyond document "
-    "research (such as writing a blog, publishing, scheduling, or posting "
-    "to social media), focus ONLY on providing the relevant document "
-    "information and research findings. Do NOT comment on whether you can "
-    "or cannot perform those other tasks — other specialized agents in the "
-    "pipeline handle them. Never say things like 'I cannot schedule posts' "
-    "or 'you will need to manually do X'. Just provide the research data."
-)
+# Legacy module-level constant kept for backward compatibility.
+# At runtime, _get_system_prompt() loads from prompt-optimization-svc
+# (Redis cache -> MLflow -> this fallback).
+SYSTEM_PROMPT = FALLBACK_DEFAULT_AGENT
+
+
+async def _get_system_prompt(tenant_id: str = "") -> str:
+    """Load the default-agent system prompt via the prompt loader.
+
+    Falls back to the hardcoded FALLBACK_DEFAULT_AGENT when the
+    prompt loader is unavailable or in fallback-only mode.
+    """
+    try:
+        from app.main import prompt_loader
+
+        return await prompt_loader.load(
+            "zorven-orchestrator-default-agent",
+            tenant_id=tenant_id or None,
+            fallback=FALLBACK_DEFAULT_AGENT,
+        )
+    except Exception:
+        logger.debug("Prompt loader unavailable, using fallback", exc_info=True)
+        return FALLBACK_DEFAULT_AGENT
 
 
 class DefaultAgentNode(BaseNode):
@@ -113,6 +121,9 @@ class DefaultAgentNode(BaseNode):
             )
         await self._emit_trace(job_id, "started", thought)
 
+        # Load system prompt from prompt-optimization-svc (or fallback)
+        system_prompt = await _get_system_prompt(tenant_id)
+
         # Synthesize answer with Gemini (inject skill context if available)
         skill_context = self.config.get("skill_context", "") if self.config else ""
         answer = await self._synthesize(
@@ -121,6 +132,7 @@ class DefaultAgentNode(BaseNode):
             chat_history,
             attachment_files,
             skill_context=skill_context,
+            system_prompt=system_prompt,
         )
 
         # Emit completion trace
@@ -193,6 +205,7 @@ class DefaultAgentNode(BaseNode):
         chat_history: list[dict[str, str]],
         attachment_files: list[tuple[str, bytes]] | None = None,
         skill_context: str = "",
+        system_prompt: str = "",
     ) -> str:
         """Synthesize an answer using Gemini, grounded in search chunks.
 
@@ -203,7 +216,7 @@ class DefaultAgentNode(BaseNode):
             genai.configure(api_key=settings.GOOGLE_API_KEY)
             model = genai.GenerativeModel(settings.GEMINI_MODEL)
 
-            prompt_parts = [SYSTEM_PROMPT, ""]
+            prompt_parts = [system_prompt or SYSTEM_PROMPT, ""]
 
             if skill_context:
                 prompt_parts.append(skill_context)

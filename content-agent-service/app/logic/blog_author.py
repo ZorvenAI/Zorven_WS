@@ -9,9 +9,10 @@ In stub mode, generates a template Markdown blog with placeholder content.
 import asyncio
 import logging
 import re
-from typing import Any
+from typing import Any, Optional
 
 from app.api.schemas import Citation
+from app.prompts.fallbacks import FALLBACK_BLOG_AUTHOR
 from app.utils.prompt_sanitizer import sanitize_ai_prompt
 
 logger = logging.getLogger(__name__)
@@ -20,8 +21,13 @@ logger = logging.getLogger(__name__)
 class BlogAuthor:
     """Generates Markdown blog posts with brand voice and SEO optimization."""
 
-    def __init__(self, gemini_model: Any = None) -> None:
+    def __init__(
+        self,
+        gemini_model: Any = None,
+        prompt_loader: Optional[Any] = None,
+    ) -> None:
         self._model = gemini_model
+        self._prompt_loader = prompt_loader
 
     async def author(
         self,
@@ -71,13 +77,25 @@ class BlogAuthor:
         safe_topic = sanitize_ai_prompt(topic)
         safe_context = sanitize_ai_prompt(research_context[:4000])
 
+        # Load system instructions from prompt-optimization-svc (or fallback)
+        blog_variables = {
+            "brand_name": brand_persona.get("name", "a brand"),
+            "brand_voice": brand_persona.get("brand_voice", "professional"),
+            "target_audience": brand_persona.get("target_audience", "professionals"),
+            "industry": brand_persona.get("industry", "General"),
+            "values": ", ".join(brand_persona.get("values", [])),
+        }
+        if self._prompt_loader:
+            system_instructions = await self._prompt_loader.load(
+                "zorven-content-blog",
+                fallback=FALLBACK_BLOG_AUTHOR,
+                variables=blog_variables,
+            )
+        else:
+            system_instructions = FALLBACK_BLOG_AUTHOR.format(**blog_variables)
+
         prompt = (
-            f"## System Instructions\n"
-            f"You are a content writer for {brand_persona.get('name', 'a brand')}.\n"
-            f"Brand voice: {brand_persona.get('brand_voice', 'professional')}.\n"
-            f"Target audience: {brand_persona.get('target_audience', 'professionals')}.\n"
-            f"Industry: {brand_persona.get('industry', 'General')}.\n"
-            f"Values: {', '.join(brand_persona.get('values', []))}.\n\n"
+            f"{system_instructions}\n"
             f"## SEO Instructions\n"
             f"Target keywords: {', '.join(keywords)}\n"
             f"Suggested sections: {', '.join(headers)}\n"

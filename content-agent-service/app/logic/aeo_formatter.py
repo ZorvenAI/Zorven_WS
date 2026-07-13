@@ -8,8 +8,9 @@ In stub mode, generates template-based FAQ from keywords.
 import asyncio
 import logging
 import re
-from typing import Any
+from typing import Any, Optional
 
+from app.prompts.fallbacks import FALLBACK_AEO_FORMATTER
 from app.utils.prompt_sanitizer import sanitize_ai_prompt
 
 logger = logging.getLogger(__name__)
@@ -18,8 +19,13 @@ logger = logging.getLogger(__name__)
 class AEOFormatter:
     """Generates Answer Engine Optimization data for blog content."""
 
-    def __init__(self, gemini_model: Any = None) -> None:
+    def __init__(
+        self,
+        gemini_model: Any = None,
+        prompt_loader: Optional[Any] = None,
+    ) -> None:
         self._model = gemini_model
+        self._prompt_loader = prompt_loader
 
     async def format(
         self,
@@ -46,21 +52,23 @@ class AEOFormatter:
         safe_topic = sanitize_ai_prompt(topic)
         safe_content = sanitize_ai_prompt(blog_content[:3000])
 
+        # Load system prompt from prompt-optimization-svc (or fallback)
+        system_prompt = FALLBACK_AEO_FORMATTER
+        if self._prompt_loader:
+            system_prompt = await self._prompt_loader.load(
+                "zorven-content-aeo",
+                fallback=FALLBACK_AEO_FORMATTER,
+            )
+
         prompt = (
-            "You are an AEO (Answer Engine Optimization) expert. "
-            "Based on the following blog content, generate 3-5 FAQ items "
-            "that users would naturally ask about this topic.\n\n"
-            "Return ONLY valid JSON with this structure:\n"
-            '{"faq_items": [{"question": "...", "answer": "..."}]}\n\n'
+            f"{system_prompt}\n"
             f"Topic: {safe_topic}\n"
             f"Keywords: {', '.join(keywords[:5])}\n"
             f"Blog content (first 3000 chars):\n{safe_content}\n"
         )
 
         try:
-            response = await asyncio.to_thread(
-                self._model.generate_content, prompt
-            )
+            response = await asyncio.to_thread(self._model.generate_content, prompt)
             text = response.text.strip()
 
             # Extract JSON from potential markdown code blocks
@@ -112,9 +120,7 @@ class AEOFormatter:
         if keywords:
             faq_items.append(
                 {
-                    "question": (
-                        f"What role does {keywords[0]} play in {topic}?"
-                    ),
+                    "question": (f"What role does {keywords[0]} play in {topic}?"),
                     "answer": (
                         f"{keywords[0].capitalize()} is a critical component "
                         f"of {topic}, influencing strategy and outcomes."

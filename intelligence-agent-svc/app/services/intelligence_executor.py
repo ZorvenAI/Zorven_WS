@@ -30,6 +30,8 @@ from app.logic.analysis.theme_analyzer import ThemeAnalyzer
 from app.logic.iso_engine.bsi_calculator import BSICalculator
 from app.logic.iso_engine.proxy_engine import ProxyEngine
 from app.logic.iso_engine.royalty_relief import RoyaltyReliefEngine
+from app.prompts.fallbacks import FALLBACK_COMPANY_LOOKUP
+from app.prompts.loader import AgentPromptClient
 from app.services.rag_adapter import RAGAdapter
 from app.services.storage_service import StorageService
 
@@ -50,6 +52,7 @@ class IntelligenceExecutor:
         rag_adapter: Optional[RAGAdapter] = None,
         redis_manager: Optional[RedisManager] = None,
         gemini_client: Any = None,
+        prompt_loader: Optional[AgentPromptClient] = None,
     ) -> None:
         self.royalty_engine = royalty_engine
         self.bsi_calculator = bsi_calculator
@@ -60,6 +63,7 @@ class IntelligenceExecutor:
         self.rag_adapter = rag_adapter
         self.redis_manager = redis_manager
         self.gemini_client = gemini_client
+        self.prompt_loader = prompt_loader
 
     async def execute(self, request: ExecuteRequest, tenant_id: str) -> ExecuteResponse:
         """
@@ -196,7 +200,7 @@ class IntelligenceExecutor:
                             "Company data cache HIT for '%s'", company_name
                         )
                 if gemini_data is None:
-                    gemini_data = self._lookup_company_data(company_name)
+                    gemini_data = await self._lookup_company_data(company_name)
                     # Cache the result for consistent results across flows
                     if gemini_data and self.redis_manager:
                         await self.redis_manager.set_company_data(
@@ -556,7 +560,7 @@ class IntelligenceExecutor:
                     return name
         return None
 
-    def _lookup_company_data(self, company_name: str) -> dict[str, Any] | None:
+    async def _lookup_company_data(self, company_name: str) -> dict[str, Any] | None:
         """Look up real financial data for a company via Gemini AI.
 
         Returns a dict with company_name, sector, base_revenue, growth_rate,
@@ -571,38 +575,17 @@ class IntelligenceExecutor:
 
             model = self.gemini_client.GenerativeModel(settings.GEMINI_MODEL)
 
-            prompt = (
-                f'Look up the real, publicly available financial data '
-                f'for "{company_name}". Provide the data as a JSON '
-                f'object with ONLY these keys:\n'
-                f'  "company_name": the official company name (string)\n'
-                f'  "sector": one of: technology, software, '
-                f'consumer_goods, retail, automotive, '
-                f'aerospace, defense, industrial, '
-                f'electric_vehicles, '
-                f'financial_services, media, healthcare, '
-                f'pharmaceuticals, luxury, energy, '
-                f'telecommunications (string)\n'
-                f'  "base_revenue": most recent annual revenue in USD '
-                f'(integer, e.g. 51000000000 for $51B)\n'
-                f'  "growth_rate": year-over-year revenue growth rate '
-                f'as a decimal (e.g. 0.10 for 10%)\n'
-                f'  "brand_awareness": estimated global brand awareness '
-                f'score from 0 to 100 (integer)\n'
-                f'  "profit_margin": net profit margin as a decimal '
-                f'(e.g. 0.15 for 15%)\n'
-                f'  "customer_loyalty": estimated customer loyalty/'
-                f'retention score from 0 to 100 (integer, based on '
-                f'repeat purchase rates, NPS, brand switching costs)\n'
-                f'  "market_share": estimated market share in primary '
-                f'market as a decimal (e.g. 0.25 for 25%)\n\n'
-                f'IMPORTANT: Use real data from public filings and '
-                f'reports. If the company is private or you cannot '
-                f'determine its financials, respond with exactly: '
-                f'NOT_FOUND\n\n'
-                f'Respond with ONLY the JSON object (or NOT_FOUND). '
-                f'No markdown fences, no explanation.'
-            )
+            # Load prompt from prompt-optimization-svc (or fallback)
+            if self.prompt_loader:
+                prompt = await self.prompt_loader.load(
+                    "zorven-intelligence-company-lookup",
+                    variables={"company_name": company_name},
+                    fallback=FALLBACK_COMPANY_LOOKUP,
+                )
+            else:
+                prompt = FALLBACK_COMPANY_LOOKUP.replace(
+                    "{company_name}", company_name
+                )
 
             response = model.generate_content(prompt)
             text = response.text.strip()

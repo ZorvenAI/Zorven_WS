@@ -8,6 +8,9 @@ Supports optional skill_context for dynamic prompt augmentation.
 import asyncio
 import logging
 import re
+from typing import Optional
+
+from app.prompts.fallbacks import FALLBACK_TITLE_GENERATION
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +23,12 @@ class TitleGenerator:
         api_key: str,
         model_name: str = "gemini-2.0-flash",
         skill_context: str = "",
+        prompt_loader: Optional[object] = None,
     ) -> None:
         self.api_key = api_key
         self.model_name = model_name
         self.skill_context = skill_context
+        self._prompt_loader = prompt_loader
         self._model = None
 
         if api_key:
@@ -48,12 +53,16 @@ class TitleGenerator:
             sanitized_message = self._sanitize_input(first_message[:2000])
             sanitized_response = self._sanitize_input(first_response[:500])
 
-            prompt = (
-                "You are a session namer. Based on the following user message, "
-                "generate a 3 to 5-word title for the chat session. "
-                "Do not use punctuation. Do not use quotes. "
-                "Example: 'Tesla Q4 Revenue Review'\n\n"
-            )
+            # Load system instruction from prompt-optimization-svc (or fallback)
+            if self._prompt_loader is not None:
+                base_instruction = await self._prompt_loader.load(
+                    "zorven-titling-session",
+                    fallback=FALLBACK_TITLE_GENERATION,
+                )
+            else:
+                base_instruction = FALLBACK_TITLE_GENERATION
+
+            prompt = base_instruction + "\n\n"
             if self.skill_context:
                 prompt += f"{self.skill_context}\n\n"
             prompt += f"Input: {sanitized_message}"

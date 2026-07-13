@@ -23,6 +23,7 @@ from app.logic.analysis.theme_analyzer import ThemeAnalyzer
 from app.logic.iso_engine.bsi_calculator import BSICalculator
 from app.logic.iso_engine.proxy_engine import ProxyEngine
 from app.logic.iso_engine.royalty_relief import RoyaltyReliefEngine
+from app.prompts.loader import AgentPromptClient
 from app.services.intelligence_executor import IntelligenceExecutor
 from app.services.rag_adapter import RAGAdapter
 from app.services.storage_service import StorageService
@@ -42,6 +43,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize Redis manager
     redis_manager = RedisManager(settings.REDIS_URL)
+
+    # Initialize prompt loader
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+        fallback_only=settings.PROMPT_FALLBACK_ONLY,
+    )
+    await prompt_loader.start()
 
     # Initialize storage service (GCS)
     storage_service: StorageService | None = None
@@ -84,7 +93,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     proxy_engine = ProxyEngine()
     royalty_engine = RoyaltyReliefEngine()
     bsi_calculator = BSICalculator(proxy_engine=proxy_engine)
-    gap_analyzer = CompetitiveGapAnalyzer()
+    gap_analyzer = CompetitiveGapAnalyzer(prompt_loader=prompt_loader)
     theme_analyzer = ThemeAnalyzer()
 
     # Initialize executor with all dependencies
@@ -98,6 +107,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         rag_adapter=rag_adapter,
         redis_manager=redis_manager,
         gemini_client=gemini_client,
+        prompt_loader=prompt_loader,
     )
     routes.executor = executor
 
@@ -105,6 +115,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Shutdown
     await executor.close()
+    await prompt_loader.stop()
     routes.executor = None
     logger.info("Intelligence Agent shut down")
 

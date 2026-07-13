@@ -8,8 +8,10 @@ content. Falls back to the original name when Gemini is unavailable.
 import asyncio
 import logging
 import re
-from typing import Any
+from typing import Any, Optional
 
+from app.prompts.fallbacks import FALLBACK_SMART_TITLE
+from app.prompts.loader import AgentPromptClient
 from app.utils.prompt_sanitizer import sanitize_ai_prompt
 
 logger = logging.getLogger(__name__)
@@ -40,8 +42,13 @@ MAX_FILENAME_LENGTH = 200
 class SmartTitler:
     """Generates descriptive filenames for generic uploads."""
 
-    def __init__(self, gemini_model: Any = None) -> None:
+    def __init__(
+        self,
+        gemini_model: Any = None,
+        prompt_loader: Optional[AgentPromptClient] = None,
+    ) -> None:
         self._model = gemini_model
+        self._prompt_loader = prompt_loader
 
     async def title(
         self,
@@ -109,9 +116,19 @@ class SmartTitler:
             except Exception:
                 preview_text = "[binary content]"
 
+        # Load prompt from prompt-optimization-svc (Redis -> MLflow -> fallback)
+        base_prompt = FALLBACK_SMART_TITLE
+        if self._prompt_loader:
+            try:
+                base_prompt = await self._prompt_loader.load(
+                    "zorven-rag-smart-title",
+                    fallback=FALLBACK_SMART_TITLE,
+                )
+            except Exception as exc:
+                logger.warning("Prompt loader failed, using fallback: %s", exc)
+
         prompt = sanitize_ai_prompt(
-            "Generate a short, professional filename (3-5 words, no extension) "
-            "for this document. Return ONLY the filename, nothing else.\n\n"
+            f"{base_prompt}\n\n"
             f"Current filename: {filename}\n"
         )
         if skill_context:

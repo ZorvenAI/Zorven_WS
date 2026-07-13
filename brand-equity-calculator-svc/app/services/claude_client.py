@@ -11,6 +11,7 @@ from typing import Any
 
 from app.api.schemas import BrandEquityRequest
 from app.core.config import settings
+from app.prompts.fallbacks import FALLBACK_ISO_20671
 
 logger = logging.getLogger(__name__)
 
@@ -142,8 +143,9 @@ def _strip_code_fences(text: str) -> str:
 class ClaudeClient:
     """Wrapper around the Anthropic async client for brand equity evaluation."""
 
-    def __init__(self, client: Any) -> None:
+    def __init__(self, client: Any, prompt_loader: Any = None) -> None:
         self._client = client
+        self._prompt_loader = prompt_loader
 
     async def evaluate_brand_equity(
         self, request: BrandEquityRequest
@@ -155,11 +157,20 @@ class ClaudeClient:
             request.company_name,
         )
 
+        # Load system prompt: three-tier (Redis -> MLflow -> fallback)
+        if self._prompt_loader is not None:
+            system_prompt = await self._prompt_loader.load(
+                "zorven-brand-equity-iso20671",
+                fallback=FALLBACK_ISO_20671,
+            )
+        else:
+            system_prompt = ISO_20671_SYSTEM_PROMPT
+
         async with self._client.messages.stream(
             model=settings.CLAUDE_MODEL,
             max_tokens=16384,
             thinking={"type": "disabled"},
-            system=ISO_20671_SYSTEM_PROMPT,
+            system=system_prompt,
             messages=[{"role": "user", "content": _build_user_prompt(request)}],
         ) as _stream:
             message = await _stream.get_final_message()

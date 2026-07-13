@@ -20,6 +20,7 @@ from app.core.logging_config import setup_logging
 from app.core.redis_client import close_redis
 from app.messaging.kafka_consumer import TriggerConsumer
 from app.messaging.kafka_producer import TraceProducer
+from app.prompts.loader import AgentPromptClient
 from app.skills.loader import load_all_skills
 from app.skills.registry import SkillRegistry
 from app.skills.router import SkillRouter
@@ -29,6 +30,13 @@ logger = logging.getLogger(__name__)
 # Module-level Kafka instances (optional — graceful if broker unavailable)
 trace_producer = TraceProducer(settings.KAFKA_BOOTSTRAP_SERVERS)
 trigger_consumer = TriggerConsumer(settings.KAFKA_BOOTSTRAP_SERVERS)
+
+# Module-level prompt loader (three-tier: Redis cache → MLflow → fallback)
+prompt_loader = AgentPromptClient(
+    redis_url=settings.PROMPT_CACHE_REDIS_URL,
+    mlflow_uri=settings.MLFLOW_TRACKING_URI,
+    fallback_only=settings.PROMPT_FALLBACK_ONLY,
+)
 
 
 @asynccontextmanager
@@ -46,6 +54,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     skill_registry = SkillRegistry(skills)
     api_routes.skill_router = SkillRouter(skill_registry)
     logger.info("Skill system initialized: %d skill(s) loaded", len(skills))
+
+    # Start prompt loader (optional — falls back to hardcoded prompts)
+    await prompt_loader.start()
 
     # Start Kafka producer + consumer (optional — non-fatal if unavailable)
     await trace_producer.start()
@@ -76,6 +87,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     await trigger_consumer.stop()
     await trace_producer.stop()
+    await prompt_loader.stop()
     await close_redis()
     api_routes.skill_router = None
     logger.info("Pipeline Orchestrator shut down")
