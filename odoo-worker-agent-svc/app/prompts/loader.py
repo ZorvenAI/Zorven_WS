@@ -68,7 +68,9 @@ class AgentPromptClient:
                 if resp.status_code == 200:
                     logger.info("Prompt service connected: %s", self.mlflow_uri)
                 else:
-                    logger.warning("Prompt service unhealthy (%d) — disabled", resp.status_code)
+                    logger.warning(
+                        "Prompt service unhealthy (%d) — disabled", resp.status_code
+                    )
                     await self._http.aclose()
                     self._http = None
             except Exception as exc:
@@ -128,18 +130,26 @@ class AgentPromptClient:
         # Tier 1: Redis cache
         template = await self._cache_get(name, tenant_id)
         if template is not None:
-            logger.info("Loaded prompt '%s' from Redis cache (tenant=%s)", name, tenant_id)
+            logger.info(
+                "Loaded prompt '%s' from Redis cache (tenant=%s)", name, tenant_id
+            )
 
         # Tier 2: MLflow API
         if template is None:
             template = await self._mlflow_get(name, tenant_id)
             if template is not None:
-                logger.info("Loaded prompt '%s' from MLflow (tenant=%s)", name, tenant_id)
+                logger.info(
+                    "Loaded prompt '%s' from MLflow (tenant=%s)", name, tenant_id
+                )
                 await self._cache_set(name, template, resolve_ttl, tenant_id)
 
         # Tier 3: Fallback
         if template is None:
-            logger.info("Prompt '%s' not found in cache/MLflow, using fallback (tenant=%s)", name, tenant_id)
+            logger.info(
+                "Prompt '%s' not found in cache/MLflow, using fallback (tenant=%s)",
+                name,
+                tenant_id,
+            )
             if fallback:
                 if self.critical_agent:
                     logger.warning(
@@ -207,7 +217,9 @@ class AgentPromptClient:
             logger.warning("Prompt service fetch failed for '%s': %s", name, exc)
             return None
 
-    async def _fetch_prompt(self, name: str, tenant_id: Optional[str] = None) -> Optional[str]:
+    async def _fetch_prompt(
+        self, name: str, tenant_id: Optional[str] = None
+    ) -> Optional[str]:
         """Fetch a prompt template from the prompt-optimization-svc API.
 
         Calls GET /v1/prompts/{name}/production which returns the

@@ -34,8 +34,26 @@ AGENT_SERVICE_DIRS: dict[str, str] = {
     "ila": "intelligence-loop-agent-svc",
 }
 
-# Prompt naming pattern: zorven-wf{N}-{agent_code}-{slug}
-PROMPT_NAME_PATTERN = re.compile(r"^zorven-wf[123]-([a-z]+)-(.+)$")
+# Utility / infrastructure agents that have prompts in the catalog but
+# no config/skills.yaml.  Used only for agent_code validation.
+UTILITY_AGENT_CODES: set[str] = {
+    "brand_equity",
+    "intelligence",
+    "titling",
+    "content",
+    "social",
+    "rag_uploader",
+    "orchestrator",
+    "odoo_worker",
+}
+
+# All known agent codes (workflow + utility)
+ALL_AGENT_CODES: set[str] = set(AGENT_SERVICE_DIRS.keys()) | UTILITY_AGENT_CODES
+
+# Prompt naming pattern:
+#   workflow prompts:  zorven-wf{N}-{agent_code}-{slug}
+#   utility prompts:   zorven-{agent_code}-{slug}
+PROMPT_NAME_PATTERN = re.compile(r"^zorven-(?:wf[123]-)?([a-z_]+)-(.+)$")
 
 
 def _default_repo_root() -> Path:
