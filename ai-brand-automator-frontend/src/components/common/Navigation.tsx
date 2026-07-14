@@ -14,6 +14,7 @@ import {
   Bot,
   BarChart3,
   Activity,
+  FlaskConical,
   Users,
   CreditCard,
   PanelLeftClose,
@@ -136,6 +137,7 @@ export function Navigation({ children }: { children: React.ReactNode }) {
       : []),
     { href: '/dashboard/analysis', label: 'Reports', icon: <BarChart3 className={iconCls} />, active: pathname?.startsWith('/dashboard/analysis') ?? false },
     { href: '/optimization', label: 'Optimization', icon: <Activity className={iconCls} />, active: pathname?.startsWith('/optimization') ?? false },
+    { href: '/prompt-ops', label: 'Prompt Ops', icon: <FlaskConical className={iconCls} />, active: pathname?.startsWith('/prompt-ops') ?? false },
     ...(canTeam
       ? [{ href: '/dashboard/team', label: 'Team', icon: <Users className={iconCls} />, active: pathname === '/dashboard/team' }]
       : []),

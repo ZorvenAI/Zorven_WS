@@ -130,4 +130,4 @@ class TestCanaryAllAgents:
             assert state.agent_code == agent
 
     def test_all_15_agents_can_canary(self):
-        assert len(AGENT_PORTS) == 15
+        assert len(AGENT_PORTS) == 23

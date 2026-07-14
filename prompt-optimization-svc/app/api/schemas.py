@@ -446,3 +446,61 @@ class TenantConfigUpdateRequest(BaseModel):
         from app.cache.tenant_config import strict_validate_schedule
 
         return strict_validate_schedule(v)
+
+
+# ── Canary dashboard schemas ──
+
+
+class CanaryMetricRecordRequest(BaseModel):
+    """Request for POST /v1/prompts/{name}/versions/{version}/metrics."""
+
+    scorer_name: str = Field(..., description="Scorer name (e.g. json_compliance)")
+    score: float = Field(..., ge=0.0, le=1.0, description="Score value [0, 1]")
+
+
+class CanaryDeploymentInfo(BaseModel):
+    """Active canary deployment info."""
+
+    prompt_name: str
+    canary_version: int
+    production_version: int
+    agent_code: str
+    started_at: str
+    expires_at: str
+    time_remaining_hours: float
+    active: bool = True
+
+
+class ActiveCanariesResponse(BaseModel):
+    """Response for GET /v1/canary/active."""
+
+    canaries: list[CanaryDeploymentInfo] = Field(default_factory=list)
+
+
+class CanaryMetricsComparison(BaseModel):
+    """Side-by-side metrics comparison for canary vs production."""
+
+    prompt_name: str
+    canary_version: int
+    production_version: int
+    canary_metrics: dict[str, float] = Field(default_factory=dict)
+    production_metrics: dict[str, float] = Field(default_factory=dict)
+    regression_pct: Optional[float] = None
+    status: str = "healthy"
+
+
+class CanaryHistoryEntry(BaseModel):
+    """Historical canary deployment outcome."""
+
+    prompt_name: str
+    canary_version: int
+    started_at: str
+    ended_at: str
+    outcome: str
+    final_regression_pct: Optional[float] = None
+
+
+class CanaryHistoryResponse(BaseModel):
+    """Response for GET /v1/canary/history."""
+
+    history: list[CanaryHistoryEntry] = Field(default_factory=list)

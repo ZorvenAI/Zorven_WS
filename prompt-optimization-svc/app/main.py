@@ -126,6 +126,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:
             logger.warning("Auto-seed failed (non-fatal): %s", exc)
 
+    # 4c. Canary manager
+    from app.logic.canary_manager import CanaryManager
+
+    canary_mgr = CanaryManager(prompt_cache, lifecycle_manager=lcm)
+
     # 5. Health checker
     checker = HealthChecker(redis_client=redis_client)
 
@@ -135,6 +140,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     routes.health_checker = checker
     routes.mlflow_registry = registry
     routes.lifecycle_manager = lcm
+    routes.canary_manager = canary_mgr
 
     # 7. Campaign completion trigger consumer
     from app.kafka.campaign_trigger import CampaignCompletionTrigger
@@ -163,6 +169,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await redis_manager.close()
     routes.health_checker = None
     routes.lifecycle_manager = None
+    routes.canary_manager = None
     logger.info("prompt-optimization-svc shut down")
 
 

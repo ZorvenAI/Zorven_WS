@@ -66,6 +66,7 @@ def _float_or_none(value) -> Optional[float]:
 health_checker: Optional[HealthChecker] = None
 mlflow_registry: Optional[MLflowPromptRegistry] = None
 lifecycle_manager: Optional[PromptLifecycleManager] = None
+canary_manager = None  # Optional[CanaryManager] — set in main.py lifespan
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -420,9 +421,36 @@ async def get_production_prompt(
     name: str,
     x_tenant_id: str = Header(default=None, alias="X-Tenant-ID"),
 ):
-    """Get the current production version (AC-4, AC-5: tenant override first)."""
+    """Get the current production version with canary-aware routing.
+
+    If an active canary exists and the tenant is in the 10% canary bucket,
+    returns the canary version instead of the production version.
+    """
     if lifecycle_manager is None:
         return JSONResponse(status_code=503, content={"detail": "Not initialized"})
+
+    # Check for active canary routing
+    if canary_manager and x_tenant_id:
+        from app.logic.canary_manager import is_canary_request
+
+        canary_state = await canary_manager.get_canary_state(name)
+        if canary_state and canary_state.active:
+            if is_canary_request(x_tenant_id):
+                # Route to canary version
+                if mlflow_registry:
+                    canary_prompt = mlflow_registry.get_prompt_version(
+                        name, canary_state.canary_version
+                    )
+                    if canary_prompt:
+                        return ProductionPromptResponse(
+                            name=name,
+                            version=canary_prompt.version,
+                            template=canary_prompt.template,
+                            state="CANARY",
+                            tags={**canary_prompt.tags, "is_canary": "true"},
+                        )
+
+    # Normal production resolution
     prod = lifecycle_manager.get_production_version(name, tenant_id=x_tenant_id)
     if prod is None:
         return JSONResponse(
@@ -1296,6 +1324,101 @@ async def delete_tenant_override_endpoint(
         )
     finally:
         await cache.close()
+
+
+# ── Canary metrics + dashboard endpoints ──
+
+
+@router.post(
+    "/v1/prompts/{name}/versions/{version}/metrics",
+    response_model=None,
+    status_code=201,
+)
+async def record_canary_metric(
+    name: str,
+    version: int,
+    request: "CanaryMetricRecordRequest",
+):
+    """Record a scorer metric for a canary or production version."""
+    from app.api.schemas import CanaryMetricRecordRequest
+
+    if canary_manager is None:
+        return JSONResponse(
+            status_code=503, content={"detail": "Canary manager not initialized"}
+        )
+    await canary_manager.record_canary_metric(
+        name, version, request.scorer_name, request.score
+    )
+    return JSONResponse(
+        status_code=201,
+        content={
+            "detail": f"Metric '{request.scorer_name}' recorded for {name} v{version}"
+        },
+    )
+
+
+@router.get("/v1/canary/active", response_model=None)
+async def list_active_canaries():
+    """List all currently active canary deployments."""
+    from datetime import datetime, timezone
+
+    from app.api.schemas import ActiveCanariesResponse, CanaryDeploymentInfo
+
+    if canary_manager is None:
+        return JSONResponse(
+            status_code=503, content={"detail": "Canary manager not initialized"}
+        )
+
+    canaries = await canary_manager.list_active_canaries()
+    now = datetime.now(timezone.utc)
+    items = [
+        CanaryDeploymentInfo(
+            prompt_name=c.prompt_name,
+            canary_version=c.canary_version,
+            production_version=c.production_version,
+            agent_code=c.agent_code,
+            started_at=c.started_at.isoformat(),
+            expires_at=c.expires_at.isoformat(),
+            time_remaining_hours=max(0, (c.expires_at - now).total_seconds() / 3600),
+            active=c.active,
+        )
+        for c in canaries
+    ]
+    return ActiveCanariesResponse(canaries=items)
+
+
+@router.get("/v1/canary/{prompt_name}/metrics", response_model=None)
+async def get_canary_metrics_comparison(prompt_name: str):
+    """Get side-by-side metrics comparison for canary vs production."""
+    from app.api.schemas import CanaryMetricsComparison
+
+    if canary_manager is None:
+        return JSONResponse(
+            status_code=503, content={"detail": "Canary manager not initialized"}
+        )
+
+    comparison = await canary_manager.get_canary_comparison(prompt_name)
+    if comparison is None:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"No active canary for '{prompt_name}'"},
+        )
+    return CanaryMetricsComparison(**comparison)
+
+
+@router.get("/v1/canary/history", response_model=None)
+async def get_canary_history():
+    """List recent canary deployment outcomes (last 30 days)."""
+    from app.api.schemas import CanaryHistoryEntry, CanaryHistoryResponse
+
+    if canary_manager is None:
+        return JSONResponse(
+            status_code=503, content={"detail": "Canary manager not initialized"}
+        )
+
+    history = await canary_manager.list_canary_history()
+    entries = [CanaryHistoryEntry(**h) for h in history]
+    return CanaryHistoryResponse(history=entries)
 
 
 @router.get("/v1/config/tenant/{tenant_id}", response_model=None)
