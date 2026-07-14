@@ -19,6 +19,7 @@ celery_app = Celery(
         "app.tasks.optimize_wf2_pipeline",
         "app.tasks.optimize_wf3_pipeline",
         "app.tasks.prompt_health_check",
+        "app.tasks.canary_health_check",
     ],
 )
 
@@ -71,5 +72,10 @@ celery_app.conf.beat_schedule = {
     "prompt-health-check-daily": {
         "task": "app.tasks.prompt_health_check.prompt_health_check",
         "schedule": crontab(hour=10, minute=0),
+    },
+    # Every 15 minutes: canary health check
+    "canary-health-check": {
+        "task": "app.tasks.canary_health_check.canary_health_check",
+        "schedule": crontab(minute="*/15"),
     },
 }

@@ -22,6 +22,7 @@ CANARY_PROMOTION_ENABLED = True  # Hardcoded, non-configurable
 # Redis key templates
 CANARY_STATE_KEY = "prompt:canary:{name}"
 CANARY_METRICS_KEY = "prompt:metrics:{name}:v{version}"
+CANARY_HISTORY_KEY = "prompt:canary_history:{name}:v{version}"
 
 
 def is_canary_request(tenant_id: str, canary_pct: float = CANARY_TRAFFIC_PCT) -> bool:
@@ -64,8 +65,9 @@ class CanaryManager:
     Stores canary state and metrics in Redis (DB 2).
     """
 
-    def __init__(self, prompt_cache) -> None:
+    def __init__(self, prompt_cache, lifecycle_manager=None) -> None:
         self.prompt_cache = prompt_cache
+        self.lifecycle_manager = lifecycle_manager
 
     async def start_canary(
         self,
@@ -217,7 +219,8 @@ class CanaryManager:
         """Roll back a canary deployment (AC-3).
 
         Transitions the prompt version to ROLLED_BACK via the lifecycle
-        manager, clears canary state from Redis, and logs ADMIN alert.
+        manager, clears canary state from Redis, records outcome, and
+        logs ADMIN alert.
         """
         state = await self.get_canary_state(prompt_name)
         if state is None:
@@ -225,16 +228,19 @@ class CanaryManager:
 
         # Transition prompt lifecycle to ROLLED_BACK
         try:
-            from app.logic.lifecycle import PromptLifecycleManager, PromptState
+            from app.logic.lifecycle import PromptState
 
-            lifecycle = PromptLifecycleManager(
-                mlflow_registry=None, prompt_cache=self.prompt_cache
-            )
-            lifecycle.rollback(
-                prompt_name,
-                state.canary_version,
-                PromptState.CANARY,
-            )
+            if self.lifecycle_manager is not None:
+                self.lifecycle_manager.rollback(
+                    prompt_name,
+                    state.canary_version,
+                    PromptState.CANARY,
+                )
+            else:
+                logger.warning(
+                    "No lifecycle_manager — skipping state transition for %s",
+                    prompt_name,
+                )
         except Exception as exc:
             logger.error(
                 "Failed to transition %s v%d to ROLLED_BACK: %s",
@@ -242,6 +248,12 @@ class CanaryManager:
                 state.canary_version,
                 exc,
             )
+
+        # Compute final regression for history
+        regression = await self._compute_regression(state)
+
+        # Record outcome in history
+        await self._record_canary_outcome(state, "rolled_back", regression)
 
         # Clear canary state from Redis
         r = await self.prompt_cache.connect()
@@ -256,3 +268,179 @@ class CanaryManager:
             state.production_version,
         )
         return True
+
+    async def promote_canary(self, prompt_name: str) -> bool:
+        """Promote a canary to PRODUCTION after successful evaluation.
+
+        Called when a canary expires with healthy metrics or is manually
+        promoted. Records outcome in history.
+        """
+        state = await self.get_canary_state(prompt_name)
+        if state is None:
+            return False
+
+        try:
+            if self.lifecycle_manager is not None:
+                self.lifecycle_manager.promote_to_production(
+                    prompt_name, state.canary_version
+                )
+            else:
+                logger.warning(
+                    "No lifecycle_manager — skipping promotion for %s", prompt_name
+                )
+        except Exception as exc:
+            logger.error(
+                "Failed to promote canary %s v%d: %s",
+                prompt_name,
+                state.canary_version,
+                exc,
+            )
+            return False
+
+        regression = await self._compute_regression(state)
+        await self._record_canary_outcome(state, "promoted", regression)
+
+        # Clear canary state
+        r = await self.prompt_cache.connect()
+        key = CANARY_STATE_KEY.format(name=prompt_name)
+        await r.delete(key)
+
+        logger.info(
+            "Canary promoted: %s v%d → PRODUCTION",
+            prompt_name,
+            state.canary_version,
+        )
+        return True
+
+    async def _compute_regression(self, state: CanaryState) -> Optional[float]:
+        """Compute regression percentage for a canary vs production."""
+        canary_metrics = await self.get_canary_metrics(
+            state.prompt_name, state.canary_version
+        )
+        prod_metrics = await self.get_canary_metrics(
+            state.prompt_name, state.production_version
+        )
+        if not canary_metrics or not prod_metrics:
+            return None
+        common = set(canary_metrics.keys()) & set(prod_metrics.keys())
+        if not common:
+            return None
+        canary_agg = sum(canary_metrics[k] for k in common) / len(common)
+        prod_agg = sum(prod_metrics[k] for k in common) / len(common)
+        if prod_agg <= 0:
+            return None
+        return (prod_agg - canary_agg) / prod_agg
+
+    async def _record_canary_outcome(
+        self,
+        state: CanaryState,
+        outcome: str,
+        regression_pct: Optional[float],
+    ) -> None:
+        """Record canary outcome in Redis history (30-day TTL)."""
+        r = await self.prompt_cache.connect()
+        now = datetime.now(timezone.utc)
+        key = CANARY_HISTORY_KEY.format(
+            name=state.prompt_name, version=state.canary_version
+        )
+        data = {
+            "prompt_name": state.prompt_name,
+            "canary_version": str(state.canary_version),
+            "production_version": str(state.production_version),
+            "agent_code": state.agent_code,
+            "started_at": state.started_at.isoformat(),
+            "ended_at": now.isoformat(),
+            "outcome": outcome,
+            "final_regression_pct": (
+                str(regression_pct) if regression_pct is not None else ""
+            ),
+        }
+        await r.hset(key, mapping=data)
+        await r.expire(key, settings.CANARY_METRICS_TTL_DAYS * 86400)
+
+    async def list_active_canaries(self) -> list[CanaryState]:
+        """Scan Redis for all active canary deployments."""
+        r = await self.prompt_cache.connect()
+        canaries = []
+        async for key in r.scan_iter(match="prompt:canary:*"):
+            data = await r.hgetall(key)
+            if not data or data.get("active") != "true":
+                continue
+            try:
+                canaries.append(
+                    CanaryState(
+                        prompt_name=data.get("prompt_name", ""),
+                        canary_version=int(data.get("canary_version", 0)),
+                        production_version=int(data.get("production_version", 0)),
+                        started_at=datetime.fromisoformat(data["started_at"]),
+                        expires_at=datetime.fromisoformat(data["expires_at"]),
+                        agent_code=data.get("agent_code", ""),
+                        active=True,
+                    )
+                )
+            except (KeyError, ValueError) as exc:
+                logger.warning("Skipping malformed canary key %s: %s", key, exc)
+        return canaries
+
+    async def get_canary_comparison(self, prompt_name: str) -> Optional[dict]:
+        """Fetch metrics for canary and production, compute regression."""
+        state = await self.get_canary_state(prompt_name)
+        if state is None:
+            return None
+
+        canary_metrics = await self.get_canary_metrics(
+            prompt_name, state.canary_version
+        )
+        prod_metrics = await self.get_canary_metrics(
+            prompt_name, state.production_version
+        )
+
+        regression_pct = await self._compute_regression(state)
+
+        if regression_pct is not None:
+            if regression_pct > 0.05:
+                status = "regressed"
+            elif regression_pct > 0.03:
+                status = "warning"
+            else:
+                status = "healthy"
+        else:
+            status = "healthy"
+
+        return {
+            "prompt_name": prompt_name,
+            "canary_version": state.canary_version,
+            "production_version": state.production_version,
+            "canary_metrics": canary_metrics,
+            "production_metrics": prod_metrics,
+            "regression_pct": regression_pct,
+            "status": status,
+        }
+
+    async def list_canary_history(self, days: int = 30) -> list[dict]:
+        """Retrieve recent canary outcomes from Redis."""
+        r = await self.prompt_cache.connect()
+        history = []
+        async for key in r.scan_iter(match="prompt:canary_history:*"):
+            data = await r.hgetall(key)
+            if not data:
+                continue
+            try:
+                reg_pct_str = data.get("final_regression_pct", "")
+                history.append(
+                    {
+                        "prompt_name": data.get("prompt_name", ""),
+                        "canary_version": int(data.get("canary_version", 0)),
+                        "started_at": data.get("started_at", ""),
+                        "ended_at": data.get("ended_at", ""),
+                        "outcome": data.get("outcome", ""),
+                        "final_regression_pct": (
+                            float(reg_pct_str) if reg_pct_str else None
+                        ),
+                    }
+                )
+            except (KeyError, ValueError) as exc:
+                logger.warning("Skipping malformed history key %s: %s", key, exc)
+        # Sort by ended_at descending
+        history.sort(key=lambda h: h.get("ended_at", ""), reverse=True)
+        return history

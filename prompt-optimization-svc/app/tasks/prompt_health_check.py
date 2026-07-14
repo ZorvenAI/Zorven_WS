@@ -323,14 +323,55 @@ def prompt_health_check(self):
         else:
             result["healthy"] += 1
 
+    # ── Canary safety net: check active canaries for regression ──
+    # The 15-minute canary_health_check task is the primary check, but this
+    # daily run provides a safety net in case the Beat task was missed.
+    canary_checked = 0
+    canary_rolled_back = 0
+    try:
+
+        async def _check_canaries():
+            nonlocal canary_checked, canary_rolled_back
+            from app.cache.prompt_cache import PromptCacheManager
+            from app.logic.canary_manager import CanaryManager
+
+            cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
+            await cache.connect()
+            try:
+                mgr = CanaryManager(cache)
+                active = await mgr.list_active_canaries()
+                for state in active:
+                    canary_checked += 1
+                    regression = await mgr.check_canary_regression(state.prompt_name)
+                    if regression is not None and regression > 0.05:
+                        canary_rolled_back += 1
+                        logger.warning(
+                            "Daily check: canary %s regression %.1f%% — "
+                            "rolled back by check_canary_regression",
+                            state.prompt_name,
+                            regression * 100,
+                        )
+            finally:
+                await cache.close()
+
+        asyncio.run(_check_canaries())
+    except Exception as exc:
+        logger.error("Canary safety-net check failed: %s", exc)
+
+    result["canary_checked"] = canary_checked
+    result["canary_rolled_back"] = canary_rolled_back
+
     logger.info(
         "Health check complete: checked=%d, healthy=%d, degraded=%d, "
-        "reopt_triggered=%d, rollback_triggered=%d",
+        "reopt_triggered=%d, rollback_triggered=%d, "
+        "canary_checked=%d, canary_rolled_back=%d",
         result["checked"],
         result["healthy"],
         result["degraded"],
         result["reopt_triggered"],
         result["rollback_triggered"],
+        canary_checked,
+        canary_rolled_back,
     )
 
     # Limit details for Celery result backend

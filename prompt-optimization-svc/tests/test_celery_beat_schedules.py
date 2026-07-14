@@ -19,12 +19,12 @@ from app.tasks.prompt_health_check import _check_regression, _get_reopt_task_nam
 
 
 class TestBeatScheduleConfiguration:
-    """Verify all 6 §14.1 entries are present and correct."""
+    """Verify all 7 Beat entries are present and correct."""
 
-    def test_beat_schedule_has_6_entries(self):
+    def test_beat_schedule_has_7_entries(self):
         from app.celery_app import celery_app
 
-        assert len(celery_app.conf.beat_schedule) == 6
+        assert len(celery_app.conf.beat_schedule) == 7
 
     def test_mine_golden_examples_present(self):
         from app.celery_app import celery_app
@@ -75,6 +75,7 @@ class TestBeatScheduleConfiguration:
         assert "app.tasks.optimize_wf2_pipeline" in include
         assert "app.tasks.optimize_wf3_pipeline" in include
         assert "app.tasks.prompt_health_check" in include
+        assert "app.tasks.canary_health_check" in include
 
     def test_all_entries_have_schedule(self):
         from app.celery_app import celery_app
@@ -260,6 +261,24 @@ class TestHealthCheckSchedule:
         assert schedule.day_of_week == {0, 1, 2, 3, 4, 5, 6}
 
 
+# ── Canary Health Check Schedule ──
+
+
+class TestCanaryHealthCheckSchedule:
+    def test_task_name(self):
+        from app.celery_app import celery_app
+
+        entry = celery_app.conf.beat_schedule["canary-health-check"]
+        assert entry["task"] == "app.tasks.canary_health_check.canary_health_check"
+
+    def test_every_15_minutes(self):
+        from app.celery_app import celery_app
+
+        entry = celery_app.conf.beat_schedule["canary-health-check"]
+        schedule = entry["schedule"]
+        assert schedule.minute == {0, 15, 30, 45}
+
+
 # ── Task Registration ──
 
 
@@ -316,6 +335,15 @@ class TestTaskRegistration:
         assert (
             prompt_health_check.name
             == "app.tasks.prompt_health_check.prompt_health_check"
+        )
+
+    def test_canary_health_check_importable(self):
+        from app.tasks.canary_health_check import canary_health_check
+
+        assert canary_health_check is not None
+        assert (
+            canary_health_check.name
+            == "app.tasks.canary_health_check.canary_health_check"
         )
 
 
