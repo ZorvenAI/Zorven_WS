@@ -260,6 +260,32 @@ async def seed_prompts() -> SeedResponse:
     )
 
 
+@router.post("/v1/prompts/seed-to-production", response_model=SeedResponse)
+async def seed_to_production_endpoint(
+    decision: Decision = Depends(require_permission(Permission.PROMOTE)),
+) -> SeedResponse:
+    """Seed all catalog prompts and promote them to PRODUCTION.
+
+    Walks each prompt through the full lifecycle sequence
+    (DRAFT → STAGING → CANARY → PRODUCTION). Idempotent — prompts already
+    at PRODUCTION are skipped. Resumes from intermediate states.
+    """
+    if mlflow_registry is None or lifecycle_manager is None:
+        return SeedResponse(
+            errors=1,
+            details=["MLflow or lifecycle manager not initialized"],
+        )
+    from app.services.prompt_seeder import seed_to_production
+
+    result = seed_to_production(mlflow_registry, lifecycle_manager)
+    return SeedResponse(
+        created=result.created,
+        skipped=result.skipped,
+        errors=result.errors,
+        details=result.details,
+    )
+
+
 @router.put("/v1/prompts/{name}/versions/{version}/promote")
 async def promote_prompt(
     name: str,
