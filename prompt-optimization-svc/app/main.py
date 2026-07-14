@@ -111,6 +111,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if registry:
         lcm = PromptLifecycleManager(registry, lifecycle_producer)
 
+    # 4b. Auto-seed prompts to PRODUCTION
+    if registry and lcm:
+        from app.services.prompt_seeder import seed_to_production
+
+        try:
+            seed_result = seed_to_production(registry, lcm)
+            logger.info(
+                "Auto-seed complete: %d promoted, %d skipped, %d errors",
+                seed_result.created,
+                seed_result.skipped,
+                seed_result.errors,
+            )
+        except Exception as exc:
+            logger.warning("Auto-seed failed (non-fatal): %s", exc)
+
     # 5. Health checker
     checker = HealthChecker(redis_client=redis_client)
 
