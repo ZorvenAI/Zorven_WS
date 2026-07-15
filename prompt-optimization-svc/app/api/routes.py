@@ -1333,6 +1333,41 @@ async def delete_tenant_override_endpoint(
 # ── Canary metrics + dashboard endpoints ──
 
 
+@router.post("/v1/canary/start", response_model=None, status_code=201)
+async def start_canary(request: Request):
+    """Start a canary deployment for a prompt version."""
+    if canary_manager is None:
+        return JSONResponse(
+            status_code=503, content={"detail": "Canary manager not initialized"}
+        )
+    body = await request.json()
+    prompt_name = body.get("prompt_name")
+    canary_version = body.get("canary_version")
+    production_version = body.get("production_version")
+    agent_code = body.get("agent_code", "")
+    if not prompt_name or canary_version is None or production_version is None:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": "prompt_name, canary_version, and production_version required"
+            },
+        )
+    state = await canary_manager.start_canary(
+        prompt_name, int(canary_version), int(production_version), agent_code
+    )
+    return JSONResponse(
+        status_code=201,
+        content={
+            "prompt_name": state.prompt_name,
+            "canary_version": state.canary_version,
+            "production_version": state.production_version,
+            "started_at": state.started_at.isoformat(),
+            "expires_at": state.expires_at.isoformat(),
+            "active": state.active,
+        },
+    )
+
+
 @router.post(
     "/v1/prompts/{name}/versions/{version}/metrics",
     response_model=None,
