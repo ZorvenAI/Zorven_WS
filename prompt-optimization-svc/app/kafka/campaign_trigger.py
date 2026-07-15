@@ -177,7 +177,7 @@ class CampaignCompletionTrigger:
             except Exception as exc:
                 logger.warning("Debounce check failed: %s", exc)
 
-        # Log re-optimization intent (actual queueing wired in EPIC-14)
+        # Log re-optimization intent and enqueue the appropriate task
         logger.info(
             "Re-optimization triggered: tenant=%s agent=%s prompt=%s "
             "score=%.2f < threshold=%.2f",
@@ -187,3 +187,33 @@ class CampaignCompletionTrigger:
             quality_score,
             threshold,
         )
+
+        # Enqueue the appropriate WF3 optimization task (force=True bypasses schedule guard)
+        try:
+            if agent in {"caa", "cga", "adpub"}:
+                from app.tasks.optimize_wf3_pipeline import (
+                    optimize_wf3_creative_pipeline,
+                )
+
+                optimize_wf3_creative_pipeline.apply_async(kwargs={"force": True})
+                logger.info(
+                    "Enqueued WF3 creative pipeline re-optimization for tenant=%s",
+                    tenant_id,
+                )
+            elif agent in {"coa", "ila"}:
+                from app.tasks.optimize_wf3_pipeline import (
+                    optimize_wf3_optimization_loop,
+                )
+
+                optimize_wf3_optimization_loop.apply_async(kwargs={"force": True})
+                logger.info(
+                    "Enqueued WF3 optimization loop re-optimization for tenant=%s",
+                    tenant_id,
+                )
+        except Exception as enqueue_exc:
+            logger.error(
+                "Failed to enqueue re-optimization task: tenant=%s agent=%s error=%s",
+                tenant_id,
+                agent,
+                enqueue_exc,
+            )

@@ -71,9 +71,11 @@ def optimize_wf1_pipeline(self):
         group.agent_codes,
     )
 
-    return {
-        "group_name": GROUP_NAME,
-        "prompt_count": len(group.prompt_names),
-        "agent_codes": list(group.agent_codes),
-        "status": "TRIGGERED",
-    }
+    from app.scorers import COMMON_SCORERS, WF1_SCORERS
+    from app.tasks.optimization_runner import run_group_optimization
+
+    return run_group_optimization(
+        group_name=GROUP_NAME,
+        scorers=COMMON_SCORERS + WF1_SCORERS,
+        celery_task_self=self,
+    )

@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     # Cost cap (OPT-02)
     OPTIMIZATION_COST_CAP_USD: float = 25.0
 
+    # Cost estimation per GEPA candidate evaluation
+    COST_PER_CANDIDATE_USD: float = 0.50
+
     # Length sanity (OPT-06)
     LENGTH_MULTIPLIER_LIMIT: float = 3.0
 

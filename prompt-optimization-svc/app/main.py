@@ -168,6 +168,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await prompt_cache.close()
     await redis_manager.close()
     routes.health_checker = None
+    routes.mlflow_registry = None
     routes.lifecycle_manager = None
     routes.canary_manager = None
     logger.info("prompt-optimization-svc shut down")
