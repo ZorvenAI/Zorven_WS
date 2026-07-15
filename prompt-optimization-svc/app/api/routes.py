@@ -1376,7 +1376,7 @@ async def start_canary(request: Request):
 async def record_canary_metric(
     name: str,
     version: int,
-    request: "CanaryMetricRecordRequest",
+    raw_request: Request,
 ):
     """Record a scorer metric for a canary or production version."""
     from app.api.schemas import CanaryMetricRecordRequest
@@ -1385,13 +1385,13 @@ async def record_canary_metric(
         return JSONResponse(
             status_code=503, content={"detail": "Canary manager not initialized"}
         )
-    await canary_manager.record_canary_metric(
-        name, version, request.scorer_name, request.score
-    )
+    data = await raw_request.json()
+    req = CanaryMetricRecordRequest(**data)
+    await canary_manager.record_canary_metric(name, version, req.scorer_name, req.score)
     return JSONResponse(
         status_code=201,
         content={
-            "detail": f"Metric '{request.scorer_name}' recorded for {name} v{version}"
+            "detail": f"Metric '{req.scorer_name}' recorded for {name} v{version}"
         },
     )
 
