@@ -38,6 +38,12 @@ from app.api.schemas import (
     TenantOverrideRequest,
     TenantOverrideResponse,
 )
+from app.api.schemas import (
+    DatasetSizeConfigRequest,
+)  # noqa: E402 — top-level for FastAPI
+from app.api.schemas import (
+    TenantConfigUpdateRequest,
+)  # noqa: E402 — top-level for FastAPI
 from app.auth.rbac import Decision, Permission, Role, require_permission, resolve_role
 from app.logic.lifecycle import (
     InvalidTransitionError,
@@ -559,10 +565,9 @@ async def list_optimization_runs(
     from app.core.config import settings
 
     cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
-    await cache.connect()
+    r = await cache.connect()
     try:
         all_runs = []
-        r = await cache.connect()
         async for key in r.scan_iter(match="prompt:optimization:progress:*"):
             run_id = key.split(":")[-1]
             progress = await cache.get_optimization_progress(run_id)
@@ -655,27 +660,103 @@ async def get_optimization_run(
         await cache.close()
 
 
-@router.post("/v1/execute", response_model=ExecuteResponse, status_code=501)
+@router.post("/v1/execute", response_model=None)
 async def execute(
     request: ExecuteRequest,
     x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
-) -> JSONResponse:
-    """Execute prompt optimization (stub — implemented in EPIC-2+)."""
-    return JSONResponse(
-        status_code=501,
-        content=ExecuteResponse().model_dump(),
+):
+    """Execute on-demand single-prompt GEPA optimization."""
+    config = request.config or {}
+    prompt_name = config.get("prompt_name")
+    agent_code = config.get("agent_code", "unknown")
+    if not prompt_name:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "config.prompt_name is required"},
+        )
+
+    from app.predict_fns.factory import make_predict_fn
+    from app.scorers import COMMON_SCORERS
+    from app.services.gepa_optimizer import ZorvenGepaOptimizer
+
+    predict_fn = make_predict_fn(prompt_name)
+    gepa = ZorvenGepaOptimizer()
+    result = gepa.optimize(
+        prompt_uris=[f"prompts:/{prompt_name}"],
+        predict_fn=predict_fn,
+        train_data=[{"inputs": request.input_context or {}}],
+        scorers=COMMON_SCORERS,
+        agent_code=agent_code,
+        tenant_id=x_tenant_id if x_tenant_id != "default" else None,
     )
+    return {
+        "status": "completed" if not result.error else "failed",
+        "best_prompt": result.best_prompt,
+        "best_score": result.best_score,
+        "candidates_evaluated": result.candidates_evaluated,
+        "mlflow_run_id": result.mlflow_run_id,
+        "duration_seconds": result.duration_seconds,
+        "error": result.error,
+    }
 
 
-@router.post("/v1/optimize", response_model=ExecuteResponse, status_code=501)
+@router.post("/v1/optimize", response_model=None, status_code=202)
 async def optimize(
     request: ExecuteRequest,
     x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
-) -> JSONResponse:
-    """Run GEPA optimization (stub — implemented in EPIC-5)."""
+    decision: Decision = Depends(require_permission(Permission.PROMOTE)),
+):
+    """Trigger GEPA group optimization via Celery task."""
+    config = request.config or {}
+    group_name = config.get("group_name")
+    if not group_name:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "config.group_name is required"},
+        )
+
+    from app.registries.optimization_groups import get_group
+
+    try:
+        group = get_group(group_name)
+    except KeyError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": str(exc)},
+        )
+
+    # Route to the correct Celery task based on workflow
+    task_map = {
+        1: "app.tasks.optimize_wf1_pipeline.optimize_wf1_pipeline",
+        2: "app.tasks.optimize_wf2_pipeline.optimize_wf2_pipeline",
+    }
+    if group.workflow == 3:
+        if "coa" in group.agent_codes or "ila" in group.agent_codes:
+            task_name = "app.tasks.optimize_wf3_pipeline.optimize_wf3_optimization_loop"
+        else:
+            task_name = "app.tasks.optimize_wf3_pipeline.optimize_wf3_creative_pipeline"
+    else:
+        task_name = task_map.get(group.workflow)
+
+    if not task_name:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": f"No task mapped for workflow {group.workflow}"},
+        )
+
+    from app.celery_app import celery_app
+
+    result = celery_app.send_task(task_name, kwargs={"force": True})
+
     return JSONResponse(
-        status_code=501,
-        content=ExecuteResponse().model_dump(),
+        status_code=202,
+        content={
+            "status": "QUEUED",
+            "task_id": result.id,
+            "group_name": group_name,
+            "prompt_count": len(group.prompt_names),
+            "agent_codes": list(group.agent_codes),
+        },
     )
 
 
@@ -1095,15 +1176,12 @@ async def get_dataset_size(
 
 @router.put("/v1/config/dataset-size", response_model=None)
 async def set_dataset_size(
-    request: "DatasetSizeConfigRequest",
+    request: DatasetSizeConfigRequest,
     x_tenant_id: str = Header(default="default", alias="X-Tenant-ID"),
     decision: Decision = Depends(require_permission(Permission.MODIFY_CONFIG)),
 ):
     """Set the golden dataset size limit for a tenant (AC-3: validates [3, 50])."""
-    from app.api.schemas import (
-        DatasetSizeConfigRequest,
-        DatasetSizeConfigResponse,
-    )
+    from app.api.schemas import DatasetSizeConfigResponse
     from app.cache.prompt_cache import PromptCacheManager
     from app.cache.tenant_config import (
         MAX_DATASET_SIZE,
@@ -1170,6 +1248,38 @@ async def approve_optimization_run(
             )
         except InvalidRunTransitionError as exc:
             return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+        # Start canary deployment after approval
+        prompt_name = progress.get("prompt_name", "")
+        agent_code = progress.get("agent_code", "")
+        if canary_manager and mlflow_registry and prompt_name:
+            try:
+                prompt_info = mlflow_registry.get_prompt(prompt_name)
+                if prompt_info:
+                    prod_info = None
+                    if lifecycle_manager:
+                        prod_info = lifecycle_manager.get_production_version(
+                            prompt_name
+                        )
+                    prod_version = (
+                        prod_info.version
+                        if prod_info
+                        else max(1, prompt_info.version - 1)
+                    )
+                    await canary_manager.start_canary(
+                        prompt_name=prompt_name,
+                        canary_version=prompt_info.version,
+                        production_version=prod_version,
+                        agent_code=agent_code,
+                    )
+                    logger.info(
+                        "Canary started after approval: prompt=%s, v%d vs v%d",
+                        prompt_name,
+                        prompt_info.version,
+                        prod_version,
+                    )
+            except Exception as exc:
+                logger.warning("Failed to start canary after approval: %s", exc)
 
         return ApprovalResponse(
             run_id=decision.run_id,
@@ -1501,11 +1611,11 @@ async def get_tenant_config(
 @router.put("/v1/config/tenant/{tenant_id}", response_model=None)
 async def update_tenant_config(
     tenant_id: str,
-    request: "TenantConfigUpdateRequest",
+    request: TenantConfigUpdateRequest,
     x_tenant_id: str = Header(default="", alias="X-Tenant-ID"),
 ):
     """Update tenant optimization configuration keys."""
-    from app.api.schemas import TenantConfigUpdateRequest, TenantOptimizationConfig
+    from app.api.schemas import TenantOptimizationConfig
 
     if x_tenant_id and tenant_id != x_tenant_id:
         return JSONResponse(

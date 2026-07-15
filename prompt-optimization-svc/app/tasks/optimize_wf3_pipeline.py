@@ -96,28 +96,32 @@ def _get_effective_schedule() -> str:
     bind=True,
     name="app.tasks.optimize_wf3_pipeline.optimize_wf3_creative_pipeline",
 )
-def optimize_wf3_creative_pipeline(self):
+def optimize_wf3_creative_pipeline(self, force: bool = False):
     """Optimize the WF3 creative pipeline group (CAA + CGA + ADPUB).
 
     Fires weekly via Beat; self-skips based on effective per-tenant schedule (US-047).
+    Pass force=True to bypass the schedule guard (used by campaign trigger).
     """
     from app.registries.optimization_groups import get_group
 
-    schedule = _get_effective_schedule()
-    now = datetime.now(timezone.utc)
+    if not force:
+        schedule = _get_effective_schedule()
+        now = datetime.now(timezone.utc)
 
-    if not should_run_wf3_schedule(schedule, now):
-        logger.info(
-            "WF3 creative pipeline skipped: schedule=%s, date=%s",
-            schedule,
-            now.isoformat(),
-        )
-        return {
-            "group_name": WF3_CREATIVE_GROUP,
-            "prompt_count": 0,
-            "status": "SKIPPED",
-            "schedule": schedule,
-        }
+        if not should_run_wf3_schedule(schedule, now):
+            logger.info(
+                "WF3 creative pipeline skipped: schedule=%s, date=%s",
+                schedule,
+                now.isoformat(),
+            )
+            return {
+                "group_name": WF3_CREATIVE_GROUP,
+                "prompt_count": 0,
+                "status": "SKIPPED",
+                "schedule": schedule,
+            }
+    else:
+        schedule = "on-demand"
 
     logger.info("Starting WF3 creative pipeline optimization: schedule=%s", schedule)
 
@@ -133,42 +137,47 @@ def optimize_wf3_creative_pipeline(self):
             "error": str(exc),
         }
 
-    return {
-        "group_name": WF3_CREATIVE_GROUP,
-        "prompt_count": len(group.prompt_names),
-        "agent_codes": list(group.agent_codes),
-        "status": "TRIGGERED",
-        "schedule": schedule,
-    }
+    from app.scorers import CAA_SCORERS, CGA_SCORERS, COMMON_SCORERS
+    from app.tasks.optimization_runner import run_group_optimization
+
+    return run_group_optimization(
+        group_name=WF3_CREATIVE_GROUP,
+        scorers=COMMON_SCORERS + CAA_SCORERS + CGA_SCORERS,
+        celery_task_self=self,
+    )
 
 
 @celery_app.task(
     bind=True,
     name="app.tasks.optimize_wf3_pipeline.optimize_wf3_optimization_loop",
 )
-def optimize_wf3_optimization_loop(self):
+def optimize_wf3_optimization_loop(self, force: bool = False):
     """Optimize the WF3 optimization loop group (COA + ILA).
 
     Fires weekly via Beat; self-skips based on effective per-tenant schedule (US-047).
     Inherits the same schedule as wf3_creative_pipeline per §14.1.
+    Pass force=True to bypass the schedule guard (used by campaign trigger).
     """
     from app.registries.optimization_groups import get_group
 
-    schedule = _get_effective_schedule()
-    now = datetime.now(timezone.utc)
+    if not force:
+        schedule = _get_effective_schedule()
+        now = datetime.now(timezone.utc)
 
-    if not should_run_wf3_schedule(schedule, now):
-        logger.info(
-            "WF3 optimization loop skipped: schedule=%s, date=%s",
-            schedule,
-            now.isoformat(),
-        )
-        return {
-            "group_name": WF3_OPTLOOP_GROUP,
-            "prompt_count": 0,
-            "status": "SKIPPED",
-            "schedule": schedule,
-        }
+        if not should_run_wf3_schedule(schedule, now):
+            logger.info(
+                "WF3 optimization loop skipped: schedule=%s, date=%s",
+                schedule,
+                now.isoformat(),
+            )
+            return {
+                "group_name": WF3_OPTLOOP_GROUP,
+                "prompt_count": 0,
+                "status": "SKIPPED",
+                "schedule": schedule,
+            }
+    else:
+        schedule = "on-demand"
 
     logger.info("Starting WF3 optimization loop optimization: schedule=%s", schedule)
 
@@ -184,10 +193,11 @@ def optimize_wf3_optimization_loop(self):
             "error": str(exc),
         }
 
-    return {
-        "group_name": WF3_OPTLOOP_GROUP,
-        "prompt_count": len(group.prompt_names),
-        "agent_codes": list(group.agent_codes),
-        "status": "TRIGGERED",
-        "schedule": schedule,
-    }
+    from app.scorers import COA_SCORERS, COMMON_SCORERS, ILA_SCORERS
+    from app.tasks.optimization_runner import run_group_optimization
+
+    return run_group_optimization(
+        group_name=WF3_OPTLOOP_GROUP,
+        scorers=COMMON_SCORERS + COA_SCORERS + ILA_SCORERS,
+        celery_task_self=self,
+    )
