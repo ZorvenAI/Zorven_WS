@@ -430,25 +430,29 @@ async def get_production_prompt(
         return JSONResponse(status_code=503, content={"detail": "Not initialized"})
 
     # Check for active canary routing
+    # Wrapped in try/except: canary check must never break the production hot path
     if canary_manager and x_tenant_id:
-        from app.logic.canary_manager import is_canary_request
+        try:
+            from app.logic.canary_manager import is_canary_request
 
-        canary_state = await canary_manager.get_canary_state(name)
-        if canary_state and canary_state.active:
-            if is_canary_request(x_tenant_id):
-                # Route to canary version
-                if mlflow_registry:
-                    canary_prompt = mlflow_registry.get_prompt_version(
-                        name, canary_state.canary_version
-                    )
-                    if canary_prompt:
-                        return ProductionPromptResponse(
-                            name=name,
-                            version=canary_prompt.version,
-                            template=canary_prompt.template,
-                            state="CANARY",
-                            tags={**canary_prompt.tags, "is_canary": "true"},
+            canary_state = await canary_manager.get_canary_state(name)
+            if canary_state and canary_state.active:
+                if is_canary_request(x_tenant_id):
+                    # Route to canary version
+                    if mlflow_registry:
+                        canary_prompt = mlflow_registry.get_prompt_version(
+                            name, canary_state.canary_version
                         )
+                        if canary_prompt:
+                            return ProductionPromptResponse(
+                                name=name,
+                                version=canary_prompt.version,
+                                template=canary_prompt.template,
+                                state="CANARY",
+                                tags={**canary_prompt.tags, "is_canary": "true"},
+                            )
+        except Exception as exc:
+            logger.warning("Canary check failed (falling through): %s", exc)
 
     # Normal production resolution
     prod = lifecycle_manager.get_production_version(name, tenant_id=x_tenant_id)
