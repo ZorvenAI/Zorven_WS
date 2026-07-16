@@ -41,7 +41,7 @@ class ZorvenGepaOptimizer:
     reflection model and per-agent budget limits.
     """
 
-    DEFAULT_REFLECTION_MODEL = "anthropic/claude-sonnet-4-6"
+    DEFAULT_REFLECTION_MODEL = "anthropic:/claude-sonnet-4-6"
 
     def __init__(
         self,
