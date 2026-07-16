@@ -17,4 +17,7 @@ COPY . .
 
 EXPOSE 8110
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8110"]
+# Start script reads PROCESS_TYPE env var to select web/worker/beat
+COPY start.sh .
+RUN chmod +x start.sh
+CMD ["./start.sh"]
