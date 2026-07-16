@@ -68,8 +68,15 @@ class JointOptimizer:
         except KeyError as exc:
             return JointOptimizationResult(group_name=group_name, error=str(exc))
 
-        # Build prompt URIs for all prompts in the group
-        prompt_uris = [f"prompts:/{name}" for name in group.prompt_names]
+        # Build prompt URIs for all prompts in the group (version required by MLflow)
+        prompt_uris = []
+        for name in group.prompt_names:
+            version = 1
+            if self.registry:
+                info = self.registry.get_prompt(name)
+                if info:
+                    version = info.version
+            prompt_uris.append(f"prompts:/{name}/{version}")
 
         logger.info(
             "Starting joint optimization: group=%s, prompts=%d, agents=%s",

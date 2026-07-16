@@ -679,10 +679,19 @@ async def execute(
     from app.scorers import COMMON_SCORERS
     from app.services.gepa_optimizer import ZorvenGepaOptimizer
 
+    # Resolve latest version — MLflow requires version in prompt URI
+    prompt_version = None
+    if mlflow_registry:
+        prompt_info = mlflow_registry.get_prompt(prompt_name)
+        if prompt_info:
+            prompt_version = prompt_info.version
+    if not prompt_version:
+        prompt_version = 1
+
     predict_fn = make_predict_fn(prompt_name)
     gepa = ZorvenGepaOptimizer()
     result = gepa.optimize(
-        prompt_uris=[f"prompts:/{prompt_name}"],
+        prompt_uris=[f"prompts:/{prompt_name}/{prompt_version}"],
         predict_fn=predict_fn,
         train_data=[{"inputs": request.input_context or {}}],
         scorers=COMMON_SCORERS,
