@@ -1,7 +1,7 @@
 FROM ghcr.io/mlflow/mlflow:v3.12.0
 
 # Install PostgreSQL driver for backend store
-RUN pip install --no-cache-dir psycopg2-binary
+RUN pip install --no-cache-dir psycopg2-binary alembic
 
 EXPOSE 5000
 
