@@ -755,7 +755,9 @@ async def optimize(
 
     from app.celery_app import celery_app
 
-    result = celery_app.send_task(task_name, kwargs={"force": True})
+    # Only WF3 tasks accept the 'force' parameter to bypass schedule guards
+    kwargs = {"force": True} if group.workflow == 3 else {}
+    result = celery_app.send_task(task_name, kwargs=kwargs)
 
     return JSONResponse(
         status_code=202,
