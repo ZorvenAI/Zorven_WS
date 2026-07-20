@@ -126,7 +126,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:
             logger.warning("Auto-seed failed (non-fatal): %s", exc)
 
-    # 4c. Canary manager
+    # 4c. Seed golden dataset examples (idempotent)
+    try:
+        from app.datasets.seeder import seed_golden_datasets
+        from app.models.database import async_session_factory
+
+        golden_result = await seed_golden_datasets(async_session_factory)
+        logger.info(
+            "Golden dataset seed: %d created, %d skipped, %d errors",
+            golden_result.created,
+            golden_result.skipped,
+            golden_result.errors,
+        )
+    except Exception as exc:
+        logger.warning("Golden dataset seeding failed (non-fatal): %s", exc)
+
+    # 4d. Canary manager
     from app.logic.canary_manager import CanaryManager
 
     canary_mgr = CanaryManager(prompt_cache, lifecycle_manager=lcm)

@@ -30,16 +30,17 @@ def _is_2nd_sunday(now: datetime) -> bool:
     bind=True,
     name="app.tasks.optimize_wf1_pipeline.optimize_wf1_pipeline",
 )
-def optimize_wf1_pipeline(self):
+def optimize_wf1_pipeline(self, force: bool = False):
     """Run joint optimization for the WF1 discovery pipeline group.
 
     Runs monthly via Beat schedule (2nd Sunday 02:00 ET).
     Self-skips if invoked on any other Sunday.
+    Pass force=True to bypass the schedule guard (used by /v1/optimize).
     """
     from app.registries.optimization_groups import get_group
 
     now = datetime.now(timezone.utc)
-    if not _is_2nd_sunday(now):
+    if not force and not _is_2nd_sunday(now):
         logger.info(
             "WF1 optimization skipped: not 2nd Sunday (day=%d, weekday=%d)",
             now.day,
