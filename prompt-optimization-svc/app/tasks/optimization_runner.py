@@ -237,6 +237,11 @@ async def _run_optimization_pipeline(
             scorers=scorers,
         )
 
+        # Extract best prompt text from joint result (primary prompt)
+        best_prompt_text = opt_result.prompt_results.get(
+            group.prompt_names[0], ""
+        ) if opt_result.prompt_results else ""
+
         if opt_result.error:
             await run_lcm.transition(
                 run_id=run_id,
@@ -269,7 +274,7 @@ async def _run_optimization_pipeline(
             opt_result.candidates_evaluated * settings.COST_PER_CANDIDATE_USD
         )
         candidate_result = run_candidate_guardrails(
-            candidate_text=opt_result.best_prompt,
+            candidate_text=best_prompt_text,
             base_text=base_prompt_text,
             current_cost_usd=estimated_cost,
         )
@@ -299,9 +304,9 @@ async def _run_optimization_pipeline(
             }
 
         # OPT-11: Placeholder invariance check
-        if base_prompt_text and opt_result.best_prompt:
+        if base_prompt_text and best_prompt_text:
             mutation_ok, invariance = check_gepa_mutation(
-                base_prompt_text, opt_result.best_prompt
+                base_prompt_text, best_prompt_text
             )
             if not mutation_ok:
                 await run_lcm.transition(
@@ -328,10 +333,10 @@ async def _run_optimization_pipeline(
 
         # ── Step 12: Register optimized prompt as new MLflow version ──
         new_version = None
-        if opt_result.best_prompt:
+        if best_prompt_text:
             for prompt_name in group.prompt_names:
                 prompt_result = opt_result.prompt_results.get(
-                    prompt_name, opt_result.best_prompt
+                    prompt_name, best_prompt_text
                 )
                 if prompt_result:
                     new_info = registry.register_prompt(
