@@ -399,13 +399,20 @@ async def _run_optimization_pipeline(
                 agent_code=primary_agent,
             )
 
+            # Start canary: use new version if available, else latest existing
+            canary_version = None
+            prod_version = 1
             if new_version is not None:
-                prod_version = 1
-                if prod_info:
-                    prod_version = prod_info.version
+                canary_version = new_version.version
+            elif prod_info is not None:
+                canary_version = prod_info.version
+            if prod_info is not None:
+                prod_version = prod_info.version
+
+            if canary_version is not None:
                 await canary_mgr.start_canary(
                     prompt_name=group.prompt_names[0],
-                    canary_version=new_version.version,
+                    canary_version=canary_version,
                     production_version=prod_version,
                     agent_code=primary_agent,
                 )
@@ -413,7 +420,7 @@ async def _run_optimization_pipeline(
                     "Canary started: group=%s, prompt=%s, v%d vs v%d",
                     group_name,
                     group.prompt_names[0],
-                    new_version.version,
+                    canary_version,
                     prod_version,
                 )
 

@@ -466,17 +466,56 @@ _EXPECTED_OUTPUTS: dict[str, dict[str, str]] = {
 
 
 def _wf1_context(brand_info: dict[str, str]) -> dict[str, Any]:
+    name = brand_info["brand_name"]
+    industry = brand_info["_industry"]
+    audience = brand_info["target_audience"]
     return {
-        "context_brand_name": brand_info["brand_name"],
-        "context_industry": brand_info["_industry"],
-        "context_target_audience": brand_info["target_audience"],
+        "context_brand_name": name,
+        "context_industry": industry,
+        "context_target_audience": audience,
         "context_brand_voice": brand_info["brand_voice"],
         "context_product_description": brand_info["product_description"],
-        "context_query": f"Analyze market opportunity for {brand_info['brand_name']}",
-        "context_competitors": f"Top 5 competitors in {brand_info['_industry']}",
-        "context_audience_data": f"Demographics and behaviors of {brand_info['target_audience']}",
-        "context_trends": f"Current macro and micro trends in {brand_info['_industry']}",
-        "context_feedback_data": f"Customer reviews and NPS data for {brand_info['brand_name']}",
+        "context_query": f"Analyze market opportunity for {name}",
+        "context_competitors": f"Top 5 competitors in {industry}",
+        "context_audience_data": f"Demographics and behaviors of {audience}",
+        "context_trends": f"Current macro and micro trends in {industry}",
+        "context_feedback_data": f"Customer reviews and NPS data for {name}",
+        # MRA/CIA skill-based prompts
+        "context_available_skills": (
+            "SKL-MRA-01 (Web Search), SKL-MRA-02 (Economic Indicators), "
+            "SKL-MRA-03 (News Search), SKL-MRA-04 (Competitor Research)"
+        ),
+        # TCIA-specific
+        "context_scored_trends": f"Scored trend analysis for {industry}",
+        "context_personas": f"Audience personas for {audience}",
+        "context_generational_insights": f"Generational insights for {audience}",
+        "context_persona_matrix": f"Trend-persona mapping for {name}",
+        "context_alerts": "No active alerts",
+        "context_viral_patterns": f"Viral patterns in {industry}",
+        "context_cultural_shifts": f"Cultural shifts affecting {industry}",
+        "context_language_trends": f"Language trends in {industry} marketing",
+        "context_report_type": "comprehensive",
+        "context_rag_context": f"Historical context for {name}",
+        "context_market": f"Market overview for {industry}",
+        "context_max_personas": "5",
+        # VOCA-specific
+        "context_brand_query": name,
+        "context_operating_mode": "comprehensive",
+        "context_persona_context": f"Persona profiles for {audience}",
+        "context_skill_context": "All analysis skills available",
+        "context_survey_data": f"Survey responses for {name}",
+        "context_review_data": f"Customer reviews for {name}",
+        "context_historical_nps": "NPS: 42 (previous quarter)",
+        "context_sentiment_data": f"Sentiment analysis for {name}",
+        "context_theme_data": f"Theme extraction for {name}",
+        "context_nps_data": f"NPS scores for {name}",
+        "context_mra_context": f"Market research context for {name}",
+        "context_cia_context": f"Competitor intelligence for {name}",
+        "context_apa_context": f"Audience persona data for {name}",
+        "context_tcia_context": f"Trend analysis for {name}",
+        "context_nps_weight": "40",
+        "context_sentiment_weight": "35",
+        "context_theme_weight": "25",
     }
 
 
