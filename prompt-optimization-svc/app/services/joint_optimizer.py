@@ -97,10 +97,15 @@ class JointOptimizer:
         # contribute schema metadata, not just the primary agent.
         gepa_kwargs = None
         if self.reflection_enricher is not None:
-            gepa_kwargs = self.reflection_enricher.enrich_gepa_kwargs(
-                agent_code=group.agent_codes,
-                prompt_names=group.prompt_names,
-            )
+            try:
+                gepa_kwargs = self.reflection_enricher.enrich_gepa_kwargs(
+                    agent_code=group.agent_codes,
+                    prompt_names=group.prompt_names,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Reflection context enrichment failed (non-fatal): %s", exc
+                )
 
         opt_result = self.gepa.optimize(
             prompt_uris=prompt_uris,
