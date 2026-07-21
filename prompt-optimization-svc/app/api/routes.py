@@ -1676,6 +1676,64 @@ async def get_canary_history():
     return CanaryHistoryResponse(history=entries)
 
 
+@router.post("/v1/canary/{prompt_name}/promote", response_model=None)
+async def promote_canary(prompt_name: str):
+    """Force-promote an active canary to production (admin/testing)."""
+    if canary_manager is None:
+        return JSONResponse(
+            status_code=503, content={"detail": "Canary manager not initialized"}
+        )
+
+    state = await canary_manager.get_canary_state(prompt_name)
+    if state is None:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"No active canary for {prompt_name}"},
+        )
+
+    promoted = await canary_manager.promote_canary(prompt_name)
+    if not promoted:
+        return JSONResponse(
+            status_code=500, content={"detail": "Promotion failed"}
+        )
+
+    return {
+        "status": "promoted",
+        "prompt_name": prompt_name,
+        "canary_version": state.canary_version,
+        "production_version": state.production_version,
+    }
+
+
+@router.post("/v1/canary/{prompt_name}/rollback", response_model=None)
+async def rollback_canary(prompt_name: str):
+    """Force-rollback an active canary (admin/testing)."""
+    if canary_manager is None:
+        return JSONResponse(
+            status_code=503, content={"detail": "Canary manager not initialized"}
+        )
+
+    state = await canary_manager.get_canary_state(prompt_name)
+    if state is None:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"No active canary for {prompt_name}"},
+        )
+
+    rolled_back = await canary_manager.rollback_canary(prompt_name)
+    if not rolled_back:
+        return JSONResponse(
+            status_code=500, content={"detail": "Rollback failed"}
+        )
+
+    return {
+        "status": "rolled_back",
+        "prompt_name": prompt_name,
+        "canary_version": state.canary_version,
+        "production_version": state.production_version,
+    }
+
+
 @router.get("/v1/config/tenant/{tenant_id}", response_model=None)
 async def get_tenant_config(
     tenant_id: str,

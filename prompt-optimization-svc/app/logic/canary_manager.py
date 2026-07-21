@@ -111,7 +111,10 @@ class CanaryManager:
             "active": "true",
         }
         await r.hset(key, mapping=state_data)
-        await r.expire(key, CANARY_DURATION_HOURS * 3600)
+        # Minimum 2h TTL so the health check (every 15 min) can always find
+        # the canary before Redis evicts the key — critical when duration=0.
+        ttl = max(CANARY_DURATION_HOURS * 3600, 7200)
+        await r.expire(key, ttl)
 
         logger.info(
             "Canary started: %s v%d (production v%d) for %s, expires %s",
