@@ -1677,8 +1677,15 @@ async def get_canary_history():
 
 
 @router.post("/v1/canary/{prompt_name}/promote", response_model=None)
-async def promote_canary(prompt_name: str):
-    """Force-promote an active canary to production (admin/testing)."""
+async def promote_canary(
+    prompt_name: str,
+    decision: Decision = Depends(require_permission(Permission.PROMOTE)),
+):
+    """Force-promote an active canary to production.
+
+    Requires PROMOTE permission. Records outcome in canary history
+    and transitions the prompt lifecycle to PRODUCTION.
+    """
     if canary_manager is None:
         return JSONResponse(
             status_code=503, content={"detail": "Canary manager not initialized"}
@@ -1697,6 +1704,12 @@ async def promote_canary(prompt_name: str):
             status_code=500, content={"detail": "Promotion failed"}
         )
 
+    logger.info(
+        "Admin force-promoted canary: %s v%d (was production v%d)",
+        prompt_name,
+        state.canary_version,
+        state.production_version,
+    )
     return {
         "status": "promoted",
         "prompt_name": prompt_name,
@@ -1706,8 +1719,15 @@ async def promote_canary(prompt_name: str):
 
 
 @router.post("/v1/canary/{prompt_name}/rollback", response_model=None)
-async def rollback_canary(prompt_name: str):
-    """Force-rollback an active canary (admin/testing)."""
+async def rollback_canary(
+    prompt_name: str,
+    decision: Decision = Depends(require_permission(Permission.PROMOTE)),
+):
+    """Force-rollback an active canary.
+
+    Requires PROMOTE permission. Records outcome in canary history
+    and transitions the prompt lifecycle to ROLLED_BACK.
+    """
     if canary_manager is None:
         return JSONResponse(
             status_code=503, content={"detail": "Canary manager not initialized"}
@@ -1726,6 +1746,12 @@ async def rollback_canary(prompt_name: str):
             status_code=500, content={"detail": "Rollback failed"}
         )
 
+    logger.info(
+        "Admin force-rolled-back canary: %s v%d (reverted to production v%d)",
+        prompt_name,
+        state.canary_version,
+        state.production_version,
+    )
     return {
         "status": "rolled_back",
         "prompt_name": prompt_name,

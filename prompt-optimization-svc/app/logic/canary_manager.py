@@ -111,9 +111,12 @@ class CanaryManager:
             "active": "true",
         }
         await r.hset(key, mapping=state_data)
-        # Minimum 2h TTL so the health check (every 15 min) can always find
-        # the canary before Redis evicts the key — critical when duration=0.
-        ttl = max(CANARY_DURATION_HOURS * 3600, 7200)
+        # The Redis key must outlive the canary duration so the health check
+        # (every 15 min) can discover, evaluate, and promote/rollback before
+        # Redis evicts the key. Add a 2-hour buffer beyond the canary window.
+        # When duration=0 (testing), this guarantees at least 2h for the
+        # health check to process the immediately-expired canary.
+        ttl = CANARY_DURATION_HOURS * 3600 + 7200
         await r.expire(key, ttl)
 
         logger.info(
