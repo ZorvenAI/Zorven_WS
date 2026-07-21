@@ -3,7 +3,14 @@
 max_metric_calls controls the total number of scorer evaluations
 GEPA may perform during an optimization run. Higher budgets allow
 more exploration but cost more in LLM calls.
+
+Override default budget via POI_DEFAULT_OPTIMIZATION_BUDGET env var.
 """
+
+import json
+import os
+
+from app.core.config import settings
 
 # Per-agent max_metric_calls defaults
 AGENT_BUDGETS: dict[str, int] = {
@@ -27,7 +34,15 @@ AGENT_BUDGETS: dict[str, int] = {
     "voca": 200,  # Voice of Customer — sentiment precision
 }
 
-DEFAULT_BUDGET = 200
+# Override per-agent budgets via POI_AGENT_BUDGETS='{"mra": 50, "cia": 50}'
+_budget_overrides = os.environ.get("POI_AGENT_BUDGETS", "")
+if _budget_overrides:
+    try:
+        AGENT_BUDGETS.update(json.loads(_budget_overrides))
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+DEFAULT_BUDGET = settings.DEFAULT_OPTIMIZATION_BUDGET
 
 
 def get_budget(agent_code: str) -> int:

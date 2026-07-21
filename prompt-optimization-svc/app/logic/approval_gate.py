@@ -8,12 +8,15 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from app.core.config import settings
 from app.logic.run_lifecycle import RunLifecycleManager, RunState
 
 logger = logging.getLogger(__name__)
 
-# Agents that touch ad spend — auto-promotion permanently disabled (AC-1)
-CRITICAL_AGENTS = ("adpub", "coa")
+# Agents requiring human approval — configurable via POI_CRITICAL_AGENTS
+CRITICAL_AGENTS = tuple(
+    a.strip() for a in settings.CRITICAL_AGENTS.split(",") if a.strip()
+)
 
 
 def requires_approval(agent_code: str) -> bool:

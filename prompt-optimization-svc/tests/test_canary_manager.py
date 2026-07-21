@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from app.logic.canary_manager import (
     CANARY_DURATION_HOURS,
     CANARY_METRICS_KEY,
-    CANARY_PROMOTION_ENABLED,
     CANARY_STATE_KEY,
     CANARY_TRAFFIC_PCT,
     CanaryState,
@@ -56,9 +55,6 @@ class TestCanaryConstants:
 
     def test_duration_hours(self):
         assert CANARY_DURATION_HOURS == 24
-
-    def test_promotion_enabled_hardcoded(self):
-        assert CANARY_PROMOTION_ENABLED is True
 
     def test_regression_threshold(self):
         from app.core.config import settings

@@ -24,10 +24,10 @@ logger = logging.getLogger(__name__)
 
 def make_predict_fn(
     prompt_name: str,
-    model: str = "claude-sonnet-4-6",
+    model: Optional[str] = None,
     mlflow_tracking_uri: Optional[str] = None,
     anthropic_api_key: Optional[str] = None,
-    max_tokens: int = 4096,
+    max_tokens: Optional[int] = None,
 ) -> Callable[..., str]:
     """Create a predict function for GEPA optimization.
 
@@ -42,6 +42,8 @@ def make_predict_fn(
         A callable(**kwargs) -> str that loads the prompt, formats it,
         calls Claude, and returns the first content block text.
     """
+    model = model or settings.GEPA_MODEL_NAME
+    max_tokens = max_tokens or settings.GEPA_MAX_TOKENS
     tracking_uri = mlflow_tracking_uri or settings.MLFLOW_TRACKING_URI
     api_key = anthropic_api_key or settings.ANTHROPIC_API_KEY
 

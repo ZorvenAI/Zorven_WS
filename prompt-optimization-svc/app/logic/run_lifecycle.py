@@ -15,9 +15,11 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
-DEFERRED_RETRY_SECONDS = 3600  # 1 hour
+DEFERRED_RETRY_SECONDS = settings.DEFERRED_RETRY_SECONDS
 
 
 class RunState(str, Enum):

@@ -41,14 +41,14 @@ class ZorvenGepaOptimizer:
     reflection model and per-agent budget limits.
     """
 
-    DEFAULT_REFLECTION_MODEL = "anthropic:/claude-sonnet-4-6"
+    DEFAULT_REFLECTION_MODEL = None  # Set from settings in __init__
 
     def __init__(
         self,
         reflection_model: Optional[str] = None,
         mlflow_tracking_uri: Optional[str] = None,
     ) -> None:
-        self.reflection_model = reflection_model or self.DEFAULT_REFLECTION_MODEL
+        self.reflection_model = reflection_model or settings.GEPA_REFLECTION_MODEL
         self.mlflow_tracking_uri = mlflow_tracking_uri or settings.MLFLOW_TRACKING_URI
 
     def optimize(

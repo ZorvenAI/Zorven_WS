@@ -14,10 +14,9 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Non-configurable canary parameters (AC-2)
-CANARY_TRAFFIC_PCT = 0.10
-CANARY_DURATION_HOURS = 24
-CANARY_PROMOTION_ENABLED = True  # Hardcoded, non-configurable
+# Canary parameters — configurable via POI_* env vars
+CANARY_TRAFFIC_PCT = settings.CANARY_TRAFFIC_PCT
+CANARY_DURATION_HOURS = settings.CANARY_DURATION_HOURS
 
 # Redis key templates
 CANARY_STATE_KEY = "prompt:canary:{name}"

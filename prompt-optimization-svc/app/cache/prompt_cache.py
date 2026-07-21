@@ -14,12 +14,14 @@ from typing import Any, Optional
 
 import redis.asyncio as aioredis
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
-# TTL defaults (seconds)
-DEFAULT_PROMPT_TTL = 300  # 5 minutes
-LOCK_TTL = 7200  # 2 hours
-PROGRESS_TTL = 86400  # 24 hours
+# TTL defaults (seconds) — configurable via POI_* env vars
+DEFAULT_PROMPT_TTL = settings.PROMPT_CACHE_TTL
+LOCK_TTL = settings.OPTIMIZATION_LOCK_TTL
+PROGRESS_TTL = settings.OPTIMIZATION_PROGRESS_TTL
 
 
 class PromptCacheManager:

@@ -770,6 +770,102 @@ async def optimize(
     )
 
 
+@router.get("/v1/optimize/locks", response_model=None)
+async def list_optimization_locks(
+    decision: Decision = Depends(require_permission(Permission.VIEW)),
+):
+    """List all active optimization locks with TTL info."""
+    from app.cache.prompt_cache import PromptCacheManager
+    from app.core.config import settings
+
+    cache = PromptCacheManager(settings.PROMPT_CACHE_REDIS_URL)
+    redis = await cache.connect()
+    try:
+        keys = []
+        async for key in redis.scan_iter("prompt:optimization:lock:*"):
+            ttl = await redis.ttl(key)
+            owner = await redis.get(key)
+            group = key.replace("prompt:optimization:lock:", "")
+            keys.append({"group": group, "owner": owner, "ttl_seconds": ttl})
+        return {"locks": keys}
+    finally:
+        await cache.close()
+
+
+@router.delete("/v1/optimize/locks/{group_name}", response_model=None)
+async def clear_optimization_lock(
+    group_name: str,
+    decision: Decision = Depends(require_permission(Permission.PROMOTE)),
+):
+    """Clear a stale optimization lock for a group (admin only)."""
+    from app.cache.prompt_cache import PromptCacheManager
+    from app.core.config import settings
+
+    cache = PromptCacheManager(settings.PROMPT_CACHE_REDIS_URL)
+    redis = await cache.connect()
+    try:
+        key = f"prompt:optimization:lock:{group_name}"
+        deleted = await redis.delete(key)
+        if deleted:
+            logger.info("Admin cleared optimization lock: group=%s", group_name)
+            return {"status": "cleared", "group": group_name}
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"No lock found for group '{group_name}'"},
+        )
+    finally:
+        await cache.close()
+
+
+@router.get("/v1/config", response_model=None)
+async def get_service_config(
+    decision: Decision = Depends(require_permission(Permission.VIEW)),
+):
+    """Return current configurable settings (for debugging/testing)."""
+    from app.core.config import settings
+
+    return {
+        "optimization": {
+            "gepa_model_name": settings.GEPA_MODEL_NAME,
+            "gepa_max_tokens": settings.GEPA_MAX_TOKENS,
+            "gepa_reflection_model": settings.GEPA_REFLECTION_MODEL,
+            "default_optimization_budget": settings.DEFAULT_OPTIMIZATION_BUDGET,
+            "cost_per_candidate_usd": settings.COST_PER_CANDIDATE_USD,
+            "optimization_cost_cap_usd": settings.OPTIMIZATION_COST_CAP_USD,
+        },
+        "locks": {
+            "lock_ttl_seconds": settings.OPTIMIZATION_LOCK_TTL,
+            "deferred_retry_seconds": settings.DEFERRED_RETRY_SECONDS,
+        },
+        "canary": {
+            "traffic_pct": settings.CANARY_TRAFFIC_PCT,
+            "duration_hours": settings.CANARY_DURATION_HOURS,
+            "regression_threshold": settings.CANARY_REGRESSION_THRESHOLD,
+        },
+        "validation": {
+            "holdout_pct": settings.VALIDATION_HOLDOUT_PCT,
+            "improvement_threshold": settings.VALIDATION_IMPROVEMENT_THRESHOLD,
+            "regression_threshold": settings.VALIDATION_REGRESSION_THRESHOLD,
+            "length_multiplier_limit": settings.LENGTH_MULTIPLIER_LIMIT,
+        },
+        "circuit_breaker": {
+            "failure_threshold_seconds": settings.CIRCUIT_BREAKER_FAILURE_THRESHOLD_SECONDS,
+            "half_open_interval_seconds": settings.CIRCUIT_BREAKER_HALF_OPEN_INTERVAL_SECONDS,
+        },
+        "auto_rollback": {
+            "regression_threshold": settings.AUTO_ROLLBACK_REGRESSION_THRESHOLD,
+            "window_hours": settings.AUTO_ROLLBACK_WINDOW_HOURS,
+        },
+        "approval": {
+            "critical_agents": settings.CRITICAL_AGENTS,
+        },
+        "cache": {
+            "prompt_cache_ttl": settings.PROMPT_CACHE_TTL,
+            "progress_ttl": settings.OPTIMIZATION_PROGRESS_TTL,
+        },
+    }
+
+
 @router.post("/v1/datasets/seed", response_model=None)
 async def seed_golden_datasets(
     decision: Decision = Depends(require_permission(Permission.REGISTER)),
