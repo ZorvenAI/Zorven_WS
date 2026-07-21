@@ -101,7 +101,9 @@ def make_predict_fn(
                 else:
                     formatted_kwargs[key] = str(value)
 
-            formatted_prompt = prompt_version.format(**formatted_kwargs)
+            formatted_prompt = prompt_version.format(
+                **formatted_kwargs, allow_partial=True
+            )
 
             # AC-2: Invoke Anthropic Messages API
             message = client.messages.create(
