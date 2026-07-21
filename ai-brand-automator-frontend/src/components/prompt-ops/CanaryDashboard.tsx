@@ -11,6 +11,9 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  Zap,
+  Play,
+  Loader2,
 } from 'lucide-react';
 import {
   BarChart,
@@ -26,11 +29,14 @@ import type {
   CanaryDeployment,
   CanaryHistoryEntry,
   CanaryMetricsComparison,
+  OptimizationRun,
 } from '@/types/prompt-ops';
 import {
   getActiveCanaries,
   getCanaryHistory,
   getCanaryMetrics,
+  getOptimizationRuns,
+  triggerOptimization,
 } from '@/lib/prompt-ops';
 
 function StatusBadge({ status }: { status: string }) {
@@ -72,6 +78,29 @@ function OutcomeBadge({ outcome }: { outcome: string }) {
   );
 }
 
+function RunStateBadge({ state }: { state: string }) {
+  const colors: Record<string, string> = {
+    QUEUED: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    ACQUIRING_LOCK: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    LOADING_DATA: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    OPTIMIZING: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
+    VALIDATING: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    CANARY: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    PRODUCTION: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    PENDING_APPROVAL: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    FAILED: 'bg-red-500/10 text-red-400 border-red-500/20',
+    REJECTED: 'bg-red-500/10 text-red-400 border-red-500/20',
+    DEFERRED: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
+  };
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${colors[state] || 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}
+    >
+      {state}
+    </span>
+  );
+}
+
 function RegressionIndicator({ value }: { value: number | null }) {
   if (value === null) return <span className="text-brand-silver/50 text-sm">--</span>;
   const isPositive = value > 0;
@@ -95,8 +124,29 @@ export default function CanaryDashboard() {
   const [canaries, setCanaries] = useState<CanaryDeployment[]>([]);
   const [history, setHistory] = useState<CanaryHistoryEntry[]>([]);
   const [comparisons, setComparisons] = useState<Record<string, CanaryMetricsComparison>>({});
+  const [optimizationRuns, setOptimizationRuns] = useState<OptimizationRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [triggering, setTriggering] = useState(false);
+
+  const handleTriggerOptimization = async (groupName: string) => {
+    try {
+      setTriggering(true);
+      await triggerOptimization(groupName);
+      // Refresh runs after a short delay
+      setTimeout(async () => {
+        try {
+          const runs = await getOptimizationRuns();
+          setOptimizationRuns(runs);
+        } catch {
+          // ignore refresh errors
+        }
+        setTriggering(false);
+      }, 2000);
+    } catch {
+      setTriggering(false);
+    }
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -104,10 +154,13 @@ export default function CanaryDashboard() {
         setLoading(true);
         setError(null);
 
-        const [activeCanaries, canaryHistory] = await Promise.all([
+        const [activeCanaries, canaryHistory, runs] = await Promise.all([
           getActiveCanaries(),
           getCanaryHistory(),
+          getOptimizationRuns().catch(() => [] as OptimizationRun[]),
         ]);
+
+        setOptimizationRuns(runs);
 
         setCanaries(activeCanaries);
         setHistory(canaryHistory);
@@ -159,6 +212,9 @@ export default function CanaryDashboard() {
 
   // KPI cards
   const totalActive = canaries.length;
+  const totalOptRuns = optimizationRuns.length;
+  const totalSuccessful = optimizationRuns.filter((r) => r.state === 'CANARY' || r.state === 'PRODUCTION').length;
+  const totalFailed = optimizationRuns.filter((r) => r.state === 'FAILED' || r.state === 'REJECTED').length;
   const totalPromoted = history.filter((h) => h.outcome === 'promoted').length;
   const totalRolledBack = history.filter((h) => h.outcome === 'rolled_back').length;
   const avgRegression =
@@ -172,7 +228,28 @@ export default function CanaryDashboard() {
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="glass-card p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Zap className="w-4 h-4 text-brand-electric" />
+            <span className="text-xs text-brand-silver">Total Runs</span>
+          </div>
+          <p className="text-2xl font-heading font-bold text-white">{totalOptRuns}</p>
+        </div>
+        <div className="glass-card p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs text-brand-silver">Successful</span>
+          </div>
+          <p className="text-2xl font-heading font-bold text-white">{totalSuccessful}</p>
+        </div>
+        <div className="glass-card p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <XCircle className="w-4 h-4 text-red-400" />
+            <span className="text-xs text-brand-silver">Failed</span>
+          </div>
+          <p className="text-2xl font-heading font-bold text-white">{totalFailed}</p>
+        </div>
         <div className="glass-card p-4">
           <div className="flex items-center gap-2 mb-1">
             <FlaskConical className="w-4 h-4 text-brand-electric" />
@@ -183,23 +260,9 @@ export default function CanaryDashboard() {
         <div className="glass-card p-4">
           <div className="flex items-center gap-2 mb-1">
             <Activity className="w-4 h-4 text-brand-electric" />
-            <span className="text-xs text-brand-silver">Avg Regression</span>
-          </div>
-          <RegressionIndicator value={avgRegression} />
-        </div>
-        <div className="glass-card p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             <span className="text-xs text-brand-silver">Promoted (30d)</span>
           </div>
           <p className="text-2xl font-heading font-bold text-white">{totalPromoted}</p>
-        </div>
-        <div className="glass-card p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <XCircle className="w-4 h-4 text-red-400" />
-            <span className="text-xs text-brand-silver">Rolled Back (30d)</span>
-          </div>
-          <p className="text-2xl font-heading font-bold text-white">{totalRolledBack}</p>
         </div>
       </div>
 
@@ -324,6 +387,79 @@ export default function CanaryDashboard() {
           </div>
         </div>
       )}
+
+      {/* Optimization Runs Table */}
+      <div className="glass-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Zap className="w-5 h-5 text-brand-electric" />
+            <h2 className="text-lg font-heading font-bold text-white">
+              Optimization Runs
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            {(['wf1-discovery-pipeline', 'wf2-brand-strategy-pipeline', 'wf3-creative-pipeline'] as const).map(
+              (group) => (
+                <button
+                  key={group}
+                  onClick={() => handleTriggerOptimization(group)}
+                  disabled={triggering}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-electric/10 text-brand-electric text-xs font-medium hover:bg-brand-electric/20 transition-colors disabled:opacity-50"
+                >
+                  {triggering ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Play className="w-3 h-3" />
+                  )}
+                  {group.replace('-pipeline', '').replace('wf', 'WF').replace('-', ' ').replace('discovery', 'Discovery').replace('brand strategy', 'Brand Strategy').replace('creative', 'Creative')}
+                </button>
+              )
+            )}
+          </div>
+        </div>
+        {optimizationRuns.length === 0 ? (
+          <p className="text-brand-silver/50 text-sm text-center py-6">
+            No optimization runs yet
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-brand-silver/70 border-b border-white/5">
+                  <th className="pb-3 font-medium">Run ID</th>
+                  <th className="pb-3 font-medium">Prompt</th>
+                  <th className="pb-3 font-medium">Agent</th>
+                  <th className="pb-3 font-medium">State</th>
+                  <th className="pb-3 font-medium">Score</th>
+                  <th className="pb-3 font-medium">Cost</th>
+                  <th className="pb-3 font-medium">Updated</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {optimizationRuns.map((run) => (
+                  <tr key={run.run_id} className="text-brand-silver">
+                    <td className="py-3 font-mono text-xs">{run.run_id.slice(0, 8)}</td>
+                    <td className="py-3 text-white font-medium text-xs">{run.prompt_name}</td>
+                    <td className="py-3">{run.agent_code}</td>
+                    <td className="py-3">
+                      <RunStateBadge state={run.state} />
+                    </td>
+                    <td className="py-3">
+                      {run.score_after !== null ? run.score_after.toFixed(3) : '--'}
+                    </td>
+                    <td className="py-3">
+                      {run.cost_usd !== null ? `$${run.cost_usd.toFixed(2)}` : '--'}
+                    </td>
+                    <td className="py-3 text-xs">
+                      {new Date(run.updated_at).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* History Table */}
       <div className="glass-card p-6">

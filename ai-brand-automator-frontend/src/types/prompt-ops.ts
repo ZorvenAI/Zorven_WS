@@ -27,3 +27,17 @@ export interface CanaryHistoryEntry {
   outcome: 'promoted' | 'rolled_back' | 'expired';
   final_regression_pct: number | null;
 }
+
+export interface OptimizationRun {
+  run_id: string;
+  state: string;
+  prompt_name: string;
+  agent_code: string;
+  error_message: string;
+  deferred_until: string | null;
+  updated_at: string;
+  score_before: number | null;
+  score_after: number | null;
+  improvement: number | null;
+  cost_usd: number | null;
+}

@@ -2,6 +2,7 @@ import type {
   CanaryDeployment,
   CanaryHistoryEntry,
   CanaryMetricsComparison,
+  OptimizationRun,
 } from '@/types/prompt-ops';
 
 const getBaseUrl = (): string => {
@@ -47,4 +48,32 @@ export async function getCanaryHistory(): Promise<CanaryHistoryEntry[]> {
     '/v1/canary/history'
   );
   return data.history;
+}
+
+export async function getOptimizationRuns(): Promise<OptimizationRun[]> {
+  const data = await fetchJson<{ runs: OptimizationRun[] }>(
+    '/v1/optimize/runs'
+  );
+  return data.runs;
+}
+
+export async function triggerOptimization(
+  groupName: string
+): Promise<{ status: string; task_id: string }> {
+  const url = `${getBaseUrl()}/v1/optimize`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Role': 'admin',
+    },
+    body: JSON.stringify({
+      input_prompt: `Optimize ${groupName}`,
+      config: { group_name: groupName },
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Optimize trigger failed: ${res.status} ${res.statusText}`);
+  }
+  return res.json();
 }
