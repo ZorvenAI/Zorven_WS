@@ -66,8 +66,8 @@ async def _run_optimization_pipeline(
     from app.logic.approval_gate import requires_approval
     from app.logic.canary_manager import CanaryManager
     from app.logic.guardrails import (
+        check_dataset_size,
         run_candidate_guardrails,
-        run_pre_optimization_guardrails,
     )
     from app.logic.gepa_guardrails import check_gepa_mutation
     from app.logic.lifecycle import PromptLifecycleManager, PromptState
@@ -169,20 +169,11 @@ async def _run_optimization_pipeline(
                 "error": "No golden dataset examples found",
             }
 
-        # ── Step 4: Pre-optimization guardrails ──
-        pre_result = await run_pre_optimization_guardrails(
-            examples=train_data,
-            min_dataset_size=3,
-            cache_manager=cache,
-            optimization_group=group_name,
-            lock_owner=run_id,
-        )
-        if not pre_result.all_passed:
-            failure_msg = (
-                pre_result.first_failure.message
-                if pre_result.first_failure
-                else "Pre-optimization guardrail failed"
-            )
+        # ── Step 4: Pre-optimization guardrails (OPT-01 only) ──
+        # OPT-07 (lock) is already handled at step 2 above.
+        ds_check = check_dataset_size(train_data, min_size=3)
+        if not ds_check.passed:
+            failure_msg = ds_check.message
             await run_lcm.transition(
                 run_id=run_id,
                 from_state=RunState.LOADING_DATA,
