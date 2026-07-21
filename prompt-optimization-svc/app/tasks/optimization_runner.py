@@ -59,6 +59,8 @@ async def _run_optimization_pipeline(
     so it blocks the event loop — acceptable in a Celery worker context
     where only one task runs per prefork.
     """
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
     from app.cache.prompt_cache import PromptCacheManager
     from app.core.config import settings
     from app.logic.approval_gate import requires_approval
@@ -71,7 +73,7 @@ async def _run_optimization_pipeline(
     from app.logic.lifecycle import PromptLifecycleManager, PromptState
     from app.logic.run_lifecycle import RunLifecycleManager, RunState
     from app.metrics import record_optimization_run, record_prompt_quality
-    from app.models.database import async_session_factory
+    from app.models.database import get_async_url
     from app.predict_fns.factory import make_predict_fn
     from app.registries.optimization_groups import get_group
     from app.services.gepa_optimizer import ZorvenGepaOptimizer
@@ -81,6 +83,18 @@ async def _run_optimization_pipeline(
     from app.services.skill_registry_reader import SkillRegistryReader
 
     # ── Initialize service dependencies ──
+    # Create a fresh async engine for this event loop (Celery workers run
+    # asyncio.run() which creates a new loop, incompatible with the module-
+    # level engine created at import time).
+    worker_engine = create_async_engine(
+        get_async_url(settings.DATABASE_URL),
+        pool_pre_ping=True,
+        echo=False,
+    )
+    async_session_factory = async_sessionmaker(
+        worker_engine, class_=AsyncSession, expire_on_commit=False
+    )
+
     cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
     await cache.connect()
 
@@ -472,9 +486,13 @@ async def _run_optimization_pipeline(
                 group_name,
                 release_exc,
             )
-        # Close the cache connection
+        # Close the cache connection and dispose the worker engine
         try:
             await cache.close()
+        except Exception:
+            pass
+        try:
+            await worker_engine.dispose()
         except Exception:
             pass
 
