@@ -19,6 +19,8 @@ from app.cache.redis_manager import RedisManager
 from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.messaging.kafka_producer import TraceProducer
+from app.prompts.invalidator import PromptCacheInvalidator
+from app.prompts.loader import AgentPromptClient
 from app.scrapers.factory import ScraperFactory
 from app.services.discovery_executor import DiscoveryExecutor
 
@@ -47,6 +49,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     trace_producer = TraceProducer(settings.KAFKA_BOOTSTRAP_SERVERS)
     await trace_producer.start()
 
+    # Initialize prompt loader (three-tier: Redis cache → MLflow → fallback)
+    prompt_loader = AgentPromptClient(
+        redis_url=settings.PROMPT_CACHE_REDIS_URL,
+        mlflow_uri=settings.MLFLOW_TRACKING_URI,
+        fallback_only=settings.PROMPT_FALLBACK_ONLY,
+    )
+    await prompt_loader.start()
+
+    # Initialize prompt cache invalidator (Kafka consumer)
+    prompt_invalidator = PromptCacheInvalidator(
+        bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
+        prompt_loader=prompt_loader,
+    )
+    await prompt_invalidator.start()
+
     # Initialize executor
     executor = DiscoveryExecutor(
         search_engine=search_engine,
@@ -65,6 +82,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # Shutdown
+    await prompt_invalidator.stop()
+    await prompt_loader.stop()
     await executor.close()
     routes.executor = None
     logger.info("Discovery Agent shut down")

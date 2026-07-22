@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 10
 
+    # Prompt optimization (empty MLFLOW_TRACKING_URI = fallback-only mode)
+    PROMPT_CACHE_REDIS_URL: str = "redis://localhost:6379/2"
+    MLFLOW_TRACKING_URI: str = ""
+    PROMPT_FALLBACK_ONLY: bool = True
+
     # GCS (empty = stub mode)
     GCS_PROJECT_ID: str = ""
     GCS_BUCKET_NAME: str = ""
