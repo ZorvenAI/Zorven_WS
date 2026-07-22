@@ -59,7 +59,11 @@ async def _run_optimization_pipeline(
     so it blocks the event loop — acceptable in a Celery worker context
     where only one task runs per prefork.
     """
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from sqlalchemy.ext.asyncio import (
+        AsyncSession,
+        async_sessionmaker,
+        create_async_engine,
+    )
 
     from app.cache.prompt_cache import PromptCacheManager
     from app.core.config import settings
@@ -216,6 +220,20 @@ async def _run_optimization_pipeline(
         except Exception as exc:
             logger.warning("Reflection context enricher unavailable: %s", exc)
 
+        # US-054: Auto-generate baseline scorers from skill output schemas
+        try:
+            from app.scorers.scorer_generator import generate_baseline_scorers
+
+            baseline_scorers = generate_baseline_scorers(group_name, skill_reader)
+            if baseline_scorers:
+                scorers = list(scorers) + baseline_scorers
+                logger.info(
+                    "Added %d baseline scorers from output schemas",
+                    len(baseline_scorers),
+                )
+        except Exception as exc:
+            logger.warning("Baseline scorer generation failed (non-fatal): %s", exc)
+
         joint_opt = JointOptimizer(
             gepa_optimizer=gepa,
             registry=registry,
@@ -238,9 +256,11 @@ async def _run_optimization_pipeline(
         )
 
         # Extract best prompt text from joint result (primary prompt)
-        best_prompt_text = opt_result.prompt_results.get(
-            group.prompt_names[0], ""
-        ) if opt_result.prompt_results else ""
+        best_prompt_text = (
+            opt_result.prompt_results.get(group.prompt_names[0], "")
+            if opt_result.prompt_results
+            else ""
+        )
 
         if opt_result.error:
             await run_lcm.transition(
