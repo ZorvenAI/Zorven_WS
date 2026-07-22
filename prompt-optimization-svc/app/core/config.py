@@ -98,7 +98,8 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
 
-    # Service auth
+    # Service auth — reserved for future JWT-based service authentication.
+    # Currently unused: RBAC uses X-User-Role header directly.
     SERVICE_TOKEN: str = ""
     JWT_SECRET: str = ""
 
