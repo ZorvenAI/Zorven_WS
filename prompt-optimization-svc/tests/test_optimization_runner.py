@@ -185,6 +185,177 @@ class TestBugFixes:
         assert settings.COST_PER_CANDIDATE_USD == 0.50
 
 
+class TestValidationWiring:
+    """Verify OPT-03/OPT-04 candidate validation is wired into the runner."""
+
+    def test_runner_imports_validate_candidate(self):
+        with open("app/tasks/optimization_runner.py") as f:
+            source = f.read()
+        assert "validate_candidate" in source
+        assert "split_holdout" in source
+        assert "compute_aggregate_score" in source
+
+    def test_runner_imports_from_candidate_validator(self):
+        with open("app/tasks/optimization_runner.py") as f:
+            source = f.read()
+        assert "from app.logic.candidate_validator import" in source
+
+    def test_runner_splits_dataset(self):
+        """US-032 AC-1: Dataset must be split into train + holdout."""
+        with open("app/tasks/optimization_runner.py") as f:
+            source = f.read()
+        assert "split_holdout" in source
+        assert "holdout_data" in source
+        assert "full_dataset" in source
+
+    def test_runner_no_hardcoded_score_before(self):
+        """Blocker 1: score_before must NOT be hardcoded to 0.0."""
+        with open("app/tasks/optimization_runner.py") as f:
+            source = f.read()
+        # The old hardcoded line was: score_before = 0.0
+        # It should now use compute_aggregate_score
+        assert "score_before = 0.0" not in source
+        assert "compute_aggregate_score(prod_holdout_scores)" in source
+
+    def test_runner_evaluates_on_holdout(self):
+        """Holdout evaluation must run for both production and candidate."""
+        with open("app/tasks/optimization_runner.py") as f:
+            source = f.read()
+        assert "_evaluate_on_holdout" in source
+        assert "prod_holdout_scores" in source
+        assert "cand_holdout_scores" in source
+
+    def test_runner_handles_rejected_decision(self):
+        """OPT-03: REJECTED candidates must be handled."""
+        with open("app/tasks/optimization_runner.py") as f:
+            source = f.read()
+        assert 'validation.decision == "REJECTED"' in source
+        assert "OPT-03" in source
+
+    def test_runner_handles_pending_approval_from_regression(self):
+        """OPT-04: Scorer regressions route to PENDING_APPROVAL."""
+        with open("app/tasks/optimization_runner.py") as f:
+            source = f.read()
+        assert 'validation.decision == "PENDING_APPROVAL"' in source
+        assert "OPT-04" in source
+
+    def test_runner_registers_after_validation(self):
+        """Registration must happen AFTER validation, not before."""
+        with open("app/tasks/optimization_runner.py") as f:
+            source = f.read()
+        validate_pos = source.index("validate_candidate(")
+        register_pos = source.index("registry.register_prompt(")
+        assert (
+            validate_pos < register_pos
+        ), "register_prompt must come AFTER validate_candidate"
+
+    def test_runner_uses_real_regression_pct(self):
+        """Prometheus metrics must use actual regression, not hardcoded 0.0."""
+        with open("app/tasks/optimization_runner.py") as f:
+            source = f.read()
+        assert "regression_pct=0.0" not in source
+        assert "max_regression" in source
+
+    def test_runner_includes_validation_in_progress(self):
+        """Redis progress must include validation details."""
+        with open("app/tasks/optimization_runner.py") as f:
+            source = f.read()
+        assert '"validation_decision"' in source
+        assert '"holdout_count"' in source
+
+
+class TestEvaluateOnHoldout:
+    """Test the _evaluate_on_holdout helper function."""
+
+    def test_function_exists(self):
+        from app.tasks.optimization_runner import _evaluate_on_holdout
+
+        assert callable(_evaluate_on_holdout)
+
+    def test_returns_dict_with_scorer_averages(self):
+        from app.tasks.optimization_runner import _evaluate_on_holdout
+
+        class MockFeedback:
+            def __init__(self, name, value):
+                self.name = name
+                self.value = value
+
+        def mock_scorer(inputs, outputs, expectations):
+            return MockFeedback("test_scorer", 0.8)
+
+        def mock_predict(**kwargs):
+            return "mock output"
+
+        holdout = [
+            {"inputs": {"key": "val1"}, "expected_output": "expected1"},
+            {"inputs": {"key": "val2"}, "expected_output": "expected2"},
+        ]
+
+        result = _evaluate_on_holdout(mock_predict, holdout, [mock_scorer])
+        assert "test_scorer" in result
+        assert result["test_scorer"] == 0.8
+
+    def test_handles_empty_holdout(self):
+        from app.tasks.optimization_runner import _evaluate_on_holdout
+
+        result = _evaluate_on_holdout(lambda **kw: "", [], [])
+        assert result == {}
+
+    def test_handles_scorer_failure(self):
+        from app.tasks.optimization_runner import _evaluate_on_holdout
+
+        def failing_scorer(inputs, outputs, expectations):
+            raise ValueError("scorer error")
+
+        def mock_predict(**kwargs):
+            return "output"
+
+        holdout = [{"inputs": {}, "expected_output": ""}]
+        result = _evaluate_on_holdout(mock_predict, holdout, [failing_scorer])
+        assert result == {}
+
+    def test_handles_predict_failure(self):
+        from app.tasks.optimization_runner import _evaluate_on_holdout
+
+        class MockFeedback:
+            def __init__(self, name, value):
+                self.name = name
+                self.value = value
+
+        def mock_scorer(inputs, outputs, expectations):
+            return MockFeedback("s", 0.5)
+
+        def failing_predict(**kwargs):
+            raise RuntimeError("API error")
+
+        holdout = [{"inputs": {}, "expected_output": ""}]
+        result = _evaluate_on_holdout(failing_predict, holdout, [mock_scorer])
+        # Should still score the empty output
+        assert "s" in result
+
+
+class TestMakePredictFnFromText:
+    """Test the make_predict_fn_from_text factory function."""
+
+    def test_function_exists(self):
+        from app.predict_fns.factory import make_predict_fn_from_text
+
+        assert callable(make_predict_fn_from_text)
+
+    def test_returns_callable(self):
+        from app.predict_fns.factory import make_predict_fn_from_text
+
+        fn = make_predict_fn_from_text("Hello {{context.name}}")
+        assert callable(fn)
+        assert fn.prompt_name == "(inline-template)"
+
+    def test_has_model_attribute(self):
+        from app.predict_fns.factory import make_predict_fn_from_text
+
+        fn = make_predict_fn_from_text("test", model="claude-haiku-4-5")
+        assert fn.model == "claude-haiku-4-5"
+
+
 class TestMetricsWiring:
     """Verify Prometheus metrics are connected to the runner."""
 
