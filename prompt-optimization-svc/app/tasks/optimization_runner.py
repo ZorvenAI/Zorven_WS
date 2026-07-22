@@ -59,11 +59,20 @@ async def _run_optimization_pipeline(
     so it blocks the event loop — acceptable in a Celery worker context
     where only one task runs per prefork.
     """
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from sqlalchemy.ext.asyncio import (
+        AsyncSession,
+        async_sessionmaker,
+        create_async_engine,
+    )
 
     from app.cache.prompt_cache import PromptCacheManager
     from app.core.config import settings
     from app.logic.approval_gate import requires_approval
+    from app.logic.candidate_validator import (
+        compute_aggregate_score,
+        split_holdout,
+        validate_candidate,
+    )
     from app.logic.canary_manager import CanaryManager
     from app.logic.guardrails import (
         check_dataset_size,
@@ -74,7 +83,7 @@ async def _run_optimization_pipeline(
     from app.logic.run_lifecycle import RunLifecycleManager, RunState
     from app.metrics import record_optimization_run, record_prompt_quality
     from app.models.database import get_async_url
-    from app.predict_fns.factory import make_predict_fn
+    from app.predict_fns.factory import make_predict_fn, make_predict_fn_from_text
     from app.registries.optimization_groups import get_group
     from app.services.gepa_optimizer import ZorvenGepaOptimizer
     from app.services.joint_optimizer import JointOptimizer
@@ -152,8 +161,8 @@ async def _run_optimization_pipeline(
             agent_code=primary_agent,
         )
 
-        train_data = await _load_golden_dataset(group, async_session_factory)
-        if not train_data:
+        full_dataset = await _load_golden_dataset(group, async_session_factory)
+        if not full_dataset:
             await run_lcm.transition(
                 run_id=run_id,
                 from_state=RunState.LOADING_DATA,
@@ -171,7 +180,8 @@ async def _run_optimization_pipeline(
 
         # ── Step 4: Pre-optimization guardrails (OPT-01 only) ──
         # OPT-07 (lock) is already handled at step 2 above.
-        ds_check = check_dataset_size(train_data, min_size=3)
+        # Validate total dataset size before splitting.
+        ds_check = check_dataset_size(full_dataset, min_size=3)
         if not ds_check.passed:
             failure_msg = ds_check.message
             await run_lcm.transition(
@@ -188,6 +198,25 @@ async def _run_optimization_pipeline(
                 "status": "FAILED",
                 "error": failure_msg,
             }
+
+        # ── Step 4b: Split dataset into train + holdout (US-032 AC-1) ──
+        train_data, holdout_data = split_holdout(full_dataset)
+        if not holdout_data:
+            # Dataset too small for split — use full dataset for both
+            train_data = full_dataset
+            holdout_data = full_dataset
+            logger.warning(
+                "Dataset too small for holdout split; using full dataset "
+                "for both train and validation (n=%d)",
+                len(full_dataset),
+            )
+        else:
+            logger.info(
+                "Dataset split: train=%d, holdout=%d (%.0f%% holdout)",
+                len(train_data),
+                len(holdout_data),
+                settings.VALIDATION_HOLDOUT_PCT * 100,
+            )
 
         # ── Step 5: OPTIMIZING ──
         await run_lcm.transition(
@@ -238,9 +267,11 @@ async def _run_optimization_pipeline(
         )
 
         # Extract best prompt text from joint result (primary prompt)
-        best_prompt_text = opt_result.prompt_results.get(
-            group.prompt_names[0], ""
-        ) if opt_result.prompt_results else ""
+        best_prompt_text = (
+            opt_result.prompt_results.get(group.prompt_names[0], "")
+            if opt_result.prompt_results
+            else ""
+        )
 
         if opt_result.error:
             await run_lcm.transition(
@@ -324,14 +355,80 @@ async def _run_optimization_pipeline(
                     "error": f"OPT-11: Placeholder invariance violated",
                 }
 
-        # ── Step 10: Check improvement threshold ──
-        score_before = 0.0
-        score_after = opt_result.overall_score
-        improvement_pct = 0.0
-        if score_before > 0:
-            improvement_pct = (score_after - score_before) / score_before
+        # ── Step 10: Evaluate on held-out set (OPT-03/OPT-04, US-032) ──
+        # Evaluate production prompt against holdout
+        prod_holdout_scores = _evaluate_on_holdout(
+            predict_fn=predict_fn,
+            holdout_data=holdout_data,
+            scorers=scorers,
+        )
+
+        # Evaluate candidate prompt against holdout
+        if best_prompt_text:
+            candidate_predict = make_predict_fn_from_text(best_prompt_text)
+            cand_holdout_scores = _evaluate_on_holdout(
+                predict_fn=candidate_predict,
+                holdout_data=holdout_data,
+                scorers=scorers,
+            )
+        else:
+            cand_holdout_scores = {}
+
+        # Validate candidate quality (OPT-03: 5% improvement, OPT-04: 3% regression)
+        validation = validate_candidate(
+            candidate_scores=cand_holdout_scores,
+            production_scores=prod_holdout_scores,
+        )
+        score_before = compute_aggregate_score(prod_holdout_scores)
+        score_after = compute_aggregate_score(cand_holdout_scores)
+        improvement_pct = validation.aggregate_improvement
+
+        logger.info(
+            "Holdout validation: decision=%s, improvement=%.2f%%, "
+            "score_before=%.3f, score_after=%.3f, holdout_n=%d, regressions=%s",
+            validation.decision,
+            validation.aggregate_improvement * 100,
+            score_before,
+            score_after,
+            len(holdout_data),
+            validation.scorer_regressions or "none",
+        )
+
+        # Handle REJECTED decision (OPT-03: insufficient improvement)
+        if validation.decision == "REJECTED":
+            await run_lcm.transition(
+                run_id=run_id,
+                from_state=RunState.VALIDATING,
+                to_state=RunState.REJECTED,
+                prompt_name=group.prompt_names[0],
+                agent_code=primary_agent,
+                error_message=(
+                    f"OPT-03: Aggregate improvement "
+                    f"{validation.aggregate_improvement * 100:.1f}% "
+                    f"below {settings.VALIDATION_IMPROVEMENT_THRESHOLD * 100:.0f}% "
+                    f"threshold"
+                ),
+            )
+            record_optimization_run(
+                agent_code=primary_agent,
+                group_name=group_name,
+                duration_seconds=opt_result.duration_seconds,
+                cost_usd=estimated_cost,
+            )
+            return {
+                "run_id": run_id,
+                "group_name": group_name,
+                "status": "REJECTED",
+                "score_before": score_before,
+                "score_after": score_after,
+                "improvement_pct": improvement_pct,
+                "validation_decision": validation.decision,
+                "holdout_count": len(holdout_data),
+            }
 
         # ── Step 12: Register optimized prompt as new MLflow version ──
+        # Only register after validation passes (avoids polluting registry
+        # with rejected candidates).
         new_version = None
         if best_prompt_text:
             for prompt_name in group.prompt_names:
@@ -352,7 +449,12 @@ async def _run_optimization_pipeline(
                     if new_version is None:
                         new_version = new_info
 
-        # Update Redis progress with scores
+        # Update Redis progress with validation results
+        max_regression = (
+            max(validation.scorer_regressions.values())
+            if validation.scorer_regressions
+            else 0.0
+        )
         if cache is not None:
             await cache.set_optimization_progress(
                 run_id,
@@ -364,6 +466,8 @@ async def _run_optimization_pipeline(
                     "score_before": str(score_before),
                     "score_after": str(score_after),
                     "improvement": str(improvement_pct),
+                    "validation_decision": validation.decision,
+                    "holdout_count": str(len(holdout_data)),
                     "cost_usd": str(estimated_cost),
                     "candidates_evaluated": str(opt_result.candidates_evaluated),
                     "mlflow_run_id": opt_result.mlflow_run_id,
@@ -371,10 +475,12 @@ async def _run_optimization_pipeline(
             )
 
         # ── Step 13/14: Route to approval or canary ──
+        # OPT-04 regression → PENDING_APPROVAL regardless of agent criticality
+        needs_approval = validation.decision == "PENDING_APPROVAL"
+        # Critical agents (adpub, coa) always need approval
         any_critical = any(requires_approval(ac) for ac in group.agent_codes)
 
-        if any_critical:
-            # CRITICAL agents (adpub, coa) require human approval
+        if needs_approval or any_critical:
             await run_lcm.transition(
                 run_id=run_id,
                 from_state=RunState.VALIDATING,
@@ -383,14 +489,24 @@ async def _run_optimization_pipeline(
                 agent_code=primary_agent,
             )
             final_status = "PENDING_APPROVAL"
-            logger.info(
-                "Optimization awaiting approval: group=%s, run=%s (critical agents: %s)",
-                group_name,
-                run_id,
-                [ac for ac in group.agent_codes if requires_approval(ac)],
-            )
+            if needs_approval:
+                logger.info(
+                    "Optimization awaiting approval (OPT-04 regression): "
+                    "group=%s, run=%s, regressions=%s",
+                    group_name,
+                    run_id,
+                    validation.scorer_regressions,
+                )
+            else:
+                logger.info(
+                    "Optimization awaiting approval: group=%s, run=%s "
+                    "(critical agents: %s)",
+                    group_name,
+                    run_id,
+                    [ac for ac in group.agent_codes if requires_approval(ac)],
+                )
         else:
-            # Non-critical: start canary deployment
+            # Non-critical, no regressions: start canary deployment
             await run_lcm.transition(
                 run_id=run_id,
                 from_state=RunState.VALIDATING,
@@ -437,7 +553,7 @@ async def _run_optimization_pipeline(
             agent_code=primary_agent,
             prompt_name=group.prompt_names[0],
             improvement_pct=improvement_pct * 100,
-            regression_pct=0.0,
+            regression_pct=max_regression * 100,
         )
 
         logger.info(
@@ -456,6 +572,11 @@ async def _run_optimization_pipeline(
             "group_name": group_name,
             "status": final_status,
             "overall_score": opt_result.overall_score,
+            "score_before": score_before,
+            "score_after": score_after,
+            "improvement_pct": improvement_pct,
+            "validation_decision": validation.decision,
+            "holdout_count": len(holdout_data),
             "candidates_evaluated": opt_result.candidates_evaluated,
             "duration_seconds": opt_result.duration_seconds,
             "cost_usd": estimated_cost,
@@ -498,6 +619,56 @@ async def _run_optimization_pipeline(
             await worker_engine.dispose()
         except Exception:
             pass
+
+
+def _evaluate_on_holdout(
+    predict_fn,
+    holdout_data: list[dict[str, Any]],
+    scorers: list[Any],
+) -> dict[str, float]:
+    """Evaluate a prompt against holdout examples and return per-scorer averages.
+
+    Runs predict_fn for each holdout example, then scores each output
+    with all scorers. Returns {scorer_name: mean_score}.
+
+    This is a synchronous function — acceptable in the Celery worker context.
+    """
+    from collections import defaultdict
+
+    scorer_totals: dict[str, float] = defaultdict(float)
+    scorer_counts: dict[str, int] = defaultdict(int)
+
+    for example in holdout_data:
+        inputs = example.get("inputs", {})
+        expected = example.get("expected_output", "")
+
+        try:
+            output = predict_fn(**inputs)
+        except Exception as exc:
+            logger.warning("Holdout prediction failed: %s", exc)
+            output = ""
+
+        for scorer_fn in scorers:
+            try:
+                feedback = scorer_fn(
+                    inputs=inputs,
+                    outputs=output,
+                    expectations=expected,
+                )
+                score_value = getattr(feedback, "value", 0.0)
+                scorer_name = getattr(
+                    feedback, "name", getattr(scorer_fn, "__name__", str(scorer_fn))
+                )
+                scorer_totals[scorer_name] += float(score_value)
+                scorer_counts[scorer_name] += 1
+            except Exception as exc:
+                logger.warning("Scorer %s failed on holdout: %s", scorer_fn, exc)
+
+    return {
+        name: scorer_totals[name] / scorer_counts[name]
+        for name in scorer_totals
+        if scorer_counts[name] > 0
+    }
 
 
 async def _load_golden_dataset(group, session_factory) -> list[dict[str, Any]]:

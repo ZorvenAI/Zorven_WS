@@ -77,13 +77,9 @@ def make_predict_fn(
                     prompt_name,
                 )
                 return ""
-            latest_ver = max(
-                versions, key=lambda v: int(v.version)
-            ).version
+            latest_ver = max(versions, key=lambda v: int(v.version)).version
             prompt_uri = f"prompts:/{prompt_name}/{latest_ver}"
-            prompt_version = mlflow.genai.load_prompt(
-                prompt_uri, allow_missing=True
-            )
+            prompt_version = mlflow.genai.load_prompt(prompt_uri, allow_missing=True)
 
             if prompt_version is None:
                 logger.warning(
@@ -98,7 +94,7 @@ def make_predict_fn(
             for key, value in kwargs.items():
                 if key.startswith("context_"):
                     # Only replace the first underscore after "context"
-                    dot_key = "context." + key[len("context_"):]
+                    dot_key = "context." + key[len("context_") :]
                     formatted_kwargs[dot_key] = str(value)
                 else:
                     formatted_kwargs[key] = str(value)
@@ -125,14 +121,79 @@ def make_predict_fn(
             return ""
 
         except Exception as exc:
-            logger.exception(
-                "predict_fn error for prompt '%s': %s", prompt_name, exc
-            )
+            logger.exception("predict_fn error for prompt '%s': %s", prompt_name, exc)
             return ""
 
     # Attach metadata for introspection
     predict_fn.prompt_name = prompt_name
     predict_fn.model = model
     predict_fn.mlflow_tracking_uri = tracking_uri
+
+    return predict_fn
+
+
+def make_predict_fn_from_text(
+    template: str,
+    model: Optional[str] = None,
+    anthropic_api_key: Optional[str] = None,
+    max_tokens: Optional[int] = None,
+) -> Callable[..., str]:
+    """Create a predict function from raw prompt text (for holdout evaluation).
+
+    Same as make_predict_fn but accepts template text directly instead of
+    loading from MLflow. Used to evaluate candidate prompts before they are
+    registered to avoid polluting the registry with rejected candidates.
+
+    Args:
+        template: Raw prompt template text with {{context.var}} placeholders.
+        model: Anthropic model ID.
+        anthropic_api_key: Anthropic API key (default from settings).
+        max_tokens: Max tokens for Anthropic response.
+
+    Returns:
+        A callable(**kwargs) -> str that formats the template, calls Claude,
+        and returns the first content block text.
+    """
+    model = model or settings.GEPA_MODEL_NAME
+    max_tokens = max_tokens or settings.GEPA_MAX_TOKENS
+    api_key = anthropic_api_key or settings.ANTHROPIC_API_KEY
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    def predict_fn(**kwargs: Any) -> str:
+        try:
+            formatted_kwargs = {}
+            for key, value in kwargs.items():
+                if key.startswith("context_"):
+                    dot_key = "context." + key[len("context_") :]
+                    formatted_kwargs[dot_key] = str(value)
+                else:
+                    formatted_kwargs[key] = str(value)
+
+            formatted = template
+            for k, v in formatted_kwargs.items():
+                formatted = formatted.replace("{{" + k + "}}", v)
+
+            message = client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                thinking={"type": "disabled"},
+                messages=[{"role": "user", "content": formatted}],
+            )
+
+            if message.content and len(message.content) > 0:
+                return next(
+                    (b.text for b in message.content if b.type == "text"),
+                    "",
+                )
+
+            return ""
+
+        except Exception as exc:
+            logger.exception("predict_fn_from_text error: %s", exc)
+            return ""
+
+    predict_fn.prompt_name = "(inline-template)"
+    predict_fn.model = model
 
     return predict_fn
