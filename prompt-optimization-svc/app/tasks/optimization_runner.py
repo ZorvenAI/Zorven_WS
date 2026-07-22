@@ -245,6 +245,20 @@ async def _run_optimization_pipeline(
         except Exception as exc:
             logger.warning("Reflection context enricher unavailable: %s", exc)
 
+        # US-054: Auto-generate baseline scorers from skill output schemas
+        try:
+            from app.scorers.scorer_generator import generate_baseline_scorers
+
+            baseline_scorers = generate_baseline_scorers(group_name, skill_reader)
+            if baseline_scorers:
+                scorers = list(scorers) + baseline_scorers
+                logger.info(
+                    "Added %d baseline scorers from output schemas",
+                    len(baseline_scorers),
+                )
+        except Exception as exc:
+            logger.warning("Baseline scorer generation failed (non-fatal): %s", exc)
+
         joint_opt = JointOptimizer(
             gepa_optimizer=gepa,
             registry=registry,
