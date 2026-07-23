@@ -42,7 +42,7 @@ import {
   getOptimizationRuns,
   triggerOptimization,
 } from '@/lib/prompt-ops';
-import type { CanaryHistoryResponse } from '@/lib/prompt-ops';
+import type { CanaryHistoryResponse, OptimizationRunsResponse } from '@/lib/prompt-ops';
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -133,6 +133,9 @@ export default function CanaryDashboard() {
   const [historyPageSize, setHistoryPageSize] = useState(5);
   const [comparisons, setComparisons] = useState<Record<string, CanaryMetricsComparison>>({});
   const [optimizationRuns, setOptimizationRuns] = useState<OptimizationRun[]>([]);
+  const [runsTotal, setRunsTotal] = useState(0);
+  const [runsPage, setRunsPage] = useState(1);
+  const [runsPageSize, setRunsPageSize] = useState(5);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState(false);
@@ -144,8 +147,10 @@ export default function CanaryDashboard() {
       // Refresh runs after a short delay
       setTimeout(async () => {
         try {
-          const runs = await getOptimizationRuns();
-          setOptimizationRuns(runs);
+          const resp = await getOptimizationRuns(1, runsPageSize);
+          setOptimizationRuns(resp.runs);
+          setRunsTotal(resp.total);
+          setRunsPage(1);
         } catch {
           // ignore refresh errors
         }
@@ -171,19 +176,38 @@ export default function CanaryDashboard() {
     []
   );
 
+  const loadRuns = useCallback(
+    async (page: number, pageSize: number) => {
+      try {
+        const resp = await getOptimizationRuns(page, pageSize);
+        setOptimizationRuns(resp.runs);
+        setRunsTotal(resp.total);
+        setRunsPage(resp.page);
+      } catch {
+        setOptimizationRuns([]);
+        setRunsTotal(0);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     async function loadData() {
       try {
         setLoading(true);
         setError(null);
 
-        const [activeCanaries, historyResp, runs] = await Promise.all([
+        const [activeCanaries, historyResp, runsResp] = await Promise.all([
           getActiveCanaries(),
           getCanaryHistory(1, historyPageSize),
-          getOptimizationRuns().catch(() => [] as OptimizationRun[]),
+          getOptimizationRuns(1, runsPageSize).catch(
+            () => ({ runs: [], total: 0, page: 1, page_size: runsPageSize }) as OptimizationRunsResponse
+          ),
         ]);
 
-        setOptimizationRuns(runs);
+        setOptimizationRuns(runsResp.runs);
+        setRunsTotal(runsResp.total);
+        setRunsPage(runsResp.page);
         setCanaries(activeCanaries);
         setHistory(historyResp.history);
         setHistoryTotal(historyResp.total);
@@ -421,25 +445,59 @@ export default function CanaryDashboard() {
             <h2 className="text-lg font-heading font-bold text-white">
               Optimization Runs
             </h2>
-          </div>
-          <div className="flex items-center gap-2">
-            {(['wf1-discovery-pipeline', 'wf2-brand-strategy-pipeline', 'wf3-creative-pipeline'] as const).map(
-              (group) => (
-                <button
-                  key={group}
-                  onClick={() => handleTriggerOptimization(group)}
-                  disabled={triggering}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-electric/10 text-brand-electric text-xs font-medium hover:bg-brand-electric/20 transition-colors disabled:opacity-50"
-                >
-                  {triggering ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Play className="w-3 h-3" />
-                  )}
-                  {group.replace('-pipeline', '').replace('wf', 'WF').replace('-', ' ').replace('discovery', 'Discovery').replace('brand strategy', 'Brand Strategy').replace('creative', 'Creative')}
-                </button>
-              )
+            {runsTotal > 0 && (
+              <span className="text-xs text-brand-silver/50">
+                ({runsTotal} total)
+              </span>
             )}
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              {(['wf1-discovery-pipeline', 'wf2-brand-strategy-pipeline', 'wf3-creative-pipeline'] as const).map(
+                (group) => (
+                  <button
+                    key={group}
+                    onClick={() => handleTriggerOptimization(group)}
+                    disabled={triggering}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-electric/10 text-brand-electric text-xs font-medium hover:bg-brand-electric/20 transition-colors disabled:opacity-50"
+                  >
+                    {triggering ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Play className="w-3 h-3" />
+                    )}
+                    {group.replace('-pipeline', '').replace('wf', 'WF').replace('-', ' ').replace('discovery', 'Discovery').replace('brand strategy', 'Brand Strategy').replace('creative', 'Creative')}
+                  </button>
+                )
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-brand-silver/70">Show</label>
+              <select
+                value={runsPageSize}
+                onChange={(e) => {
+                  const newSize = Number(e.target.value);
+                  setRunsPageSize(newSize);
+                  setRunsPage(1);
+                  loadRuns(1, newSize);
+                }}
+                className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-xs text-brand-silver focus:outline-none focus:border-brand-electric/50"
+              >
+                {[5, 10, 25, 50].map((n) => (
+                  <option key={n} value={n} className="bg-brand-midnight">
+                    {n}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-brand-silver/70">entries</span>
+            </div>
+            <Link
+              href="/prompt-ops/optimization-runs"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-brand-electric/10 text-brand-electric text-xs font-medium hover:bg-brand-electric/20 transition-colors"
+            >
+              View All
+              <ExternalLink className="w-3 h-3" />
+            </Link>
           </div>
         </div>
         {optimizationRuns.length === 0 ? (
@@ -447,42 +505,81 @@ export default function CanaryDashboard() {
             No optimization runs yet
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-brand-silver/70 border-b border-white/5">
-                  <th className="pb-3 font-medium">Run ID</th>
-                  <th className="pb-3 font-medium">Prompt</th>
-                  <th className="pb-3 font-medium">Agent</th>
-                  <th className="pb-3 font-medium">State</th>
-                  <th className="pb-3 font-medium">Score</th>
-                  <th className="pb-3 font-medium">Cost</th>
-                  <th className="pb-3 font-medium">Updated</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {optimizationRuns.map((run) => (
-                  <tr key={run.run_id} className="text-brand-silver">
-                    <td className="py-3 font-mono text-xs">{run.run_id.slice(0, 8)}</td>
-                    <td className="py-3 text-white font-medium text-xs">{run.prompt_name}</td>
-                    <td className="py-3">{run.agent_code}</td>
-                    <td className="py-3">
-                      <RunStateBadge state={run.state} />
-                    </td>
-                    <td className="py-3">
-                      {run.score_after !== null ? run.score_after.toFixed(3) : '--'}
-                    </td>
-                    <td className="py-3">
-                      {run.cost_usd !== null ? `$${run.cost_usd.toFixed(2)}` : '--'}
-                    </td>
-                    <td className="py-3 text-xs">
-                      {new Date(run.updated_at).toLocaleString()}
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-brand-silver/70 border-b border-white/5">
+                    <th className="pb-3 font-medium">Run ID</th>
+                    <th className="pb-3 font-medium">Prompt</th>
+                    <th className="pb-3 font-medium">Agent</th>
+                    <th className="pb-3 font-medium">State</th>
+                    <th className="pb-3 font-medium">Score</th>
+                    <th className="pb-3 font-medium">Cost</th>
+                    <th className="pb-3 font-medium">Updated</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {optimizationRuns.map((run) => (
+                    <tr key={run.run_id} className="text-brand-silver">
+                      <td className="py-3 font-mono text-xs">{run.run_id.slice(0, 8)}</td>
+                      <td className="py-3 text-white font-medium text-xs">{run.prompt_name}</td>
+                      <td className="py-3">{run.agent_code}</td>
+                      <td className="py-3">
+                        <RunStateBadge state={run.state} />
+                      </td>
+                      <td className="py-3">
+                        {run.score_after !== null ? run.score_after.toFixed(3) : '--'}
+                      </td>
+                      <td className="py-3">
+                        {run.cost_usd !== null ? `$${run.cost_usd.toFixed(2)}` : '--'}
+                      </td>
+                      <td className="py-3 text-xs">
+                        {new Date(run.updated_at).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Pagination Controls */}
+            {runsTotal > runsPageSize && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/5">
+                <span className="text-xs text-brand-silver/50">
+                  Showing {(runsPage - 1) * runsPageSize + 1}–
+                  {Math.min(runsPage * runsPageSize, runsTotal)} of{' '}
+                  {runsTotal}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    disabled={runsPage <= 1}
+                    onClick={() => {
+                      const p = runsPage - 1;
+                      setRunsPage(p);
+                      loadRuns(p, runsPageSize);
+                    }}
+                    className="p-1.5 rounded-md hover:bg-white/5 text-brand-silver disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-xs text-brand-silver px-2">
+                    Page {runsPage} of {Math.ceil(runsTotal / runsPageSize)}
+                  </span>
+                  <button
+                    disabled={runsPage >= Math.ceil(runsTotal / runsPageSize)}
+                    onClick={() => {
+                      const p = runsPage + 1;
+                      setRunsPage(p);
+                      loadRuns(p, runsPageSize);
+                    }}
+                    className="p-1.5 rounded-md hover:bg-white/5 text-brand-silver disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

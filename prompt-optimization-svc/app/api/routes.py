@@ -561,52 +561,92 @@ async def list_optimization_runs(
 ):
     """AC-2: List optimization runs with status, metrics, and cost (paginated).
 
-    Reads from PostgreSQL (durable source of truth) with Redis supplementary
-    data for in-progress runs.
+    Reads from PostgreSQL (durable). Falls back to Redis if PostgreSQL
+    has no data yet (pre-migration runs).
     """
-    from sqlalchemy import func, select
-
     from app.api.schemas import RunListResponse, RunStatusResponse
-    from app.models.database import async_session_factory
-    from app.models.optimization_run import OptimizationRun
 
-    async with async_session_factory() as session:
-        # Count total
-        count_stmt = select(func.count()).select_from(OptimizationRun)
-        total = (await session.execute(count_stmt)).scalar() or 0
+    # Try PostgreSQL first
+    try:
+        from sqlalchemy import func, select
 
-        # Paginated query ordered by most recent
-        offset = (page - 1) * page_size
-        stmt = (
-            select(OptimizationRun)
-            .order_by(OptimizationRun.updated_at.desc())
-            .offset(offset)
-            .limit(page_size)
+        from app.models.database import async_session_factory
+        from app.models.optimization_run import OptimizationRun
+
+        async with async_session_factory() as session:
+            count_stmt = select(func.count()).select_from(OptimizationRun)
+            total = (await session.execute(count_stmt)).scalar() or 0
+
+            if total > 0:
+                offset = (page - 1) * page_size
+                stmt = (
+                    select(OptimizationRun)
+                    .order_by(OptimizationRun.updated_at.desc())
+                    .offset(offset)
+                    .limit(page_size)
+                )
+                result = await session.execute(stmt)
+                rows = result.scalars().all()
+
+                runs = [
+                    RunStatusResponse(
+                        run_id=row.id,
+                        state=row.state,
+                        prompt_name=row.prompt_name,
+                        agent_code=row.agent_code,
+                        error_message=row.error_message or "",
+                        updated_at=(
+                            row.updated_at.isoformat() if row.updated_at else None
+                        ),
+                        score_before=row.score_before,
+                        score_after=row.score_after,
+                        improvement=row.improvement,
+                        cost_usd=row.cost_usd,
+                    )
+                    for row in rows
+                ]
+                return RunListResponse(
+                    runs=runs, total=total, page=page, page_size=page_size
+                )
+    except Exception:
+        pass  # Fall through to Redis
+
+    # Fallback: read from Redis (pre-migration data)
+    from app.cache.prompt_cache import PromptCacheManager
+    from app.core.config import settings
+
+    cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
+    r = await cache.connect()
+    try:
+        all_runs = []
+        async for key in r.scan_iter(match="prompt:optimization:progress:*"):
+            run_id = key.split(":")[-1]
+            progress = await cache.get_optimization_progress(run_id)
+            if progress:
+                all_runs.append(
+                    RunStatusResponse(
+                        run_id=run_id,
+                        state=progress.get("state", "UNKNOWN"),
+                        prompt_name=progress.get("prompt_name", ""),
+                        agent_code=progress.get("agent_code", ""),
+                        updated_at=progress.get("updated_at"),
+                        score_before=_float_or_none(progress.get("score_before")),
+                        score_after=_float_or_none(progress.get("score_after")),
+                        improvement=_float_or_none(progress.get("improvement")),
+                        cost_usd=_float_or_none(progress.get("cost_usd")),
+                    )
+                )
+        total = len(all_runs)
+        start = (page - 1) * page_size
+        end = start + page_size
+        return RunListResponse(
+            runs=all_runs[start:end],
+            total=total,
+            page=page,
+            page_size=page_size,
         )
-        result = await session.execute(stmt)
-        rows = result.scalars().all()
-
-    runs = [
-        RunStatusResponse(
-            run_id=row.id,
-            state=row.state,
-            prompt_name=row.prompt_name,
-            agent_code=row.agent_code,
-            error_message=row.error_message or "",
-            updated_at=row.updated_at.isoformat() if row.updated_at else None,
-            score_before=row.score_before,
-            score_after=row.score_after,
-            improvement=row.improvement,
-            cost_usd=row.cost_usd,
-        )
-        for row in rows
-    ]
-    return RunListResponse(
-        runs=runs,
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
+    finally:
+        await cache.close()
 
 
 @router.get("/v1/optimize/runs/{run_id}", response_model=None)
@@ -1677,38 +1717,63 @@ async def get_canary_history(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
 ):
-    """List canary deployment outcomes from PostgreSQL, paginated."""
-    from sqlalchemy import func, select
+    """List canary deployment outcomes, paginated.
 
+    Reads from PostgreSQL (durable). Falls back to Redis if PostgreSQL
+    has no data yet (pre-migration history).
+    """
     from app.api.schemas import CanaryHistoryEntry, CanaryHistoryResponse
-    from app.models.canary_history import CanaryHistory
-    from app.models.database import async_session_factory
 
-    async with async_session_factory() as session:
-        count_stmt = select(func.count()).select_from(CanaryHistory)
-        total = (await session.execute(count_stmt)).scalar() or 0
+    # Try PostgreSQL first
+    try:
+        from sqlalchemy import func, select
 
-        offset = (page - 1) * page_size
-        stmt = (
-            select(CanaryHistory)
-            .order_by(CanaryHistory.ended_at.desc())
-            .offset(offset)
-            .limit(page_size)
+        from app.models.canary_history import CanaryHistory
+        from app.models.database import async_session_factory
+
+        async with async_session_factory() as session:
+            count_stmt = select(func.count()).select_from(CanaryHistory)
+            total = (await session.execute(count_stmt)).scalar() or 0
+
+            if total > 0:
+                offset = (page - 1) * page_size
+                stmt = (
+                    select(CanaryHistory)
+                    .order_by(CanaryHistory.ended_at.desc())
+                    .offset(offset)
+                    .limit(page_size)
+                )
+                result = await session.execute(stmt)
+                rows = result.scalars().all()
+
+                entries = [
+                    CanaryHistoryEntry(
+                        prompt_name=row.prompt_name,
+                        canary_version=row.canary_version,
+                        started_at=row.started_at.isoformat() if row.started_at else "",
+                        ended_at=row.ended_at.isoformat() if row.ended_at else "",
+                        outcome=row.outcome,
+                        final_regression_pct=row.final_regression_pct,
+                    )
+                    for row in rows
+                ]
+                return CanaryHistoryResponse(
+                    history=entries, total=total, page=page, page_size=page_size
+                )
+    except Exception:
+        pass  # Fall through to Redis
+
+    # Fallback: read from Redis (pre-migration data)
+    if canary_manager is None:
+        return JSONResponse(
+            status_code=503, content={"detail": "Canary manager not initialized"}
         )
-        result = await session.execute(stmt)
-        rows = result.scalars().all()
 
-    entries = [
-        CanaryHistoryEntry(
-            prompt_name=row.prompt_name,
-            canary_version=row.canary_version,
-            started_at=row.started_at.isoformat() if row.started_at else "",
-            ended_at=row.ended_at.isoformat() if row.ended_at else "",
-            outcome=row.outcome,
-            final_regression_pct=row.final_regression_pct,
-        )
-        for row in rows
-    ]
+    all_history = await canary_manager.list_canary_history()
+    total = len(all_history)
+    start = (page - 1) * page_size
+    page_items = all_history[start : start + page_size]
+    entries = [CanaryHistoryEntry(**h) for h in page_items]
     return CanaryHistoryResponse(
         history=entries, total=total, page=page, page_size=page_size
     )
