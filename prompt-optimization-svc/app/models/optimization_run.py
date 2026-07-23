@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Index, String, Text
+from sqlalchemy import DateTime, Float, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import text
 
@@ -45,6 +45,18 @@ class OptimizationRun(Base):
     )
     error_message: Mapped[str | None] = mapped_column(
         Text, nullable=True
+    )
+    score_before: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    score_after: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    improvement: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    cost_usd: Mapped[float | None] = mapped_column(
+        Float, nullable=True
     )
     deferred_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

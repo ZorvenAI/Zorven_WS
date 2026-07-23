@@ -17,9 +17,18 @@ const getBaseUrl = (): string => {
   return 'http://localhost:8110';
 };
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const url = `${getBaseUrl()}${path}`;
-  const res = await fetch(url, {
+async function fetchJson<T>(
+  path: string,
+  params?: Record<string, string | number>
+): Promise<T> {
+  const baseUrl = getBaseUrl();
+  const url = new URL(`${baseUrl}${path}`);
+  if (params) {
+    Object.entries(params).forEach(([k, v]) =>
+      url.searchParams.set(k, String(v))
+    );
+  }
+  const res = await fetch(url.toString(), {
     headers: { 'Content-Type': 'application/json' },
   });
   if (!res.ok) {
@@ -43,11 +52,21 @@ export async function getCanaryMetrics(
   );
 }
 
-export async function getCanaryHistory(): Promise<CanaryHistoryEntry[]> {
-  const data = await fetchJson<{ history: CanaryHistoryEntry[] }>(
-    '/v1/canary/history'
-  );
-  return data.history;
+export interface CanaryHistoryResponse {
+  history: CanaryHistoryEntry[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export async function getCanaryHistory(
+  page: number = 1,
+  pageSize: number = 10
+): Promise<CanaryHistoryResponse> {
+  return fetchJson<CanaryHistoryResponse>('/v1/canary/history', {
+    page,
+    page_size: pageSize,
+  });
 }
 
 export async function getOptimizationRuns(): Promise<OptimizationRun[]> {

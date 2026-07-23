@@ -213,6 +213,33 @@ class RunLifecycleManager:
         )
         return True
 
+    async def persist_scores(
+        self,
+        run_id: str,
+        score_before: float,
+        score_after: float,
+        improvement: float,
+        cost_usd: float,
+    ) -> None:
+        """Persist optimization scores and cost to PostgreSQL."""
+        if self.db_session_factory is None:
+            return
+
+        from app.models.optimization_run import OptimizationRun
+
+        async with self.db_session_factory() as session:
+            from sqlalchemy import select
+
+            stmt = select(OptimizationRun).where(OptimizationRun.id == run_id)
+            result = await session.execute(stmt)
+            run = result.scalar_one_or_none()
+            if run is not None:
+                run.score_before = score_before
+                run.score_after = score_after
+                run.improvement = improvement
+                run.cost_usd = cost_usd
+                await session.commit()
+
     async def defer_on_lock_conflict(
         self, run_id: str, prompt_name: str = "", agent_code: str = ""
     ) -> datetime:

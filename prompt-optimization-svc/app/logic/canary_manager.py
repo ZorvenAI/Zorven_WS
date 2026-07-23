@@ -61,12 +61,14 @@ class CanaryState:
 class CanaryManager:
     """Manages canary deployments for prompt optimization.
 
-    Stores canary state and metrics in Redis (DB 2).
+    Stores canary state and metrics in Redis (DB 2) with PostgreSQL
+    persistence for canary history.
     """
 
-    def __init__(self, prompt_cache, lifecycle_manager=None) -> None:
+    def __init__(self, prompt_cache, lifecycle_manager=None, db_session_factory=None) -> None:
         self.prompt_cache = prompt_cache
         self.lifecycle_manager = lifecycle_manager
+        self.db_session_factory = db_session_factory
 
     async def start_canary(
         self,
@@ -342,7 +344,7 @@ class CanaryManager:
         outcome: str,
         regression_pct: Optional[float],
     ) -> None:
-        """Record canary outcome in Redis history (30-day TTL)."""
+        """Record canary outcome in Redis (30-day TTL) and PostgreSQL."""
         r = await self.prompt_cache.connect()
         now = datetime.now(timezone.utc)
         key = CANARY_HISTORY_KEY.format(
@@ -362,6 +364,27 @@ class CanaryManager:
         }
         await r.hset(key, mapping=data)
         await r.expire(key, settings.CANARY_METRICS_TTL_DAYS * 86400)
+
+        # Persist to PostgreSQL for long-term storage
+        if self.db_session_factory is not None:
+            try:
+                from app.models.canary_history import CanaryHistory
+
+                async with self.db_session_factory() as session:
+                    record = CanaryHistory(
+                        prompt_name=state.prompt_name,
+                        canary_version=state.canary_version,
+                        production_version=state.production_version,
+                        agent_code=state.agent_code,
+                        started_at=state.started_at,
+                        ended_at=now,
+                        outcome=outcome,
+                        final_regression_pct=regression_pct,
+                    )
+                    session.add(record)
+                    await session.commit()
+            except Exception as exc:
+                logger.warning("Failed to persist canary history to DB: %s", exc)
 
     async def list_active_canaries(self) -> list[CanaryState]:
         """Scan Redis for all active canary deployments."""

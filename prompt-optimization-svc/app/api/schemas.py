@@ -501,6 +501,9 @@ class CanaryHistoryEntry(BaseModel):
 
 
 class CanaryHistoryResponse(BaseModel):
-    """Response for GET /v1/canary/history."""
+    """Response for GET /v1/canary/history (paginated)."""
 
     history: list[CanaryHistoryEntry] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 10
