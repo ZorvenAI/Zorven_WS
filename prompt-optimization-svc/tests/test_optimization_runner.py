@@ -149,8 +149,8 @@ class TestBugFixes:
             source = f.read()
         assert "routes.mlflow_registry = None" in source
 
-    def test_list_runs_uses_postgresql(self):
-        """Step 1.3: list_optimization_runs reads from PostgreSQL, not Redis."""
+    def test_list_runs_uses_postgresql_with_redis_fallback(self):
+        """Step 1.3: list_optimization_runs reads PostgreSQL first, Redis fallback."""
         with open("app/api/routes.py") as f:
             source = f.read()
         func_start = source.index("async def list_optimization_runs")
@@ -158,6 +158,7 @@ class TestBugFixes:
         func_body = source[func_start:next_func]
         assert "async_session_factory" in func_body
         assert "OptimizationRun" in func_body
+        assert "scan_iter" in func_body  # Redis fallback
 
     def test_no_501_stub_endpoints(self):
         """Steps 4.1/4.2: 501 stubs should be replaced."""
