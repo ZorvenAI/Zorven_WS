@@ -69,11 +69,21 @@ export async function getCanaryHistory(
   });
 }
 
-export async function getOptimizationRuns(): Promise<OptimizationRun[]> {
-  const data = await fetchJson<{ runs: OptimizationRun[] }>(
-    '/v1/optimize/runs'
-  );
-  return data.runs;
+export interface OptimizationRunsResponse {
+  runs: OptimizationRun[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export async function getOptimizationRuns(
+  page: number = 1,
+  pageSize: number = 50
+): Promise<OptimizationRunsResponse> {
+  return fetchJson<OptimizationRunsResponse>('/v1/optimize/runs', {
+    page,
+    page_size: pageSize,
+  });
 }
 
 export async function triggerOptimization(
