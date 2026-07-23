@@ -463,6 +463,15 @@ async def _run_optimization_pipeline(
                     if new_version is None:
                         new_version = new_info
 
+        # Persist scores to PostgreSQL
+        await run_lcm.persist_scores(
+            run_id=run_id,
+            score_before=score_before,
+            score_after=score_after,
+            improvement=improvement_pct,
+            cost_usd=estimated_cost,
+        )
+
         # Update Redis progress with validation results
         max_regression = (
             max(validation.scorer_regressions.values())

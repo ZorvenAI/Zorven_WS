@@ -144,7 +144,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 4d. Canary manager
     from app.logic.canary_manager import CanaryManager
 
-    canary_mgr = CanaryManager(prompt_cache, lifecycle_manager=lcm)
+    canary_mgr = CanaryManager(
+        prompt_cache, lifecycle_manager=lcm, db_session_factory=async_session_factory
+    )
 
     # 5. Health checker
     checker = HealthChecker(redis_client=redis_client)

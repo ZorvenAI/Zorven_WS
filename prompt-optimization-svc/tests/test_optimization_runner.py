@@ -149,17 +149,15 @@ class TestBugFixes:
             source = f.read()
         assert "routes.mlflow_registry = None" in source
 
-    def test_no_double_cache_connect(self):
-        """Step 1.3: Only one cache.connect() call in list_optimization_runs."""
+    def test_list_runs_uses_postgresql(self):
+        """Step 1.3: list_optimization_runs reads from PostgreSQL, not Redis."""
         with open("app/api/routes.py") as f:
             source = f.read()
-        # Find the list_optimization_runs function and check for double connect
         func_start = source.index("async def list_optimization_runs")
-        # Find the next function
         next_func = source.index("@router.", func_start + 1)
         func_body = source[func_start:next_func]
-        connect_count = func_body.count("cache.connect()")
-        assert connect_count == 1, f"Expected 1 cache.connect(), found {connect_count}"
+        assert "async_session_factory" in func_body
+        assert "OptimizationRun" in func_body
 
     def test_no_501_stub_endpoints(self):
         """Steps 4.1/4.2: 501 stubs should be replaced."""
