@@ -1662,8 +1662,11 @@ async def get_canary_metrics_comparison(prompt_name: str):
 
 
 @router.get("/v1/canary/history", response_model=None)
-async def get_canary_history():
-    """List recent canary deployment outcomes (last 30 days)."""
+async def get_canary_history(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+):
+    """List recent canary deployment outcomes (last 30 days), paginated."""
     from app.api.schemas import CanaryHistoryEntry, CanaryHistoryResponse
 
     if canary_manager is None:
@@ -1671,9 +1674,14 @@ async def get_canary_history():
             status_code=503, content={"detail": "Canary manager not initialized"}
         )
 
-    history = await canary_manager.list_canary_history()
-    entries = [CanaryHistoryEntry(**h) for h in history]
-    return CanaryHistoryResponse(history=entries)
+    all_history = await canary_manager.list_canary_history()
+    total = len(all_history)
+    start = (page - 1) * page_size
+    page_items = all_history[start : start + page_size]
+    entries = [CanaryHistoryEntry(**h) for h in page_items]
+    return CanaryHistoryResponse(
+        history=entries, total=total, page=page, page_size=page_size
+    )
 
 
 @router.post("/v1/canary/{prompt_name}/promote", response_model=None)

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import {
   FlaskConical,
   Activity,
@@ -14,6 +15,9 @@ import {
   Zap,
   Play,
   Loader2,
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import {
   BarChart,
@@ -38,6 +42,7 @@ import {
   getOptimizationRuns,
   triggerOptimization,
 } from '@/lib/prompt-ops';
+import type { CanaryHistoryResponse } from '@/lib/prompt-ops';
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -123,6 +128,9 @@ function RegressionIndicator({ value }: { value: number | null }) {
 export default function CanaryDashboard() {
   const [canaries, setCanaries] = useState<CanaryDeployment[]>([]);
   const [history, setHistory] = useState<CanaryHistoryEntry[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(5);
   const [comparisons, setComparisons] = useState<Record<string, CanaryMetricsComparison>>({});
   const [optimizationRuns, setOptimizationRuns] = useState<OptimizationRun[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,22 +156,38 @@ export default function CanaryDashboard() {
     }
   };
 
+  const loadHistory = useCallback(
+    async (page: number, pageSize: number) => {
+      try {
+        const resp = await getCanaryHistory(page, pageSize);
+        setHistory(resp.history);
+        setHistoryTotal(resp.total);
+        setHistoryPage(resp.page);
+      } catch {
+        setHistory([]);
+        setHistoryTotal(0);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     async function loadData() {
       try {
         setLoading(true);
         setError(null);
 
-        const [activeCanaries, canaryHistory, runs] = await Promise.all([
+        const [activeCanaries, historyResp, runs] = await Promise.all([
           getActiveCanaries(),
-          getCanaryHistory(),
+          getCanaryHistory(1, historyPageSize),
           getOptimizationRuns().catch(() => [] as OptimizationRun[]),
         ]);
 
         setOptimizationRuns(runs);
-
         setCanaries(activeCanaries);
-        setHistory(canaryHistory);
+        setHistory(historyResp.history);
+        setHistoryTotal(historyResp.total);
+        setHistoryPage(historyResp.page);
 
         // Fetch metrics for each active canary
         const metricsMap: Record<string, CanaryMetricsComparison> = {};
@@ -188,6 +212,7 @@ export default function CanaryDashboard() {
     }
 
     loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
@@ -463,47 +488,122 @@ export default function CanaryDashboard() {
 
       {/* History Table */}
       <div className="glass-card p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <History className="w-5 h-5 text-brand-electric" />
-          <h2 className="text-lg font-heading font-bold text-white">
-            Canary History
-          </h2>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <History className="w-5 h-5 text-brand-electric" />
+            <h2 className="text-lg font-heading font-bold text-white">
+              Canary History
+            </h2>
+            {historyTotal > 0 && (
+              <span className="text-xs text-brand-silver/50">
+                ({historyTotal} total)
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-brand-silver/70">Show</label>
+              <select
+                value={historyPageSize}
+                onChange={(e) => {
+                  const newSize = Number(e.target.value);
+                  setHistoryPageSize(newSize);
+                  setHistoryPage(1);
+                  loadHistory(1, newSize);
+                }}
+                className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-xs text-brand-silver focus:outline-none focus:border-brand-electric/50"
+              >
+                {[5, 10, 25, 50].map((n) => (
+                  <option key={n} value={n} className="bg-brand-midnight">
+                    {n}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-brand-silver/70">entries</span>
+            </div>
+            <Link
+              href="/prompt-ops/canary-history"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-brand-electric/10 text-brand-electric text-xs font-medium hover:bg-brand-electric/20 transition-colors"
+            >
+              View All
+              <ExternalLink className="w-3 h-3" />
+            </Link>
+          </div>
         </div>
         {history.length === 0 ? (
           <p className="text-brand-silver/50 text-sm text-center py-6">
             No canary deployment history
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-brand-silver/70 border-b border-white/5">
-                  <th className="pb-3 font-medium">Prompt</th>
-                  <th className="pb-3 font-medium">Version</th>
-                  <th className="pb-3 font-medium">Started</th>
-                  <th className="pb-3 font-medium">Ended</th>
-                  <th className="pb-3 font-medium">Outcome</th>
-                  <th className="pb-3 font-medium">Regression</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {history.map((h, idx) => (
-                  <tr key={`${h.prompt_name}-${h.canary_version}-${idx}`} className="text-brand-silver">
-                    <td className="py-3 text-white font-medium">{h.prompt_name}</td>
-                    <td className="py-3">v{h.canary_version}</td>
-                    <td className="py-3">{new Date(h.started_at).toLocaleDateString()}</td>
-                    <td className="py-3">{new Date(h.ended_at).toLocaleDateString()}</td>
-                    <td className="py-3">
-                      <OutcomeBadge outcome={h.outcome} />
-                    </td>
-                    <td className="py-3">
-                      <RegressionIndicator value={h.final_regression_pct} />
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-brand-silver/70 border-b border-white/5">
+                    <th className="pb-3 font-medium">Prompt</th>
+                    <th className="pb-3 font-medium">Version</th>
+                    <th className="pb-3 font-medium">Started</th>
+                    <th className="pb-3 font-medium">Ended</th>
+                    <th className="pb-3 font-medium">Outcome</th>
+                    <th className="pb-3 font-medium">Regression</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {history.map((h, idx) => (
+                    <tr key={`${h.prompt_name}-${h.canary_version}-${idx}`} className="text-brand-silver">
+                      <td className="py-3 text-white font-medium">{h.prompt_name}</td>
+                      <td className="py-3">v{h.canary_version}</td>
+                      <td className="py-3">{new Date(h.started_at).toLocaleDateString()}</td>
+                      <td className="py-3">{new Date(h.ended_at).toLocaleDateString()}</td>
+                      <td className="py-3">
+                        <OutcomeBadge outcome={h.outcome} />
+                      </td>
+                      <td className="py-3">
+                        <RegressionIndicator value={h.final_regression_pct} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Pagination Controls */}
+            {historyTotal > historyPageSize && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/5">
+                <span className="text-xs text-brand-silver/50">
+                  Showing {(historyPage - 1) * historyPageSize + 1}–
+                  {Math.min(historyPage * historyPageSize, historyTotal)} of{' '}
+                  {historyTotal}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    disabled={historyPage <= 1}
+                    onClick={() => {
+                      const p = historyPage - 1;
+                      setHistoryPage(p);
+                      loadHistory(p, historyPageSize);
+                    }}
+                    className="p-1.5 rounded-md hover:bg-white/5 text-brand-silver disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-xs text-brand-silver px-2">
+                    Page {historyPage} of {Math.ceil(historyTotal / historyPageSize)}
+                  </span>
+                  <button
+                    disabled={historyPage >= Math.ceil(historyTotal / historyPageSize)}
+                    onClick={() => {
+                      const p = historyPage + 1;
+                      setHistoryPage(p);
+                      loadHistory(p, historyPageSize);
+                    }}
+                    className="p-1.5 rounded-md hover:bg-white/5 text-brand-silver disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
