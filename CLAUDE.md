@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 24 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash and Anthropic Claude. ~3,300+ tests across all components.
+AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 26 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash and Anthropic Claude. ~3,300+ tests across all components.
 
 ## Monorepo Layout
 
@@ -172,6 +172,8 @@ Django dispatches job → pipeline-orchestrator-svc (:8010) → direct sequentia
   → campaign-architecture-agent-svc (:8041) → Meta Ads campaign architecture (WF3)
   → creative-generation-agent-svc (:8042) → Ad creative generation (WF3)
   → ad-publishing-agent-svc (:8043) → Meta Ads publishing + human approval gate (WF3)
+  → campaign-optimization-agent-svc (:8044) → continuous optimization, Meta Insights (WF3)
+  → intelligence-loop-agent-svc (:8045) → campaign insight extraction, RAG ingestion (WF3.5)
   → intelligence-agent-svc (:8030) → brand valuation
   → content-agent-service (:8050) → blog authoring
   → social-agent-service (:8060) → social posting
