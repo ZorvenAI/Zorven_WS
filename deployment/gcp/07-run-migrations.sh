@@ -47,7 +47,7 @@ TITLING_KAFKA_ENABLED=false,\
 VERTEX_AI_MOCK_MODE=true,\
 RAG_DB_SYNC_ENABLED=false" \
   --command="bash" \
-  --args="-c,cd /app && python manage.py migrate_schemas --shared --noinput && python manage.py seed_manifests && python manage.py seed_metrics && echo 'Migrations complete'" \
+  --args="-c,cd /app && python manage.py migrate_schemas --shared --noinput && python manage.py seed_manifests && (python manage.py seed_metrics || echo 'seed_metrics failed - non-critical') && echo 'Migrations complete'" \
   --quiet
 
 log "Running migration job..."

@@ -20,7 +20,7 @@ for img in "${UNIQUE_IMAGES[@]}"; do
 
   log "  [${COUNT}/${TOTAL}] ${img}..."
 
-  if docker pull "${SRC}" >/dev/null 2>&1; then
+  if docker pull --platform linux/amd64 "${SRC}" >/dev/null 2>&1; then
     docker tag "${SRC}" "${DST}"
     if docker push "${DST}" >/dev/null 2>&1; then
       log_ok "  [${COUNT}/${TOTAL}] ${img}"
