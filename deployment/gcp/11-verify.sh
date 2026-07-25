@@ -18,6 +18,14 @@ TOTAL=${#ALL_SERVICES[@]}
 
 log "Verifying ${TOTAL} services..."
 
+# Get auth token for authenticated Cloud Run services
+AUTH_TOKEN=$(gcloud auth print-identity-token 2>/dev/null || echo "")
+AUTH_HEADER=""
+if [ -n "${AUTH_TOKEN}" ]; then
+  AUTH_HEADER="Authorization: Bearer ${AUTH_TOKEN}"
+  log "Using authenticated requests"
+fi
+
 # Health check endpoints per service type
 get_health_path() {
   local svc_name=$1
@@ -56,8 +64,12 @@ for entry in "${ALL_SERVICES[@]}"; do
   health_path=$(get_health_path "${svc_name}")
   full_url="${url}${health_path}"
 
-  # curl with 30s timeout (cold start may take time)
-  http_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "${full_url}" 2>/dev/null || echo "000")
+  # curl with 60s timeout (cold start may take time), with auth if available
+  if [ -n "${AUTH_HEADER}" ]; then
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' -H "${AUTH_HEADER}" --max-time 60 "${full_url}" 2>/dev/null || echo "000")
+  else
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "${full_url}" 2>/dev/null || echo "000")
+  fi
 
   if [ "${http_code}" -ge 200 ] && [ "${http_code}" -lt 400 ]; then
     log_ok "  ${svc_name}: ${http_code} ← ${full_url}"
