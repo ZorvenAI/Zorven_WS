@@ -1,0 +1,387 @@
+# ==============================================================================
+# Build and publish all Docker images to GitHub Container Registry (GHCR)
+# Triggered on push to main or manual dispatch
+# ==============================================================================
+name: Publish Docker Images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ai-brand-automator/**'
+      - 'ai-brand-automator-frontend/**'
+      - 'pipeline-orchestrator-svc/**'
+      - 'discovery-agent-svc/**'
+      - 'intelligence-agent-svc/**'
+      - 'chat-titling-worker/**'
+      - 'content-agent-service/**'
+      - 'social-agent-service/**'
+      - 'rag-uploader-agent-service/**'
+      - 'brand-equity-calculator-svc/**'
+      - 'market-research-agent-svc/**'
+      - 'competitor-intel-agent-svc/**'
+      - 'audience-persona-agent-svc/**'
+      - 'trend-cultural-agent-svc/**'
+      - 'voc-agent-svc/**'
+      - 'brand-positioning-agent-svc/**'
+      - 'brand-architecture-agent-svc/**'
+      - 'brand-personality-agent-svc/**'
+      - 'brand-naming-agent-svc/**'
+      - 'brand-story-agent-svc/**'
+      - 'campaign-architecture-agent-svc/**'
+      - 'creative-generation-agent-svc/**'
+      - 'ad-publishing-agent-svc/**'
+      - 'campaign-optimization-agent-svc/**'
+      - 'intelligence-loop-agent-svc/**'
+      - 'odoo-mcp-server-svc/**'
+      - 'odoo-worker-agent-svc/**'
+      - 'prompt-optimization-svc/**'
+      - 'deployment/docker/**'
+  workflow_dispatch:
+    inputs:
+      build_all:
+        description: 'Build all images regardless of changes'
+        required: false
+        default: 'true'
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_PREFIX: ghcr.io/naveenah
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Detect which services changed (skip on workflow_dispatch with build_all)
+  # --------------------------------------------------------------------------
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      orchestrator: ${{ steps.filter.outputs.orchestrator }}
+      discovery: ${{ steps.filter.outputs.discovery }}
+      intelligence: ${{ steps.filter.outputs.intelligence }}
+      titling: ${{ steps.filter.outputs.titling }}
+      content: ${{ steps.filter.outputs.content }}
+      social: ${{ steps.filter.outputs.social }}
+      rag-uploader: ${{ steps.filter.outputs.rag-uploader }}
+      brand-equity: ${{ steps.filter.outputs.brand-equity }}
+      market-research: ${{ steps.filter.outputs.market-research }}
+      competitor-intel: ${{ steps.filter.outputs.competitor-intel }}
+      audience-persona: ${{ steps.filter.outputs.audience-persona }}
+      trend-cultural: ${{ steps.filter.outputs.trend-cultural }}
+      voc: ${{ steps.filter.outputs.voc }}
+      brand-positioning: ${{ steps.filter.outputs.brand-positioning }}
+      brand-architecture: ${{ steps.filter.outputs.brand-architecture }}
+      brand-personality: ${{ steps.filter.outputs.brand-personality }}
+      brand-naming: ${{ steps.filter.outputs.brand-naming }}
+      brand-story: ${{ steps.filter.outputs.brand-story }}
+      campaign-architecture: ${{ steps.filter.outputs.campaign-architecture }}
+      creative-generation: ${{ steps.filter.outputs.creative-generation }}
+      ad-publishing: ${{ steps.filter.outputs.ad-publishing }}
+      campaign-optimization: ${{ steps.filter.outputs.campaign-optimization }}
+      intelligence-loop: ${{ steps.filter.outputs.intelligence-loop }}
+      odoo-mcp: ${{ steps.filter.outputs.odoo-mcp }}
+      odoo-worker: ${{ steps.filter.outputs.odoo-worker }}
+      prompt-optimization: ${{ steps.filter.outputs.prompt-optimization }}
+      kong: ${{ steps.filter.outputs.kong }}
+      mlflow: ${{ steps.filter.outputs.mlflow }}
+      build_all: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_all == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'ai-brand-automator/**'
+              - 'deployment/docker/backend/**'
+              - 'deployment/docker/celery-worker/**'
+              - 'deployment/docker/celery-beat/**'
+            frontend:
+              - 'ai-brand-automator-frontend/**'
+              - 'deployment/docker/frontend/**'
+            orchestrator:
+              - 'pipeline-orchestrator-svc/**'
+            discovery:
+              - 'discovery-agent-svc/**'
+            intelligence:
+              - 'intelligence-agent-svc/**'
+            titling:
+              - 'chat-titling-worker/**'
+            content:
+              - 'content-agent-service/**'
+            social:
+              - 'social-agent-service/**'
+            rag-uploader:
+              - 'rag-uploader-agent-service/**'
+            brand-equity:
+              - 'brand-equity-calculator-svc/**'
+            market-research:
+              - 'market-research-agent-svc/**'
+            competitor-intel:
+              - 'competitor-intel-agent-svc/**'
+            audience-persona:
+              - 'audience-persona-agent-svc/**'
+            trend-cultural:
+              - 'trend-cultural-agent-svc/**'
+            voc:
+              - 'voc-agent-svc/**'
+            brand-positioning:
+              - 'brand-positioning-agent-svc/**'
+            brand-architecture:
+              - 'brand-architecture-agent-svc/**'
+            brand-personality:
+              - 'brand-personality-agent-svc/**'
+            brand-naming:
+              - 'brand-naming-agent-svc/**'
+            brand-story:
+              - 'brand-story-agent-svc/**'
+            campaign-architecture:
+              - 'campaign-architecture-agent-svc/**'
+            creative-generation:
+              - 'creative-generation-agent-svc/**'
+            ad-publishing:
+              - 'ad-publishing-agent-svc/**'
+            campaign-optimization:
+              - 'campaign-optimization-agent-svc/**'
+            intelligence-loop:
+              - 'intelligence-loop-agent-svc/**'
+            odoo-mcp:
+              - 'odoo-mcp-server-svc/**'
+            odoo-worker:
+              - 'odoo-worker-agent-svc/**'
+            prompt-optimization:
+              - 'prompt-optimization-svc/**'
+            kong:
+              - 'deployment/docker/kong/**'
+            mlflow:
+              - 'deployment/docker/mlflow/**'
+
+  # --------------------------------------------------------------------------
+  # Build and push images (only changed services, or all on manual trigger)
+  # --------------------------------------------------------------------------
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: changes
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Backend (shared image for backend, backend-ws, celery, mcp-server, consumers)
+          - service: backend
+            image: zorven-backend
+            context: .
+            dockerfile: deployment/docker/backend/Dockerfile
+            changed: ${{ needs.changes.outputs.backend }}
+          - service: celery-worker
+            image: zorven-celery-worker
+            context: .
+            dockerfile: deployment/docker/celery-worker/Dockerfile
+            changed: ${{ needs.changes.outputs.backend }}
+          - service: celery-beat
+            image: zorven-celery-beat
+            context: .
+            dockerfile: deployment/docker/celery-beat/Dockerfile
+            changed: ${{ needs.changes.outputs.backend }}
+          # Frontend
+          - service: frontend
+            image: zorven-frontend
+            context: .
+            dockerfile: deployment/docker/frontend/Dockerfile
+            changed: ${{ needs.changes.outputs.frontend }}
+          # Infrastructure
+          - service: kong
+            image: zorven-kong
+            context: deployment
+            dockerfile: deployment/docker/kong/Dockerfile
+            changed: ${{ needs.changes.outputs.kong }}
+          - service: mlflow-server
+            image: zorven-mlflow-server
+            context: deployment
+            dockerfile: deployment/docker/mlflow/Dockerfile
+            changed: ${{ needs.changes.outputs.mlflow }}
+          # Orchestrator
+          - service: orchestrator
+            image: zorven-orchestrator
+            context: pipeline-orchestrator-svc
+            dockerfile: pipeline-orchestrator-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.orchestrator }}
+          # WF1 Agents
+          - service: discovery-agent
+            image: zorven-discovery-agent
+            context: discovery-agent-svc
+            dockerfile: discovery-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.discovery }}
+          - service: market-research-agent
+            image: zorven-market-research-agent
+            context: market-research-agent-svc
+            dockerfile: market-research-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.market-research }}
+          - service: competitor-intel-agent
+            image: zorven-competitor-intel-agent
+            context: competitor-intel-agent-svc
+            dockerfile: competitor-intel-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.competitor-intel }}
+          - service: audience-persona-agent
+            image: zorven-audience-persona-agent
+            context: audience-persona-agent-svc
+            dockerfile: audience-persona-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.audience-persona }}
+          - service: trend-cultural-agent
+            image: zorven-trend-cultural-agent
+            context: trend-cultural-agent-svc
+            dockerfile: trend-cultural-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.trend-cultural }}
+          - service: voc-agent
+            image: zorven-voc-agent
+            context: voc-agent-svc
+            dockerfile: voc-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.voc }}
+          - service: intelligence-agent
+            image: zorven-intelligence-agent
+            context: intelligence-agent-svc
+            dockerfile: intelligence-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.intelligence }}
+          # WF2 Agents
+          - service: brand-positioning-agent
+            image: zorven-brand-positioning-agent
+            context: brand-positioning-agent-svc
+            dockerfile: brand-positioning-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.brand-positioning }}
+          - service: brand-architecture-agent
+            image: zorven-brand-architecture-agent
+            context: brand-architecture-agent-svc
+            dockerfile: brand-architecture-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.brand-architecture }}
+          - service: brand-personality-agent
+            image: zorven-brand-personality-agent
+            context: brand-personality-agent-svc
+            dockerfile: brand-personality-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.brand-personality }}
+          - service: brand-naming-agent
+            image: zorven-brand-naming-agent
+            context: brand-naming-agent-svc
+            dockerfile: brand-naming-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.brand-naming }}
+          - service: brand-story-agent
+            image: zorven-brand-story-agent
+            context: brand-story-agent-svc
+            dockerfile: brand-story-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.brand-story }}
+          # WF3 Agents
+          - service: campaign-architecture-agent
+            image: zorven-campaign-architecture-agent
+            context: campaign-architecture-agent-svc
+            dockerfile: campaign-architecture-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.campaign-architecture }}
+          - service: creative-generation-agent
+            image: zorven-creative-generation-agent
+            context: creative-generation-agent-svc
+            dockerfile: creative-generation-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.creative-generation }}
+          - service: ad-publishing-agent
+            image: zorven-ad-publishing-agent
+            context: ad-publishing-agent-svc
+            dockerfile: ad-publishing-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.ad-publishing }}
+          - service: campaign-optimization-agent
+            image: zorven-campaign-optimization-agent
+            context: campaign-optimization-agent-svc
+            dockerfile: campaign-optimization-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.campaign-optimization }}
+          - service: intelligence-loop-agent
+            image: zorven-intelligence-loop-agent
+            context: intelligence-loop-agent-svc
+            dockerfile: intelligence-loop-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.intelligence-loop }}
+          # Support Services
+          - service: chat-titling-worker
+            image: zorven-chat-titling-worker
+            context: chat-titling-worker
+            dockerfile: chat-titling-worker/Dockerfile
+            changed: ${{ needs.changes.outputs.titling }}
+          - service: content-agent
+            image: zorven-content-agent
+            context: content-agent-service
+            dockerfile: content-agent-service/Dockerfile
+            changed: ${{ needs.changes.outputs.content }}
+          - service: social-agent
+            image: zorven-social-agent
+            context: social-agent-service
+            dockerfile: social-agent-service/Dockerfile
+            changed: ${{ needs.changes.outputs.social }}
+          - service: rag-uploader-agent
+            image: zorven-rag-uploader-agent
+            context: rag-uploader-agent-service
+            dockerfile: rag-uploader-agent-service/Dockerfile
+            changed: ${{ needs.changes.outputs.rag-uploader }}
+          - service: brand-equity-calculator
+            image: zorven-brand-equity-calculator
+            context: brand-equity-calculator-svc
+            dockerfile: brand-equity-calculator-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.brand-equity }}
+          # Odoo Integration
+          - service: odoo-mcp-server
+            image: zorven-odoo-mcp-server
+            context: odoo-mcp-server-svc
+            dockerfile: odoo-mcp-server-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.odoo-mcp }}
+          - service: odoo-worker-agent
+            image: zorven-odoo-worker-agent
+            context: odoo-worker-agent-svc
+            dockerfile: odoo-worker-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.odoo-worker }}
+          # Prompt Optimization
+          - service: prompt-optimization
+            image: zorven-prompt-optimization
+            context: prompt-optimization-svc
+            dockerfile: prompt-optimization-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.prompt-optimization }}
+    steps:
+      - name: Skip if unchanged
+        if: matrix.changed != 'true' && needs.changes.outputs.build_all != 'true'
+        run: echo "Skipping ${{ matrix.service }} — no changes detected"
+
+      - name: Checkout
+        if: matrix.changed == 'true' || needs.changes.outputs.build_all == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        if: matrix.changed == 'true' || needs.changes.outputs.build_all == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: matrix.changed == 'true' || needs.changes.outputs.build_all == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        if: matrix.changed == 'true' || needs.changes.outputs.build_all == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_PREFIX }}/${{ matrix.image }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=
+            type=ref,event=branch
+
+      - name: Build and push
+        if: matrix.changed == 'true' || needs.changes.outputs.build_all == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

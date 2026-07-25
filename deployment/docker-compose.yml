@@ -15,6 +15,7 @@ services:
     build:
       context: .
       dockerfile: docker/kong/Dockerfile
+    image: ghcr.io/naveenah/zorven-kong:latest
     container_name: ai-brand-automator-kong
     environment:
       - KONG_DATABASE=off
@@ -55,6 +56,7 @@ services:
     build:
       context: ..
       dockerfile: deployment/docker/backend/Dockerfile
+    image: ghcr.io/naveenah/zorven-backend:latest
     container_name: ai-brand-automator-backend
     command: ["bash", "/scripts/start.sh"]
     environment:
@@ -142,6 +144,7 @@ services:
     build:
       context: ..
       dockerfile: deployment/docker/backend/Dockerfile
+    image: ghcr.io/naveenah/zorven-backend:latest
     container_name: ai-brand-automator-backend-ws
     command: ["daphne", "brand_automator.asgi:application", "--port", "8002", "--bind", "0.0.0.0"]
     environment:
@@ -183,6 +186,7 @@ services:
         # Frontend now talks to Kong on port 8000
         - NEXT_PUBLIC_API_URL=http://localhost:8000
         - NEXT_PUBLIC_BRAND_EQUITY_API_URL=http://localhost:8090
+    image: ghcr.io/naveenah/zorven-frontend:latest
     container_name: ai-brand-automator-frontend
     command: ["sh", "-c", "npm install && npm run dev"]
     environment:
@@ -216,6 +220,7 @@ services:
     build:
       context: ..
       dockerfile: deployment/docker/celery-worker/Dockerfile
+    image: ghcr.io/naveenah/zorven-celery-worker:latest
     container_name: ai-brand-automator-celery-worker
     command: ["bash", "/scripts/start.sh"]
     environment:
@@ -278,6 +283,7 @@ services:
     build:
       context: ..
       dockerfile: deployment/docker/celery-beat/Dockerfile
+    image: ghcr.io/naveenah/zorven-celery-beat:latest
     container_name: ai-brand-automator-celery-beat
     command: ["bash", "/scripts/start.sh"]
     environment:
@@ -333,6 +339,7 @@ services:
     build:
       context: ..
       dockerfile: deployment/docker/nginx/Dockerfile
+    image: ghcr.io/naveenah/zorven-nginx:latest
     container_name: ai-brand-automator-nginx
     ports:
       - "80:80"
@@ -468,6 +475,7 @@ services:
     build:
       context: ..
       dockerfile: deployment/docker/backend/Dockerfile
+    image: ghcr.io/naveenah/zorven-backend:latest
     container_name: ai-brand-automator-ingestion-consumer
     command: ["python", "manage.py", "run_ingestion", "--batch-size", "10", "--poll-timeout", "1.0"]
     healthcheck:
@@ -510,6 +518,7 @@ services:
     build:
       context: ..
       dockerfile: deployment/docker/backend/Dockerfile
+    image: ghcr.io/naveenah/zorven-backend:latest
     container_name: ai-brand-automator-curation-consumer
     command: ["python", "manage.py", "run_curation_consumer", "--batch-size", "10", "--poll-timeout", "1.0"]
     healthcheck:
@@ -553,6 +562,7 @@ services:
     build:
       context: ..
       dockerfile: deployment/docker/backend/Dockerfile
+    image: ghcr.io/naveenah/zorven-backend:latest
     container_name: ai-brand-automator-rag-index-consumer
     command: ["python", "manage.py", "consume_sync_events", "--topic", "rag-sync-ready-topic", "--group", "rag-index-consumers", "--poll-timeout", "1.0"]
     healthcheck:
@@ -603,6 +613,7 @@ services:
     build:
       context: ../pipeline-orchestrator-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-orchestrator:latest
     container_name: ai-brand-automator-orchestrator
     environment:
       - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
@@ -649,6 +660,7 @@ services:
     build:
       context: ../market-research-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-market-research-agent:latest
     container_name: ai-brand-automator-market-research-agent
     environment:
       - MRA_REDIS_URL=redis://redis:6379/11
@@ -692,6 +704,7 @@ services:
     build:
       context: ../competitor-intel-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-competitor-intel-agent:latest
     container_name: ai-brand-automator-competitor-intel-agent
     environment:
       - CIA_REDIS_URL=redis://redis:6379/12
@@ -738,6 +751,7 @@ services:
     build:
       context: ../audience-persona-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-audience-persona-agent:latest
     container_name: ai-brand-automator-audience-persona-agent
     environment:
       - APA_REDIS_URL=redis://redis:6379/13
@@ -786,6 +800,7 @@ services:
     build:
       context: ../trend-cultural-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-trend-cultural-agent:latest
     container_name: ai-brand-automator-trend-cultural-agent
     environment:
       - TCIA_REDIS_URL=redis://redis:6379/14
@@ -836,6 +851,7 @@ services:
     build:
       context: ../voc-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-voc-agent:latest
     container_name: ai-brand-automator-voc-agent
     environment:
       - VOCA_REDIS_URL=redis://redis:6379/15
@@ -883,6 +899,7 @@ services:
     build:
       context: ../discovery-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-discovery-agent:latest
     container_name: ai-brand-automator-discovery-agent
     environment:
       - DISCOVERY_REDIS_URL=redis://redis:6379/2
@@ -920,6 +937,7 @@ services:
     build:
       context: ../intelligence-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-intelligence-agent:latest
     container_name: ai-brand-automator-intelligence-agent
     environment:
       - INTELLIGENCE_REDIS_URL=redis://redis:6379/3
@@ -957,6 +975,7 @@ services:
     build:
       context: ../chat-titling-worker
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-chat-titling-worker:latest
     container_name: ai-brand-automator-titling-worker
     environment:
       - TITLING_REDIS_URL=redis://redis:6379/4
@@ -989,6 +1008,7 @@ services:
     build:
       context: ../content-agent-service
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-content-agent:latest
     container_name: ai-brand-automator-content-agent
     environment:
       - CONTENT_REDIS_URL=redis://redis:6379/5
@@ -1031,6 +1051,7 @@ services:
     build:
       context: ..
       dockerfile: deployment/docker/backend/Dockerfile
+    image: ghcr.io/naveenah/zorven-backend:latest
     container_name: ai-brand-automator-mcp-server
     command: ["python", "run_mcp_server.py", "--transport", "sse", "--port", "8085", "--host", "0.0.0.0"]
     environment:
@@ -1068,6 +1089,7 @@ services:
     build:
       context: ../social-agent-service
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-social-agent:latest
     container_name: ai-brand-automator-social-agent
     environment:
       - SOCIAL_REDIS_URL=redis://redis:6379/6
@@ -1106,6 +1128,7 @@ services:
     build:
       context: ../rag-uploader-agent-service
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-rag-uploader-agent:latest
     container_name: ai-brand-automator-rag-uploader
     environment:
       - UPLOADER_REDIS_URL=redis://redis:6379/7
@@ -1143,6 +1166,7 @@ services:
     build:
       context: ../odoo-mcp-server-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-odoo-mcp-server:latest
     container_name: ai-brand-automator-odoo-mcp
     environment:
       - ODOO_MCP_REDIS_URL=redis://redis:6379/9
@@ -1184,6 +1208,7 @@ services:
     build:
       context: ../odoo-worker-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-odoo-worker-agent:latest
     container_name: ai-brand-automator-odoo-worker
     environment:
       - ODOO_WORKER_REDIS_URL=redis://redis:6379/10
@@ -1275,6 +1300,7 @@ services:
     build:
       context: ../brand-positioning-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-brand-positioning-agent:latest
     container_name: ai-brand-automator-brand-positioning
     environment:
       - BPA_REDIS_URL=redis://redis:6379/16
@@ -1314,6 +1340,7 @@ services:
     build:
       context: ../brand-architecture-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-brand-architecture-agent:latest
     container_name: ai-brand-automator-brand-architecture
     environment:
       - BAA_REDIS_URL=redis://redis:6379/17
@@ -1353,6 +1380,7 @@ services:
     build:
       context: ../brand-personality-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-brand-personality-agent:latest
     container_name: ai-brand-automator-brand-personality
     environment:
       - BPV_REDIS_URL=redis://redis:6379/18
@@ -1392,6 +1420,7 @@ services:
     build:
       context: ../brand-naming-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-brand-naming-agent:latest
     container_name: ai-brand-automator-brand-naming
     environment:
       - NTA_REDIS_URL=redis://redis:6379/19
@@ -1431,6 +1460,7 @@ services:
     build:
       context: ../brand-story-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-brand-story-agent:latest
     container_name: ai-brand-automator-brand-story
     environment:
       - BSA_REDIS_URL=redis://redis:6379/20
@@ -1471,6 +1501,7 @@ services:
     build:
       context: ../campaign-architecture-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-campaign-architecture-agent:latest
     container_name: ai-brand-automator-campaign-architecture
     environment:
       - CAA_REDIS_URL=redis://redis:6379/21
@@ -1513,6 +1544,7 @@ services:
     build:
       context: ../creative-generation-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-creative-generation-agent:latest
     container_name: ai-brand-automator-creative-generation
     environment:
       - CGA_REDIS_URL=redis://redis:6379/22
@@ -1555,6 +1587,7 @@ services:
     build:
       context: ../ad-publishing-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-ad-publishing-agent:latest
     container_name: ai-brand-automator-ad-publishing
     environment:
       - ADPUB_REDIS_URL=redis://redis:6379/23
@@ -1592,6 +1625,7 @@ services:
     build:
       context: ../campaign-optimization-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-campaign-optimization-agent:latest
     container_name: ai-brand-automator-campaign-optimization
     environment:
       - COA_REDIS_URL=redis://redis:6379/24
@@ -1628,6 +1662,7 @@ services:
     build:
       context: ../intelligence-loop-agent-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-intelligence-loop-agent:latest
     container_name: ai-brand-automator-intelligence-loop
     environment:
       - ILA_REDIS_URL=redis://redis:6379/25
@@ -1691,23 +1726,24 @@ services:
     build:
       context: .
       dockerfile: docker/mlflow/Dockerfile
+    image: ghcr.io/naveenah/zorven-mlflow-server:latest
     container_name: ai-brand-automator-mlflow
     environment:
       - MLFLOW_BACKEND_STORE_URI=postgresql://mlflow:${MLFLOW_DB_PASSWORD:-mlflow}@mlflow-db:5432/mlflow
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
     ports:
-      - "5000:5000"
+      - "${MLFLOW_HOST_PORT:-5050}:5000"
     volumes:
       - mlflow_artifacts_volume:/mlflow/artifacts
     depends_on:
       mlflow-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 15s
+      retries: 5
+      start_period: 30s
     restart: unless-stopped
     networks:
       - app-network
@@ -1720,6 +1756,7 @@ services:
     build:
       context: ../prompt-optimization-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-prompt-optimization:latest
     container_name: ai-brand-automator-prompt-optimization
     environment:
       - POI_REDIS_URL=redis://redis:6379/26
@@ -1761,6 +1798,7 @@ services:
     build:
       context: ../brand-equity-calculator-svc
       dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-brand-equity-calculator:latest
     container_name: ai-brand-automator-brand-equity
     environment:
       - BRAND_EQUITY_REDIS_URL=redis://redis:6379/8
