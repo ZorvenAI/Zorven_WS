@@ -115,19 +115,23 @@ class TestSTTConfig:
         assert config.credentials_path == ""
 
     def test_streaming_config_values(self):
-        """Verify the streaming config constants used in _audio_generator."""
+        """Verify the streaming config constants used in _audio_generator.
+
+        Note: StreamingRecognize does NOT support speaker diarization.
+        Diarization is only available via batch recognition.
+        """
         from google.cloud.speech_v2.types import cloud_speech
 
         # Build the streaming config the same way stt_client.py does
         streaming_config = cloud_speech.StreamingRecognitionConfig(
             config=cloud_speech.RecognitionConfig(
-                auto_decoding_config=cloud_speech.AutoDetectDecodingConfig(),
+                explicit_decoding_config=cloud_speech.ExplicitDecodingConfig(
+                    encoding=cloud_speech.ExplicitDecodingConfig.AudioEncoding.LINEAR16,
+                    sample_rate_hertz=16000,
+                    audio_channel_count=1,
+                ),
                 features=cloud_speech.RecognitionFeatures(
                     enable_automatic_punctuation=True,
-                    diarization_config=cloud_speech.SpeakerDiarizationConfig(
-                        min_speaker_count=2,
-                        max_speaker_count=2,
-                    ),
                 ),
             ),
             streaming_features=cloud_speech.StreamingRecognitionFeatures(
@@ -138,7 +142,5 @@ class TestSTTConfig:
         # Verify interim results enabled
         assert streaming_config.streaming_features.interim_results is True
 
-        # Verify diarization config
-        diar = streaming_config.config.features.diarization_config
-        assert diar.min_speaker_count == 2
-        assert diar.max_speaker_count == 2
+        # Verify punctuation enabled
+        assert streaming_config.config.features.enable_automatic_punctuation is True

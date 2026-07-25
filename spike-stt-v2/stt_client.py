@@ -176,15 +176,20 @@ class STTStreamingSession:
     def _audio_generator(self) -> Iterator[cloud_speech.StreamingRecognizeRequest]:
         """Generate streaming requests: config first, then audio chunks."""
         # First request carries the streaming config
+        # Note: StreamingRecognize does NOT support speaker diarization.
+        # Diarization is only available via batch (non-streaming) recognition.
+        # This is a key finding for the A-01 spike — F-05 LIVE mode cannot
+        # rely on streaming diarization; speaker attribution must use a
+        # separate mechanism (e.g., voice embeddings or batch post-processing).
         streaming_config = cloud_speech.StreamingRecognitionConfig(
             config=cloud_speech.RecognitionConfig(
-                auto_decoding_config=cloud_speech.AutoDetectDecodingConfig(),
+                explicit_decoding_config=cloud_speech.ExplicitDecodingConfig(
+                    encoding=cloud_speech.ExplicitDecodingConfig.AudioEncoding.LINEAR16,
+                    sample_rate_hertz=16000,
+                    audio_channel_count=1,
+                ),
                 features=cloud_speech.RecognitionFeatures(
                     enable_automatic_punctuation=True,
-                    diarization_config=cloud_speech.SpeakerDiarizationConfig(
-                        min_speaker_count=2,
-                        max_speaker_count=2,
-                    ),
                 ),
             ),
             streaming_features=cloud_speech.StreamingRecognitionFeatures(
