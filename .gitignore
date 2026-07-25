@@ -54,5 +54,10 @@ Thumbs.db
 vendor/odoo/community/**/*.pyc
 vendor/odoo/community/**/__pycache__/
 
+# GCP deployment secrets and generated files
+deployment/gcp/secrets.env
+deployment/gcp/redis-connection.env
+deployment/gcp/service-urls.env
+
 # Claude Code worktrees
 .claude/worktrees/
