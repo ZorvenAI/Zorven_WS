@@ -1,0 +1,854 @@
+# ==============================================================================
+# Production Docker Compose — Pull-only deployment
+# No build contexts needed. Just: docker compose -f docker-compose.production.yml pull && up -d
+# Requires: .env with all API keys and DATABASE_URL set
+# ==============================================================================
+
+services:
+  # --- Infrastructure ---
+  redis:
+    image: redis:7-alpine
+    container_name: zorven-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --databases 27
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_volume:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  mlflow-db:
+    image: postgres:15-alpine
+    container_name: zorven-mlflow-db
+    environment:
+      - POSTGRES_DB=mlflow
+      - POSTGRES_USER=mlflow
+      - POSTGRES_PASSWORD=${MLFLOW_DB_PASSWORD:-mlflow}
+    volumes:
+      - mlflow_postgres_volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  mlflow-server:
+    image: ghcr.io/naveenah/zorven-mlflow-server:latest
+    container_name: zorven-mlflow
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=postgresql://mlflow:${MLFLOW_DB_PASSWORD:-mlflow}@mlflow-db:5432/mlflow
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
+    ports:
+      - "${MLFLOW_HOST_PORT:-5050}:5000"
+    volumes:
+      - mlflow_artifacts_volume:/mlflow/artifacts
+    depends_on:
+      mlflow-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- Kong Gateway ---
+  kong:
+    image: ghcr.io/naveenah/zorven-kong:latest
+    container_name: zorven-kong
+    environment:
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/usr/local/kong/declarative/kong.yaml
+      - KONG_PROXY_LISTEN=0.0.0.0:8000
+      - KONG_ADMIN_LISTEN=0.0.0.0:8001
+      - KONG_PROXY_ACCESS_LOG=/dev/stdout
+      - KONG_PROXY_ERROR_LOG=/dev/stderr
+      - KONG_PLUGINS=bundled,jwt,cors,request-transformer,rate-limiting,response-transformer
+      - JWT_SECRET_KEY=${SECRET_KEY}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- Django Backend ---
+  backend:
+    image: ghcr.io/naveenah/zorven-backend:latest
+    container_name: zorven-backend
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,backend,kong}
+      - KONG_ENABLED=true
+      - PORT=8001
+      - ORCHESTRATOR_URL=http://orchestrator:8010
+      - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN}
+      - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN}
+      - BACKEND_URL=http://backend:8001
+      - CALLBACK_BASE_URL=http://backend:8001
+      - WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}
+      - MAILGUN_API_KEY=${MAILGUN_API_KEY:-}
+      - MAILGUN_DOMAIN=${MAILGUN_DOMAIN:-}
+    expose:
+      - "8001"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  backend-ws:
+    image: ghcr.io/naveenah/zorven-backend:latest
+    container_name: zorven-backend-ws
+    command: ["daphne", "brand_automator.asgi:application", "--port", "8002", "--bind", "0.0.0.0"]
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - CHANNELS_REDIS_URL=redis://redis:6379/0
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,backend-ws,kong}
+      - KONG_ENABLED=true
+      - PORT=8002
+    expose:
+      - "8002"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- Frontend ---
+  frontend:
+    image: ghcr.io/naveenah/zorven-frontend:latest
+    container_name: zorven-frontend
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - NEXT_PUBLIC_BRAND_EQUITY_API_URL=${NEXT_PUBLIC_BRAND_EQUITY_API_URL:-http://localhost:8090}
+    ports:
+      - "3000:3000"
+    depends_on:
+      kong:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- Celery ---
+  celery-worker:
+    image: ghcr.io/naveenah/zorven-celery-worker:latest
+    container_name: zorven-celery-worker
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - ORCHESTRATOR_URL=http://orchestrator:8010
+      - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN}
+      - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN}
+      - BACKEND_URL=http://backend:8001
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  celery-beat:
+    image: ghcr.io/naveenah/zorven-celery-beat:latest
+    container_name: zorven-celery-beat
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- Pipeline Orchestrator ---
+  orchestrator:
+    image: ghcr.io/naveenah/zorven-orchestrator:latest
+    container_name: zorven-orchestrator
+    environment:
+      - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN}
+      - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN}
+      - ORCHESTRATOR_CALLBACK_BASE_URL=http://backend:8001
+      - ORCHESTRATOR_REDIS_URL=redis://redis:6379/1
+      - ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=
+      - ORCHESTRATOR_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - ORCHESTRATOR_ODOO_WORKER_AGENT_URL=http://odoo-worker-agent:8100
+      - ORCHESTRATOR_MARKET_RESEARCH_AGENT_URL=http://market-research-agent:8021
+      - ORCHESTRATOR_COMPETITOR_INTEL_AGENT_URL=http://competitor-intel-agent:8022
+      - ORCHESTRATOR_AUDIENCE_PERSONA_AGENT_URL=http://audience-persona-agent:8023
+      - ORCHESTRATOR_TREND_CULTURAL_AGENT_URL=http://trend-cultural-agent:8024
+      - ORCHESTRATOR_VOC_AGENT_URL=http://voc-agent:8025
+    ports:
+      - "8010:8010"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- WF1 Agents ---
+  discovery-agent:
+    image: ghcr.io/naveenah/zorven-discovery-agent:latest
+    container_name: zorven-discovery-agent
+    environment:
+      - DISCOVERY_REDIS_URL=redis://redis:6379/2
+      - DISCOVERY_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - DISCOVERY_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - DISCOVERY_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
+    ports:
+      - "8020:8020"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  market-research-agent:
+    image: ghcr.io/naveenah/zorven-market-research-agent:latest
+    container_name: zorven-market-research-agent
+    environment:
+      - MRA_REDIS_URL=redis://redis:6379/11
+      - MRA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - MRA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - MRA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - MRA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - MRA_GNEWS_API_KEY=${GNEWS_API_KEY:-}
+      - MRA_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
+    ports:
+      - "8021:8021"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8021/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  competitor-intel-agent:
+    image: ghcr.io/naveenah/zorven-competitor-intel-agent:latest
+    container_name: zorven-competitor-intel-agent
+    environment:
+      - CIA_REDIS_URL=redis://redis:6379/12
+      - CIA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - CIA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - CIA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CIA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - CIA_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
+    ports:
+      - "8022:8022"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8022/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  audience-persona-agent:
+    image: ghcr.io/naveenah/zorven-audience-persona-agent:latest
+    container_name: zorven-audience-persona-agent
+    environment:
+      - APA_REDIS_URL=redis://redis:6379/13
+      - APA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - APA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - APA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - APA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - APA_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
+    ports:
+      - "8023:8023"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8023/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  trend-cultural-agent:
+    image: ghcr.io/naveenah/zorven-trend-cultural-agent:latest
+    container_name: zorven-trend-cultural-agent
+    environment:
+      - TCIA_REDIS_URL=redis://redis:6379/14
+      - TCIA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - TCIA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - TCIA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - TCIA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - TCIA_CORE_API_URL=http://backend:8001
+      - TCIA_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
+    ports:
+      - "8024:8024"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8024/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  voc-agent:
+    image: ghcr.io/naveenah/zorven-voc-agent:latest
+    container_name: zorven-voc-agent
+    environment:
+      - VOCA_REDIS_URL=redis://redis:6379/15
+      - VOCA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - VOCA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - VOCA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - VOCA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - VOCA_CORE_API_URL=http://backend:8001
+      - VOCA_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
+    ports:
+      - "8025:8025"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8025/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  intelligence-agent:
+    image: ghcr.io/naveenah/zorven-intelligence-agent:latest
+    container_name: zorven-intelligence-agent
+    environment:
+      - INTELLIGENCE_REDIS_URL=redis://redis:6379/3
+      - INTELLIGENCE_GEMINI_API_KEY=${GOOGLE_API_KEY:-}
+    ports:
+      - "8030:8030"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8030/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- WF2 Agents ---
+  brand-positioning-agent:
+    image: ghcr.io/naveenah/zorven-brand-positioning-agent:latest
+    container_name: zorven-brand-positioning
+    environment:
+      - BPA_REDIS_URL=redis://redis:6379/16
+      - BPA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BPA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - BPA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - BPA_BACKEND_URL=http://backend:8001
+    ports:
+      - "8031:8031"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8031/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  brand-architecture-agent:
+    image: ghcr.io/naveenah/zorven-brand-architecture-agent:latest
+    container_name: zorven-brand-architecture
+    environment:
+      - BAA_REDIS_URL=redis://redis:6379/17
+      - BAA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BAA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - BAA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - BAA_BACKEND_URL=http://backend:8001
+    ports:
+      - "8032:8032"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8032/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  brand-personality-agent:
+    image: ghcr.io/naveenah/zorven-brand-personality-agent:latest
+    container_name: zorven-brand-personality
+    environment:
+      - BPV_REDIS_URL=redis://redis:6379/18
+      - BPV_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BPV_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - BPV_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - BPV_BACKEND_URL=http://backend:8001
+    ports:
+      - "8033:8033"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8033/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  brand-naming-agent:
+    image: ghcr.io/naveenah/zorven-brand-naming-agent:latest
+    container_name: zorven-brand-naming
+    environment:
+      - NTA_REDIS_URL=redis://redis:6379/19
+      - NTA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - NTA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - NTA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - NTA_BACKEND_URL=http://backend:8001
+    ports:
+      - "8034:8034"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8034/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  brand-story-agent:
+    image: ghcr.io/naveenah/zorven-brand-story-agent:latest
+    container_name: zorven-brand-story
+    environment:
+      - BSA_REDIS_URL=redis://redis:6379/20
+      - BSA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BSA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - BSA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - BSA_BACKEND_URL=http://backend:8001
+    ports:
+      - "8035:8035"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8035/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- WF3 Agents ---
+  campaign-architecture-agent:
+    image: ghcr.io/naveenah/zorven-campaign-architecture-agent:latest
+    container_name: zorven-campaign-architecture
+    environment:
+      - CAA_REDIS_URL=redis://redis:6379/21
+      - CAA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - CAA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - CAA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CAA_BACKEND_URL=http://backend:8001
+    ports:
+      - "8041:8041"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8041/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  creative-generation-agent:
+    image: ghcr.io/naveenah/zorven-creative-generation-agent:latest
+    container_name: zorven-creative-generation
+    environment:
+      - CGA_REDIS_URL=redis://redis:6379/22
+      - CGA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - CGA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - CGA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CGA_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - CGA_BACKEND_URL=http://backend:8001
+    ports:
+      - "8042:8042"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8042/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  ad-publishing-agent:
+    image: ghcr.io/naveenah/zorven-ad-publishing-agent:latest
+    container_name: zorven-ad-publishing
+    environment:
+      - ADPUB_REDIS_URL=redis://redis:6379/23
+      - ADPUB_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - ADPUB_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - ADPUB_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ADPUB_BACKEND_URL=http://backend:8001
+      - ADPUB_META_ADS_SANDBOX_MODE=true
+    ports:
+      - "8043:8043"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8043/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  campaign-optimization-agent:
+    image: ghcr.io/naveenah/zorven-campaign-optimization-agent:latest
+    container_name: zorven-campaign-optimization
+    environment:
+      - COA_REDIS_URL=redis://redis:6379/24
+      - COA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - COA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - COA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - COA_BACKEND_URL=http://backend:8001
+      - COA_META_ADS_SANDBOX_MODE=true
+      - COA_CELERY_BROKER_URL=redis://redis:6379/24
+    ports:
+      - "8044:8044"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8044/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  intelligence-loop-agent:
+    image: ghcr.io/naveenah/zorven-intelligence-loop-agent:latest
+    container_name: zorven-intelligence-loop
+    environment:
+      - ILA_REDIS_URL=redis://redis:6379/25
+      - ILA_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - ILA_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - ILA_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ILA_BACKEND_URL=http://backend:8001
+    ports:
+      - "8045:8045"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8045/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- Support Services ---
+  chat-titling-worker:
+    image: ghcr.io/naveenah/zorven-chat-titling-worker:latest
+    container_name: zorven-titling-worker
+    environment:
+      - TITLING_REDIS_URL=redis://redis:6379/4
+      - TITLING_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - TITLING_CORE_API_URL=http://backend:8001
+      - TITLING_WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}
+    ports:
+      - "8040:8040"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8040/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  content-agent:
+    image: ghcr.io/naveenah/zorven-content-agent:latest
+    container_name: zorven-content-agent
+    environment:
+      - CONTENT_REDIS_URL=redis://redis:6379/5
+      - CONTENT_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - CONTENT_CORE_API_URL=http://backend:8001
+      - CONTENT_CORE_API_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN}
+    ports:
+      - "8050:8050"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8050/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  social-agent:
+    image: ghcr.io/naveenah/zorven-social-agent:latest
+    container_name: zorven-social-agent
+    environment:
+      - SOCIAL_REDIS_URL=redis://redis:6379/6
+      - SOCIAL_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - SOCIAL_CORE_API_URL=http://backend:8001
+      - SOCIAL_CORE_API_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN}
+    ports:
+      - "8060:8060"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8060/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  rag-uploader-agent:
+    image: ghcr.io/naveenah/zorven-rag-uploader-agent:latest
+    container_name: zorven-rag-uploader
+    environment:
+      - UPLOADER_REDIS_URL=redis://redis:6379/7
+      - UPLOADER_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - UPLOADER_CORE_API_URL=http://backend:8001
+      - UPLOADER_CORE_API_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN}
+    ports:
+      - "8070:8070"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8070/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  brand-equity-calculator:
+    image: ghcr.io/naveenah/zorven-brand-equity-calculator:latest
+    container_name: zorven-brand-equity
+    environment:
+      - BRAND_EQUITY_REDIS_URL=redis://redis:6379/8
+      - BRAND_EQUITY_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - BRAND_EQUITY_CORS_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8090:8090"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- Odoo Integration ---
+  odoo-mcp-server:
+    image: ghcr.io/naveenah/zorven-odoo-mcp-server:latest
+    container_name: zorven-odoo-mcp
+    environment:
+      - ODOO_MCP_REDIS_URL=redis://redis:6379/9
+      - ODOO_MCP_ODOO_URL=${ODOO_URL:-http://odoo:8069}
+      - ODOO_MCP_DATABASE_URL=${DATABASE_URL}
+    ports:
+      - "8095:8095"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8095/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  odoo-worker-agent:
+    image: ghcr.io/naveenah/zorven-odoo-worker-agent:latest
+    container_name: zorven-odoo-worker
+    environment:
+      - ODOO_WORKER_REDIS_URL=redis://redis:6379/10
+      - ODOO_WORKER_MCP_SERVER_URL=http://odoo-mcp-server:8095
+      - ODOO_WORKER_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+    ports:
+      - "8100:8100"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- Prompt Optimization ---
+  prompt-optimization:
+    image: ghcr.io/naveenah/zorven-prompt-optimization:latest
+    container_name: zorven-prompt-optimization
+    environment:
+      - POI_REDIS_URL=redis://redis:6379/26
+      - POI_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - POI_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - POI_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - POI_DATABASE_URL=postgresql://mlflow:${MLFLOW_DB_PASSWORD:-mlflow}@mlflow-db:5432/mlflow
+    ports:
+      - "8110:8110"
+    depends_on:
+      redis:
+        condition: service_healthy
+      mlflow-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8110/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+volumes:
+  redis_volume:
+  mlflow_postgres_volume:
+  mlflow_artifacts_volume:
+
+networks:
+  app-network:
+    driver: bridge

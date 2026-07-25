@@ -1,0 +1,17 @@
+__pycache__
+*.pyc
+*.pyo
+.git
+.gitignore
+.env
+.env.*
+.venv
+venv/
+tests/
+README.md
+CLAUDE.md
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.DS_Store
+docker-compose.yml
