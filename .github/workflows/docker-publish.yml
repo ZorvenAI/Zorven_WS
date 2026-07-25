@@ -82,7 +82,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  REGISTRY_PREFIX: ghcr.io/naveenah
+  REGISTRY_PREFIX: ghcr.io/zorvenai
 
 permissions:
   contents: read
