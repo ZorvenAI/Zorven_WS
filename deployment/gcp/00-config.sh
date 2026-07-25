@@ -14,7 +14,7 @@ export AR_HOST="${GCP_REGION}-docker.pkg.dev"
 export AR_PREFIX="${AR_HOST}/${GCP_PROJECT_ID}/${AR_REPO}"
 
 # ── GHCR Source ──────────────────────────────────────────────
-export GHCR_PREFIX="ghcr.io/naveenah"
+export GHCR_PREFIX="ghcr.io/zorvenai"
 
 # ── Networking ───────────────────────────────────────────────
 export VPC_NAME="zorven-vpc"
