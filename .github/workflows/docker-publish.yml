@@ -1,11 +1,46 @@
 # ==============================================================================
 # Build and publish all Docker images to GitHub Container Registry (GHCR)
-# Triggered on push to main or manual dispatch
+# Triggered on push to main, pull requests, or manual dispatch
+#
+# - PR branches: builds & pushes with branch name + SHA tags (for local testing)
+# - main: builds & pushes with :latest + SHA + branch tags (production)
 # ==============================================================================
 name: Publish Docker Images
 
 on:
   push:
+    branches: [main]
+    paths:
+      - 'ai-brand-automator/**'
+      - 'ai-brand-automator-frontend/**'
+      - 'pipeline-orchestrator-svc/**'
+      - 'discovery-agent-svc/**'
+      - 'intelligence-agent-svc/**'
+      - 'chat-titling-worker/**'
+      - 'content-agent-service/**'
+      - 'social-agent-service/**'
+      - 'rag-uploader-agent-service/**'
+      - 'brand-equity-calculator-svc/**'
+      - 'market-research-agent-svc/**'
+      - 'competitor-intel-agent-svc/**'
+      - 'audience-persona-agent-svc/**'
+      - 'trend-cultural-agent-svc/**'
+      - 'voc-agent-svc/**'
+      - 'brand-positioning-agent-svc/**'
+      - 'brand-architecture-agent-svc/**'
+      - 'brand-personality-agent-svc/**'
+      - 'brand-naming-agent-svc/**'
+      - 'brand-story-agent-svc/**'
+      - 'campaign-architecture-agent-svc/**'
+      - 'creative-generation-agent-svc/**'
+      - 'ad-publishing-agent-svc/**'
+      - 'campaign-optimization-agent-svc/**'
+      - 'intelligence-loop-agent-svc/**'
+      - 'odoo-mcp-server-svc/**'
+      - 'odoo-worker-agent-svc/**'
+      - 'prompt-optimization-svc/**'
+      - 'deployment/docker/**'
+  pull_request:
     branches: [main]
     paths:
       - 'ai-brand-automator/**'
@@ -370,9 +405,10 @@ jobs:
         with:
           images: ${{ env.REGISTRY_PREFIX }}/${{ matrix.image }}
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,prefix=
             type=ref,event=branch
+            type=ref,event=pr
 
       - name: Build and push
         if: matrix.changed == 'true' || needs.changes.outputs.build_all == 'true'
