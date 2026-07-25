@@ -25,7 +25,7 @@ export CONNECTOR_RANGE="10.8.0.0/28"
 export REDIS_INSTANCE="zorven-redis"
 export REDIS_TIER="basic"
 export REDIS_SIZE_GB="1"
-export REDIS_VERSION="REDIS_7_0"
+export REDIS_VERSION="redis_7_0"
 
 # ── Service Account ─────────────────────────────────────────
 export SA_NAME="zorven-cloudrun"
@@ -115,37 +115,15 @@ ALL_SERVICES=(
 )
 
 # ── Redis DB mapping (service → DB number) ───────────────────
-# Used to construct per-service REDIS_URL with correct DB number
-declare -A REDIS_DB_MAP=(
-  ["backend"]=0
-  ["celery"]=0
-  ["orchestrator"]=1
-  ["discovery"]=2
-  ["intelligence"]=3
-  ["titling"]=4
-  ["content"]=5
-  ["social"]=6
-  ["rag-uploader"]=7
-  ["brand-equity"]=8
-  ["odoo-mcp"]=9
-  ["odoo-worker"]=10
-  ["market-research"]=11
-  ["competitor-intel"]=12
-  ["audience-persona"]=13
-  ["trend-cultural"]=14
-  ["voc"]=15
-  ["brand-positioning"]=16
-  ["brand-architecture"]=17
-  ["brand-personality"]=18
-  ["brand-naming"]=19
-  ["brand-story"]=20
-  ["campaign-architecture"]=21
-  ["creative-generation"]=22
-  ["ad-publishing"]=23
-  ["campaign-optimization"]=24
-  ["intelligence-loop"]=25
-  ["prompt-optimization"]=26
-)
+# Reference only — DB numbers are hardcoded in 08-deploy-services.sh
+# DB 0: backend/celery, 1: orchestrator, 2: discovery+prompt-cache,
+# 3: intelligence, 4: titling, 5: content, 6: social, 7: rag-uploader,
+# 8: brand-equity, 9: odoo-mcp, 10: odoo-worker, 11: market-research,
+# 12: competitor-intel, 13: audience-persona, 14: trend-cultural,
+# 15: voc, 16: brand-positioning, 17: brand-architecture,
+# 18: brand-personality, 19: brand-naming, 20: brand-story,
+# 21: campaign-architecture, 22: creative-generation, 23: ad-publishing,
+# 24: campaign-optimization, 25: intelligence-loop, 26: prompt-optimization
 
 # ── Helper: get Redis URL for a service DB ───────────────────
 get_redis_url() {
