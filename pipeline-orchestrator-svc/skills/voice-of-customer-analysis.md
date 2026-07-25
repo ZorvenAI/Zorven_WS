@@ -1,3 +1,11 @@
+---
+name: voice-of-customer-analysis
+version: "1.0"
+description: Voice of Customer analysis methodology for aggregating customer feedback, sentiment analysis, and actionable intelligence
+target_agents:
+  - voc-agent
+---
+
 # Voice of Customer Analysis
 
 ## Methodology

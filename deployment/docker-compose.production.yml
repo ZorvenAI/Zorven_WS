@@ -235,6 +235,8 @@ services:
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN}
       - ORCHESTRATOR_CALLBACK_BASE_URL=http://backend:8001
       - ORCHESTRATOR_REDIS_URL=redis://redis:6379/1
+      - ORCHESTRATOR_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - ORCHESTRATOR_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=
       - ORCHESTRATOR_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ORCHESTRATOR_ODOO_WORKER_AGENT_URL=http://odoo-worker-agent:8100
@@ -263,9 +265,13 @@ services:
     container_name: zorven-discovery-agent
     environment:
       - DISCOVERY_REDIS_URL=redis://redis:6379/2
+      - DISCOVERY_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - DISCOVERY_MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - DISCOVERY_PROMPT_FALLBACK_ONLY=true
       - DISCOVERY_TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - DISCOVERY_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - DISCOVERY_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
+      - DISCOVERY_KAFKA_BOOTSTRAP_SERVERS=
     ports:
       - "8020:8020"
     depends_on:
@@ -292,7 +298,7 @@ services:
       - MRA_GNEWS_API_KEY=${GNEWS_API_KEY:-}
       - MRA_TAVILY_MCP_SERVER_URL=${TAVILY_MCP_SERVER_URL:-}
     ports:
-      - "8021:8021"
+      - "${MRA_HOST_PORT:-8021}:8021"
     depends_on:
       redis:
         condition: service_healthy
@@ -413,6 +419,8 @@ services:
     container_name: zorven-intelligence-agent
     environment:
       - INTELLIGENCE_REDIS_URL=redis://redis:6379/3
+      - INTELLIGENCE_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - INTELLIGENCE_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - INTELLIGENCE_GEMINI_API_KEY=${GOOGLE_API_KEY:-}
     ports:
       - "8030:8030"
@@ -670,6 +678,8 @@ services:
     container_name: zorven-titling-worker
     environment:
       - TITLING_REDIS_URL=redis://redis:6379/4
+      - TITLING_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - TITLING_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - TITLING_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - TITLING_CORE_API_URL=http://backend:8001
       - TITLING_WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}
@@ -692,6 +702,8 @@ services:
     container_name: zorven-content-agent
     environment:
       - CONTENT_REDIS_URL=redis://redis:6379/5
+      - CONTENT_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - CONTENT_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - CONTENT_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - CONTENT_CORE_API_URL=http://backend:8001
       - CONTENT_CORE_API_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN}
@@ -714,6 +726,8 @@ services:
     container_name: zorven-social-agent
     environment:
       - SOCIAL_REDIS_URL=redis://redis:6379/6
+      - SOCIAL_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - SOCIAL_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - SOCIAL_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - SOCIAL_CORE_API_URL=http://backend:8001
       - SOCIAL_CORE_API_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN}
@@ -736,6 +750,8 @@ services:
     container_name: zorven-rag-uploader
     environment:
       - UPLOADER_REDIS_URL=redis://redis:6379/7
+      - UPLOADER_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - UPLOADER_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - UPLOADER_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - UPLOADER_CORE_API_URL=http://backend:8001
       - UPLOADER_CORE_API_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN}
@@ -758,6 +774,8 @@ services:
     container_name: zorven-brand-equity
     environment:
       - BRAND_EQUITY_REDIS_URL=redis://redis:6379/8
+      - BRAND_EQUITY_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BRAND_EQUITY_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - BRAND_EQUITY_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - BRAND_EQUITY_CORS_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
     ports:
@@ -801,6 +819,8 @@ services:
     container_name: zorven-odoo-worker
     environment:
       - ODOO_WORKER_REDIS_URL=redis://redis:6379/10
+      - ODOO_WORKER_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - ODOO_WORKER_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - ODOO_WORKER_MCP_SERVER_URL=http://odoo-mcp-server:8095
       - ODOO_WORKER_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
     ports:

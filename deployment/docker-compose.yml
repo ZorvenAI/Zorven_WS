@@ -620,6 +620,8 @@ services:
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
       - ORCHESTRATOR_CALLBACK_BASE_URL=${ORCHESTRATOR_CALLBACK_BASE_URL:-http://backend:8001}
       - ORCHESTRATOR_REDIS_URL=redis://redis:6379/1
+      - ORCHESTRATOR_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - ORCHESTRATOR_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS=${ORCHESTRATOR_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
       - ORCHESTRATOR_LOG_LEVEL=INFO
       # Vertex AI Search / Gemini (Default Agent Node - RAG queries)
@@ -903,6 +905,8 @@ services:
     container_name: ai-brand-automator-discovery-agent
     environment:
       - DISCOVERY_REDIS_URL=redis://redis:6379/2
+      - DISCOVERY_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - DISCOVERY_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - DISCOVERY_KAFKA_BOOTSTRAP_SERVERS=${DISCOVERY_KAFKA_BOOTSTRAP_SERVERS:-}
       # Kafka integration is disabled by default (empty bootstrap servers).
       # To enable Kafka when running the full event streaming stack, either:
@@ -941,6 +945,8 @@ services:
     container_name: ai-brand-automator-intelligence-agent
     environment:
       - INTELLIGENCE_REDIS_URL=redis://redis:6379/3
+      - INTELLIGENCE_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - INTELLIGENCE_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - INTELLIGENCE_KAFKA_BOOTSTRAP_SERVERS=${INTELLIGENCE_KAFKA_BOOTSTRAP_SERVERS:-}
       # Kafka integration is disabled by default (empty bootstrap servers).
       # To enable Kafka when running the full event streaming stack, either:
@@ -979,6 +985,8 @@ services:
     container_name: ai-brand-automator-titling-worker
     environment:
       - TITLING_REDIS_URL=redis://redis:6379/4
+      - TITLING_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - TITLING_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - TITLING_KAFKA_BOOTSTRAP_SERVERS=${TITLING_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
       - TITLING_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - TITLING_CORE_API_URL=http://backend:8001
@@ -1012,6 +1020,8 @@ services:
     container_name: ai-brand-automator-content-agent
     environment:
       - CONTENT_REDIS_URL=redis://redis:6379/5
+      - CONTENT_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - CONTENT_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - CONTENT_KAFKA_BOOTSTRAP_SERVERS=${CONTENT_KAFKA_BOOTSTRAP_SERVERS:-}
       # Kafka integration is disabled by default (empty bootstrap servers).
       # To enable Kafka when running the full event streaming stack, either:
@@ -1093,6 +1103,8 @@ services:
     container_name: ai-brand-automator-social-agent
     environment:
       - SOCIAL_REDIS_URL=redis://redis:6379/6
+      - SOCIAL_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - SOCIAL_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - SOCIAL_KAFKA_BOOTSTRAP_SERVERS=${SOCIAL_KAFKA_BOOTSTRAP_SERVERS:-}
       # Kafka integration is disabled by default (empty bootstrap servers).
       # To enable Kafka when running the full event streaming stack, either:
@@ -1132,6 +1144,8 @@ services:
     container_name: ai-brand-automator-rag-uploader
     environment:
       - UPLOADER_REDIS_URL=redis://redis:6379/7
+      - UPLOADER_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - UPLOADER_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - UPLOADER_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - UPLOADER_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - UPLOADER_GCS_PROJECT_ID=${GCP_PROJECT_ID:-brandsol}
@@ -1212,6 +1226,8 @@ services:
     container_name: ai-brand-automator-odoo-worker
     environment:
       - ODOO_WORKER_REDIS_URL=redis://redis:6379/10
+      - ODOO_WORKER_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - ODOO_WORKER_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - ODOO_WORKER_MCP_SERVER_URL=http://odoo-mcp-server:8095
       - ODOO_WORKER_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ODOO_WORKER_KAFKA_BOOTSTRAP_SERVERS=${ODOO_WORKER_KAFKA_BOOTSTRAP_SERVERS:-}
@@ -1802,6 +1818,8 @@ services:
     container_name: ai-brand-automator-brand-equity
     environment:
       - BRAND_EQUITY_REDIS_URL=redis://redis:6379/8
+      - BRAND_EQUITY_PROMPT_CACHE_REDIS_URL=redis://redis:6379/2
+      - BRAND_EQUITY_MLFLOW_TRACKING_URI=http://mlflow-server:5000
       - BRAND_EQUITY_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - BRAND_EQUITY_LOG_LEVEL=INFO
       - BRAND_EQUITY_CORS_ORIGINS=http://localhost:3000,http://localhost:8000
