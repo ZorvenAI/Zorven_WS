@@ -134,7 +134,7 @@ class TestGeminiComposition:
     async def test_rag_blog_social_prompt(self, mock_settings):
         """Gemini returns compose_pipeline for RAG+blog+social prompt."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
         mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 1
         mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
@@ -180,7 +180,7 @@ class TestGeminiComposition:
     async def test_web_blog_prompt(self, mock_settings):
         """Gemini returns compose_pipeline for plain blog prompt."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
         mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 1
         mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
@@ -209,7 +209,7 @@ class TestGeminiComposition:
     async def test_iso_valuation_prompt(self, mock_settings):
         """Gemini returns compose_pipeline for ISO valuation prompt."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
         mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 1
         mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
@@ -236,7 +236,7 @@ class TestGeminiComposition:
     async def test_gemini_error_falls_to_tier2(self, mock_settings):
         """Gemini Tier 1 error → falls to Tier 2 LLM classification."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
         mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
         mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
@@ -380,7 +380,7 @@ class TestGeminiRetry:
     async def test_retries_once_on_failure(self, mock_settings, mock_sleep):
         """Verify retry + sleep on first failure, then re-raise."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
         mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 1
         mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 2.0
 
@@ -409,7 +409,7 @@ class TestGeminiRetry:
     async def test_succeeds_on_retry(self, mock_settings, mock_sleep):
         """First call fails, second succeeds."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
         mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 1
         mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 1.0
 
@@ -512,7 +512,7 @@ class TestManifestBuilding:
     def test_includes_global_config(self):
         composer = PipelineComposer()
         manifest = composer._build_manifest(["web_research", "manager"])
-        assert manifest["global_config"]["model"] == "gemini-2.0-flash"
+        assert manifest["global_config"]["model"] == "gemini-3.5-flash"
         assert manifest["global_config"]["temperature"] == 0.7
 
     def test_includes_node_config(self):
@@ -612,7 +612,7 @@ class TestLLMClassifyFallback:
     async def test_selects_social_promotion(self, mock_settings):
         """Tier 2 correctly selects social-promotion."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
 
         composer = PipelineComposer()
 
@@ -638,7 +638,7 @@ class TestLLMClassifyFallback:
     async def test_returns_none_on_invalid_response(self, mock_settings):
         """Returns None when LLM returns invalid pipeline_id."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
 
         composer = PipelineComposer()
 
@@ -675,7 +675,7 @@ class TestLLMClassifyFallback:
     async def test_returns_none_when_no_function_call(self, mock_settings):
         """Returns None when Gemini doesn't return a function call."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
 
         composer = PipelineComposer()
 
@@ -703,7 +703,7 @@ class TestFullFallbackChain:
     async def test_tier1_success_skips_tier2_and_tier3(self, mock_settings):
         """Tier 1 success → returns _composed_manifest, no Tier 2/3."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
         mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
         mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
@@ -730,7 +730,7 @@ class TestFullFallbackChain:
     async def test_tier1_fails_tier2_succeeds(self, mock_settings):
         """Tier 1 fails → Tier 2 selects a pipeline."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
         mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
         mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
@@ -764,7 +764,7 @@ class TestFullFallbackChain:
     async def test_tier1_and_tier2_fail_falls_to_tier3(self, mock_settings):
         """Both Tier 1 and Tier 2 fail → Tier 3 keyword matching."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
         mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
         mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
@@ -903,7 +903,7 @@ class TestMultiWorkerComposition:
     async def test_multi_worker_email_campaign(self, mock_settings):
         """Gemini returns multi-worker pipeline for email campaign."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
         mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
         mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
@@ -943,7 +943,7 @@ class TestMultiWorkerComposition:
     async def test_multi_worker_sales_invoice(self, mock_settings):
         """Gemini returns multi-worker pipeline for sales + invoice."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
         mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
         mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
@@ -1074,7 +1074,7 @@ class TestGeminiComposeWithDependencies:
     async def test_gemini_compose_returns_dependencies(self, mock_settings):
         """Gemini returns dependencies for parallel execution."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
         mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
         mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 
@@ -1115,7 +1115,7 @@ class TestGeminiComposeWithDependencies:
     async def test_gemini_compose_no_dependencies_fallback(self, mock_settings):
         """Gemini returns no dependencies → sequential edges."""
         mock_settings.GOOGLE_API_KEY = "test-key"
-        mock_settings.GEMINI_MODEL = "gemini-2.0-flash"
+        mock_settings.GEMINI_MODEL = "gemini-3.5-flash"
         mock_settings.GEMINI_COMPOSE_MAX_RETRIES = 0
         mock_settings.GEMINI_COMPOSE_RETRY_DELAY = 0.0
 

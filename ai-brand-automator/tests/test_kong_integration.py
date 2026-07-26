@@ -348,7 +348,7 @@ class TestAssetConfirmationEndpoint:
             "file_type": "image",
             "file_size": 1024,
             "gcs_path": f"assets/{company.tenant.id}/test-image.png",
-            "gcs_bucket": "brand-automator-assets",
+            "gcs_bucket": "zorven-raw-assets",
         }
 
         response = api_client.post(

@@ -18,7 +18,7 @@ class GeminiClient:
 
     def __init__(
         self,
-        model_name: str = "gemini-2.0-flash",
+        model_name: str = "gemini-3.5-flash",
         max_tool_calls_per_step: int = 5,
         prompt_loader: Optional[Any] = None,
     ) -> None:

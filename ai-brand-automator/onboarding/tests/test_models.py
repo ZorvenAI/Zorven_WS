@@ -228,7 +228,7 @@ class TestBrandAssetModel:
         company = CompanyFactory(tenant=tenant)
         asset = BrandAssetFactory(tenant=tenant, company=company)
 
-        assert asset.gcs_bucket == "brand-automator-assets"
+        assert asset.gcs_bucket == "zorven-raw-assets"
 
     def test_processed_defaults_to_false(self, tenant):
         """Test processed flag defaults to False"""

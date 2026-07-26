@@ -78,10 +78,12 @@ class GCSService:
         self.bucket_name = settings.GS_BUCKET_NAME
         self.project_id = settings.GS_PROJECT_ID
         self.credentials_path = settings.GS_CREDENTIALS_PATH
+        self._credentials = None
 
         # Initialize GCS client
         try:
             credentials = self._resolve_credentials()
+            self._credentials = credentials
             self.client = storage.Client(
                 credentials=credentials, project=self.project_id
             )
@@ -315,6 +317,32 @@ class GCSService:
                 url_kwargs["response_disposition"] = response_disposition
             if content_type:
                 url_kwargs["response_type"] = content_type
+
+            # ADC user credentials can't sign URLs locally — use IAM
+            # signBlob API via the service_account_email parameter.
+            from google.oauth2 import service_account as sa_module
+
+            if self._credentials and not isinstance(
+                self._credentials, sa_module.Credentials
+            ):
+                # Refresh token if needed
+                import google.auth.transport.requests
+
+                if not self._credentials.token or (
+                    hasattr(self._credentials, "expired")
+                    and self._credentials.expired
+                ):
+                    self._credentials.refresh(
+                        google.auth.transport.requests.Request()
+                    )
+
+                sa_email = getattr(
+                    settings,
+                    "GCS_SIGNING_SERVICE_ACCOUNT",
+                    f"zorven-cloudrun@{self.project_id}.iam.gserviceaccount.com",
+                )
+                url_kwargs["service_account_email"] = sa_email
+                url_kwargs["access_token"] = self._credentials.token
 
             url = blob.generate_signed_url(**url_kwargs)
 

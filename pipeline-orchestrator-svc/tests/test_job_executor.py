@@ -31,7 +31,7 @@ def _make_request(manifest=_UNSET, available_manifests=None, job_id="test-job-12
                 ManifestNode(id="report", type="internal", handler="ReportNode"),
             ],
             edges=[["strategy", "report"]],
-            global_config={"model": "gemini-2.0-flash"},
+            global_config={"model": "gemini-3.5-flash"},
         )
 
     return DispatchRequest(
@@ -354,7 +354,7 @@ class TestJobExecutor:
                 },
             ],
             "edges": [["strategy", "report"]],
-            "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+            "global_config": {"model": "gemini-3.5-flash", "temperature": 0.7},
         }
 
         executor = JobExecutor()
@@ -863,7 +863,7 @@ class TestParallelExecution:
                 ManifestNode(id="manager", type="internal", handler="ManagerNode"),
             ],
             edges=[["nodeA", "manager"], ["nodeB", "manager"]],
-            global_config={"model": "gemini-2.0-flash"},
+            global_config={"model": "gemini-3.5-flash"},
         )
 
         mock_a = AsyncMock(return_value={"node_outputs": {"nodeA": {"data": "a"}}})

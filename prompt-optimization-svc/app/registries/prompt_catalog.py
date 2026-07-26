@@ -1436,7 +1436,7 @@ WF3_PROMPTS: list[CatalogEntry] = [
 
 
 def _utility_tags(
-    agent: str, skill: str, model_target: str = "gemini-2.0-flash"
+    agent: str, skill: str, model_target: str = "gemini-3.5-flash"
 ) -> dict[str, str]:
     """Build tags for utility/non-workflow agent prompts."""
     return {

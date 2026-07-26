@@ -172,7 +172,7 @@ class AIGeneration(models.Model):
     )
 
     # Metadata
-    model_used = models.CharField(max_length=100, default="gemini-2.0-flash-exp")
+    model_used = models.CharField(max_length=100, default="gemini-3.5-flash")
     created_at = models.DateTimeField(default=timezone.now)
     processing_time = models.FloatField(
         default=0.0, help_text="Processing time in seconds"

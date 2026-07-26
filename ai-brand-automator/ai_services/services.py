@@ -22,7 +22,7 @@ class GeminiAIService:
 
     def __init__(self):
         self.api_key = os.getenv("GOOGLE_API_KEY") or settings.GOOGLE_API_KEY
-        self.model_name = "gemini-2.0-flash"
+        self.model_name = "gemini-3.5-flash"
         if self.api_key:
             try:
                 genai.configure(api_key=self.api_key)

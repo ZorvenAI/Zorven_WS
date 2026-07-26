@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # Gemini AI (empty = stub mode, used for SmartTitler)
     GOOGLE_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
 
     # GCS (empty = stub mode)
     GCS_PROJECT_ID: str = ""
