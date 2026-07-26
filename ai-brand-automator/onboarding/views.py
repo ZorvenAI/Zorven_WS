@@ -996,7 +996,7 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             "file_type": "image",  # image, video, document, other
             "file_size": 1024,  # size in bytes
             "gcs_path": "assets/tenant-id/filename.png",
-            "gcs_bucket": "brand-automator-assets",
+            "gcs_bucket": "zorven-raw-assets",
             "company_id": 1  # optional, defaults to tenant's company
         }
         """
@@ -1023,7 +1023,7 @@ class BrandAssetViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         gcs_path = request.data.get("gcs_path")
         gcs_bucket = request.data.get(
             "gcs_bucket",
-            tenant.get_raw_bucket() if tenant else "brand-automator-assets",
+            tenant.get_raw_bucket() if tenant else "zorven-raw-assets",
         )
         company_id = request.data.get("company_id")
 

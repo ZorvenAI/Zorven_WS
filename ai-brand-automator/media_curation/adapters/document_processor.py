@@ -106,7 +106,9 @@ class DocumentProcessor(ContentProcessorPort):
         self.api_key = api_key or ai_config.get(
             "API_KEY", getattr(settings, "GOOGLE_API_KEY", None)
         )
-        self.model_name = model_name or ai_config.get("MODEL", "gemini-2.0-flash")
+        self.model_name = model_name or ai_config.get(
+            "MODEL", ai_config.get("MODEL_NAME", "gemini-3.5-flash")
+        )
 
         if self.api_key:
             genai.configure(api_key=self.api_key)

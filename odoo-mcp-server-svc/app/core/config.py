@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     # ── Vertex AI Discovery Engine (direct RAG) ──
     VERTEX_AI_PROJECT_ID: str = "zorven-503517"
     VERTEX_AI_LOCATION: str = "global"
-    VERTEX_AI_DATA_STORE_ID: str = "prevision-rag-dev"
+    VERTEX_AI_DATA_STORE_ID: str = "zorven-rag-dev"
     VERTEX_AI_MOCK_MODE: bool = False
 
     # ── Connection Pool ──

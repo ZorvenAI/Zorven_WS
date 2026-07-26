@@ -33,7 +33,7 @@ def _brand_analysis_manifest():
             ["market_research", "brand_strategist"],
             ["brand_strategist", "report_generator"],
         ],
-        "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+        "global_config": {"model": "gemini-3.5-flash", "temperature": 0.7},
     }
 
 
@@ -60,7 +60,7 @@ def _iso_brand_equity_manifest():
             ["web_research", "valuation_logic"],
             ["valuation_logic", "manager"],
         ],
-        "global_config": {"model": "gemini-2.0-flash", "temperature": 0.3},
+        "global_config": {"model": "gemini-3.5-flash", "temperature": 0.3},
     }
 
 
@@ -91,7 +91,7 @@ def _competitor_audit_manifest():
             ["competitor_research", "gap_analyzer"],
             ["gap_analyzer", "report_generator"],
         ],
-        "global_config": {"model": "gemini-2.0-flash", "temperature": 0.5},
+        "global_config": {"model": "gemini-3.5-flash", "temperature": 0.5},
     }
 
 
@@ -120,7 +120,7 @@ def _content_strategy_manifest():
             ["audience_analyzer", "content_planner"],
             ["content_planner", "calendar_builder"],
         ],
-        "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+        "global_config": {"model": "gemini-3.5-flash", "temperature": 0.7},
     }
 
 

@@ -10,7 +10,7 @@ class TestTitleGenerator:
 
     async def test_stub_mode_returns_truncated_words(self):
         """No API key → first 5 words of the message."""
-        generator = TitleGenerator(api_key="", model_name="gemini-2.0-flash")
+        generator = TitleGenerator(api_key="", model_name="gemini-3.5-flash")
         title = await generator.generate(
             "Analyze NVIDIA brand positioning in the GPU market"
         )
@@ -18,13 +18,13 @@ class TestTitleGenerator:
 
     async def test_stub_mode_short_message(self):
         """Short message returns all words."""
-        generator = TitleGenerator(api_key="", model_name="gemini-2.0-flash")
+        generator = TitleGenerator(api_key="", model_name="gemini-3.5-flash")
         title = await generator.generate("Hello world")
         assert title == "Hello world"
 
     async def test_generates_title_with_gemini(self):
         """Mocked Gemini returns clean title."""
-        generator = TitleGenerator(api_key="", model_name="gemini-2.0-flash")
+        generator = TitleGenerator(api_key="", model_name="gemini-3.5-flash")
 
         # Inject a mock model directly
         mock_model = MagicMock()
@@ -39,7 +39,7 @@ class TestTitleGenerator:
 
     async def test_strips_quotes_from_title(self):
         """Removes surrounding quotes from Gemini output."""
-        generator = TitleGenerator(api_key="", model_name="gemini-2.0-flash")
+        generator = TitleGenerator(api_key="", model_name="gemini-3.5-flash")
 
         mock_model = MagicMock()
         mock_response = MagicMock()
@@ -52,7 +52,7 @@ class TestTitleGenerator:
 
     async def test_strips_trailing_punctuation(self):
         """Removes trailing punctuation from Gemini output."""
-        generator = TitleGenerator(api_key="", model_name="gemini-2.0-flash")
+        generator = TitleGenerator(api_key="", model_name="gemini-3.5-flash")
 
         mock_model = MagicMock()
         mock_response = MagicMock()
@@ -65,7 +65,7 @@ class TestTitleGenerator:
 
     async def test_error_fallback(self):
         """Gemini error → word truncation fallback."""
-        generator = TitleGenerator(api_key="", model_name="gemini-2.0-flash")
+        generator = TitleGenerator(api_key="", model_name="gemini-3.5-flash")
 
         mock_model = MagicMock()
         mock_model.generate_content.side_effect = Exception("API error")
@@ -79,13 +79,13 @@ class TestTitleGenerator:
     async def test_fallback_title_truncates_to_255(self):
         """Fallback title is truncated to 255 characters."""
         long_message = "word " * 200
-        generator = TitleGenerator(api_key="", model_name="gemini-2.0-flash")
+        generator = TitleGenerator(api_key="", model_name="gemini-3.5-flash")
         title = await generator.generate(long_message)
         assert len(title) <= 255
 
     async def test_empty_gemini_response_falls_back(self):
         """Empty Gemini response triggers fallback."""
-        generator = TitleGenerator(api_key="", model_name="gemini-2.0-flash")
+        generator = TitleGenerator(api_key="", model_name="gemini-3.5-flash")
 
         mock_model = MagicMock()
         mock_response = MagicMock()
@@ -108,7 +108,7 @@ class TestTitleGenerator:
 
     async def test_generate_with_first_response(self):
         """First response context is included in prompt."""
-        generator = TitleGenerator(api_key="", model_name="gemini-2.0-flash")
+        generator = TitleGenerator(api_key="", model_name="gemini-3.5-flash")
 
         mock_model = MagicMock()
         mock_response = MagicMock()

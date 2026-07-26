@@ -155,7 +155,7 @@ BRAND_ANALYSIS_MANIFEST: dict[str, Any] = {
         ["market_research", "brand_strategist"],
         ["brand_strategist", "report_generator"],
     ],
-    "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+    "global_config": {"model": "gemini-3.5-flash", "temperature": 0.7},
 }
 
 ISO_BRAND_EQUITY_MANIFEST: dict[str, Any] = {
@@ -180,7 +180,7 @@ ISO_BRAND_EQUITY_MANIFEST: dict[str, Any] = {
         ["web_research", "valuation_logic"],
         ["valuation_logic", "manager"],
     ],
-    "global_config": {"model": "gemini-2.0-flash", "temperature": 0.3},
+    "global_config": {"model": "gemini-3.5-flash", "temperature": 0.3},
 }
 
 COMPETITOR_AUDIT_MANIFEST: dict[str, Any] = {
@@ -205,7 +205,7 @@ COMPETITOR_AUDIT_MANIFEST: dict[str, Any] = {
         ["competitor_research", "gap_analyzer"],
         ["gap_analyzer", "report_generator"],
     ],
-    "global_config": {"model": "gemini-2.0-flash", "temperature": 0.5},
+    "global_config": {"model": "gemini-3.5-flash", "temperature": 0.5},
 }
 
 CONTENT_STRATEGY_MANIFEST: dict[str, Any] = {
@@ -220,7 +220,7 @@ CONTENT_STRATEGY_MANIFEST: dict[str, Any] = {
         ["audience_analyzer", "content_planner"],
         ["content_planner", "calendar_builder"],
     ],
-    "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+    "global_config": {"model": "gemini-3.5-flash", "temperature": 0.7},
 }
 
 GENERAL_CHAT_MANIFEST: dict[str, Any] = {
@@ -231,7 +231,7 @@ GENERAL_CHAT_MANIFEST: dict[str, Any] = {
     "edges": [
         ["intent_router", "manager"],
     ],
-    "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+    "global_config": {"model": "gemini-3.5-flash", "temperature": 0.7},
 }
 
 ALL_AVAILABLE_MANIFESTS: list[dict[str, Any]] = [
