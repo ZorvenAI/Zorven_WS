@@ -354,7 +354,7 @@ def _run_curation(
             curated_bucket
             or config.get("STORAGE", {}).get("CURATED_BUCKET", "")
             or raw_bucket
-            or "brandsol-curation-bucket"
+            or "zorven-curated-assets"
         )
 
         # Build CurationEvent from ingestion result

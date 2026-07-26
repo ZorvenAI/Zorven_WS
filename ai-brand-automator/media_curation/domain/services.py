@@ -543,7 +543,7 @@ class CurationService:
             output_event = CurationCompletedEvent(
                 id=str(uuid4()),
                 source="media-curation-svc",
-                type="brandsol.curation.completed.v1",
+                type="zorven.curation.completed.v1",
                 datacontenttype="application/json",
                 time=datetime.now(timezone.utc),
                 subject=f"tenant:{event.tenant_id}/file:{event.file_id}",
@@ -606,7 +606,7 @@ class CurationService:
             failed_event = CurationFailedEvent(
                 id=str(uuid4()),
                 source="media-curation-svc",
-                type="brandsol.curation.failed.v1",
+                type="zorven.curation.failed.v1",
                 datacontenttype="application/json",
                 time=datetime.now(timezone.utc),
                 subject=f"tenant:{event.tenant_id}/file:{event.file_id}",

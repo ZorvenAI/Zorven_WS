@@ -28,7 +28,7 @@ class TestCurationNeededEvent:
     def test_valid_event(self, sample_curation_needed_event):
         """Test creating a valid curation-needed event."""
         event = sample_curation_needed_event
-        assert event.type == "brandsol.ingestion.completed.v1"
+        assert event.type == "zorven.ingestion.completed.v1"
         assert event.source == "data-ingestion-svc"
         assert event.datacontenttype == "application/json"
 
@@ -37,7 +37,7 @@ class TestCurationNeededEvent:
         event = CurationNeededEvent(
             id=str(uuid4()),
             source="test-service",
-            type="brandsol.test.event.v1",
+            type="zorven.test.event.v1",
             datacontenttype="application/json",
             time=datetime.now(timezone.utc),
             subject=f"tenant:{SAMPLE_TENANT_ID}/file:{SAMPLE_FILE_ID}",
@@ -95,7 +95,7 @@ class TestCurationNeededEvent:
         event = CurationNeededEvent(
             id=str(uuid4()),
             source="data-ingestion-svc",
-            type="brandsol.ingestion.completed.v1",
+            type="zorven.ingestion.completed.v1",
             datacontenttype="application/json",
             time=datetime.now(timezone.utc),
             subject=f"tenant:{SAMPLE_TENANT_ID}/file:{SAMPLE_FILE_ID}",
@@ -122,7 +122,7 @@ class TestCurationCompletedEvent:
     def test_valid_event(self, sample_curation_completed_event):
         """Test creating a valid curation-completed event."""
         event = sample_curation_completed_event
-        assert event.type == "brandsol.curation.completed.v1"
+        assert event.type == "zorven.curation.completed.v1"
         assert event.source == "media-curation-svc"
 
     def test_event_data_contains_output_uri(self, sample_curation_completed_event):
@@ -153,7 +153,7 @@ class TestCurationCompletedEvent:
         event = CurationCompletedEvent(
             id=str(uuid4()),
             source="media-curation-svc",
-            type="brandsol.curation.completed.v1",
+            type="zorven.curation.completed.v1",
             datacontenttype="application/json",
             time=datetime.now(timezone.utc),
             subject=f"tenant:{SAMPLE_TENANT_ID}/file:{SAMPLE_FILE_ID}",
@@ -180,7 +180,7 @@ class TestCurationFailedEvent:
         event = CurationFailedEvent(
             id=str(uuid4()),
             source="media-curation-svc",
-            type="brandsol.curation.failed.v1",
+            type="zorven.curation.failed.v1",
             datacontenttype="application/json",
             time=datetime.now(timezone.utc),
             subject=f"tenant:{SAMPLE_TENANT_ID}/file:{SAMPLE_FILE_ID}",
@@ -196,7 +196,7 @@ class TestCurationFailedEvent:
                 "retry_count": 3,
             },
         )
-        assert event.type == "brandsol.curation.failed.v1"
+        assert event.type == "zorven.curation.failed.v1"
         assert event.data["error_code"] == "ProcessingError"
 
     def test_event_error_details(self):
@@ -204,7 +204,7 @@ class TestCurationFailedEvent:
         event = CurationFailedEvent(
             id=str(uuid4()),
             source="media-curation-svc",
-            type="brandsol.curation.failed.v1",
+            type="zorven.curation.failed.v1",
             datacontenttype="application/json",
             time=datetime.now(timezone.utc),
             subject=f"tenant:{SAMPLE_TENANT_ID}/file:{SAMPLE_FILE_ID}",
@@ -232,7 +232,7 @@ class TestCurationFailedEvent:
         event = CurationFailedEvent(
             id=str(uuid4()),
             source="media-curation-svc",
-            type="brandsol.curation.failed.v1",
+            type="zorven.curation.failed.v1",
             datacontenttype="application/json",
             time=datetime.now(timezone.utc),
             subject=f"tenant:{SAMPLE_TENANT_ID}/file:{SAMPLE_FILE_ID}",
@@ -305,7 +305,7 @@ class TestEventRoundTrip:
         event = CurationFailedEvent(
             id=str(uuid4()),
             source="media-curation-svc",
-            type="brandsol.curation.failed.v1",
+            type="zorven.curation.failed.v1",
             datacontenttype="application/json",
             time=datetime.now(timezone.utc),
             subject=f"tenant:{SAMPLE_TENANT_ID}/file:{SAMPLE_FILE_ID}",

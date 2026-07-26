@@ -10,7 +10,7 @@ These tests connect to actual Google Cloud services:
 Prerequisites:
 - Valid GCP service account credentials in credentials/gcs-credentials.json
 - APIs enabled: Storage, Vision, DLP, Vertex AI
-- Test bucket: onboarding-brandsol-customer-bucket-1
+- Test bucket: zorven-raw-assets
 
 Run with: pytest media_curation/tests/test_gcp_real_integrations.py -v
 """
@@ -40,7 +40,7 @@ def setup_gcp_credentials():
 
 
 # Test file URIs in the real GCS bucket
-TEST_BUCKET = "onboarding-brandsol-customer-bucket-1"
+TEST_BUCKET = "zorven-raw-assets"
 TEST_PREFIX = "customer-1"
 TEST_TEXT_FILE = (
     f"gs://{TEST_BUCKET}/{TEST_PREFIX}/customer-1-onboarding-file-example-1.txt"
@@ -50,7 +50,7 @@ TEST_IMAGE_JPEG = f"gs://{TEST_BUCKET}/{TEST_PREFIX}/Test-image.jpeg"
 TEST_VIDEO_FILE = f"gs://{TEST_BUCKET}/{TEST_PREFIX}/Test-video.mp4"
 TEST_PDF_FILE = f"gs://{TEST_BUCKET}/{TEST_PREFIX}/Kannada-alphabets.pdf"
 TEST_AUDIO_FILE = f"gs://{TEST_BUCKET}/{TEST_PREFIX}/test-WhatsApp-Audio.ogg"
-GCP_PROJECT_ID = "brandsol-project"
+GCP_PROJECT_ID = "zorven-503517"
 
 
 def run_async(coro):

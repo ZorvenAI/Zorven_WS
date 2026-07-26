@@ -126,7 +126,7 @@ def get_orchestrator():
 
     # Create adapters
     vertex_ai = VertexAIAdapter(
-        project_id=getattr(settings, "VERTEX_AI_PROJECT_ID", "brandsol-project"),
+        project_id=getattr(settings, "VERTEX_AI_PROJECT_ID", "zorven-503517"),
         location=getattr(settings, "VERTEX_AI_LOCATION", "global"),
         data_store_id=getattr(settings, "VERTEX_AI_DATA_STORE_ID", "prevision-rag-dev"),
         mock_mode=mock_mode,
