@@ -44,7 +44,7 @@ def adapter_no_resolver() -> VertexAIRAGAdapter:
 class TestInit:
     def test_defaults(self) -> None:
         a = VertexAIRAGAdapter()
-        assert a.project_id == "brandsol-project"
+        assert a.project_id == "zorven-503517"
         assert a.location == "global"
         assert a._doc_client is None
         assert a._search_client is None

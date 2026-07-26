@@ -99,7 +99,7 @@ class TestE2EAssetUpload:
             file_size=1024,
             gcs_path=gcs_path,
             gcs_bucket=settings.DATA_INGESTION.get(
-                "GCP_BUCKET_NAME", "onboarding-brandsol-customer-bucket-1"
+                "GCP_BUCKET_NAME", "zorven-raw-assets"
             ),
             pipeline_status="pending",
         )
@@ -242,7 +242,7 @@ class TestE2EFullPipelineFlow:
             file_type="document",
             file_size=5000,
             gcs_path=f"_landing/{tenant.id}/{file_uuid}_lifecycle_test.pdf",
-            gcs_bucket="onboarding-brandsol-customer-bucket-1",
+            gcs_bucket="zorven-raw-assets",
             pipeline_status="pending",
             processed=False,
         )

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Setup Vertex AI Discovery Engine for brandsol-project.
+Setup Vertex AI Discovery Engine for zorven-503517.
 
 This script:
 1. Enables the Discovery Engine API
@@ -20,11 +20,11 @@ if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
     print("Error: GOOGLE_APPLICATION_CREDENTIALS environment variable not set")
     sys.exit(1)
 
-PROJECT_ID = "brandsol-project"
+PROJECT_ID = "zorven-503517"
 LOCATION = "global"  # Use 'global' for Discovery Engine API endpoint
 DATA_STORE_ID = "prevision-docs-dev"
 DATA_STORE_DISPLAY_NAME = "Prevision Docs Dev"
-GCS_URI = "gs://onboarding-brandsol-customer-bucket-1/customer-1/curated/"
+GCS_URI = "gs://zorven-raw-assets/customer-1/curated/"
 
 
 def enable_discovery_engine_api():
@@ -172,7 +172,7 @@ def create_data_store():
                 "Service account needs 'Discovery Engine Admin' role."
             )
             print(f"      Run: gcloud projects add-iam-policy-binding {PROJECT_ID} \\")
-            sa = f"brandsol-service-account-87@{PROJECT_ID}.iam.gserviceaccount.com"
+            sa = f"zorven-service-account@{PROJECT_ID}.iam.gserviceaccount.com"
             print(f"             --member='serviceAccount:{sa}' \\")
             print("             --role='roles/discoveryengine.admin'")
             return False
@@ -219,7 +219,7 @@ VERTEX_AI_MOCK_MODE=False
 
 def main():
     print("=" * 60)
-    print("Vertex AI Discovery Engine Setup for brandsol-project")
+    print("Vertex AI Discovery Engine Setup for zorven-503517")
     print("=" * 60)
 
     # Step 1: Enable API

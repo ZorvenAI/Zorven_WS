@@ -823,7 +823,7 @@ def sample_curation_needed_event() -> CurationNeededEvent:
     return CurationNeededEvent(
         id=str(SAMPLE_EVENT_ID),
         source="data-ingestion-svc",
-        type="brandsol.ingestion.completed.v1",
+        type="zorven.ingestion.completed.v1",
         datacontenttype="application/json",
         time=datetime.now(timezone.utc),
         subject=f"tenant:{SAMPLE_TENANT_ID}/file:{SAMPLE_FILE_ID}",
@@ -845,7 +845,7 @@ def sample_curation_completed_event() -> CurationCompletedEvent:
     return CurationCompletedEvent(
         id=str(uuid4()),
         source="media-curation-svc",
-        type="brandsol.curation.completed.v1",
+        type="zorven.curation.completed.v1",
         datacontenttype="application/json",
         time=datetime.now(timezone.utc),
         subject=f"tenant:{SAMPLE_TENANT_ID}/file:{SAMPLE_FILE_ID}",

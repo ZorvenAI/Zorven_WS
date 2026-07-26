@@ -460,8 +460,8 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # Google Cloud Storage settings
-GS_BUCKET_NAME = config("GS_BUCKET_NAME", default="brand-automator-assets")
-GS_PROJECT_ID = config("GS_PROJECT_ID", default="")
+GS_BUCKET_NAME = config("GS_BUCKET_NAME", default="zorven-raw-assets")
+GS_PROJECT_ID = config("GS_PROJECT_ID", default="zorven-503517")
 GS_CREDENTIALS_PATH = config("GS_CREDENTIALS_PATH", default="")
 
 # AI Service settings
@@ -730,12 +730,12 @@ DATA_INGESTION = {
     "KAFKA_DLQ_TOPIC": config("INGESTION_KAFKA_DLQ_TOPIC", default="ingestion-dlq"),
     "KAFKA_GROUP_ID": config("INGESTION_KAFKA_GROUP_ID", default="ingestion-svc-group"),
     # GCS Configuration
-    "GCP_PROJECT_ID": config("GCP_PROJECT_ID", default="brandsol"),
-    "GCP_BUCKET_NAME": config("GCP_BUCKET_NAME", default="onboarding-bucket1"),
+    "GCP_PROJECT_ID": config("GCP_PROJECT_ID", default="zorven-503517"),
+    "GCP_BUCKET_NAME": config("GCP_BUCKET_NAME", default="zorven-raw-assets"),
     "GCS_LANDING_PREFIX": config("GCS_LANDING_PREFIX", default="_landing"),
     "GCS_CREDENTIALS_PATH": config(
         "GOOGLE_APPLICATION_CREDENTIALS",
-        default=str(BASE_DIR / "credentials" / "gcs-credentials.json"),
+        default="",
     ),
     # Processing Configuration
     "MAX_RETRIES": config("INGESTION_MAX_RETRIES", default=3, cast=int),
@@ -753,12 +753,12 @@ DATA_INGESTION = {
 # =============================================================================
 # Vertex AI Search / RAG Index Configuration
 # =============================================================================
-VERTEX_AI_PROJECT_ID = config("VERTEX_AI_PROJECT_ID", default="brandsol-project")
+VERTEX_AI_PROJECT_ID = config("VERTEX_AI_PROJECT_ID", default="zorven-503517")
 VERTEX_AI_LOCATION = config("VERTEX_AI_LOCATION", default="global")
 VERTEX_AI_DATA_STORE_ID = config("VERTEX_AI_DATA_STORE_ID", default="prevision-rag-dev")
 VERTEX_AI_AUTO_PROVISION = config("VERTEX_AI_AUTO_PROVISION", default=False, cast=bool)
 RAG_INDEX_MOCK_MODE = config("VERTEX_AI_MOCK_MODE", default=False, cast=bool)
-GCP_PROJECT_ID = config("GCP_PROJECT_ID", default="brandsol")
+GCP_PROJECT_ID = config("GCP_PROJECT_ID", default="zorven-503517")
 GCP_LOCATION = config("GCP_LOCATION", default="global")
 
 # --- DB-to-RAG Sync ---
@@ -799,20 +799,20 @@ MEDIA_CURATION = {
     },
     # Storage Configuration (GCS)
     "STORAGE": {
-        "GCP_PROJECT_ID": config("GCP_PROJECT_ID", default="brandsol"),
+        "GCP_PROJECT_ID": config("GCP_PROJECT_ID", default="zorven-503517"),
         "CURATED_BUCKET": config(
-            "CURATION_GCP_BUCKET_NAME", default="brandsol-curation-bucket"
+            "CURATION_GCP_BUCKET_NAME", default="zorven-curated-assets"
         ),
-        "RAW_BUCKET": config("RAW_GCP_BUCKET_NAME", default="onboarding-bucket1"),
+        "RAW_BUCKET": config("RAW_GCP_BUCKET_NAME", default="zorven-raw-assets"),
         "CREDENTIALS_PATH": config(
             "GOOGLE_APPLICATION_CREDENTIALS",
-            default=str(BASE_DIR / "credentials" / "gcs-credentials.json"),
+            default="",
         ),
     },
     # DLP Configuration (Google Cloud DLP)
     "DLP": {
         "ENABLED": config("CURATION_DLP_ENABLED", default=True, cast=bool),
-        "GCP_PROJECT_ID": config("DLP_GCP_PROJECT_ID", default="brandsol"),
+        "GCP_PROJECT_ID": config("DLP_GCP_PROJECT_ID", default="zorven-503517"),
         "INFO_TYPES": config(
             "DLP_INFO_TYPES",
             default=(

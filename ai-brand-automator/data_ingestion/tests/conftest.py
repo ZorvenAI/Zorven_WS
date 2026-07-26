@@ -292,7 +292,7 @@ def sample_event() -> IngestionEvent:
         event_id=uuid4(),
         trace_id=uuid4(),
         tenant_id="tenant-123",
-        file_path="gs://onboarding-bucket1/_landing/test-video.mp4",
+        file_path="gs://zorven-raw-assets/_landing/test-video.mp4",
         file_type="video/mp4",
         timestamp=datetime(2026, 1, 29, 12, 0, 0),
         source=EventSource.FRONTEND_UPLOAD,
@@ -309,7 +309,7 @@ def sample_processed_event(sample_event: IngestionEvent) -> ProcessedEvent:
         timestamp=datetime.utcnow(),
         tenant_id=sample_event.tenant_id,
         source_path=sample_event.file_path,
-        destination_path="gs://onboarding-bucket1/tenant-123/raw/2026/01/29/test-video.mp4",
+        destination_path="gs://zorven-raw-assets/tenant-123/raw/2026/01/29/test-video.mp4",
         status=ProcessingStatus.RAW_STORED,
         processing_duration_ms=150,
     )

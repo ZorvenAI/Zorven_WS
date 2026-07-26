@@ -98,7 +98,7 @@ class Tenant(TenantMixin):
             return gs_bucket
         # Fallback: DATA_INGESTION pipeline config
         pipeline_cfg = getattr(settings, "DATA_INGESTION", {})
-        return pipeline_cfg.get("GCP_BUCKET_NAME", "onboarding-bucket1")
+        return pipeline_cfg.get("GCP_BUCKET_NAME", "zorven-raw-assets")
 
     def get_curated_bucket(self):
         """Resolve GCS curated bucket: tenant-specific or shared default."""
@@ -108,7 +108,7 @@ class Tenant(TenantMixin):
 
         curation_cfg = getattr(settings, "MEDIA_CURATION", {})
         storage_cfg = curation_cfg.get("STORAGE", {})
-        return storage_cfg.get("CURATED_BUCKET", "brandsol-curation-bucket")
+        return storage_cfg.get("CURATED_BUCKET", "zorven-curated-assets")
 
     def get_data_store_id(self):
         """Resolve Vertex AI data store: tenant-specific or shared default."""
