@@ -6,7 +6,7 @@ GCSAdapter works correctly with real file operations.
 
 Prerequisites:
 - Valid GCP service account credentials in credentials/gcs-credentials.json
-- Test bucket: onboarding-brandsol-customer-bucket-1
+- Test bucket: zorven-raw-assets
 
 Run with:
     GOOGLE_APPLICATION_CREDENTIALS=credentials/gcs-credentials.json \
@@ -25,8 +25,8 @@ pytestmark = [pytest.mark.integration, pytest.mark.gcp]
 
 # Test configuration - HARDCODED for real GCP tests
 # These override the .env.test values which use mock buckets
-GCP_PROJECT_ID = "brandsol-project"
-TEST_BUCKET = "onboarding-brandsol-customer-bucket-1"
+GCP_PROJECT_ID = "zorven-503517"
+TEST_BUCKET = "zorven-raw-assets"
 TEST_PREFIX = "test-ingestion"
 
 

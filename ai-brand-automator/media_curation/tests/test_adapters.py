@@ -108,9 +108,9 @@ class TestGCSAdapterRealOperations:
             pytest.skip("GCS credentials file not found - skipping real GCS tests")
 
         return GCSAdapter(
-            project_id="brandsol-project",
+            project_id="zorven-503517",
             credentials_path=credentials_path,
-            default_bucket="onboarding-brandsol-customer-bucket-1",
+            default_bucket="zorven-raw-assets",
         )
 
     def test_gcs_adapter_initializes_with_credentials(self, gcs_adapter):
@@ -136,7 +136,7 @@ class TestGCSAdapterRealOperations:
 
         test_id = str(uuid.uuid4())[:8]
         content = b"test content for upload"
-        bucket = "onboarding-brandsol-customer-bucket-1"
+        bucket = "zorven-raw-assets"
         destination = f"gs://{bucket}/customer-1/test-uploads/test-upload-{test_id}.txt"
 
         result = run_async(
@@ -151,8 +151,8 @@ class TestGCSAdapterRealOperations:
         # Clean up - delete the test file
         from google.cloud import storage
 
-        client = storage.Client(project="brandsol-project")
-        bucket = client.bucket("onboarding-brandsol-customer-bucket-1")
+        client = storage.Client(project="zorven-503517")
+        bucket = client.bucket("zorven-raw-assets")
         blob = bucket.blob(f"customer-1/test-uploads/test-upload-{test_id}.txt")
         try:
             blob.delete()
@@ -162,7 +162,7 @@ class TestGCSAdapterRealOperations:
     def test_download_as_bytes_returns_bytes(self, gcs_adapter):
         """Test downloading bytes from GCS."""
         # Use the test file in the real bucket
-        bucket = "onboarding-brandsol-customer-bucket-1"
+        bucket = "zorven-raw-assets"
         test_file = f"gs://{bucket}/customer-1/customer-1-onboarding-file-example-1.txt"
         result = run_async(gcs_adapter.download_as_bytes(test_file))
         assert isinstance(result, bytes)
@@ -170,14 +170,14 @@ class TestGCSAdapterRealOperations:
 
     def test_exists_returns_true_for_existing_file(self, gcs_adapter):
         """Test file existence check for existing file."""
-        bucket = "onboarding-brandsol-customer-bucket-1"
+        bucket = "zorven-raw-assets"
         test_file = f"gs://{bucket}/customer-1/customer-1-onboarding-file-example-1.txt"
         result = run_async(gcs_adapter.exists(test_file))
         assert result is True
 
     def test_exists_returns_false_for_missing_file(self, gcs_adapter):
         """Test file existence check for non-existent file."""
-        bucket = "onboarding-brandsol-customer-bucket-1"
+        bucket = "zorven-raw-assets"
         result = run_async(
             gcs_adapter.exists(f"gs://{bucket}/non-existent-file-12345.txt")
         )
@@ -786,9 +786,9 @@ class TestGCSAdapterSaveJson:
             pytest.skip("GCS credentials file not found - skipping real GCS tests")
 
         return GCSAdapter(
-            project_id="brandsol-project",
+            project_id="zorven-503517",
             credentials_path=credentials_path,
-            default_bucket="onboarding-brandsol-customer-bucket-1",
+            default_bucket="zorven-raw-assets",
         )
 
     def test_save_json_stores_dict(self, gcs_adapter):
@@ -802,7 +802,7 @@ class TestGCSAdapterSaveJson:
             "metadata": {"source": "test"},
         }
         destination = (
-            f"gs://onboarding-brandsol-customer-bucket-1/tests/curated-{test_id}.json"
+            f"gs://zorven-raw-assets/tests/curated-{test_id}.json"
         )
 
         result = run_async(
@@ -826,7 +826,7 @@ class TestGCSAdapterSaveJson:
             "trace_id": str(SAMPLE_TRACE_ID),
         }
         destination = (
-            f"gs://onboarding-brandsol-customer-bucket-1/tests/with-meta-{test_id}.json"
+            f"gs://zorven-raw-assets/tests/with-meta-{test_id}.json"
         )
 
         result = run_async(

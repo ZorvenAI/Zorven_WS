@@ -45,7 +45,7 @@ class CurationNeededEvent(CloudEventBase):
     - metadata: optional dict
     """
 
-    type: str = "brandsol.ingestion.completed.v1"
+    type: str = "zorven.ingestion.completed.v1"
     source: str = "data-ingestion-svc"
 
 
@@ -66,7 +66,7 @@ class CurationCompletedEvent(CloudEventBase):
     - pii_redacted: bool
     """
 
-    type: str = "brandsol.curation.completed.v1"
+    type: str = "zorven.curation.completed.v1"
     source: str = "media-curation-svc"
 
 
@@ -87,5 +87,5 @@ class CurationFailedEvent(CloudEventBase):
     - retry_count: Number of retries
     """
 
-    type: str = "brandsol.curation.failed.v1"
+    type: str = "zorven.curation.failed.v1"
     source: str = "media-curation-svc"

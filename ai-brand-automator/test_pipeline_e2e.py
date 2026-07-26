@@ -73,7 +73,7 @@ def send_raw_ingestion_event():
             "tenant_id": tenant_id,
             "file_id": file_id,
             "trace_id": trace_id,
-            "gcs_uri": "gs://onboarding-bucket1/customer-1/test-document.txt",
+            "gcs_uri": "gs://zorven-raw-assets/customer-1/test-document.txt",
             "content_type": "text/plain",
             "file_size": 1024,
             "metadata": {
@@ -130,7 +130,7 @@ def send_curation_event():
             "tenant_id": tenant_id,
             "file_id": file_id,
             "trace_id": trace_id,
-            "gcs_uri": "gs://onboarding-bucket1/customer-1/test-document.txt",
+            "gcs_uri": "gs://zorven-raw-assets/customer-1/test-document.txt",
             "content_type": "text/plain",
             "language_code": "en",
             "metadata": {

@@ -69,7 +69,7 @@ All prefixed with `ODOO_MCP_`:
 - `RAG_SERVICE_URL` — default http://localhost:8070 (HTTP fallback)
 - `RAG_ENABLED` — default false
 - `DATABASE_URL` — Neon DB URL for tenant → data store resolution (read-only)
-- `VERTEX_AI_PROJECT_ID` — default brandsol-project
+- `VERTEX_AI_PROJECT_ID` — default zorven-503517
 - `VERTEX_AI_LOCATION` — default global
 - `VERTEX_AI_DATA_STORE_ID` — default prevision-rag-dev (fallback)
 - `VERTEX_AI_MOCK_MODE` — default false

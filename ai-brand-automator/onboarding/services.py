@@ -248,7 +248,7 @@ class OnboardingPipelineService:
         if tenant:
             return tenant.get_raw_bucket()
         config = getattr(settings, "DATA_INGESTION", {})
-        return config.get("GCP_BUCKET_NAME", "onboarding-brandsol-customer-bucket-1")
+        return config.get("GCP_BUCKET_NAME", "zorven-raw-assets")
 
     def retry_asset_pipeline(self, asset: BrandAsset) -> Optional[str]:
         """

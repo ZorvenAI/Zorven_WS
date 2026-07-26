@@ -40,9 +40,9 @@ def integration_storage():
     """Create a mock storage with some pre-populated files."""
     storage = MockStoragePort()
     # Add some test files to the landing zone
-    storage.add_file("gs://onboarding-bucket1/_landing/tenant-a/video1.mp4")
-    storage.add_file("gs://onboarding-bucket1/_landing/tenant-b/image1.jpg")
-    storage.add_file("gs://onboarding-bucket1/_landing/shared/document.pdf")
+    storage.add_file("gs://zorven-raw-assets/_landing/tenant-a/video1.mp4")
+    storage.add_file("gs://zorven-raw-assets/_landing/tenant-b/image1.jpg")
+    storage.add_file("gs://zorven-raw-assets/_landing/shared/document.pdf")
     return storage
 
 
@@ -82,7 +82,7 @@ def integration_service(integration_storage, integration_cache, integration_prod
 
 def create_test_event(
     tenant_id: str = "tenant-123",
-    file_path: str = "gs://onboarding-bucket1/_landing/test.mp4",
+    file_path: str = "gs://zorven-raw-assets/_landing/test.mp4",
     source: EventSource = EventSource.FRONTEND_UPLOAD,
 ) -> IngestionEvent:
     """Helper to create test ingestion events."""
@@ -116,7 +116,7 @@ class TestEndToEndPipeline:
         # Create an event for a file that exists
         event = create_test_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+            file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
         )
 
         # Process the event
@@ -159,11 +159,11 @@ class TestEndToEndPipeline:
         events = [
             create_test_event(
                 tenant_id="tenant-a",
-                file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+                file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
             ),
             create_test_event(
                 tenant_id="tenant-b",
-                file_path="gs://onboarding-bucket1/_landing/tenant-b/image1.jpg",
+                file_path="gs://zorven-raw-assets/_landing/tenant-b/image1.jpg",
             ),
         ]
 
@@ -189,7 +189,7 @@ class TestEndToEndPipeline:
         """Test that destination paths include date partitioning."""
         event = create_test_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+            file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
         )
         # Set specific timestamp for predictable path
         event = IngestionEvent(
@@ -222,7 +222,7 @@ class TestDeduplicationFlow:
         """Test that duplicate events are properly rejected."""
         event = create_test_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+            file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
         )
 
         # Process first time - should succeed
@@ -232,14 +232,14 @@ class TestDeduplicationFlow:
         # Create same event ID for second attempt
         # Need to re-add file since it was moved
         integration_storage.add_file(
-            "gs://onboarding-bucket1/_landing/tenant-a/video1.mp4"
+            "gs://zorven-raw-assets/_landing/tenant-a/video1.mp4"
         )
 
         duplicate_event = IngestionEvent(
             event_id=event.event_id,  # Same event ID
             trace_id=uuid4(),  # Different trace
             tenant_id=event.tenant_id,
-            file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+            file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
             file_type=event.file_type,
             timestamp=datetime.utcnow(),
             source=event.source,
@@ -258,7 +258,7 @@ class TestDeduplicationFlow:
         # Create two events for same file but different event IDs
         event1 = create_test_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+            file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
         )
 
         # Process first event
@@ -266,10 +266,10 @@ class TestDeduplicationFlow:
         assert result1.status == ProcessingStatus.RAW_STORED
 
         # Add file back and create second event with different ID
-        integration_storage.add_file("gs://onboarding-bucket1/_landing/new-video.mp4")
+        integration_storage.add_file("gs://zorven-raw-assets/_landing/new-video.mp4")
         event2 = create_test_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/new-video.mp4",
+            file_path="gs://zorven-raw-assets/_landing/new-video.mp4",
         )
 
         # Should succeed with different event ID
@@ -290,7 +290,7 @@ class TestErrorHandlingIntegration:
     ):
         """Test the flow when a file is missing from landing zone."""
         event = create_test_event(
-            file_path="gs://onboarding-bucket1/_landing/nonexistent.mp4"
+            file_path="gs://zorven-raw-assets/_landing/nonexistent.mp4"
         )
 
         # Should raise NonRetryableError (wrapping FileNotFoundInLandingError)
@@ -308,7 +308,7 @@ class TestErrorHandlingIntegration:
         """Test that process_event_with_retry properly handles duplicates."""
         event = create_test_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+            file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
         )
 
         # First attempt should succeed
@@ -318,13 +318,13 @@ class TestErrorHandlingIntegration:
 
         # Re-add file and create duplicate
         integration_storage.add_file(
-            "gs://onboarding-bucket1/_landing/tenant-a/video1.mp4"
+            "gs://zorven-raw-assets/_landing/tenant-a/video1.mp4"
         )
         duplicate_event = IngestionEvent(
             event_id=event.event_id,
             trace_id=uuid4(),
             tenant_id=event.tenant_id,
-            file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+            file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
             file_type=event.file_type,
             timestamp=datetime.utcnow(),
             source=event.source,
@@ -389,7 +389,7 @@ class TestStatusTrackingIntegration:
         """Test that status progresses correctly on successful processing."""
         event = create_test_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+            file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
         )
 
         # Process the event
@@ -404,7 +404,7 @@ class TestStatusTrackingIntegration:
         """Test that status is set to FAILED on processing errors."""
         # Create event for non-existent file
         event = create_test_event(
-            file_path="gs://onboarding-bucket1/_landing/missing.mp4"
+            file_path="gs://zorven-raw-assets/_landing/missing.mp4"
         )
 
         # Process should fail with NonRetryableError
@@ -432,7 +432,7 @@ class TestConsumerServiceIntegration:
         # Add events to consumer
         event1 = create_test_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+            file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
         )
         integration_consumer.events.append(event1)
 
@@ -460,11 +460,11 @@ class TestConsumerServiceIntegration:
         events = [
             create_test_event(
                 tenant_id="tenant-a",
-                file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+                file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
             ),
             create_test_event(
                 tenant_id="tenant-b",
-                file_path="gs://onboarding-bucket1/_landing/tenant-b/image1.jpg",
+                file_path="gs://zorven-raw-assets/_landing/tenant-b/image1.jpg",
             ),
         ]
         consumer.events.extend(events)
@@ -737,11 +737,11 @@ class TestMultiTenantIntegration:
         # Process events for different tenants
         event_a = create_test_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+            file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
         )
         event_b = create_test_event(
             tenant_id="tenant-b",
-            file_path="gs://onboarding-bucket1/_landing/tenant-b/image1.jpg",
+            file_path="gs://zorven-raw-assets/_landing/tenant-b/image1.jpg",
         )
 
         result_a = service.process_event(event_a)
@@ -768,12 +768,12 @@ class TestMultiTenantIntegration:
 
         # Add file for tenant with uppercase
         integration_storage.add_file(
-            "gs://onboarding-bucket1/_landing/TENANT-C/file.mp4"
+            "gs://zorven-raw-assets/_landing/TENANT-C/file.mp4"
         )
 
         event = create_test_event(
             tenant_id="TENANT-C",  # Uppercase
-            file_path="gs://onboarding-bucket1/_landing/TENANT-C/file.mp4",
+            file_path="gs://zorven-raw-assets/_landing/TENANT-C/file.mp4",
         )
 
         result = service.process_event(event)
@@ -800,7 +800,7 @@ class TestIdempotencyIntegration:
         """Test that reprocessing the same event doesn't create duplicates."""
         event = create_test_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+            file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
         )
 
         # Process first time
@@ -809,7 +809,7 @@ class TestIdempotencyIntegration:
 
         # Try to process again
         integration_storage.add_file(
-            "gs://onboarding-bucket1/_landing/tenant-a/video1.mp4"
+            "gs://zorven-raw-assets/_landing/tenant-a/video1.mp4"
         )
 
         with pytest.raises(DuplicateEventError):
@@ -818,7 +818,7 @@ class TestIdempotencyIntegration:
                     event_id=event.event_id,  # Same ID
                     trace_id=uuid4(),
                     tenant_id=event.tenant_id,
-                    file_path="gs://onboarding-bucket1/_landing/tenant-a/video1.mp4",
+                    file_path="gs://zorven-raw-assets/_landing/tenant-a/video1.mp4",
                     file_type=event.file_type,
                     timestamp=datetime.utcnow(),
                     source=event.source,

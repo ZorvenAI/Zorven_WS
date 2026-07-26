@@ -102,7 +102,7 @@ class TenantGCSService:
         try:
             from google.cloud import storage as gcs
 
-            project_id = config("GCP_PROJECT_ID", default="brandsol")
+            project_id = config("GCP_PROJECT_ID", default="zorven-503517")
 
             if credentials_path:
                 from google.oauth2 import service_account
@@ -167,7 +167,7 @@ class TenantVertexAIService:
     """
 
     def __init__(self):
-        self.project_id = config("VERTEX_AI_PROJECT_ID", default="brandsol-project")
+        self.project_id = config("VERTEX_AI_PROJECT_ID", default="zorven-503517")
         self.location = config("VERTEX_AI_LOCATION", default="global")
         self._client = None
 

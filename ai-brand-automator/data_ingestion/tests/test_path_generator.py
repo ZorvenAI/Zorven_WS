@@ -57,8 +57,8 @@ class TestParseGcsUri:
 
     def test_valid_gcs_uri_landing_zone(self):
         """Test parsing a landing zone URI."""
-        bucket, blob = parse_gcs_uri("gs://onboarding-bucket1/_landing/video.mp4")
-        assert bucket == "onboarding-bucket1"
+        bucket, blob = parse_gcs_uri("gs://zorven-raw-assets/_landing/video.mp4")
+        assert bucket == "zorven-raw-assets"
         assert blob == "_landing/video.mp4"
 
     def test_nested_path(self):
@@ -146,11 +146,11 @@ class TestGenerateRawPath:
         """Test basic path generation."""
         result = generate_raw_path(
             tenant_id="tenant-123",
-            source_path="gs://onboarding-bucket1/_landing/video.mp4",
+            source_path="gs://zorven-raw-assets/_landing/video.mp4",
             timestamp=datetime(2026, 1, 29, 14, 30, 0),
         )
 
-        assert result == "gs://onboarding-bucket1/tenant-123/raw/2026/01/29/video.mp4"
+        assert result == "gs://zorven-raw-assets/tenant-123/raw/2026/01/29/video.mp4"
 
     def test_preserves_filename(self):
         """Test that original filename is preserved."""

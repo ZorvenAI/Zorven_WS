@@ -24,8 +24,8 @@ PORT = "8000"
 DJANGO_SETTINGS_MODULE = "brand_automator.settings"
 PYTHONUNBUFFERED = "1"
 # Multi-tenancy default GCS buckets (tenants can override)
-RAW_GCP_BUCKET_NAME = "onboarding-bucket1"
-CURATION_GCP_BUCKET_NAME = "brandsol-curation-bucket"
+RAW_GCP_BUCKET_NAME = "zorven-raw-assets"
+CURATION_GCP_BUCKET_NAME = "zorven-curated-assets"
 # Multi-tenancy: GCS bucket auto-provisioning
 GCS_AUTO_PROVISION = "true"
-GCP_PROJECT_ID = "brandsol"
+GCP_PROJECT_ID = "zorven-503517"

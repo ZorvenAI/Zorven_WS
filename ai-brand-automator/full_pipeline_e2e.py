@@ -12,7 +12,7 @@ Tests the complete flow from client request through:
 Prerequisites:
 - Docker containers running (docker-compose up)
 - Valid GCP credentials in credentials/gcs-credentials.json
-- Test bucket: onboarding-brandsol-customer-bucket-1
+- Test bucket: zorven-raw-assets
 - Vertex AI Discovery Engine configured
 
 Run:
@@ -31,8 +31,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # GCP Configuration
-GCP_PROJECT_ID = "brandsol-project"
-GCS_BUCKET = "onboarding-brandsol-customer-bucket-1"
+GCP_PROJECT_ID = "zorven-503517"
+GCS_BUCKET = "zorven-raw-assets"
 CREDENTIALS_PATH = "credentials/gcs-credentials.json"
 
 # Service URLs
