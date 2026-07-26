@@ -801,9 +801,7 @@ class TestGCSAdapterSaveJson:
             "content": "Test curated document",
             "metadata": {"source": "test"},
         }
-        destination = (
-            f"gs://zorven-raw-assets/tests/curated-{test_id}.json"
-        )
+        destination = f"gs://zorven-raw-assets/tests/curated-{test_id}.json"
 
         result = run_async(
             gcs_adapter.save_json(
@@ -825,9 +823,7 @@ class TestGCSAdapterSaveJson:
             "tenant_id": SAMPLE_TENANT_ID,
             "trace_id": str(SAMPLE_TRACE_ID),
         }
-        destination = (
-            f"gs://zorven-raw-assets/tests/with-meta-{test_id}.json"
-        )
+        destination = f"gs://zorven-raw-assets/tests/with-meta-{test_id}.json"
 
         result = run_async(
             gcs_adapter.save_json(
