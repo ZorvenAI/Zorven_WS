@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop, bugfixes/**]
+    branches: [main, develop, development_main, bugfixes/**]
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, development_main]
 
 jobs:
   # Backend Tests
@@ -393,7 +393,7 @@ jobs:
   build-images:
     runs-on: ubuntu-latest
     needs: [backend-tests, test-media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, odoo-mcp-server-tests, odoo-worker-tests, frontend-tests, integration-tests]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/development_main'
     
     steps:
       - uses: actions/checkout@v3
