@@ -864,6 +864,24 @@ services:
     networks:
       - app-network
 
+  # --- Auto-Update (Watchtower) ---
+  # Monitors GHCR for new image digests and restarts containers automatically.
+  # When a new :development_main image is pushed, Watchtower pulls it and recreates the container.
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: zorven-watchtower
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_LABEL_ENABLE=false
+      - WATCHTOWER_INCLUDE_STOPPED=false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.docker/config.json:/config.json:ro
+    restart: unless-stopped
+    networks:
+      - app-network
+
 volumes:
   redis_volume:
   mlflow_postgres_volume:
