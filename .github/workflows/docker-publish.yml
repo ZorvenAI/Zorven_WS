@@ -87,6 +87,7 @@ env:
 permissions:
   contents: read
   packages: write
+  pull-requests: read
 
 jobs:
   # --------------------------------------------------------------------------
