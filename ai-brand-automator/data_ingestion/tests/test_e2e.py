@@ -48,38 +48,38 @@ def e2e_storage() -> MockStoragePort:
     test_files = [
         # Frontend uploads
         (
-            "gs://onboarding-bucket1/_landing/frontend/tenant-a/profile_video.mp4",
+            "gs://zorven-raw-assets/_landing/frontend/tenant-a/profile_video.mp4",
             b"video_content_a",
         ),
         (
-            "gs://onboarding-bucket1/_landing/frontend/tenant-a/logo.png",
+            "gs://zorven-raw-assets/_landing/frontend/tenant-a/logo.png",
             b"image_content_a",
         ),
         (
-            "gs://onboarding-bucket1/_landing/frontend/tenant-b/promo_video.mp4",
+            "gs://zorven-raw-assets/_landing/frontend/tenant-b/promo_video.mp4",
             b"video_content_b",
         ),
         # API uploads
         (
-            "gs://onboarding-bucket1/_landing/api/tenant-c/bulk_upload_1.mp4",
+            "gs://zorven-raw-assets/_landing/api/tenant-c/bulk_upload_1.mp4",
             b"video_bulk_1",
         ),
         (
-            "gs://onboarding-bucket1/_landing/api/tenant-c/bulk_upload_2.mp4",
+            "gs://zorven-raw-assets/_landing/api/tenant-c/bulk_upload_2.mp4",
             b"video_bulk_2",
         ),
         # Batch imports
         (
-            "gs://onboarding-bucket1/_landing/batch/tenant-d/batch_file.mp4",
+            "gs://zorven-raw-assets/_landing/batch/tenant-d/batch_file.mp4",
             b"batch_content",
         ),
         # Edge cases
         (
-            "gs://onboarding-bucket1/_landing/special/tenant-e/file with spaces.mp4",
+            "gs://zorven-raw-assets/_landing/special/tenant-e/file with spaces.mp4",
             b"space_file",
         ),
         (
-            "gs://onboarding-bucket1/_landing/special/tenant-e/файл_unicode.mp4",
+            "gs://zorven-raw-assets/_landing/special/tenant-e/файл_unicode.mp4",
             b"unicode_file",
         ),
     ]
@@ -169,7 +169,7 @@ class TestE2ECompleteUploadFlow:
         # Arrange - file already in landing (from fixture)
         event = create_ingestion_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/frontend/tenant-a/profile_video.mp4",
+            file_path="gs://zorven-raw-assets/_landing/frontend/tenant-a/profile_video.mp4",
             source=EventSource.FRONTEND_UPLOAD,
             metadata={"uploaded_by": "user-123", "original_filename": "my_video.mp4"},
         )
@@ -224,12 +224,12 @@ class TestE2ECompleteUploadFlow:
         events = [
             create_ingestion_event(
                 tenant_id="tenant-c",
-                file_path="gs://onboarding-bucket1/_landing/api/tenant-c/bulk_upload_1.mp4",
+                file_path="gs://zorven-raw-assets/_landing/api/tenant-c/bulk_upload_1.mp4",
                 source=EventSource.API_INTEGRATION,
             ),
             create_ingestion_event(
                 tenant_id="tenant-c",
-                file_path="gs://onboarding-bucket1/_landing/api/tenant-c/bulk_upload_2.mp4",
+                file_path="gs://zorven-raw-assets/_landing/api/tenant-c/bulk_upload_2.mp4",
                 source=EventSource.API_INTEGRATION,
             ),
         ]
@@ -272,11 +272,11 @@ class TestE2EKafkaConsumerFlow:
         events = [
             create_ingestion_event(
                 tenant_id="tenant-a",
-                file_path="gs://onboarding-bucket1/_landing/frontend/tenant-a/profile_video.mp4",
+                file_path="gs://zorven-raw-assets/_landing/frontend/tenant-a/profile_video.mp4",
             ),
             create_ingestion_event(
                 tenant_id="tenant-b",
-                file_path="gs://onboarding-bucket1/_landing/frontend/tenant-b/promo_video.mp4",
+                file_path="gs://zorven-raw-assets/_landing/frontend/tenant-b/promo_video.mp4",
             ),
         ]
         e2e_consumer.events.extend(events)
@@ -313,7 +313,7 @@ class TestE2EKafkaConsumerFlow:
         # Arrange - event for non-existent file
         event = create_ingestion_event(
             tenant_id="tenant-x",
-            file_path="gs://onboarding-bucket1/_landing/nonexistent.mp4",
+            file_path="gs://zorven-raw-assets/_landing/nonexistent.mp4",
         )
         e2e_consumer.events.append(event)
 
@@ -369,7 +369,7 @@ class TestE2EDeduplication:
         # Arrange
         event = create_ingestion_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/frontend/tenant-a/profile_video.mp4",
+            file_path="gs://zorven-raw-assets/_landing/frontend/tenant-a/profile_video.mp4",
         )
 
         # Act - first processing
@@ -411,7 +411,7 @@ class TestE2EDeduplication:
         """
         event = create_ingestion_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/frontend/tenant-a/profile_video.mp4",
+            file_path="gs://zorven-raw-assets/_landing/frontend/tenant-a/profile_video.mp4",
         )
 
         # First attempt
@@ -460,11 +460,11 @@ class TestE2EMultiTenantIsolation:
         tenant_events = {
             "tenant-a": create_ingestion_event(
                 tenant_id="tenant-a",
-                file_path="gs://onboarding-bucket1/_landing/frontend/tenant-a/profile_video.mp4",
+                file_path="gs://zorven-raw-assets/_landing/frontend/tenant-a/profile_video.mp4",
             ),
             "tenant-b": create_ingestion_event(
                 tenant_id="tenant-b",
-                file_path="gs://onboarding-bucket1/_landing/frontend/tenant-b/promo_video.mp4",
+                file_path="gs://zorven-raw-assets/_landing/frontend/tenant-b/promo_video.mp4",
             ),
         }
 
@@ -511,11 +511,11 @@ class TestE2EMultiTenantIsolation:
         # Arrange
         event_a = create_ingestion_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/frontend/tenant-a/profile_video.mp4",
+            file_path="gs://zorven-raw-assets/_landing/frontend/tenant-a/profile_video.mp4",
         )
         event_b = create_ingestion_event(
             tenant_id="tenant-b",
-            file_path="gs://onboarding-bucket1/_landing/frontend/tenant-b/promo_video.mp4",
+            file_path="gs://zorven-raw-assets/_landing/frontend/tenant-b/promo_video.mp4",
         )
 
         # Act - "concurrent" processing
@@ -558,7 +558,7 @@ class TestE2EErrorHandling:
 
         event = create_ingestion_event(
             tenant_id="tenant-x",
-            file_path="gs://onboarding-bucket1/_landing/missing_file.mp4",
+            file_path="gs://zorven-raw-assets/_landing/missing_file.mp4",
         )
 
         # Act
@@ -649,7 +649,7 @@ class TestE2EStatusTracking:
         """
         event = create_ingestion_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/frontend/tenant-a/profile_video.mp4",
+            file_path="gs://zorven-raw-assets/_landing/frontend/tenant-a/profile_video.mp4",
         )
 
         # Act
@@ -671,7 +671,7 @@ class TestE2EStatusTracking:
         """
         event = create_ingestion_event(
             tenant_id="tenant-a",
-            file_path="gs://onboarding-bucket1/_landing/frontend/tenant-a/profile_video.mp4",
+            file_path="gs://zorven-raw-assets/_landing/frontend/tenant-a/profile_video.mp4",
         )
 
         # Act
@@ -702,7 +702,7 @@ class TestE2EEdgeCases:
         """
         event = create_ingestion_event(
             tenant_id="tenant-e",
-            file_path="gs://onboarding-bucket1/_landing/special/tenant-e/file with spaces.mp4",
+            file_path="gs://zorven-raw-assets/_landing/special/tenant-e/file with spaces.mp4",
         )
 
         result = e2e_service.process_event(event)
@@ -718,7 +718,7 @@ class TestE2EEdgeCases:
         """
         event = create_ingestion_event(
             tenant_id="tenant-e",
-            file_path="gs://onboarding-bucket1/_landing/special/tenant-e/файл_unicode.mp4",
+            file_path="gs://zorven-raw-assets/_landing/special/tenant-e/файл_unicode.mp4",
         )
 
         result = e2e_service.process_event(event)
@@ -904,7 +904,7 @@ class TestE2EFullPipelineSimulation:
         """
         # Step 1-2: Simulate frontend upload (file already in storage)
         file_path = (
-            "gs://onboarding-bucket1/_landing/frontend/tenant-a/profile_video.mp4"
+            "gs://zorven-raw-assets/_landing/frontend/tenant-a/profile_video.mp4"
         )
         assert file_path in e2e_storage.files
 

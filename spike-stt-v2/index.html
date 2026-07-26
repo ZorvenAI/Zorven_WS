@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A-01 — STT v2 Spike</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a2e; color: #e0e0e0; padding: 24px;
+    }
+    h1 { color: #00d4ff; margin-bottom: 8px; }
+    h2 { color: #8888cc; margin: 16px 0 8px; font-size: 1.1em; }
+    .controls { display: flex; gap: 12px; margin: 16px 0; flex-wrap: wrap; }
+    button {
+      padding: 10px 20px; border: none; border-radius: 6px;
+      font-size: 14px; cursor: pointer; font-weight: 600;
+    }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-start { background: #00c853; color: #000; }
+    .btn-stop { background: #ff1744; color: #fff; }
+    .btn-reconnect { background: #ff9100; color: #000; }
+    .btn-record { background: #651fff; color: #fff; }
+    .btn-stats { background: #2979ff; color: #fff; }
+    .status {
+      padding: 8px 16px; border-radius: 4px; margin: 8px 0;
+      font-family: monospace; font-size: 13px;
+    }
+    .status-ok { background: #1b5e20; }
+    .status-err { background: #b71c1c; }
+    .status-idle { background: #333; }
+    .config { margin: 12px 0; }
+    .config label { margin-right: 8px; }
+    .config select, .config input {
+      background: #2a2a4a; color: #e0e0e0; border: 1px solid #444;
+      padding: 6px 10px; border-radius: 4px;
+    }
+    #transcript {
+      background: #0d0d1a; border: 1px solid #333; border-radius: 6px;
+      padding: 12px; min-height: 120px; max-height: 300px; overflow-y: auto;
+      font-family: monospace; font-size: 13px; margin: 12px 0;
+      white-space: pre-wrap;
+    }
+    table {
+      width: 100%; border-collapse: collapse; margin: 12px 0;
+      font-size: 13px;
+    }
+    th { background: #2a2a4a; padding: 8px; text-align: left; }
+    td { padding: 6px 8px; border-bottom: 1px solid #222; }
+    .pass { color: #00c853; font-weight: bold; }
+    .marginal { color: #ff9100; font-weight: bold; }
+    .fail { color: #ff1744; font-weight: bold; }
+    #stats-summary {
+      background: #1a1a3a; border: 1px solid #444; border-radius: 6px;
+      padding: 16px; margin: 12px 0; font-family: monospace;
+    }
+    .counter { font-size: 1.2em; color: #00d4ff; margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <h1>A-01 — STT v2 Streaming Latency Spike</h1>
+  <p>Measures end-to-end latency from utterance onset to first partial transcript.</p>
+
+  <div class="config">
+    <label for="recognizer">Recognizer:</label>
+    <select id="recognizer">
+      <option value="oia-spike-en-us">Fixed English (oia-spike-en-us)</option>
+      <option value="oia-spike-auto">Multi-language (oia-spike-auto)</option>
+    </select>
+  </div>
+
+  <div class="controls">
+    <button class="btn-start" id="btnStart" onclick="startSession()">Start Session</button>
+    <button class="btn-stop" id="btnStop" onclick="stopSession()" disabled>Stop</button>
+    <button class="btn-reconnect" id="btnReconnect" onclick="testReconnect()" disabled>Test Reconnect</button>
+    <button class="btn-record" id="btnRecord" onclick="toggleFixtureRecording()">Record Fixture</button>
+    <button class="btn-stats" onclick="showStats()">Show Stats</button>
+  </div>
+
+  <div id="status" class="status status-idle">Idle — click Start to begin</div>
+  <div class="counter">Utterances measured: <span id="utteranceCount">0</span></div>
+
+  <h2>Live Transcript</h2>
+  <div id="transcript"></div>
+
+  <h2>Latency Measurements</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Latency (ms)</th>
+        <th>Speaker</th>
+        <th>Text</th>
+        <th>Stream</th>
+      </tr>
+    </thead>
+    <tbody id="measurementTable"></tbody>
+  </table>
+
+  <div id="stats-summary" style="display:none"></div>
+
+  <script>
+    let ws = null;
+    let audioCtx = null;
+    let workletNode = null;
+    let mediaStream = null;
+    let currentOnsetTs = 0;
+    let utteranceCount = 0;
+    let measurements = [];
+    let fixtureChunks = [];
+    let recordingFixture = false;
+
+    function setStatus(msg, type) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status status-' + type;
+    }
+
+    async function startSession() {
+      const recognizer = document.getElementById('recognizer').value;
+      setStatus('Connecting...', 'idle');
+
+      // Open WebSocket
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${proto}//${location.host}/ws/stt-spike?recognizer=${recognizer}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = async () => {
+        setStatus('Connected — starting microphone...', 'ok');
+        await startAudio();
+        document.getElementById('btnStart').disabled = true;
+        document.getElementById('btnStop').disabled = false;
+        document.getElementById('btnReconnect').disabled = false;
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        handleServerMessage(msg);
+      };
+
+      ws.onclose = () => {
+        setStatus('Disconnected', 'idle');
+        stopAudio();
+        document.getElementById('btnStart').disabled = false;
+        document.getElementById('btnStop').disabled = true;
+        document.getElementById('btnReconnect').disabled = true;
+      };
+
+      ws.onerror = () => {
+        setStatus('WebSocket error', 'err');
+      };
+    }
+
+    async function startAudio() {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+          }
+        });
+
+        audioCtx = new AudioContext({ sampleRate: mediaStream.getAudioTracks()[0].getSettings().sampleRate || 48000 });
+        await audioCtx.audioWorklet.addModule('/worklet.js');
+
+        const source = audioCtx.createMediaStreamSource(mediaStream);
+        workletNode = new AudioWorkletNode(audioCtx, 'stt-worklet-processor');
+
+        // Configure the worklet with the actual sample rate
+        workletNode.port.postMessage({
+          type: 'configure',
+          sampleRate: audioCtx.sampleRate,
+        });
+
+        workletNode.port.onmessage = (event) => {
+          const msg = event.data;
+
+          if (msg.type === 'onset') {
+            currentOnsetTs = msg.performanceNow;
+          } else if (msg.type === 'silence') {
+            // Reset onset for next utterance
+          } else if (msg.type === 'audio') {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              // Prepend onset timestamp (8 bytes float64)
+              const tsBuf = new ArrayBuffer(8);
+              new Float64Array(tsBuf)[0] = currentOnsetTs || 0;
+              const combined = new Uint8Array(8 + msg.data.length);
+              combined.set(new Uint8Array(tsBuf), 0);
+              combined.set(msg.data, 8);
+              ws.send(combined.buffer);
+            }
+            if (recordingFixture) {
+              fixtureChunks.push(new Uint8Array(msg.data));
+            }
+          }
+        };
+
+        source.connect(workletNode);
+        workletNode.connect(audioCtx.destination);
+        setStatus(`Streaming — sample rate: ${audioCtx.sampleRate}Hz, recognizer: ${document.getElementById('recognizer').value}`, 'ok');
+
+      } catch (err) {
+        setStatus('Microphone error: ' + err.message, 'err');
+      }
+    }
+
+    function stopAudio() {
+      if (workletNode) { workletNode.disconnect(); workletNode = null; }
+      if (audioCtx) { audioCtx.close(); audioCtx = null; }
+      if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+    }
+
+    function stopSession() {
+      stopAudio();
+      if (ws) { ws.close(); ws = null; }
+      setStatus('Session ended', 'idle');
+    }
+
+    function testReconnect() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: 'reconnect' }));
+        setStatus('Reconnect requested...', 'idle');
+      }
+    }
+
+    function handleServerMessage(msg) {
+      const transcript = document.getElementById('transcript');
+
+      if (msg.type === 'transcript.partial') {
+        transcript.textContent = transcript.textContent.replace(/\[partial\].*$/, '') +
+          `[partial] ${msg.text}\n`;
+      } else if (msg.type === 'transcript.final') {
+        transcript.textContent = transcript.textContent.replace(/\[partial\].*$/, '') +
+          `[S${msg.speaker_tag}] ${msg.text}\n`;
+      } else if (msg.type === 'reconnected') {
+        setStatus(`Reconnected — new stream: ${msg.stream_id.substring(0, 8)}`, 'ok');
+        return;
+      }
+
+      // Log latency measurement for partials
+      if (msg.type === 'transcript.partial' && msg.latency_ms > 0) {
+        utteranceCount++;
+        document.getElementById('utteranceCount').textContent = utteranceCount;
+
+        measurements.push({
+          id: utteranceCount,
+          latency_ms: msg.latency_ms,
+          speaker_tag: msg.speaker_tag,
+          text: msg.text.substring(0, 60),
+          stream_id: msg.stream_id ? msg.stream_id.substring(0, 8) : '',
+        });
+
+        // Add to table
+        const row = document.createElement('tr');
+        const cls = msg.latency_ms <= 2000 ? 'pass' : msg.latency_ms <= 3000 ? 'marginal' : 'fail';
+        row.innerHTML = `
+          <td>${utteranceCount}</td>
+          <td class="${cls}">${msg.latency_ms.toFixed(0)}</td>
+          <td>S${msg.speaker_tag}</td>
+          <td>${msg.text.substring(0, 60)}</td>
+          <td>${msg.stream_id ? msg.stream_id.substring(0, 8) : ''}</td>
+        `;
+        document.getElementById('measurementTable').prepend(row);
+      }
+
+      // Auto-scroll transcript
+      transcript.scrollTop = transcript.scrollHeight;
+    }
+
+    function showStats() {
+      if (measurements.length === 0) {
+        alert('No measurements yet. Start a session and speak first.');
+        return;
+      }
+
+      const latencies = measurements.map(m => m.latency_ms).sort((a, b) => a - b);
+      const n = latencies.length;
+      const p50 = latencies[Math.floor(n * 0.5)];
+      const p95 = latencies[Math.floor(n * 0.95)];
+      const min = latencies[0];
+      const max = latencies[n - 1];
+      const mean = latencies.reduce((a, b) => a + b, 0) / n;
+
+      let verdict = 'PASS';
+      if (p95 > 2000 && p50 <= 2000) verdict = 'MARGINAL';
+      if (p50 > 2000) verdict = 'FAIL';
+
+      const el = document.getElementById('stats-summary');
+      el.style.display = 'block';
+      el.innerHTML = `
+        <h2>Statistics Summary</h2>
+        <p>Samples: ${n}</p>
+        <p>p50: ${p50.toFixed(0)}ms | p95: ${p95.toFixed(0)}ms</p>
+        <p>Min: ${min.toFixed(0)}ms | Max: ${max.toFixed(0)}ms | Mean: ${mean.toFixed(0)}ms</p>
+        <p>Verdict: <span class="${verdict.toLowerCase()}">${verdict}</span> (budget: 2000ms)</p>
+      `;
+    }
+
+    function toggleFixtureRecording() {
+      const btn = document.getElementById('btnRecord');
+      if (!recordingFixture) {
+        fixtureChunks = [];
+        recordingFixture = true;
+        btn.textContent = 'Stop Recording Fixture';
+        btn.style.background = '#ff1744';
+      } else {
+        recordingFixture = false;
+        btn.textContent = 'Record Fixture';
+        btn.style.background = '#651fff';
+        downloadFixture();
+      }
+    }
+
+    function downloadFixture() {
+      if (fixtureChunks.length === 0) {
+        alert('No audio recorded');
+        return;
+      }
+
+      // Concatenate all INT16 PCM chunks
+      const totalLen = fixtureChunks.reduce((sum, c) => sum + c.length, 0);
+      const pcm = new Uint8Array(totalLen);
+      let offset = 0;
+      for (const chunk of fixtureChunks) {
+        pcm.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      // Build WAV header (16kHz, 16-bit, mono)
+      const sampleRate = 16000;
+      const bitsPerSample = 16;
+      const channels = 1;
+      const dataSize = pcm.length;
+      const header = new ArrayBuffer(44);
+      const view = new DataView(header);
+
+      // RIFF header
+      writeString(view, 0, 'RIFF');
+      view.setUint32(4, 36 + dataSize, true);
+      writeString(view, 8, 'WAVE');
+
+      // fmt chunk
+      writeString(view, 12, 'fmt ');
+      view.setUint32(16, 16, true); // chunk size
+      view.setUint16(20, 1, true);  // PCM format
+      view.setUint16(22, channels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * channels * bitsPerSample / 8, true);
+      view.setUint16(32, channels * bitsPerSample / 8, true);
+      view.setUint16(34, bitsPerSample, true);
+
+      // data chunk
+      writeString(view, 36, 'data');
+      view.setUint32(40, dataSize, true);
+
+      const wav = new Blob([header, pcm], { type: 'audio/wav' });
+      const url = URL.createObjectURL(wav);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'two_speaker_onboarding_sample.wav';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function writeString(view, offset, str) {
+      for (let i = 0; i < str.length; i++) {
+        view.setUint8(offset + i, str.charCodeAt(i));
+      }
+    }
+  </script>
+</body>
+</html>

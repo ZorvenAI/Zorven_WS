@@ -44,7 +44,7 @@ services:
       - app-network
 
   mlflow-server:
-    image: ghcr.io/naveenah/zorven-mlflow-server:latest
+    image: ghcr.io/zorvenai/zorven-mlflow-server:development_main
     container_name: zorven-mlflow
     environment:
       - MLFLOW_BACKEND_STORE_URI=postgresql://mlflow:${MLFLOW_DB_PASSWORD:-mlflow}@mlflow-db:5432/mlflow
@@ -68,7 +68,7 @@ services:
 
   # --- Kong Gateway ---
   kong:
-    image: ghcr.io/naveenah/zorven-kong:latest
+    image: ghcr.io/zorvenai/zorven-kong:development_main
     container_name: zorven-kong
     environment:
       - KONG_DATABASE=off
@@ -98,7 +98,7 @@ services:
 
   # --- Django Backend ---
   backend:
-    image: ghcr.io/naveenah/zorven-backend:latest
+    image: ghcr.io/zorvenai/zorven-backend:development_main
     container_name: zorven-backend
     environment:
       - DEBUG=False
@@ -121,6 +121,26 @@ services:
       - WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}
       - MAILGUN_API_KEY=${MAILGUN_API_KEY:-}
       - MAILGUN_DOMAIN=${MAILGUN_DOMAIN:-}
+      # GCS: mount local ADC to appuser's default gcloud config path.
+      # Do NOT set GOOGLE_APPLICATION_CREDENTIALS — it leaks into
+      # DATA_INGESTION.GCS_CREDENTIALS_PATH and breaks from_service_account_json().
+      - GOOGLE_CLOUD_PROJECT=zorven-503517
+      - GCP_PROJECT_ID=zorven-503517
+      - GS_BUCKET_NAME=zorven-raw-assets
+      # Disable Kafka — use Celery fallback for local Docker Desktop
+      - ONBOARDING_KAFKA_ENABLED=false
+      - KAFKA_CONSUMERS_ENABLED=false
+      - ORCHESTRATION_KAFKA_ENABLED=false
+      # gemini-2.0-flash is deprecated — use 2.5-flash
+      - CURATION_AI_MODEL=gemini-3.5-flash
+    volumes:
+      - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
+      # Hotfix: mount patched processors (gemini-2.0-flash → 2.5-flash + key fix)
+      - ../ai-brand-automator/media_curation/adapters/document_processor.py:/app/media_curation/adapters/document_processor.py:ro
+      - ../ai-brand-automator/media_curation/adapters/media_processors.py:/app/media_curation/adapters/media_processors.py:ro
+      - ../ai-brand-automator/brand_automator/settings.py:/app/brand_automator/settings.py:ro
+      - ../ai-brand-automator/files/services.py:/app/files/services.py:ro
+      - ../ai-brand-automator/onboarding/models.py:/app/onboarding/models.py:ro
     expose:
       - "8001"
     depends_on:
@@ -137,7 +157,7 @@ services:
       - app-network
 
   backend-ws:
-    image: ghcr.io/naveenah/zorven-backend:latest
+    image: ghcr.io/zorvenai/zorven-backend:development_main
     container_name: zorven-backend-ws
     command: ["daphne", "brand_automator.asgi:application", "--port", "8002", "--bind", "0.0.0.0"]
     environment:
@@ -166,7 +186,7 @@ services:
 
   # --- Frontend ---
   frontend:
-    image: ghcr.io/naveenah/zorven-frontend:latest
+    image: ghcr.io/zorvenai/zorven-frontend:development_main
     container_name: zorven-frontend
     environment:
       - NODE_ENV=production
@@ -189,7 +209,7 @@ services:
 
   # --- Celery ---
   celery-worker:
-    image: ghcr.io/naveenah/zorven-celery-worker:latest
+    image: ghcr.io/zorvenai/zorven-celery-worker:development_main
     container_name: zorven-celery-worker
     environment:
       - DEBUG=False
@@ -203,6 +223,25 @@ services:
       - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN}
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN}
       - BACKEND_URL=http://backend:8001
+      # GCS: mount local ADC to appuser's default gcloud config path
+      # Do NOT set GOOGLE_APPLICATION_CREDENTIALS — it would be read by
+      # DATA_INGESTION.GCS_CREDENTIALS_PATH and treated as a service-account key.
+      # Instead, google-cloud-storage discovers ADC automatically from ~/.config/gcloud/
+      - GOOGLE_CLOUD_PROJECT=zorven-503517
+      - GCP_PROJECT_ID=zorven-503517
+      - GS_BUCKET_NAME=zorven-raw-assets
+      # Disable Kafka — use Celery fallback
+      - ONBOARDING_KAFKA_ENABLED=false
+      - KAFKA_CONSUMERS_ENABLED=false
+      # gemini-2.0-flash is deprecated — use 2.5-flash
+      - CURATION_AI_MODEL=gemini-3.5-flash
+    volumes:
+      - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
+      # Hotfix: mount patched processors (gemini-2.0-flash → 2.5-flash + key fix)
+      - ../ai-brand-automator/media_curation/adapters/document_processor.py:/app/media_curation/adapters/document_processor.py:ro
+      - ../ai-brand-automator/media_curation/adapters/media_processors.py:/app/media_curation/adapters/media_processors.py:ro
+      - ../ai-brand-automator/brand_automator/settings.py:/app/brand_automator/settings.py:ro
+      - ../ai-brand-automator/onboarding/tasks.py:/app/onboarding/tasks.py:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -211,7 +250,7 @@ services:
       - app-network
 
   celery-beat:
-    image: ghcr.io/naveenah/zorven-celery-beat:latest
+    image: ghcr.io/zorvenai/zorven-celery-beat:development_main
     container_name: zorven-celery-beat
     environment:
       - DEBUG=False
@@ -228,7 +267,7 @@ services:
 
   # --- Pipeline Orchestrator ---
   orchestrator:
-    image: ghcr.io/naveenah/zorven-orchestrator:latest
+    image: ghcr.io/zorvenai/zorven-orchestrator:development_main
     container_name: zorven-orchestrator
     environment:
       - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN}
@@ -261,7 +300,7 @@ services:
 
   # --- WF1 Agents ---
   discovery-agent:
-    image: ghcr.io/naveenah/zorven-discovery-agent:latest
+    image: ghcr.io/zorvenai/zorven-discovery-agent:development_main
     container_name: zorven-discovery-agent
     environment:
       - DISCOVERY_REDIS_URL=redis://redis:6379/2
@@ -287,7 +326,7 @@ services:
       - app-network
 
   market-research-agent:
-    image: ghcr.io/naveenah/zorven-market-research-agent:latest
+    image: ghcr.io/zorvenai/zorven-market-research-agent:development_main
     container_name: zorven-market-research-agent
     environment:
       - MRA_REDIS_URL=redis://redis:6379/11
@@ -313,7 +352,7 @@ services:
       - app-network
 
   competitor-intel-agent:
-    image: ghcr.io/naveenah/zorven-competitor-intel-agent:latest
+    image: ghcr.io/zorvenai/zorven-competitor-intel-agent:development_main
     container_name: zorven-competitor-intel-agent
     environment:
       - CIA_REDIS_URL=redis://redis:6379/12
@@ -338,7 +377,7 @@ services:
       - app-network
 
   audience-persona-agent:
-    image: ghcr.io/naveenah/zorven-audience-persona-agent:latest
+    image: ghcr.io/zorvenai/zorven-audience-persona-agent:development_main
     container_name: zorven-audience-persona-agent
     environment:
       - APA_REDIS_URL=redis://redis:6379/13
@@ -363,7 +402,7 @@ services:
       - app-network
 
   trend-cultural-agent:
-    image: ghcr.io/naveenah/zorven-trend-cultural-agent:latest
+    image: ghcr.io/zorvenai/zorven-trend-cultural-agent:development_main
     container_name: zorven-trend-cultural-agent
     environment:
       - TCIA_REDIS_URL=redis://redis:6379/14
@@ -389,7 +428,7 @@ services:
       - app-network
 
   voc-agent:
-    image: ghcr.io/naveenah/zorven-voc-agent:latest
+    image: ghcr.io/zorvenai/zorven-voc-agent:development_main
     container_name: zorven-voc-agent
     environment:
       - VOCA_REDIS_URL=redis://redis:6379/15
@@ -415,7 +454,7 @@ services:
       - app-network
 
   intelligence-agent:
-    image: ghcr.io/naveenah/zorven-intelligence-agent:latest
+    image: ghcr.io/zorvenai/zorven-intelligence-agent:development_main
     container_name: zorven-intelligence-agent
     environment:
       - INTELLIGENCE_REDIS_URL=redis://redis:6379/3
@@ -438,7 +477,7 @@ services:
 
   # --- WF2 Agents ---
   brand-positioning-agent:
-    image: ghcr.io/naveenah/zorven-brand-positioning-agent:latest
+    image: ghcr.io/zorvenai/zorven-brand-positioning-agent:development_main
     container_name: zorven-brand-positioning
     environment:
       - BPA_REDIS_URL=redis://redis:6379/16
@@ -461,7 +500,7 @@ services:
       - app-network
 
   brand-architecture-agent:
-    image: ghcr.io/naveenah/zorven-brand-architecture-agent:latest
+    image: ghcr.io/zorvenai/zorven-brand-architecture-agent:development_main
     container_name: zorven-brand-architecture
     environment:
       - BAA_REDIS_URL=redis://redis:6379/17
@@ -484,7 +523,7 @@ services:
       - app-network
 
   brand-personality-agent:
-    image: ghcr.io/naveenah/zorven-brand-personality-agent:latest
+    image: ghcr.io/zorvenai/zorven-brand-personality-agent:development_main
     container_name: zorven-brand-personality
     environment:
       - BPV_REDIS_URL=redis://redis:6379/18
@@ -507,7 +546,7 @@ services:
       - app-network
 
   brand-naming-agent:
-    image: ghcr.io/naveenah/zorven-brand-naming-agent:latest
+    image: ghcr.io/zorvenai/zorven-brand-naming-agent:development_main
     container_name: zorven-brand-naming
     environment:
       - NTA_REDIS_URL=redis://redis:6379/19
@@ -530,7 +569,7 @@ services:
       - app-network
 
   brand-story-agent:
-    image: ghcr.io/naveenah/zorven-brand-story-agent:latest
+    image: ghcr.io/zorvenai/zorven-brand-story-agent:development_main
     container_name: zorven-brand-story
     environment:
       - BSA_REDIS_URL=redis://redis:6379/20
@@ -554,7 +593,7 @@ services:
 
   # --- WF3 Agents ---
   campaign-architecture-agent:
-    image: ghcr.io/naveenah/zorven-campaign-architecture-agent:latest
+    image: ghcr.io/zorvenai/zorven-campaign-architecture-agent:development_main
     container_name: zorven-campaign-architecture
     environment:
       - CAA_REDIS_URL=redis://redis:6379/21
@@ -577,7 +616,7 @@ services:
       - app-network
 
   creative-generation-agent:
-    image: ghcr.io/naveenah/zorven-creative-generation-agent:latest
+    image: ghcr.io/zorvenai/zorven-creative-generation-agent:development_main
     container_name: zorven-creative-generation
     environment:
       - CGA_REDIS_URL=redis://redis:6379/22
@@ -601,7 +640,7 @@ services:
       - app-network
 
   ad-publishing-agent:
-    image: ghcr.io/naveenah/zorven-ad-publishing-agent:latest
+    image: ghcr.io/zorvenai/zorven-ad-publishing-agent:development_main
     container_name: zorven-ad-publishing
     environment:
       - ADPUB_REDIS_URL=redis://redis:6379/23
@@ -625,7 +664,7 @@ services:
       - app-network
 
   campaign-optimization-agent:
-    image: ghcr.io/naveenah/zorven-campaign-optimization-agent:latest
+    image: ghcr.io/zorvenai/zorven-campaign-optimization-agent:development_main
     container_name: zorven-campaign-optimization
     environment:
       - COA_REDIS_URL=redis://redis:6379/24
@@ -650,7 +689,7 @@ services:
       - app-network
 
   intelligence-loop-agent:
-    image: ghcr.io/naveenah/zorven-intelligence-loop-agent:latest
+    image: ghcr.io/zorvenai/zorven-intelligence-loop-agent:development_main
     container_name: zorven-intelligence-loop
     environment:
       - ILA_REDIS_URL=redis://redis:6379/25
@@ -674,7 +713,7 @@ services:
 
   # --- Support Services ---
   chat-titling-worker:
-    image: ghcr.io/naveenah/zorven-chat-titling-worker:latest
+    image: ghcr.io/zorvenai/zorven-chat-titling-worker:development_main
     container_name: zorven-titling-worker
     environment:
       - TITLING_REDIS_URL=redis://redis:6379/4
@@ -698,7 +737,7 @@ services:
       - app-network
 
   content-agent:
-    image: ghcr.io/naveenah/zorven-content-agent:latest
+    image: ghcr.io/zorvenai/zorven-content-agent:development_main
     container_name: zorven-content-agent
     environment:
       - CONTENT_REDIS_URL=redis://redis:6379/5
@@ -722,7 +761,7 @@ services:
       - app-network
 
   social-agent:
-    image: ghcr.io/naveenah/zorven-social-agent:latest
+    image: ghcr.io/zorvenai/zorven-social-agent:development_main
     container_name: zorven-social-agent
     environment:
       - SOCIAL_REDIS_URL=redis://redis:6379/6
@@ -746,7 +785,7 @@ services:
       - app-network
 
   rag-uploader-agent:
-    image: ghcr.io/naveenah/zorven-rag-uploader-agent:latest
+    image: ghcr.io/zorvenai/zorven-rag-uploader-agent:development_main
     container_name: zorven-rag-uploader
     environment:
       - UPLOADER_REDIS_URL=redis://redis:6379/7
@@ -770,7 +809,7 @@ services:
       - app-network
 
   brand-equity-calculator:
-    image: ghcr.io/naveenah/zorven-brand-equity-calculator:latest
+    image: ghcr.io/zorvenai/zorven-brand-equity-calculator:development_main
     container_name: zorven-brand-equity
     environment:
       - BRAND_EQUITY_REDIS_URL=redis://redis:6379/8
@@ -794,7 +833,7 @@ services:
 
   # --- Odoo Integration ---
   odoo-mcp-server:
-    image: ghcr.io/naveenah/zorven-odoo-mcp-server:latest
+    image: ghcr.io/zorvenai/zorven-odoo-mcp-server:development_main
     container_name: zorven-odoo-mcp
     environment:
       - ODOO_MCP_REDIS_URL=redis://redis:6379/9
@@ -815,7 +854,7 @@ services:
       - app-network
 
   odoo-worker-agent:
-    image: ghcr.io/naveenah/zorven-odoo-worker-agent:latest
+    image: ghcr.io/zorvenai/zorven-odoo-worker-agent:development_main
     container_name: zorven-odoo-worker
     environment:
       - ODOO_WORKER_REDIS_URL=redis://redis:6379/10
@@ -839,7 +878,7 @@ services:
 
   # --- Prompt Optimization ---
   prompt-optimization:
-    image: ghcr.io/naveenah/zorven-prompt-optimization:latest
+    image: ghcr.io/zorvenai/zorven-prompt-optimization:development_main
     container_name: zorven-prompt-optimization
     environment:
       - POI_REDIS_URL=redis://redis:6379/26
@@ -860,6 +899,24 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- Auto-Update (Watchtower) ---
+  # Monitors GHCR for new image digests and restarts containers automatically.
+  # When a new :development_main image is pushed, Watchtower pulls it and recreates the container.
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: zorven-watchtower
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_LABEL_ENABLE=false
+      - WATCHTOWER_INCLUDE_STOPPED=false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.docker/config.json:/config.json:ro
     restart: unless-stopped
     networks:
       - app-network

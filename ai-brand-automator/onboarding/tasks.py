@@ -85,6 +85,11 @@ def _update_asset_status(
                     asset.pipeline_error = ""
                     update_fields.append("pipeline_error")
 
+                # Mark asset as processed once curation or indexing succeeds
+                if status in ("curated", "indexed"):
+                    asset.processed = True
+                    update_fields.append("processed")
+
                 asset.save(update_fields=update_fields)
                 logger.info("Updated BrandAsset %s → status=%s", asset.id, status)
                 return True
@@ -354,7 +359,7 @@ def _run_curation(
             curated_bucket
             or config.get("STORAGE", {}).get("CURATED_BUCKET", "")
             or raw_bucket
-            or "brandsol-curation-bucket"
+            or "zorven-curated-assets"
         )
 
         # Build CurationEvent from ingestion result

@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # Vertex AI Search (RAG queries)
-    VERTEX_AI_PROJECT_ID: str = "brandsol-project"
+    VERTEX_AI_PROJECT_ID: str = "zorven-503517"
     VERTEX_AI_LOCATION: str = "global"
     VERTEX_AI_DATA_STORE_ID: str = "prevision-rag-dev"
 
@@ -52,7 +52,7 @@ class Settings(BaseSettings):
 
     # Gemini (answer synthesis)
     GOOGLE_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
     GEMINI_TEMPERATURE: float = 0.3
 
     # Gemini composition retry (Tier 1)

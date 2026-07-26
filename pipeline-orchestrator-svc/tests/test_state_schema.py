@@ -27,7 +27,7 @@ class TestAgentState:
                 "gcs_processed_bucket": "curated/",
                 "rag_data_store_id": "ds-1",
             },
-            "global_config": {"model": "gemini-2.0-flash"},
+            "global_config": {"model": "gemini-3.5-flash"},
             "callback_url": "http://localhost:8001/callback/",
             "available_manifests": [
                 {"pipeline_id": "brand-analysis", "name": "BA", "description": ""}

@@ -287,8 +287,11 @@ def _sync_model_since_checkpoint(
             # ChatMessage: filter via session__tenant
             qs = qs.filter(session__tenant_id=tenant_pk)
 
+    # Use updated_at if available, fall back to created_at (e.g. ChatMessage)
+    ts_field = "updated_at" if hasattr(model_class, "updated_at") else "created_at"
+
     if checkpoint:
-        qs = qs.filter(updated_at__gt=checkpoint)
+        qs = qs.filter(**{f"{ts_field}__gt": checkpoint})
 
     # Apply model-specific filters
     if model_name == "AnalysisJob":
@@ -301,13 +304,13 @@ def _sync_model_since_checkpoint(
     dispatched = 0
     latest_updated = checkpoint
 
-    for i, record in enumerate(qs.order_by("updated_at").iterator(chunk_size=200)):
+    for i, record in enumerate(qs.order_by(ts_field).iterator(chunk_size=200)):
         sync_model_to_rag.apply_async(
             args=[model_name, record.pk, tenant_id],
             countdown=i * 0.1,  # 100ms stagger
         )
         dispatched += 1
-        record_updated = getattr(record, "updated_at", None)
+        record_updated = getattr(record, ts_field, None)
         if record_updated and (
             latest_updated is None or record_updated > latest_updated
         ):

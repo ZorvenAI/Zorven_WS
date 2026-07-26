@@ -47,12 +47,12 @@ def create_gcs_adapter(config: Optional[dict] = None, tenant=None) -> GCSAdapter
         default_bucket = tenant.get_raw_bucket()
     else:
         default_bucket = gcs_config.get(
-            "BUCKET_NAME", config.get("GCP_BUCKET_NAME", "onboarding-bucket1")
+            "BUCKET_NAME", config.get("GCP_BUCKET_NAME", "zorven-raw-assets")
         )
 
     return GCSAdapter(
         project_id=gcs_config.get(
-            "PROJECT_ID", config.get("GCP_PROJECT_ID", "brandsol")
+            "PROJECT_ID", config.get("GCP_PROJECT_ID", "zorven-503517")
         ),
         credentials_path=gcs_config.get(
             "CREDENTIALS_PATH", config.get("GCS_CREDENTIALS_PATH")

@@ -92,7 +92,7 @@ class TestVertexSearchTool:
         """Default data store path when no override is provided."""
         tool = VertexSearchTool()
         path = tool._get_data_store_path("42")
-        assert "projects/brandsol-project" in path
+        assert "projects/zorven-503517" in path
         assert "locations/global" in path
         assert "collections/default_collection" in path
         assert "dataStores/prevision-rag-dev" in path
@@ -107,7 +107,7 @@ class TestVertexSearchTool:
         """Base data store path uses shared default."""
         tool = VertexSearchTool()
         path = tool._get_base_data_store_path()
-        assert "projects/brandsol-project" in path
+        assert "projects/zorven-503517" in path
         assert "dataStores/prevision-rag-dev" in path
 
     @patch("app.nodes.tools.vertex_search_tool.get_redis")

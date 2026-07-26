@@ -34,7 +34,7 @@ def valid_dispatch_payload():
                 },
             ],
             "edges": [["intent_router", "web_research"]],
-            "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+            "global_config": {"model": "gemini-3.5-flash", "temperature": 0.7},
         },
         "input_prompt": "Analyze brand positioning for Acme Corp",
         "input_context": {"company_id": 42},

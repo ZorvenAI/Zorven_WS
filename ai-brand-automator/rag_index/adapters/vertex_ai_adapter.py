@@ -52,11 +52,11 @@ class VertexAIAdapter(VertexAIPort):
             mock_mode: If True, use mock mode without real Vertex AI calls
         """
         self.project_id = project_id or getattr(
-            settings, "VERTEX_AI_PROJECT_ID", "brandsol-project"
+            settings, "VERTEX_AI_PROJECT_ID", "zorven-503517"
         )
         self.location = location or getattr(settings, "VERTEX_AI_LOCATION", "global")
         self.data_store_id = data_store_id or getattr(
-            settings, "VERTEX_AI_DATA_STORE_ID", "prevision-rag-dev"
+            settings, "VERTEX_AI_DATA_STORE_ID", "zorven-rag-dev"
         )
         self.mock_mode = mock_mode or getattr(settings, "VERTEX_AI_MOCK_MODE", False)
         self._client = None

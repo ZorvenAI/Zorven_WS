@@ -180,7 +180,7 @@ class RedisAdapter(CachePort):
             tenant_id=d["tenant_id"],
             dlp_enabled=d.get("dlp_enabled", True),
             dlp_info_types=d.get("dlp_info_types", []),
-            ai_model=d.get("ai_model", "gemini-2.0-flash"),
+            ai_model=d.get("ai_model", "gemini-3.5-flash"),
             max_tokens=d.get("max_tokens", 8192),
             temperature=d.get("temperature", 0.1),
         )

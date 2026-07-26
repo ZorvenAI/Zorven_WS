@@ -9,7 +9,7 @@ name: Publish Docker Images
 
 on:
   push:
-    branches: [main]
+    branches: [main, development_main]
     paths:
       - 'ai-brand-automator/**'
       - 'ai-brand-automator-frontend/**'
@@ -41,7 +41,7 @@ on:
       - 'prompt-optimization-svc/**'
       - 'deployment/docker/**'
   pull_request:
-    branches: [main]
+    branches: [main, development_main]
     paths:
       - 'ai-brand-automator/**'
       - 'ai-brand-automator-frontend/**'
@@ -87,6 +87,7 @@ env:
 permissions:
   contents: read
   packages: write
+  pull-requests: read
 
 jobs:
   # --------------------------------------------------------------------------

@@ -41,7 +41,7 @@ EXPOSE 8000 8443 8001 8444
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD kong health || exit 1
+    CMD ["sh", "-c", "kong health || exit 1"]
 
 # Run custom entrypoint which processes env vars then calls Kong's entrypoint
 USER root

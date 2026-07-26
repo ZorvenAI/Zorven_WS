@@ -15,7 +15,7 @@ bucket = settings.GS_BUCKET_NAME
 print(f"Correct bucket: {bucket}")
 
 # Update all assets with wrong bucket
-updated = BrandAsset.objects.filter(gcs_bucket="brand-automator-assets").update(
+updated = BrandAsset.objects.filter(gcs_bucket="zorven-raw-assets").update(
     gcs_bucket=bucket
 )
 print(f"Updated {updated} assets with correct bucket")

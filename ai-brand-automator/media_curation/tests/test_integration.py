@@ -109,7 +109,7 @@ class TestFactoryIntegration:
             {
                 "STORAGE": {
                     "CREDENTIALS_PATH": credentials_path,
-                    "PROJECT_ID": "brandsol",
+                    "PROJECT_ID": "zorven-503517",
                 }
             }
         )
@@ -369,7 +369,7 @@ class TestCrossComponentIntegration:
             tenant_id=SAMPLE_TENANT_ID,
             dlp_enabled=True,
             dlp_info_types=["EMAIL_ADDRESS", "PHONE_NUMBER"],
-            ai_model="gemini-2.0-flash",
+            ai_model="gemini-3.5-flash",
         )
 
         run_async(cache.set_tenant_config(str(SAMPLE_TENANT_ID), config))
@@ -561,9 +561,9 @@ class TestRealGCSIntegration:
             pytest.skip("GCS credentials not available")
 
         return GCSAdapter(
-            project_id="brandsol-project",
+            project_id="zorven-503517",
             credentials_path=credentials_path,
-            default_bucket="onboarding-brandsol-customer-bucket-1",
+            default_bucket="zorven-raw-assets",
         )
 
     def test_gcs_read_write_roundtrip(self, gcs_adapter):
@@ -572,7 +572,7 @@ class TestRealGCSIntegration:
 
         test_id = str(uuid.uuid4())[:8]
         test_data = {"test": "data", "id": test_id}
-        bucket = "onboarding-brandsol-customer-bucket-1"
+        bucket = "zorven-raw-assets"
         destination = f"gs://{bucket}/tests/integration-{test_id}.json"
 
         # Write
@@ -594,7 +594,7 @@ class TestRealGCSIntegration:
 
     def test_gcs_file_exists_check(self, gcs_adapter):
         """Test file existence checking."""
-        bucket = "onboarding-brandsol-customer-bucket-1"
+        bucket = "zorven-raw-assets"
         # Existing file
         test_file = f"gs://{bucket}/customer-1/customer-1-onboarding-file-example-1.txt"
         exists = run_async(gcs_adapter.exists(test_file))

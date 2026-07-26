@@ -126,7 +126,7 @@ class TenantConfig(BaseModel):
         ]
     )
     custom_pii_patterns: list[dict[str, str]] = Field(default_factory=list)
-    ai_model: str = "gemini-2.0-flash"
+    ai_model: str = "gemini-3.5-flash"
     max_tokens: int = 8192
     temperature: float = 0.1
     preferred_language: str = "en"

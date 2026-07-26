@@ -15,8 +15,8 @@ from google.cloud import storage
 
 def main():
     """Upload sample curated documents to test bucket."""
-    client = storage.Client(project="brandsol-project")
-    bucket = client.bucket("onboarding-brandsol-customer-bucket-1")
+    client = storage.Client(project="zorven-503517")
+    bucket = client.bucket("zorven-raw-assets")
 
     # Sample curated document 1 - Standard document
     doc1 = {

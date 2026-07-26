@@ -194,10 +194,10 @@ def generate_raw_path(
     Examples:
         >>> generate_raw_path(
         ...     tenant_id="customer-1",
-        ...     source_path="gs://onboarding-bucket1/_landing/video.mp4",
+        ...     source_path="gs://zorven-raw-assets/_landing/video.mp4",
         ...     timestamp=datetime(2026, 1, 29, 10, 0, 0)
         ... )
-        'gs://onboarding-bucket1/customer-1/raw/2026/01/29/video.mp4'
+        'gs://zorven-raw-assets/customer-1/raw/2026/01/29/video.mp4'
     """
     # Parse source URI
     source_bucket, object_path = parse_gcs_uri(source_path)

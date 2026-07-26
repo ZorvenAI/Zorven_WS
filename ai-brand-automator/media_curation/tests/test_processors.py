@@ -39,7 +39,7 @@ SAMPLE_FILE_ID = UUID("44444444-4444-4444-4444-444444444444")
 @pytest.fixture
 def sample_document_event():
     """Create a sample document curation event using real GCS file."""
-    bucket = "onboarding-brandsol-customer-bucket-1"
+    bucket = "zorven-raw-assets"
     raw_uri = f"gs://{bucket}/customer-1/customer-1-onboarding-file-example-1.txt"
     return CurationEvent(
         event_id=SAMPLE_EVENT_ID,
@@ -109,7 +109,7 @@ def sample_tenant_config():
         tenant_id=SAMPLE_TENANT_ID,
         dlp_enabled=True,
         dlp_info_types=["EMAIL_ADDRESS", "PHONE_NUMBER"],
-        ai_model="gemini-2.0-flash",
+        ai_model="gemini-3.5-flash",
     )
 
 
@@ -190,9 +190,9 @@ class TestDocumentProcessorProcessing:
             pytest.skip("GCS credentials file not found - skipping real GCS tests")
 
         return GCSAdapter(
-            project_id="brandsol-project",
+            project_id="zorven-503517",
             credentials_path=credentials_path,
-            default_bucket="onboarding-brandsol-customer-bucket-1",
+            default_bucket="zorven-raw-assets",
         )
 
     @pytest.fixture

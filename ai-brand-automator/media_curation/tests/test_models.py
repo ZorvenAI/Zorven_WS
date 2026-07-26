@@ -132,7 +132,7 @@ class TestTenantConfig:
         """Test default tenant config values."""
         config = TenantConfig(tenant_id=sample_tenant_id)
         assert config.dlp_enabled is True
-        assert config.ai_model == "gemini-2.0-flash"
+        assert config.ai_model == "gemini-3.5-flash"
         assert config.max_tokens == 8192
         assert config.temperature == 0.1
 

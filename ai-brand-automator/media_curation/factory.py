@@ -25,7 +25,7 @@ def get_media_curation_config() -> dict:
         Configuration dictionary with defaults
     """
     defaults = {
-        "GCP_PROJECT_ID": "brandsol",
+        "GCP_PROJECT_ID": "zorven-503517",
         "VERTEX_MODEL_NAME": "gemini-1.5-pro",
         "VERTEX_LOCATION": "us-central1",
         "VISION_ENABLED": True,
@@ -234,9 +234,7 @@ def create_storage_adapter(config: Optional[dict] = None, tenant=None):
     if tenant is not None and hasattr(tenant, "get_curated_bucket"):
         default_bucket = tenant.get_curated_bucket()
     else:
-        default_bucket = storage_config.get(
-            "CURATED_BUCKET", "brandsol-curation-bucket"
-        )
+        default_bucket = storage_config.get("CURATED_BUCKET", "zorven-curated-assets")
 
     adapter = GCSAdapter(
         project_id=storage_config.get("GCP_PROJECT_ID", config.get("GCP_PROJECT_ID")),

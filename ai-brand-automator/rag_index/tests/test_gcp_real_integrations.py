@@ -7,7 +7,7 @@ GCSAdapter works correctly with real curated documents.
 Prerequisites:
 - Valid GCP service account credentials in credentials/gcs-credentials.json
 - Sample curated JSON documents uploaded to the test bucket
-- Test bucket: onboarding-brandsol-customer-bucket-1
+- Test bucket: zorven-raw-assets
 
 Run with:
     pytest rag_index/tests/test_gcp_real_integrations.py -v
@@ -59,8 +59,8 @@ def run_async(coro):
 
 
 # Test configuration
-GCP_PROJECT_ID = "brandsol-project"
-TEST_BUCKET = "onboarding-brandsol-customer-bucket-1"
+GCP_PROJECT_ID = "zorven-503517"
+TEST_BUCKET = "zorven-raw-assets"
 TEST_PREFIX = "customer-1/curated"
 
 # Curated document URIs

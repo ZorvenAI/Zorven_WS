@@ -87,7 +87,7 @@ class BrandAssetFactory(DjangoModelFactory):
     gcs_path = factory.LazyAttribute(
         lambda obj: f"assets/{obj.tenant.schema_name}/{obj.file_name}"
     )
-    gcs_bucket = "brand-automator-assets"
+    gcs_bucket = "zorven-raw-assets"
 
     # Metadata
     processed = False

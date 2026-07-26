@@ -42,8 +42,8 @@ WORKER_TOKEN = "yBVV1W8PWGYfKj3WvwrBoofCbWNW0MkMRPkEZKUfboU"
 
 # Google API Key (from backend env)
 GOOGLE_API_KEY = "AIzaSyAyyFMj47QoOUrIU0jIP4WSMC8IWPlc144"
-GCS_PROJECT_ID = "brandsol-project"
-GCS_BUCKET_NAME = "onboarding-brandsol-customer-bucket-1"
+GCS_PROJECT_ID = "zorven-503517"
+GCS_BUCKET_NAME = "zorven-raw-assets"
 
 # Backend service name (used to derive internal Railway hostname)
 BACKEND_SERVICE_NAME = "Prevision-WS"

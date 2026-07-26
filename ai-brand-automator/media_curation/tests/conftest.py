@@ -137,7 +137,7 @@ def sample_tenant_config() -> TenantConfig:
         tenant_id=SAMPLE_TENANT_ID,
         dlp_enabled=True,
         dlp_info_types=["EMAIL_ADDRESS", "PHONE_NUMBER", "US_SSN"],
-        ai_model="gemini-2.0-flash",
+        ai_model="gemini-3.5-flash",
         max_tokens=8192,
         temperature=0.1,
     )
@@ -823,7 +823,7 @@ def sample_curation_needed_event() -> CurationNeededEvent:
     return CurationNeededEvent(
         id=str(SAMPLE_EVENT_ID),
         source="data-ingestion-svc",
-        type="brandsol.ingestion.completed.v1",
+        type="zorven.ingestion.completed.v1",
         datacontenttype="application/json",
         time=datetime.now(timezone.utc),
         subject=f"tenant:{SAMPLE_TENANT_ID}/file:{SAMPLE_FILE_ID}",
@@ -845,7 +845,7 @@ def sample_curation_completed_event() -> CurationCompletedEvent:
     return CurationCompletedEvent(
         id=str(uuid4()),
         source="media-curation-svc",
-        type="brandsol.curation.completed.v1",
+        type="zorven.curation.completed.v1",
         datacontenttype="application/json",
         time=datetime.now(timezone.utc),
         subject=f"tenant:{SAMPLE_TENANT_ID}/file:{SAMPLE_FILE_ID}",
