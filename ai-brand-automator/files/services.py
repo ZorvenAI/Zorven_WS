@@ -329,12 +329,9 @@ class GCSService:
                 import google.auth.transport.requests
 
                 if not self._credentials.token or (
-                    hasattr(self._credentials, "expired")
-                    and self._credentials.expired
+                    hasattr(self._credentials, "expired") and self._credentials.expired
                 ):
-                    self._credentials.refresh(
-                        google.auth.transport.requests.Request()
-                    )
+                    self._credentials.refresh(google.auth.transport.requests.Request())
 
                 sa_email = getattr(
                     settings,
