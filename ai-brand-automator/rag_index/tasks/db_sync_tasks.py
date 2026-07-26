@@ -288,11 +288,7 @@ def _sync_model_since_checkpoint(
             qs = qs.filter(session__tenant_id=tenant_pk)
 
     # Use updated_at if available, fall back to created_at (e.g. ChatMessage)
-    ts_field = (
-        "updated_at"
-        if hasattr(model_class, "updated_at")
-        else "created_at"
-    )
+    ts_field = "updated_at" if hasattr(model_class, "updated_at") else "created_at"
 
     if checkpoint:
         qs = qs.filter(**{f"{ts_field}__gt": checkpoint})

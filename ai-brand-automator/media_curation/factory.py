@@ -234,9 +234,7 @@ def create_storage_adapter(config: Optional[dict] = None, tenant=None):
     if tenant is not None and hasattr(tenant, "get_curated_bucket"):
         default_bucket = tenant.get_curated_bucket()
     else:
-        default_bucket = storage_config.get(
-            "CURATED_BUCKET", "zorven-curated-assets"
-        )
+        default_bucket = storage_config.get("CURATED_BUCKET", "zorven-curated-assets")
 
     adapter = GCSAdapter(
         project_id=storage_config.get("GCP_PROJECT_ID", config.get("GCP_PROJECT_ID")),
