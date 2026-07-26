@@ -5,22 +5,30 @@
 
 // Dynamic API URL that works from any hostname (localhost, network IP, etc.)
 const getBaseApiUrl = (): string => {
-  // Check for explicit env var first (works in both SSR and client)
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  
-  // In browser only - use the same hostname as the current page but port 8000
-  // This is wrapped in try-catch for safety during SSR/static generation
+  // In browser: detect production domain and route to api subdomain
   try {
     if (typeof window !== 'undefined' && window.location) {
       const { protocol, hostname } = window.location;
+      // Production: zorven.ai → api.zorven.ai
+      if (hostname === 'zorven.ai' || hostname === 'www.zorven.ai') {
+        return `${protocol}//api.zorven.ai`;
+      }
+      // Cloud Run direct URL: use the backend Cloud Run URL
+      if (hostname.includes('.run.app')) {
+        return `${protocol}//zorven-backend-977911773818.us-central1.run.app`;
+      }
+      // Local dev: same hostname, port 8000
       return `${protocol}//${hostname}:8000`;
     }
   } catch {
     // Silently fall through to default during SSR
   }
-  
+
+  // Check for explicit env var (SSR context)
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+
   // Default for SSR/static generation
   return 'http://localhost:8000';
 };
