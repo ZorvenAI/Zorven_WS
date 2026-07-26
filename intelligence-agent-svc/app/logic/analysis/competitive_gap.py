@@ -182,7 +182,7 @@ class CompetitiveGapAnalyzer:
                     "{skill_context}", skill_block
                 ).replace("{findings_text}", findings_text)
 
-            model_name = config.get("model", "gemini-2.0-flash")
+            model_name = config.get("model", "gemini-3.5-flash")
             model = gemini_client.GenerativeModel(model_name)
             response = await model.generate_content_async(prompt)
             text = response.text

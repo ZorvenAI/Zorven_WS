@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     PROMPT_FALLBACK_ONLY: bool = False
     KAFKA_BOOTSTRAP_SERVERS: str = ""
     GOOGLE_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
     CORE_API_URL: str = "http://localhost:8001"
     CORE_API_TOKEN: str = "dev-service-token"
     RATE_LIMIT_PER_MINUTE: int = 10

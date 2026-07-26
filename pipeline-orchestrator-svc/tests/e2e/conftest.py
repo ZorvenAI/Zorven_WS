@@ -146,7 +146,7 @@ def brand_analysis_manifest() -> ManifestData:
             ["market_research", "brand_strategist"],
             ["brand_strategist", "report_generator"],
         ],
-        global_config={"model": "gemini-2.0-flash", "temperature": 0.7},
+        global_config={"model": "gemini-3.5-flash", "temperature": 0.7},
     )
 
 
@@ -175,7 +175,7 @@ def iso_brand_equity_manifest() -> ManifestData:
             ["web_research", "valuation_logic"],
             ["valuation_logic", "manager"],
         ],
-        global_config={"model": "gemini-2.0-flash", "temperature": 0.3},
+        global_config={"model": "gemini-3.5-flash", "temperature": 0.3},
     )
 
 
@@ -204,7 +204,7 @@ def competitor_audit_manifest() -> ManifestData:
             ["competitor_research", "gap_analyzer"],
             ["gap_analyzer", "report_generator"],
         ],
-        global_config={"model": "gemini-2.0-flash", "temperature": 0.5},
+        global_config={"model": "gemini-3.5-flash", "temperature": 0.5},
     )
 
 
@@ -227,7 +227,7 @@ def content_strategy_manifest() -> ManifestData:
             ["audience_analyzer", "content_planner"],
             ["content_planner", "calendar_builder"],
         ],
-        global_config={"model": "gemini-2.0-flash", "temperature": 0.7},
+        global_config={"model": "gemini-3.5-flash", "temperature": 0.7},
     )
 
 
@@ -387,7 +387,7 @@ def _brand_analysis_manifest_data() -> dict:
             ["market_research", "brand_strategist"],
             ["brand_strategist", "report_generator"],
         ],
-        "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+        "global_config": {"model": "gemini-3.5-flash", "temperature": 0.7},
     }
 
 
@@ -438,7 +438,7 @@ def make_auto_detect_request(
                         ["web_research", "valuation_logic"],
                         ["valuation_logic", "manager"],
                     ],
-                    "global_config": {"model": "gemini-2.0-flash", "temperature": 0.3},
+                    "global_config": {"model": "gemini-3.5-flash", "temperature": 0.3},
                 },
             ),
             AvailableManifest(
@@ -481,7 +481,7 @@ def make_auto_detect_request(
                         ["competitor_research", "gap_analyzer"],
                         ["gap_analyzer", "report_generator"],
                     ],
-                    "global_config": {"model": "gemini-2.0-flash", "temperature": 0.5},
+                    "global_config": {"model": "gemini-3.5-flash", "temperature": 0.5},
                 },
             ),
             AvailableManifest(
@@ -532,7 +532,7 @@ def make_auto_detect_request(
                         ["audience_analyzer", "content_planner"],
                         ["content_planner", "calendar_builder"],
                     ],
-                    "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+                    "global_config": {"model": "gemini-3.5-flash", "temperature": 0.7},
                 },
             ),
         ],

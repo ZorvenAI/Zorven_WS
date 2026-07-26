@@ -375,7 +375,7 @@ class TestAIGenerationModel:
             prompt="Test",
             response="Response",
         )
-        assert generation.model_used == "gemini-2.0-flash-exp"
+        assert generation.model_used == "gemini-3.5-flash-exp"
 
     def test_processing_time_defaults_to_zero(self, public_tenant):
         """Test processing_time defaults to 0.0"""

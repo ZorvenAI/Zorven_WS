@@ -511,7 +511,7 @@ class CurationHealthView(APIView):
                 components["ai_model"] = {
                     "status": "healthy",
                     "model": config.get("AI_MODEL", {}).get(
-                        "MODEL", "gemini-2.0-flash"
+                        "MODEL", "gemini-3.5-flash"
                     ),
                 }
             else:

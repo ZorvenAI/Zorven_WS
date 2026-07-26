@@ -52,7 +52,7 @@ class Settings(BaseSettings):
 
     # Gemini (answer synthesis)
     GOOGLE_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
     GEMINI_TEMPERATURE: float = 0.3
 
     # Gemini composition retry (Tier 1)

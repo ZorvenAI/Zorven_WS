@@ -172,7 +172,7 @@ class TestBrandAnalysisPipeline:
         # Node-level config
         assert config["focus"] == "market_trends,competitors"
         # Global config merged in
-        assert config["model"] == "gemini-2.0-flash"
+        assert config["model"] == "gemini-3.5-flash"
         assert config["temperature"] == 0.7
 
     @patch("app.services.job_executor.get_redis", new_callable=AsyncMock)

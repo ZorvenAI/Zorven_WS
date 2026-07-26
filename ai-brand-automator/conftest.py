@@ -517,7 +517,7 @@ def sample_manifest_data():
             ["discovery", "intelligence"],
             ["intelligence", "manager"],
         ],
-        "global_config": {"model": "gemini-2.0-flash", "temperature": 0.7},
+        "global_config": {"model": "gemini-3.5-flash", "temperature": 0.7},
     }
 
 

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # Gemini AI (empty = stub mode)
     GOOGLE_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
 
     # Redis (DB 10 — next available after DB 9 odoo-mcp-server)
     REDIS_URL: str = "redis://localhost:6379/10"

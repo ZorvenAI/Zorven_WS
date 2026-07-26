@@ -178,7 +178,7 @@ class BrandAsset(models.Model):
 
     # Storage information
     gcs_path = models.CharField(max_length=500, help_text="Google Cloud Storage path")
-    gcs_bucket = models.CharField(max_length=100, default="brand-automator-assets")
+    gcs_bucket = models.CharField(max_length=100, default="zorven-raw-assets")
 
     # Metadata
     uploaded_at = models.DateTimeField(default=timezone.now)

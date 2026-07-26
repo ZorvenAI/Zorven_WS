@@ -137,7 +137,7 @@ def sample_tenant_config() -> TenantConfig:
         tenant_id=SAMPLE_TENANT_ID,
         dlp_enabled=True,
         dlp_info_types=["EMAIL_ADDRESS", "PHONE_NUMBER", "US_SSN"],
-        ai_model="gemini-2.0-flash",
+        ai_model="gemini-3.5-flash",
         max_tokens=8192,
         temperature=0.1,
     )
