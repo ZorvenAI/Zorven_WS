@@ -1,0 +1,359 @@
+# ==============================================================================
+# Auto-deploy to GCP Cloud Run when images are published to GHCR on main branch.
+# Triggered after "Publish Docker Images" workflow completes successfully.
+#
+# Flow: GHCR :latest images → mirror to Artifact Registry → update Cloud Run
+# Only deploys services whose source code changed (reuses change detection).
+# ==============================================================================
+name: Deploy to GCP Cloud Run
+
+on:
+  workflow_run:
+    workflows: ["Publish Docker Images"]
+    types: [completed]
+    branches: [main]
+
+env:
+  GCP_PROJECT_ID: zorven-503517
+  GCP_REGION: us-central1
+  AR_PREFIX: us-central1-docker.pkg.dev/zorven-503517/zorven
+  GHCR_PREFIX: ghcr.io/zorvenai
+
+permissions:
+  contents: read
+  id-token: write
+  packages: read
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Only proceed if the image build succeeded
+  # --------------------------------------------------------------------------
+  gate:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - run: echo "Publish Docker Images succeeded — proceeding with deployment"
+
+  # --------------------------------------------------------------------------
+  # Detect which services changed (same filters as docker-publish.yml)
+  # --------------------------------------------------------------------------
+  changes:
+    runs-on: ubuntu-latest
+    needs: gate
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      orchestrator: ${{ steps.filter.outputs.orchestrator }}
+      discovery: ${{ steps.filter.outputs.discovery }}
+      intelligence: ${{ steps.filter.outputs.intelligence }}
+      titling: ${{ steps.filter.outputs.titling }}
+      content: ${{ steps.filter.outputs.content }}
+      social: ${{ steps.filter.outputs.social }}
+      rag-uploader: ${{ steps.filter.outputs.rag-uploader }}
+      brand-equity: ${{ steps.filter.outputs.brand-equity }}
+      market-research: ${{ steps.filter.outputs.market-research }}
+      competitor-intel: ${{ steps.filter.outputs.competitor-intel }}
+      audience-persona: ${{ steps.filter.outputs.audience-persona }}
+      trend-cultural: ${{ steps.filter.outputs.trend-cultural }}
+      voc: ${{ steps.filter.outputs.voc }}
+      brand-positioning: ${{ steps.filter.outputs.brand-positioning }}
+      brand-architecture: ${{ steps.filter.outputs.brand-architecture }}
+      brand-personality: ${{ steps.filter.outputs.brand-personality }}
+      brand-naming: ${{ steps.filter.outputs.brand-naming }}
+      brand-story: ${{ steps.filter.outputs.brand-story }}
+      campaign-architecture: ${{ steps.filter.outputs.campaign-architecture }}
+      creative-generation: ${{ steps.filter.outputs.creative-generation }}
+      ad-publishing: ${{ steps.filter.outputs.ad-publishing }}
+      campaign-optimization: ${{ steps.filter.outputs.campaign-optimization }}
+      intelligence-loop: ${{ steps.filter.outputs.intelligence-loop }}
+      odoo-mcp: ${{ steps.filter.outputs.odoo-mcp }}
+      odoo-worker: ${{ steps.filter.outputs.odoo-worker }}
+      prompt-optimization: ${{ steps.filter.outputs.prompt-optimization }}
+      mlflow: ${{ steps.filter.outputs.mlflow }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          base: ${{ github.event.workflow_run.head_sha }}~1
+          ref: ${{ github.event.workflow_run.head_sha }}
+          filters: |
+            backend:
+              - 'ai-brand-automator/**'
+              - 'deployment/docker/backend/**'
+              - 'deployment/docker/celery-worker/**'
+              - 'deployment/docker/celery-beat/**'
+            frontend:
+              - 'ai-brand-automator-frontend/**'
+              - 'deployment/docker/frontend/**'
+            orchestrator:
+              - 'pipeline-orchestrator-svc/**'
+            discovery:
+              - 'discovery-agent-svc/**'
+            intelligence:
+              - 'intelligence-agent-svc/**'
+            titling:
+              - 'chat-titling-worker/**'
+            content:
+              - 'content-agent-service/**'
+            social:
+              - 'social-agent-service/**'
+            rag-uploader:
+              - 'rag-uploader-agent-service/**'
+            brand-equity:
+              - 'brand-equity-calculator-svc/**'
+            market-research:
+              - 'market-research-agent-svc/**'
+            competitor-intel:
+              - 'competitor-intel-agent-svc/**'
+            audience-persona:
+              - 'audience-persona-agent-svc/**'
+            trend-cultural:
+              - 'trend-cultural-agent-svc/**'
+            voc:
+              - 'voc-agent-svc/**'
+            brand-positioning:
+              - 'brand-positioning-agent-svc/**'
+            brand-architecture:
+              - 'brand-architecture-agent-svc/**'
+            brand-personality:
+              - 'brand-personality-agent-svc/**'
+            brand-naming:
+              - 'brand-naming-agent-svc/**'
+            brand-story:
+              - 'brand-story-agent-svc/**'
+            campaign-architecture:
+              - 'campaign-architecture-agent-svc/**'
+            creative-generation:
+              - 'creative-generation-agent-svc/**'
+            ad-publishing:
+              - 'ad-publishing-agent-svc/**'
+            campaign-optimization:
+              - 'campaign-optimization-agent-svc/**'
+            intelligence-loop:
+              - 'intelligence-loop-agent-svc/**'
+            odoo-mcp:
+              - 'odoo-mcp-server-svc/**'
+            odoo-worker:
+              - 'odoo-worker-agent-svc/**'
+            prompt-optimization:
+              - 'prompt-optimization-svc/**'
+            mlflow:
+              - 'deployment/docker/mlflow/**'
+
+  # --------------------------------------------------------------------------
+  # Mirror changed images from GHCR to Artifact Registry, then update Cloud Run
+  # --------------------------------------------------------------------------
+  deploy:
+    runs-on: ubuntu-latest
+    needs: changes
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        include:
+          # Backend (image used by backend + backend-ws)
+          - image: zorven-backend
+            cloud_run_services: zorven-backend,zorven-backend-ws
+            changed: ${{ needs.changes.outputs.backend }}
+          - image: zorven-celery-worker
+            cloud_run_services: zorven-celery-worker
+            changed: ${{ needs.changes.outputs.backend }}
+          - image: zorven-celery-beat
+            cloud_run_services: zorven-celery-beat
+            changed: ${{ needs.changes.outputs.backend }}
+          # Frontend
+          - image: zorven-frontend
+            cloud_run_services: zorven-frontend
+            changed: ${{ needs.changes.outputs.frontend }}
+          # MLflow
+          - image: zorven-mlflow-server
+            cloud_run_services: zorven-mlflow
+            changed: ${{ needs.changes.outputs.mlflow }}
+          # Orchestrator
+          - image: zorven-orchestrator
+            cloud_run_services: zorven-orchestrator
+            changed: ${{ needs.changes.outputs.orchestrator }}
+          # WF1 Agents
+          - image: zorven-discovery-agent
+            cloud_run_services: zorven-discovery-agent
+            changed: ${{ needs.changes.outputs.discovery }}
+          - image: zorven-market-research-agent
+            cloud_run_services: zorven-market-research-agent
+            changed: ${{ needs.changes.outputs.market-research }}
+          - image: zorven-competitor-intel-agent
+            cloud_run_services: zorven-competitor-intel-agent
+            changed: ${{ needs.changes.outputs.competitor-intel }}
+          - image: zorven-audience-persona-agent
+            cloud_run_services: zorven-audience-persona-agent
+            changed: ${{ needs.changes.outputs.audience-persona }}
+          - image: zorven-trend-cultural-agent
+            cloud_run_services: zorven-trend-cultural-agent
+            changed: ${{ needs.changes.outputs.trend-cultural }}
+          - image: zorven-voc-agent
+            cloud_run_services: zorven-voc-agent
+            changed: ${{ needs.changes.outputs.voc }}
+          - image: zorven-intelligence-agent
+            cloud_run_services: zorven-intelligence-agent
+            changed: ${{ needs.changes.outputs.intelligence }}
+          # WF2 Agents
+          - image: zorven-brand-positioning-agent
+            cloud_run_services: zorven-brand-positioning-agent
+            changed: ${{ needs.changes.outputs.brand-positioning }}
+          - image: zorven-brand-architecture-agent
+            cloud_run_services: zorven-brand-architecture-agent
+            changed: ${{ needs.changes.outputs.brand-architecture }}
+          - image: zorven-brand-personality-agent
+            cloud_run_services: zorven-brand-personality-agent
+            changed: ${{ needs.changes.outputs.brand-personality }}
+          - image: zorven-brand-naming-agent
+            cloud_run_services: zorven-brand-naming-agent
+            changed: ${{ needs.changes.outputs.brand-naming }}
+          - image: zorven-brand-story-agent
+            cloud_run_services: zorven-brand-story-agent
+            changed: ${{ needs.changes.outputs.brand-story }}
+          # WF3 Agents
+          - image: zorven-campaign-architecture-agent
+            cloud_run_services: zorven-campaign-architecture-agent
+            changed: ${{ needs.changes.outputs.campaign-architecture }}
+          - image: zorven-creative-generation-agent
+            cloud_run_services: zorven-creative-generation-agent
+            changed: ${{ needs.changes.outputs.creative-generation }}
+          - image: zorven-ad-publishing-agent
+            cloud_run_services: zorven-ad-publishing-agent
+            changed: ${{ needs.changes.outputs.ad-publishing }}
+          - image: zorven-campaign-optimization-agent
+            cloud_run_services: zorven-campaign-optimization-agent
+            changed: ${{ needs.changes.outputs.campaign-optimization }}
+          - image: zorven-intelligence-loop-agent
+            cloud_run_services: zorven-intelligence-loop-agent
+            changed: ${{ needs.changes.outputs.intelligence-loop }}
+          # Support Services
+          - image: zorven-chat-titling-worker
+            cloud_run_services: zorven-chat-titling-worker
+            changed: ${{ needs.changes.outputs.titling }}
+          - image: zorven-content-agent
+            cloud_run_services: zorven-content-agent
+            changed: ${{ needs.changes.outputs.content }}
+          - image: zorven-social-agent
+            cloud_run_services: zorven-social-agent
+            changed: ${{ needs.changes.outputs.social }}
+          - image: zorven-rag-uploader-agent
+            cloud_run_services: zorven-rag-uploader-agent
+            changed: ${{ needs.changes.outputs.rag-uploader }}
+          - image: zorven-brand-equity-calculator
+            cloud_run_services: zorven-brand-equity-calculator
+            changed: ${{ needs.changes.outputs.brand-equity }}
+          # Odoo
+          - image: zorven-odoo-mcp-server
+            cloud_run_services: zorven-odoo-mcp-server
+            changed: ${{ needs.changes.outputs.odoo-mcp }}
+          - image: zorven-odoo-worker-agent
+            cloud_run_services: zorven-odoo-worker-agent
+            changed: ${{ needs.changes.outputs.odoo-worker }}
+          # Prompt Optimization
+          - image: zorven-prompt-optimization
+            cloud_run_services: zorven-prompt-optimization
+            changed: ${{ needs.changes.outputs.prompt-optimization }}
+
+    steps:
+      - name: Skip if unchanged
+        if: matrix.changed != 'true'
+        run: echo "Skipping ${{ matrix.image }} — no changes detected"
+
+      # Authenticate to GCP
+      - name: Authenticate to Google Cloud
+        if: matrix.changed == 'true'
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Set up Cloud SDK
+        if: matrix.changed == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+
+      # Configure Docker for both GHCR (pull) and Artifact Registry (push)
+      - name: Configure Docker auth
+        if: matrix.changed == 'true'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      # Mirror: pull amd64 from GHCR, tag for AR, push
+      - name: Mirror image to Artifact Registry
+        if: matrix.changed == 'true'
+        run: |
+          echo "Pulling ${{ env.GHCR_PREFIX }}/${{ matrix.image }}:latest..."
+          docker pull --platform linux/amd64 "${{ env.GHCR_PREFIX }}/${{ matrix.image }}:latest"
+          docker tag "${{ env.GHCR_PREFIX }}/${{ matrix.image }}:latest" \
+                     "${{ env.AR_PREFIX }}/${{ matrix.image }}:latest"
+          echo "Pushing to Artifact Registry..."
+          docker push "${{ env.AR_PREFIX }}/${{ matrix.image }}:latest"
+
+      # Run migrations if backend changed (before deploying backend services)
+      - name: Run database migrations
+        if: matrix.changed == 'true' && matrix.image == 'zorven-backend'
+        run: |
+          echo "Running database migrations..."
+          gcloud run jobs execute zorven-migrations \
+            --region="${{ env.GCP_REGION }}" \
+            --wait \
+            --quiet || echo "Warning: Migration job failed or not found"
+
+      # Update Cloud Run services with new image
+      - name: Deploy to Cloud Run
+        if: matrix.changed == 'true'
+        run: |
+          IFS=',' read -ra SERVICES <<< "${{ matrix.cloud_run_services }}"
+          for svc in "${SERVICES[@]}"; do
+            echo "Deploying ${svc}..."
+            gcloud run services update "${svc}" \
+              --region="${{ env.GCP_REGION }}" \
+              --image="${{ env.AR_PREFIX }}/${{ matrix.image }}:latest" \
+              --quiet
+            echo "Deployed ${svc} successfully"
+          done
+
+      # Verify health after deployment
+      - name: Verify deployment health
+        if: matrix.changed == 'true'
+        run: |
+          IFS=',' read -ra SERVICES <<< "${{ matrix.cloud_run_services }}"
+          for svc in "${SERVICES[@]}"; do
+            URL=$(gcloud run services describe "${svc}" \
+              --region="${{ env.GCP_REGION }}" \
+              --format="value(status.url)")
+            # Try /health first, fall back to /health/ for Django
+            HTTP_CODE=$(curl -sf -o /dev/null -w '%{http_code}' --max-time 60 "${URL}/health" 2>/dev/null || echo "000")
+            if [ "${HTTP_CODE}" -ge 200 ] && [ "${HTTP_CODE}" -lt 400 ]; then
+              echo "  ${svc}: healthy (${HTTP_CODE})"
+            else
+              HTTP_CODE=$(curl -sf -o /dev/null -w '%{http_code}' --max-time 60 "${URL}/health/" 2>/dev/null || echo "000")
+              if [ "${HTTP_CODE}" -ge 200 ] && [ "${HTTP_CODE}" -lt 400 ]; then
+                echo "  ${svc}: healthy (${HTTP_CODE})"
+              else
+                echo "::warning::${svc} health check returned ${HTTP_CODE}"
+              fi
+            fi
+          done
+
+  # --------------------------------------------------------------------------
+  # Summary
+  # --------------------------------------------------------------------------
+  summary:
+    runs-on: ubuntu-latest
+    needs: [changes, deploy]
+    if: always()
+    steps:
+      - name: Deployment summary
+        run: |
+          echo "## GCP Cloud Run Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Triggered by: Publish Docker Images workflow on main" >> $GITHUB_STEP_SUMMARY
+          echo "Commit: ${{ github.event.workflow_run.head_sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the deploy job results above for details." >> $GITHUB_STEP_SUMMARY
