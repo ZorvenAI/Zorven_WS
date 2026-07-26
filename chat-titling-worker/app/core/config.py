@@ -31,7 +31,7 @@ class Settings(BaseSettings):
 
     # Google Gemini (empty = stub mode)
     GOOGLE_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
 
     # Core API callback
     CORE_API_URL: str = "http://localhost:8001"

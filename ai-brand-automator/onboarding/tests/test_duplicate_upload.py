@@ -41,7 +41,7 @@ class TestDuplicateUploadPrevention:
             file_type="image",
             file_size=1024,
             gcs_path=f"_landing/{public_tenant.id}/old123_test-logo.png",
-            gcs_bucket="brand-automator-assets",
+            gcs_bucket="zorven-raw-assets",
             pipeline_status="indexed",
         )
 
@@ -231,7 +231,7 @@ class TestDuplicateConfirmGCSUpload:
             file_type="document",
             file_size=5000,
             gcs_path=f"_landing/{public_tenant.id}/abc123_report.pdf",
-            gcs_bucket="brand-automator-assets",
+            gcs_bucket="zorven-raw-assets",
             pipeline_status="curated",
         )
 

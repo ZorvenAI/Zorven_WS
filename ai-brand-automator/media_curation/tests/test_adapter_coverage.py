@@ -339,9 +339,9 @@ class TestVertexAdapterMockMode:
         """Test model name is set."""
         from media_curation.adapters.vertex_adapter import VertexAIAdapter
 
-        adapter = VertexAIAdapter(model_name="gemini-2.0-flash")
+        adapter = VertexAIAdapter(model_name="gemini-3.5-flash")
 
-        assert adapter.model_name == "gemini-2.0-flash"
+        assert adapter.model_name == "gemini-3.5-flash"
 
 
 class TestVertexAdapterWithMockedClient:

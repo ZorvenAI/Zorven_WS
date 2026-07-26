@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # Gemini AI (empty = stub mode, rule-based only)
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
 
     # CORS origins (comma-separated)
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8000"

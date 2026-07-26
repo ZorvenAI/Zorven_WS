@@ -116,7 +116,7 @@ class Tenant(TenantMixin):
             return self.vertex_ai_data_store_id
         from django.conf import settings
 
-        return getattr(settings, "VERTEX_AI_DATA_STORE_ID", "prevision-rag-dev")
+        return getattr(settings, "VERTEX_AI_DATA_STORE_ID", "zorven-rag-dev")
 
     def save(self, *args, **kwargs):
         # Auto-generate slug from name if not provided

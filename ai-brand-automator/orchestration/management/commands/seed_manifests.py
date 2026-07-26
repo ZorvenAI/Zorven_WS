@@ -69,7 +69,7 @@ class Command(BaseCommand):
                     ["valuation_logic", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.3,
                 },
             },
@@ -112,7 +112,7 @@ class Command(BaseCommand):
                     ["brand_strategist", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.7,
                 },
             },
@@ -159,7 +159,7 @@ class Command(BaseCommand):
                     ["gap_analyzer", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.5,
                 },
             },
@@ -225,7 +225,7 @@ class Command(BaseCommand):
                     ["blog_author", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.7,
                 },
             },
@@ -281,7 +281,7 @@ class Command(BaseCommand):
                     ["social_promoter", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.7,
                 },
             },
@@ -318,7 +318,7 @@ class Command(BaseCommand):
                     ["social_promoter", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.7,
                 },
             },
@@ -366,7 +366,7 @@ class Command(BaseCommand):
                     ["social_promoter", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.7,
                 },
             },
@@ -404,7 +404,7 @@ class Command(BaseCommand):
                     ["blog_author", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.7,
                 },
             },
@@ -444,7 +444,7 @@ class Command(BaseCommand):
                     ["content_planner", "calendar_builder"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.7,
                 },
             },
@@ -474,7 +474,7 @@ class Command(BaseCommand):
                     ["odoo_worker", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.3,
                 },
             },
@@ -514,7 +514,7 @@ class Command(BaseCommand):
                     ["market_research", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.3,
                 },
             },
@@ -554,7 +554,7 @@ class Command(BaseCommand):
                     ["competitor_intelligence", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.3,
                 },
             },
@@ -606,7 +606,7 @@ class Command(BaseCommand):
                     ["competitor_intelligence", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.3,
                 },
             },
@@ -652,7 +652,7 @@ class Command(BaseCommand):
                     ["blog_author", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.5,
                 },
             },
@@ -695,7 +695,7 @@ class Command(BaseCommand):
                     ["audience_persona", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.3,
                 },
             },
@@ -760,7 +760,7 @@ class Command(BaseCommand):
                     ["audience_persona", "manager"],
                 ],
                 "global_config": {
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-3.5-flash",
                     "temperature": 0.3,
                 },
             },

@@ -104,7 +104,7 @@ def ai_generation_stub():
         content_type="brand_strategy",
         prompt="Generate a brand strategy for a tech startup",
         response="Here is a comprehensive brand strategy...",
-        model_used="gemini-2.0-flash-exp",
+        model_used="gemini-3.5-flash-exp",
         tokens_used=1500,
         created_at=datetime(2025, 5, 1, tzinfo=timezone.utc),
         tenant=SimpleNamespace(id=7),
@@ -340,7 +340,7 @@ class TestBuildAIGenerationDoc:
         doc = db_sync.build_document("AIGeneration", ai_generation_stub)
         meta = doc["metadata"]
         assert meta["content_type"] == "brand_strategy"
-        assert meta["model_used"] == "gemini-2.0-flash-exp"
+        assert meta["model_used"] == "gemini-3.5-flash-exp"
         assert meta["tokens_used"] == 1500
 
     def test_extracted_text(self, db_sync, ai_generation_stub):

@@ -21,7 +21,7 @@ class TitleGenerator:
     def __init__(
         self,
         api_key: str,
-        model_name: str = "gemini-2.0-flash",
+        model_name: str = "gemini-3.5-flash",
         skill_context: str = "",
         prompt_loader: Optional[object] = None,
     ) -> None:

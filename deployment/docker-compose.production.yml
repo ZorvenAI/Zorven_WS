@@ -121,6 +121,26 @@ services:
       - WORKER_TOKEN=${WORKER_TOKEN:-dev-worker-token}
       - MAILGUN_API_KEY=${MAILGUN_API_KEY:-}
       - MAILGUN_DOMAIN=${MAILGUN_DOMAIN:-}
+      # GCS: mount local ADC to appuser's default gcloud config path.
+      # Do NOT set GOOGLE_APPLICATION_CREDENTIALS — it leaks into
+      # DATA_INGESTION.GCS_CREDENTIALS_PATH and breaks from_service_account_json().
+      - GOOGLE_CLOUD_PROJECT=zorven-503517
+      - GCP_PROJECT_ID=zorven-503517
+      - GS_BUCKET_NAME=zorven-raw-assets
+      # Disable Kafka — use Celery fallback for local Docker Desktop
+      - ONBOARDING_KAFKA_ENABLED=false
+      - KAFKA_CONSUMERS_ENABLED=false
+      - ORCHESTRATION_KAFKA_ENABLED=false
+      # gemini-2.0-flash is deprecated — use 2.5-flash
+      - CURATION_AI_MODEL=gemini-3.5-flash
+    volumes:
+      - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
+      # Hotfix: mount patched processors (gemini-2.0-flash → 2.5-flash + key fix)
+      - ../ai-brand-automator/media_curation/adapters/document_processor.py:/app/media_curation/adapters/document_processor.py:ro
+      - ../ai-brand-automator/media_curation/adapters/media_processors.py:/app/media_curation/adapters/media_processors.py:ro
+      - ../ai-brand-automator/brand_automator/settings.py:/app/brand_automator/settings.py:ro
+      - ../ai-brand-automator/files/services.py:/app/files/services.py:ro
+      - ../ai-brand-automator/onboarding/models.py:/app/onboarding/models.py:ro
     expose:
       - "8001"
     depends_on:
@@ -203,6 +223,25 @@ services:
       - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN}
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN}
       - BACKEND_URL=http://backend:8001
+      # GCS: mount local ADC to appuser's default gcloud config path
+      # Do NOT set GOOGLE_APPLICATION_CREDENTIALS — it would be read by
+      # DATA_INGESTION.GCS_CREDENTIALS_PATH and treated as a service-account key.
+      # Instead, google-cloud-storage discovers ADC automatically from ~/.config/gcloud/
+      - GOOGLE_CLOUD_PROJECT=zorven-503517
+      - GCP_PROJECT_ID=zorven-503517
+      - GS_BUCKET_NAME=zorven-raw-assets
+      # Disable Kafka — use Celery fallback
+      - ONBOARDING_KAFKA_ENABLED=false
+      - KAFKA_CONSUMERS_ENABLED=false
+      # gemini-2.0-flash is deprecated — use 2.5-flash
+      - CURATION_AI_MODEL=gemini-3.5-flash
+    volumes:
+      - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
+      # Hotfix: mount patched processors (gemini-2.0-flash → 2.5-flash + key fix)
+      - ../ai-brand-automator/media_curation/adapters/document_processor.py:/app/media_curation/adapters/document_processor.py:ro
+      - ../ai-brand-automator/media_curation/adapters/media_processors.py:/app/media_curation/adapters/media_processors.py:ro
+      - ../ai-brand-automator/brand_automator/settings.py:/app/brand_automator/settings.py:ro
+      - ../ai-brand-automator/onboarding/tasks.py:/app/onboarding/tasks.py:ro
     depends_on:
       backend:
         condition: service_healthy

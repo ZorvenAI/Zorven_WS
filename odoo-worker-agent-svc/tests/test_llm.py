@@ -11,7 +11,7 @@ from app.agent.models import PlanOutput, ReflectionOutput
 
 @pytest.fixture
 def gemini_client():
-    return GeminiClient(model_name="gemini-2.0-flash")
+    return GeminiClient(model_name="gemini-3.5-flash")
 
 
 def test_parse_plan_response_valid(gemini_client):

@@ -755,7 +755,7 @@ DATA_INGESTION = {
 # =============================================================================
 VERTEX_AI_PROJECT_ID = config("VERTEX_AI_PROJECT_ID", default="brandsol-project")
 VERTEX_AI_LOCATION = config("VERTEX_AI_LOCATION", default="global")
-VERTEX_AI_DATA_STORE_ID = config("VERTEX_AI_DATA_STORE_ID", default="prevision-rag-dev")
+VERTEX_AI_DATA_STORE_ID = config("VERTEX_AI_DATA_STORE_ID", default="zorven-rag-dev")
 VERTEX_AI_AUTO_PROVISION = config("VERTEX_AI_AUTO_PROVISION", default=False, cast=bool)
 RAG_INDEX_MOCK_MODE = config("VERTEX_AI_MOCK_MODE", default=False, cast=bool)
 GCP_PROJECT_ID = config("GCP_PROJECT_ID", default="brandsol")
@@ -828,7 +828,7 @@ MEDIA_CURATION = {
     # AI Model Configuration (Gemini)
     "AI_MODEL": {
         "PROVIDER": config("CURATION_AI_PROVIDER", default="gemini"),
-        "MODEL_NAME": config("CURATION_AI_MODEL", default="gemini-2.0-flash"),
+        "MODEL": config("CURATION_AI_MODEL", default="gemini-3.5-flash"),
         "MAX_TOKENS": config("CURATION_AI_MAX_TOKENS", default=8192, cast=int),
         "TEMPERATURE": config("CURATION_AI_TEMPERATURE", default=0.1, cast=float),
     },

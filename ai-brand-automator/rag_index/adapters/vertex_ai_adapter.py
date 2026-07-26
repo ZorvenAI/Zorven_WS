@@ -56,7 +56,7 @@ class VertexAIAdapter(VertexAIPort):
         )
         self.location = location or getattr(settings, "VERTEX_AI_LOCATION", "global")
         self.data_store_id = data_store_id or getattr(
-            settings, "VERTEX_AI_DATA_STORE_ID", "prevision-rag-dev"
+            settings, "VERTEX_AI_DATA_STORE_ID", "zorven-rag-dev"
         )
         self.mock_mode = mock_mode or getattr(settings, "VERTEX_AI_MOCK_MODE", False)
         self._client = None

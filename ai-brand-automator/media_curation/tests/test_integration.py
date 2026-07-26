@@ -369,7 +369,7 @@ class TestCrossComponentIntegration:
             tenant_id=SAMPLE_TENANT_ID,
             dlp_enabled=True,
             dlp_info_types=["EMAIL_ADDRESS", "PHONE_NUMBER"],
-            ai_model="gemini-2.0-flash",
+            ai_model="gemini-3.5-flash",
         )
 
         run_async(cache.set_tenant_config(str(SAMPLE_TENANT_ID), config))

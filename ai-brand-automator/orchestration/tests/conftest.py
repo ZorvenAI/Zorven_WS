@@ -32,7 +32,7 @@ def sample_manifest_data():
             },
         ],
         "edges": [["researcher", "strategist"]],
-        "global_config": {"model": "gemini-2.0-flash"},
+        "global_config": {"model": "gemini-3.5-flash"},
     }
 
 
@@ -62,7 +62,7 @@ def external_agent_manifest_data():
             ["web_research", "valuation"],
         ],
         "global_config": {
-            "model": "gemini-2.0-flash",
+            "model": "gemini-3.5-flash",
             "temperature": 0.7,
         },
     }

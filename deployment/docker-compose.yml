@@ -108,7 +108,7 @@ services:
       # Vertex AI Search / RAG Index settings
       - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol-project}
       - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
-      - VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-prevision-rag-dev}
+      - VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-zorven-rag-dev}
       - VERTEX_AI_MOCK_MODE=${VERTEX_AI_MOCK_MODE:-false}
       # DB-to-RAG sync (sync Django models to Vertex AI)
       - RAG_DB_SYNC_ENABLED=${RAG_DB_SYNC_ENABLED:-false}
@@ -259,7 +259,7 @@ services:
       # Vertex AI Search / RAG Index settings
       - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol-project}
       - VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
-      - VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-prevision-rag-dev}
+      - VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-zorven-rag-dev}
       - VERTEX_AI_MOCK_MODE=${VERTEX_AI_MOCK_MODE:-false}
       # DB-to-RAG sync (sync Django models to Vertex AI)
       - RAG_DB_SYNC_ENABLED=${RAG_DB_SYNC_ENABLED:-false}
@@ -627,7 +627,7 @@ services:
       # Vertex AI Search / Gemini (Default Agent Node - RAG queries)
       - ORCHESTRATOR_VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol-project}
       - ORCHESTRATOR_VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
-      - ORCHESTRATOR_VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-prevision-rag-dev}
+      - ORCHESTRATOR_VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-zorven-rag-dev}
       - ORCHESTRATOR_GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ORCHESTRATOR_ODOO_WORKER_AGENT_URL=http://odoo-worker-agent:8100
       - ORCHESTRATOR_MARKET_RESEARCH_AGENT_URL=http://market-research-agent-svc:8021
@@ -1196,7 +1196,7 @@ services:
       - ODOO_MCP_DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/ai_brand_automator}
       - ODOO_MCP_VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-brandsol-project}
       - ODOO_MCP_VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION:-global}
-      - ODOO_MCP_VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-prevision-rag-dev}
+      - ODOO_MCP_VERTEX_AI_DATA_STORE_ID=${VERTEX_AI_DATA_STORE_ID:-zorven-rag-dev}
       - ODOO_MCP_VERTEX_AI_MOCK_MODE=${VERTEX_AI_MOCK_MODE:-false}
     expose:
       - "8095"
