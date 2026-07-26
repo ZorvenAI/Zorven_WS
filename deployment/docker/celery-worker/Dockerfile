@@ -57,6 +57,6 @@ USER appuser
 
 # Health check - verify Celery worker is responding
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD celery -A brand_automator inspect ping -d celery@$HOSTNAME || exit 1
+    CMD ["sh", "-c", "celery -A brand_automator inspect ping -d celery@$HOSTNAME || exit 1"]
 
 CMD ["bash", "/app/start.sh"]

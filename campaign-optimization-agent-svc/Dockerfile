@@ -21,7 +21,7 @@ EXPOSE 8044
 ENV PORT=8044
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8044}/health || exit 1
+    CMD ["sh", "-c", "curl -f http://localhost:${PORT:-8044}/health || exit 1"]
 
 # tini as PID 1 → forwards SIGTERM to entrypoint → entrypoint traps and
 # kills all child processes cleanly.
