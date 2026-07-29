@@ -118,7 +118,7 @@ All use `BSA_` prefix. Key settings:
 - `BSA_GCS_PROJECT_ID` — GCP project ID
 - `BSA_GCS_BUCKET_NAME` — GCS bucket for narrative storage
 - `BSA_GCS_CREDENTIALS_PATH` — Path to service account JSON
-- `BSA_GCS_CREDENTIALS_JSON` — Inline service account JSON (Railway)
+- `BSA_GCS_CREDENTIALS_JSON` — Inline service account JSON (Cloud Run)
 - `BSA_CONFIDENCE_THRESHOLD` — Escalation threshold (default 0.7)
 
 ## Kafka Topics

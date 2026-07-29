@@ -37,8 +37,9 @@ intelligence-loop-agent-svc/    # FastAPI — WF3.5 intelligence loop, consumes 
 odoo-mcp-server-svc/            # FastAPI — Odoo ERP MCP bridge, 101 tools (port 8095)
 odoo-worker-agent-svc/          # FastAPI — Multi-persona Odoo worker, PAOR loop (port 8100)
 prompt-optimization-svc/        # FastAPI — MLflow prompt registry + GEPA optimization (port 8110)
+spike-stt-v2/                    # Timeboxed spike — GCP Speech-to-Text v2 streaming latency/diarization (port 8120)
 vendor/odoo/community/           # Git submodule — Odoo Community Edition 19.0
-deployment/                      # Master docker-compose, Kong config, scripts
+deployment/                      # Master docker-compose, Kong config, GCP Cloud Run deploy scripts (gcp/)
 docs/                            # Architecture docs
 scripts/                         # E2E test scripts, GitHub issue automation
 tests/integration/               # Cross-service integration tests (3 phases)
@@ -80,7 +81,7 @@ python manage.py seed_subscription_plans        # Seed Stripe plans
 python manage.py check                          # Django system check
 
 # Analytics backfill (one-time, from existing completed jobs)
-RUN_ANALYTICS_BACKFILL=true  # Set env var on Railway to trigger on next deploy
+RUN_ANALYTICS_BACKFILL=true  # Set on the zorven-backend Cloud Run service to trigger on next deploy
 python manage.py backfill_analytics             # Or run manually
 
 # Celery workers (6 queues: celery, high_priority, low_priority, orchestration, ingestion, curation)
@@ -188,7 +189,7 @@ When `ORCHESTRATION_KAFKA_ENABLED=false` (default), dispatch is HTTP. When `true
 - **Chat (auto-detect)**: Dispatched without a manifest. `PipelineComposer` uses Gemini function-calling to dynamically compose a pipeline from the node catalog. Chat ALWAYS uses this mode.
 - **Pipeline UI (manifest-driven)**: Dispatched with a `PipelineManifest` from `seed_manifests.py`. Fixed DAG defined in the manifest JSON.
 
-**Per-node progress tracking**: The `JobExecutor` (`pipeline-orchestrator-svc/app/services/job_executor.py`) executes nodes **sequentially** in topological order (Kahn’s algorithm) via a simple for-loop. Before each node it sends a `running` progress callback; after each node it sends a `done` callback. This replaces the previous LangGraph `ainvoke`/`astream` approach which failed to fire per-node callbacks reliably on Railway. LangGraph remains a dependency but is **not used for execution**. Django's `result_handler.py` updates the DB and Redis cache with `current_node` and `progress_percent` on every callback. Frontend polls `/quick-status` every 3s via `usePollingJob`.
+**Per-node progress tracking**: The `JobExecutor` (`pipeline-orchestrator-svc/app/services/job_executor.py`) executes nodes **sequentially** in topological order (Kahn’s algorithm) via a simple for-loop. Before each node it sends a `running` progress callback; after each node it sends a `done` callback. This replaces the previous LangGraph `ainvoke`/`astream` approach which failed to fire per-node callbacks reliably in production. LangGraph remains a dependency but is **not used for execution**. Django's `result_handler.py` updates the DB and Redis cache with `current_node` and `progress_percent` on every callback. Frontend polls `/quick-status` every 3s via `usePollingJob`.
 
 **Cancel mechanism**: Sets `cancel:{job_id}` key in Redis with 1-hour TTL. The executor checks this flag before each node in the sequential loop.
 
@@ -501,7 +502,7 @@ Use "Digital Twilight" dark theme classes: `glass-card`, `bg-brand-midnight`, `t
 | Frontend workflow canvas | `ai-brand-automator-frontend/src/components/workspace/WorkflowCanvas.tsx` |
 | Frontend env config | `ai-brand-automator-frontend/src/lib/env.ts` |
 | Onboarding pipeline service | `ai-brand-automator/onboarding/services.py` |
-| Backend Procfile (9 processes) | `ai-brand-automator/Procfile` |
+| Backend Procfile (11 processes) | `ai-brand-automator/Procfile` |
 | Architecture overview | `ARCHITECTURE.md` |
 | Copilot instructions | `.github/copilot-instructions.md` |
 | Scoped instructions (backend/frontend/pipeline/testing) | `.github/instructions/` |
@@ -527,7 +528,7 @@ Conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`
 
 ## Do Not Modify
 
-- `docs/LICENSE.md`, `credentials/`, `db.sqlite3` — Protected files
+- `LICENSE`, `docs/LICENSE.md`, `credentials/`, `db.sqlite3` — Protected files. The license is proprietary (All Rights Reserved) — never relicense, add an OSI license, or add open-source badges without explicit instruction.
 - `.github/workflows/ci-cd.yml` — CI pipeline (coordinate with team)
 - `deployment/config/kong/` — Kong gateway config
 
@@ -566,4 +567,14 @@ Each microservice uses its own env-var prefix (e.g., `DISCOVERY_REDIS_URL`, `CON
 
 ## CI/CD
 
-GitHub Actions: 8 jobs (backend-tests, media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, frontend-tests, integration-tests, build-images). Auto-deploy to Railway on `main` merge with change detection (only redeploys changed services). Backend CI runs `black --check .`, `flake8 .`, `pytest --cov`, and MCP server tests.
+**Tests** (`.github/workflows/ci-cd.yml`) — 10 jobs: backend-tests, test-media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, odoo-mcp-server-tests, odoo-worker-tests, frontend-tests, integration-tests, build-images. Backend CI runs `black --check .`, `flake8 .`, `pytest --cov`, and MCP server tests.
+
+**Production deploy — GCP Cloud Run** (primary). Chain on `main`: `docker-publish.yml` builds/pushes images to GHCR (`ghcr.io/zorvenai`) → `deploy-gcp.yml` triggers on that workflow's success, mirrors only *changed* images to Artifact Registry (`us-central1-docker.pkg.dev/zorven-503517/zorven`), runs the `zorven-migrations` Cloud Run job when the backend changed, then `gcloud run services update`s each service and health-checks it. Cloud Run services are named `zorven-<service>`; the backend image feeds `zorven-backend` + `zorven-backend-ws`, with `zorven-celery-worker` and `zorven-celery-beat` as separate services keyed off the same backend change filter.
+
+Change detection uses `paths-filter` per service — adding a new microservice means adding filters in **both** `docker-publish.yml` and `deploy-gcp.yml`, plus a matrix entry mapping image → Cloud Run service(s). Env-var changes must be applied to every Cloud Run service that needs them (the celery-worker service has drifted from the backend service before).
+
+One-time/manual GCP infra provisioning lives in `deployment/gcp/` as numbered scripts (`00-config.sh` … `11-verify.sh`, `deploy-all.sh`, `99-teardown.sh`) covering project setup, VPC connector, Memorystore Redis, Secret Manager, and Artifact Registry.
+
+**Public domain**: `zorven.ai` / `www.zorven.ai` → `zorven-frontend`; `api.zorven.ai` → `zorven-backend`. The frontend resolves its API base from `window.location.hostname` at runtime (`src/lib/env.ts`), so the production domain mapping is hardcoded in that file, not supplied by `NEXT_PUBLIC_API_URL` — update it there if the domain changes.
+
+**Railway is retired and fully removed** — the workflow, `deployment/railway/`, all `railway.json`/`.railwayignore` files, and the Railway-specific `RAILWAY_*` env handling are gone. Do not reintroduce them. GCP Cloud Run is the only deployment target; `docs/` still contains historical plans that mention Railway, which are left as-is.

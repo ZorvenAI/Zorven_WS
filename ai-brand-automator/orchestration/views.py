@@ -639,15 +639,8 @@ def callback_debug(request):
             "backend_url": decouple_config("BACKEND_URL", default="(not set)"),
             "orchestrator_url": getattr(settings, "ORCHESTRATOR_URL", "(not set)"),
             "callback_token_configured": bool(cb_token),
-            "railway_env": decouple_config(
-                "RAILWAY_ENVIRONMENT_NAME", default="(not set)"
-            ),
-            "railway_private_domain": decouple_config(
-                "RAILWAY_PRIVATE_DOMAIN", default="(not set)"
-            ),
-            "railway_service_name": decouple_config(
-                "RAILWAY_SERVICE_NAME", default="(not set)"
-            ),
+            "service_name": decouple_config("K_SERVICE", default="(not set)"),
+            "revision": decouple_config("K_REVISION", default="(not set)"),
             "host_header": request.META.get("HTTP_HOST", "(none)"),
         }
     )

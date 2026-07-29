@@ -61,7 +61,9 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning("Failed to initialize Anthropic client: %s", exc)
     else:
-        logger.warning("Set BAA_ANTHROPIC_API_KEY on Railway for live results")
+        logger.warning(
+            "Set BAA_ANTHROPIC_API_KEY on the Cloud Run service for live results"
+        )
 
     # 4. Anthropic wrapper
     from app.services.anthropic_client import AnthropicClient

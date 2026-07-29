@@ -18,7 +18,7 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
 # Task routing for specialized workers
-# Queue names MUST match the -Q flag in Railway/Procfile worker start commands
+# Queue names MUST match the -Q flag in the Procfile worker start commands
 app.conf.task_routes = {
     # Route rag_index tasks to ingestion queue (ingestion-worker)
     "rag_index.tasks.*": {"queue": "ingestion"},

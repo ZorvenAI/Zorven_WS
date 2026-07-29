@@ -19,7 +19,7 @@ AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand buil
 | Queue | Celery + Redis (beat scheduler, `orchestration` queue), Apache Kafka (event streaming) |
 | Storage | Google Cloud Storage (2 buckets: raw + curated) |
 | Payments | Stripe (Basic $29 / Pro $79 / Enterprise $199) |
-| Deployment | Railway (Docker), GitHub Actions CI/CD |
+| Deployment | GCP Cloud Run (Docker), GitHub Actions CI/CD |
 
 ## Monorepo Layout
 
@@ -50,7 +50,7 @@ ad-publishing-agent-svc/      → FastAPI — WF3 ad publishing, Meta Ads API, h
 odoo-mcp-server-svc/          → FastAPI — Odoo ERP MCP bridge, RBAC + 101 tools (port 8095)
 odoo-worker-agent-svc/        → FastAPI — Multi-persona Odoo worker (port 8100)
 vendor/odoo/community/        → Git submodule — Odoo Community Edition 19.0
-deployment/                   → Docker Compose, Kong config, Railway/k8s manifests
+deployment/                   → Docker Compose, Kong config, GCP Cloud Run/k8s manifests
 docs/                         → Architecture docs, plans, guides
 ```
 

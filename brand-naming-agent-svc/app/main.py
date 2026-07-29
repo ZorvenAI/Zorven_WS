@@ -59,7 +59,9 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning("Anthropic client init failed: %s", exc)
     else:
-        logger.warning("Set NTA_ANTHROPIC_API_KEY on Railway for live results")
+        logger.warning(
+            "Set NTA_ANTHROPIC_API_KEY on the Cloud Run service for live results"
+        )
 
     # 4. Event emitter
     event_emitter = EventEmitter(audit_producer)

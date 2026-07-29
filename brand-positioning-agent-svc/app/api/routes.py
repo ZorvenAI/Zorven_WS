@@ -27,7 +27,7 @@ async def health() -> dict[str, str]:
 
 @router.get("/health/diagnostics")
 async def diagnostics() -> dict:
-    """Detailed diagnostics — helps debug stub mode / low confidence on Railway."""
+    """Detailed diagnostics — helps debug stub mode / low confidence in deployed environments."""
     api_key = settings.ANTHROPIC_API_KEY
 
     has_anthropic = bool(api_key and len(api_key) > 8)

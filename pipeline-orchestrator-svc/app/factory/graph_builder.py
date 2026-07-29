@@ -214,7 +214,7 @@ class GraphBuilder:
         """Translate Docker Compose service URLs to environment-configured URLs.
 
         Manifest nodes may contain hardcoded Docker Compose hostnames
-        (e.g. http://discovery-agent-svc:8020/v1/search). On Railway or
+        (e.g. http://discovery-agent-svc:8020/v1/search). On Cloud Run or
         other cloud deployments the internal DNS differs. This method
         replaces the host:port prefix with the value from settings,
         preserving the URL path.

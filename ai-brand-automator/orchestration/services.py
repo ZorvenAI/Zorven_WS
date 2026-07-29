@@ -516,13 +516,13 @@ class OrchestratorDispatcher:
         """Build the callback URL for this job.
 
         Uses ``CALLBACK_BASE_URL`` which must point to the **web**
-        service's private networking URL (e.g.
-        ``http://previsionws.railway.internal:8000`` on Railway).
+        service's URL (e.g. the ``zorven-backend`` Cloud Run URL, or
+        ``https://api.zorven.ai``).
 
-        Note: Do NOT use ``RAILWAY_PRIVATE_DOMAIN`` here — dispatch runs
-        inside a Celery worker which is a separate Railway service with
-        its own private domain.  The callback must always target the
-        web service.
+        Note: do NOT derive this from the running container's own
+        identity — dispatch runs inside a Celery worker, which is a
+        separate Cloud Run service with its own URL.  The callback must
+        always target the web service.
         """
         base_url = config(
             "CALLBACK_BASE_URL",
@@ -534,7 +534,7 @@ class OrchestratorDispatcher:
                 "fail if the orchestrator runs on a different host. "
                 "Set CALLBACK_BASE_URL to the internal service URL "
                 "(e.g. http://backend:8001 or "
-                "http://<service>.railway.internal:<port>).",
+                "https://api.zorven.ai or the backend Cloud Run URL).",
                 base_url,
             )
         callback_url = f"{base_url}/api/v1/orchestration/jobs/{job.job_id}/callback/"

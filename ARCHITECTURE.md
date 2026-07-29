@@ -494,23 +494,39 @@ Key testing boundaries:
 - **Orchestrator**: Mocked via `unittest.mock.patch` on `OrchestratorDispatcher`
 - **Microservice integration tests**: Marked `@pytest.mark.integration` (require Redis)
 
-## Deployment Topology (Railway)
+## Deployment Topology (GCP Cloud Run)
+
+Production runs on **Google Cloud Run** in project `zorven-503517`, region `us-central1`, served at **zorven.ai**. Railway has been retired.
 
 ```
-Railway Project
-├── Backend Service          → ai-brand-automator/ (Gunicorn)
-├── Celery Worker            → ai-brand-automator/ (celery worker)
-├── Celery Beat              → ai-brand-automator/ (celery beat)
-├── Frontend Service         → ai-brand-automator-frontend/ (Next.js)
-├── MCP Server               → ai-brand-automator/ (SSE transport, port 8085)
-├── Pipeline Orchestrator    → pipeline-orchestrator-svc/ (Uvicorn)
-├── Discovery Agent          → discovery-agent-svc/ (Uvicorn)
-├── Intelligence Agent       → intelligence-agent-svc/ (Uvicorn)
-├── Redis                    → Managed Redis instance (7 DBs)
-└── PostgreSQL               → Neon (external, SSL required)
+Public DNS
+├── zorven.ai / www.zorven.ai   → zorven-frontend    (Next.js)
+└── api.zorven.ai               → zorven-backend     (Gunicorn)
+
+Cloud Run services (zorven-*, 30 images)
+├── zorven-backend            → ai-brand-automator/ (Gunicorn)
+├── zorven-backend-ws         → ai-brand-automator/ (Daphne, WebSocket/ASGI)
+├── zorven-celery-worker      → ai-brand-automator/ (celery worker)
+├── zorven-celery-beat        → ai-brand-automator/ (celery beat)
+├── zorven-frontend           → ai-brand-automator-frontend/ (Next.js standalone)
+├── zorven-mlflow             → MLflow tracking + prompt registry
+├── zorven-orchestrator       → pipeline-orchestrator-svc/ (Uvicorn)
+├── zorven-<agent>            → one service per agent microservice (Uvicorn)
+└── zorven-migrations         → Cloud Run Job (migrate_schemas, run pre-deploy)
+
+Managed dependencies
+├── Artifact Registry  → us-central1-docker.pkg.dev/zorven-503517/zorven
+├── Memorystore Redis  → zorven-redis (reached via VPC connector zorven-connector)
+├── Secret Manager     → runtime secrets, mounted as env vars
+├── Service Account    → zorven-cloudrun@zorven-503517.iam.gserviceaccount.com
+└── PostgreSQL         → Neon (external, sslmode=require + channel_binding=require)
 ```
 
-CI/CD: GitHub Actions → 8 test jobs (backend-tests, media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, frontend-tests, integration-tests, build-images) → Auto-deploy on `main` merge via Railway with change detection (only redeploys changed services).
+**Frontend API resolution** (`ai-brand-automator-frontend/src/lib/env.ts`) is hostname-driven, not env-driven, in the browser: `zorven.ai`/`www.zorven.ai` → `api.zorven.ai`; a `*.run.app` host → the backend's direct Cloud Run URL; anything else → `<hostname>:8000` for local dev. `NEXT_PUBLIC_API_URL` is only consulted during SSR.
+
+**CI/CD**: GitHub Actions → 10 test jobs (backend-tests, test-media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, odoo-mcp-server-tests, odoo-worker-tests, frontend-tests, integration-tests, build-images) → `docker-publish.yml` pushes images to GHCR (`ghcr.io/zorvenai`) → `deploy-gcp.yml` mirrors only changed images to Artifact Registry, runs the `zorven-migrations` job when the backend changed, then `gcloud run services update`s each affected service and health-checks it.
+
+One-time infrastructure provisioning lives in `deployment/gcp/` as numbered scripts (`00-config.sh` … `11-verify.sh`, `deploy-all.sh`, `99-teardown.sh`).
 
 ## Frontend Hydration Safety
 

@@ -190,8 +190,8 @@ def perform_create(self, serializer):
 - **Location**: `settings.py` Lines 103-109
 - **Problem**: Hardcoded Neon PostgreSQL credentials in source code
 ```python
-'PASSWORD': 'npg_ihO4oHanJW8e',  # ⚠️ EXPOSED!
-'HOST': 'ep-delicate-unit-aes0pu6a-pooler.c-2.us-east-2.aws.neon.tech',
+'PASSWORD': '<REDACTED>',  # ⚠️ EXPOSED!
+'HOST': '<REDACTED>.us-east-2.aws.neon.tech',
 ```
 - **Risk**: Credentials committed to Git repository
 - **Fix**: Move to environment variables immediately

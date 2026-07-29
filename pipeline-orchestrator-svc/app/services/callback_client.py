@@ -5,7 +5,7 @@ Uses HTTP PATCH to the callback_url with X-Callback-Token authentication.
 Matches the contract in ai-brand-automator/orchestration/views.py callback endpoint.
 
 Retries up to 4 times with exponential back-off (0.5 s, 1 s, 2 s) on
-transient errors (5xx, connection resets, Railway DNS warm-up).  4xx errors
+transient errors (5xx, connection resets, cold-start DNS warm-up).  4xx errors
 are considered deterministic and are never retried.
 """
 
@@ -18,7 +18,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # Max retries for transient connection errors (stale connections, resets,
-# Railway DNS warm-up on .railway.internal hostnames).
+# cold-start DNS warm-up on internal hostnames).
 _MAX_RETRIES = 4
 _RETRY_DELAYS = [0.5, 1.0, 2.0]  # exponential back-off between attempts
 
@@ -27,7 +27,7 @@ class CallbackClient:
     """HTTP client for sending job progress/results to core-api-service.
 
     Creates a fresh httpx.AsyncClient per request to avoid stale connection
-    issues when callbacks route through cloud load balancers (Railway, etc.).
+    issues when callbacks route through cloud load balancers (Cloud Run, etc.).
     """
 
     def __init__(self, callback_token: str, timeout: float = 30.0):
