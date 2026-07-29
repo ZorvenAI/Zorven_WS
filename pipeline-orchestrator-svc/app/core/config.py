@@ -31,8 +31,7 @@ class Settings(BaseSettings):
 
     # Callback URL override — when set, the orchestrator constructs callback
     # URLs from this base instead of using the URL from the dispatch payload.
-    # Set to the Django backend's private networking URL on Railway, e.g.
-    # http://previsionws.railway.internal:8000
+    # Set to the Django backend's URL, e.g. https://api.zorven.ai
     CALLBACK_BASE_URL: str = ""
 
     # Server
@@ -67,7 +66,7 @@ class Settings(BaseSettings):
     # may take 10+ minutes for blog authoring / publishing.
     AGENT_TIMEOUT: float = 900.0
 
-    # Agent service URLs (override for Railway/cloud deployment)
+    # Agent service URLs (override for cloud deployment)
     DISCOVERY_AGENT_URL: str = "http://discovery-agent-svc:8020"
     CONTENT_AGENT_URL: str = "http://content-agent-svc:8050"
     SOCIAL_AGENT_URL: str = "http://social-agent-svc:8060"

@@ -38,7 +38,7 @@ RUN cat <<'EOF' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 #!/bin/bash
 set -e
 
-# Write GCS credentials file from env var if provided (Railway/Heroku)
+# Write GCS credentials file from env var if provided (Cloud Run)
 if [ -n "$GCS_CREDENTIALS_JSON" ]; then
   echo "=== Writing GCS credentials file ==="
   printf '%s' "$GCS_CREDENTIALS_JSON" > /app/gcs-credentials.json
@@ -81,7 +81,7 @@ if cleaned:
     print(f'DATABASE_URL OK: scheme={parsed.scheme}, host_len={len(parsed.hostname or \"\")}, path={parsed.path}')
 else:
     print('WARNING: DATABASE_URL is empty — will fall back to individual DB_* vars')
-" || { echo "=== DATABASE_URL validation failed — check Railway Variables tab ==="; exit 1; }
+" || { echo "=== DATABASE_URL validation failed — check the Cloud Run service env vars ==="; exit 1; }
 
 echo "=== Running migrations ==="
 python manage.py migrate_schemas --shared --noinput
@@ -153,12 +153,12 @@ case "${PROCESS_TYPE:-web}" in
 esac
 EOF
 
-# Create worker entrypoint (for Kafka consumers and Celery workers on Railway)
+# Create worker entrypoint (for Kafka consumers and Celery workers)
 RUN cat <<'EOF' > /app/entrypoint-worker.sh && chmod +x /app/entrypoint-worker.sh
 #!/bin/bash
 set -e
 
-# Write GCS credentials file from env var if provided (Railway/Heroku)
+# Write GCS credentials file from env var if provided (Cloud Run)
 if [ -n "$GCS_CREDENTIALS_JSON" ]; then
   printf '%s' "$GCS_CREDENTIALS_JSON" > /app/gcs-credentials.json
   chmod 600 /app/gcs-credentials.json

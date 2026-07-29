@@ -1,0 +1,102 @@
+PROPRIETARY SOFTWARE LICENSE
+
+Copyright (c) 2026 Zorven AI. All Rights Reserved.
+
+Zorven (also referred to as "AI Brand Automator"), including all source code,
+object code, documentation, configuration, design assets, prompts, skill
+definitions, and any accompanying materials in this repository (collectively,
+the "Software"), is the confidential and proprietary property of Zorven AI (the
+"Licensor").
+
+1. NO LICENSE GRANTED
+
+   No license, right, title, or interest in or to the Software is granted to
+   any person or entity, whether express, implied, by estoppel, or otherwise.
+   All rights not expressly granted in a separate written agreement signed by
+   an authorized representative of the Licensor are reserved by the Licensor.
+
+2. PROHIBITED WITHOUT PRIOR WRITTEN PERMISSION
+
+   Without the Licensor's prior written permission, no person or entity may:
+
+   (a) use, execute, or run the Software, in whole or in part, for ANY
+       purpose — including personal, private, educational, evaluation,
+       research, non-commercial, and commercial purposes;
+   (b) copy, clone, fork, mirror, download, or otherwise reproduce the
+       Software;
+   (c) modify, adapt, translate, or create derivative works of the Software;
+   (d) merge the Software, or any portion of it, into any other work;
+   (e) publish, distribute, sublicense, sell, rent, lease, lend, host, or
+       otherwise make the Software available to any third party;
+   (f) operate the Software, or any derivative of it, as a hosted or managed
+       service, whether or not for a fee;
+   (g) reverse engineer, decompile, or disassemble the Software, except to the
+       extent such restriction is expressly prohibited by applicable law;
+   (h) use the Software, or any portion of it, as training data or input for
+       the development, training, fine-tuning, or evaluation of any machine
+       learning or artificial intelligence model; or
+   (i) remove, obscure, or alter any copyright, trademark, or other
+       proprietary notice contained in the Software.
+
+   The availability of this repository or its source code — whether through a
+   public code host, a shared link, a package registry, or any other means —
+   does not constitute a license, a waiver of any restriction above, or a
+   grant of permission of any kind.
+
+3. CONFIDENTIALITY
+
+   The Software constitutes the confidential information and trade secrets of
+   the Licensor. Any person who obtains access to the Software, by any means,
+   shall not disclose it to any third party and shall take reasonable measures
+   to protect its confidentiality.
+
+4. TRADEMARKS
+
+   "Zorven", "zorven.ai", and the Licensor's logos, product names, and service
+   names are trademarks of the Licensor. This license grants no right to use
+   any trademark of the Licensor.
+
+5. THIRD-PARTY COMPONENTS
+
+   The Software incorporates or depends upon third-party components that are
+   licensed separately by their respective copyright holders. Those components
+   remain governed by their own license terms, and nothing in this license
+   modifies, supersedes, or restricts the rights granted by those terms.
+
+   This includes, without limitation, the Odoo Community Edition source
+   included as a git submodule at `vendor/odoo/community/`, which is published
+   under the GNU Lesser General Public License, Version 3 (LGPLv3), and all
+   open-source packages declared in the `requirements.txt` and `package.json`
+   files throughout this repository.
+
+   The restrictions in Sections 1 and 2 apply to the Licensor's own original
+   work and to the Software as a combined whole, not to the independent use of
+   those third-party components under their own licenses.
+
+6. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NONINFRINGEMENT.
+
+7. LIMITATION OF LIABILITY
+
+   IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING
+   FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+8. ENFORCEMENT
+
+   Unauthorized use, reproduction, or distribution of the Software may result
+   in civil liability and criminal penalties, and will be prosecuted to the
+   maximum extent possible under law.
+
+9. COMMERCIAL LICENSING
+
+   To request a commercial license, an evaluation license, or any other
+   permission with respect to the Software, contact:
+
+       Zorven AI
+       legal@zorven.ai
+       https://zorven.ai

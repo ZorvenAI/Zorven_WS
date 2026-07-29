@@ -1,5 +1,5 @@
 # Prevent local environment files from entering Docker image
-# Railway/Heroku inject env vars via os.environ, not .env files
+# Cloud Run injects env vars via os.environ, not .env files
 .env
 .env.*
 .env.local

@@ -7,7 +7,7 @@ engine of the pipeline orchestrator.
 
 Uses **direct sequential execution** instead of LangGraph's ainvoke /
 astream.  This ensures per-node progress callbacks fire reliably across
-all deployment targets (local Docker, Railway, etc.) by giving the
+all deployment targets (local Docker, Cloud Run, etc.) by giving the
 executor full control over the call → callback loop.
 """
 
@@ -85,7 +85,7 @@ class JobExecutor:
         between every step.  This bypasses LangGraph's ``ainvoke`` /
         ``astream`` execution engine entirely, ensuring per-node
         progress is visible on all deployment targets (local Docker,
-        Railway, etc.).
+        Cloud Run, etc.).
         """
         job_id = request.job_id
         callback_url = self._resolve_callback_url(request)

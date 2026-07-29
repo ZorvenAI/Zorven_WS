@@ -1,12 +1,12 @@
 # AI Brand Automator - Deployment Guide
 
-This directory contains all the configuration files needed to deploy the AI Brand Automator to Railway.
+This directory contains the configuration needed to run Zorven locally with Docker Compose and to deploy it to **Google Cloud Run** (project `zorven-503517`, region `us-central1`, served at [zorven.ai](https://zorven.ai)).
 
 ## Architecture Overview
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────┐
-│                              RAILWAY PLATFORM / LOCAL DOCKER COMPOSE               │
+│                            GCP CLOUD RUN / LOCAL DOCKER COMPOSE                    │
 ├───────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                   │
 │  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐          │
@@ -61,8 +61,12 @@ deployment/
 │       ├── Dockerfile           # Nginx Reverse Proxy
 │       └── nginx.conf           # Nginx configuration
 │
-├── railway/
-│   └── railway.toml             # Railway service configuration
+├── gcp/
+│   ├── 00-config.sh             # Shared config (project, region, service list)
+│   ├── 01..11-*.sh              # Numbered provisioning steps
+│   ├── deploy-all.sh            # Run the full provisioning sequence
+│   ├── 99-teardown.sh           # Tear down GCP resources
+│   └── secrets.env.template     # Copy to secrets.env (gitignored) and fill in
 │
 ├── scripts/
 │   ├── start-backend.sh         # Django/Gunicorn startup (migrations, static, gunicorn)
@@ -125,113 +129,67 @@ curl http://localhost:8070/health     # RAG Uploader Agent
 curl http://localhost:8085/health     # MCP Server
 ```
 
-### 2. Deployment to Railway
+### 2. Deployment to GCP Cloud Run
 
 #### Prerequisites
 
-1. Install Railway CLI: `npm install -g @railway/cli`
-2. Login to Railway: `railway login`
-3. Create a new project: `railway init`
+1. Install the gcloud CLI and authenticate: `gcloud auth login`
+2. Set the project: `gcloud config set project zorven-503517`
+3. Copy `gcp/secrets.env.template` to `gcp/secrets.env` and fill in every value,
+   including `DATABASE_URL`. This file is gitignored — never commit it.
 
-#### Setup Services
+#### First-time provisioning
 
-1. **Create Redis Service**
-   - In Railway dashboard, click "New" → "Database" → "Redis"
-
-2. **Create Backend Service**
-   ```bash
-   railway add --service backend
-   ```
-
-3. **Create Frontend Service**
-   ```bash
-   railway add --service frontend
-   ```
-
-4. **Create Celery Worker Service**
-   ```bash
-   railway add --service celery-worker
-   ```
-
-5. **Create Celery Beat Service**
-   ```bash
-   railway add --service celery-beat
-   ```
-
-6. **Create MCP Server Service**
-   ```bash
-   railway add --service mcp-server
-   ```
-
-7. **Create Pipeline Orchestrator Service**
-   ```bash
-   railway add --service orchestrator
-   ```
-
-8. **Create Discovery Agent Service**
-   ```bash
-   railway add --service discovery-agent
-   ```
-
-9. **Create Intelligence Agent Service**
-   ```bash
-   railway add --service intelligence-agent
-   ```
-
-#### Configure Environment Variables
-
-1. Copy `.env.production.template` and fill in your values
-2. In Railway dashboard, add environment variables to each service:
-
-**Backend Service:**
-- `SECRET_KEY`
-- `DEBUG=False`
-- `ALLOWED_HOSTS`
-- `DATABASE_URL` (your Neon connection string)
-- `REDIS_URL` (Railway provides this via variable reference)
-- `GOOGLE_API_KEY`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
-- `CORS_ALLOWED_ORIGINS`
-
-**Frontend Service:**
-- `NEXT_PUBLIC_API_URL` (Backend service URL)
-
-**Celery Worker & Beat:**
-- Same as Backend, but without `ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS`
-
-**Pipeline Orchestrator:**
-- `ORCHESTRATOR_SERVICE_TOKEN` (must match backend's)
-- `ORCHESTRATOR_CALLBACK_TOKEN` (must match backend's)
-- `ORCHESTRATOR_REDIS_URL` (Redis DB 1)
-
-**Discovery Agent:**
-- `DISCOVERY_REDIS_URL` (Redis DB 2)
-- `DISCOVERY_TAVILY_API_KEY`
-
-**Intelligence Agent:**
-- `INTELLIGENCE_REDIS_URL` (Redis DB 3)
-- `INTELLIGENCE_GEMINI_API_KEY`
-
-#### Deploy
+The numbered scripts in `gcp/` are idempotent and run in order:
 
 ```bash
-# Deploy all services
-railway up
+cd deployment/gcp
+./deploy-all.sh          # Or run 01..11 individually
+```
 
-# Or deploy individual services
-railway up --service backend
-railway up --service frontend
+| Script | Purpose |
+|--------|---------|
+| `01-setup-project.sh` | Enable APIs, create the service account |
+| `02-setup-networking.sh` | VPC + `zorven-connector` Serverless VPC connector |
+| `03-setup-redis.sh` | Memorystore instance `zorven-redis` |
+| `04-setup-secrets.sh` | Push `secrets.env` into Secret Manager |
+| `05-setup-artifact-registry.sh` | Create the `zorven` Artifact Registry repo |
+| `06-mirror-images.sh` | Mirror GHCR images into Artifact Registry |
+| `07-run-migrations.sh` | Run `migrate_schemas` as a Cloud Run Job |
+| `08-deploy-services.sh` | Deploy all Cloud Run services |
+| `09-collect-urls.sh` | Collect assigned service URLs |
+| `10-redeploy-with-urls.sh` | Re-deploy with inter-service URLs wired in |
+| `11-verify.sh` | Health-check every service |
+
+#### Ongoing deploys
+
+Ongoing deploys are automatic — see GitHub Actions below. To deploy a single
+service by hand:
+
+```bash
+gcloud run services update zorven-backend \
+  --region=us-central1 \
+  --image=us-central1-docker.pkg.dev/zorven-503517/zorven/zorven-backend:latest
 ```
 
 ### 3. GitHub Actions Deployment
 
-The workflow at `.github/workflows/deploy-railway.yml` automatically deploys on push to `main`.
+Two chained workflows deploy on push to `main`:
 
-**Required GitHub Secrets:**
-- `RAILWAY_TOKEN` - Get from Railway account settings
-- `RAILWAY_BACKEND_URL` - Backend service URL (for health checks)
-- `RAILWAY_FRONTEND_URL` - Frontend service URL (for health checks)
+1. **`docker-publish.yml`** builds changed images and pushes them to GHCR
+   (`ghcr.io/zorvenai`).
+2. **`deploy-gcp.yml`** runs on that workflow's success. It mirrors only the
+   changed images into Artifact Registry, runs the `zorven-migrations` Cloud Run
+   Job when the backend changed, updates each affected Cloud Run service, and
+   health-checks it.
+
+Change detection uses `paths-filter`. **Adding a new service means adding a
+filter in both workflows**, plus a matrix entry mapping image → Cloud Run
+service(s).
+
+**Required GitHub Secrets / config:**
+- Workload Identity Federation provider + service account (`id-token: write`)
+- `GHCR` read access via the built-in `GITHUB_TOKEN`
 
 ## Service Details
 
@@ -337,14 +295,14 @@ When Kafka is not running, the system falls back to:
 | Redis | $5-10 |
 | **Total** | **~$60-125** |
 
-*Note: Costs vary based on usage and scaling requirements. Services can be scaled to zero when idle on Railway.*
+*Note: Costs vary based on usage and scaling requirements. Services can be scaled to zero when idle on Cloud Run.*
 
 ## Troubleshooting
 
 ### Backend won't start
 1. Check DATABASE_URL is correctly set
 2. Verify Redis is running
-3. Check logs: `railway logs --service backend`
+3. Check logs: `gcloud run services logs read zorven-backend --region=us-central1`
 
 ### Frontend build fails
 1. Ensure NEXT_PUBLIC_API_URL is set at build time
@@ -353,7 +311,7 @@ When Kafka is not running, the system falls back to:
 
 ### Celery tasks not running
 1. Verify Redis connection
-2. Check worker logs: `railway logs --service celery-worker`
+2. Check worker logs: `gcloud run services logs read zorven-celery-worker --region=us-central1`
 3. Ensure tasks are discovered: check `autodiscover_tasks()` in celery.py
 
 ### Database connection issues
@@ -378,22 +336,33 @@ When Kafka is not running, the system falls back to:
 
 ### Rolling Updates
 
-Railway performs rolling updates automatically. To force a redeployment:
+Cloud Run performs rolling updates automatically. To force a redeployment:
 
 ```bash
-railway redeploy --service backend
+gcloud run services update zorven-backend --region=us-central1 \
+  --image=us-central1-docker.pkg.dev/zorven-503517/zorven/zorven-backend:latest
 ```
 
 ### Rollback
 
-```bash
-# View deployment history
-railway deployments --service backend
+Cloud Run keeps every revision, so rollback is a traffic change:
 
-# Rollback to previous deployment
-railway rollback --service backend
+```bash
+# View revision history
+gcloud run revisions list --service=zorven-backend --region=us-central1
+
+# Send 100% of traffic back to a known-good revision
+gcloud run services update-traffic zorven-backend \
+  --region=us-central1 --to-revisions=<REVISION>=100
 ```
 
 ### Scaling
 
-In Railway dashboard, adjust service replicas and resource limits as needed.
+Per-service limits are set in `gcp/00-config.sh` (`CR_MEMORY`, `CR_CPU`,
+`CR_MAX_INSTANCES`, `CR_TIMEOUT`) and applied by `08-deploy-services.sh`.
+Adjust a single service directly:
+
+```bash
+gcloud run services update zorven-backend --region=us-central1 \
+  --min-instances=1 --max-instances=10 --memory=1Gi
+```

@@ -38,7 +38,36 @@ export CR_MAX_INSTANCES="2"
 export CR_TIMEOUT="300"
 
 # ── Database ─────────────────────────────────────────────────
-export DATABASE_URL="postgresql://neondb_owner:npg_ihO4oHanJW8e@ep-small-dawn-aevftgxm-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+# SECURITY: DATABASE_URL carries credentials and MUST NOT be hardcoded here.
+# This file is tracked in git; secrets.env is not.
+#
+# Resolved at runtime, in order:
+#   1. DATABASE_URL already exported in the environment (CI / one-off runs)
+#   2. DATABASE_URL=... in deployment/gcp/secrets.env (gitignored)
+#
+# Scripts that actually need the database call require_database_url below,
+# so infra-only scripts (01, 02, 05, 09) still run without secrets.env.
+CONFIG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export CONFIG_DIR
+
+if [ -z "${DATABASE_URL:-}" ] && [ -f "${CONFIG_DIR}/secrets.env" ]; then
+  DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' "${CONFIG_DIR}/secrets.env" | head -n1)"
+  # Strip optional surrounding quotes
+  DATABASE_URL="${DATABASE_URL#\"}"; DATABASE_URL="${DATABASE_URL%\"}"
+  DATABASE_URL="${DATABASE_URL#\'}"; DATABASE_URL="${DATABASE_URL%\'}"
+fi
+export DATABASE_URL="${DATABASE_URL:-}"
+
+# Call at the top of any script that deploys or migrates against the database.
+require_database_url() {
+  if [ -z "${DATABASE_URL:-}" ]; then
+    echo "ERROR: DATABASE_URL is not set." >&2
+    echo "  Add it to ${CONFIG_DIR}/secrets.env (see secrets.env.template):" >&2
+    echo "    DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require&channel_binding=require" >&2
+    echo "  or export it before running this script." >&2
+    exit 1
+  fi
+}
 
 # ── Unique GHCR images (30) ─────────────────────────────────
 UNIQUE_IMAGES=(

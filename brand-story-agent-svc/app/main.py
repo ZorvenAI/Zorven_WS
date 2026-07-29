@@ -60,7 +60,9 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning("Anthropic client init failed: %s", exc)
     else:
-        logger.warning("Set BSA_ANTHROPIC_API_KEY on Railway for live results")
+        logger.warning(
+            "Set BSA_ANTHROPIC_API_KEY on the Cloud Run service for live results"
+        )
 
     # 4. GCS client
     gcs_client = GCSClient(
