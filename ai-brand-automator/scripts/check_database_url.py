@@ -1,5 +1,5 @@
 """
-Diagnostic script for Railway deployment.
+Diagnostic script for deployment.
 Runs before migrations to verify DATABASE_URL is readable and parseable.
 """
 

@@ -330,8 +330,8 @@ gh issue create \
 **Problem**: Hardcoded Neon PostgreSQL credentials in source code
 
 \`\`\`python
-'PASSWORD': 'npg_ihO4oHanJW8e',  # ⚠️ EXPOSED!
-'HOST': 'ep-delicate-unit-aes0pu6a-pooler.c-2.us-east-2.aws.neon.tech',
+'PASSWORD': '<REDACTED>',  # ⚠️ EXPOSED!
+'HOST': '<REDACTED>.us-east-2.aws.neon.tech',
 \`\`\`
 
 **Risk**: 

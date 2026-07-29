@@ -40,7 +40,9 @@ class AnthropicClient:
             except Exception as exc:
                 logger.warning("Anthropic init failed (fail-open): %s", exc)
         else:
-            logger.warning("Set ILA_ANTHROPIC_API_KEY on Railway for live results")
+            logger.warning(
+                "Set ILA_ANTHROPIC_API_KEY on the Cloud Run service for live results"
+            )
 
     @property
     def enabled(self) -> bool:

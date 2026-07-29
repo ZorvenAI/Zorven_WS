@@ -69,7 +69,7 @@ class GCSService:
     Service for interacting with Google Cloud Storage.
 
     Credentials are resolved in order:
-    1. GCS_CREDENTIALS_JSON env var (inline JSON - for Railway/Heroku)
+    1. GCS_CREDENTIALS_JSON env var (inline JSON - for Cloud Run/CI)
     2. GS_CREDENTIALS_PATH file on disk (local dev with service account key)
     3. Application Default Credentials (GCP-hosted environments)
     """
@@ -115,7 +115,7 @@ class GCSService:
 
     def _resolve_credentials(self):
         """Resolve GCS credentials from env var, file, or return None for ADC."""
-        # 1. Inline JSON from environment variable (Railway / Heroku / CI)
+        # 1. Inline JSON from environment variable (Cloud Run / CI)
         creds_json = os.environ.get("GCS_CREDENTIALS_JSON", "").strip()
         if creds_json:
             logger.info("Loading GCS credentials from GCS_CREDENTIALS_JSON env var")

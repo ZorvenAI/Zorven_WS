@@ -65,7 +65,7 @@ async def health() -> HealthResponse:
 
 @router.get("/health/diagnostics")
 async def diagnostics() -> dict:
-    """Detailed diagnostics — helps debug stub mode / low confidence on Railway."""
+    """Detailed diagnostics — helps debug stub mode / low confidence in deployed environments."""
     api_key = settings.ANTHROPIC_API_KEY
     tavily_key = settings.TAVILY_API_KEY
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 Add production domains to the public tenant.
-This allows Railway and other production domains to work with django-tenants.
+This allows Cloud Run and other production domains to work with django-tenants.
 """
 import os
 import django
@@ -28,10 +28,13 @@ def add_production_domains():
 
     # Production domains to add
     production_domains = [
-        # Railway production domains
-        "previsionws-production.up.railway.app",
-        # Railway uses various subdomains
-        "*.up.railway.app",
+        # Public domains
+        "zorven.ai",
+        "www.zorven.ai",
+        "api.zorven.ai",
+        # Cloud Run assigns per-service *.run.app URLs; wildcards are skipped
+        # below, so add specific service URLs here if you need to route by them
+        "*.run.app",
         # Localhost for development
         "localhost",
         "127.0.0.1",

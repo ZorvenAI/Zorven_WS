@@ -69,7 +69,9 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning("Anthropic client init failed: %s", exc)
     else:
-        logger.warning("Set ADPUB_ANTHROPIC_API_KEY on Railway for live results")
+        logger.warning(
+            "Set ADPUB_ANTHROPIC_API_KEY on the Cloud Run service for live results"
+        )
 
     # 4. Prompt loader + cache invalidator (ZorvenPromptLoader integration)
     # Initialized before TargetingTranslator so it can be injected.

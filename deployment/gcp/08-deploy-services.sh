@@ -3,6 +3,7 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/00-config.sh"
+require_database_url
 
 # Load Redis connection
 if [ -f "${SCRIPT_DIR}/redis-connection.env" ]; then

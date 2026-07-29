@@ -74,7 +74,9 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning("Failed to initialize Anthropic client: %s", exc)
     else:
-        logger.info("Set VOCA_ANTHROPIC_API_KEY on Railway for live results")
+        logger.info(
+            "Set VOCA_ANTHROPIC_API_KEY on the Cloud Run service for live results"
+        )
 
     # 5. Circuit breakers
     breakers = create_breakers(settings)

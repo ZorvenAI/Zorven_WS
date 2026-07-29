@@ -119,7 +119,7 @@ See: [CODEBASE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md](CODEBASE_ANALYSIS_AND_IMPLEM
         "body": """**Priority**: HIGH | **Time**: 1 hour | **Dependencies**: None
 
 ## ⚠️ SECURITY ISSUE
-Password `npg_ihO4oHanJW8e` is hardcoded in settings.py Lines 103-109
+A database password is hardcoded in settings.py Lines 103-109 (value redacted here — see Neon dashboard)
 
 ## Immediate Actions
 1. **URGENT**: Rotate database password in Neon dashboard

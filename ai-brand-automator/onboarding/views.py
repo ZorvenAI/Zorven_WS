@@ -337,7 +337,8 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 if not settings.DEBUG:
                     logger.error(
                         "GCS_CREDENTIALS_JSON not configured — cannot store "
-                        "onboarding PDF. Set the env var on Railway."
+                        "onboarding PDF. Set the env var on the Cloud Run "
+                        "service."
                     )
                 else:
                     logger.warning(

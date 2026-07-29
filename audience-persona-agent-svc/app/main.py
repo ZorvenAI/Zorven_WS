@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI):
     else:
         logger.error(
             "ANTHROPIC_API_KEY is not set — LLM skills will run in stub mode. "
-            "Set APA_ANTHROPIC_API_KEY on Railway"
+            "Set APA_ANTHROPIC_API_KEY on the Cloud Run service"
         )
 
     # 5. Prompt loader + cache invalidator (ZorvenPromptLoader integration)
