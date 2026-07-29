@@ -103,7 +103,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         logger.warning(
             "No Anthropic API key — running in stub mode. "
-            "Set MRA_ANTHROPIC_API_KEY on Railway for live results."
+            "Set MRA_ANTHROPIC_API_KEY on the Cloud Run service for live results."
         )
 
     # Initialize circuit breakers

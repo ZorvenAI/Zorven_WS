@@ -3,7 +3,7 @@
 #
 # Usage:
 #   ./scripts/seed_and_promote_prompts.sh                          # default: http://localhost:8110
-#   ./scripts/seed_and_promote_prompts.sh https://poi.railway.app  # Railway URL
+#   ./scripts/seed_and_promote_prompts.sh https://<poi-service>.run.app  # deployed URL
 #
 # The lifecycle requires: DRAFT → STAGING → CANARY → PRODUCTION (3 transitions per prompt).
 # Auth: X-User-Role: admin header (RBAC allows ADMIN to promote).

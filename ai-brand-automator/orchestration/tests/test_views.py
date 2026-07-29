@@ -616,7 +616,7 @@ class TestCallbackDebug:
         data = response.data
         assert "allowed_hosts" in data
         assert "callback_token_configured" in data
-        assert "railway_private_domain" in data
+        assert "service_name" in data
 
     def test_does_not_leak_full_token(self, api_client):
         from django.conf import settings

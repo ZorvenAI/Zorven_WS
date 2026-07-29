@@ -1,7 +1,7 @@
 """E2E test fixtures wiring real services into pipeline-ready objects (US-060).
 
 All fixtures connect to real Redis, MLflow, and PostgreSQL via
-testcontainer or Railway URLs from POI_* environment variables.
+testcontainer or deployed URLs from POI_* environment variables.
 """
 
 import os

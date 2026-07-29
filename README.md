@@ -1,10 +1,16 @@
-# AI Brand Automator
+# Zorven — AI Brand Automator
 
 > **Version**: 5.0.0 (Full Workflow Pipeline — WF1 Discovery + WF2 Brand Strategy + WF3 Campaign Activation + WF3.5 Intelligence Loop)
-> **Status**: ✅ Production Ready
-> **Last Updated**: April 28, 2026
+> **Status**: ✅ Production Ready — live at **[zorven.ai](https://zorven.ai)**
+> **Hosting**: Google Cloud Run (`zorven-503517` / `us-central1`)
+> **Last Updated**: July 28, 2026
 
 **Multi-tenant SaaS platform for AI-powered brand building**
+
+> ⚠️ **Proprietary software.** Copyright © 2026 Zorven AI. All Rights Reserved.
+> This is **not** open source. You may not use, copy, fork, or run this software
+> for any purpose — including personal use — without written permission.
+> See [Copyright and Licensing](#copyright-and-licensing).
 
 A Django REST Framework backend with Next.js 15 frontend and 24 Python FastAPI agent microservices that helps businesses create and manage their brand strategy, run AI-powered analysis pipelines, and automate advertising campaigns — all powered by Google Gemini 2.0 Flash, Anthropic Claude, and sequential pipeline orchestration.
 
@@ -183,9 +189,11 @@ Runtime skill system that dynamically injects contextual instructions into agent
 - **Automatic API client** with token management and multi-tenancy headers
 
 ### Deployment
-- **Railway** for production hosting (with change detection deploys)
+- **Google Cloud Run** for production hosting (project `zorven-503517`, region `us-central1`)
+- **Live at [zorven.ai](https://zorven.ai)** — API at `api.zorven.ai`
+- **Artifact Registry** for images, **Memorystore** for Redis, **Neon** for PostgreSQL
 - **Docker** for containerization
-- **GitHub Actions** for CI/CD (8 test jobs)
+- **GitHub Actions** for CI/CD (10 test jobs + change-detection deploys)
 - **3,300+ tests** (pytest + Hypothesis + microservice suites)
 
 ## Project Structure
@@ -851,16 +859,47 @@ npx tsc --noEmit               # TypeScript check only
 - [Deployment Guide](deployment/README.md)
 - [Design System](ai-brand-automator-frontend/DESIGN_SYSTEM.md)
 
-## License
+## Copyright and Licensing
 
-See [LICENSE.md](docs/LICENSE.md)
+**Copyright © 2026 Zorven AI. All Rights Reserved.**
+
+Zorven is **proprietary, closed-source software**. It is published here for
+reference and collaboration with authorized parties only — it is **not**
+open source, and no license to use it is granted to the public.
+
+> **You may not use, run, copy, clone, fork, modify, distribute, or host this
+> software — or any part of it — for any purpose, including personal and
+> non-commercial use, without prior written permission from Zorven AI.**
+
+Access to this repository or its source code does **not** grant you permission
+to use it. Unauthorized use is a violation of copyright law.
+
+| | |
+|---|---|
+| **License** | Proprietary — All Rights Reserved ([full text](LICENSE)) |
+| **Personal / hobby use** | ❌ Not permitted |
+| **Commercial use** | ❌ Not permitted without a signed agreement |
+| **Forking / redistribution** | ❌ Not permitted |
+| **Use as AI training data** | ❌ Not permitted |
+| **Commercial licensing** | legal@zorven.ai |
+
+### Third-Party Components
+
+Third-party dependencies remain governed by their own licenses and are not
+covered by the terms above. Notably, the Odoo Community Edition submodule at
+`vendor/odoo/community/` is licensed under the **GNU Lesser General Public
+License v3 (LGPLv3)** by Odoo S.A. Python and Node dependencies are licensed
+per their respective `requirements.txt` and `package.json` declarations.
+
+See [`LICENSE`](LICENSE) for the authoritative terms and
+[docs/LICENSE.md](docs/LICENSE.md) for a summary.
 
 ## Status
 
 **Current Version**: 5.0.0 (Full Workflow Pipeline — WF1 + WF2 + WF3 + WF3.5)
 **Status**: ✅ Production Ready
-**Deployment**: Railway (with change detection)
-**Last Updated**: April 28, 2026
+**Deployment**: Google Cloud Run — live at [zorven.ai](https://zorven.ai) (change-detection deploys)
+**Last Updated**: July 28, 2026
 
 ### Test Coverage
 | Component | Tests | Status |

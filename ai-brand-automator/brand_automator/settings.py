@@ -39,15 +39,6 @@ ALLOWED_HOSTS = config(
     cast=lambda v: [s.strip() for s in v.split(",")],
 )
 
-# Railway private networking: allow this service's own private domain so
-# that service-to-service callbacks (e.g. orchestrator → Django) are not
-# rejected with 400 DisallowedHost.  We use RAILWAY_PRIVATE_DOMAIN
-# (auto-set by Railway on every service) rather than a wildcard to avoid
-# host-header attacks via forged *.railway.internal values.
-_railway_private_domain = config("RAILWAY_PRIVATE_DOMAIN", default="")
-if _railway_private_domain and _railway_private_domain not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append(_railway_private_domain)
-
 
 # Application definition
 
@@ -188,7 +179,7 @@ TESTING = "pytest" in sys.modules or "test" in sys.argv
 def _sanitize_url(raw: str) -> str:
     """Strip whitespace, quotes, newlines, null bytes, and BOM from a URL.
 
-    Railway/Neon dashboard copy-paste can inject invisible characters
+    Dashboard copy-paste can inject invisible characters
     or surrounding quotes that break urllib.parse.urlsplit().
     """
     if not raw:
@@ -212,7 +203,7 @@ _raw_db_url = os.environ.get("DATABASE_URL", "")
 DATABASE_URL = _sanitize_url(_raw_db_url)
 _db_url_source = "DATABASE_URL"
 
-# Log what we found for debugging Railway deployments
+# Log what we found for debugging deployments
 if _raw_db_url:
     _db_log.info(
         "DATABASE_URL from os.environ: len=%d, first_20=%r, sanitized_len=%d",
@@ -226,7 +217,7 @@ else:
     DATABASE_URL = config("DATABASE_URL", default="").strip()
 
 # If DATABASE_URL is empty, try alternative variable names used by
-# Railway, Render, and other PaaS platforms.
+# Cloud Run and other container platforms.
 if not DATABASE_URL:
     _DB_URL_ALTERNATIVES = (
         "DATABASE_PRIVATE_URL",
@@ -249,7 +240,7 @@ if not DATABASE_URL:
 _db_url_valid = bool(DATABASE_URL) and DATABASE_URL.find("://") > 0
 
 if _db_url_valid:
-    # Use DATABASE_URL if available (Railway, Heroku, etc.)
+    # Use DATABASE_URL if available (Cloud Run, etc.)
     # Use parse() with the explicit value to avoid dj_database_url
     # re-reading os.environ["DATABASE_URL"] independently.
     try:
@@ -279,7 +270,7 @@ if _db_url_valid:
 
 if not _db_url_valid:
     # Fall back to individual DB_* variables (local development or
-    # Railway with individual vars set instead of DATABASE_URL).
+    # platforms with individual vars set instead of DATABASE_URL).
     # Read each var once with its real default to avoid redundant config() calls.
     _db_name = config("DB_NAME", default="neondb")
     _db_user = config("DB_USER", default="neondb_owner")
@@ -499,8 +490,8 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
-    # SECURE_SSL_REDIRECT disabled - Railway handles HTTPS at load balancer level
-    # This also allows Railway's internal healthcheck (which uses HTTP) to work
+    # SECURE_SSL_REDIRECT disabled - Cloud Run handles HTTPS at the load balancer
+    # This also allows the platform healthcheck (which uses HTTP) to work
     SECURE_SSL_REDIRECT = False
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 

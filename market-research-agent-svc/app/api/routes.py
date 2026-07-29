@@ -61,7 +61,7 @@ async def diagnostics() -> dict:
     """
     Detailed diagnostics showing which API keys are configured.
 
-    Helps debug 30% confidence / stub mode issues on Railway.
+    Helps debug 30% confidence / stub mode issues in deployed environments.
     Does NOT expose actual key values — only whether they are set.
     """
     api_key = settings.ANTHROPIC_API_KEY

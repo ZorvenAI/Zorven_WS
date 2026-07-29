@@ -62,7 +62,9 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning("Anthropic client init failed: %s", exc)
     else:
-        logger.warning("Set CGA_ANTHROPIC_API_KEY on Railway for live results")
+        logger.warning(
+            "Set CGA_ANTHROPIC_API_KEY on the Cloud Run service for live results"
+        )
 
     # 4. Nano Banana 2 image generation client
     image_gen_client = create_image_gen_client()

@@ -98,7 +98,6 @@ rag_index/
 │   └── test_e2e.py               # E2E tests (10 tests)
 ├── Dockerfile                    # Multi-stage production build
 ├── docker-compose.yml            # Local development stack
-├── railway.json                  # Railway deployment config
 └── .env.example                  # Environment template
 ```
 
@@ -235,8 +234,8 @@ cd rag_index
 docker-compose up -d
 ```
 
-### Railway
-The service is configured for Railway deployment via `railway.json`:
+### Cloud Run
+The service runs as a Cloud Run consumer process (`rag-index-consumer` in the Procfile):
 - Automatic health checks
 - Restart on failure
 - Environment variable injection

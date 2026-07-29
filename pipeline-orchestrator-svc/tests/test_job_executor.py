@@ -741,10 +741,10 @@ class TestResolveCallbackUrl:
         request = _make_request(job_id="job-abc-123")
         original_val = settings.CALLBACK_BASE_URL
         try:
-            settings.CALLBACK_BASE_URL = "http://previsionws.railway.internal:8000"
+            settings.CALLBACK_BASE_URL = "https://api.zorven.ai"
             url = JobExecutor._resolve_callback_url(request)
             assert url == (
-                "http://previsionws.railway.internal:8000"
+                "https://api.zorven.ai"
                 "/api/v1/orchestration/jobs/job-abc-123/callback/"
             )
             assert request.callback_url not in url
