@@ -303,10 +303,22 @@ jobs:
         if: matrix.changed == 'true' && matrix.image == 'zorven-backend'
         run: |
           echo "Running database migrations..."
-          gcloud run jobs execute zorven-migrations \
+          # NOTE: this step must fail the deploy on migration failure. It
+          # previously ended in `|| echo "Warning: ..."`, which meant a broken
+          # migration job passed silently and services rolled forward onto an
+          # unmigrated schema. A real failure went unnoticed this way: the
+          # zorven-migrations job was pinned to a decommissioned Neon endpoint
+          # and had been exiting 1 on every deploy.
+          if ! gcloud run jobs execute zorven-migrations \
             --region="${{ env.GCP_REGION }}" \
             --wait \
-            --quiet || echo "Warning: Migration job failed or not found"
+            --quiet; then
+            echo "::error::Migration job 'zorven-migrations' failed. Aborting deploy."
+            echo "Inspect the failing execution with:"
+            echo "  gcloud run jobs executions list --job=zorven-migrations --region=${{ env.GCP_REGION }}"
+            echo "  gcloud logging read 'resource.type=\"cloud_run_job\" resource.labels.job_name=\"zorven-migrations\"' --limit=50"
+            exit 1
+          fi
 
       # Update Cloud Run services with new image
       - name: Deploy to Cloud Run
