@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 26 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash and Anthropic Claude. ~3,300+ tests across all components.
+AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 26 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash and Anthropic Claude. ~5,900 test functions across all components (excluding the vendored Odoo submodule).
 
 ## Monorepo Layout
 
@@ -45,7 +45,7 @@ scripts/                         # E2E test scripts, GitHub issue automation
 tests/integration/               # Cross-service integration tests (3 phases)
 ```
 
-Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service, brand-equity-calculator-svc, odoo-mcp-server-svc, market-research-agent-svc, competitor-intel-agent-svc, audience-persona-agent-svc, trend-cultural-agent-svc, voc-agent-svc, odoo-worker-agent-svc, brand-positioning-agent-svc, brand-architecture-agent-svc, brand-personality-agent-svc, brand-naming-agent-svc, brand-story-agent-svc, campaign-architecture-agent-svc, creative-generation-agent-svc, ad-publishing-agent-svc, campaign-optimization-agent-svc, intelligence-loop-agent-svc, prompt-optimization-svc. Missing: rag-uploader-agent-service.
+Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service, brand-equity-calculator-svc, odoo-mcp-server-svc, market-research-agent-svc, competitor-intel-agent-svc, audience-persona-agent-svc, trend-cultural-agent-svc, voc-agent-svc, odoo-worker-agent-svc, brand-positioning-agent-svc, brand-architecture-agent-svc, brand-personality-agent-svc, brand-naming-agent-svc, brand-story-agent-svc, campaign-architecture-agent-svc, creative-generation-agent-svc, ad-publishing-agent-svc, campaign-optimization-agent-svc, intelligence-loop-agent-svc, prompt-optimization-svc. Missing: rag-uploader-agent-service (no service-local docs) and spike-stt-v2 (has `README.md` instead).
 
 ## Build, Run, and Test Commands
 
@@ -58,7 +58,7 @@ cd ai-brand-automator && source ../.venv/bin/activate
 python manage.py runserver 0.0.0.0:8001
 
 # Tests
-pytest -v                                    # All ~2075 tests
+pytest -v                                    # All ~2450 tests
 pytest automation/tests/ -v                  # Single app
 pytest media_curation/tests/test_views.py -v # Single file
 pytest -k "test_my_function" -v              # Single test by name
@@ -78,6 +78,9 @@ python manage.py migrate_schemas --shared --noinput
 python manage.py seed_manifests
 python manage.py seed_metrics                    # Seed analytics MetricDefinitions
 python manage.py seed_subscription_plans        # Seed Stripe plans
+python manage.py seed_sandbox_recommendations   # Seed optimization sandbox data
+python manage.py provision_data_stores          # Provision per-tenant data stores
+python manage.py cache_health                   # Redis cache health check
 python manage.py check                          # Django system check
 
 # Analytics backfill (one-time, from existing completed jobs)
@@ -142,7 +145,7 @@ docker compose --profile with-kafka --profile with-db up      # + Local PostgreS
 docker compose down -v                                        # Tear down
 ```
 
-**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, MLflow 5000, MLflow DB 5435 (host), Orchestrator 8010, Discovery 8020, Market Research 8021, Competitor Intel 8022, Audience Persona 8023, Trend Cultural 8024, VoC Agent 8025, Intelligence 8030, Brand Positioning 8031, Brand Architecture 8032, Brand Personality 8033, Brand Naming 8034, Brand Story 8035, Titling 8040, Campaign Architecture 8041, Creative Generation 8042, Ad Publishing 8043, Campaign Optimization 8044, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090, Odoo MCP 8095, Odoo Worker 8100, Prompt Optimization 8110
+**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, MLflow 5000, MLflow DB 5435 (host), Orchestrator 8010, Discovery 8020, Market Research 8021, Competitor Intel 8022, Audience Persona 8023, Trend Cultural 8024, VoC Agent 8025, Intelligence 8030, Brand Positioning 8031, Brand Architecture 8032, Brand Personality 8033, Brand Naming 8034, Brand Story 8035, Titling 8040, Campaign Architecture 8041, Creative Generation 8042, Ad Publishing 8043, Campaign Optimization 8044, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090, Odoo MCP 8095, Odoo Worker 8100, Prompt Optimization 8110, Intelligence Loop 8045, STT Spike 8120
 
 **Frontend Docker build** requires `output: "standalone"` in `next.config.ts`. Without it, the Dockerfile `COPY --from=builder /app/.next/standalone` step fails.
 
@@ -233,7 +236,9 @@ The `workspace` app provides visual workflow editing with React Flow. Models: `U
 
 ### Multi-Tenancy
 
-Schema-based via `django-tenants`. All models have a nullable `tenant` FK. Most apps run in the shared (public) schema. The `files` app runs in per-tenant schemas as a `TENANT_APP`.
+Schema-based via `django-tenants`. All models have a nullable `tenant` FK. Most apps run in the shared (public) schema. The `files` app is the only app in `TENANT_APPS`, running in per-tenant schemas.
+
+`SHARED_APPS` (public schema): `tenants`, `ai_services` (Gemini integration + logging), `onboarding` (company data), `subscriptions` (Stripe), `automation` (social media + MCP server), `kafka_service`, `data_ingestion` / `media_curation` / `rag_index` (hexagonal pipeline apps), `orchestration`, `workspace`, `analytics`, `optimization` (COA background service), `intelligence_loop` (ILA/WF3.5). `daphne` must precede `django.contrib.staticfiles`; `django_tenants` must be first.
 
 ### Service-to-Service Authentication
 
