@@ -15,6 +15,23 @@ fi
 
 REDIS_BASE="redis://${REDIS_HOST}:${REDIS_PORT}"
 
+# REDIS DB INDEX LIMIT — do not reintroduce indices >= 16 here.
+#
+# The project's logical allocation runs 0..26 (see root CLAUDE.md), which works
+# under docker-compose because redis is started with `--databases 27`.
+# Memorystore for Redis does NOT expose `databases` as a tunable redisConfig,
+# so the managed instance is fixed at 16 databases (0..15). Every service that
+# was pointed at DB 16..26 failed with
+#   "DB index is out of range"
+# and — because the agent RedisManagers fail open — degraded to no caching
+# silently rather than crashing. That went unnoticed from at least 2026-07-25.
+#
+# The 11 affected services (BPA, BAA, BPV, NTA, BSA, CAA, CGA, ADPUB, COA, ILA,
+# POI) are therefore mapped onto DB 2, the existing shared, key-prefix-isolated
+# pool. This is safe because each namespaces every key it writes with a
+# distinct prefix: bpa:, baa:, bpv:, nta:, bsa:, caa:, cga:, adpub:, coa:,
+# ila:, poi:/prompt:.
+
 # ── Common flags ─────────────────────────────────────────────
 COMMON_FLAGS=(
   --region="${GCP_REGION}"
@@ -282,7 +299,7 @@ deploy_service zorven-brand-positioning-agent zorven-brand-positioning-agent 803
   --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="BPA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
-BPA_REDIS_URL=${REDIS_BASE}/16,\
+BPA_REDIS_URL=${REDIS_BASE}/2,\
 BPA_PROMPT_CACHE_REDIS_URL=${REDIS_BASE}/2,\
 BPA_MLFLOW_TRACKING_URI=PLACEHOLDER,\
 BPA_PROMPT_FALLBACK_ONLY=true,\
@@ -293,7 +310,7 @@ deploy_service zorven-brand-architecture-agent zorven-brand-architecture-agent 8
   --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="BAA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
-BAA_REDIS_URL=${REDIS_BASE}/17,\
+BAA_REDIS_URL=${REDIS_BASE}/2,\
 BAA_PROMPT_CACHE_REDIS_URL=${REDIS_BASE}/2,\
 BAA_MLFLOW_TRACKING_URI=PLACEHOLDER,\
 BAA_PROMPT_FALLBACK_ONLY=true,\
@@ -304,7 +321,7 @@ deploy_service zorven-brand-personality-agent zorven-brand-personality-agent 803
   --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="BPV_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
-BPV_REDIS_URL=${REDIS_BASE}/18,\
+BPV_REDIS_URL=${REDIS_BASE}/2,\
 BPV_PROMPT_CACHE_REDIS_URL=${REDIS_BASE}/2,\
 BPV_MLFLOW_TRACKING_URI=PLACEHOLDER,\
 BPV_PROMPT_FALLBACK_ONLY=true,\
@@ -315,7 +332,7 @@ deploy_service zorven-brand-naming-agent zorven-brand-naming-agent 8034 \
   --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="NTA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
-NTA_REDIS_URL=${REDIS_BASE}/19,\
+NTA_REDIS_URL=${REDIS_BASE}/2,\
 NTA_PROMPT_CACHE_REDIS_URL=${REDIS_BASE}/2,\
 NTA_MLFLOW_TRACKING_URI=PLACEHOLDER,\
 NTA_PROMPT_FALLBACK_ONLY=true,\
@@ -326,7 +343,7 @@ deploy_service zorven-brand-story-agent zorven-brand-story-agent 8035 \
   --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="BSA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
-BSA_REDIS_URL=${REDIS_BASE}/20,\
+BSA_REDIS_URL=${REDIS_BASE}/2,\
 BSA_PROMPT_CACHE_REDIS_URL=${REDIS_BASE}/2,\
 BSA_MLFLOW_TRACKING_URI=PLACEHOLDER,\
 BSA_PROMPT_FALLBACK_ONLY=true,\
@@ -378,7 +395,7 @@ deploy_service zorven-campaign-architecture-agent zorven-campaign-architecture-a
   --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="CAA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
-CAA_REDIS_URL=${REDIS_BASE}/21,\
+CAA_REDIS_URL=${REDIS_BASE}/2,\
 CAA_PROMPT_CACHE_REDIS_URL=${REDIS_BASE}/2,\
 CAA_MLFLOW_TRACKING_URI=PLACEHOLDER,\
 CAA_PROMPT_FALLBACK_ONLY=true,\
@@ -389,7 +406,7 @@ deploy_service zorven-creative-generation-agent zorven-creative-generation-agent
   --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="CGA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
-CGA_REDIS_URL=${REDIS_BASE}/22,\
+CGA_REDIS_URL=${REDIS_BASE}/2,\
 CGA_PROMPT_CACHE_REDIS_URL=${REDIS_BASE}/2,\
 CGA_MLFLOW_TRACKING_URI=PLACEHOLDER,\
 CGA_PROMPT_FALLBACK_ONLY=true,\
@@ -400,7 +417,7 @@ deploy_service zorven-ad-publishing-agent zorven-ad-publishing-agent 8043 \
   --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="ADPUB_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
-ADPUB_REDIS_URL=${REDIS_BASE}/23,\
+ADPUB_REDIS_URL=${REDIS_BASE}/2,\
 ADPUB_PROMPT_CACHE_REDIS_URL=${REDIS_BASE}/2,\
 ADPUB_MLFLOW_TRACKING_URI=PLACEHOLDER,\
 ADPUB_PROMPT_FALLBACK_ONLY=true,\
@@ -411,7 +428,7 @@ deploy_service zorven-campaign-optimization-agent zorven-campaign-optimization-a
   --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="COA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
-COA_REDIS_URL=${REDIS_BASE}/24,\
+COA_REDIS_URL=${REDIS_BASE}/2,\
 COA_PROMPT_CACHE_REDIS_URL=${REDIS_BASE}/2,\
 COA_MLFLOW_TRACKING_URI=PLACEHOLDER,\
 COA_PROMPT_FALLBACK_ONLY=true,\
@@ -422,7 +439,7 @@ deploy_service zorven-intelligence-loop-agent zorven-intelligence-loop-agent 804
   --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="ILA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
-ILA_REDIS_URL=${REDIS_BASE}/25,\
+ILA_REDIS_URL=${REDIS_BASE}/2,\
 ILA_PROMPT_CACHE_REDIS_URL=${REDIS_BASE}/2,\
 ILA_MLFLOW_TRACKING_URI=PLACEHOLDER,\
 ILA_PROMPT_FALLBACK_ONLY=true,\
@@ -468,7 +485,7 @@ deploy_service zorven-prompt-optimization zorven-prompt-optimization 8110 \
   --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="POI_ANTHROPIC_API_KEY=POI_ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
-POI_REDIS_URL=${REDIS_BASE}/26,\
+POI_REDIS_URL=${REDIS_BASE}/2,\
 POI_MLFLOW_TRACKING_URI=PLACEHOLDER,\
 POI_DATABASE_URL=${DATABASE_URL},\
 ${AGENT_COMMON}" &
