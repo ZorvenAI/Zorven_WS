@@ -155,7 +155,21 @@ jobs:
     needs: changes
     strategy:
       fail-fast: false
-      max-parallel: 8
+      # QUOTA: us-central1 allows 20 vCPU total (CpuAllocPerProjectRegion =
+      # 20000 milli vCPU). Rolling a revision needs headroom for the old and
+      # new revision to be live simultaneously, so N parallel rollouts can
+      # transiently demand ~2N vCPU on top of whatever is already serving.
+      # At max-parallel: 8 that spike exhausted the quota mid-deploy and
+      # failed 4 services (backend/-ws, intelligence-loop, odoo-mcp,
+      # prompt-optimization) with "Quota exceeded for total allowable CPU".
+      #
+      # Evidence that the spike — not the steady-state total — was the cause:
+      # 28 services deployed fine while potential allocation was already
+      # 61 vCPU, so the quota is enforced against concurrent CPU in use.
+      #
+      # 3 keeps the transient draw near ~6 vCPU. Raise this once the
+      # CpuAllocPerProjectRegion quota increase is granted.
+      max-parallel: 3
       matrix:
         include:
           # Backend (image used by backend + backend-ws)
