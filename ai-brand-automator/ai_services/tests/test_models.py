@@ -375,7 +375,12 @@ class TestAIGenerationModel:
             prompt="Test",
             response="Response",
         )
-        assert generation.model_used == "gemini-3.5-flash-exp"
+        # Must track AIGeneration.model_used's default, which moved from
+        # "gemini-3.5-flash-exp" to "gemini-3.5-flash" in #509.
+        assert (
+            generation.model_used == AIGeneration._meta.get_field("model_used").default
+        )
+        assert generation.model_used == "gemini-3.5-flash"
 
     def test_processing_time_defaults_to_zero(self, public_tenant):
         """Test processing_time defaults to 0.0"""

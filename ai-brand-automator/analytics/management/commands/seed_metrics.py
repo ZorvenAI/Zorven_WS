@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand
+from django.db import transaction
 
 from analytics.models import MetricDefinition
 
@@ -379,8 +380,8 @@ METRIC_DEFINITIONS = [
         "display_name": "Architecture Model Score",
         "category": "brand_architecture",
         "unit": "score",
-        "min_value": 0,
-        "max_value": 100,
+        "value_range_min": 0,
+        "value_range_max": 100,
         "higher_is_better": True,
         "chart_color": "#3B82F6",
         "display_order": 200,
@@ -393,8 +394,8 @@ METRIC_DEFINITIONS = [
         "display_name": "Positioning Alignment",
         "category": "brand_architecture",
         "unit": "score",
-        "min_value": 0,
-        "max_value": 25,
+        "value_range_min": 0,
+        "value_range_max": 25,
         "higher_is_better": True,
         "chart_color": "#8B5CF6",
         "display_order": 201,
@@ -406,8 +407,8 @@ METRIC_DEFINITIONS = [
         "display_name": "Audience Fit",
         "category": "brand_architecture",
         "unit": "score",
-        "min_value": 0,
-        "max_value": 25,
+        "value_range_min": 0,
+        "value_range_max": 25,
         "higher_is_better": True,
         "chart_color": "#14B8A6",
         "display_order": 202,
@@ -419,8 +420,8 @@ METRIC_DEFINITIONS = [
         "display_name": "Competitive Differentiation",
         "category": "brand_architecture",
         "unit": "score",
-        "min_value": 0,
-        "max_value": 25,
+        "value_range_min": 0,
+        "value_range_max": 25,
         "higher_is_better": True,
         "chart_color": "#F59E0B",
         "display_order": 203,
@@ -432,8 +433,8 @@ METRIC_DEFINITIONS = [
         "display_name": "Operational Efficiency",
         "category": "brand_architecture",
         "unit": "score",
-        "min_value": 0,
-        "max_value": 25,
+        "value_range_min": 0,
+        "value_range_max": 25,
         "higher_is_better": True,
         "chart_color": "#EC4899",
         "display_order": 204,
@@ -445,8 +446,8 @@ METRIC_DEFINITIONS = [
         "display_name": "Hierarchy Depth",
         "category": "brand_architecture",
         "unit": "count",
-        "min_value": 0,
-        "max_value": 5,
+        "value_range_min": 0,
+        "value_range_max": 5,
         "higher_is_better": False,
         "chart_color": "#6B7280",
         "display_order": 205,
@@ -458,8 +459,8 @@ METRIC_DEFINITIONS = [
         "display_name": "Sub-Brand Count",
         "category": "brand_architecture",
         "unit": "count",
-        "min_value": 0,
-        "max_value": 15,
+        "value_range_min": 0,
+        "value_range_max": 15,
         "higher_is_better": True,
         "chart_color": "#22C55E",
         "display_order": 206,
@@ -471,8 +472,8 @@ METRIC_DEFINITIONS = [
         "display_name": "Naming Consistency",
         "category": "brand_architecture",
         "unit": "score",
-        "min_value": 0,
-        "max_value": 100,
+        "value_range_min": 0,
+        "value_range_max": 100,
         "higher_is_better": True,
         "chart_color": "#00F5FF",
         "display_order": 207,
@@ -484,8 +485,8 @@ METRIC_DEFINITIONS = [
         "display_name": "Growth Phases Planned",
         "category": "brand_architecture",
         "unit": "count",
-        "min_value": 0,
-        "max_value": 10,
+        "value_range_min": 0,
+        "value_range_max": 10,
         "higher_is_better": True,
         "chart_color": "#F59E0B",
         "display_order": 208,
@@ -497,8 +498,8 @@ METRIC_DEFINITIONS = [
         "display_name": "Architecture Confidence",
         "category": "brand_architecture",
         "unit": "score",
-        "min_value": 0,
-        "max_value": 100,
+        "value_range_min": 0,
+        "value_range_max": 100,
         "higher_is_better": True,
         "chart_color": "#10B981",
         "display_order": 209,
@@ -1228,7 +1229,7 @@ METRIC_DEFINITIONS = [
         "unit": "count",
         "value_range_min": 0,
         "value_range_max": 1000,
-        "higher_is_better": None,
+        "higher_is_better": True,
         "chart_color": "#3B82F6",
         "display_order": 1,
         "description": "Number of optimization recommendations generated per tick",
@@ -1254,7 +1255,7 @@ METRIC_DEFINITIONS = [
         "unit": "count",
         "value_range_min": 0,
         "value_range_max": 100,
-        "higher_is_better": None,
+        "higher_is_better": True,
         "chart_color": "#F59E0B",
         "display_order": 3,
         "description": "Number of autonomous optimization actions executed per tick",
@@ -1306,7 +1307,7 @@ METRIC_DEFINITIONS = [
         "unit": "currency",
         "value_range_min": 0,
         "value_range_max": 100000,
-        "higher_is_better": None,
+        "higher_is_better": False,
         "chart_color": "#EC4899",
         "display_order": 7,
         "description": "Campaign spend for the current day in USD",
@@ -1375,7 +1376,7 @@ METRIC_DEFINITIONS = [
         "unit": "count",
         "value_range_min": 0,
         "value_range_max": 1000,
-        "higher_is_better": None,
+        "higher_is_better": False,
         "chart_color": "#F59E0B",
         "display_order": 4,
         "description": (
@@ -1423,7 +1424,12 @@ METRIC_DEFINITIONS = [
 class Command(BaseCommand):
     help = "Seed MetricDefinition rows for workflow analytics"
 
+    @transaction.atomic
     def handle(self, *args, **options):
+        # Atomic so a bad record cannot leave a partial registry behind. A
+        # field-name mismatch in the brand-architecture block (record 27 of
+        # 104) previously raised FieldError mid-loop, committing the first 26
+        # rows and silently skipping the remaining 78 in production.
         created = 0
         updated = 0
 
