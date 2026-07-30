@@ -154,8 +154,20 @@ class TestE2ECompanyExport:
     """E2E tests for company RAG export."""
 
     def test_e2e_company_document_structure(self):
-        """Verify company document has correct structure for RAG."""
-        from onboarding.tasks import _build_company_document
+        """Verify company document has correct structure for RAG.
+
+        Company document building moved out of ``onboarding.tasks`` — that
+        module now delegates to ``rag_index.tasks.db_sync_tasks.sync_model_to_rag``,
+        and the document itself is built by ``DbSyncService``. The old
+        ``_build_company_document`` no longer exists anywhere in the backend,
+        so this asserts the current contract:
+
+          * ``company_id`` moved into ``metadata`` and is a string
+          * ``content`` became ``extracted_text``
+          * ``tenant_id``/``source`` are no longer part of the document —
+            tenant is resolved separately via ``get_tenant_id()``
+        """
+        from rag_index.services.db_sync_service import DbSyncService
 
         tenant = create_test_tenant()
         company = Company.objects.create(
@@ -167,21 +179,30 @@ class TestE2ECompanyExport:
             values="Quality, Innovation",
         )
 
-        doc = _build_company_document(company)
+        service = DbSyncService()
+        doc = service.build_document("Company", company)
 
         # Verify required fields for RAG indexing
         assert doc["document_type"] == "company_profile"
-        assert doc["tenant_id"] == str(tenant.id)
-        assert doc["company_id"] == company.id
-        assert doc["source"] == "onboarding_service"
+        assert doc["metadata"]["company_id"] == str(company.id)
 
-        # Metadata should have timestamps
-        assert "metadata" in doc
+        # Tenant routing and upsert identity are resolved by the service
+        assert service.get_tenant_id(company) == str(tenant.id)
+        assert service.get_document_id("Company", company) == f"company-{company.pk}"
+        assert service.should_sync("Company", company) is True
 
-        # Content should be concatenated text
-        content = doc["content"]
-        assert isinstance(content, str)
-        assert len(content) > 0
+        # Metadata should carry the profile fields and timestamps
+        assert doc["metadata"]["name"] == "E2E Company Export"
+        assert doc["metadata"]["industry"] == "Technology"
+        assert "created_at" in doc["metadata"]
+        assert "updated_at" in doc["metadata"]
+
+        # Extracted text should be concatenated content from the company
+        text = doc["extracted_text"]
+        assert isinstance(text, str)
+        assert len(text) > 0
+        assert "E2E Company Export" in text
+        assert "Technology" in text
 
 
 @pytest.mark.django_db

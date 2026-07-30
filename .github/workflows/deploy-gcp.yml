@@ -155,7 +155,21 @@ jobs:
     needs: changes
     strategy:
       fail-fast: false
-      max-parallel: 8
+      # QUOTA: us-central1 allows 20 vCPU total (CpuAllocPerProjectRegion =
+      # 20000 milli vCPU). Rolling a revision needs headroom for the old and
+      # new revision to be live simultaneously, so N parallel rollouts can
+      # transiently demand ~2N vCPU on top of whatever is already serving.
+      # At max-parallel: 8 that spike exhausted the quota mid-deploy and
+      # failed 4 services (backend/-ws, intelligence-loop, odoo-mcp,
+      # prompt-optimization) with "Quota exceeded for total allowable CPU".
+      #
+      # Evidence that the spike — not the steady-state total — was the cause:
+      # 28 services deployed fine while potential allocation was already
+      # 61 vCPU, so the quota is enforced against concurrent CPU in use.
+      #
+      # 3 keeps the transient draw near ~6 vCPU. Raise this once the
+      # CpuAllocPerProjectRegion quota increase is granted.
+      max-parallel: 3
       matrix:
         include:
           # Backend (image used by backend + backend-ws)
@@ -303,10 +317,22 @@ jobs:
         if: matrix.changed == 'true' && matrix.image == 'zorven-backend'
         run: |
           echo "Running database migrations..."
-          gcloud run jobs execute zorven-migrations \
+          # NOTE: this step must fail the deploy on migration failure. It
+          # previously ended in `|| echo "Warning: ..."`, which meant a broken
+          # migration job passed silently and services rolled forward onto an
+          # unmigrated schema. A real failure went unnoticed this way: the
+          # zorven-migrations job was pinned to a decommissioned Neon endpoint
+          # and had been exiting 1 on every deploy.
+          if ! gcloud run jobs execute zorven-migrations \
             --region="${{ env.GCP_REGION }}" \
             --wait \
-            --quiet || echo "Warning: Migration job failed or not found"
+            --quiet; then
+            echo "::error::Migration job 'zorven-migrations' failed. Aborting deploy."
+            echo "Inspect the failing execution with:"
+            echo "  gcloud run jobs executions list --job=zorven-migrations --region=${{ env.GCP_REGION }}"
+            echo "  gcloud logging read 'resource.type=\"cloud_run_job\" resource.labels.job_name=\"zorven-migrations\"' --limit=50"
+            exit 1
+          fi
 
       # Update Cloud Run services with new image
       - name: Deploy to Cloud Run
