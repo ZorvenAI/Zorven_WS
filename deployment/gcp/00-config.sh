@@ -34,8 +34,25 @@ export SA_EMAIL="${SA_NAME}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
 # ── Cloud Run Defaults ───────────────────────────────────────
 export CR_MEMORY="512Mi"
 export CR_CPU="1"
-export CR_MAX_INSTANCES="2"
 export CR_TIMEOUT="300"
+
+# Max instances for user-facing services (backend, frontend, orchestrator).
+# These absorb interactive traffic and keep burst headroom.
+export CR_MAX_INSTANCES="2"
+
+# Max instances for agent microservices.
+#
+# QUOTA: us-central1 allows 20 vCPU total (CpuAllocPerProjectRegion =
+# 20000 milli vCPU). At cpu=1 each, the ~29 CR_MAX_INSTANCES services could
+# request 58 vCPU on their own, which blew the ceiling and failed 4 services
+# mid-rollout. Agents are invoked per-pipeline-node and rarely need to scale
+# out, so they are pinned to 1 instance to cut rollout pressure roughly in
+# half (61 -> 36 vCPU potential).
+#
+# NOTE: 32 services x 1 instance = 32 vCPU still exceeds the 20 vCPU quota.
+# This reduces pressure but does NOT by itself make the ceiling safe — the
+# quota increase is still required.
+export CR_MAX_INSTANCES_AGENT="1"
 
 # ── Database ─────────────────────────────────────────────────
 # SECURITY: DATABASE_URL carries credentials and MUST NOT be hardcoded here.

@@ -198,7 +198,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-discovery-agent zorven-discovery-agent 8020 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="DISCOVERY_GOOGLE_API_KEY=GOOGLE_API_KEY:latest,DISCOVERY_TAVILY_API_KEY=TAVILY_API_KEY:latest" \
   --set-env-vars="\
 DISCOVERY_REDIS_URL=${REDIS_BASE}/2,\
@@ -209,7 +209,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-market-research-agent zorven-market-research-agent 8021 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="MRA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,MRA_TAVILY_API_KEY=TAVILY_API_KEY:latest" \
   --set-env-vars="\
 MRA_REDIS_URL=${REDIS_BASE}/11,\
@@ -220,7 +220,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-competitor-intel-agent zorven-competitor-intel-agent 8022 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="CIA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,CIA_TAVILY_API_KEY=TAVILY_API_KEY:latest" \
   --set-env-vars="\
 CIA_REDIS_URL=${REDIS_BASE}/12,\
@@ -231,7 +231,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-audience-persona-agent zorven-audience-persona-agent 8023 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="APA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 APA_REDIS_URL=${REDIS_BASE}/13,\
@@ -242,7 +242,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-trend-cultural-agent zorven-trend-cultural-agent 8024 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="TCIA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,TCIA_TAVILY_API_KEY=TAVILY_API_KEY:latest" \
   --set-env-vars="\
 TCIA_REDIS_URL=${REDIS_BASE}/14,\
@@ -253,7 +253,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-voc-agent zorven-voc-agent 8025 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="VOCA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 VOCA_REDIS_URL=${REDIS_BASE}/15,\
@@ -264,7 +264,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-intelligence-agent zorven-intelligence-agent 8030 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="INTELLIGENCE_GEMINI_API_KEY=GOOGLE_API_KEY:latest" \
   --set-env-vars="\
 INTELLIGENCE_REDIS_URL=${REDIS_BASE}/3,\
@@ -279,7 +279,7 @@ log "  Batch 1 complete."
 # ── Batch 2: WF2 agents ─────────────────────────────────────
 deploy_service zorven-brand-positioning-agent zorven-brand-positioning-agent 8031 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="BPA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 BPA_REDIS_URL=${REDIS_BASE}/16,\
@@ -290,7 +290,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-brand-architecture-agent zorven-brand-architecture-agent 8032 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="BAA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 BAA_REDIS_URL=${REDIS_BASE}/17,\
@@ -301,7 +301,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-brand-personality-agent zorven-brand-personality-agent 8033 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="BPV_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 BPV_REDIS_URL=${REDIS_BASE}/18,\
@@ -312,7 +312,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-brand-naming-agent zorven-brand-naming-agent 8034 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="NTA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 NTA_REDIS_URL=${REDIS_BASE}/19,\
@@ -323,7 +323,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-brand-story-agent zorven-brand-story-agent 8035 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="BSA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 BSA_REDIS_URL=${REDIS_BASE}/20,\
@@ -334,7 +334,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-chat-titling-worker zorven-chat-titling-worker 8040 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="TITLING_GOOGLE_API_KEY=GOOGLE_API_KEY:latest,TITLING_WORKER_TOKEN=WORKER_TOKEN:latest" \
   --set-env-vars="\
 TITLING_REDIS_URL=${REDIS_BASE}/4,\
@@ -347,7 +347,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-content-agent zorven-content-agent 8050 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="CONTENT_GOOGLE_API_KEY=GOOGLE_API_KEY:latest,CONTENT_CORE_API_TOKEN=ORCHESTRATOR_SERVICE_TOKEN:latest" \
   --set-env-vars="\
 CONTENT_REDIS_URL=${REDIS_BASE}/5,\
@@ -359,7 +359,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-social-agent zorven-social-agent 8060 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="SOCIAL_GOOGLE_API_KEY=GOOGLE_API_KEY:latest,SOCIAL_CORE_API_TOKEN=ORCHESTRATOR_SERVICE_TOKEN:latest" \
   --set-env-vars="\
 SOCIAL_REDIS_URL=${REDIS_BASE}/6,\
@@ -375,7 +375,7 @@ log "  Batch 2 complete."
 # ── Batch 3: WF3 + remaining agents ─────────────────────────
 deploy_service zorven-campaign-architecture-agent zorven-campaign-architecture-agent 8041 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="CAA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 CAA_REDIS_URL=${REDIS_BASE}/21,\
@@ -386,7 +386,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-creative-generation-agent zorven-creative-generation-agent 8042 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="CGA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 CGA_REDIS_URL=${REDIS_BASE}/22,\
@@ -397,7 +397,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-ad-publishing-agent zorven-ad-publishing-agent 8043 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="ADPUB_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 ADPUB_REDIS_URL=${REDIS_BASE}/23,\
@@ -408,7 +408,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-campaign-optimization-agent zorven-campaign-optimization-agent 8044 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="COA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 COA_REDIS_URL=${REDIS_BASE}/24,\
@@ -419,7 +419,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-intelligence-loop-agent zorven-intelligence-loop-agent 8045 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="ILA_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 ILA_REDIS_URL=${REDIS_BASE}/25,\
@@ -430,7 +430,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-rag-uploader-agent zorven-rag-uploader-agent 8070 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-env-vars="\
 RAG_UPLOADER_REDIS_URL=${REDIS_BASE}/7,\
 RAG_UPLOADER_PROMPT_CACHE_REDIS_URL=${REDIS_BASE}/2,\
@@ -440,7 +440,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-brand-equity-calculator zorven-brand-equity-calculator 8090 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="BRAND_EQUITY_ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 BRAND_EQUITY_REDIS_URL=${REDIS_BASE}/8,\
@@ -448,14 +448,14 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-odoo-mcp-server zorven-odoo-mcp-server 8095 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-env-vars="\
 ODOO_MCP_REDIS_URL=${REDIS_BASE}/9,\
 ${AGENT_COMMON}" &
 
 deploy_service zorven-odoo-worker-agent zorven-odoo-worker-agent 8100 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-env-vars="\
 ODOO_WORKER_REDIS_URL=${REDIS_BASE}/10,\
 ODOO_WORKER_PROMPT_CACHE_REDIS_URL=${REDIS_BASE}/2,\
@@ -465,7 +465,7 @@ ${AGENT_COMMON}" &
 
 deploy_service zorven-prompt-optimization zorven-prompt-optimization 8110 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
-  --max-instances="${CR_MAX_INSTANCES}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --set-secrets="POI_ANTHROPIC_API_KEY=POI_ANTHROPIC_API_KEY:latest" \
   --set-env-vars="\
 POI_REDIS_URL=${REDIS_BASE}/26,\
