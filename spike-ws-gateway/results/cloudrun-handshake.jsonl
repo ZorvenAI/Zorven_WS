@@ -1,0 +1,3 @@
+{"event": "open", "rtt_ms": 1361.85, "url": "wss://zorven-spike-ws-echo-977911773818.us-central1.run.app", "t": 1785462726.133743}
+{"event": "start_ack", "rtt_ms": 33.19, "frame": {"seq": 0, "type": "transcript.partial", "text": "session started for tenant tenant-spike", "speaker": 0}, "t": 1785462726.1681468}
+{"event": "rtt", "rtt_ms": 30.65, "bytes_sent": 1024, "bytes_echoed": 1024, "echo_id": 1, "t": 1785462726.20709}

@@ -1,0 +1,3 @@
+{"event": "reject", "label": "absent", "outcome": "http_rejected", "status": 401, "t": 1785463472.396885}
+{"event": "reject", "label": "expired", "outcome": "http_rejected", "status": 401, "t": 1785463473.439035}
+{"event": "reject", "label": "forged", "outcome": "http_rejected", "status": 401, "t": 1785463492.6830661}
