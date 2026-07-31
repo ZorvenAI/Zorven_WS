@@ -9,7 +9,8 @@
 ## Summary
 
 **Go.** A WebSocket upgrade completes, authenticates and holds for a full
-45-minute meeting on both paths. Neither topology forces a redesign, but each
+45-minute meeting on both paths — measured, not inferred: 2700.7 s through
+Cloud Run and 2700.6 s through Kong, ~134,800 frames each. Neither topology forces a redesign, but each
 needs a named configuration and they do **not** behave the same way, so OD-1
 resolves per environment rather than globally.
 
@@ -75,8 +76,12 @@ tenant validation and rate limiting have nowhere to run in production except
 | Path | Configuration | Outcome |
 |---|---|---|
 | Cloud Run | `--timeout=300` (the **default**) | **disconnected at 301.9 s** — "no close frame received or sent" |
-| Cloud Run | `--timeout=3600` | **survived past 300 s** — full 45 min run pending at time of writing |
+| Cloud Run | `--timeout=3600` | **survived 45 min** (2700.7 s), 134,800 frames sent / 134,934 acked, 134 heartbeats |
 | Kong dev tier | `read_timeout: 60000`, 20 s app heartbeat | **survived 45 min** (2700.6 s), 134,750 frames sent / 134,884 acked |
+
+(Acked slightly exceeds sent because the acked counter includes every inbound
+frame — the heartbeat replies and the session-start frame as well as the
+per-audio-frame acks. It is a liveness signal, not a delivery ratio.)
 
 The 300 s result is the important one. **A WebSocket on Cloud Run is one
 long-lived request, so the service's `--timeout` caps the socket outright.** The
