@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 26 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini 2.0 Flash and Anthropic Claude. ~5,900 test functions across all components (excluding the vendored Odoo submodule).
+AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 26 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini (default `gemini-3.5-flash`, set in `ai_services/services.py`) and Anthropic Claude. ~8,470 test functions across all components (excluding the vendored Odoo submodule).
 
 ## Monorepo Layout
 
@@ -58,7 +58,7 @@ cd ai-brand-automator && source ../.venv/bin/activate
 python manage.py runserver 0.0.0.0:8001
 
 # Tests
-pytest -v                                    # All ~2450 tests
+pytest -v                                    # All ~2470 tests
 pytest automation/tests/ -v                  # Single app
 pytest media_curation/tests/test_views.py -v # Single file
 pytest -k "test_my_function" -v              # Single test by name
@@ -142,8 +142,12 @@ cd deployment
 docker compose up --build                                     # Core services
 docker compose --profile with-kafka up --build                # + Kafka streaming
 docker compose --profile with-kafka --profile with-db up      # + Local PostgreSQL
+docker compose --profile with-odoo up --build                 # + Odoo CE + its PostgreSQL
+docker compose --profile with-nginx up --build                # + Nginx reverse proxy
 docker compose down -v                                        # Tear down
 ```
+
+Four profiles gate optional stacks: `with-kafka` (Zookeeper, Kafka, Kafka UI, and the three pipeline consumers), `with-db` (local PostgreSQL on host 5433 instead of Neon), `with-odoo` (Odoo CE on 8069/8072 + `odoo-db` on host 5434), `with-nginx`. Everything else — all 26 agent services, Redis, MLflow — starts unprofiled. `spike-stt-v2` is **not** in Compose; run it standalone with uvicorn.
 
 **Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, MLflow 5000, MLflow DB 5435 (host), Orchestrator 8010, Discovery 8020, Market Research 8021, Competitor Intel 8022, Audience Persona 8023, Trend Cultural 8024, VoC Agent 8025, Intelligence 8030, Brand Positioning 8031, Brand Architecture 8032, Brand Personality 8033, Brand Naming 8034, Brand Story 8035, Titling 8040, Campaign Architecture 8041, Creative Generation 8042, Ad Publishing 8043, Campaign Optimization 8044, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090, Odoo MCP 8095, Odoo Worker 8100, Prompt Optimization 8110, Intelligence Loop 8045, STT Spike 8120
 
@@ -562,6 +566,9 @@ ORCHESTRATOR_CALLBACK_TOKEN=<callback-token> # Auth for callbacks (orchestrator 
 BACKEND_URL=http://localhost:8001            # Used to build callback URL
 WORKER_TOKEN=<worker-token>                  # Auth for chat-titling-worker callbacks
 ORCHESTRATION_KAFKA_ENABLED=false            # true for Kafka-based dispatch (vs HTTP)
+GS_BUCKET_NAME=zorven-raw-assets             # Raw uploads (also RAW_GCP_BUCKET_NAME/GCP_BUCKET_NAME)
+VERTEX_AI_DATA_STORE_ID=zorven-rag-dev       # Vertex AI Search data store for RAG
+CURATION_AI_MODEL=gemini-3.5-flash
 
 # Frontend (.env.local)
 NEXT_PUBLIC_API_URL=http://localhost:8000     # Auto-detected via env.ts in browser
@@ -573,6 +580,8 @@ Each microservice uses its own env-var prefix (e.g., `DISCOVERY_REDIS_URL`, `CON
 ## CI/CD
 
 **Tests** (`.github/workflows/ci-cd.yml`) — 10 jobs: backend-tests, test-media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, odoo-mcp-server-tests, odoo-worker-tests, frontend-tests, integration-tests, build-images. Backend CI runs `black --check .`, `flake8 .`, `pytest --cov`, and MCP server tests.
+
+**Two-tier branching.** Feature branch → PR into `development_main` (dev tier) → PR/sync merge into `main` (production tier). `ci-cd.yml` runs on pushes and PRs to `main`, `develop`, `development_main` (plus pushes to `bugfixes/**`). `docker-publish.yml` builds on pushes to `main` **and** `development_main` and on PRs — PR builds get branch+SHA tags for pre-merge testing. Only `main` triggers the GCP deploy; `development_main` images are tagged `:development_main` and picked up by a **Watchtower** container (5-minute poll) running alongside `deployment/docker-compose.production.yml` on the dev host, which auto-pulls and recreates changed containers.
 
 **Production deploy — GCP Cloud Run** (primary). Chain on `main`: `docker-publish.yml` builds/pushes images to GHCR (`ghcr.io/zorvenai`) → `deploy-gcp.yml` triggers on that workflow's success, mirrors only *changed* images to Artifact Registry (`us-central1-docker.pkg.dev/zorven-503517/zorven`), runs the `zorven-migrations` Cloud Run job when the backend changed, then `gcloud run services update`s each service and health-checks it. Cloud Run services are named `zorven-<service>`; the backend image feeds `zorven-backend` + `zorven-backend-ws`, with `zorven-celery-worker` and `zorven-celery-beat` as separate services keyed off the same backend change filter.
 
