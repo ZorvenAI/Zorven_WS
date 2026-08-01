@@ -1,0 +1,13 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "unit: pure unit tests, no network",
+    "property: hypothesis property tests",
+    "integration: requires a running echo service or Kong container",
+    "slow: full-length soak; opt in with -m slow",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]

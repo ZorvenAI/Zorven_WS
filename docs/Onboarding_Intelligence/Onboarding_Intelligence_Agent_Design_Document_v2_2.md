@@ -2418,16 +2418,17 @@ that silence resolves to a sensible default rather than to a stall.
 
 ```text
  ID      Decision                             Proposal                                                        Needed by
- OD-1    WebSocket transport differs by      Two topologies, not one. Cloud Run has no Kong in front of       Week 1 (spike A-02)
-         environment: Google Front End on    it, so the browser reaches the service through the Google
-         Cloud Run, Kong on the dev tier     Front End and gateway-level auth and rate limiting have no
-                                             place to run — both move into app/api/ws.py. The dev tier
-                                             and local compose do front the fleet with Kong, so that
-                                             path keeps the gateway JWT check. Verify the upgrade, the
-                                             idle timeout and the 45-minute hold on both paths in week
-                                             1 — this is the riskiest infrastructure assumption in the
-                                             design and the only one that could force a topology
-                                             change.
+ OD-1    WebSocket transport differs by      RESOLVED by spike A-02 (2026-07-30) — proceed on both paths.     RESOLVED
+         environment: Google Front End on    Cloud Run: direct, no gateway exists. Mandatory --timeout=3600
+         Cloud Run, Kong on the dev tier     (the 300 s default cut a socket at 301.9 s in measurement);
+                                             auth, tenant resolution and rate limiting move into
+                                             app/api/ws.py. Dev tier: through Kong, route block ready in
+                                             spike-ws-gateway/kong/oia-live.yaml, JWT via uri_param_names.
+                                             45-minute hold confirmed on both. Three findings change F-04:
+                                             a close code cannot precede accept(); the JWT must travel as a
+                                             query parameter; and sockets for one tenant land on different
+                                             Cloud Run instances, so session state must be in Redis.
+                                             See docs/spikes/A-02-gateway-websocket-note.md.
  OD-2    STT language per tenant or per       One language per session, defaulting from tenant config         Week 5
          session                              (en-US), exposed as a selector at session start.
                                               Multilingual meetings are common in this market and a
