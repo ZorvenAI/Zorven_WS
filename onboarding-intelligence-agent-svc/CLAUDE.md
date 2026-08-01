@@ -23,17 +23,50 @@ One deployable, three modes, decided by entry point rather than a runtime flag:
 - Backlog: `…_User_Story_Backlog_v2_1.md`
 - **Corrections that override both: `ERRATA-01-redis-allocation.md`**
 
-## Current state — scaffold plus the event and Redis baseline
+## Current state — scaffold, event baseline, agent skeleton
 
-A-05 and A-03 have landed. Working: configuration, logging, telemetry with W3C
-trace propagation, the Redis pool and tenant-scoped key builders, the Kafka
-producer/consumer with topic provisioning and DLQ routing, the §12 event
-catalogue and emitter, and the health, readiness and metrics surface.
+A-05, A-03 and A-06 have landed. Working: configuration, logging, telemetry
+with W3C trace propagation, the Redis pool and tenant-scoped key builders, the
+Kafka producer/consumer with topic provisioning and DLQ routing, the §12 event
+catalogue and emitter, the health/readiness/metrics surface, and the agent
+skeleton — SkillRegistry, the ordered guardrail chain, the RBAC evaluator and
+the §18.4 error taxonomy.
 Everything else is a stub that **raises `NotImplementedError` by design** — a
 stub returning `None` would let a later story ship a silent no-op. When you
 implement one, delete the raise; do not leave it returning nothing.
 
 Owning stories are named in each stub's docstring.
+
+## The registry is the only way to run a skill
+
+`SkillRegistry.execute` and `execute_stream` are the entry points. `BaseSkill`
+defines `run`, `StreamingSkill` defines `stream`, and neither class is
+callable — there is deliberately no convenient way to invoke a skill and skip
+IG → RBAC → PG → OG.
+
+- Skills load from `config/skills.yaml`, not from imports. A declaration whose
+  class is missing fails **at startup**, naming every missing skill at once.
+- Guardrail rule *bodies* are no-op stubs; M-01 fills them in through
+  `GuardrailChain.register`, which replaces a rule without changing the order.
+- Output guardrails run **per yielded chunk** for streaming skills. A chunk
+  already delivered to the browser cannot be recalled.
+- RBAC has **four** verdicts — ALLOW, DENY, ESCALATE, VIEW_RESULT — because
+  §15 uses all four. The matrix is data in `app/rbac/engine.py`; keep it that
+  way, or `test_rbac.py` cannot sweep it exhaustively.
+- The role comes from the verified JWT claim only, never a body or header.
+
+## Error codes
+
+`app/core/errors.py` is the §18.4 taxonomy. Two codes deviate from the
+documents, deliberately:
+
+| Situation | Docs say | We use | Why |
+|---|---|---|---|
+| Role denied | A-06 AC-3 says ERR-03 | **ERR-04** | §18.4 assigns ERR-03 to *consent* (IG-08). Collapsing them makes a permissions bug look like a consent bug on call. |
+| Unknown skill id | §5 PG-02 says ERR-06 | **ERR-17** (provisional) | §18.4 already spends ERR-06 on "live session already active" (409/4409). Reusing it would tell an operator a meeting is running when a skill id is simply wrong. |
+
+Both need reconciling in the design; until then the code is right and the
+documents are not.
 
 ## Non-negotiables in this service
 

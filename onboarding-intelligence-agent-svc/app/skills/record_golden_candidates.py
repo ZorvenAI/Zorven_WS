@@ -1,19 +1,25 @@
-"""SKL-OIA-13 — Record golden-dataset candidates for the flywheel.
+"""SKL-OIA-13 — Record admin-edit pairs as golden-dataset candidates for the prompt
+flywheel (§17.
 
 Design §8.1 · implemented by story L-02.
 
-Scaffolded by A-05. The body raises NotImplementedError deliberately: a
-stub that silently returns None would let a later story ship a no-op
-that passes its tests.
+Registered by A-06: the class exists and the registry resolves and
+instantiates it, so the declaration in config/skills.yaml is proven to point
+at something real. The body is deferred — it raises NotImplementedError
+rather than returning None, so a later story cannot ship a silent no-op.
 """
 
 from __future__ import annotations
 
-_NOT_YET = "app.skills.record_golden_candidates — implemented by L-02"
+from app.skills.base import BaseSkill
+from app.skills.models import SkillContext, SkillResult
+
+_NOT_YET = "SKL-OIA-13 (record_golden_candidates) — implemented by L-02"
 
 
-class RecordGoldenCandidates:
-    """Not yet implemented."""
+class RecordGoldenCandidates(BaseSkill):
+    """Record admin-edit pairs as golden-dataset candidates for the prompt flywheel
+    (§17."""
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
+    async def run(self, context: SkillContext) -> SkillResult:
         raise NotImplementedError(_NOT_YET)

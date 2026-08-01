@@ -1,19 +1,67 @@
-"""SkillMeta, SkillContext and SkillResult.
+"""SkillMeta, SkillContext and SkillResult (Design §8).
 
-Design §8 · implemented by story A-06.
-
-Scaffolded by A-05. The body raises NotImplementedError deliberately: a
-stub that silently returns None would let a later story ship a no-op
-that passes its tests.
+``SkillMeta`` is the **fleet shape**, matching voc-agent-svc field for field.
+A-06's technical note is blunt: "Do not add fields; a diverging dataclass
+breaks the shared contract test." Anything OIA-specific belongs in the YAML
+declaration or in the skill body, not here.
 """
 
 from __future__ import annotations
 
-_NOT_YET = "app.skills.models — implemented by A-06"
+from dataclasses import dataclass, field
+from typing import Any
+
+DEFAULT_TIMEOUT_MS = 30000
+DEFAULT_MAX_RETRIES = 1
+ALL_ROLES = ("OWNER", "ADMIN", "EDITOR", "VIEWER")
 
 
+@dataclass(frozen=True)
 class SkillMeta:
-    """Not yet implemented."""
+    """Declaration metadata for one skill."""
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
-        raise NotImplementedError(_NOT_YET)
+    skill_id: str
+    name: str
+    description: str = ""
+    allowed_roles: tuple[str, ...] = ALL_ROLES
+    idempotent: bool = True
+    max_retries: int = DEFAULT_MAX_RETRIES
+    timeout_ms: int = DEFAULT_TIMEOUT_MS
+    circuit_breaker_dependency: str = ""
+
+
+@dataclass
+class TenantContext:
+    """Who is calling, resolved from the verified JWT — never from a body."""
+
+    tenant_id: str
+    user_id: str | None = None
+    role: str = "VIEWER"
+    session_id: str | None = None
+
+
+@dataclass
+class SkillContext:
+    """The fleet-standard five inputs (§8), plus who is asking.
+
+    Every skill takes the same five fields; the per-skill meaning of
+    ``input_context`` is documented in each declaration's description.
+    """
+
+    input_prompt: str
+    tenant_context: TenantContext
+    input_context: dict[str, Any] = field(default_factory=dict)
+    config: dict[str, Any] = field(default_factory=dict)
+    previous_outputs: dict[str, Any] = field(default_factory=dict)
+    correlation_id: str = ""
+
+
+@dataclass
+class SkillResult:
+    """What a non-streaming skill returns."""
+
+    skill_id: str
+    output: dict[str, Any] = field(default_factory=dict)
+    confidence: float | None = None
+    duration_ms: int = 0
+    prompt_version: str | None = None

@@ -1,20 +1,442 @@
-# Machine-readable skill registry — Design §8.
+# Onboarding Intelligence Agent (OIA) — Skill Registry
 #
-# A-05 lands this file empty of skills so that config loading, schema
-# validation and tests/test_skills_yaml.py have something real to parse from
-# the first commit. Each skill is declared here by the story that implements
-# it, alongside its module in app/skills/.
+# This file IS Design §8. It follows the fleet contract established by
+# voc-agent-svc/config/skills.yaml and is validated by
+# tests/test_skills_yaml.py: ids match ^SKL-OIA-\d{2}[a-z]?$, roles are drawn
+# from {OWNER, ADMIN, EDITOR, VIEWER}, timeout_ms <= 120000, every
+# input_schema entry carries field/type/required, and the count is exactly 16.
 #
-# Declaration shape (see Design §8.1):
+# Every skill takes the same five inputs; the per-skill meaning of
+# input_context is documented in each description.
 #
-#   - id: SKL-OIA-01
-#     name: research_business
-#     module: app.skills.research_business
-#     modes: [PREP]
-#     roles: [Owner, Admin, Editor]
-#     input_schema: {...}
-#     output_schema: {...}
+# SYSTEM in §15's allowed_roles is expressed as the full role set plus
+# internal_only: true, because the platform has no SYSTEM role.
+#
+# Streaming skills (04, 05, 06) are invoked from app/logic/live_session.py
+# only, and their output guardrails run per yielded chunk.
 
 version: 1
 service: onboarding-intelligence-agent
-skills: []
+skills:
+  - skill_id: SKL-OIA-01
+    name: research_business
+    description: >-
+      Research the prospective brand's business ahead of the onboarding meeting. input_context carries {company_name, website, industry, operator_notes}.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 60000
+    max_retries: 2
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+    circuit_breaker_dependency: "tavily"
+
+  - skill_id: SKL-OIA-02
+    name: generate_questionnaire
+    description: >-
+      Generate a questionnaire to the operator's requested count and depth. input_context carries the BusinessResearchBrief from SKL-OIA-01.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 30000
+    max_retries: 2
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+    circuit_breaker_dependency: "llm"
+
+  - skill_id: SKL-OIA-03
+    name: refine_questionnaire
+    description: >-
+      Refine and approve the questionnaire interactively. input_context carries the current draft and the operator's edit instruction.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 20000
+    max_retries: 2
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: false
+    circuit_breaker_dependency: "llm"
+
+  - skill_id: SKL-OIA-04
+    name: analyze_transcript_stream
+    description: >-
+      Analyse a finalized transcript segment against the approved questionnaire. Invoked from app/logic/live_session.py only.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 5000
+    max_retries: 1
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+    circuit_breaker_dependency: "llm"
+    streaming: true
+
+  - skill_id: SKL-OIA-05
+    name: evaluate_answer_sufficiency
+    description: >-
+      Score whether a prepared question has been answered sufficiently. Emits the green signal above the configured threshold.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 5000
+    max_retries: 1
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+    circuit_breaker_dependency: "llm"
+    streaming: true
+
+  - skill_id: SKL-OIA-06
+    name: generate_followups
+    description: >-
+      Suggest follow-up questions for a partially answered question. Acceptance is backfilled on use (EVT-105).
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 5000
+    max_retries: 1
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: false
+    circuit_breaker_dependency: "llm"
+    streaming: true
+
+  - skill_id: SKL-OIA-07
+    name: analyze_captured_media
+    description: >-
+      Describe and classify media captured during the meeting, including OCR. input_context carries {media_id, gcs_uri, usage_tag}.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 90000
+    max_retries: 2
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+    circuit_breaker_dependency: "vision"
+
+  - skill_id: SKL-OIA-08
+    name: summarize_recording
+    description: >-
+      Summarise a recording into key moments with timestamps. VIEWER may read the result but not invoke it (§15).
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 60000
+    max_retries: 2
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+    circuit_breaker_dependency: "llm"
+
+  - skill_id: SKL-OIA-09
+    name: check_workflow_coverage
+    description: >-
+      Report WF1, WF2 and WF3 coverage as fractions. Runs incrementally during LIVE and fully during PROCESS.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 20000
+    max_retries: 2
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+    circuit_breaker_dependency: "llm"
+
+  - skill_id: SKL-OIA-10
+    name: extract_and_map_fields
+    description: >-
+      Extract Company fields from the evidence set and map them, attaching field-level provenance to every value.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 120000
+    max_retries: 1
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+    circuit_breaker_dependency: "backend"
+
+  - skill_id: SKL-OIA-11
+    name: register_meeting_assets
+    description: >-
+      Register recordings, transcripts and captured media as BrandAssets through the Django API.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 30000
+    max_retries: 3
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+    circuit_breaker_dependency: "backend"
+
+  - skill_id: SKL-OIA-12
+    name: autogen_strategy_identity
+    description: >-
+      Auto-generate strategy and identity drafts from the confirmed onboarding profile.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 90000
+    max_retries: 1
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: true
+    circuit_breaker_dependency: "backend"
+
+  - skill_id: SKL-OIA-13
+    name: record_golden_candidates
+    description: >-
+      Record admin-edit pairs as golden-dataset candidates for the prompt flywheel (§17.3). SYSTEM in §15; internal_only here because the platform has no SYSTEM role.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 30000
+    max_retries: 3
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+    circuit_breaker_dependency: "poi"
+    internal_only: true
+
+  - skill_id: SKL-OIA-14
+    name: surface_conflicts_and_escalate
+    description: >-
+      Surface conflicting evidence for a field and escalate for human resolution. EDITOR is ESCALATE rather than ALLOW (§15).
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 10000
+    max_retries: 2
+    allowed_roles: [OWNER, ADMIN, EDITOR]
+    idempotent: false
+    circuit_breaker_dependency: ""
+
+  - skill_id: SKL-OIA-15
+    name: fetch_prompts
+    description: >-
+      Fetch the pinned prompt set for a session from POI, the Redis cache, or the fallbacks (§17.2). Internal plumbing.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 3000
+    max_retries: 1
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+    circuit_breaker_dependency: "poi"
+    internal_only: true
+
+  - skill_id: SKL-OIA-16
+    name: redact_pii
+    description: >-
+      Redact PII from a transcript segment before it is buffered, prompted or indexed (IG-04). Internal plumbing.
+    input_schema:
+      - field: input_prompt
+        type: string
+        required: true
+      - field: input_context
+        type: object
+        required: true
+      - field: tenant_context
+        type: TenantContext
+        required: true
+      - field: config
+        type: object
+        required: false
+      - field: previous_outputs
+        type: object
+        required: false
+    timeout_ms: 2000
+    max_retries: 1
+    allowed_roles: [OWNER, ADMIN, EDITOR, VIEWER]
+    idempotent: true
+    circuit_breaker_dependency: ""
+    internal_only: true
+

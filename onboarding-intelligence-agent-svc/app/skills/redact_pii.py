@@ -1,21 +1,25 @@
-"""SKL-OIA-16 — Redact PII before buffering or prompting.
+"""SKL-OIA-16 — Redact PII from a transcript segment before it is buffered, prompted or
+indexed (IG-04).
 
 Design §8.1 · implemented by story F-05.
 
-Scaffolded by A-05. The body raises NotImplementedError deliberately: a
-stub that silently returns None would let a later story ship a no-op
-that passes its tests.
+Registered by A-06: the class exists and the registry resolves and
+instantiates it, so the declaration in config/skills.yaml is proven to point
+at something real. The body is deferred — it raises NotImplementedError
+rather than returning None, so a later story cannot ship a silent no-op.
 """
 
 from __future__ import annotations
 
-_NOT_YET = (
-    "SKL-OIA-16 — Redact PII before buffering or prompting. — implemented by F-05"
-)
+from app.skills.base import BaseSkill
+from app.skills.models import SkillContext, SkillResult
+
+_NOT_YET = "SKL-OIA-16 (redact_pii) — implemented by F-05"
 
 
-class RedactPii:
-    """Not yet implemented."""
+class RedactPii(BaseSkill):
+    """Redact PII from a transcript segment before it is buffered, prompted or indexed
+    (IG-04)."""
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
+    async def run(self, context: SkillContext) -> SkillResult:
         raise NotImplementedError(_NOT_YET)
