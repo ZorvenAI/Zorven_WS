@@ -36,6 +36,15 @@ export CR_MEMORY="512Mi"
 export CR_CPU="1"
 export CR_TIMEOUT="300"
 
+# Request timeout for services that hold WebSockets open.
+#
+# On Cloud Run a WebSocket is a single long-lived request, so the service's
+# request timeout caps the connection outright — it is not an idle timeout.
+# At the CR_TIMEOUT default of 300s a socket is severed after five minutes
+# with no close frame, which spike A-02 measured at 301.9s
+# (docs/spikes/A-02-gateway-websocket-note.md). 3600s is the platform maximum.
+export CR_WS_TIMEOUT="3600"
+
 # Max instances for user-facing services (backend, frontend, orchestrator).
 # These absorb interactive traffic and keep burst headroom.
 export CR_MAX_INSTANCES="2"
