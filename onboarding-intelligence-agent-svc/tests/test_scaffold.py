@@ -96,7 +96,19 @@ IMPLEMENTED = {
     "app.messaging.schemas",
     "app.messaging.topics",
     "app.messaging.provision",
+    # Implemented by A-06.
+    "app.core.errors",
+    "app.logic.guardrails",
+    "app.rbac.engine",
+    "app.skills.base",
+    "app.skills.models",
+    "app.skills.registry",
 }
+
+#: A-06 turned the sixteen skill modules into registry-resolvable classes.
+#: They are no longer bare stubs — the class is real and instantiable, and it
+#: is the *body* that is deferred. test_skill_bodies_are_deferred covers them.
+IMPLEMENTED |= set(SKILL_MODULES)
 
 
 @pytest.mark.parametrize("dotted", EXPECTED_MODULES + SKILL_MODULES)
@@ -138,12 +150,47 @@ def test_config_directory_and_skills_manifest_exist():
     assert (ROOT / "config" / "skills.yaml").is_file()
 
 
-def test_skills_yaml_parses_even_while_empty():
-    """The manifest must be valid from the first commit, not from the first skill."""
+def test_skills_yaml_declares_all_sixteen_skills():
+    """A-05 landed this empty; A-06 filled it from Design §8."""
     parsed = yaml.safe_load((ROOT / "config" / "skills.yaml").read_text())
     assert parsed["service"] == "onboarding-intelligence-agent"
     assert parsed["version"] == 1
-    assert parsed["skills"] == []
+    assert len(parsed["skills"]) == 16
+
+
+@pytest.mark.parametrize("dotted", SKILL_MODULES)
+def test_skill_bodies_are_deferred(dotted):
+    """The class resolves and instantiates; run/stream still refuse to run.
+
+    A-06 needs the class to exist so the registry can resolve the declaration
+    at startup. What stays deferred is the body — which must raise rather than
+    return None, so a later story cannot ship a silent no-op.
+    """
+    import asyncio
+    import inspect
+
+    from app.skills.base import BaseSkill, StreamingSkill
+    from app.skills.models import SkillContext, SkillMeta, TenantContext
+
+    module = importlib.import_module(dotted)
+    name = dotted.rsplit(".", 1)[1]
+    cls = getattr(module, "".join(p.title() for p in name.split("_")))
+
+    assert issubclass(cls, (BaseSkill, StreamingSkill)), dotted
+    skill = cls(SkillMeta(skill_id="SKL-OIA-00", name=name))
+
+    context = SkillContext(
+        input_prompt="p",
+        tenant_context=TenantContext(tenant_id="t-1", role="ADMIN"),
+    )
+
+    with pytest.raises(NotImplementedError):
+        if isinstance(skill, StreamingSkill):
+            stream = skill.stream(context)
+            if inspect.isasyncgen(stream):
+                asyncio.run(anext(stream))
+        else:
+            asyncio.run(skill.run(context))
 
 
 def test_fleet_files_are_present():

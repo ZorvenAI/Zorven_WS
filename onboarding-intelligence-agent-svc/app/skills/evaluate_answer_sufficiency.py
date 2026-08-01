@@ -1,19 +1,28 @@
-"""SKL-OIA-05 — Score whether a question has been answered sufficiently.
+"""SKL-OIA-05 — Score whether a prepared question has been answered sufficiently.
 
 Design §8.1 · implemented by story G-03.
 
-Scaffolded by A-05. The body raises NotImplementedError deliberately: a
-stub that silently returns None would let a later story ship a no-op
-that passes its tests.
+Registered by A-06: the class exists and the registry resolves and
+instantiates it, so the declaration in config/skills.yaml is proven to point
+at something real. The body is deferred — it raises NotImplementedError
+rather than returning None, so a later story cannot ship a silent no-op.
 """
 
 from __future__ import annotations
 
-_NOT_YET = "app.skills.evaluate_answer_sufficiency — implemented by G-03"
+from typing import Any, AsyncIterator
+
+from app.skills.base import StreamingSkill
+from app.skills.models import SkillContext
+
+_NOT_YET = "SKL-OIA-05 (evaluate_answer_sufficiency) — implemented by G-03"
 
 
-class EvaluateAnswerSufficiency:
-    """Not yet implemented."""
+class EvaluateAnswerSufficiency(StreamingSkill):
+    """Score whether a prepared question has been answered sufficiently.
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
+    Streaming: output guardrails run per yielded chunk, not once at the end.
+    """
+
+    def stream(self, context: SkillContext) -> AsyncIterator[dict[str, Any]]:
         raise NotImplementedError(_NOT_YET)
