@@ -4,26 +4,38 @@ Querysets are tenant-scoped for everyone except superusers. The admin is a
 direct path to the ORM, so the same rule that governs the API applies here:
 a queryset that does not filter by tenant is the likeliest source of a
 cross-tenant leak, and no permission mixin intercepts it at this layer.
+
+The predicate comes from ``models.tenant_scope_q`` rather than being written
+again here. An earlier version of this file had its own copy that dropped the
+pre-tenant half, so the admin and the manager disagreed about what a tenant
+could see — exactly the drift a single definition prevents.
 """
 
 from __future__ import annotations
 
 from django.contrib import admin
 
-from .models import OnboardingSession, Question, Questionnaire
+from .models import OnboardingSession, Question, Questionnaire, tenant_scope_q
 
 
 class TenantScopedAdmin(admin.ModelAdmin):
-    """Restricts rows to the staff user's tenant memberships."""
+    """Restricts rows to the requesting staff user's tenant.
+
+    ``tenant_field`` is the lookup path to the tenant. It is a class attribute
+    because not every model in this app carries a tenant column: Question is
+    reached through its questionnaire, and browsing the Question changelist
+    directly would otherwise show every tenant's rows.
+    """
+
+    tenant_field = "tenant"
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
         if request.user.is_superuser:
             return queryset
-        # Mirrors the defensive pattern used across the fleet: never read
-        # request.tenant directly, and keep pre-tenant rows visible.
+        # Never read request.tenant directly — the fleet's defensive pattern.
         tenant = getattr(request, "tenant", None)
-        return queryset.filter(tenant=tenant) if tenant else queryset.none()
+        return queryset.filter(tenant_scope_q(tenant, self.tenant_field))
 
 
 @admin.register(OnboardingSession)
@@ -67,13 +79,15 @@ class QuestionnaireAdmin(TenantScopedAdmin):
 
 
 @admin.register(Question)
-class QuestionAdmin(admin.ModelAdmin):
-    """Question has no tenant column of its own.
+class QuestionAdmin(TenantScopedAdmin):
+    """Question has no tenant column, so it is scoped through its parent.
 
-    It is reached through Questionnaire, so scoping happens one level up;
-    filtering here would mean a join that adds nothing the parent does not
-    already enforce.
+    Scoping "one level up" only holds while a question is reached through a
+    questionnaire. The changelist is reachable on its own, so the filter has
+    to be applied here too — via the relation.
     """
+
+    tenant_field = "questionnaire__tenant"
 
     list_display = (
         "id",

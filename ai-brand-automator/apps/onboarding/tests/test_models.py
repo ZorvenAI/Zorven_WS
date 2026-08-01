@@ -282,3 +282,29 @@ def test_session_prompt_versions_defaults_to_an_empty_dict():
     """L-03 writes it; B-01 only guarantees the column and a safe default."""
     assert make_session().prompt_versions == {}
     assert Questionnaire.objects.count() == 0
+
+
+# ── Regression cover for PR #537 review findings ──────────────────────────
+
+
+def test_a_session_inherits_its_company_tenant(public_tenant):
+    """Review finding: a tenanted company could yield a tenant-less session.
+
+    Under the backward-compatibility rule a NULL tenant is visible to every
+    tenant, so such a fixture would quietly weaken any later test meaning to
+    prove scoping.
+    """
+    company = make_company(tenant=public_tenant)
+    session = make_session(company=company)
+    assert session.tenant == public_tenant
+
+
+def test_a_questionnaire_inherits_its_session_tenant(public_tenant):
+    session = make_session(company=make_company(tenant=public_tenant))
+    assert make_questionnaire(session=session).tenant == public_tenant
+
+
+def test_an_explicit_tenant_still_wins(public_tenant):
+    """Inheritance is a default, not an override."""
+    company = make_company(tenant=None)
+    assert make_session(company=company, tenant=public_tenant).tenant == public_tenant

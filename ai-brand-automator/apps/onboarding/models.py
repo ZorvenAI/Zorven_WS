@@ -56,6 +56,24 @@ class SessionStatus(models.TextChoices):
 TERMINAL_STATUSES = (SessionStatus.COMPLETED, SessionStatus.ARCHIVED)
 
 
+def tenant_scope_q(tenant: Tenant | None, field: str = "tenant") -> Q:
+    """The project's tenant predicate, defined once.
+
+    Pre-tenant rows (``tenant IS NULL``) stay visible: they predate
+    multi-tenancy and would otherwise vanish from a tenant's view after an
+    upgrade. ``field`` lets a caller scope through a relation — Question has
+    no tenant column of its own and is reached via
+    ``questionnaire__tenant``.
+
+    Both the manager and the admin use this. They drifted apart when each
+    wrote its own filter, and the admin's copy silently dropped the
+    pre-tenant half.
+    """
+    if tenant is None:
+        return Q(**{f"{field}__isnull": True})
+    return Q(**{field: tenant}) | Q(**{f"{field}__isnull": True})
+
+
 class TenantScopedManager(models.Manager):
     """Manager with an explicit tenant filter.
 
@@ -74,9 +92,7 @@ class TenantScopedManager(models.Manager):
         multi-tenancy and stay visible, rather than vanishing from a tenant's
         view after an upgrade.
         """
-        if tenant is None:
-            return self.get_queryset().filter(tenant__isnull=True)
-        return self.get_queryset().filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+        return self.get_queryset().filter(tenant_scope_q(tenant))
 
 
 class OnboardingSession(models.Model):

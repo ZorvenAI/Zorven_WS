@@ -41,9 +41,18 @@ def make_session(
     status: str = SessionStatus.DRAFT,
     **kwargs: Any,
 ) -> OnboardingSession:
-    """A non-terminal session by default, so the uniqueness rule applies."""
+    """A non-terminal session by default, so the uniqueness rule applies.
+
+    When a tenanted company is passed without an explicit tenant, the session
+    inherits the company's. Otherwise the fixture would be tenant-less and so
+    visible to *every* tenant under the backward-compatibility rule in
+    ``tenant_scope_q`` — which would quietly weaken any later test that means
+    to prove scoping.
+    """
     if company is None:
         company = make_company(tenant=tenant)
+    elif tenant is None:
+        tenant = getattr(company, "tenant", None)
     defaults = {
         "company": company,
         "tenant": tenant,
@@ -64,6 +73,10 @@ def make_questionnaire(
 ) -> Questionnaire:
     if company is None:
         company = session.company if session else make_company(tenant=tenant)
+    if tenant is None:
+        # Same reasoning as make_session: inherit rather than silently
+        # producing a globally-visible fixture.
+        tenant = getattr(session, "tenant", None) or getattr(company, "tenant", None)
     defaults = {
         "company": company,
         "session": session,
