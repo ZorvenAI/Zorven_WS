@@ -29,7 +29,16 @@ def _port_is_open(host: str, port: int, timeout: float = 1.0) -> bool:
 
 
 def redis_available() -> bool:
-    return _port_is_open("localhost", 6379)
+    """Whether the Redis the tests will actually use is reachable.
+
+    Parsed from REDIS_URL rather than assuming localhost: the guard and the
+    connection target must agree, or an override silently skips instead of
+    testing what it was pointed at.
+    """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(REDIS_URL)
+    return _port_is_open(parsed.hostname or "localhost", parsed.port or 6379)
 
 
 def free_port() -> int:

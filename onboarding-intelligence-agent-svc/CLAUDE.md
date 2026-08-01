@@ -23,10 +23,12 @@ One deployable, three modes, decided by entry point rather than a runtime flag:
 - Backlog: `…_User_Story_Backlog_v2_1.md`
 - **Corrections that override both: `ERRATA-01-redis-allocation.md`**
 
-## Current state — scaffold only
+## Current state — scaffold plus the event and Redis baseline
 
-A-05 has landed. Working: configuration, logging, telemetry, the Redis pool
-and key builders, the Kafka producer lifecycle, and the health surface.
+A-05 and A-03 have landed. Working: configuration, logging, telemetry with W3C
+trace propagation, the Redis pool and tenant-scoped key builders, the Kafka
+producer/consumer with topic provisioning and DLQ routing, the §12 event
+catalogue and emitter, and the health, readiness and metrics surface.
 Everything else is a stub that **raises `NotImplementedError` by design** — a
 stub returning `None` would let a later story ship a silent no-op. When you
 implement one, delete the raise; do not leave it returning nothing.
@@ -35,6 +37,39 @@ Owning stories are named in each stub's docstring.
 
 ## Non-negotiables in this service
 
+### Eviction: the shared instance is `noeviction`, and must stay that way
+
+**AC-5 finding, recorded here because A-03 requires it.**
+
+Measured 2026-08-01 on Memorystore `zorven-redis` (1 GB, BASIC, shared by the
+whole fleet):
+
+| | |
+|---|---|
+| memory in use | 7.2 MB of 1 GB (`usage_ratio` 0.007) |
+| policy before | `allkeys-lru` |
+| policy now | **`noeviction`** |
+
+`allkeys-lru` evicts *any* key once memory is full, regardless of TTL — there
+is no per-key exemption in Redis — so a live meeting could have lost its
+transcript and resume window under memory pressure. That is a correctness bug,
+not a tuning problem, which is why AC-5 says escalate rather than proceed.
+
+The instance was at 0.7% of capacity, so `noeviction` was free to switch on:
+nothing was being evicted, and there is ~140× headroom. The residual risk is
+the opposite one — a *full* instance under `noeviction` rejects writes
+fleet-wide instead of dropping cache keys — covered by the Cloud Monitoring
+alert **"Memorystore zorven-redis memory above 75%"**, whose runbook says
+plainly that reverting to `allkeys-lru` is not a fix.
+
+A dedicated Redis instance for OIA session state was considered and rejected as
+premature at ~$35–50/month while the shared instance sits at 0.7%. It remains
+the escalation path if usage climbs.
+
+`tests/integration/test_redis_isolation_live.py::test_eviction_policy_is_noeviction`
+asserts the live server's policy, not a constant. If it fails, session state is
+evictable again and the fix is the policy.
+
 ### Redis is DB 2 and shared — never DB 27
 
 ERRATA-01 supersedes the design here. Production Redis is Memorystore, fixed
@@ -42,7 +77,11 @@ at 16 databases (0–15); DB 27 cannot exist. OIA shares **DB 2** with ten other
 services and is isolated only by its key prefix.
 
 - Every key this service writes starts with `oia:v1:`. No exceptions.
-- Build keys through `app/cache/redis_manager.py`. Never format one inline.
+- Build keys through `TenantKeys` in `app/cache/redis_manager.py`, obtained
+  from `RedisManager.keys_for(tenant_id)`. The tenant is a **constructor**
+  argument, so a tenant-less key cannot be written — that is deliberate, per
+  A-03: "a helper that can be called without a tenant will eventually be
+  called without one." Never format a key inline.
 - Every key carries a TTL — `maxmemory-policy allkeys-lru` is instance-wide,
   so an untrimmed key evicts another service's data.
 - The prompt cache (`poi:` prefix, same DB) is **read-only**. Never write there.
@@ -85,12 +124,20 @@ five minutes.
 cd onboarding-intelligence-agent-svc
 pip install -r requirements-dev.txt
 
+# A broker for the Kafka integration tests. Redpanda rather than the compose
+# broker: Kafka-API compatible, no ZooKeeper, ~400 MB, ready in ~30 s.
+docker run -d --name oia-test-kafka -p 39092:9092 --memory=700m \
+  redpandadata/redpanda:v24.2.7 redpanda start --smp 1 --memory 400M \
+  --overprovisioned --node-id 0 --check=false \
+  --kafka-addr PLAINTEXT://0.0.0.0:9092 \
+  --advertise-kafka-addr PLAINTEXT://localhost:39092
+
 uvicorn app.main:app --host 0.0.0.0 --port 8120 --reload
 
 pytest -q                      # everything (integration needs Redis on :6379)
 pytest -m unit -q              # no network
 pytest -m property -q          # hypothesis
-pytest -m integration -q       # real Redis
+pytest -m integration -q       # real Redis and, if present, real Kafka
 pytest -m e2e -q               # real container; needs Docker
 
 black app/ tests/ && flake8 app/ tests/ && mypy app/
@@ -104,3 +151,19 @@ black app/ tests/ && flake8 app/ tests/ && mypy app/
   values.
 - Tests: no mocks. Integration tests run against real Redis; the health-down
   case points at a genuinely closed port rather than a patched client.
+
+
+## Local environment traps
+
+**A native Redis can shadow the compose one.** On macOS a Homebrew
+`redis-server` bound to `127.0.0.1:6379` wins over the container's published
+port, so `redis://localhost:6379` may not be the Redis in `docker-compose.yml`
+— with a different `maxmemory-policy`. This was observed on 2026-08-01 and made
+the eviction test pass against the wrong server. Point tests explicitly with
+`OIA_TEST_REDIS_URL`, and check `redis-cli info server` if a config assertion
+behaves oddly.
+
+**The compose Kafka is heavy.** It runs ZooKeeper mode with a JVM heap and
+replays every persisted partition on boot; on a loaded machine it can time out
+its ZooKeeper session and crash-loop. The tests use Redpanda instead and skip
+cleanly when no broker is reachable.

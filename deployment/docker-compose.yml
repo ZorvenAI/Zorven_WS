@@ -317,7 +317,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ai-brand-automator-redis
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 27
+    # noeviction, not allkeys-lru: OIA keeps live session state here, and an
+    # allkeys-* policy evicts any key regardless of TTL — a meeting can lose
+    # its transcript and resume window under memory pressure (A-03 AC-5). This
+    # mirrors the shared Memorystore instance, changed on 2026-08-01.
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction --databases 27
     ports:
       - "6379:6379"
     volumes:
@@ -1712,6 +1716,24 @@ services:
   # MLflow PostgreSQL — Dedicated database for MLflow Tracking Server
   # Stores prompt registry, experiment tracking, and run metadata
   # ==========================================================================
+  # OpenTelemetry collector — profiled, so the default stack is unaffected.
+  # Bring it up with:  docker compose --profile with-otel up -d otel-collector
+  # then set OIA_OTEL_EXPORTER_ENDPOINT=http://otel-collector:4318/v1/traces
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    container_name: ai-brand-automator-otel-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./config/otel/collector.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    profiles:
+      - with-otel
+    restart: unless-stopped
+    networks:
+      - app-network
+
   onboarding-intelligence-agent-svc:
     build:
       context: ../onboarding-intelligence-agent-svc

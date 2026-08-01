@@ -342,11 +342,32 @@ jobs:
         working-directory: onboarding-intelligence-agent-svc
         run: mypy app/
 
-      # Integration tests run against the real Redis service above. The e2e
+      # A real broker for the AC-1 round-trip and DLQ tests. Redpanda rather
+      # than a Kafka service container: it speaks the Kafka protocol, needs no
+      # ZooKeeper, and starts in seconds on a runner.
+      - name: Start Kafka (Redpanda)
+        run: |
+          docker run -d --name ci-kafka -p 39092:9092 \
+            redpandadata/redpanda:v24.2.7 redpanda start \
+            --smp 1 --memory 512M --overprovisioned --node-id 0 --check=false \
+            --kafka-addr PLAINTEXT://0.0.0.0:9092 \
+            --advertise-kafka-addr PLAINTEXT://localhost:39092
+          for i in $(seq 1 60); do
+            if docker exec ci-kafka rpk cluster info >/dev/null 2>&1; then
+              echo "kafka ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::warning::Kafka never became ready; broker tests will skip"
+
+      # Integration tests run against the real Redis and Kafka above. The e2e
       # tests build and run the image and are excluded here — they need Docker
       # and take minutes; they run locally and in the image build job.
       - name: Test
         working-directory: onboarding-intelligence-agent-svc
+        env:
+          OIA_TEST_KAFKA: localhost:39092
+          OIA_TEST_REDIS_URL: redis://localhost:6379/2
         run: pytest tests/ -v -m "not e2e"
 
   # Frontend Tests

@@ -17,8 +17,11 @@ from app.api.routes import router
 from app.cache.redis_manager import RedisManager
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
-from app.core.telemetry import configure_telemetry
+from app.core.telemetry import TraceContextMiddleware, configure_telemetry
+from app.events.emitter import EventEmitter
+from app.messaging.consumer import CommandConsumer
 from app.messaging.producer import KafkaProducer
+from app.messaging.provision import provision, verify
 
 settings = get_settings()
 configure_logging(settings.LOG_LEVEL)
@@ -44,16 +47,61 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception as exc:  # noqa: BLE001 — reported via /health
         logger.warning("kafka_start_failed", error=str(exc))
 
+    app.state.events = EventEmitter(app.state.kafka)
+    await app.state.events.start()
+
+    app.state.commands = CommandConsumer(settings, app.state.kafka)
+    try:
+        await app.state.commands.start()
+    except Exception as exc:  # noqa: BLE001 — reported via /health
+        logger.warning("command_consumer_start_failed", error=str(exc))
+
+    # AC-1: provision the fleet topics and prove they are reachable. Skipped
+    # entirely where no broker is configured, which is production today.
+    if settings.kafka_enabled:
+        try:
+            report = await provision(settings.KAFKA_BOOTSTRAP_SERVERS)
+            reachable, missing = await verify(settings.KAFKA_BOOTSTRAP_SERVERS)
+            logger.info(
+                "kafka_topics_ready",
+                created=report.created,
+                existing=report.existing,
+                reachable=reachable,
+                missing=missing,
+            )
+        except Exception as exc:  # noqa: BLE001 — reported via /health
+            logger.warning("kafka_topic_provisioning_failed", error=str(exc))
+
+    # AC-5: session state must not be evictable. Reported rather than fatal —
+    # refusing to start would take the service down for a condition an
+    # operator has to fix on the shared instance anyway.
+    policy = await app.state.redis.eviction_policy()
+    app.state.eviction_policy = policy
+    if policy is None:
+        logger.warning("redis_eviction_policy_unknown", detail="CONFIG GET refused")
+    elif policy != "noeviction":
+        logger.warning(
+            "redis_eviction_policy_unsafe",
+            policy=policy,
+            detail=(
+                "live session state can be evicted mid-meeting; "
+                "expected noeviction (A-03 AC-5)"
+            ),
+        )
+
     logger.info(
         "service_started",
         service="onboarding-intelligence-agent",
         port=settings.PORT,
         redis_db=settings.REDIS_DB,
         kafka_configured=settings.kafka_enabled,
+        eviction_policy=policy,
     )
 
     yield
 
+    await app.state.commands.stop()
+    await app.state.events.stop()
     await app.state.kafka.stop()
     await app.state.redis.close()
     logger.info("service_stopped")
@@ -69,4 +117,5 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+app.add_middleware(TraceContextMiddleware)
 app.include_router(router)

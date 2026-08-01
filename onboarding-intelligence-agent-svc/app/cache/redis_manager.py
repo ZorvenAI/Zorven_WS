@@ -1,18 +1,21 @@
-"""Redis connection pool and key builders.
+"""Redis connection pool and the single construction point for keys.
 
-**Every key this service writes begins with ``oia:v1:``.** That is not a
-stylistic choice — OIA shares DB 2 with ten other services (ERRATA-01), so the
-prefix is the only thing keeping its keys from colliding with theirs.
-``tests/test_redis_key_isolation.py`` enforces it structurally.
+**Every key this service writes begins with ``oia:v1:``.** OIA shares DB 2 with
+the prompt cache and the rest of the fleet (ERRATA-01), so the prefix — not a
+dedicated database — is the isolation guarantee. ``tests/test_redis_key_
+isolation.py`` enforces it structurally.
 
-Two properties matter more because the database is shared:
+The tenant is a **constructor argument**, not a per-call one. A-03's technical
+note is blunt about why: "a helper that can be called without a tenant will
+eventually be called without one." With :class:`TenantKeys` the type checker
+rejects a tenant-less key at build time rather than leaving it to a runtime
+guard that a caller can forget (AC-4).
 
-- **Every key carries a TTL.** Memorystore applies ``maxmemory-policy
-  allkeys-lru`` instance-wide, so an untrimmed OIA key creates eviction
-  pressure on another service's data.
-- **The prompt cache is read-only.** It lives in the same DB under the ``poi:``
-  prefix and belongs to prompt-optimization-svc. OIA reads it; it never writes
-  there.
+Eviction (AC-5). Session state must survive a full meeting, so it must not be
+evictable. The shared Memorystore instance was measured at 7.2 MB of 1 GB
+(0.7%) on 2026-08-01 and its ``maxmemory-policy`` was changed from
+``allkeys-lru`` to ``noeviction`` — under ``allkeys-lru`` a memory spike would
+have dropped live session state silently, mid-meeting. See CLAUDE.md.
 """
 
 from __future__ import annotations
@@ -29,63 +32,104 @@ KEY_PREFIX: Final[str] = "oia:v1:"
 #: Read-only namespace owned by prompt-optimization-svc, shared in DB 2.
 PROMPT_CACHE_PREFIX: Final[str] = "poi:"
 
-# Default TTLs (seconds). Nothing is written without one.
-TTL_SESSION: Final[int] = 24 * 60 * 60
-TTL_LIVE_FRAMES: Final[int] = 6 * 60 * 60
-TTL_LOCK: Final[int] = 2 * 60 * 60
+# TTLs from Design §14. Nothing is written without one — on a shared instance
+# an untrimmed key creates pressure on every other service's data.
+TTL_SESSION: Final[int] = 4 * 60 * 60  # sliding
+TTL_LIVE: Final[int] = 4 * 60 * 60
+TTL_SUMMARY: Final[int] = 24 * 60 * 60
 TTL_IDEMPOTENCY: Final[int] = 24 * 60 * 60
+TTL_OUTBOX: Final[int] = 24 * 60 * 60
 TTL_CIRCUIT: Final[int] = 5 * 60
-#: The tenant config key is long-lived but still bounded — see ERRATA-01 §4.
+TTL_RATELIMIT: Final[int] = 60
+TTL_LOCK: Final[int] = 2 * 60 * 60
+#: §14 gives the tenant config key no TTL. ERRATA-01 §4 requires either a TTL
+#: or a documented exemption once the database is shared; this is the TTL.
 TTL_CONFIG: Final[int] = 7 * 24 * 60 * 60
 
-
-def _tenant_scope(tenant_id: str) -> str:
-    if not tenant_id:
-        raise ValueError("tenant_id is required — no key is built without one")
-    return f"{KEY_PREFIX}{tenant_id}:"
+#: §14: the transcript list is capped so reconnect replay has a known worst
+#: case. ~8 segments/minute means a 60-minute meeting stays under 500.
+TRANSCRIPT_MAX_ENTRIES: Final[int] = 4000
 
 
-def session_key(tenant_id: str, session_id: str) -> str:
-    """Onboarding session state hash."""
-    return f"{_tenant_scope(tenant_id)}session:{session_id}"
+class TenantKeys:
+    """Builds every tenant-scoped key for one tenant.
 
-
-def live_frames_key(tenant_id: str, session_id: str) -> str:
-    """Capped list of server → client frames backing reconnect replay."""
-    return f"{_tenant_scope(tenant_id)}live:{session_id}:frames"
-
-
-def live_lock_key(tenant_id: str, company_id: str) -> str:
-    """Single-live-session lock (OD-5), held with a TTL so a crashed process
-    cannot lock a company out permanently."""
-    return f"{_tenant_scope(tenant_id)}live:lock:{company_id}"
-
-
-def idempotency_key(tenant_id: str, digest: str) -> str:
-    """Write-dedup marker (§18.1)."""
-    return f"{_tenant_scope(tenant_id)}idem:{digest}"
-
-
-def tenant_config_key(tenant_id: str) -> str:
-    """Per-tenant overrides.
-
-    ERRATA-01 §4 renamed this from ``tenant:{id}:oia:config``. On a dedicated
-    database the generic ``tenant:`` root was harmless; on shared DB 2 it
-    breaks the single-prefix invariant and collides with other services'
-    ``tenant:``-rooted keys.
+    Constructed with a tenant id, so there is no way to ask for a key without
+    one — that is AC-4's "fails at type-check time rather than at runtime".
     """
-    return f"{_tenant_scope(tenant_id)}config"
+
+    __slots__ = ("_scope", "tenant_id")
+
+    def __init__(self, tenant_id: str) -> None:
+        if not tenant_id or not str(tenant_id).strip():
+            raise ValueError("tenant_id is required — no key is built without one")
+        self.tenant_id = str(tenant_id)
+        self._scope = f"{KEY_PREFIX}{self.tenant_id}:"
+
+    # ── Session state ────────────────────────────────────────
+    def session(self, session_id: str) -> str:
+        """Hash · 4 h sliding · mode, status, recording_id, prompt_versions."""
+        return f"{self._scope}session:{session_id}"
+
+    def session_summary(self, session_id: str) -> str:
+        """String · 24 h · compressed L3 summary."""
+        return f"{self._scope}session:{session_id}:summary"
+
+    # ── Live meeting ─────────────────────────────────────────
+    def transcript(self, session_id: str) -> str:
+        """List · 4 h · finalized redacted segments, capped, replay source."""
+        return f"{self._scope}live:{session_id}:transcript"
+
+    def questions(self, session_id: str) -> str:
+        """Hash · 4 h · question_id → status/score/evidence/override."""
+        return f"{self._scope}live:{session_id}:questions"
+
+    def coverage(self, session_id: str) -> str:
+        """Hash · 4 h · WF1/WF2/WF3 fractions plus updated_at."""
+        return f"{self._scope}live:{session_id}:coverage"
+
+    def live_lock(self, company_id: str) -> str:
+        """String · 2 h · one live meeting per company (OD-5).
+
+        Keyed on company, not session: keying it on the session would make
+        the lock trivially satisfiable by opening a second session.
+        """
+        return f"{self._scope}lock:live:{company_id}"
+
+    # ── Write safety ─────────────────────────────────────────
+    def idempotency(self, digest: str) -> str:
+        """String · 24 h · write dedup, value is the original response."""
+        return f"{self._scope}idempotency:{digest}"
+
+    def outbox(self, session_id: str) -> str:
+        """List · 24 h · Django writes buffered while the backend breaker is open."""
+        return f"{self._scope}outbox:{session_id}"
+
+    # ── Tenant control ───────────────────────────────────────
+    def ratelimit(self, user_id: str) -> str:
+        """Counter · 1 min · PREP 10/min per user, WS control-frame throttle."""
+        return f"{self._scope}ratelimit:{user_id}"
+
+    def config(self) -> str:
+        """Hash · tenant overrides.
+
+        ERRATA-01 §4 renamed this from ``tenant:{id}:oia:config``: on a shared
+        database the generic ``tenant:`` root breaks the single-prefix
+        invariant and collides with other services' ``tenant:``-rooted keys.
+        """
+        return f"{self._scope}config"
 
 
 def circuit_key(dependency: str) -> str:
-    """Circuit-breaker state for one dependency.
+    """Hash · 5 min · breaker state for one dependency.
 
-    Deliberately **not** tenant-scoped: a breaker tracks the health of an
-    external engine, which is a property of the service, not of a tenant. It
-    still carries the service prefix so another service's breaker state can
-    never be read as OIA's.
+    Deliberately **not** tenant-scoped and therefore not on :class:`TenantKeys`:
+    Google STT being down is not a per-tenant condition, and a per-tenant
+    breaker would require every tenant to discover the outage independently
+    before protecting itself. It still carries the service prefix so another
+    service's breaker state can never be read as OIA's.
     """
-    if not dependency:
+    if not dependency or not dependency.strip():
         raise ValueError("dependency is required")
     return f"{KEY_PREFIX}circuit:{dependency}"
 
@@ -124,15 +168,42 @@ class RedisManager:
             raise RuntimeError("RedisManager.connect() has not been called")
         return self._client
 
-    async def ping(self) -> bool:
-        """Liveness check for /health.
+    def keys_for(self, tenant_id: str) -> TenantKeys:
+        """The only way to obtain tenant-scoped key builders."""
+        return TenantKeys(tenant_id)
 
-        Bounded by the 2 s socket timeouts above so the probe answers within
-        the 2 s budget rather than hanging (A-05 AC-3).
-        """
+    async def ping(self) -> bool:
+        """Liveness check for /health, bounded by the 2 s socket timeouts."""
         if self._client is None:
             return False
         try:
             return bool(await self._client.ping())
         except Exception:
             return False
+
+    async def eviction_policy(self) -> str | None:
+        """Report ``maxmemory-policy`` as the server actually has it (AC-5).
+
+        Returns ``None`` when the server refuses CONFIG GET — managed Redis
+        sometimes restricts it — so callers can distinguish "not noeviction"
+        from "could not determine", which are different operational states.
+        """
+        if self._client is None:
+            return None
+        try:
+            config = await self._client.config_get("maxmemory-policy")
+            policy = config.get("maxmemory-policy")
+            return str(policy) if policy is not None else None
+        except Exception:
+            return None
+
+    async def scan_prefix(self, prefix: str, limit: int = 1000) -> list[str]:
+        """Return keys under ``prefix``. Used by the isolation test."""
+        if self._client is None:
+            return []
+        found: list[str] = []
+        async for key in self._client.scan_iter(match=f"{prefix}*", count=100):
+            found.append(key)
+            if len(found) >= limit:
+                break
+        return found

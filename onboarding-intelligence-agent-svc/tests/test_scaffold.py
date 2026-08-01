@@ -89,6 +89,13 @@ IMPLEMENTED = {
     "app.core.logging",
     "app.core.telemetry",
     "app.messaging.producer",
+    # Implemented by A-03.
+    "app.events.catalog",
+    "app.events.emitter",
+    "app.messaging.consumer",
+    "app.messaging.schemas",
+    "app.messaging.topics",
+    "app.messaging.provision",
 }
 
 

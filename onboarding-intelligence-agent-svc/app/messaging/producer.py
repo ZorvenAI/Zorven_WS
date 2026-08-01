@@ -46,7 +46,11 @@ class KafkaProducer:
             return
         self._producer = AIOKafkaProducer(
             bootstrap_servers=self._settings.KAFKA_BOOTSTRAP_SERVERS,
-            request_timeout_ms=2000,
+            # Bounded, but not so tight that ordinary cloud latency or a
+            # busy broker turns a healthy publish into a dropped event. The
+            # health probe does not depend on this — is_live() reads cluster
+            # metadata rather than producing.
+            request_timeout_ms=10000,
         )
         await self._producer.start()
         self._started = True
@@ -60,6 +64,22 @@ class KafkaProducer:
             await self._producer.stop()
             self._producer = None
         self._started = False
+
+    async def send(
+        self, topic: str, *, key: str | None = None, value: bytes = b""
+    ) -> bool:
+        """Publish one message. Returns False when there is no broker.
+
+        Never raises for an absent broker: production has none, and an event
+        that cannot be published must not fail the request that produced it.
+        A genuine publish error still propagates so the caller can log it.
+        """
+        if not self.configured or self._producer is None or not self._started:
+            return False
+        await self._producer.send_and_wait(
+            topic, value=value, key=key.encode() if key else None
+        )
+        return True
 
     async def is_live(self) -> bool:
         """Whether a configured broker is actually reachable.
