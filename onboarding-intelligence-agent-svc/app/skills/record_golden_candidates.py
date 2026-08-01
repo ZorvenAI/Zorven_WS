@@ -1,5 +1,5 @@
 """SKL-OIA-13 — Record admin-edit pairs as golden-dataset candidates for the prompt
-flywheel (§17.
+flywheel (§17.3).
 
 Design §8.1 · implemented by story L-02.
 
@@ -19,7 +19,7 @@ _NOT_YET = "SKL-OIA-13 (record_golden_candidates) — implemented by L-02"
 
 class RecordGoldenCandidates(BaseSkill):
     """Record admin-edit pairs as golden-dataset candidates for the prompt flywheel
-    (§17."""
+    (§17.3)."""
 
     async def run(self, context: SkillContext) -> SkillResult:
         raise NotImplementedError(_NOT_YET)

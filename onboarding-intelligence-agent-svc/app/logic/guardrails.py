@@ -127,11 +127,20 @@ class GuardrailChain:
             self.register(Layer.OUTPUT, rule_id, noop(rule_id))
 
     def register(self, layer: Layer, rule_id: str, evaluate: Rule) -> None:
-        """Add or replace a rule. M-01 replaces the no-ops through this."""
-        existing = [r for r in self._rules[layer] if r.rule_id == rule_id]
-        if existing:
-            self._rules[layer].remove(existing[0])
-        self._rules[layer].append(RegisteredRule(rule_id, layer, evaluate))
+        """Add or replace a rule, **preserving position**.
+
+        M-01 replaces the no-ops through this. Replacement must not reorder
+        the layer: §5 numbers its rules in the order an operator reads them,
+        and IG-04 (redaction) running after IG-06 (size limit) would truncate
+        text before it was redacted. A replacement lands where the original
+        was; only a genuinely new rule is appended.
+        """
+        registered = RegisteredRule(rule_id, layer, evaluate)
+        for index, existing in enumerate(self._rules[layer]):
+            if existing.rule_id == rule_id:
+                self._rules[layer][index] = registered
+                return
+        self._rules[layer].append(registered)
 
     def rules(self, layer: Layer) -> list[str]:
         return [r.rule_id for r in self._rules[layer]]
@@ -198,6 +207,11 @@ class GuardrailChain:
     def evaluate_result(
         self, result: SkillResult, context: SkillContext
     ) -> SkillResult:
-        """OG for the non-streaming case."""
-        self.evaluate(Layer.OUTPUT, result.output, context)
+        """OG for the non-streaming case.
+
+        The evaluated payload is written back. OG-02 re-applies redaction on
+        egress and OG-01 drops ungrounded values, so discarding the transform
+        would hand the caller exactly the output those rules just rewrote.
+        """
+        result.output = self.evaluate(Layer.OUTPUT, result.output, context)
         return result

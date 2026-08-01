@@ -152,16 +152,28 @@ def test_a_rule_may_transform_the_payload(chain):
     assert chain.evaluate(Layer.INPUT, {"x": "secret"}, context()) == {"x": "***"}
 
 
-def test_registering_a_rule_replaces_the_no_op(chain):
-    """M-01 fills bodies in through this door without changing the order."""
+def test_registering_a_rule_replaces_it_in_place(chain):
+    """M-01 fills bodies in through this door **without changing the order**.
+
+    §5 numbers its rules in the order an operator reads them, and the order is
+    load-bearing: IG-04 redacts, IG-06 truncates, and truncating before
+    redacting would cut text that had not been redacted yet.
+    """
     before = chain.rules(Layer.INPUT)
 
     def rule(payload, ctx):
         return Verdict(rule_id="IG-01")
 
     chain.register(Layer.INPUT, "IG-01", rule)
-    assert chain.rules(Layer.INPUT) == [r for r in before if r != "IG-01"] + ["IG-01"]
-    assert len(chain.rules(Layer.INPUT)) == len(before)
+
+    assert chain.rules(Layer.INPUT) == before, "replacement reordered the layer"
+
+
+def test_registering_a_new_rule_appends_it(chain):
+    """A rule §5 does not declare is appended rather than silently dropped."""
+    before = chain.rules(Layer.OUTPUT)
+    chain.register(Layer.OUTPUT, "OG-99", lambda p, c: Verdict(rule_id="OG-99"))
+    assert chain.rules(Layer.OUTPUT) == before + ["OG-99"]
 
 
 async def test_a_skill_cannot_be_reached_except_through_the_registry():
@@ -193,3 +205,68 @@ async def test_rbac_runs_before_the_skill_body(chain):
         await registry.execute("SKL-OIA-01", context(role=Role.VIEWER.value))
 
     assert log == [], "the skill body ran despite the denial"
+
+
+# ── Regression cover for PR #533 review findings ──────────────────────────
+
+
+async def test_input_transforms_reach_the_skill_body(chain):
+    """Review finding: execute() discarded the evaluated payload.
+
+    IG-04 redacts and IG-06 truncates. A transform the skill never sees is
+    not a guardrail, it is a log line.
+    """
+    seen: dict = {}
+
+    class Capturing(BaseSkill):
+        async def run(self, ctx: SkillContext) -> SkillResult:
+            seen.update(ctx.input_context)
+            return SkillResult(skill_id=self.meta.skill_id, output={"ok": True})
+
+    def redactor(payload, ctx):
+        return Verdict(
+            rule_id="IG-04",
+            action=Action.REDACT,
+            payload={**payload, "secret": "***"},
+        )
+
+    chain.register(Layer.INPUT, "IG-04", redactor)
+
+    meta = SkillMeta(skill_id="SKL-OIA-01", name="research_business")
+    registry = SkillRegistry(chain=chain, rbac=RBACEngine())
+    registry._by_id[meta.skill_id] = Capturing(meta)
+    registry._meta[meta.skill_id] = meta
+
+    ctx = context()
+    ctx.input_context["secret"] = "hunter2"
+    await registry.execute("SKL-OIA-01", ctx)
+
+    assert seen["secret"] == "***", "the skill saw the un-redacted input"
+    assert ctx.input_context["secret"] == "***"
+
+
+async def test_output_transforms_reach_the_caller(chain):
+    """Review finding: evaluate_result() discarded the transformed output.
+
+    OG-02 re-applies redaction on egress; discarding it would hand the caller
+    exactly the output that rule just rewrote.
+    """
+
+    class Emitting(BaseSkill):
+        async def run(self, ctx: SkillContext) -> SkillResult:
+            return SkillResult(skill_id=self.meta.skill_id, output={"email": "a@b.c"})
+
+    def scrubber(payload, ctx):
+        return Verdict(
+            rule_id="OG-02", action=Action.REDACT, payload={**payload, "email": "***"}
+        )
+
+    chain.register(Layer.OUTPUT, "OG-02", scrubber)
+
+    meta = SkillMeta(skill_id="SKL-OIA-01", name="research_business")
+    registry = SkillRegistry(chain=chain, rbac=RBACEngine())
+    registry._by_id[meta.skill_id] = Emitting(meta)
+    registry._meta[meta.skill_id] = meta
+
+    result = await registry.execute("SKL-OIA-01", context())
+    assert result.output["email"] == "***", "the caller got the pre-guardrail output"

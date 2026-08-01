@@ -9,6 +9,7 @@ declaration or in the skill body, not here.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
 
 DEFAULT_TIMEOUT_MS = 30000
@@ -28,6 +29,22 @@ class SkillMeta:
     max_retries: int = DEFAULT_MAX_RETRIES
     timeout_ms: int = DEFAULT_TIMEOUT_MS
     circuit_breaker_dependency: str = ""
+
+
+class Origin(StrEnum):
+    """Where an invocation came from.
+
+    ``internal_only`` skills (SKL-OIA-13, 15, 16) are SYSTEM in §15. The
+    platform has no SYSTEM role, so §8 expresses them as the full role set
+    plus a marker — which means RBAC alone would let any role invoke them.
+    The origin is what actually gates them: only the service's own pipelines
+    may call one, never a caller who arrived over HTTP or a socket.
+    """
+
+    #: Raised by this service's own executors and live-session loop.
+    INTERNAL = "INTERNAL"
+    #: Arrived from outside — an API request, a WebSocket frame.
+    EXTERNAL = "EXTERNAL"
 
 
 @dataclass
@@ -54,6 +71,9 @@ class SkillContext:
     config: dict[str, Any] = field(default_factory=dict)
     previous_outputs: dict[str, Any] = field(default_factory=dict)
     correlation_id: str = ""
+    #: Defaults to EXTERNAL so a caller who forgets to say gets the *stricter*
+    #: treatment rather than accidental access to an internal-only skill.
+    origin: Origin = Origin.EXTERNAL
 
 
 @dataclass

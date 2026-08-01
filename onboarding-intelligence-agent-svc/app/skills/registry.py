@@ -24,12 +24,12 @@ from typing import Any, AsyncIterator
 
 import yaml
 
-from app.core.errors import SkillNotFound
+from app.core.errors import AuthorizationError, SkillNotFound
 from app.core.logging import get_logger
 from app.logic.guardrails import GuardrailChain, Layer
 from app.rbac.engine import RBACEngine, Role, Verdict
 from app.skills.base import BaseSkill, Skill, StreamingSkill
-from app.skills.models import SkillContext, SkillMeta, SkillResult
+from app.skills.models import Origin, SkillContext, SkillMeta, SkillResult
 
 logger = get_logger(__name__)
 
@@ -179,7 +179,11 @@ class SkillRegistry:
         skill = self.get(key)
         meta = skill.meta
 
-        self.chain.evaluate(Layer.INPUT, context.input_context, context)
+        # The evaluated payload is assigned back: IG-04 redacts and IG-06
+        # truncates, and a transform the skill never sees is not a guardrail.
+        context.input_context = self.chain.evaluate(
+            Layer.INPUT, context.input_context, context
+        )
         self._authorize(meta, context)
         self.chain.evaluate(Layer.PROCESS, meta, context)
 
@@ -201,7 +205,9 @@ class SkillRegistry:
         skill = self.get(key)
         meta = skill.meta
 
-        self.chain.evaluate(Layer.INPUT, context.input_context, context)
+        context.input_context = self.chain.evaluate(
+            Layer.INPUT, context.input_context, context
+        )
         self._authorize(meta, context)
         self.chain.evaluate(Layer.PROCESS, meta, context)
 
@@ -218,6 +224,20 @@ class SkillRegistry:
 
         The role is taken from the tenant context, which is populated from the
         verified JWT claim — §15 forbids reading it from a body or a header.
+
+        ``internal_only`` is checked **before** the matrix, because the matrix
+        cannot express it: those skills carry the full role set precisely
+        because the platform has no SYSTEM role, so every role would pass.
+        Origin is the gate.
         """
+        if (
+            self.is_internal_only(meta.skill_id)
+            and context.origin is not Origin.INTERNAL
+        ):
+            raise AuthorizationError(
+                f"{meta.skill_id} is internal-only and cannot be invoked externally",
+                skill_id=meta.skill_id,
+                origin=context.origin.value,
+            )
         role = Role(context.tenant_context.role)
         return self.rbac.enforce(role, meta.skill_id)

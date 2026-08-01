@@ -151,3 +151,69 @@ async def test_executing_a_streaming_skill_through_execute_is_refused(registry):
     )
     with pytest.raises((SkillNotFound, NotImplementedError)):
         await registry.execute("SKL-OIA-04", context)
+
+
+# ── Regression cover for PR #533 review findings ──────────────────────────
+
+
+async def test_internal_only_skills_reject_an_external_caller(registry):
+    """Review finding: internal_only was tracked but never enforced.
+
+    §15 marks SKL-OIA-13 SYSTEM. The platform has no SYSTEM role, so §8
+    expresses it as the full role set — which means RBAC alone lets every role
+    through. Origin is what actually gates it.
+    """
+    from app.core.errors import AuthorizationError, ErrorCode
+    from app.skills.models import Origin, SkillContext, TenantContext
+
+    for skill_id in ("SKL-OIA-13", "SKL-OIA-15", "SKL-OIA-16"):
+        ctx = SkillContext(
+            input_prompt="p",
+            tenant_context=TenantContext(tenant_id="t-1", role="OWNER"),
+            origin=Origin.EXTERNAL,
+        )
+        with pytest.raises(AuthorizationError) as exc:
+            await registry.execute(skill_id, ctx)
+        assert exc.value.code is ErrorCode.ROLE_DENIED
+        assert "internal-only" in str(exc.value)
+
+
+async def test_origin_defaults_to_external(registry):
+    """A caller who forgets to say gets the stricter treatment."""
+    from app.core.errors import AuthorizationError
+    from app.skills.models import Origin, SkillContext, TenantContext
+
+    ctx = SkillContext(
+        input_prompt="p",
+        tenant_context=TenantContext(tenant_id="t-1", role="OWNER"),
+    )
+    assert ctx.origin is Origin.EXTERNAL
+    with pytest.raises(AuthorizationError):
+        await registry.execute("SKL-OIA-13", ctx)
+
+
+async def test_internal_callers_pass_the_origin_gate(registry):
+    """The service's own pipelines may invoke them — reaching the deferred body."""
+    from app.skills.models import Origin, SkillContext, TenantContext
+
+    ctx = SkillContext(
+        input_prompt="p",
+        tenant_context=TenantContext(tenant_id="t-1", role="OWNER"),
+        origin=Origin.INTERNAL,
+    )
+    # Past the gate, into the body A-06 leaves deferred.
+    with pytest.raises(NotImplementedError):
+        await registry.execute("SKL-OIA-13", ctx)
+
+
+async def test_a_normal_skill_is_unaffected_by_origin(registry):
+    """Only the three internal_only skills are gated."""
+    from app.skills.models import Origin, SkillContext, TenantContext
+
+    ctx = SkillContext(
+        input_prompt="p",
+        tenant_context=TenantContext(tenant_id="t-1", role="ADMIN"),
+        origin=Origin.EXTERNAL,
+    )
+    with pytest.raises(NotImplementedError):
+        await registry.execute("SKL-OIA-01", ctx)

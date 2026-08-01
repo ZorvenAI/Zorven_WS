@@ -1,5 +1,5 @@
 """SKL-OIA-15 — Fetch the pinned prompt set for a session from POI, the Redis cache, or
-the fallbacks (§17.
+the fallbacks (§17.2).
 
 Design §8.1 · implemented by story C-01.
 
@@ -19,7 +19,7 @@ _NOT_YET = "SKL-OIA-15 (fetch_prompts) — implemented by C-01"
 
 class FetchPrompts(BaseSkill):
     """Fetch the pinned prompt set for a session from POI, the Redis cache, or the
-    fallbacks (§17."""
+    fallbacks (§17.2)."""
 
     async def run(self, context: SkillContext) -> SkillResult:
         raise NotImplementedError(_NOT_YET)

@@ -101,33 +101,46 @@ async def read_one(topic: str, timeout: float = 30.0) -> dict | None:
         await consumer.stop()
 
 
-async def read_matching(
-    topic: str, predicate, limit: int = 100, timeout: float = 20.0
-) -> dict | None:
-    """Return the first message on ``topic`` satisfying ``predicate``.
+async def end_offsets(topic: str) -> dict:
+    """Where the topic ends *now*, so a test can read only what it adds.
 
-    Position-independent on purpose. These topics accumulate across tests and
-    across runs — the round-trip probe and the dead letters share the DLQ — so
-    "the first message" is not necessarily the one under test.
+    Scanning from the beginning does not scale: these topics retain messages
+    for 1-30 days, so after a few runs the message under test sits behind a
+    growing backlog and a bounded scan stops finding it. Reading forward from
+    a captured offset is O(1) in history.
     """
-    consumer = AIOKafkaConsumer(
-        bootstrap_servers=BOOTSTRAP,
-        auto_offset_reset="earliest",
-        enable_auto_commit=False,
-    )
+    consumer = AIOKafkaConsumer(bootstrap_servers=BOOTSTRAP)
     await consumer.start()
     try:
-        partitions = consumer.partitions_for_topic(topic)
-        if not partitions:
-            return None
+        partitions = consumer.partitions_for_topic(topic) or set()
         assignment = [TopicPartition(topic, p) for p in partitions]
+        if not assignment:
+            return {}
         consumer.assign(assignment)
-        await consumer.seek_to_beginning(*assignment)
-        for _ in range(limit):
+        return await consumer.end_offsets(assignment)
+    finally:
+        await consumer.stop()
+
+
+async def read_since(
+    topic: str, offsets: dict, predicate, timeout: float = 30.0
+) -> dict | None:
+    """Return the first message after ``offsets`` satisfying ``predicate``."""
+    if not offsets:
+        return None
+    consumer = AIOKafkaConsumer(bootstrap_servers=BOOTSTRAP, enable_auto_commit=False)
+    await consumer.start()
+    try:
+        consumer.assign(list(offsets))
+        for partition, offset in offsets.items():
+            consumer.seek(partition, offset)
+
+        deadline = asyncio.get_event_loop().time() + timeout
+        while asyncio.get_event_loop().time() < deadline:
             try:
-                message = await asyncio.wait_for(consumer.getone(), timeout=timeout)
+                message = await asyncio.wait_for(consumer.getone(), timeout=5)
             except asyncio.TimeoutError:
-                return None
+                continue
             body = json.loads(message.value)
             if predicate(body):
                 return body
@@ -163,12 +176,16 @@ async def test_publish_consume_each_fleet_topic(producer, broker):
     for spec in FLEET_TOPICS:
         probe_id = str(uuid.uuid4())
         payload = {"probe": spec.name, "id": probe_id}
+
+        offsets = await end_offsets(spec.name)
         sent = await producer.send(
             spec.name, key="tenant:session", value=json.dumps(payload).encode()
         )
         assert sent, f"publish to {spec.name} reported no broker"
 
-        received = await read_matching(spec.name, lambda b: b.get("id") == probe_id)
+        received = await read_since(
+            spec.name, offsets, lambda b: b.get("id") == probe_id
+        )
         assert received is not None, f"no message returned from {spec.name}"
         assert received["probe"] == spec.name
 
@@ -179,6 +196,9 @@ async def test_event_reaches_the_per_tenant_events_topic(producer, broker):
     await emitter.start()
     tenant = uuid.uuid4()
     try:
+        # A fresh tenant means a fresh topic, but capture offsets anyway so
+        # the read is uniform with the others.
+        await provision(broker)
         event = await emitter.emit(
             EventType.COVERAGE_UPDATED,
             tenant_id=tenant,
@@ -187,7 +207,11 @@ async def test_event_reaches_the_per_tenant_events_topic(producer, broker):
         )
         assert await emitter.flush(timeout=20)
 
-        received = await read_one(events_topic(str(tenant)))
+        received = await read_since(
+            events_topic(str(tenant)),
+            await end_offsets(events_topic(str(tenant))) or {},
+            lambda b: b.get("event_id") == str(event.event_id),
+        ) or await read_one(events_topic(str(tenant)))
         assert received is not None
         assert received["event_type"] == "onboarding.coverage.updated"
         assert received["event_id"] == str(event.event_id)
@@ -206,26 +230,28 @@ async def test_command_that_keeps_failing_is_dead_lettered(settings, producer, b
     consumer = CommandConsumer(
         settings, producer, always_fails, max_attempts=2, backoff_s=0.01
     )
+    idempotency_key = f"idem-{uuid.uuid4().hex[:8]}"
     command = {
         "job_id": "job-1",
         "session_id": str(uuid.uuid4()),
         "evidence_manifest": {"manifest_hash": "abc123"},
-        "idempotency_key": "idem-key-1",
+        "idempotency_key": idempotency_key,
     }
 
+    offsets = await end_offsets(DLQ.name)
     handled = await consumer.handle_raw(json.dumps(command).encode(), key="t:s")
     assert handled is False
     assert consumer.dead_lettered == 1
 
-    letter = await read_matching(
-        DLQ.name, lambda b: b.get("idempotency_key") == "idem-key-1"
+    letter = await read_since(
+        DLQ.name, offsets, lambda b: b.get("idempotency_key") == idempotency_key
     )
     assert letter is not None, "no dead letter for this command reached the DLQ"
     assert letter["original_topic"] == COMMANDS.name
     assert letter["attempts"] == 2
     assert letter["error_code"] == "ERR-CMD-01"
     # §20: replay re-publishes with the same key, so it must survive.
-    assert letter["idempotency_key"] == "idem-key-1"
+    assert letter["idempotency_key"] == idempotency_key
 
 
 async def test_unparseable_command_is_dead_lettered_immediately(
