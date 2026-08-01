@@ -65,7 +65,12 @@ class CommandConsumer:
             COMMANDS.name,
             bootstrap_servers=self._settings.KAFKA_BOOTSTRAP_SERVERS,
             group_id=f"{COMMANDS.name}.consumers",
-            enable_auto_commit=True,
+            # Offsets are committed explicitly, after handle_raw has either
+            # succeeded or dead-lettered. On a timer, auto-commit can advance
+            # past a message this process never finished handling, and the
+            # message is simply lost on restart — retries and the DLQ only
+            # help if the offset has not already moved.
+            enable_auto_commit=False,
             auto_offset_reset="latest",
         )
         await self._consumer.start()
@@ -91,6 +96,10 @@ class CommandConsumer:
                 message.value,
                 key=message.key.decode() if message.key else None,
             )
+            # Committed regardless of outcome: a failure has already been
+            # retried and dead-lettered inside handle_raw, so replaying it
+            # would duplicate the dead letter rather than recover anything.
+            await self._consumer.commit()
 
     async def handle_raw(self, raw: bytes, *, key: str | None = None) -> bool:
         """Process one message. Returns True when it was handled.

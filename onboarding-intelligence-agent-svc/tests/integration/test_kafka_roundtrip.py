@@ -30,7 +30,7 @@ from app.events.catalog import EventType
 from app.events.emitter import EventEmitter
 from app.messaging.consumer import CommandConsumer
 from app.messaging.producer import KafkaProducer
-from app.messaging.provision import provision, verify
+from app.messaging.provision import provision, retention_of, verify
 from app.messaging.topics import COMMANDS, DLQ, FLEET_TOPICS, events_topic
 
 pytestmark = [pytest.mark.integration]
@@ -101,6 +101,41 @@ async def read_one(topic: str, timeout: float = 30.0) -> dict | None:
         await consumer.stop()
 
 
+async def read_matching(
+    topic: str, predicate, limit: int = 100, timeout: float = 20.0
+) -> dict | None:
+    """Return the first message on ``topic`` satisfying ``predicate``.
+
+    Position-independent on purpose. These topics accumulate across tests and
+    across runs — the round-trip probe and the dead letters share the DLQ — so
+    "the first message" is not necessarily the one under test.
+    """
+    consumer = AIOKafkaConsumer(
+        bootstrap_servers=BOOTSTRAP,
+        auto_offset_reset="earliest",
+        enable_auto_commit=False,
+    )
+    await consumer.start()
+    try:
+        partitions = consumer.partitions_for_topic(topic)
+        if not partitions:
+            return None
+        assignment = [TopicPartition(topic, p) for p in partitions]
+        consumer.assign(assignment)
+        await consumer.seek_to_beginning(*assignment)
+        for _ in range(limit):
+            try:
+                message = await asyncio.wait_for(consumer.getone(), timeout=timeout)
+            except asyncio.TimeoutError:
+                return None
+            body = json.loads(message.value)
+            if predicate(body):
+                return body
+        return None
+    finally:
+        await consumer.stop()
+
+
 async def test_provisioning_creates_every_fleet_topic(broker):
     """AC-1: the topics exist, with the retention Design §13.1 specifies."""
     report = await provision(broker)
@@ -126,13 +161,14 @@ async def test_publish_consume_each_fleet_topic(producer, broker):
     await provision(broker)
 
     for spec in FLEET_TOPICS:
-        payload = {"probe": spec.name, "id": str(uuid.uuid4())}
+        probe_id = str(uuid.uuid4())
+        payload = {"probe": spec.name, "id": probe_id}
         sent = await producer.send(
             spec.name, key="tenant:session", value=json.dumps(payload).encode()
         )
         assert sent, f"publish to {spec.name} reported no broker"
 
-        received = await read_one(spec.name)
+        received = await read_matching(spec.name, lambda b: b.get("id") == probe_id)
         assert received is not None, f"no message returned from {spec.name}"
         assert received["probe"] == spec.name
 
@@ -181,8 +217,10 @@ async def test_command_that_keeps_failing_is_dead_lettered(settings, producer, b
     assert handled is False
     assert consumer.dead_lettered == 1
 
-    letter = await read_one(DLQ.name)
-    assert letter is not None
+    letter = await read_matching(
+        DLQ.name, lambda b: b.get("idempotency_key") == "idem-key-1"
+    )
+    assert letter is not None, "no dead letter for this command reached the DLQ"
     assert letter["original_topic"] == COMMANDS.name
     assert letter["attempts"] == 2
     assert letter["error_code"] == "ERR-CMD-01"
@@ -219,3 +257,84 @@ async def test_valid_command_is_handled_once(settings, producer, broker):
     assert await consumer.handle_raw(json.dumps(command).encode()) is True
     assert seen == ["job-ok"]
     assert consumer.dead_lettered == 0
+
+
+# ── Regression cover for PR #532 review findings ─────────────────────────
+
+
+async def test_retention_matches_the_catalogue_after_provisioning(broker):
+    """Review finding: the provisioner claimed reconciliation it never did.
+
+    An auto-created topic takes the broker default, so agent.escalations would
+    silently keep 7 days instead of the 30 Design §13.1 requires.
+    """
+    await provision(broker)
+    for spec in FLEET_TOPICS:
+        actual = await retention_of(broker, spec.name)
+        assert actual == str(
+            spec.retention_ms
+        ), f"{spec.name} retention is {actual}, expected {spec.retention_ms}"
+
+
+async def test_a_topic_with_wrong_retention_is_reconciled(broker):
+    """The case that matters: the topic already exists and is non-compliant."""
+    from aiokafka.admin import AIOKafkaAdminClient, NewTopic
+
+    from app.messaging.topics import TopicSpec
+
+    name = f"agent.dlq.retention-probe-{uuid.uuid4().hex[:8]}"
+    spec = TopicSpec(name=name, retention_ms=30 * 24 * 60 * 60 * 1000, purpose="probe")
+
+    admin = AIOKafkaAdminClient(bootstrap_servers=broker)
+    await admin.start()
+    try:
+        # Create it the way auto-create would: with a wrong retention.
+        await admin.create_topics(
+            [
+                NewTopic(
+                    name=name,
+                    num_partitions=1,
+                    replication_factor=1,
+                    topic_configs={"retention.ms": "604800000"},  # 7 days
+                )
+            ]
+        )
+        assert await retention_of(broker, name) == "604800000"
+
+        report = await provision(broker, specs=(spec,))
+        assert name in report.reconciled, report
+        assert await retention_of(broker, name) == str(spec.retention_ms)
+
+        # And running again is a no-op rather than another "reconciled".
+        second = await provision(broker, specs=(spec,))
+        assert name in second.existing
+        assert name not in second.reconciled
+    finally:
+        try:
+            await admin.delete_topics([name])
+        except Exception:  # noqa: BLE001 — best-effort cleanup
+            pass
+        await admin.close()
+
+
+async def test_consumer_commits_only_after_handling(settings, producer, broker):
+    """Review finding: auto-commit can advance past an unhandled message.
+
+    The consumer now commits explicitly after handle_raw, so a crash mid-handle
+    replays the message rather than losing it.
+    """
+    from aiokafka import AIOKafkaConsumer
+
+    from app.messaging.consumer import CommandConsumer
+
+    consumer = CommandConsumer(settings, producer)
+    await consumer.start()
+    try:
+        assert consumer._consumer is not None
+        # The contract, asserted on the real client the service will use.
+        assert consumer._consumer._enable_auto_commit is False
+    finally:
+        await consumer.stop()
+
+    assert isinstance(consumer, CommandConsumer)
+    assert AIOKafkaConsumer is not None

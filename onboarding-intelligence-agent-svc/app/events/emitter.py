@@ -29,6 +29,7 @@ from typing import Any
 from opentelemetry import trace
 
 from app.core.logging import get_logger
+from app.core.telemetry import get_tracer
 from app.events.catalog import AgentEvent, EventType, Outcome, assert_no_pii
 from app.messaging.producer import KafkaProducer
 from app.messaging.topics import events_topic, message_key
@@ -82,13 +83,12 @@ class EventEmitter:
         body = payload or {}
         assert_no_pii(event_type, body)
 
-        span = trace.get_current_span()
-        context = span.get_span_context()
+        trace_id, span_id = self._trace_ids(event_type)
 
         return AgentEvent(
             event_type=event_type,
-            trace_id=format(context.trace_id, "032x"),
-            span_id=format(context.span_id, "016x"),
+            trace_id=trace_id,
+            span_id=span_id,
             correlation_id=correlation_id,
             tenant_id=uuid.UUID(str(tenant_id)),
             session_id=uuid.UUID(str(session_id)) if session_id else None,
@@ -99,6 +99,41 @@ class EventEmitter:
             duration_ms=duration_ms,
             outcome=outcome,
         )
+
+    @staticmethod
+    def _trace_ids(event_type: EventType) -> tuple[str, str]:
+        """Correlation ids for an event, guaranteed to be real.
+
+        Outside an active span — a Kafka consumer callback, a background
+        task, a Celery-style worker — OpenTelemetry returns the invalid
+        context, whose ids are all zeros. An event carrying 000… is
+        uncorrelatable and quietly poisons the audit stream, so a span is
+        started for it instead. The event then has a trace of its own that a
+        backend can join, rather than a placeholder.
+        """
+        context = trace.get_current_span().get_span_context()
+        if context.is_valid:
+            return format(context.trace_id, "032x"), format(context.span_id, "016x")
+
+        with get_tracer().start_as_current_span(
+            f"oia.event.{event_type.value}"
+        ) as span:
+            fresh = span.get_span_context()
+            if fresh.is_valid:
+                return format(fresh.trace_id, "032x"), format(fresh.span_id, "016x")
+
+        # No SDK tracer provider is installed, so even a started span is
+        # non-recording and its context is still all zeros. The service always
+        # installs one (app.main calls configure_telemetry at import), so this
+        # is the library-used-standalone case — a test, a script, a future
+        # worker entry point that forgot to configure telemetry.
+        #
+        # Synthesised ids rather than zeros: unique per event, so the audit
+        # stream stays groupable and an operator can still follow one event,
+        # and they can never collide with a real trace. Emission degrades; it
+        # does not crash, and it does not lie by reusing 000….
+        logger.debug("event_trace_synthesised", event_type=event_type.value)
+        return uuid.uuid4().hex, uuid.uuid4().hex[:16]
 
     async def emit(
         self, event_type: EventType, *, tenant_id: uuid.UUID | str, **kwargs: Any

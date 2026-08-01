@@ -47,17 +47,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception as exc:  # noqa: BLE001 — reported via /health
         logger.warning("kafka_start_failed", error=str(exc))
 
-    app.state.events = EventEmitter(app.state.kafka)
-    await app.state.events.start()
-
-    app.state.commands = CommandConsumer(settings, app.state.kafka)
-    try:
-        await app.state.commands.start()
-    except Exception as exc:  # noqa: BLE001 — reported via /health
-        logger.warning("command_consumer_start_failed", error=str(exc))
-
-    # AC-1: provision the fleet topics and prove they are reachable. Skipped
-    # entirely where no broker is configured, which is production today.
+    # AC-1: provision the fleet topics and prove they are reachable. This runs
+    # BEFORE the consumer subscribes and before the emitter can publish:
+    # either would trigger Kafka's auto-create first, and an auto-created
+    # topic takes the broker's default retention rather than the §13.1 value.
+    # Skipped entirely where no broker is configured, which is production.
     if settings.kafka_enabled:
         try:
             report = await provision(settings.KAFKA_BOOTSTRAP_SERVERS)
@@ -66,11 +60,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 "kafka_topics_ready",
                 created=report.created,
                 existing=report.existing,
+                reconciled=report.reconciled,
                 reachable=reachable,
                 missing=missing,
             )
         except Exception as exc:  # noqa: BLE001 — reported via /health
             logger.warning("kafka_topic_provisioning_failed", error=str(exc))
+
+    app.state.events = EventEmitter(app.state.kafka)
+    await app.state.events.start()
+
+    app.state.commands = CommandConsumer(settings, app.state.kafka)
+    try:
+        await app.state.commands.start()
+    except Exception as exc:  # noqa: BLE001 — reported via /health
+        logger.warning("command_consumer_start_failed", error=str(exc))
 
     # AC-5: session state must not be evictable. Reported rather than fatal —
     # refusing to start would take the service down for a condition an

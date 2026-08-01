@@ -180,6 +180,26 @@ class AgentEvent(BaseModel):
             )
         return v
 
+    @field_validator("trace_id", "span_id")
+    @classmethod
+    def _must_not_be_the_invalid_context(cls, v: str) -> str:
+        """Reject OpenTelemetry's all-zero ids.
+
+        Emitting outside an active span yields the invalid context, whose ids
+        are all zeros. Such an event validates structurally but can never be
+        joined to anything, so the audit stream would fill with events that
+        look correlated and are not. The emitter starts a span rather than
+        letting this happen; this is the guard for any other caller.
+        """
+        if set(v) == {"0"}:
+            raise ValueError(
+                "is OpenTelemetry's invalid context (all zeros) — the event "
+                "was built outside an active span and would be "
+                "uncorrelatable. Start a span, or use EventEmitter, which "
+                "does it for you."
+            )
+        return v
+
     @property
     def event_ref(self) -> str:
         """The §12 ID this event realises, e.g. ``EVT-103``."""

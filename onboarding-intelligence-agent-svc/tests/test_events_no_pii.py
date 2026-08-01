@@ -157,3 +157,70 @@ def test_event_serialises_to_json_for_kafka():
     body = json.loads(json.dumps(event.model_dump(mode="json")))
     assert body["tenant_id"] == str(TENANT)
     assert body["event_type"] == "agent.invoked"
+
+
+# ── Regression cover for PR #532 review findings ─────────────────────────
+
+
+@pytest.mark.parametrize("field", ["trace_id", "span_id"])
+def test_all_zero_correlation_ids_are_rejected(field):
+    """OpenTelemetry's invalid context must never reach the audit stream.
+
+    Review finding: outside an active span OTel returns all-zero ids. Such an
+    event validates structurally but can never be joined to anything, so the
+    stream would fill with events that look correlated and are not.
+    """
+    zeros = "0" * (32 if field == "trace_id" else 16)
+    with pytest.raises(ValidationError, match="invalid context"):
+        AgentEvent(**envelope(**{field: zeros}))
+
+
+def test_emitter_never_emits_all_zero_ids_outside_a_span():
+    """A background task must still produce a correlatable event.
+
+    With an SDK provider installed the emitter starts a real span; without
+    one — a script or a worker that forgot to configure telemetry — it
+    synthesises unique ids rather than crashing or emitting 000….
+    """
+    from app.events.emitter import EventEmitter
+    from app.messaging.producer import KafkaProducer
+
+    emitter = EventEmitter(KafkaProducer.__new__(KafkaProducer))
+    first = emitter.build(
+        EventType.AGENT_COMPLETED, tenant_id=TENANT, correlation_id="corr-bg-1"
+    )
+    second = emitter.build(
+        EventType.AGENT_COMPLETED, tenant_id=TENANT, correlation_id="corr-bg-2"
+    )
+
+    for event in (first, second):
+        assert set(event.trace_id) != {"0"}
+        assert set(event.span_id) != {"0"}
+        assert len(event.trace_id) == 32
+        assert len(event.span_id) == 16
+
+    # Unique per event, so the stream stays groupable rather than collapsing
+    # every background event onto one placeholder trace.
+    assert first.trace_id != second.trace_id
+
+
+def test_emitter_joins_a_real_span_when_the_sdk_is_configured():
+    """The path that matters in production: a real, joinable trace."""
+    from opentelemetry import trace as ot
+    from opentelemetry.sdk.trace import TracerProvider
+
+    from app.events.emitter import EventEmitter
+    from app.messaging.producer import KafkaProducer
+
+    if not isinstance(ot.get_tracer_provider(), TracerProvider):
+        ot.set_tracer_provider(TracerProvider())
+
+    emitter = EventEmitter(KafkaProducer.__new__(KafkaProducer))
+    tracer = ot.get_tracer("test")
+    with tracer.start_as_current_span("caller") as span:
+        expected = format(span.get_span_context().trace_id, "032x")
+        event = emitter.build(
+            EventType.AGENT_INVOKED, tenant_id=TENANT, correlation_id="corr-live"
+        )
+
+    assert event.trace_id == expected
