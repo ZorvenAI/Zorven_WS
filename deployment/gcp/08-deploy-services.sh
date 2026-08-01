@@ -99,6 +99,7 @@ deploy_service zorven-backend-ws zorven-backend 8002 \
   --max-instances="${CR_MAX_INSTANCES}" \
   --min-instances=0 \
   --session-affinity \
+  --timeout="${CR_WS_TIMEOUT}" \
   --set-secrets="SECRET_KEY=SECRET_KEY:latest" \
   --set-env-vars="\
 DATABASE_URL=${DATABASE_URL},\

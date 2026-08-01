@@ -341,9 +341,23 @@ jobs:
           IFS=',' read -ra SERVICES <<< "${{ matrix.cloud_run_services }}"
           for svc in "${SERVICES[@]}"; do
             echo "Deploying ${svc}..."
+
+            # Services that hold WebSockets open need the request timeout
+            # raised. On Cloud Run a WebSocket is one long-lived request, so
+            # the 300s default severs the connection after five minutes with
+            # no close frame (measured at 301.9s by spike A-02). Applied on
+            # every deploy so the setting cannot silently drift back.
+            EXTRA_FLAGS=()
+            case "${svc}" in
+              zorven-backend-ws)
+                EXTRA_FLAGS+=(--timeout=3600)
+                ;;
+            esac
+
             gcloud run services update "${svc}" \
               --region="${{ env.GCP_REGION }}" \
               --image="${{ env.AR_PREFIX }}/${{ matrix.image }}:latest" \
+              "${EXTRA_FLAGS[@]}" \
               --quiet
             echo "Deployed ${svc} successfully"
           done
