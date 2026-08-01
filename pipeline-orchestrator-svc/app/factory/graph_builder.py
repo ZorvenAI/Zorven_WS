@@ -44,6 +44,12 @@ _SERVICE_URL_MAP: dict[str, str] = {
     "creative-generation-agent-svc:8042": settings.CREATIVE_GENERATION_AGENT_URL,
     "ad-publishing-agent-svc:8043": settings.AD_PUBLISHING_AGENT_URL,
     "campaign-optimization-agent-svc:8044": settings.CAMPAIGN_OPTIMIZATION_AGENT_URL,
+    # Present in EXTERNAL_ENDPOINTS but previously absent here, so their URLs
+    # were never translated even when a setting existed.
+    "intelligence-loop-agent-svc:8045": settings.INTELLIGENCE_LOOP_AGENT_URL,
+    "odoo-mcp-server:8095": settings.ODOO_MCP_URL,
+    "odoo-worker-agent:8100": settings.ODOO_WORKER_AGENT_URL,
+    "chat-titling-worker:8040": settings.CHAT_TITLING_URL,
 }
 
 
