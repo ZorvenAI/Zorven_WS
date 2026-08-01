@@ -29,7 +29,6 @@ _SERVICE_URL_MAP: dict[str, str] = {
     "content-agent-svc:8050": settings.CONTENT_AGENT_URL,
     "social-agent-svc:8060": settings.SOCIAL_AGENT_URL,
     "rag-uploader-agent-svc:8070": settings.RAG_UPLOADER_AGENT_URL,
-    "odoo-worker-agent-svc:8100": settings.ODOO_WORKER_AGENT_URL,
     "market-research-agent-svc:8021": settings.MARKET_RESEARCH_AGENT_URL,
     "competitor-intel-agent-svc:8022": settings.COMPETITOR_INTEL_AGENT_URL,
     "audience-persona-agent-svc:8023": settings.AUDIENCE_PERSONA_AGENT_URL,

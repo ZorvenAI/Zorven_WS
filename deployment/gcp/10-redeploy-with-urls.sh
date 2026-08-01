@@ -48,15 +48,20 @@ wait
 # ═══════════════════════════════════════════════════════════════
 # ORCHESTRATOR — needs callback URL + all agent service URLs
 # ═══════════════════════════════════════════════════════════════
-# NOTE: these names must match the Settings field names in
+# NOTE: every name here must match a Settings field in
 # pipeline-orchestrator-svc/app/core/config.py exactly, prefixed with
-# ORCHESTRATOR_. The fields are <NAME>_AGENT_URL, so the env var is
-# ORCHESTRATOR_<NAME>_AGENT_URL. Dropping the _AGENT segment does not error —
-# pydantic silently keeps the docker-compose default, and every agent call
-# then resolves to a hostname that does not exist on Cloud Run. That is
-# exactly what happened: 20 of these were misnamed and every external node
-# failed with "Name or service not known". tests/test_service_url_config.py
-# now asserts this file against the Settings fields.
+# ORCHESTRATOR_. Match the field, not a pattern — most agents are
+# <NAME>_AGENT_URL, but CALLBACK_BASE_URL, MLFLOW_TRACKING_URI, ODOO_MCP_URL
+# and CHAT_TITLING_URL are not, and assuming the suffix is what caused this
+# incident in reverse.
+#
+# A wrong name does not error. Pydantic cannot warn about a variable it was
+# never asked for, so the field silently keeps its docker-compose default and
+# every agent call resolves to a hostname that does not exist on Cloud Run.
+# Twenty of these were missing the _AGENT segment and every external node
+# failed with "Name or service not known" while the console showed the URLs
+# as configured. tests/test_service_url_config.py now asserts this file
+# against the Settings fields in both directions.
 update_service zorven-orchestrator \
   "ORCHESTRATOR_CALLBACK_BASE_URL=${ZORVEN_BACKEND_URL},\
 ORCHESTRATOR_MLFLOW_TRACKING_URI=${ZORVEN_MLFLOW_URL},\

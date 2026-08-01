@@ -29,12 +29,47 @@ REDEPLOY_SCRIPT = REPO_ROOT / "deployment" / "gcp" / "10-redeploy-with-urls.sh"
 ENV_PREFIX = "ORCHESTRATOR_"
 
 
-def orchestrator_env_vars_in_script() -> set[str]:
-    """Every ORCHESTRATOR_* variable the deploy script sets."""
+def orchestrator_env_blob() -> str:
+    """The quoted env-var argument of the zorven-orchestrator update_service call.
+
+    Scoped deliberately. A whole-file scan matches on line starts, which misses
+    the first variable in the blob — it shares a line with the opening quote —
+    and it also picks up ORCHESTRATOR_URL, which belongs to the *backend*
+    service and is not an orchestrator Settings field at all. Both directions
+    of the guard depend on reading exactly the orchestrator's own variables.
+    """
     if not REDEPLOY_SCRIPT.is_file():
         pytest.skip(f"{REDEPLOY_SCRIPT} not available")
     text = REDEPLOY_SCRIPT.read_text()
-    return set(re.findall(r"^(ORCHESTRATOR_[A-Z0-9_]+)=", text, re.MULTILINE))
+
+    match = re.search(
+        r"update_service\s+zorven-orchestrator\s*\\?\s*\n\s*\"(.*?)\"",
+        text,
+        re.DOTALL,
+    )
+    assert match, "could not find the zorven-orchestrator update_service call"
+    return match.group(1)
+
+
+def orchestrator_env_vars_in_script() -> set[str]:
+    """Every ORCHESTRATOR_* variable set on the orchestrator service."""
+    return set(re.findall(r"(ORCHESTRATOR_[A-Z0-9_]+)=", orchestrator_env_blob()))
+
+
+def test_the_parser_finds_the_whole_blob():
+    """Guards the guard.
+
+    If the regex above ever stops matching, both directional tests would pass
+    vacuously against an empty set. CALLBACK_BASE_URL is asserted by name
+    because it is the first entry, and the previous line-start parser missed
+    exactly that one.
+    """
+    found = orchestrator_env_vars_in_script()
+    assert len(found) >= 20, f"parser found only {len(found)} variables"
+    assert "ORCHESTRATOR_CALLBACK_BASE_URL" in found
+    assert "ORCHESTRATOR_VOC_AGENT_URL" in found
+    # Belongs to the backend, not the orchestrator — must not be swept up.
+    assert "ORCHESTRATOR_URL" not in found
 
 
 def test_every_env_var_the_script_sets_maps_to_a_real_setting():
@@ -103,11 +138,17 @@ def test_defaults_are_compose_hostnames_not_cloud_urls():
 
     If a default ever became a .run.app URL, a missing env var would stop
     being detectable by this suite.
+
+    Read from model_fields rather than Settings(): instantiating would apply
+    any ORCHESTRATOR_* variables present in the runner's environment, so the
+    test would be asserting the environment instead of the class defaults —
+    and would pass or fail depending on where it ran.
     """
-    for name in Settings.model_fields:
+    for name, field in Settings.model_fields.items():
         if not name.endswith("_AGENT_URL"):
             continue
-        default = getattr(Settings(), name)
+        default = field.default
+        assert isinstance(default, str), f"{name} has no literal default"
         assert ".run.app" not in default, (
             f"{name} defaults to a Cloud Run URL, which hides a missing "
             "environment variable"
