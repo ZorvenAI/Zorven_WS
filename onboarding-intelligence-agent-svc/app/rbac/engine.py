@@ -120,13 +120,18 @@ MATRIX: dict[Capability, dict[Role, Verdict]] = {
         Role.VIEWER: D,
     },
     # SYSTEM in §15. The platform has no SYSTEM role, so §8 expresses it as the
-    # full role set plus internal_only: true — the registry refuses an
-    # externally-originated call regardless of the caller's role.
+    # full role set plus internal_only: true, and the registry's origin gate —
+    # not this row — is what refuses an external caller.
+    #
+    # VIEWER is ALLOW on purpose. The row must match the full role set the YAML
+    # declares, or an internal pipeline running under a VIEWER's session would
+    # be denied by RBAC before the origin gate ever spoke. Externally the skill
+    # is unreachable for every role, VIEWER included.
     Capability.RECORD_GOLDEN_CANDIDATES: {
         Role.OWNER: A,
         Role.ADMIN: A,
         Role.EDITOR: A,
-        Role.VIEWER: D,
+        Role.VIEWER: A,
     },
     Capability.CONFLICT_ESCALATION: {
         Role.OWNER: A,
@@ -188,8 +193,12 @@ SKILL_CAPABILITY: dict[str, Capability] = {
     "SKL-OIA-12": Capability.AUTOGEN_STRATEGY_IDENTITY,
     "SKL-OIA-13": Capability.RECORD_GOLDEN_CANDIDATES,
     "SKL-OIA-14": Capability.CONFLICT_ESCALATION,
-    # 15 and 16 are internal plumbing (prompt fetch, redaction) and carry no
-    # §15 row: they are never invoked by a user directly.
+    # 15 and 16 are internal plumbing (prompt fetch, redaction). §15 gives them
+    # no row of their own, so they borrow VIEW_RECORDINGS — the one row every
+    # role may use — precisely because RBAC is not their control. Both are
+    # internal_only, so the registry's origin gate is what stops an external
+    # caller; mapping them anywhere stricter would only break the internal
+    # pipelines that legitimately call them.
     "SKL-OIA-15": Capability.VIEW_RECORDINGS,
     "SKL-OIA-16": Capability.VIEW_RECORDINGS,
 }
