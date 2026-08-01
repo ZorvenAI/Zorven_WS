@@ -140,6 +140,12 @@ log_ok "Core services deployed."
 log "Deploying Celery services (always-on)..."
 
 # Celery Worker — wrap with health server
+# NOTE: gcloud splits --args on commas, so the -Q queue list must travel under
+# a custom delimiter (^|^). Without it the list is torn into separate argv
+# entries and the worker silently subscribes to 'celery' alone — every task
+# routed to high_priority, low_priority, ingestion, curation or orchestration
+# then queues forever. That is what left dispatched jobs stuck in QUEUED:
+# dispatch_job_task routes to high_priority and was never consumed.
 deploy_service zorven-celery-worker zorven-celery-worker 8080 \
   --memory=1Gi --cpu=1 \
   --max-instances=1 \
@@ -168,7 +174,7 @@ ORCHESTRATOR_URL=PLACEHOLDER,\
 BACKEND_URL=PLACEHOLDER,\
 CALLBACK_BASE_URL=PLACEHOLDER" \
   --command="bash" \
-  --args="-c,python -m http.server \${PORT:-8080} & exec celery -A brand_automator worker --loglevel=info --concurrency=4 -Q celery,high_priority,low_priority,ingestion,curation,orchestration" &
+  --args='^|^-c|python -m http.server ${PORT:-8080} & exec celery -A brand_automator worker --loglevel=info --concurrency=4 -Q celery,high_priority,low_priority,ingestion,curation,orchestration' &
 
 # Celery Beat
 deploy_service zorven-celery-beat zorven-celery-beat 8080 \
