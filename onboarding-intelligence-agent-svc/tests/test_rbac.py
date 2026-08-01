@@ -139,3 +139,46 @@ def test_enforce_returns_the_verdict_when_not_denied(engine):
 def test_an_unknown_skill_denies_rather_than_raising_keyerror(engine):
     """The engine stays total; unknown ids are the registry's business."""
     assert engine.verdict_for_skill(Role.OWNER, "SKL-OIA-99") is Verdict.DENY
+
+
+# ── Regression cover for PR #534 review findings ──────────────────────────
+
+
+def test_internal_only_skills_allow_every_role_in_the_matrix(engine):
+    """The matrix must agree with the full role set the YAML declares.
+
+    Review finding: RECORD_GOLDEN_CANDIDATES denied VIEWER while §8 declares
+    all four roles and marks it internal_only. An internal pipeline running
+    under a VIEWER's session would have been denied by RBAC before the origin
+    gate ever spoke. Externally the skill is unreachable for every role, so
+    the gate — not this row — is the control.
+    """
+    for skill_id in ("SKL-OIA-13", "SKL-OIA-15", "SKL-OIA-16"):
+        for role in Role:
+            assert engine.verdict_for_skill(role, skill_id) is not Verdict.DENY, (
+                f"{skill_id} denies {role.value} in the matrix, which would "
+                "block an internal caller before the origin gate applies"
+            )
+
+
+def test_matrix_agrees_with_the_declared_roles_for_internal_only_skills():
+    """Cross-check the matrix against config/skills.yaml rather than a constant."""
+    from pathlib import Path as _Path
+
+    import yaml
+
+    root = _Path(__file__).resolve().parents[1]
+    declarations = yaml.safe_load((root / "config" / "skills.yaml").read_text())
+    engine = RBACEngine()
+
+    for declaration in declarations["skills"]:
+        if not declaration.get("internal_only"):
+            continue
+        declared = set(declaration["allowed_roles"])
+        assert declared == {r.value for r in Role}, declaration["skill_id"]
+        for role in Role:
+            verdict = engine.verdict_for_skill(role, declaration["skill_id"])
+            assert verdict is not Verdict.DENY, (
+                f"{declaration['skill_id']} declares {sorted(declared)} but the "
+                f"matrix denies {role.value}"
+            )

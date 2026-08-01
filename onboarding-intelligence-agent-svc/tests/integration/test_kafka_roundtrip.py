@@ -135,8 +135,12 @@ async def read_since(
         for partition, offset in offsets.items():
             consumer.seek(partition, offset)
 
-        deadline = asyncio.get_event_loop().time() + timeout
-        while asyncio.get_event_loop().time() < deadline:
+        # get_running_loop() rather than get_event_loop(): the latter is
+        # deprecated inside a coroutine on 3.12+ and warns or errors depending
+        # on the runtime.
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while loop.time() < deadline:
             try:
                 message = await asyncio.wait_for(consumer.getone(), timeout=5)
             except asyncio.TimeoutError:
