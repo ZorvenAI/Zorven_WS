@@ -18,9 +18,25 @@ variable fails safe rather than pointing at a database that does not exist.
 from __future__ import annotations
 
 from functools import lru_cache
+from urllib.parse import urlparse
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: Memorystore is fixed at 16 databases. Anything outside this range does not
+#: exist in production.
+MAX_REDIS_DB = 15
+
+
+def redis_db_from_url(url: str) -> int | None:
+    """Extract the database index from a Redis URL, if it carries one."""
+    path = urlparse(url).path.lstrip("/")
+    if not path:
+        return None
+    try:
+        return int(path)
+    except ValueError:
+        return None
 
 
 class Settings(BaseSettings):
@@ -85,21 +101,58 @@ class Settings(BaseSettings):
     @field_validator("REDIS_DB", "POI_PROMPT_CACHE_DB")
     @classmethod
     def _must_exist_on_memorystore(cls, v: int) -> int:
-        # Memorystore is fixed at 16 databases. A value outside 0–15 is the
-        # DB 27 mistake ERRATA-01 exists to prevent, and it fails silently at
-        # runtime — the agent RedisManagers fail open and run cacheless.
-        if not 0 <= v <= 15:
-            raise ValueError(
-                f"Redis DB {v} does not exist in production. Memorystore is "
-                "fixed at 16 databases (0-15); OIA uses DB 2 with the "
-                "oia:v1: key prefix (ERRATA-01)."
-            )
+        # A value outside 0-15 is the DB 27 mistake ERRATA-01 exists to
+        # prevent, and it fails silently at runtime — the agent RedisManagers
+        # fail open and run cacheless.
+        if not 0 <= v <= MAX_REDIS_DB:
+            raise ValueError(_bad_db_message(v))
         return v
+
+    @model_validator(mode="after")
+    def _redis_url_agrees_with_redis_db(self) -> "Settings":
+        """Validate the database index that is actually connected to.
+
+        REDIS_URL is what RedisManager.connect() dials; REDIS_DB is what
+        /health/diagnostics reports. Validating only the latter would let
+        OIA_REDIS_URL=redis://host:6379/27 through — the precise
+        misconfiguration this class exists to reject — and would let
+        diagnostics report a database the service is not using.
+
+        When only the URL is set, REDIS_DB follows it. When both are set they
+        must agree.
+        """
+        url_db = redis_db_from_url(self.REDIS_URL)
+        if url_db is None:
+            return self
+
+        if not 0 <= url_db <= MAX_REDIS_DB:
+            raise ValueError(f"REDIS_URL: {_bad_db_message(url_db)}")
+
+        if "REDIS_DB" in self.model_fields_set:
+            if url_db != self.REDIS_DB:
+                raise ValueError(
+                    f"REDIS_URL selects DB {url_db} but REDIS_DB is "
+                    f"{self.REDIS_DB}. They must agree — the URL is what the "
+                    "service connects to and REDIS_DB is what /health "
+                    "reports, so a mismatch makes diagnostics lie."
+                )
+        else:
+            object.__setattr__(self, "REDIS_DB", url_db)
+
+        return self
 
     @property
     def kafka_enabled(self) -> bool:
         """Whether this environment has a Kafka broker at all."""
         return bool(self.KAFKA_BOOTSTRAP_SERVERS.strip())
+
+
+def _bad_db_message(db: int) -> str:
+    return (
+        f"Redis DB {db} does not exist in production. Memorystore is fixed at "
+        f"16 databases (0-{MAX_REDIS_DB}); OIA uses DB 2 with the oia:v1: key "
+        "prefix (ERRATA-01)."
+    )
 
 
 @lru_cache

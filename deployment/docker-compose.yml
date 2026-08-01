@@ -1729,7 +1729,13 @@ services:
       - OIA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - OIA_POI_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - OIA_GEMINI_KEY=${GOOGLE_API_KEY:-}
-      - OIA_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      # Left empty by default on purpose. The kafka service sits behind the
+      # with-kafka profile, so in the default stack there is no broker — and
+      # unlike the rest of the fleet, OIA's /health treats a *configured*
+      # broker as a hard dependency. Naming kafka:29092 here would make the
+      # container permanently 503 whenever the profile is off. Set it when
+      # running with --profile with-kafka.
+      - OIA_KAFKA_BOOTSTRAP_SERVERS=${OIA_KAFKA_BOOTSTRAP_SERVERS:-}
       - OIA_LOG_LEVEL=INFO
     expose:
       - "8120"

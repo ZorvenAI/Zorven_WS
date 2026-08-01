@@ -40,7 +40,14 @@ def free_port() -> int:
 
 @pytest.fixture(autouse=True)
 def _required_env(monkeypatch):
-    """Every test starts from a valid minimal configuration."""
+    """Every test starts from a valid minimal configuration.
+
+    Ambient OIA_ variables are cleared first: inheriting a developer's
+    OIA_REDIS_URL would silently redirect the integration tests at a different
+    database than the one under test.
+    """
+    for key in [k for k in os.environ if k.startswith("OIA_")]:
+        monkeypatch.delenv(key, raising=False)
     for key, value in REQUIRED_ENV.items():
         monkeypatch.setenv(key, value)
     from app.core.config import get_settings
