@@ -1712,6 +1712,41 @@ services:
   # MLflow PostgreSQL — Dedicated database for MLflow Tracking Server
   # Stores prompt registry, experiment tracking, and run metadata
   # ==========================================================================
+  onboarding-intelligence-agent-svc:
+    build:
+      context: ../onboarding-intelligence-agent-svc
+      dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-onboarding-intelligence-agent:latest
+    container_name: ai-brand-automator-onboarding-intelligence
+    environment:
+      # ERRATA-01: DB 2 with the oia:v1: prefix, not DB 27. Production Redis is
+      # Memorystore, which is fixed at 16 databases and has no DB 27.
+      - OIA_REDIS_URL=redis://redis:6379/2
+      - OIA_REDIS_DB=2
+      - OIA_POI_PROMPT_CACHE_DB=2
+      - OIA_BACKEND_BASE_URL=http://backend:8001
+      - OIA_GCS_BUCKET=${GS_BUCKET_NAME:-zorven-raw-assets}
+      - OIA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - OIA_POI_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - OIA_GEMINI_KEY=${GOOGLE_API_KEY:-}
+      - OIA_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - OIA_LOG_LEVEL=INFO
+    expose:
+      - "8120"
+    ports:
+      - "8120:8120"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8120/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
   mlflow-db:
     image: postgres:15-alpine
     container_name: ai-brand-automator-mlflow-db

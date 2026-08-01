@@ -1,0 +1,20 @@
+# Machine-readable skill registry — Design §8.
+#
+# A-05 lands this file empty of skills so that config loading, schema
+# validation and tests/test_skills_yaml.py have something real to parse from
+# the first commit. Each skill is declared here by the story that implements
+# it, alongside its module in app/skills/.
+#
+# Declaration shape (see Design §8.1):
+#
+#   - id: SKL-OIA-01
+#     name: research_business
+#     module: app.skills.research_business
+#     modes: [PREP]
+#     roles: [Owner, Admin, Editor]
+#     input_schema: {...}
+#     output_schema: {...}
+
+version: 1
+service: onboarding-intelligence-agent
+skills: []
