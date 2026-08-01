@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Request, Response, status
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 router = APIRouter()
 
@@ -133,3 +134,31 @@ async def diagnostics(request: Request) -> dict[str, Any]:
             "OIA_POI_TOKEN": bool(settings.POI_TOKEN),
         },
     }
+
+
+@router.get("/ready")
+async def ready(request: Request, response: Response) -> dict[str, Any]:
+    """Readiness probe (Design §20).
+
+    §20 describes /health as liveness only and /ready as the probe that
+    checks dependencies, while A-05's AC-3 required /health to check them.
+    Both readings are honoured: /health keeps the behaviour A-05 shipped and
+    is tested, and /ready is the §20-named endpoint with the same semantics,
+    so a rolling deploy can point at either name.
+    """
+    deps = await _dependency_status(request)
+    failed = [
+        name
+        for name, state in deps.items()
+        if state["required"] and not state["healthy"]
+    ]
+    if failed:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "not_ready", "service": SERVICE_NAME, "failed": failed}
+    return {"status": "ready", "service": SERVICE_NAME}
+
+
+@router.get("/metrics")
+async def prometheus_metrics() -> Response:
+    """Prometheus exposition (Design §20)."""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
