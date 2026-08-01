@@ -306,6 +306,49 @@ jobs:
         working-directory: odoo-worker-agent-svc
         run: pytest tests/ -v -m "not integration"
 
+  onboarding-intelligence-agent-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        working-directory: onboarding-intelligence-agent-svc
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint
+        working-directory: onboarding-intelligence-agent-svc
+        run: |
+          black --check app/ tests/
+          flake8 app/ tests/
+
+      - name: Type check
+        working-directory: onboarding-intelligence-agent-svc
+        run: mypy app/
+
+      # Integration tests run against the real Redis service above. The e2e
+      # tests build and run the image and are excluded here — they need Docker
+      # and take minutes; they run locally and in the image build job.
+      - name: Test
+        working-directory: onboarding-intelligence-agent-svc
+        run: pytest tests/ -v -m "not e2e"
+
   # Frontend Tests
   frontend-tests:
     runs-on: ubuntu-latest
@@ -392,7 +435,7 @@ jobs:
   # Build Docker Images
   build-images:
     runs-on: ubuntu-latest
-    needs: [backend-tests, test-media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, odoo-mcp-server-tests, odoo-worker-tests, frontend-tests, integration-tests]
+    needs: [backend-tests, test-media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, odoo-mcp-server-tests, odoo-worker-tests, onboarding-intelligence-agent-tests, frontend-tests, integration-tests]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/development_main'
     
     steps:

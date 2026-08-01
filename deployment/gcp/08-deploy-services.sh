@@ -446,6 +446,30 @@ ILA_MLFLOW_TRACKING_URI=PLACEHOLDER,\
 ILA_PROMPT_FALLBACK_ONLY=true,\
 ${AGENT_COMMON}" &
 
+# Onboarding Intelligence Agent (OIA).
+#
+# --timeout is the WebSocket one, not the default: LIVE mode holds a socket for
+# a 45-minute meeting, and on Cloud Run a WebSocket is a single long-lived
+# request capped by this value. Spike A-02 measured the 300s default severing a
+# socket at 301.9s. --session-affinity is best-effort only; session state lives
+# in Redis because sockets land on different instances.
+#
+# Redis is DB 2 with the oia:v1: key prefix (ERRATA-01), not DB 27 — Memorystore
+# is fixed at 16 databases and DB 27 does not exist there.
+deploy_service zorven-onboarding-intelligence-agent zorven-onboarding-intelligence-agent 8120 \
+  --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
+  --timeout="${CR_WS_TIMEOUT}" \
+  --session-affinity \
+  --set-secrets="OIA_GEMINI_KEY=GOOGLE_API_KEY:latest" \
+  --set-env-vars="\
+OIA_REDIS_URL=${REDIS_BASE}/2,\
+OIA_REDIS_DB=2,\
+OIA_POI_PROMPT_CACHE_DB=2,\
+OIA_BACKEND_BASE_URL=PLACEHOLDER,\
+OIA_GCS_BUCKET=zorven-raw-assets,\
+${AGENT_COMMON}" &
+
 deploy_service zorven-rag-uploader-agent zorven-rag-uploader-agent 8070 \
   --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
   --max-instances="${CR_MAX_INSTANCES_AGENT}" \

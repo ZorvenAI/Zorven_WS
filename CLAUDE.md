@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 26 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini (default `gemini-3.5-flash`, set in `ai_services/services.py`) and Anthropic Claude. ~8,470 test functions across all components (excluding the vendored Odoo submodule).
+AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 27 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini (default `gemini-3.5-flash`, set in `ai_services/services.py`) and Anthropic Claude. ~8,470 test functions across all components (excluding the vendored Odoo submodule).
 
 ## Monorepo Layout
 
@@ -37,6 +37,7 @@ intelligence-loop-agent-svc/    # FastAPI — WF3.5 intelligence loop, consumes 
 odoo-mcp-server-svc/            # FastAPI — Odoo ERP MCP bridge, 101 tools (port 8095)
 odoo-worker-agent-svc/          # FastAPI — Multi-persona Odoo worker, PAOR loop (port 8100)
 prompt-optimization-svc/        # FastAPI — MLflow prompt registry + GEPA optimization (port 8110)
+onboarding-intelligence-agent-svc/ # FastAPI — OIA: PREP/LIVE/PROCESS onboarding intelligence, STT + OCR + Gemini (port 8120)
 spike-stt-v2/                    # Timeboxed spike — GCP Speech-to-Text v2 streaming latency/diarization (port 8120)
 vendor/odoo/community/           # Git submodule — Odoo Community Edition 19.0
 deployment/                      # Master docker-compose, Kong config, GCP Cloud Run deploy scripts (gcp/)
@@ -45,7 +46,7 @@ scripts/                         # E2E test scripts, GitHub issue automation
 tests/integration/               # Cross-service integration tests (3 phases)
 ```
 
-Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service, brand-equity-calculator-svc, odoo-mcp-server-svc, market-research-agent-svc, competitor-intel-agent-svc, audience-persona-agent-svc, trend-cultural-agent-svc, voc-agent-svc, odoo-worker-agent-svc, brand-positioning-agent-svc, brand-architecture-agent-svc, brand-personality-agent-svc, brand-naming-agent-svc, brand-story-agent-svc, campaign-architecture-agent-svc, creative-generation-agent-svc, ad-publishing-agent-svc, campaign-optimization-agent-svc, intelligence-loop-agent-svc, prompt-optimization-svc. Missing: rag-uploader-agent-service (no service-local docs) and spike-stt-v2 (has `README.md` instead).
+Each microservice has its own `CLAUDE.md` — read it before modifying that service. Services with `CLAUDE.md`: pipeline-orchestrator-svc, discovery-agent-svc, intelligence-agent-svc, chat-titling-worker, content-agent-service, social-agent-service, brand-equity-calculator-svc, odoo-mcp-server-svc, market-research-agent-svc, competitor-intel-agent-svc, audience-persona-agent-svc, trend-cultural-agent-svc, voc-agent-svc, odoo-worker-agent-svc, brand-positioning-agent-svc, brand-architecture-agent-svc, brand-personality-agent-svc, brand-naming-agent-svc, brand-story-agent-svc, campaign-architecture-agent-svc, creative-generation-agent-svc, ad-publishing-agent-svc, campaign-optimization-agent-svc, intelligence-loop-agent-svc, prompt-optimization-svc, onboarding-intelligence-agent-svc. Missing: rag-uploader-agent-service (no service-local docs) and spike-stt-v2 (has `README.md` instead).
 
 ## Build, Run, and Test Commands
 
@@ -149,7 +150,7 @@ docker compose down -v                                        # Tear down
 
 Four profiles gate optional stacks: `with-kafka` (Zookeeper, Kafka, Kafka UI, and the three pipeline consumers), `with-db` (local PostgreSQL on host 5433 instead of Neon), `with-odoo` (Odoo CE on 8069/8072 + `odoo-db` on host 5434), `with-nginx`. Everything else — all 26 agent services, Redis, MLflow — starts unprofiled. `spike-stt-v2` is **not** in Compose; run it standalone with uvicorn.
 
-**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, MLflow 5000, MLflow DB 5435 (host), Orchestrator 8010, Discovery 8020, Market Research 8021, Competitor Intel 8022, Audience Persona 8023, Trend Cultural 8024, VoC Agent 8025, Intelligence 8030, Brand Positioning 8031, Brand Architecture 8032, Brand Personality 8033, Brand Naming 8034, Brand Story 8035, Titling 8040, Campaign Architecture 8041, Creative Generation 8042, Ad Publishing 8043, Campaign Optimization 8044, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090, Odoo MCP 8095, Odoo Worker 8100, Prompt Optimization 8110, Intelligence Loop 8045, STT Spike 8120
+**Service ports**: Kong 8000, Backend 8001 (internal only in Docker), Kong Admin 8001 (Docker only), Frontend 3000, MLflow 5000, MLflow DB 5435 (host), Orchestrator 8010, Discovery 8020, Market Research 8021, Competitor Intel 8022, Audience Persona 8023, Trend Cultural 8024, VoC Agent 8025, Intelligence 8030, Brand Positioning 8031, Brand Architecture 8032, Brand Personality 8033, Brand Naming 8034, Brand Story 8035, Titling 8040, Campaign Architecture 8041, Creative Generation 8042, Ad Publishing 8043, Campaign Optimization 8044, Content 8050, Social 8060, RAG Uploader 8070, MCP 8085, Kafka UI 8080, Brand Equity 8090, Odoo MCP 8095, Odoo Worker 8100, Prompt Optimization 8110, Intelligence Loop 8045, Onboarding Intelligence 8120
 
 **Frontend Docker build** requires `output: "standalone"` in `next.config.ts`. Without it, the Dockerfile `COPY --from=builder /app/.next/standalone` step fails.
 
@@ -258,7 +259,7 @@ Schema-based via `django-tenants`. All models have a nullable `tenant` FK. Most 
 
 ### Redis Database Allocation
 
-DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery + Prompt Cache (shared, key-prefix isolated), DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent, DB 16: Brand Positioning, DB 17: Brand Architecture, DB 18: Brand Personality, DB 19: Brand Naming, DB 20: Brand Story, DB 21: Campaign Architecture, DB 22: Creative Generation, DB 23: Ad Publishing, DB 24: Campaign Optimization, DB 25: Intelligence Loop Agent (WF3.5), DB 26: Prompt Optimization. Requires `databases 27` in redis.conf and `--databases 27` in docker-compose — if a service fails with `ERR DB index is out of range`, bump the Redis `databases` setting.
+DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery + Prompt Cache + **Onboarding Intelligence** (`oia:v1:` prefix) (shared, key-prefix isolated), DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11: Market Research, DB 12: Competitor Intel, DB 13: Audience Persona, DB 14: Trend Cultural, DB 15: VoC Agent, DB 16: Brand Positioning, DB 17: Brand Architecture, DB 18: Brand Personality, DB 19: Brand Naming, DB 20: Brand Story, DB 21: Campaign Architecture, DB 22: Creative Generation, DB 23: Ad Publishing, DB 24: Campaign Optimization, DB 25: Intelligence Loop Agent (WF3.5), DB 26: Prompt Optimization. Requires `databases 27` in redis.conf and `--databases 27` in docker-compose — if a service fails with `ERR DB index is out of range`, bump the Redis `databases` setting.
 
 **This 0–26 allocation is local-only.** Memorystore for Redis does not expose `databases` as a tunable `redisConfig`, so the managed instance is fixed at **16 databases (0–15)** and cannot be bumped the way docker-compose can. The 11 services allocated DB 16–26 (BPA, BAA, BPV, NTA, BSA, CAA, CGA, ADPUB, COA, ILA, POI) are therefore mapped onto **DB 2** in production by `deployment/gcp/08-deploy-services.sh` — safe because each namespaces its keys with a distinct prefix (`bpa:`, `baa:`, `bpv:`, `nta:`, `bsa:`, `caa:`, `cga:`, `adpub:`, `coa:`, `ila:`, `poi:`/`prompt:`). Do not reintroduce indices ≥ 16 into the GCP deploy scripts. Note the agent `RedisManager`s **fail open** on connection errors, so an out-of-range index degrades to no caching silently instead of crashing — check service logs for `DB index is out of range` rather than expecting a failed deploy.
 
@@ -276,7 +277,7 @@ All agent microservices follow this structure:
 └── main.py       # FastAPI application with lifespan management
 ```
 
-Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `CONTENT_`, `SOCIAL_`, `TITLING_`, `RAG_UPLOADER_`, `BRAND_EQUITY_`, `ODOO_MCP_`, `APA_`, `TCIA_`, `VOCA_`, `ODOO_WORKER_`, `BPA_`, `BAA_`, `BPV_`, `NTA_`, `BSA_`, `CAA_`, `CGA_`, `ADPUB_`, `COA_`, `ILA_`, `POI_`).
+Each service has its own env var prefix (e.g., `DISCOVERY_`, `INTELLIGENCE_`, `CONTENT_`, `SOCIAL_`, `TITLING_`, `RAG_UPLOADER_`, `BRAND_EQUITY_`, `ODOO_MCP_`, `APA_`, `TCIA_`, `VOCA_`, `ODOO_WORKER_`, `BPA_`, `BAA_`, `BPV_`, `NTA_`, `BSA_`, `CAA_`, `CGA_`, `ADPUB_`, `COA_`, `ILA_`, `POI_`, `OIA_`).
 
 ### Kafka Topics
 
