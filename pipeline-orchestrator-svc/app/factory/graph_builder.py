@@ -29,7 +29,6 @@ _SERVICE_URL_MAP: dict[str, str] = {
     "content-agent-svc:8050": settings.CONTENT_AGENT_URL,
     "social-agent-svc:8060": settings.SOCIAL_AGENT_URL,
     "rag-uploader-agent-svc:8070": settings.RAG_UPLOADER_AGENT_URL,
-    "odoo-worker-agent-svc:8100": settings.ODOO_WORKER_AGENT_URL,
     "market-research-agent-svc:8021": settings.MARKET_RESEARCH_AGENT_URL,
     "competitor-intel-agent-svc:8022": settings.COMPETITOR_INTEL_AGENT_URL,
     "audience-persona-agent-svc:8023": settings.AUDIENCE_PERSONA_AGENT_URL,
@@ -44,6 +43,12 @@ _SERVICE_URL_MAP: dict[str, str] = {
     "creative-generation-agent-svc:8042": settings.CREATIVE_GENERATION_AGENT_URL,
     "ad-publishing-agent-svc:8043": settings.AD_PUBLISHING_AGENT_URL,
     "campaign-optimization-agent-svc:8044": settings.CAMPAIGN_OPTIMIZATION_AGENT_URL,
+    # Present in EXTERNAL_ENDPOINTS but previously absent here, so their URLs
+    # were never translated even when a setting existed.
+    "intelligence-loop-agent-svc:8045": settings.INTELLIGENCE_LOOP_AGENT_URL,
+    "odoo-mcp-server:8095": settings.ODOO_MCP_URL,
+    "odoo-worker-agent:8100": settings.ODOO_WORKER_AGENT_URL,
+    "chat-titling-worker:8040": settings.CHAT_TITLING_URL,
 }
 
 

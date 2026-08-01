@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     INTELLIGENCE_AGENT_URL: str = "http://intelligence-agent-svc:8030"
     RAG_UPLOADER_AGENT_URL: str = "http://rag-uploader-agent-svc:8070"
     ODOO_WORKER_AGENT_URL: str = "http://odoo-worker-agent:8100"
+    # These three had no field at all, so they could never be pointed at
+    # Cloud Run — EXTERNAL_ENDPOINTS referenced them and nothing could
+    # override the compose default.
+    INTELLIGENCE_LOOP_AGENT_URL: str = "http://intelligence-loop-agent-svc:8045"
+    ODOO_MCP_URL: str = "http://odoo-mcp-server:8095"
+    CHAT_TITLING_URL: str = "http://chat-titling-worker:8040"
     MARKET_RESEARCH_AGENT_URL: str = "http://market-research-agent-svc:8021"
     COMPETITOR_INTEL_AGENT_URL: str = "http://competitor-intel-agent-svc:8022"
     AUDIENCE_PERSONA_AGENT_URL: str = "http://audience-persona-agent-svc:8023"
