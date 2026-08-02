@@ -39,23 +39,74 @@ pytestmark = [pytest.mark.integration]
 BOOTSTRAP = os.environ.get("OIA_TEST_KAFKA", "localhost:39092")
 
 
-async def broker_available() -> bool:
-    from aiokafka.admin import AIOKafkaAdminClient
+async def broker_serving() -> bool:
+    """True once the broker can actually serve, not merely accept a socket.
 
+    Connecting proves far less than it looks. A broker seconds into its life
+    accepts admin connections while partition leaders are still being elected,
+    so a produce times out and a consumer is told a just-created topic has no
+    partitions. That is the gap CI was falling into: it waits for
+    ``rpk cluster info``, which answers early, and started the tests about six
+    seconds into the broker's life.
+
+    So probe the two things the tests actually need — a produce that is
+    acknowledged, and a consumer that can see the partitions written to — and
+    treat anything less as not ready.
+    """
+    from aiokafka import AIOKafkaProducer
+    from aiokafka.admin import AIOKafkaAdminClient, NewTopic
+
+    probe = f"oia-readiness-probe-{uuid.uuid4().hex[:8]}"
+    admin = AIOKafkaAdminClient(bootstrap_servers=BOOTSTRAP)
+    await admin.start()
     try:
-        admin = AIOKafkaAdminClient(bootstrap_servers=BOOTSTRAP)
-        await admin.start()
-        await admin.close()
-        return True
+        await admin.create_topics(
+            [NewTopic(probe, num_partitions=1, replication_factor=1)]
+        )
     except Exception:
-        return False
+        pass
+    try:
+        producer = AIOKafkaProducer(bootstrap_servers=BOOTSTRAP)
+        await producer.start()
+        try:
+            # A leaderless partition fails here rather than mid-test.
+            await asyncio.wait_for(producer.send_and_wait(probe, b"{}"), timeout=10)
+        finally:
+            await producer.stop()
+
+        consumer = AIOKafkaConsumer(bootstrap_servers=BOOTSTRAP)
+        await consumer.start()
+        try:
+            return bool(await partitions_for(consumer, probe, timeout=10))
+        finally:
+            await stop(consumer)
+    finally:
+        try:
+            await admin.delete_topics([probe])
+        except Exception:
+            pass
+        await admin.close()
 
 
 @pytest.fixture(scope="module")
 async def broker() -> str:
-    if not await broker_available():
-        pytest.skip(f"no Kafka broker at {BOOTSTRAP}")
-    return BOOTSTRAP
+    """Wait for a serving broker, or skip.
+
+    Bounded rather than immediate: a broker that CI has only just launched is
+    not absent, just not up yet, and skipping on it would silently drop the
+    AC-1 coverage that this file exists to provide.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 90
+    last = ""
+    while loop.time() < deadline:
+        try:
+            if await broker_serving():
+                return BOOTSTRAP
+        except Exception as exc:  # not up yet — connection refused and friends
+            last = f"{type(exc).__name__}: {exc}"
+        await asyncio.sleep(2)
+    pytest.skip(f"no serving Kafka broker at {BOOTSTRAP} after 90s ({last})")
 
 
 @pytest.fixture
@@ -103,23 +154,39 @@ async def stop(consumer: Any) -> None:
             raise
 
 
-async def partitions_for(consumer: AIOKafkaConsumer, topic: str) -> list:
-    """Partitions of ``topic``, fetching cluster metadata first.
+async def partitions_for(
+    consumer: AIOKafkaConsumer, topic: str, timeout: float = 30.0
+) -> list:
+    """Partitions of ``topic``, waiting for metadata to catch up.
 
-    ``partitions_for_topic`` reads a local cache. A freshly started consumer
-    that has not subscribed to anything has no metadata for the topic and
-    returns ``None`` — not "no partitions", but "never asked". Whether the
-    cache happens to be warm depends on what else the broker has told this
-    client, so on a long-lived broker it usually works and on a freshly
-    provisioned one (that is, CI) it does not.
+    Two things make the naive call unreliable.
 
-    ``topics()`` forces the fetch, making the answer independent of that.
+    ``partitions_for_topic`` reads a *local* cache, so a freshly started
+    consumer that has not subscribed to anything returns ``None`` — meaning
+    "never asked", not "no partitions". ``topics()`` forces the fetch.
+
+    One fetch is still not enough. Topic creation is acknowledged by the
+    controller before every broker can serve metadata for it, so a consumer
+    asking immediately afterwards is told the topic has no partitions and is
+    not wrong, only early. CI shows this plainly: the provisioning tests pass,
+    because the admin client sees the topics, while a consumer six seconds
+    into the broker's life does not. Locally the broker has usually been up
+    for minutes and the gap never opens — which is why this passed here and
+    failed there.
+
+    So poll until they appear, bounded by ``timeout``. Empty means they
+    genuinely never showed up.
     """
-    await consumer.topics()
-    return [
-        TopicPartition(topic, p)
-        for p in sorted(consumer.partitions_for_topic(topic) or ())
-    ]
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        await consumer.topics()
+        partitions = consumer.partitions_for_topic(topic)
+        if partitions:
+            return [TopicPartition(topic, p) for p in sorted(partitions)]
+        if loop.time() >= deadline:
+            return []
+        await asyncio.sleep(0.5)
 
 
 async def read_one(topic: str, timeout: float = 30.0) -> dict | None:
