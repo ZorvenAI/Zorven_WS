@@ -4,7 +4,12 @@ pydantic==2.12.5
 pydantic-settings==2.13.1
 httpx==0.28.1
 redis==7.1.0
-mcp>=1.0.0
+# Pinned below 2.0.0: the low-level Server.list_tools decorator this codebase
+# uses was removed in mcp 2.x. Seven other services in the monorepo already
+# carry this bound; these two did not, so CI resolved 2.0.0 and failed with
+# "'Server' object has no attribute 'list_tools'". Lifting the bound means
+# migrating to the 2.x API, not just relaxing this line.
+mcp>=1.0.0,<2.0.0
 pyyaml>=6.0.0
 asyncpg>=0.30.0
 google-cloud-discoveryengine>=0.13
