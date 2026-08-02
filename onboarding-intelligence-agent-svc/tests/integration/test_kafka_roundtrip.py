@@ -38,6 +38,12 @@ pytestmark = [pytest.mark.integration]
 
 BOOTSTRAP = os.environ.get("OIA_TEST_KAFKA", "localhost:39092")
 
+#: One probe topic for the whole run. Retrying with a *fresh* name each time
+#: would be self-defeating: every attempt would face a partition whose leader
+#: has just started being elected, so the probe would never observe the state
+#: it is waiting for. Reusing one topic lets it settle across attempts.
+PROBE_TOPIC = f"oia-readiness-probe-{uuid.uuid4().hex[:8]}"
+
 
 async def broker_serving() -> bool:
     """True once the broker can actually serve, not merely accept a socket.
@@ -50,63 +56,71 @@ async def broker_serving() -> bool:
     seconds into the broker's life.
 
     So probe the two things the tests actually need — a produce that is
-    acknowledged, and a consumer that can see the partitions written to — and
+    acknowledged, and a consumer that can then see what was written — and
     treat anything less as not ready.
     """
     from aiokafka import AIOKafkaProducer
     from aiokafka.admin import AIOKafkaAdminClient, NewTopic
 
-    probe = f"oia-readiness-probe-{uuid.uuid4().hex[:8]}"
     admin = AIOKafkaAdminClient(bootstrap_servers=BOOTSTRAP)
     await admin.start()
     try:
-        await admin.create_topics(
-            [NewTopic(probe, num_partitions=1, replication_factor=1)]
-        )
-    except Exception:
-        pass
-    try:
+        try:
+            await admin.create_topics(
+                [NewTopic(PROBE_TOPIC, num_partitions=1, replication_factor=1)]
+            )
+        except Exception:
+            pass  # already created by an earlier attempt
+
         producer = AIOKafkaProducer(bootstrap_servers=BOOTSTRAP)
         await producer.start()
         try:
             # A leaderless partition fails here rather than mid-test.
-            await asyncio.wait_for(producer.send_and_wait(probe, b"{}"), timeout=10)
+            await asyncio.wait_for(
+                producer.send_and_wait(PROBE_TOPIC, b"{}"), timeout=10
+            )
         finally:
             await producer.stop()
 
         consumer = AIOKafkaConsumer(bootstrap_servers=BOOTSTRAP)
         await consumer.start()
         try:
-            return bool(await partitions_for(consumer, probe, timeout=10))
+            return bool(await partitions_for(consumer, PROBE_TOPIC, timeout=10))
         finally:
             await stop(consumer)
     finally:
-        try:
-            await admin.delete_topics([probe])
-        except Exception:
-            pass
         await admin.close()
 
 
 @pytest.fixture(scope="module")
 async def broker() -> str:
-    """Wait for a serving broker, or skip.
+    """Wait for a serving broker; skip only where one was never promised.
 
-    Bounded rather than immediate: a broker that CI has only just launched is
-    not absent, just not up yet, and skipping on it would silently drop the
-    AC-1 coverage that this file exists to provide.
+    Bounded rather than immediate: a broker CI has only just launched is not
+    absent, just not up yet.
+
+    The distinction that matters is *who said there would be one*. When
+    ``OIA_TEST_KAFKA`` is set, as CI sets it, a broker was promised and its
+    absence is a failure — skipping there would turn a broken broker into a
+    green run that silently covers none of AC-1, which is worse than an honest
+    red. With no such promise, as in production, skipping is right.
     """
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + 90
-    last = ""
+    deadline = loop.time() + 120
+    last = "never reached"
     while loop.time() < deadline:
         try:
             if await broker_serving():
                 return BOOTSTRAP
+            last = "probe produced/consumed nothing"
         except Exception as exc:  # not up yet — connection refused and friends
             last = f"{type(exc).__name__}: {exc}"
         await asyncio.sleep(2)
-    pytest.skip(f"no serving Kafka broker at {BOOTSTRAP} after 90s ({last})")
+
+    message = f"no serving Kafka broker at {BOOTSTRAP} after 120s — last: {last}"
+    if "OIA_TEST_KAFKA" in os.environ:
+        pytest.fail(f"{message}. OIA_TEST_KAFKA is set, so one was expected.")
+    pytest.skip(message)
 
 
 @pytest.fixture
