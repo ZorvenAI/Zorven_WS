@@ -103,6 +103,9 @@ SHARED_APPS = [
     "analytics",  # Workflow analytics layer
     "optimization",  # Campaign optimization (COA-3.4 background service)
     "intelligence_loop",  # Intelligence Loop Agent (ILA, WF3.5)
+    # OIA session models. Label is "onboarding_sessions", not "onboarding" —
+    # that label belongs to the wizard app above. See apps/onboarding/apps.py.
+    "apps.onboarding.apps.OnboardingSessionsConfig",
 ]
 
 TENANT_APPS = [
