@@ -149,7 +149,7 @@ class RedisManager:
         self._client: redis.Redis | None = None
 
     async def connect(self) -> None:
-        self._client = redis.from_url(  # type: ignore[no-untyped-call]
+        self._client = redis.Redis.from_url(
             self._settings.REDIS_URL,
             encoding="utf-8",
             decode_responses=True,
