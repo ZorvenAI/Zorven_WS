@@ -200,3 +200,25 @@ behaves oddly.
 replays every persisted partition on boot; on a loaded machine it can time out
 its ZooKeeper session and crash-loop. The tests use Redpanda instead and skip
 cleanly when no broker is reachable.
+
+**A reused broker hides metadata bugs.** `consumer.partitions_for_topic()`
+reads a *local* cache and returns `None` when this client has never asked
+about the topic — which is not the same as "no partitions". On a broker that
+has been up for a while the cache is usually warm by luck, so a helper that
+skips the fetch passes locally and fails on the freshly provisioned broker CI
+starts. Call `await consumer.topics()` first, as `partitions_for()` in
+`tests/integration/test_kafka_roundtrip.py` does.
+
+Because of this, **re-create the container before trusting a green Kafka run**:
+
+```bash
+docker rm -f oia-test-kafka   # then the docker run above
+```
+
+**`consumer.stop()` can raise `CancelledError`.** A consumer built without a
+`group_id` gets aiokafka's `NoGroupCoordinator`, whose `close()` cancels an
+internal task and awaits it; the task only swallows the cancellation once it
+has run a step, so cancelling it before the loop ever schedules it lets the
+error escape. It fires whenever nothing is awaited between `start()` and
+`stop()` — reproduced 30/30 on aiokafka 0.12 and 0.13. Stop consumers through
+the `stop()` helper in that same file, never `await consumer.stop()` directly.

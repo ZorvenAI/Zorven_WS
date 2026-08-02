@@ -21,6 +21,7 @@ import asyncio
 import json
 import os
 import uuid
+from typing import Any
 
 import pytest
 from aiokafka import AIOKafkaConsumer, TopicPartition
@@ -73,6 +74,54 @@ async def producer(settings, broker):
     await kafka.stop()
 
 
+async def stop(consumer: Any) -> None:
+    """Stop a consumer, tolerating an aiokafka shutdown race.
+
+    Takes anything with a ``stop()`` — both ``AIOKafkaConsumer`` and this
+    service's ``CommandConsumer``, which wraps one.
+
+    A consumer created without a ``group_id`` gets a ``NoGroupCoordinator``,
+    whose ``close()`` cancels an internal task and then awaits it. That task
+    catches ``CancelledError`` and returns cleanly — but only once it has run
+    at least one step. Cancel it before the loop has ever scheduled it and
+    there is no ``except`` in place yet, so the ``CancelledError`` escapes
+    ``consumer.stop()`` and fails the calling test.
+
+    It surfaces when nothing is awaited between ``start()`` and ``stop()``,
+    which is exactly the early-return path below. Reproduced 30/30 against a
+    real broker on aiokafka 0.12 and 0.13.
+
+    A genuine cancellation of *this* task is re-raised: ``cancelling()`` is
+    non-zero only when the cancel was aimed at us, so a test being torn down
+    by a timeout still dies as it should.
+    """
+    task = asyncio.current_task()
+    try:
+        await consumer.stop()
+    except asyncio.CancelledError:
+        if task is not None and task.cancelling() > 0:
+            raise
+
+
+async def partitions_for(consumer: AIOKafkaConsumer, topic: str) -> list:
+    """Partitions of ``topic``, fetching cluster metadata first.
+
+    ``partitions_for_topic`` reads a local cache. A freshly started consumer
+    that has not subscribed to anything has no metadata for the topic and
+    returns ``None`` — not "no partitions", but "never asked". Whether the
+    cache happens to be warm depends on what else the broker has told this
+    client, so on a long-lived broker it usually works and on a freshly
+    provisioned one (that is, CI) it does not.
+
+    ``topics()`` forces the fetch, making the answer independent of that.
+    """
+    await consumer.topics()
+    return [
+        TopicPartition(topic, p)
+        for p in sorted(consumer.partitions_for_topic(topic) or ())
+    ]
+
+
 async def read_one(topic: str, timeout: float = 30.0) -> dict | None:
     """Read the first message on ``topic``.
 
@@ -87,10 +136,9 @@ async def read_one(topic: str, timeout: float = 30.0) -> dict | None:
     )
     await consumer.start()
     try:
-        partitions = consumer.partitions_for_topic(topic)
-        if not partitions:
+        assignment = await partitions_for(consumer, topic)
+        if not assignment:
             return None
-        assignment = [TopicPartition(topic, p) for p in partitions]
         consumer.assign(assignment)
         await consumer.seek_to_beginning(*assignment)
         message = await asyncio.wait_for(consumer.getone(), timeout=timeout)
@@ -98,7 +146,7 @@ async def read_one(topic: str, timeout: float = 30.0) -> dict | None:
     except asyncio.TimeoutError:
         return None
     finally:
-        await consumer.stop()
+        await stop(consumer)
 
 
 async def end_offsets(topic: str) -> dict:
@@ -112,14 +160,16 @@ async def end_offsets(topic: str) -> dict:
     consumer = AIOKafkaConsumer(bootstrap_servers=BOOTSTRAP)
     await consumer.start()
     try:
-        partitions = consumer.partitions_for_topic(topic) or set()
-        assignment = [TopicPartition(topic, p) for p in partitions]
-        if not assignment:
-            return {}
+        assignment = await partitions_for(consumer, topic)
+        # Empty used to return {}, which made read_since return None without
+        # reading anything — the test then failed on a missing message rather
+        # than on the real cause. The topic is provisioned before this runs,
+        # so no partitions means provisioning did not take.
+        assert assignment, f"{topic} reports no partitions after provisioning"
         consumer.assign(assignment)
         return await consumer.end_offsets(assignment)
     finally:
-        await consumer.stop()
+        await stop(consumer)
 
 
 async def read_since(
@@ -150,7 +200,7 @@ async def read_since(
                 return body
         return None
     finally:
-        await consumer.stop()
+        await stop(consumer)
 
 
 async def test_provisioning_creates_every_fleet_topic(broker):
@@ -364,7 +414,7 @@ async def test_consumer_commits_only_after_handling(settings, producer, broker):
         # The contract, asserted on the real client the service will use.
         assert consumer._consumer._enable_auto_commit is False
     finally:
-        await consumer.stop()
+        await stop(consumer)
 
     assert isinstance(consumer, CommandConsumer)
     assert AIOKafkaConsumer is not None
