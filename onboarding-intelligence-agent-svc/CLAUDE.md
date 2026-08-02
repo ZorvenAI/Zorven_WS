@@ -201,19 +201,36 @@ replays every persisted partition on boot; on a loaded machine it can time out
 its ZooKeeper session and crash-loop. The tests use Redpanda instead and skip
 cleanly when no broker is reachable.
 
-**A reused broker hides metadata bugs.** `consumer.partitions_for_topic()`
-reads a *local* cache and returns `None` when this client has never asked
-about the topic — which is not the same as "no partitions". On a broker that
-has been up for a while the cache is usually warm by luck, so a helper that
-skips the fetch passes locally and fails on the freshly provisioned broker CI
-starts. Call `await consumer.topics()` first, as `partitions_for()` in
-`tests/integration/test_kafka_roundtrip.py` does.
+**Never size a read window through a consumer.**
+`consumer.partitions_for_topic()` reads a *local* cache and returns `None`
+when this client has never asked about the topic — which is not the same as
+"no partitions". Locally the cache is usually warm by luck; on a GitHub runner
+a fresh, unsubscribed consumer never populates it at all, not across 120 s of
+retries, and `await consumer.topics()` does not help. That asymmetry is what
+made these tests pass here and fail in CI for three rounds.
 
-Because of this, **re-create the container before trusting a green Kafka run**:
+Ask the admin client instead — `partitions_for()` in
+`tests/integration/test_kafka_roundtrip.py` uses `describe_topics`, which also
+reports the **leader**. That is the signal worth waiting on: a partition is
+listed as soon as the topic is created but cannot be produced to or read from
+until a leader is elected, so the leader is what separates "the topic exists"
+from "the topic works". Answers are cached per run, because standing up an
+admin client per read stalls the suite.
+
+Because a warm broker hides all of this, **re-create the container before
+trusting a green Kafka run**, and start the tests as soon as `rpk cluster
+info` answers — which is what CI does, and is earlier than `cluster health`:
 
 ```bash
 docker rm -f oia-test-kafka   # then the docker run above
 ```
+
+**A skipped Kafka test is a failure, not a pass.** The `broker` fixture waits
+up to 120 s for a broker that can actually serve. If `OIA_TEST_KAFKA` is set,
+as CI sets it, a missing broker **fails** rather than skips — a green run that
+silently covers none of AC-1 is worse than an honest red. Without that
+variable, as in production where no `deployment/gcp` script provisions a
+broker, skipping is correct. If you change this, keep that asymmetry.
 
 **`consumer.stop()` can raise `CancelledError`.** A consumer built without a
 `group_id` gets aiokafka's `NoGroupCoordinator`, whose `close()` cancels an
