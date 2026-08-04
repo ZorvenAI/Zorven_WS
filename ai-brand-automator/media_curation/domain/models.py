@@ -216,6 +216,16 @@ class CuratedDocument(BaseModel):
     metadata: DocumentMetadata = Field(default_factory=DocumentMetadata)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    # What the uploader said this asset *is* (B-02, Design §10.1). Carried
+    # from the ingestion event rather than read from the database: this is a
+    # hexagonal app and must not import the Django ORM.
+    #
+    # ocr_text is deliberately NOT carried. OCR runs after upload, so at event
+    # time the column is always null — threading it now would ship null on
+    # every document while looking wired. H-03 owns it, and re-syncs the
+    # document once redaction has actually run (Design §5.2 PG-08).
+    usage_tag: Optional[str] = None
+
     # Legacy fields for backward compatibility
     event_id: Optional[UUID] = None
     brand_id: Optional[str] = None
@@ -266,6 +276,18 @@ class CuratedDocument(BaseModel):
 
     def to_rag_document(self) -> dict[str, Any]:
         """Convert to RAG indexer document format."""
+        metadata: dict[str, Any] = {
+            "file_id": str(self.file_id),
+            "trace_id": str(self.trace_id),
+            "pii_redacted": self.pii_redacted,
+            "confidence_score": self.confidence_score,
+            **self.struct_data,
+        }
+        # Only when present, so documents uploaded before B-02 — and every
+        # asset that carries no tag — keep exactly the payload they had.
+        if self.usage_tag:
+            metadata["usage_tag"] = self.usage_tag
+
         return {
             "id": str(self.document_id),
             "tenant_id": self.tenant_id,
@@ -280,13 +302,7 @@ class CuratedDocument(BaseModel):
             "file_type": self.mime_type,
             "content_type": self.content_type.value,
             "created_at": self.created_at.isoformat(),
-            "metadata": {
-                "file_id": str(self.file_id),
-                "trace_id": str(self.trace_id),
-                "pii_redacted": self.pii_redacted,
-                "confidence_score": self.confidence_score,
-                **self.struct_data,
-            },
+            "metadata": metadata,
         }
 
 

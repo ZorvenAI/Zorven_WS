@@ -355,3 +355,185 @@ class Question(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean(validate_unique=False)
         return super().save(*args, **kwargs)
+
+
+class RecordingModality(models.TextChoices):
+    """§24: video is declared in v1 so adding it in v2 is a data-free change.
+
+    ``VIDEO`` is deliberately reachable — no constraint, validator or
+    serializer rejects it (AC-2). A choice that cannot be selected would not
+    prove the migration-free claim §24 makes; it would only look like it did.
+    """
+
+    AUDIO = "AUDIO", "Audio"
+    VIDEO = "VIDEO", "Video"
+
+
+class RecordingStatus(models.TextChoices):
+    RECORDING = "RECORDING", "Recording"
+    UPLOADED = "UPLOADED", "Uploaded"
+    TRANSCRIBED = "TRANSCRIBED", "Transcribed"
+    SUMMARIZED = "SUMMARIZED", "Summarized"
+    FAILED = "FAILED", "Failed"
+
+
+class MeetingRecording(models.Model):
+    """One start/stop cycle of a meeting recording (Design §10.1).
+
+    A cycle, not a meeting: an operator who starts and stops three times gets
+    three rows, each with its own duration and status, all pointing at the one
+    session (AC-1). Modelling it per meeting would lose the pause structure and
+    make a failed segment indistinguishable from a short one.
+
+    ``audio_asset`` is a FK to BrandAsset rather than a raw GCS path. That is
+    deliberate per the card: recordings inherit the existing landing-bucket,
+    Kafka and RAG pipeline instead of growing a parallel one.
+    """
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)ss",
+    )
+    session = models.ForeignKey(
+        OnboardingSession,
+        on_delete=models.CASCADE,
+        related_name="recordings",
+    )
+    modality = models.CharField(
+        max_length=8,
+        choices=RecordingModality.choices,
+        default=RecordingModality.AUDIO,
+        help_text="AUDIO in v1; VIDEO reserved and unconstrained (§24)",
+    )
+    audio_asset = models.ForeignKey(
+        "onboarding.BrandAsset",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="meeting_recordings",
+        help_text=(
+            "The uploaded audio, as a BrandAsset so it rides the existing "
+            "ingestion pipeline. Null until the upload completes."
+        ),
+    )
+    transcript_gcs_path = models.CharField(max_length=500, blank=True, default="")
+    duration_s = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Whole seconds; null while still RECORDING",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=RecordingStatus.choices,
+        default=RecordingStatus.RECORDING,
+        db_index=True,
+    )
+    summary = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="{text, key_moments: [{t, label}]} — written by a later story",
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    stopped_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = TenantScopedManager()
+
+    class Meta:
+        ordering = ["-started_at"]
+        indexes = [
+            models.Index(fields=["session", "status"]),
+            models.Index(fields=["tenant", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Recording {self.pk} · session {self.session_id} · {self.status}"
+
+
+class ConsentMethod(models.TextChoices):
+    VERBAL_RECORDED = "VERBAL_RECORDED", "Verbal, recorded"
+    CHECKBOX = "CHECKBOX", "Checkbox"
+
+
+class ConsentRecord(models.Model):
+    """Consent as a record rather than a boolean (Design §10.1, IG-08).
+
+    A boolean answers "may we record?" but not "who agreed, to what, how, and
+    is it still true?" — which is what an auditor and the erasure workflow both
+    need. IG-08 reads this row, so every one of subject, method, scope and
+    grantor is persisted (AC-3).
+
+    ``granted_at`` is server-set and never client-supplied: FR-REC-01 is
+    explicit, and a client-chosen consent timestamp is exactly the field an
+    incident would turn on.
+    """
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)ss",
+    )
+    session = models.ForeignKey(
+        OnboardingSession,
+        on_delete=models.CASCADE,
+        related_name="consent_records",
+    )
+    subject_name = models.CharField(
+        max_length=255, help_text="The person consenting to be recorded"
+    )
+    granted_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="granted_consents",
+        help_text="The operator who captured the consent",
+    )
+    method = models.CharField(
+        max_length=20,
+        choices=ConsentMethod.choices,
+        default=ConsentMethod.VERBAL_RECORDED,
+    )
+    scope = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "What was consented to. No schema enforced here — the consent API "
+            "story owns that contract."
+        ),
+    )
+    granted_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Server-set (FR-REC-01); never accepted from a client",
+    )
+    revoked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Set on revocation. Visible to any consumer querying the session's "
+            "consent state; triggers erasure in a later story, not this one."
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = TenantScopedManager()
+
+    class Meta:
+        ordering = ["-granted_at"]
+        indexes = [models.Index(fields=["session", "revoked_at"])]
+
+    def __str__(self) -> str:
+        state = "revoked" if self.revoked_at else "active"
+        return f"Consent {self.pk} · {self.subject_name} · {state}"
+
+    @property
+    def is_active(self) -> bool:
+        """Consent state as one expression, so consumers cannot disagree."""
+        return self.revoked_at is None

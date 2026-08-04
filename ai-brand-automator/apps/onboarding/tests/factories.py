@@ -13,10 +13,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from onboarding.models import Company
+from onboarding.models import BrandAsset, Company
 
 from apps.onboarding.models import (
+    ConsentMethod,
+    ConsentRecord,
+    MeetingRecording,
     OnboardingSession,
+    RecordingStatus,
     Question,
     Questionnaire,
     QuestionnaireStatus,
@@ -120,3 +124,60 @@ def evidence_span(
 ) -> dict[str, Any]:
     """One evidence span in the §10.1 shape."""
     return {"recording_id": recording_id, "t_start": t_start, "t_end": t_end}
+
+
+def make_recording(
+    session: OnboardingSession | None = None,
+    tenant=None,
+    status: str = RecordingStatus.RECORDING,
+    **kwargs: Any,
+) -> MeetingRecording:
+    """One start/stop cycle. Defaults to RECORDING, the state a cycle opens in."""
+    if session is None:
+        session = make_session(tenant=tenant)
+    elif tenant is None:
+        tenant = getattr(session, "tenant", None)
+    defaults = {"session": session, "tenant": tenant, "status": status}
+    defaults.update(kwargs)
+    return MeetingRecording.objects.create(**defaults)
+
+
+def make_consent(
+    session: OnboardingSession | None = None,
+    tenant=None,
+    subject_name: str = "Asha Kalyani",
+    **kwargs: Any,
+) -> ConsentRecord:
+    if session is None:
+        session = make_session(tenant=tenant)
+    elif tenant is None:
+        tenant = getattr(session, "tenant", None)
+    defaults = {
+        "session": session,
+        "tenant": tenant,
+        "subject_name": subject_name,
+        "method": ConsentMethod.VERBAL_RECORDED,
+        "scope": {"recording": True, "transcription": True},
+    }
+    defaults.update(kwargs)
+    return ConsentRecord.objects.create(**defaults)
+
+
+def make_brand_asset(company: Company | None = None, **kwargs: Any) -> BrandAsset:
+    """A BrandAsset with none of B-02's new fields supplied.
+
+    That is the point: AC-4 is about existing callers continuing to work
+    without knowing the new columns exist.
+    """
+    if company is None:
+        company = make_company()
+    defaults = {
+        "company": company,
+        "tenant": getattr(company, "tenant", None),
+        "file_name": "storefront.jpg",
+        "file_type": "image",
+        "file_size": 2048,
+        "gcs_path": "_raw/t-1/storefront.jpg",
+    }
+    defaults.update(kwargs)
+    return BrandAsset.objects.create(**defaults)

@@ -15,7 +15,14 @@ from __future__ import annotations
 
 from django.contrib import admin
 
-from .models import OnboardingSession, Question, Questionnaire, tenant_scope_q
+from .models import (
+    ConsentRecord,
+    MeetingRecording,
+    OnboardingSession,
+    Question,
+    Questionnaire,
+    tenant_scope_q,
+)
 
 
 class TenantScopedAdmin(admin.ModelAdmin):
@@ -107,3 +114,49 @@ class QuestionAdmin(TenantScopedAdmin):
     @admin.display(description="Text")
     def short_text(self, obj: Question) -> str:
         return obj.text[:60] + ("…" if len(obj.text) > 60 else "")
+
+
+@admin.register(MeetingRecording)
+class MeetingRecordingAdmin(TenantScopedAdmin):
+    list_display = (
+        "id",
+        "session",
+        "modality",
+        "status",
+        "duration_s",
+        "audio_asset",
+        "started_at",
+        "stopped_at",
+    )
+    list_filter = ("status", "modality", "started_at")
+    search_fields = ("session__id", "transcript_gcs_path")
+    readonly_fields = ("started_at", "created_at", "updated_at")
+    raw_id_fields = ("session", "audio_asset", "tenant")
+
+
+@admin.register(ConsentRecord)
+class ConsentRecordAdmin(TenantScopedAdmin):
+    """Consent is audit evidence, so granted_at is not editable here either.
+
+    FR-REC-01 says the timestamp is server-set; an admin able to backdate it
+    would defeat the same rule the model enforces.
+    """
+
+    list_display = (
+        "id",
+        "session",
+        "subject_name",
+        "method",
+        "granted_by",
+        "granted_at",
+        "revoked_at",
+        "is_active",
+    )
+    list_filter = ("method", "granted_at", "revoked_at")
+    search_fields = ("subject_name",)
+    readonly_fields = ("granted_at", "created_at", "updated_at")
+    raw_id_fields = ("session", "granted_by", "tenant")
+
+    @admin.display(boolean=True, description="Active")
+    def is_active(self, obj: ConsentRecord) -> bool:
+        return obj.is_active
