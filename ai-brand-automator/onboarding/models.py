@@ -215,6 +215,54 @@ class BrandAsset(models.Model):
         help_text="Short LLM-generated description of the asset's contents",
     )
 
+    # ── Onboarding Intelligence (B-02, Design §10.1) ──────────────────
+    # All four are nullable and unsupplied by the existing upload flow, so
+    # every pre-existing row keeps working untouched (AC-4, NFR-COMPAT).
+
+    USAGE_TAG_CHOICES = [
+        ("business_photo", "Business photo"),
+        ("previous_ad", "Previous ad"),
+        ("identity_document", "Identity document"),
+        ("brand_asset", "Brand asset"),
+        ("other", "Other"),
+    ]
+
+    usage_tag = models.CharField(
+        max_length=32,
+        choices=USAGE_TAG_CHOICES,
+        null=True,
+        blank=True,
+        help_text=(
+            "What this asset is, as declared at capture. Carried into RAG "
+            "document metadata so WF3 can retrieve prior ads by intent."
+        ),
+    )
+    onboarding_session = models.ForeignKey(
+        "onboarding_sessions.OnboardingSession",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="captured_media",
+        help_text="The session this was captured during, if any",
+    )
+    ocr_text = models.TextField(
+        null=True,
+        blank=True,
+        help_text=(
+            "REDACTED OCR text only. The unredacted output must never reach "
+            "this column — Design §5.2 PG-08 requires redaction before "
+            "persistence, and H-03 implements it. Do not 'helpfully' store "
+            "the raw text here. Written by H-03, not by the upload flow. "
+            "H-03 also owns carrying this into RAG metadata, which B-02 "
+            "deliberately does not do (see test_rag_metadata.py)."
+        ),
+    )
+    ocr_confidence = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Confidence of the OCR pass that produced ocr_text (H-03)",
+    )
+
     class Meta:
         verbose_name = "Brand Asset"
         verbose_name_plural = "Brand Assets"

@@ -160,9 +160,9 @@ class GCSAdapter(StoragePort):
                     name=blob_name,
                     size_bytes=blob.size or 0,
                     content_type=blob.content_type or "application/octet-stream",
-                    created_at=blob.time_created.isoformat()
-                    if blob.time_created
-                    else None,
+                    created_at=(
+                        blob.time_created.isoformat() if blob.time_created else None
+                    ),
                     updated_at=blob.updated.isoformat() if blob.updated else None,
                     md5_hash=blob.md5_hash,
                     metadata=blob.metadata or {},
@@ -244,9 +244,9 @@ class GCSAdapter(StoragePort):
                     name=blob_name,
                     size_bytes=blob.size or len(content),
                     content_type=content_type,
-                    created_at=blob.time_created.isoformat()
-                    if blob.time_created
-                    else None,
+                    created_at=(
+                        blob.time_created.isoformat() if blob.time_created else None
+                    ),
                     updated_at=blob.updated.isoformat() if blob.updated else None,
                     md5_hash=blob.md5_hash,
                     metadata=blob.metadata or {},
@@ -292,9 +292,9 @@ class GCSAdapter(StoragePort):
                     name=blob_name,
                     size_bytes=blob.size or 0,
                     content_type=final_content_type,
-                    created_at=blob.time_created.isoformat()
-                    if blob.time_created
-                    else None,
+                    created_at=(
+                        blob.time_created.isoformat() if blob.time_created else None
+                    ),
                     updated_at=blob.updated.isoformat() if blob.updated else None,
                     md5_hash=blob.md5_hash,
                     metadata=blob.metadata or {},

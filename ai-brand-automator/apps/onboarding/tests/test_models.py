@@ -10,11 +10,18 @@ from __future__ import annotations
 
 import pytest
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from django.db import IntegrityError, transaction
+
+from onboarding.models import BrandAsset
 
 from apps.onboarding.models import (
     TERMINAL_STATUSES,
+    ConsentMethod,
+    MeetingRecording,
     OnboardingSession,
+    RecordingModality,
+    RecordingStatus,
     Question,
     Questionnaire,
     QuestionnaireStatus,
@@ -25,7 +32,10 @@ from apps.onboarding.models import (
 )
 from apps.onboarding.tests.factories import (
     evidence_span,
+    make_brand_asset,
     make_company,
+    make_consent,
+    make_recording,
     make_question,
     make_questionnaire,
     make_session,
@@ -308,3 +318,176 @@ def test_an_explicit_tenant_still_wins(public_tenant):
     """Inheritance is a default, not an override."""
     company = make_company(tenant=None)
     assert make_session(company=company, tenant=public_tenant).tenant == public_tenant
+
+
+# ══ B-02 · Meeting evidence models and the BrandAsset extension ══════
+
+
+# ── AC-1 · one row per start/stop cycle ──────────────────────────────
+
+
+def test_multiple_recordings_per_session():
+    """The card's named case: three cycles, three rows, one session."""
+    session = make_session()
+
+    for seconds in (95, 240, 12):
+        make_recording(
+            session=session,
+            duration_s=seconds,
+            status=RecordingStatus.UPLOADED,
+        )
+
+    recordings = MeetingRecording.objects.filter(session=session)
+    assert recordings.count() == 3
+    assert sorted(r.duration_s for r in recordings) == [12, 95, 240]
+    assert {r.session_id for r in recordings} == {session.pk}
+
+
+def test_each_cycle_carries_its_own_status():
+    """A failed segment must stay distinguishable from its neighbours."""
+    session = make_session()
+    make_recording(session=session, status=RecordingStatus.TRANSCRIBED)
+    make_recording(session=session, status=RecordingStatus.FAILED)
+
+    statuses = set(
+        MeetingRecording.objects.filter(session=session).values_list(
+            "status", flat=True
+        )
+    )
+    assert statuses == {RecordingStatus.TRANSCRIBED, RecordingStatus.FAILED}
+
+
+def test_a_recording_links_to_its_audio_asset():
+    """§10.1: audio is a BrandAsset so it rides the existing pipeline."""
+    session = make_session()
+    asset = make_brand_asset(company=session.company)
+    recording = make_recording(session=session, audio_asset=asset)
+
+    recording.refresh_from_db()
+    assert recording.audio_asset_id == asset.pk
+    assert asset.meeting_recordings.first() == recording
+
+
+def test_audio_asset_is_optional_while_recording():
+    """The row exists before the upload finishes, so the FK must be nullable."""
+    assert make_recording().audio_asset is None
+
+
+# ── AC-2 · modality present, defaulted, and VIDEO reserved ───────────
+
+
+def test_modality_defaults_to_audio():
+    assert make_recording().modality == RecordingModality.AUDIO
+
+
+def test_video_is_declared_and_rejected_by_nothing():
+    """§24's data-free claim only holds if VIDEO is actually storable."""
+    recording = make_recording(modality=RecordingModality.VIDEO)
+    recording.full_clean()  # no validator refuses it
+    recording.refresh_from_db()
+    assert recording.modality == RecordingModality.VIDEO
+    assert {m.value for m in RecordingModality} == {"AUDIO", "VIDEO"}
+
+
+# ── AC-3 · consent is a record, not a boolean ────────────────────────
+
+
+def test_consent_persists_subject_method_scope_and_grantor():
+    from django.contrib.auth.models import User
+
+    operator = User.objects.create_user("operator", "op@example.com", "pw")
+    consent = make_consent(
+        subject_name="Asha Kalyani",
+        granted_by=operator,
+        method=ConsentMethod.CHECKBOX,
+        scope={"recording": True, "transcription": False},
+    )
+
+    consent.refresh_from_db()
+    assert consent.subject_name == "Asha Kalyani"
+    assert consent.granted_by == operator
+    assert consent.method == ConsentMethod.CHECKBOX
+    assert consent.scope == {"recording": True, "transcription": False}
+    assert consent.granted_at is not None
+
+
+def test_revocation_is_visible_to_a_consumer_querying_the_session():
+    """AC-3's second half — IG-08 reads this, so it must be queryable."""
+    session = make_session()
+    consent = make_consent(session=session)
+    assert consent.is_active is True
+    assert session.consent_records.filter(revoked_at__isnull=True).exists()
+
+    consent.revoked_at = timezone.now()
+    consent.save(update_fields=["revoked_at"])
+
+    consent.refresh_from_db()
+    assert consent.is_active is False
+    assert not session.consent_records.filter(revoked_at__isnull=True).exists()
+
+
+def test_granted_at_is_server_set_and_ignores_a_client_value():
+    """FR-REC-01 is explicit; a client-chosen consent time is the field an
+    incident would turn on."""
+    from datetime import timedelta
+
+    forged = timezone.now() - timedelta(days=400)
+    consent = make_consent(granted_at=forged)
+
+    consent.refresh_from_db()
+    assert consent.granted_at != forged
+    assert (timezone.now() - consent.granted_at).total_seconds() < 60
+
+
+# ── AC-4 · BrandAsset gains fields without disturbing existing rows ──
+
+
+def test_brandasset_backfill_nullable():
+    """The card's named case: an asset created the old way has all four null."""
+    asset = make_brand_asset()
+    asset.refresh_from_db()
+
+    assert asset.usage_tag is None
+    assert asset.onboarding_session is None
+    assert asset.ocr_text is None
+    assert asset.ocr_confidence is None
+
+
+def test_usage_tag_choices_are_exactly_the_five():
+    values = {value for value, _label in BrandAsset.USAGE_TAG_CHOICES}
+    assert values == {
+        "business_photo",
+        "previous_ad",
+        "identity_document",
+        "brand_asset",
+        "other",
+    }
+
+
+def test_the_existing_upload_flow_needs_none_of_the_new_fields():
+    """AC-4's real risk is a regression in a live path, not the new columns."""
+    asset = make_brand_asset(file_name="menu.pdf", file_type="document")
+    asset.full_clean(exclude=["onboarding_session"])
+    assert BrandAsset.objects.filter(pk=asset.pk).exists()
+
+
+def test_an_asset_can_be_attached_to_a_session():
+    session = make_session()
+    asset = make_brand_asset(
+        company=session.company,
+        onboarding_session=session,
+        usage_tag="previous_ad",
+    )
+    asset.refresh_from_db()
+    assert asset.onboarding_session == session
+    assert session.captured_media.filter(pk=asset.pk).exists()
+
+
+def test_deleting_a_session_keeps_the_asset():
+    """SET_NULL, not CASCADE: the upload is the tenant's, not the session's."""
+    session = make_session()
+    asset = make_brand_asset(company=session.company, onboarding_session=session)
+    session.delete()
+
+    asset.refresh_from_db()
+    assert asset.onboarding_session is None

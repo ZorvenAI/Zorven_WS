@@ -62,6 +62,12 @@ class BrandAssetSerializer(serializers.ModelSerializer):
             "pipeline_error",
             "pipeline_trace_id",
             "summary",
+            # B-02 (Design §10.1). Every one is optional, so a client that
+            # has never heard of them keeps working unchanged (AC-4).
+            "usage_tag",
+            "onboarding_session",
+            "ocr_text",
+            "ocr_confidence",
         ]
         read_only_fields = [
             "id",
@@ -72,6 +78,11 @@ class BrandAssetSerializer(serializers.ModelSerializer):
             "pipeline_error",
             "pipeline_trace_id",
             "summary",
+            # Written by H-03's OCR pass, never by a client: accepting them
+            # would let a caller write unredacted text into a column whose
+            # whole contract is that it holds redacted text only (PG-08).
+            "ocr_text",
+            "ocr_confidence",
         ]
 
 

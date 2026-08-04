@@ -13,8 +13,11 @@ from django.db.migrations.executor import MigrationExecutor
 
 from apps.onboarding.models import SessionStatus
 from apps.onboarding.tests.factories import (
+    make_company,
+    make_consent,
     make_question,
     make_questionnaire,
+    make_recording,
     make_session,
 )
 
@@ -70,7 +73,16 @@ def test_migration_reversible():
             [f"{APP_LABEL}_%"],
         )
         rebuilt = sorted(row[0] for row in cursor.fetchall())
-    assert len(rebuilt) == 3, rebuilt
+
+    # Named rather than counted: a bare count silently passes when a table is
+    # swapped for another, and has to be edited by every story that adds one.
+    assert rebuilt == [
+        f"{APP_LABEL}_consentrecord",
+        f"{APP_LABEL}_meetingrecording",
+        f"{APP_LABEL}_onboardingsession",
+        f"{APP_LABEL}_question",
+        f"{APP_LABEL}_questionnaire",
+    ], rebuilt
 
 
 def test_the_partial_index_exists_in_the_database():
@@ -104,3 +116,86 @@ def test_no_existing_table_was_altered():
             assert (
                 "company" not in str(model).lower() or "session" in str(model).lower()
             ), f"operation touches an existing model: {operation}"
+
+
+# ══ B-02 · the BrandAsset extension is additive (AC-4) ═══════════════
+
+
+def test_brandasset_columns_exist_and_are_nullable():
+    """AC-4 is a database property, so assert it against the database.
+
+    A column added NOT NULL without a default is exactly the migration that
+    passes on an empty test database and fails on a populated production one.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT column_name, is_nullable FROM information_schema.columns "
+            "WHERE table_name = 'onboarding_brandasset' "
+            "AND column_name IN %s",
+            [("usage_tag", "onboarding_session_id", "ocr_text", "ocr_confidence")],
+        )
+        columns = dict(cursor.fetchall())
+
+    assert set(columns) == {
+        "usage_tag",
+        "onboarding_session_id",
+        "ocr_text",
+        "ocr_confidence",
+    }, columns
+    for name, nullable in columns.items():
+        assert nullable == "YES", f"{name} is NOT NULL — existing rows would fail"
+
+
+def test_a_row_written_the_old_way_still_inserts():
+    """The pre-B-02 insert statement, run verbatim against the new schema."""
+    company = make_company()
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO onboarding_brandasset "
+            "(company_id, file_name, file_type, file_size, gcs_path, "
+            " gcs_bucket, uploaded_at, processed, pipeline_status, "
+            " pipeline_error, summary) "
+            "VALUES (%s, 'legacy.jpg', 'image', 512, '_raw/legacy.jpg', "
+            "'zorven-raw-assets', NOW(), false, 'pending', '', '') "
+            "RETURNING usage_tag, onboarding_session_id, ocr_text, "
+            "ocr_confidence",
+            [company.pk],
+        )
+        row = cursor.fetchone()
+
+    assert row == (None, None, None, None), f"new columns not defaulted null: {row}"
+
+
+def test_the_b02_migration_reverses_on_populated_data():
+    """Forward, populate, backward, forward — with recordings and consent."""
+    head = latest_migration()
+
+    session = make_session(status=SessionStatus.MEETING_LIVE)
+    make_recording(session=session, duration_s=42)
+    make_consent(session=session)
+
+    migrate_to(None)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_name LIKE %s",
+            [f"{APP_LABEL}_%"],
+        )
+        assert [r[0] for r in cursor.fetchall()] == []
+
+    migrate_to(head)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_name LIKE %s",
+            [f"{APP_LABEL}_%"],
+        )
+        rebuilt = sorted(r[0] for r in cursor.fetchall())
+
+    assert rebuilt == [
+        f"{APP_LABEL}_consentrecord",
+        f"{APP_LABEL}_meetingrecording",
+        f"{APP_LABEL}_onboardingsession",
+        f"{APP_LABEL}_question",
+        f"{APP_LABEL}_questionnaire",
+    ], rebuilt

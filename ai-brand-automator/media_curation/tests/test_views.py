@@ -246,13 +246,13 @@ class TestHealthEndpoint:
     @pytest.mark.django_db
     def test_health_check_all_healthy(self, api_client):
         """Test health check when all components are healthy."""
-        with patch(
-            "media_curation.factory.create_cache_adapter"
-        ) as mock_cache_factory, patch(
-            "media_curation.factory.create_storage_adapter"
-        ) as mock_storage_factory, patch(
-            "media_curation.factory.create_kafka_producer"
-        ) as mock_kafka_factory:
+        with (
+            patch("media_curation.factory.create_cache_adapter") as mock_cache_factory,
+            patch(
+                "media_curation.factory.create_storage_adapter"
+            ) as mock_storage_factory,
+            patch("media_curation.factory.create_kafka_producer") as mock_kafka_factory,
+        ):
             # Mock healthy components
             mock_cache = MagicMock()
             mock_cache.is_healthy = AsyncMock(return_value=True)
@@ -279,13 +279,13 @@ class TestHealthEndpoint:
     @pytest.mark.django_db
     def test_health_check_public_endpoint(self, api_client):
         """Test that health check doesn't require authentication."""
-        with patch(
-            "media_curation.factory.create_cache_adapter"
-        ) as mock_cache_factory, patch(
-            "media_curation.factory.create_storage_adapter"
-        ) as mock_storage_factory, patch(
-            "media_curation.factory.create_kafka_producer"
-        ) as mock_kafka_factory:
+        with (
+            patch("media_curation.factory.create_cache_adapter") as mock_cache_factory,
+            patch(
+                "media_curation.factory.create_storage_adapter"
+            ) as mock_storage_factory,
+            patch("media_curation.factory.create_kafka_producer") as mock_kafka_factory,
+        ):
             mock_cache = MagicMock()
             mock_cache.is_healthy = AsyncMock(return_value=True)
             mock_cache_factory.return_value = mock_cache
@@ -307,13 +307,13 @@ class TestHealthEndpoint:
     @pytest.mark.django_db
     def test_health_check_degraded_when_redis_unhealthy(self, api_client):
         """Test health check returns degraded when Redis is unhealthy."""
-        with patch(
-            "media_curation.factory.create_cache_adapter"
-        ) as mock_cache_factory, patch(
-            "media_curation.factory.create_storage_adapter"
-        ) as mock_storage_factory, patch(
-            "media_curation.factory.create_kafka_producer"
-        ) as mock_kafka_factory:
+        with (
+            patch("media_curation.factory.create_cache_adapter") as mock_cache_factory,
+            patch(
+                "media_curation.factory.create_storage_adapter"
+            ) as mock_storage_factory,
+            patch("media_curation.factory.create_kafka_producer") as mock_kafka_factory,
+        ):
             mock_cache = MagicMock()
             mock_cache.is_healthy = AsyncMock(return_value=False)
             mock_cache_factory.return_value = mock_cache

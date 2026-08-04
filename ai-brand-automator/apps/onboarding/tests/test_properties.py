@@ -11,11 +11,25 @@ from __future__ import annotations
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from apps.onboarding.models import TERMINAL_STATUSES, SessionStatus
-from apps.onboarding.tests.factories import make_company, make_question, make_session
+from onboarding.models import BrandAsset
+
+from apps.onboarding.models import (
+    TERMINAL_STATUSES,
+    MeetingRecording,
+    SessionStatus,
+)
+from apps.onboarding.tests.factories import (
+    make_brand_asset,
+    make_company,
+    make_consent,
+    make_question,
+    make_recording,
+    make_session,
+)
 
 pytestmark = [pytest.mark.django_db, pytest.mark.property]
 
@@ -91,3 +105,62 @@ def test_score_and_evidence_are_accepted_only_together(score, spans):
 def test_is_terminal_agrees_with_the_terminal_set(status):
     session = make_session(status=status)
     assert session.is_terminal == (status in {s.value for s in TERMINAL_STATUSES})
+
+
+# ══ B-02 ═════════════════════════════════════════════════════════════
+
+
+@pytest.mark.django_db
+@given(cycles=st.integers(min_value=1, max_value=12))
+@settings(
+    max_examples=15,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+def test_n_start_stop_cycles_produce_n_rows(cycles):
+    """AC-1 generalised: the card says three, but nothing is special about 3.
+
+    An operator pausing for a phone call produces however many cycles the
+    meeting needed, and each must stay independently addressable.
+    """
+    session = make_session()
+    for index in range(cycles):
+        make_recording(session=session, duration_s=index + 1)
+
+    rows = MeetingRecording.objects.filter(session=session)
+    assert rows.count() == cycles
+    assert {r.session_id for r in rows} == {session.pk}
+    assert sorted(r.duration_s for r in rows) == list(range(1, cycles + 1))
+
+
+@pytest.mark.django_db
+@given(tag=st.sampled_from([c[0] for c in BrandAsset.USAGE_TAG_CHOICES]))
+@settings(
+    max_examples=10,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+def test_every_declared_usage_tag_is_storable(tag):
+    """A choice that cannot be stored is a choice that will surprise H-01."""
+    asset = make_brand_asset(file_name=f"{tag}.jpg", usage_tag=tag)
+    asset.refresh_from_db()
+    assert asset.usage_tag == tag
+
+
+@pytest.mark.django_db
+@given(revoked=st.booleans())
+@settings(
+    max_examples=8,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+def test_is_active_always_agrees_with_revoked_at(revoked):
+    """One expression for consent state, so two consumers cannot disagree."""
+    consent = make_consent()
+    if revoked:
+        consent.revoked_at = timezone.now()
+        consent.save(update_fields=["revoked_at"])
+        consent.refresh_from_db()
+
+    assert consent.is_active is (not revoked)
+    assert consent.is_active is (consent.revoked_at is None)
