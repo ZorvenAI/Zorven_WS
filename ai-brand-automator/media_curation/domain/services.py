@@ -465,6 +465,15 @@ class CurationService:
         pii_redacted: bool,
     ) -> CuratedDocument:
         """Build the curated document from processing results."""
+        # Read once, so every lookup below agrees about a metadata-less event.
+        #
+        # The keys are "original_filename" and "file_size_bytes" because that
+        # is what the producers actually send (onboarding/services.py, both
+        # event builders). This read previously used "filename" and
+        # "file_size", which no producer has ever sent, so both fields were
+        # None on every curated document written to GCS.
+        metadata = event.metadata or {}
+
         return CuratedDocument(
             document_id=uuid4(),
             trace_id=event.trace_id,
@@ -477,14 +486,10 @@ class CurationService:
             struct_data=processor_result.struct_data,
             pii_redacted=pii_redacted,
             processing_time_ms=processor_result.processing_time_ms,
-            usage_tag=(event.metadata or {}).get("usage_tag"),
+            usage_tag=metadata.get("usage_tag"),
             metadata=DocumentMetadata(
-                original_filename=event.metadata.get("filename")
-                if event.metadata
-                else None,
-                file_size_bytes=event.metadata.get("file_size")
-                if event.metadata
-                else None,
+                original_filename=metadata.get("original_filename"),
+                file_size_bytes=metadata.get("file_size_bytes"),
                 content_type=event.mime_type,
                 word_count=len(extracted_text.split()) if extracted_text else 0,
                 language_code=processor_result.language_code,

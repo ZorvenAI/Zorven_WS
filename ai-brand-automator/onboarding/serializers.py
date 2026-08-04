@@ -83,6 +83,17 @@ class BrandAssetSerializer(serializers.ModelSerializer):
             # whole contract is that it holds redacted text only (PG-08).
             "ocr_text",
             "ocr_confidence",
+            # Read-only until an endpoint validates ownership. As a writable
+            # PrimaryKeyRelatedField this accepts any session id a caller can
+            # guess, including another tenant's, which would attach their
+            # asset to that session — a cross-tenant write with no check.
+            #
+            # It stays read-only rather than gaining a validator because the
+            # session is not the client's to choose: the capture endpoint is
+            # POST /sessions/{id}/media/ (Design §10.2, stories H-01/F-02), so
+            # the session comes from the URL and is set server-side. A body
+            # field would be a second, unauthenticated way to say it.
+            "onboarding_session",
         ]
 
 

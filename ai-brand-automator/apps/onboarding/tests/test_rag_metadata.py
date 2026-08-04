@@ -233,3 +233,78 @@ def test_the_ingestion_event_builder_includes_usage_tag():
     event = OnboardingPipelineService()._build_ingestion_event(asset, uuid4())
 
     assert event["metadata"]["usage_tag"] == "business_photo"
+
+
+# ── PR #540 review · both findings were real ─────────────────────────
+
+
+@pytest.mark.django_db
+def test_onboarding_session_cannot_be_set_by_a_client():
+    """A writable session FK is a cross-tenant write with no check.
+
+    As a plain PrimaryKeyRelatedField it accepts any id a caller can guess,
+    including another tenant's, attaching their asset to that session. The
+    capture endpoint is POST /sessions/{id}/media/, so the session comes from
+    the URL and is set server-side — a body field would be a second, and
+    unauthenticated, way to say it.
+    """
+    from onboarding.serializers import BrandAssetSerializer
+
+    from apps.onboarding.tests.factories import make_company, make_session
+
+    victim_session = make_session()
+    attacker_company = make_company(name="Attacker Ltd")
+
+    serializer = BrandAssetSerializer(
+        data={
+            "company": attacker_company.pk,
+            "file_name": "smuggled.jpg",
+            "file_type": "image",
+            "file_size": 128,
+            "gcs_path": "_raw/attacker/smuggled.jpg",
+            "onboarding_session": victim_session.pk,
+        }
+    )
+    assert serializer.is_valid(), serializer.errors
+    asset = serializer.save()
+
+    assert (
+        asset.onboarding_session is None
+    ), "a client attached an asset to a session it does not own"
+
+
+def test_document_metadata_uses_the_keys_producers_actually_send():
+    """The consumer read "filename"/"file_size"; producers send neither.
+
+    Every curated document written to GCS therefore stored null for both,
+    since the whole model is dumped by model_dump() when saved.
+    """
+    from media_curation.domain.models import CurationEvent, ProcessorResult
+    from media_curation.domain.services import CurationService
+
+    event = CurationEvent(
+        tenant_id="t-1",
+        file_id=uuid4(),
+        raw_gcs_uri="gs://zorven-raw-assets/_raw/t-1/menu.pdf",
+        mime_type="application/pdf",
+        metadata={
+            # Exactly what onboarding/services.py puts on the wire.
+            "original_filename": "menu.pdf",
+            "file_size_bytes": 4096,
+            "usage_tag": "brand_asset",
+        },
+    )
+
+    document = CurationService._build_curated_document(
+        None,
+        event=event,
+        extracted_text="Espresso 120",
+        processor_result=ProcessorResult(
+            source_gcs_uri=event.raw_gcs_uri, mime_type=event.mime_type
+        ),
+        pii_redacted=False,
+    )
+
+    assert document.metadata.original_filename == "menu.pdf"
+    assert document.metadata.file_size_bytes == 4096
+    assert document.usage_tag == "brand_asset"
