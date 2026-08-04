@@ -479,12 +479,12 @@ class CurationService:
             processing_time_ms=processor_result.processing_time_ms,
             usage_tag=(event.metadata or {}).get("usage_tag"),
             metadata=DocumentMetadata(
-                original_filename=(
-                    event.metadata.get("filename") if event.metadata else None
-                ),
-                file_size_bytes=(
-                    event.metadata.get("file_size") if event.metadata else None
-                ),
+                original_filename=event.metadata.get("filename")
+                if event.metadata
+                else None,
+                file_size_bytes=event.metadata.get("file_size")
+                if event.metadata
+                else None,
                 content_type=event.mime_type,
                 word_count=len(extracted_text.split()) if extracted_text else 0,
                 language_code=processor_result.language_code,

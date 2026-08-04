@@ -186,11 +186,11 @@ class VideoProcessor(ContentProcessorPort):
                         labels.append(
                             {
                                 "description": label.entity.description,
-                                "confidence": (
-                                    max(seg.confidence for seg in label.segments)
-                                    if label.segments
-                                    else 0.0
-                                ),
+                                "confidence": max(
+                                    seg.confidence for seg in label.segments
+                                )
+                                if label.segments
+                                else 0.0,
                             }
                         )
 

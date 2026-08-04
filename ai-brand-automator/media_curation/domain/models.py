@@ -220,9 +220,9 @@ class CuratedDocument(BaseModel):
     # from the ingestion event rather than read from the database: this is a
     # hexagonal app and must not import the Django ORM.
     #
-    # ocr_text is deliberately NOT carried here. OCR runs after upload, so at
-    # event time the column is always null — threading it now would ship null
-    # on every document while looking wired. H-03 owns it, and re-syncs the
+    # ocr_text is deliberately NOT carried. OCR runs after upload, so at event
+    # time the column is always null — threading it now would ship null on
+    # every document while looking wired. H-03 owns it, and re-syncs the
     # document once redaction has actually run (Design §5.2 PG-08).
     usage_tag: Optional[str] = None
 

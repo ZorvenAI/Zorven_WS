@@ -34,22 +34,20 @@ class ConsumerHealthStatus:
         return {
             "instance_id": self.instance_id,
             "status": self.status,
-            "last_heartbeat": (
-                self.last_heartbeat.isoformat() if self.last_heartbeat else None
-            ),
+            "last_heartbeat": self.last_heartbeat.isoformat()
+            if self.last_heartbeat
+            else None,
             "events_processed": self.events_processed,
             "events_failed": self.events_failed,
-            "last_event_time": (
-                self.last_event_time.isoformat() if self.last_event_time else None
-            ),
+            "last_event_time": self.last_event_time.isoformat()
+            if self.last_event_time
+            else None,
             "current_batch_size": self.current_batch_size,
             "error_message": self.error_message,
             "started_at": self.started_at.isoformat() if self.started_at else None,
-            "uptime_seconds": (
-                (datetime.utcnow() - self.started_at).total_seconds()
-                if self.started_at
-                else 0
-            ),
+            "uptime_seconds": (datetime.utcnow() - self.started_at).total_seconds()
+            if self.started_at
+            else 0,
         }
 
     @classmethod
@@ -58,25 +56,19 @@ class ConsumerHealthStatus:
         return cls(
             instance_id=data.get("instance_id", "unknown"),
             status=data.get("status", "unknown"),
-            last_heartbeat=(
-                datetime.fromisoformat(data["last_heartbeat"])
-                if data.get("last_heartbeat")
-                else None
-            ),
+            last_heartbeat=datetime.fromisoformat(data["last_heartbeat"])
+            if data.get("last_heartbeat")
+            else None,
             events_processed=data.get("events_processed", 0),
             events_failed=data.get("events_failed", 0),
-            last_event_time=(
-                datetime.fromisoformat(data["last_event_time"])
-                if data.get("last_event_time")
-                else None
-            ),
+            last_event_time=datetime.fromisoformat(data["last_event_time"])
+            if data.get("last_event_time")
+            else None,
             current_batch_size=data.get("current_batch_size", 0),
             error_message=data.get("error_message"),
-            started_at=(
-                datetime.fromisoformat(data["started_at"])
-                if data.get("started_at")
-                else None
-            ),
+            started_at=datetime.fromisoformat(data["started_at"])
+            if data.get("started_at")
+            else None,
         )
 
 

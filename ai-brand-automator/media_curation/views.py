@@ -194,17 +194,13 @@ class CurationViewSet(viewsets.ViewSet):
                     "status": status_record.status.value,
                     "content_type": None,
                     "started_at": status_record.updated_at,
-                    "completed_at": (
-                        status_record.updated_at
-                        if status_record.status.value in ["CURATED", "FAILED"]
-                        else None
-                    ),
+                    "completed_at": status_record.updated_at
+                    if status_record.status.value in ["CURATED", "FAILED"]
+                    else None,
                     "processing_duration_ms": 0,
-                    "error_message": (
-                        status_record.message
-                        if status_record.status.value == "FAILED"
-                        else None
-                    ),
+                    "error_message": status_record.message
+                    if status_record.status.value == "FAILED"
+                    else None,
                     "retry_count": 0,
                     "destination_path": status_record.output_gcs_uri,
                 }
@@ -345,11 +341,9 @@ class CurationViewSet(viewsets.ViewSet):
                     "entities": document.entities,
                     "keywords": document.keywords,
                     "language": document.detected_language,
-                    "status": (
-                        document.status.value
-                        if hasattr(document.status, "value")
-                        else str(document.status)
-                    ),
+                    "status": document.status.value
+                    if hasattr(document.status, "value")
+                    else str(document.status),
                     "confidence_score": document.confidence_score,
                     "pii_redacted": document.pii_redacted,
                     "pii_findings_count": document.pii_findings_count,

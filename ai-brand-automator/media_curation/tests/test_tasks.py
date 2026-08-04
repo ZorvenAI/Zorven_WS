@@ -204,9 +204,9 @@ class TestProcessCurationEventIntegration:
         loop.close()
 
         # Create processor that returns text with PII
-        test_adapters["content_processor"]._extracted_text = (
-            "Contact john@example.com or call 555-123-4567"
-        )
+        test_adapters[
+            "content_processor"
+        ]._extracted_text = "Contact john@example.com or call 555-123-4567"
 
         with patch(
             "media_curation.tasks.get_curation_service",
@@ -256,12 +256,11 @@ class TestProcessCurationEventIntegration:
             output_bucket="curated-content",
         )
 
-        with (
-            patch("media_curation.tasks.get_curation_service", return_value=service),
-            patch(
-                "media_curation.tasks.create_kafka_producer",
-                return_value=test_adapters["producer"],
-            ),
+        with patch(
+            "media_curation.tasks.get_curation_service", return_value=service
+        ), patch(
+            "media_curation.tasks.create_kafka_producer",
+            return_value=test_adapters["producer"],
         ):
             from media_curation.tasks import process_curation_event
 
