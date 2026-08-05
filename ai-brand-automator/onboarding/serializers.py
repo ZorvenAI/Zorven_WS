@@ -30,6 +30,26 @@ ONBOARDING_FIELDS = [
 ]
 
 
+#: ISO 4217 active currency codes. A regex for three uppercase letters
+#: accepts "AAA", which is not a currency — and extraction storing a garbage
+#: code is a data-quality bug nothing downstream can recover from. Held as
+#: data rather than pulled from a library because neither pycountry nor babel
+#: is a runtime dependency, and the list changes rarely.
+ISO_4217_CODES = frozenset(
+    """
+    AED AFN ALL AMD ANG AOA ARS AUD AWG AZN BAM BBD BDT BGN BHD BIF BMD BND
+    BOB BRL BSD BTN BWP BYN BZD CAD CDF CHF CLP CNY COP CRC CUP CVE CZK DJF
+    DKK DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP GMD GNF GTQ GYD HKD
+    HNL HTG HUF IDR ILS INR IQD IRR ISK JMD JOD JPY KES KGS KHR KMF KPW KRW
+    KWD KYD KZT LAK LBP LKR LRD LSL LYD MAD MDL MGA MKD MMK MNT MOP MRU MUR
+    MVR MWK MXN MYR MZN NAD NGN NIO NOK NPR NZD OMR PAB PEN PGK PHP PKR PLN
+    PYG QAR RON RSD RUB RWF SAR SBD SCR SDG SEK SGD SHP SLE SOS SRD SSP STN
+    SVC SYP SZL THB TJS TMT TND TOP TRY TTD TWD TZS UAH UGX USD UYU UZS VED
+    VES VND VUV WST XAF XCD XOF XPF YER ZAR ZMW ZWG
+    """.split()
+)
+
+
 class CompetitorSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255)
     url = serializers.URLField(required=False, allow_blank=True)
@@ -56,8 +76,7 @@ class MarketingBudgetSerializer(serializers.Serializer):
 
     PERIODS = ["monthly", "quarterly", "annual"]
 
-    currency = serializers.RegexField(
-        r"^[A-Z]{3}$",
+    currency = serializers.CharField(
         help_text="ISO 4217, e.g. INR, USD, EUR",
     )
     min = serializers.DecimalField(
@@ -73,6 +92,18 @@ class MarketingBudgetSerializer(serializers.Serializer):
     )
     period = serializers.ChoiceField(choices=PERIODS, default="monthly")
 
+    def validate_currency(self, value):
+        """Checked against the real code list, not just the shape.
+
+        A three-uppercase-letter regex accepts "AAA"; storing that is a
+        data-quality bug no downstream consumer can recover from.
+        """
+        if value not in ISO_4217_CODES:
+            raise serializers.ValidationError(
+                f"{value!r} is not an active ISO 4217 currency code."
+            )
+        return value
+
     def validate(self, attrs):
         low, high = attrs.get("min"), attrs.get("max")
         if high is not None and low is not None and high < low:
@@ -83,9 +114,19 @@ class MarketingBudgetSerializer(serializers.Serializer):
 
 
 class DigitalPresenceSerializer(serializers.Serializer):
-    """Handles or URLs. Unknown platforms are allowed through deliberately:
-    refusing an unlisted network would lose data the operator actually
-    captured, and this is a record rather than an integration."""
+    """Handles or URLs for the platforms we know about.
+
+    Unknown platforms are allowed through deliberately: refusing an unlisted
+    network would lose data the operator actually captured, and this is a
+    record rather than an integration.
+
+    That works because DRF *ignores* undeclared keys rather than rejecting
+    them, and because ``_validate_object`` below returns the caller's original
+    dict rather than ``validated_data`` — so an unlisted platform is validated
+    against nothing and stored intact. Both halves are load-bearing: returning
+    ``validated_data`` would silently drop it. ``test_an_unlisted_platform_is
+    _kept`` holds that in place.
+    """
 
     website = serializers.CharField(required=False, allow_blank=True)
     instagram = serializers.CharField(required=False, allow_blank=True)
@@ -147,6 +188,8 @@ class OnboardingFieldShapesMixin:
             raise serializers.ValidationError(f"{field} must be an object.")
         serializer = object_serializer(data=value)
         serializer.is_valid(raise_exception=True)
+        # The caller's dict, not validated_data: undeclared keys are legal
+        # (see DigitalPresenceSerializer) and validated_data would drop them.
         return value
 
     def validate_competitors(self, value):

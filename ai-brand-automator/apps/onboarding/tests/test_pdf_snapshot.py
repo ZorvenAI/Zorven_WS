@@ -171,9 +171,12 @@ def test_no_b03_field_value_leaked_into_the_pdf():
 
 
 def test_no_b03_field_label_leaked_into_the_pdf():
+    # Rendered once, not once per field: the PDF does not change between
+    # iterations, and thirteen renders cost thirteen times as much.
+    text = pdf_text(make_company())
     for field in ONBOARDING_FIELDS:
         label = field.replace("_", " ").title()
-        assert label not in pdf_text(make_company()), f"{label!r} reached the PDF"
+        assert label not in text, f"{label!r} reached the PDF"
 
 
 def test_the_pdf_still_renders_and_is_a_pdf():

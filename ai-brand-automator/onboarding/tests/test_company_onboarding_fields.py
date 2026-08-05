@@ -260,3 +260,65 @@ def test_a_company_written_the_old_way_still_inserts():
         row = cursor.fetchone()
 
     assert row == (None, None, None), f"new columns not defaulted null: {row}"
+
+
+# ── PR #542 review ───────────────────────────────────────────────────
+
+
+def test_an_unknown_currency_code_is_refused():
+    """A three-letter regex accepts "AAA", which is not a currency.
+
+    The PR claimed ISO 4217 validation while only checking the shape. A
+    garbage code stored by extraction is unrecoverable downstream.
+    """
+    serializer = CompanyCreateSerializer(
+        data={
+            "name": "Fake Money Co",
+            "marketing_budget_range": {"currency": "AAA", "min": "100.00"},
+        }
+    )
+    assert not serializer.is_valid()
+    assert "marketing_budget_range" in serializer.errors
+
+
+@pytest.mark.parametrize("code", ["INR", "USD", "EUR", "GBP", "JPY", "AED", "ZAR"])
+def test_real_currency_codes_are_accepted(code):
+    """The list must not reject currencies a customer actually uses."""
+    serializer = CompanyCreateSerializer(
+        data={
+            "name": f"Co {code}",
+            "marketing_budget_range": {"currency": code, "min": "100.00"},
+        }
+    )
+    assert serializer.is_valid(), serializer.errors
+
+
+def test_an_unlisted_platform_is_kept():
+    """Unknown platforms pass through, as DigitalPresenceSerializer claims.
+
+    Two things make this work, and both are easy to "clean up" by accident:
+    DRF ignores undeclared keys rather than rejecting them, and
+    _validate_object returns the caller's dict rather than validated_data.
+    Returning validated_data would silently drop the platform — a reviewer
+    read the code as doing exactly that, so it is pinned here.
+    """
+    serializer = CompanyCreateSerializer(
+        data={
+            "name": "Fediverse Co",
+            "digital_presence": {"instagram": "@known", "mastodon": "@unlisted"},
+        }
+    )
+    assert serializer.is_valid(), serializer.errors
+    stored = serializer.save().digital_presence
+
+    assert stored["instagram"] == "@known"
+    assert stored["mastodon"] == "@unlisted", "an unlisted platform was dropped"
+
+
+def test_a_declared_platform_is_still_type_checked():
+    """Tolerating unknown keys must not disable validation of known ones."""
+    serializer = CompanyCreateSerializer(
+        data={"name": "Bad Shape Co", "digital_presence": {"instagram": {"a": 1}}}
+    )
+    assert not serializer.is_valid()
+    assert "digital_presence" in serializer.errors
