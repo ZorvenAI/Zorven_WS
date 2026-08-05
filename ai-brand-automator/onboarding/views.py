@@ -35,6 +35,140 @@ from tenants.permissions import (
 logger = logging.getLogger(__name__)
 
 
+def build_onboarding_pdf(company) -> bytes:
+    """Render the onboarding summary PDF for *company*.
+
+    Extracted from ``CompanyViewSet.generate_onboarding_pdf`` so the
+    field list can be asserted without GCS. B-03 AC-3 requires proof
+    that the PDF has not changed, and the only alternative was to drive
+    the whole upload path — which fails on absent credentials and so
+    proves nothing about the field list.
+
+    Pure: builds bytes, touches no storage, and is behaviourally
+    identical to the inline version it replaces.
+    """
+    # --- Build the PDF with fpdf2 ---
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    # Title
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.cell(0, 12, "Brand Onboarding Summary", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    def _sanitize(text):
+        """Replace Unicode characters unsupported by Helvetica."""
+        replacements = {
+            "\u2018": "'",
+            "\u2019": "'",  # curly single quotes
+            "\u201c": '"',
+            "\u201d": '"',  # curly double quotes
+            "\u2013": "-",
+            "\u2014": "--",  # en-dash, em-dash
+            "\u2026": "...",  # ellipsis
+            "\u00a0": " ",  # non-breaking space
+            "\u2022": "-",  # bullet
+        }
+        for orig, repl in replacements.items():
+            text = text.replace(orig, repl)
+        # Strip any remaining non-latin1 characters as a safety net
+        return text.encode("latin-1", errors="replace").decode("latin-1")
+
+    def _section(title):
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_text_color(60, 60, 180)
+        pdf.cell(0, 10, title, new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(1)
+
+    def _wrap_text(text, max_token_length=60):
+        """Sanitize text and break very long tokens to avoid layout errors.
+
+        Args:
+            text: Original text value.
+            max_token_length: Maximum length for any single token.
+
+        Returns:
+            A sanitized text string where long tokens are split into
+            smaller chunks separated by spaces, so fpdf2.multi_cell
+            can wrap them safely.
+        """
+        sanitized = _sanitize(text or "")
+        tokens = sanitized.split(" ")
+        wrapped_tokens = []
+        for token in tokens:
+            if len(token) > max_token_length:
+                for i in range(0, len(token), max_token_length):
+                    wrapped_tokens.append(token[i : i + max_token_length])
+            else:
+                wrapped_tokens.append(token)
+        return " ".join(wrapped_tokens)
+
+    def _field(label, value):
+        if not value:
+            return
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(0, 6, f"{label}:", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 10)
+        # Wrap and sanitize text so multi_cell doesn't see long
+        # unbreakable tokens (e.g., very long URLs).
+        pdf.multi_cell(0, 5, _wrap_text(str(value)))
+        pdf.ln(2)
+
+    # Company Information
+    _section("Company Information")
+    _field("Company Name", company.name)
+    _field("Industry", company.industry)
+    _field("Description", company.description)
+    _field("Core Problem", company.core_problem)
+    _field("Website", company.website)
+    _field("Physical Address", company.formatted_address)
+
+    # Target Audience
+    _section("Target Audience")
+    _field("Primary Audience", company.target_audience)
+    _field("Demographics", company.demographics)
+    _field("Psychographics", company.psychographics)
+    _field("Pain Points", company.pain_points)
+    _field("Desired Outcomes", company.desired_outcomes)
+
+    # Brand Details
+    _section("Brand Details")
+    _field("Brand Voice", company.brand_voice)
+    _field("Vision Statement", company.vision_statement)
+    _field("Mission Statement", company.mission_statement)
+    _field("Core Values", company.values)
+    _field("Positioning Statement", company.positioning_statement)
+    _field("Tagline", company.tagline)
+    _field("Value Proposition", company.value_proposition)
+    _field("Elevator Pitch", company.elevator_pitch)
+
+    # Brand Identity
+    if (
+        company.color_palette_desc
+        or company.font_recommendations
+        or company.messaging_guide
+    ):
+        _section("Brand Identity")
+        _field("Color Palette", company.color_palette_desc)
+        _field("Font Recommendations", company.font_recommendations)
+        _field("Messaging Guide", company.messaging_guide)
+
+    raw_pdf = pdf.output()
+    if isinstance(raw_pdf, bytearray):
+        pdf_bytes = bytes(raw_pdf)
+    elif isinstance(raw_pdf, str):
+        # fpdf2 historically uses Latin-1-compatible output
+        pdf_bytes = raw_pdf.encode("latin1")
+    else:
+        pdf_bytes = raw_pdf
+
+    return pdf_bytes
+
+
 class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
     """ViewSet for Company model.
 
@@ -191,124 +325,8 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # --- Build the PDF with fpdf2 ---
-        from fpdf import FPDF
-
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=15)
-        pdf.add_page()
-
-        # Title
-        pdf.set_font("Helvetica", "B", 20)
-        pdf.cell(0, 12, "Brand Onboarding Summary", new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(4)
-
-        def _sanitize(text):
-            """Replace Unicode characters unsupported by Helvetica."""
-            replacements = {
-                "\u2018": "'",
-                "\u2019": "'",  # curly single quotes
-                "\u201c": '"',
-                "\u201d": '"',  # curly double quotes
-                "\u2013": "-",
-                "\u2014": "--",  # en-dash, em-dash
-                "\u2026": "...",  # ellipsis
-                "\u00a0": " ",  # non-breaking space
-                "\u2022": "-",  # bullet
-            }
-            for orig, repl in replacements.items():
-                text = text.replace(orig, repl)
-            # Strip any remaining non-latin1 characters as a safety net
-            return text.encode("latin-1", errors="replace").decode("latin-1")
-
-        def _section(title):
-            pdf.set_font("Helvetica", "B", 14)
-            pdf.set_text_color(60, 60, 180)
-            pdf.cell(0, 10, title, new_x="LMARGIN", new_y="NEXT")
-            pdf.set_text_color(0, 0, 0)
-            pdf.ln(1)
-
-        def _wrap_text(text, max_token_length=60):
-            """Sanitize text and break very long tokens to avoid layout errors.
-
-            Args:
-                text: Original text value.
-                max_token_length: Maximum length for any single token.
-
-            Returns:
-                A sanitized text string where long tokens are split into
-                smaller chunks separated by spaces, so fpdf2.multi_cell
-                can wrap them safely.
-            """
-            sanitized = _sanitize(text or "")
-            tokens = sanitized.split(" ")
-            wrapped_tokens = []
-            for token in tokens:
-                if len(token) > max_token_length:
-                    for i in range(0, len(token), max_token_length):
-                        wrapped_tokens.append(token[i : i + max_token_length])
-                else:
-                    wrapped_tokens.append(token)
-            return " ".join(wrapped_tokens)
-
-        def _field(label, value):
-            if not value:
-                return
-            pdf.set_font("Helvetica", "B", 10)
-            pdf.cell(0, 6, f"{label}:", new_x="LMARGIN", new_y="NEXT")
-            pdf.set_font("Helvetica", "", 10)
-            # Wrap and sanitize text so multi_cell doesn't see long
-            # unbreakable tokens (e.g., very long URLs).
-            pdf.multi_cell(0, 5, _wrap_text(str(value)))
-            pdf.ln(2)
-
-        # Company Information
-        _section("Company Information")
-        _field("Company Name", company.name)
-        _field("Industry", company.industry)
-        _field("Description", company.description)
-        _field("Core Problem", company.core_problem)
-        _field("Website", company.website)
-        _field("Physical Address", company.formatted_address)
-
-        # Target Audience
-        _section("Target Audience")
-        _field("Primary Audience", company.target_audience)
-        _field("Demographics", company.demographics)
-        _field("Psychographics", company.psychographics)
-        _field("Pain Points", company.pain_points)
-        _field("Desired Outcomes", company.desired_outcomes)
-
-        # Brand Details
-        _section("Brand Details")
-        _field("Brand Voice", company.brand_voice)
-        _field("Vision Statement", company.vision_statement)
-        _field("Mission Statement", company.mission_statement)
-        _field("Core Values", company.values)
-        _field("Positioning Statement", company.positioning_statement)
-        _field("Tagline", company.tagline)
-        _field("Value Proposition", company.value_proposition)
-        _field("Elevator Pitch", company.elevator_pitch)
-
-        # Brand Identity
-        if (
-            company.color_palette_desc
-            or company.font_recommendations
-            or company.messaging_guide
-        ):
-            _section("Brand Identity")
-            _field("Color Palette", company.color_palette_desc)
-            _field("Font Recommendations", company.font_recommendations)
-            _field("Messaging Guide", company.messaging_guide)
-
-        raw_pdf = pdf.output()
-        if isinstance(raw_pdf, bytearray):
-            pdf_bytes = bytes(raw_pdf)
-        elif isinstance(raw_pdf, str):
-            # fpdf2 historically uses Latin-1-compatible output
-            pdf_bytes = raw_pdf.encode("latin1")
-        else:
-            pdf_bytes = raw_pdf
+        # --- Build the PDF (extracted; see build_onboarding_pdf) ---
+        pdf_bytes = build_onboarding_pdf(company)
 
         # --- Upload to GCS and create BrandAsset ---
         safe_filename = "onboarding_data.pdf"

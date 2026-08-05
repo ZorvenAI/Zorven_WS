@@ -1,8 +1,191 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 from .models import Company, BrandAsset, OnboardingProgress
 
 
-class CompanySerializer(serializers.ModelSerializer):
+# ── B-03 · declared shapes for the JSON-typed Company fields ─────────
+#
+# Design §10.1's technical note is explicit: these columns are schemaless,
+# but J-02's extraction output has to match something, and "whatever the LLM
+# emitted" is not a contract. Each shape below is enforced on write only —
+# existing rows are never revalidated, so a pre-existing malformed value can
+# still be read back.
+
+#: The Company fields carrying the thirteen approved onboarding values.
+ONBOARDING_FIELDS = [
+    "competitors",
+    "products_services",
+    "marketing_budget_range",
+    "digital_presence",
+    "business_goals",
+    "founder_story",
+    "brand_asset_status",
+    "legal_name",
+    "trademark_status",
+    "customer_proof",
+    "sales_channels",
+    "audience_languages",
+    "decision_maker",
+]
+
+
+class CompetitorSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=255)
+    url = serializers.URLField(required=False, allow_blank=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class ProductServiceSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True)
+    price_range = serializers.CharField(required=False, allow_blank=True)
+
+
+class MarketingBudgetSerializer(serializers.Serializer):
+    """A numeric range plus a currency, not a band enum.
+
+    A band ("$1k-$5k") cannot be multi-currency without either a per-currency
+    band table or an FX rate baked into the schema. A number and an ISO 4217
+    code carry the same information with neither, and compare without string
+    parsing — which is what the technical note actually objected to.
+
+    Cross-currency comparison needs an FX rate and is the caller's job; this
+    records what the brand owner said.
+    """
+
+    PERIODS = ["monthly", "quarterly", "annual"]
+
+    currency = serializers.RegexField(
+        r"^[A-Z]{3}$",
+        help_text="ISO 4217, e.g. INR, USD, EUR",
+    )
+    min = serializers.DecimalField(
+        max_digits=14, decimal_places=2, min_value=Decimal("0")
+    )
+    max = serializers.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        min_value=Decimal("0"),
+        required=False,
+        allow_null=True,
+        help_text="Omit for an open-ended top band",
+    )
+    period = serializers.ChoiceField(choices=PERIODS, default="monthly")
+
+    def validate(self, attrs):
+        low, high = attrs.get("min"), attrs.get("max")
+        if high is not None and low is not None and high < low:
+            raise serializers.ValidationError(
+                {"max": "max must be greater than or equal to min."}
+            )
+        return attrs
+
+
+class DigitalPresenceSerializer(serializers.Serializer):
+    """Handles or URLs. Unknown platforms are allowed through deliberately:
+    refusing an unlisted network would lose data the operator actually
+    captured, and this is a record rather than an integration."""
+
+    website = serializers.CharField(required=False, allow_blank=True)
+    instagram = serializers.CharField(required=False, allow_blank=True)
+    facebook = serializers.CharField(required=False, allow_blank=True)
+    linkedin = serializers.CharField(required=False, allow_blank=True)
+    x = serializers.CharField(required=False, allow_blank=True)
+    youtube = serializers.CharField(required=False, allow_blank=True)
+    tiktok = serializers.CharField(required=False, allow_blank=True)
+    google_business = serializers.CharField(required=False, allow_blank=True)
+
+
+class CustomerProofSerializer(serializers.Serializer):
+    TYPES = ["testimonial", "review", "case_study", "award"]
+
+    type = serializers.ChoiceField(choices=TYPES)
+    text = serializers.CharField()
+    source = serializers.CharField(required=False, allow_blank=True)
+    date = serializers.CharField(required=False, allow_blank=True)
+
+
+class SalesChannelSerializer(serializers.Serializer):
+    CHANNELS = [
+        "online_store",
+        "marketplace",
+        "retail",
+        "wholesale",
+        "direct",
+        "social",
+    ]
+
+    channel = serializers.ChoiceField(choices=CHANNELS)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class OnboardingFieldShapesMixin:
+    """Validates the JSON-typed onboarding fields against their shapes.
+
+    A mixin because all three Company serializers need identical rules:
+    CompanyViewSet routes create to CompanyCreateSerializer, update and
+    partial_update to CompanyUpdateSerializer, and everything else to
+    CompanySerializer. Validating in only one of them would satisfy a read
+    test and still let a PATCH — the path FR-PROC-03 says J-02 writes
+    through — store an unvalidated shape.
+    """
+
+    def _validate_list(self, value, item_serializer, field):
+        if value is None:
+            return value
+        if not isinstance(value, list):
+            raise serializers.ValidationError(f"{field} must be a list.")
+        serializer = item_serializer(data=value, many=True)
+        serializer.is_valid(raise_exception=True)
+        return value
+
+    def _validate_object(self, value, object_serializer, field):
+        if value is None:
+            return value
+        if not isinstance(value, dict):
+            raise serializers.ValidationError(f"{field} must be an object.")
+        serializer = object_serializer(data=value)
+        serializer.is_valid(raise_exception=True)
+        return value
+
+    def validate_competitors(self, value):
+        return self._validate_list(value, CompetitorSerializer, "competitors")
+
+    def validate_products_services(self, value):
+        return self._validate_list(value, ProductServiceSerializer, "products_services")
+
+    def validate_marketing_budget_range(self, value):
+        return self._validate_object(
+            value, MarketingBudgetSerializer, "marketing_budget_range"
+        )
+
+    def validate_digital_presence(self, value):
+        return self._validate_object(
+            value, DigitalPresenceSerializer, "digital_presence"
+        )
+
+    def validate_customer_proof(self, value):
+        return self._validate_list(value, CustomerProofSerializer, "customer_proof")
+
+    def validate_sales_channels(self, value):
+        return self._validate_list(value, SalesChannelSerializer, "sales_channels")
+
+    def validate_audience_languages(self, value):
+        """BCP-47 tags, matching §10.2.1's config.language ("en-IN")."""
+        if value is None:
+            return value
+        if not isinstance(value, list):
+            raise serializers.ValidationError("audience_languages must be a list.")
+        for tag in value:
+            if not isinstance(tag, str) or not tag.strip():
+                raise serializers.ValidationError(
+                    "Each language must be a non-empty BCP-47 tag, e.g. 'en-IN'."
+                )
+        return value
+
+
+class CompanySerializer(OnboardingFieldShapesMixin, serializers.ModelSerializer):
     """Serializer for Company model"""
 
     class Meta:
@@ -36,6 +219,8 @@ class CompanySerializer(serializers.ModelSerializer):
             "color_palette_desc",
             "font_recommendations",
             "messaging_guide",
+            # B-03 · the thirteen approved onboarding fields (Design §10.1).
+            *ONBOARDING_FIELDS,
             "created_at",
             "updated_at",
         ]
@@ -119,7 +304,7 @@ class OnboardingProgressSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "tenant", "started_at", "last_updated"]
 
 
-class CompanyCreateSerializer(serializers.ModelSerializer):
+class CompanyCreateSerializer(OnboardingFieldShapesMixin, serializers.ModelSerializer):
     """Serializer for creating a new company during onboarding"""
 
     class Meta:
@@ -138,12 +323,15 @@ class CompanyCreateSerializer(serializers.ModelSerializer):
             "postal_code",
             "country",
             "brand_voice",
+            # B-03 · optional here too, so a single-call create can carry
+            # them. The wizard does not send them (AC-3); Epic J may.
+            *ONBOARDING_FIELDS,
         ]
         read_only_fields = ["id"]
         # Tenant is set in the viewset's perform_create method
 
 
-class CompanyUpdateSerializer(serializers.ModelSerializer):
+class CompanyUpdateSerializer(OnboardingFieldShapesMixin, serializers.ModelSerializer):
     """Serializer for updating company after onboarding (brand strategy)"""
 
     class Meta:
@@ -176,6 +364,9 @@ class CompanyUpdateSerializer(serializers.ModelSerializer):
             "color_palette_desc",
             "font_recommendations",
             "messaging_guide",
+            # B-03 · this is the PATCH path FR-PROC-03 says J-02 writes
+            # through, so it matters most that the fields land here.
+            *ONBOARDING_FIELDS,
         ]
         read_only_fields = ["id"]
 
