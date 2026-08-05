@@ -43,46 +43,69 @@ def latest_migration() -> str:
     return sorted(nodes)[-1][1]
 
 
+def restore_all_migrations() -> None:
+    """Re-apply every app to its leaf migration.
+
+    ``migrate_to(None)`` unapplies more than this app: ``onboarding.0013``
+    adds a FK *to* this app and so depends on it, and every later onboarding
+    migration follows 0013. Restoring only ``APP_LABEL`` therefore leaves the
+    ``onboarding`` app short of columns the ORM still expects, and the next
+    test to create a Company dies on a missing column — which is exactly how
+    B-03 surfaced this.
+
+    The database is shared across the module, so a test that tears down
+    schema has to put all of it back, not just the part it was inspecting.
+    """
+    executor = MigrationExecutor(connection)
+    executor.loader.build_graph()
+    executor.migrate(executor.loader.graph.leaf_nodes())
+    executor.loader.build_graph()
+
+
 def test_migration_reversible():
     """Forward, populate, backward, forward — no residue."""
-    head = latest_migration()
+    try:
+        head = latest_migration()
 
-    session = make_session(status=SessionStatus.MEETING_LIVE)
-    questionnaire = make_questionnaire(company=session.company, session=session)
-    make_question(questionnaire=questionnaire, order=1)
+        session = make_session(status=SessionStatus.MEETING_LIVE)
+        questionnaire = make_questionnaire(company=session.company, session=session)
+        make_question(questionnaire=questionnaire, order=1)
 
-    # Backwards on a populated database.
-    migrate_to(None)
+        # Backwards on a populated database.
+        migrate_to(None)
 
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_name LIKE %s",
-            [f"{APP_LABEL}_%"],
-        )
-        remaining = [row[0] for row in cursor.fetchall()]
-    assert remaining == [], f"tables survived the reverse: {remaining}"
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_name LIKE %s",
+                [f"{APP_LABEL}_%"],
+            )
+            remaining = [row[0] for row in cursor.fetchall()]
+        assert remaining == [], f"tables survived the reverse: {remaining}"
 
-    # And forward again, so the migration is not one-shot.
-    migrate_to(head)
+        # And forward again, so the migration is not one-shot.
+        migrate_to(head)
 
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_name LIKE %s",
-            [f"{APP_LABEL}_%"],
-        )
-        rebuilt = sorted(row[0] for row in cursor.fetchall())
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_name LIKE %s",
+                [f"{APP_LABEL}_%"],
+            )
+            rebuilt = sorted(row[0] for row in cursor.fetchall())
 
-    # Named rather than counted: a bare count silently passes when a table is
-    # swapped for another, and has to be edited by every story that adds one.
-    assert rebuilt == [
-        f"{APP_LABEL}_consentrecord",
-        f"{APP_LABEL}_meetingrecording",
-        f"{APP_LABEL}_onboardingsession",
-        f"{APP_LABEL}_question",
-        f"{APP_LABEL}_questionnaire",
-    ], rebuilt
+        # Named rather than counted: a bare count silently passes when a table is
+        # swapped for another, and has to be edited by every story that adds one.
+        assert rebuilt == [
+            f"{APP_LABEL}_consentrecord",
+            f"{APP_LABEL}_meetingrecording",
+            f"{APP_LABEL}_onboardingsession",
+            f"{APP_LABEL}_question",
+            f"{APP_LABEL}_questionnaire",
+        ], rebuilt
+    finally:
+        # This test unapplies migrations other apps depend on.
+        restore_all_migrations()
 
 
 def test_the_partial_index_exists_in_the_database():
@@ -168,34 +191,38 @@ def test_a_row_written_the_old_way_still_inserts():
 
 def test_the_b02_migration_reverses_on_populated_data():
     """Forward, populate, backward, forward — with recordings and consent."""
-    head = latest_migration()
+    try:
+        head = latest_migration()
 
-    session = make_session(status=SessionStatus.MEETING_LIVE)
-    make_recording(session=session, duration_s=42)
-    make_consent(session=session)
+        session = make_session(status=SessionStatus.MEETING_LIVE)
+        make_recording(session=session, duration_s=42)
+        make_consent(session=session)
 
-    migrate_to(None)
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_name LIKE %s",
-            [f"{APP_LABEL}_%"],
-        )
-        assert [r[0] for r in cursor.fetchall()] == []
+        migrate_to(None)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_name LIKE %s",
+                [f"{APP_LABEL}_%"],
+            )
+            assert [r[0] for r in cursor.fetchall()] == []
 
-    migrate_to(head)
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_name LIKE %s",
-            [f"{APP_LABEL}_%"],
-        )
-        rebuilt = sorted(r[0] for r in cursor.fetchall())
+        migrate_to(head)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_name LIKE %s",
+                [f"{APP_LABEL}_%"],
+            )
+            rebuilt = sorted(r[0] for r in cursor.fetchall())
 
-    assert rebuilt == [
-        f"{APP_LABEL}_consentrecord",
-        f"{APP_LABEL}_meetingrecording",
-        f"{APP_LABEL}_onboardingsession",
-        f"{APP_LABEL}_question",
-        f"{APP_LABEL}_questionnaire",
-    ], rebuilt
+        assert rebuilt == [
+            f"{APP_LABEL}_consentrecord",
+            f"{APP_LABEL}_meetingrecording",
+            f"{APP_LABEL}_onboardingsession",
+            f"{APP_LABEL}_question",
+            f"{APP_LABEL}_questionnaire",
+        ], rebuilt
+    finally:
+        # This test unapplies migrations other apps depend on.
+        restore_all_migrations()

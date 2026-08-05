@@ -108,6 +108,95 @@ class Company(models.Model):
         blank=True, help_text="Brand messaging guidelines"
     )
 
+    # ── Onboarding Intelligence (B-03, Design §10.1) ──────────────────
+    # The thirteen approved fields. Every one is nullable and optional at
+    # both the model and serializer layer (NFR-COMPAT), so a client that has
+    # never heard of them keeps working unchanged. Epic J's extraction writes
+    # them; nothing here populates them.
+    #
+    # The JSON-typed fields carry a declared shape, enforced in the
+    # serializer rather than the column. J-02's extraction output has to
+    # match something, and "whatever the LLM emitted" is not a contract.
+    # Shapes are documented on each field and validated in serializers.py.
+
+    competitors = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='[{"name": str, "url": str?, "notes": str?}]',
+    )
+    products_services = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='[{"name": str, "description": str?, "price_range": str?}]',
+    )
+    marketing_budget_range = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            '{"currency": "INR", "min": 50000, "max": 200000?, '
+            '"period": "monthly"} — a numeric range with an ISO 4217 code '
+            "rather than a band enum, because a band cannot be "
+            "multi-currency without an FX rate baked into the schema. "
+            "Cross-currency comparison is the caller's job."
+        ),
+    )
+    digital_presence = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='{"website": str?, "instagram": str?, ... } — handles/URLs',
+    )
+    business_goals = models.TextField(
+        blank=True, null=True, help_text="What the business wants to achieve"
+    )
+    founder_story = models.TextField(
+        blank=True, null=True, help_text="Origin story, in the founder's words"
+    )
+    brand_asset_status = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="What brand assets exist today (logo, guidelines, none)",
+    )
+    legal_name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Registered legal entity name, where it differs from name",
+    )
+    trademark_status = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Trademark position — registered, pending, none",
+    )
+    customer_proof = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            '[{"type": "testimonial|review|case_study|award", "text": str, '
+            '"source": str?, "date": str?}]'
+        ),
+    )
+    sales_channels = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            '[{"channel": "online_store|marketplace|retail|wholesale|'
+            'direct|social", "notes": str?}]'
+        ),
+    )
+    audience_languages = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='["en-IN", "kn-IN"] — BCP-47, matching §10.2.1 config.language',
+    )
+    decision_maker = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Who signs off on brand and campaign decisions",
+    )
+
     # Metadata
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
