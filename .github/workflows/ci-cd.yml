@@ -34,6 +34,12 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
+          # Without this the default glob is recursive, so the key hashes
+          # every requirements.txt in the monorepo and an unrelated service
+          # invalidates this job's cache.
+          cache-dependency-path: |
+            ai-brand-automator/requirements.txt
+            ai-brand-automator/requirements-dev.txt
       
       - name: Install dependencies
         run: |
@@ -94,7 +100,8 @@ jobs:
           files: ./ai-brand-automator/coverage.xml
           flags: backend
 
-  # Media Curation Tests
+  # Backend Property Tests (Hypothesis; split out so they run in
+  # parallel with backend-tests rather than behind it)
   backend-property-tests:
     runs-on: ubuntu-latest
     
@@ -121,6 +128,12 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
+          # Without this the default glob is recursive, so the key hashes
+          # every requirements.txt in the monorepo and an unrelated service
+          # invalidates this job's cache.
+          cache-dependency-path: |
+            ai-brand-automator/requirements.txt
+            ai-brand-automator/requirements-dev.txt
       
       - name: Install dependencies
         run: |
@@ -149,6 +162,7 @@ jobs:
           # already uploads the coverage report.
           pytest -m property --durations=25
 
+  # Media Curation Tests
   test-media-curation:
     runs-on: ubuntu-latest
     
