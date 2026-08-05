@@ -34,6 +34,12 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
+          # Without this the default glob is recursive, so the key hashes
+          # every requirements.txt in the monorepo and an unrelated service
+          # invalidates this job's cache.
+          cache-dependency-path: |
+            ai-brand-automator/requirements.txt
+            ai-brand-automator/requirements-dev.txt
       
       - name: Install dependencies
         run: |
@@ -67,11 +73,11 @@ jobs:
         run: |
           cd ai-brand-automator
           python manage.py migrate_schemas --shared --noinput
-          # --durations: the suite takes ~4h and nobody knows where it
-          # goes. Report the 25 slowest so the next change is aimed at
-          # evidence rather than a guess. Reporting only; no behaviour
-          # change, and no test is skipped or reordered.
-          pytest --cov=. --cov-report=xml --cov-report=html --durations=25
+          # Everything except the property tests, which run in the
+          # backend-property-tests job alongside this one. --durations=25
+          # keeps reporting where the remaining time goes.
+          pytest -m "not property" --cov=. --cov-report=xml \
+            --cov-report=html --durations=25
       
       - name: Test MCP Server
         env:
@@ -93,6 +99,68 @@ jobs:
         with:
           files: ./ai-brand-automator/coverage.xml
           flags: backend
+
+  # Backend Property Tests (Hypothesis; split out so they run in
+  # parallel with backend-tests rather than behind it)
+  backend-property-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          # Without this the default glob is recursive, so the key hashes
+          # every requirements.txt in the monorepo and an unrelated service
+          # invalidates this job's cache.
+          cache-dependency-path: |
+            ai-brand-automator/requirements.txt
+            ai-brand-automator/requirements-dev.txt
+      
+      - name: Install dependencies
+        run: |
+          cd ai-brand-automator
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      
+      - name: Run tests
+        env:
+          SECRET_KEY: test-secret-key-for-ci
+          DB_NAME: test_db
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_SSLMODE: disable
+          DB_CHANNEL_BINDING: disable
+          DEBUG: True
+        run: |
+          cd ai-brand-automator
+          python manage.py migrate_schemas --shared --noinput
+          # Only the property tests. They dominated the 4h run — the 25
+          # slowest were all Hypothesis tests — so running them beside the
+          # rest turns a serial 4h into two shorter jobs in parallel.
+          # No coverage: this job exists for wall-clock, and backend-tests
+          # already uploads the coverage report.
+          pytest -m property --durations=25
 
   # Media Curation Tests
   test-media-curation:
