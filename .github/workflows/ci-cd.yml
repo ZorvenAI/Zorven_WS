@@ -67,7 +67,11 @@ jobs:
         run: |
           cd ai-brand-automator
           python manage.py migrate_schemas --shared --noinput
-          pytest --cov=. --cov-report=xml --cov-report=html
+          # --durations: the suite takes ~4h and nobody knows where it
+          # goes. Report the 25 slowest so the next change is aimed at
+          # evidence rather than a guess. Reporting only; no behaviour
+          # change, and no test is skipped or reordered.
+          pytest --cov=. --cov-report=xml --cov-report=html --durations=25
       
       - name: Test MCP Server
         env:
