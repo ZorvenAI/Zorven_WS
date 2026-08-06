@@ -69,6 +69,10 @@ urlpatterns = [
                 ),
                 # Onboarding
                 path("", include("onboarding.urls")),
+                # Onboarding Intelligence sessions (apps.onboarding, label
+                # onboarding_sessions). A distinct prefix from the line
+                # above, which is mounted at the root.
+                path("onboarding/", include("apps.onboarding.urls")),
                 # AI Services
                 path("ai/", include("ai_services.urls")),
                 # Subscriptions
