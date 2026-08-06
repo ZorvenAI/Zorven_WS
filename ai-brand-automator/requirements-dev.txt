@@ -36,3 +36,10 @@ django-silk==5.0.4
 django-stubs==4.2.7
 djangorestframework-stubs==3.14.5
 types-requests==2.31.0.20231231
+
+# OpenAPI schema generation (B-04 AC-1 asserts the session endpoints appear
+# in the schema). DRF's built-in generator needs both; uritemplate was only
+# present transitively via google-api-python-client, which is not a
+# dependency to rely on for a test that must not silently stop running.
+inflection==0.5.1
+uritemplate==4.2.0
