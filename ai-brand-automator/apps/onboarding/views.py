@@ -8,6 +8,7 @@ validated here rather than in the client.
 from __future__ import annotations
 
 from django.db import IntegrityError
+from django.db import transaction as db_transaction
 from rest_framework import status as http
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -93,20 +94,36 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 status=http.HTTP_409_CONFLICT,
             )
 
+    @db_transaction.atomic
     def update(self, request, *args, **kwargs):
         """PATCH/PUT, with any status change routed through §9.4.
 
-        The status is applied *before* the serializer runs so that a refused
-        transition rejects the whole request — a partial update that saved
-        the other fields and dropped the status would leave the caller with
-        a 409 and a half-applied change.
+        The transition is checked and applied **in memory** (``save=False``)
+        and only reaches the database through the serializer's save, so the
+        request is all-or-nothing in both directions:
+
+        - a refused transition returns 409 having written nothing;
+        - a legal transition followed by a serializer error returns 400,
+          also having written nothing.
+
+        An earlier version saved the transition first and then called
+        ``super().update()``. That looked right — it rejected the whole
+        request on a bad transition — but got the other order wrong: a legal
+        status change with an invalid field alongside it returned 400 with
+        the status already committed. Caught in review on PR #546, and
+        ``test_a_serializer_error_does_not_leave_the_status_changed`` now
+        holds it.
+
+        ``super().update()`` cannot be reused here because it re-fetches the
+        row through ``get_object()`` and would discard the in-memory change.
         """
+        partial = kwargs.pop("partial", False)
         session = self.get_object()
         target = request.data.get("status")
 
         if target and target != session.status:
             try:
-                transition(session, target)
+                transition(session, target, save=False)
             except InvalidTransition as exc:
                 return Response(
                     {
@@ -118,4 +135,7 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                     status=http.HTTP_409_CONFLICT,
                 )
 
-        return super().update(request, *args, **kwargs)
+        serializer = self.get_serializer(session, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)

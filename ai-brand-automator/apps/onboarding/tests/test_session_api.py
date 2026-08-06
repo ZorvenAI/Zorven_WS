@@ -329,3 +329,49 @@ def test_a_full_lifecycle_walks_the_state_machine(public_tenant, editor):
 
     session = OnboardingSession.objects.get(pk=created.data["id"])
     assert session.is_terminal
+
+
+# ── PR #546 review · the update path is all-or-nothing ───────────────
+
+
+def test_a_serializer_error_does_not_leave_the_status_changed(public_tenant, editor):
+    """A legal transition alongside an invalid field must write neither.
+
+    The first version applied the transition, saved it, and only then let the
+    serializer validate — so this returned 400 with the status already
+    committed. The inverse case (illegal transition, nothing applied) was
+    tested; this direction was not.
+    """
+    session = make_session(tenant=public_tenant, status="DRAFT")
+    client = client_for(editor, public_tenant)
+
+    response = client.patch(
+        f"{SESSIONS}{session.pk}/",
+        {
+            "status": "PREPARING",  # legal
+            "evidence_manifest_hash": "x" * 200,  # max_length is 64
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400, response.data
+    session.refresh_from_db()
+    assert session.status == "DRAFT", "the status was committed before validation"
+    assert session.evidence_manifest_hash == ""
+
+
+def test_an_escalation_is_not_recorded_when_the_rest_is_invalid(public_tenant, editor):
+    """escalated_from must not be written by a request that fails."""
+    session = make_session(tenant=public_tenant, status="READY")
+    client = client_for(editor, public_tenant)
+
+    response = client.patch(
+        f"{SESSIONS}{session.pk}/",
+        {"status": "ESCALATED", "evidence_manifest_hash": "y" * 200},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    session.refresh_from_db()
+    assert session.status == "READY"
+    assert session.escalated_from is None

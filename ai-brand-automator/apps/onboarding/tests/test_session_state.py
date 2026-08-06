@@ -73,13 +73,20 @@ def test_escalated_has_no_static_target():
     assert state.legal_targets("ESCALATED", None) == frozenset()
 
 
-@pytest.mark.property
-@given(current=statuses, target=statuses)
-@settings(max_examples=200, deadline=None)
+@pytest.mark.unit
+@pytest.mark.parametrize("current", ALL_STATUSES)
+@pytest.mark.parametrize("target", ALL_STATUSES)
 def test_exactly_the_declared_edges_are_legal(current, target):
-    """The exhaustive sweep AC-2 asks for: all 11 × 11 pairs.
+    """The exhaustive sweep AC-2 asks for: every one of the 11 × 11 pairs.
 
-    No database, so 200 examples cost milliseconds.
+    Parameterised rather than generated. Hypothesis *samples*, and AC-2 says
+    "exhaustively rather than by sampling" — so however well a 200-example
+    run happens to cover the space (it did cover all 121 under the repo's
+    pinned seed), nothing guarantees it, and a Hypothesis upgrade could
+    quietly shrink the coverage while the test kept passing.
+
+    121 cases with no database cost milliseconds, and a failure names the
+    exact pair rather than a falsifying example.
     """
     expected = target in state.TRANSITIONS[current]
     assert state.is_legal(current, target) is expected
@@ -96,8 +103,9 @@ def test_escalation_only_returns_to_its_origin(origin, other):
 
 
 # ── The service · these do touch the database ────────────────────────
-
-pytestmark_db = pytest.mark.django_db
+#
+# Marked per test rather than per module: the table tests above must stay
+# database-free, which is what keeps the 121-case sweep fast.
 
 
 @pytest.mark.django_db
