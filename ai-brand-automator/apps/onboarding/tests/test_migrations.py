@@ -8,13 +8,14 @@ proves nothing depends on data the reverse cannot handle.
 from __future__ import annotations
 
 import pytest
-from django.db import connection
+from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 
-from apps.onboarding.models import SessionStatus
+from apps.onboarding.models import FieldProvenance, SessionStatus
 from apps.onboarding.tests.factories import (
     make_company,
     make_consent,
+    make_provenance,
     make_question,
     make_questionnaire,
     make_recording,
@@ -98,6 +99,7 @@ def test_migration_reversible():
         # swapped for another, and has to be edited by every story that adds one.
         assert rebuilt == [
             f"{APP_LABEL}_consentrecord",
+            f"{APP_LABEL}_fieldprovenance",
             f"{APP_LABEL}_meetingrecording",
             f"{APP_LABEL}_onboardingsession",
             f"{APP_LABEL}_question",
@@ -218,6 +220,7 @@ def test_the_b02_migration_reverses_on_populated_data():
 
         assert rebuilt == [
             f"{APP_LABEL}_consentrecord",
+            f"{APP_LABEL}_fieldprovenance",
             f"{APP_LABEL}_meetingrecording",
             f"{APP_LABEL}_onboardingsession",
             f"{APP_LABEL}_question",
@@ -225,4 +228,82 @@ def test_the_b02_migration_reverses_on_populated_data():
         ], rebuilt
     finally:
         # This test unapplies migrations other apps depend on.
+        restore_all_migrations()
+
+
+# ══ B-05 · the grounding constraint survives replay (AC-3) ═══════════
+
+
+def test_the_grounding_constraint_exists_in_the_database():
+    """The whole point of B-05: the rule is in PostgreSQL, not in Python."""
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint " "WHERE conname = %s",
+            ["provenance_requires_a_source"],
+        )
+        row = cursor.fetchone()
+
+    assert row is not None, "the check constraint was not created"
+    definition = row[0].lower()
+    assert definition.startswith("check")
+    for column in ("source_recording_id", "source_span", "source_media_id"):
+        assert column in definition, f"{column} missing from the constraint"
+
+
+def test_the_confidence_bound_exists_in_the_database():
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint " "WHERE conname = %s",
+            ["confidence_between_zero_and_one"],
+        )
+        row = cursor.fetchone()
+
+    assert row is not None, "the confidence bound was not created"
+    assert "confidence" in row[0].lower()
+
+
+def test_constraint_replay():
+    """The card's named case: reverse and re-apply is clean.
+
+    Asserted with provenance rows present, because an empty replay only
+    proves the operations are declared reversible. A populated one proves
+    nothing depends on data the reverse cannot handle, and that no surviving
+    row violates the constraint when it comes back.
+    """
+    try:
+        head = latest_migration()
+
+        session = make_session(status=SessionStatus.GATHERED)
+        make_provenance(session=session, field_name="legal_name")
+        make_provenance(session=session, field_name="founder_story")
+        assert FieldProvenance.objects.count() == 2
+
+        migrate_to(None)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT COUNT(*) FROM pg_constraint WHERE conname = %s",
+                ["provenance_requires_a_source"],
+            )
+            assert cursor.fetchone()[0] == 0, "the constraint survived the reverse"
+
+        migrate_to(head)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT COUNT(*) FROM pg_constraint WHERE conname = %s",
+                ["provenance_requires_a_source"],
+            )
+            assert cursor.fetchone()[0] == 1, "the constraint did not come back"
+
+        # And it still bites after the round trip.
+        rebuilt = make_session(status=SessionStatus.GATHERED)
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                FieldProvenance.objects.create(
+                    session=rebuilt,
+                    tenant=rebuilt.tenant,
+                    model_name="Company",
+                    field_name="ungrounded",
+                    extracted_value="no source",
+                )
+    finally:
         restore_all_migrations()

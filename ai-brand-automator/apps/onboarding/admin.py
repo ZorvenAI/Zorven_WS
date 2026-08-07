@@ -17,6 +17,7 @@ from django.contrib import admin
 
 from .models import (
     ConsentRecord,
+    FieldProvenance,
     MeetingRecording,
     OnboardingSession,
     Question,
@@ -160,3 +161,31 @@ class ConsentRecordAdmin(TenantScopedAdmin):
     @admin.display(boolean=True, description="Active")
     def is_active(self, obj: ConsentRecord) -> bool:
         return obj.is_active
+
+
+@admin.register(FieldProvenance)
+class FieldProvenanceAdmin(TenantScopedAdmin):
+    """Read-mostly: the admin is a direct path to the ORM, and this table is
+    the audit trail for what the agent wrote and why."""
+
+    list_display = (
+        "id",
+        "session",
+        "model_name",
+        "field_name",
+        "classification",
+        "confidence",
+        "status",
+        "reviewed_by",
+        "reviewed_at",
+    )
+    list_filter = ("status", "classification", "model_name")
+    search_fields = ("field_name", "model_name")
+    readonly_fields = ("created_at", "updated_at")
+    raw_id_fields = (
+        "session",
+        "source_recording",
+        "source_media",
+        "reviewed_by",
+        "tenant",
+    )
