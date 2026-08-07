@@ -17,6 +17,8 @@ from onboarding.models import BrandAsset, Company
 
 from apps.onboarding.models import (
     ConsentMethod,
+    FieldClassification,
+    FieldProvenance,
     ConsentRecord,
     MeetingRecording,
     OnboardingSession,
@@ -181,3 +183,35 @@ def make_brand_asset(company: Company | None = None, **kwargs: Any) -> BrandAsse
     }
     defaults.update(kwargs)
     return BrandAsset.objects.create(**defaults)
+
+
+def make_provenance(
+    session: OnboardingSession | None = None,
+    tenant=None,
+    model_name: str = "Company",
+    field_name: str = "legal_name",
+    **kwargs: Any,
+) -> FieldProvenance:
+    """A grounded row by default.
+
+    Defaults to carrying ``source_span``, because an ungrounded row cannot be
+    saved at all — the factory would be a factory for IntegrityError. Tests
+    that want the unsourced case build it explicitly, which keeps the
+    intention visible at the call site.
+    """
+    if session is None:
+        session = make_session(tenant=tenant)
+    elif tenant is None:
+        tenant = getattr(session, "tenant", None)
+
+    defaults = {
+        "session": session,
+        "tenant": tenant,
+        "model_name": model_name,
+        "field_name": field_name,
+        "extracted_value": "Kalyani Coffee Roasters Pvt Ltd",
+        "classification": FieldClassification.SECONDARY,
+        "source_span": evidence_span(),
+    }
+    defaults.update(kwargs)
+    return FieldProvenance.objects.create(**defaults)

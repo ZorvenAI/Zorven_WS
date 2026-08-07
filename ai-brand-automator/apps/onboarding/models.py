@@ -537,3 +537,170 @@ class ConsentRecord(models.Model):
     def is_active(self) -> bool:
         """Consent state as one expression, so consumers cannot disagree."""
         return self.revoked_at is None
+
+
+class FieldClassification(models.TextChoices):
+    """D-04: KEY fields gate the review, SECONDARY ones do not."""
+
+    KEY = "KEY", "Key"
+    SECONDARY = "SECONDARY", "Secondary"
+
+
+class ProvenanceStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    CONFIRMED = "CONFIRMED", "Confirmed"
+    EDITED = "EDITED", "Edited"
+    CONFLICT = "CONFLICT", "Conflict"
+
+
+#: Statuses a PROCESS re-run must never overwrite (PG-06).
+PROTECTED_STATUSES = (ProvenanceStatus.CONFIRMED, ProvenanceStatus.EDITED)
+
+
+class FieldProvenance(models.Model):
+    """Where a written field value came from (Design §10.1, §5.3 OG-01).
+
+    §10.1 calls the check constraint below "the most important line in this
+    section", and the reason is worth restating: OG-01 drops ungrounded values
+    inside the agent, which is the right place for it, but the agent is not
+    the only writer. A migration, a data fix, a refactor or a bug can all
+    insert a row. The constraint makes those writes fail in PostgreSQL rather
+    than relying on every future writer to behave.
+
+    That is also why the rule is **not** in ``save()``: ``bulk_create()``
+    bypasses ``save()``, and J-03 writes provenance in bulk (§8.2) — exactly
+    the path that would otherwise slip through.
+    """
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)ss",
+    )
+    session = models.ForeignKey(
+        OnboardingSession,
+        on_delete=models.CASCADE,
+        related_name="provenance",
+    )
+
+    model_name = models.CharField(
+        max_length=64, help_text="The Django model written to, e.g. 'Company'"
+    )
+    field_name = models.CharField(max_length=128)
+
+    # JSON rather than text so a value round-trips losslessly. Six of the
+    # thirteen B-03 Company fields are JSON-typed, and storing those as text
+    # would make the provenance record and the value it describes disagree
+    # about their own shape.
+    extracted_value = models.JSONField(
+        help_text="What the agent proposed, in the shape it will be written"
+    )
+    final_value = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="What a reviewer confirmed or edited it to; null until then",
+    )
+
+    classification = models.CharField(
+        max_length=16,
+        choices=FieldClassification.choices,
+        default=FieldClassification.SECONDARY,
+    )
+    confidence = models.DecimalField(
+        max_digits=4,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        help_text="0.000-1.000, bounded by its own constraint. Null before scoring.",
+    )
+
+    # ── The three sources, at least one of which must be present ──────
+    source_recording = models.ForeignKey(
+        MeetingRecording,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="provenance",
+    )
+    source_span = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            "{recording_id, t_start, t_end} — the same shape as "
+            "Question.evidence, so K-01 can seek a player from either."
+        ),
+    )
+    source_media = models.ForeignKey(
+        "onboarding.BrandAsset",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="provenance",
+    )
+
+    status = models.CharField(
+        max_length=16,
+        choices=ProvenanceStatus.choices,
+        default=ProvenanceStatus.PENDING,
+        db_index=True,
+    )
+    reviewed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_provenance",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = TenantScopedManager()
+
+    class Meta:
+        ordering = ["model_name", "field_name"]
+        indexes = [
+            models.Index(fields=["session", "status"]),
+            models.Index(fields=["tenant", "status"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "model_name", "field_name"],
+                name="unique_provenance_per_field",
+            ),
+            # OG-01, as a property of the database. Every write path — the
+            # ORM, bulk_create, raw SQL and a data migration — hits this.
+            models.CheckConstraint(
+                check=(
+                    Q(source_recording__isnull=False)
+                    | Q(source_span__isnull=False)
+                    | Q(source_media__isnull=False)
+                ),
+                name="provenance_requires_a_source",
+            ),
+            # Cheap here, annoying to add once rows exist.
+            models.CheckConstraint(
+                check=Q(confidence__isnull=True)
+                | (Q(confidence__gte=0) & Q(confidence__lte=1)),
+                name="confidence_between_zero_and_one",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.model_name}.{self.field_name} · {self.status}"
+
+    @property
+    def is_protected(self) -> bool:
+        """True when PG-06 forbids a re-run from overwriting this row."""
+        return self.status in PROTECTED_STATUSES
+
+    @property
+    def has_source(self) -> bool:
+        """The Python-side reading of the constraint, for callers that want
+        to check before writing rather than catch an IntegrityError."""
+        return bool(
+            self.source_recording_id or self.source_span or self.source_media_id
+        )
