@@ -325,7 +325,15 @@ def test_confirmed_row_not_overwritten(protected):
     resolved", so the row is marked CONFLICT and returned rather than being
     quietly updated or quietly skipped.
     """
-    row = make_provenance(extracted_value="reviewed value", status=protected)
+    # A genuinely reviewed row: the agent's proposal stays in
+    # extracted_value and the reviewer's decision lands in final_value,
+    # which is what those two columns mean. Modelling it with the reviewer's
+    # text in extracted_value would test a row shape that cannot occur.
+    row = make_provenance(
+        extracted_value="what the agent proposed",
+        final_value="what the reviewer decided",
+        status=protected,
+    )
 
     result = write_provenance(
         row.session,
@@ -340,7 +348,8 @@ def test_confirmed_row_not_overwritten(protected):
     )
 
     row.refresh_from_db()
-    assert row.extracted_value == "reviewed value", "a reviewer was overwritten"
+    assert row.extracted_value == "what the agent proposed", "a re-run overwrote it"
+    assert row.final_value == "what the reviewer decided", "the reviewer was lost"
     assert row.status == ProvenanceStatus.CONFLICT
     assert result.conflicted == [row]
     assert result.updated == []
@@ -416,3 +425,37 @@ def test_is_protected_agrees_with_the_status():
         row = FieldProvenance(status=status)
         expected = status in (ProvenanceStatus.CONFIRMED, ProvenanceStatus.EDITED)
         assert row.is_protected is expected, status
+
+
+# ── PR #547 review · has_source must mirror the constraint ───────────
+
+
+@pytest.mark.parametrize("span", [{}, [], {"recording_id": "r_01"}])
+def test_has_source_agrees_with_the_database_for_any_span(span):
+    """An empty span is grounded to PostgreSQL, so it must be here too.
+
+    ``has_source`` used truthiness while the constraint asks IS NOT NULL, so
+    ``{}`` and ``[]`` were storable yet reported ungrounded — two readings of
+    one rule disagreeing, which is what putting the rule in the database was
+    meant to prevent.
+    """
+    session = make_session()
+    row = FieldProvenance.objects.create(
+        session=session,
+        tenant=session.tenant,
+        model_name="Company",
+        field_name="legal_name",
+        extracted_value="value",
+        source_span=span,
+    )
+
+    row.refresh_from_db()
+    assert row.source_span == span, "the span did not survive the round trip"
+    assert row.has_source is True
+
+
+def test_has_source_is_false_only_when_all_three_are_null():
+    row = FieldProvenance(
+        source_recording_id=None, source_span=None, source_media_id=None
+    )
+    assert row.has_source is False

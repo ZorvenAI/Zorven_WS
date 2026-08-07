@@ -700,7 +700,22 @@ class FieldProvenance(models.Model):
     @property
     def has_source(self) -> bool:
         """The Python-side reading of the constraint, for callers that want
-        to check before writing rather than catch an IntegrityError."""
-        return bool(
-            self.source_recording_id or self.source_span or self.source_media_id
+        to check before writing rather than catch an IntegrityError.
+
+        ``is not None`` rather than truthiness, because the constraint asks
+        ``IS NOT NULL``. An empty ``source_span`` — ``{}`` or ``[]`` — is
+        grounded as far as PostgreSQL is concerned, and a truthy test called
+        it ungrounded. Two readings of one rule that disagree is exactly what
+        putting the rule in the database was meant to avoid.
+
+        This does mean an empty span counts, which is faithful to the
+        constraint but arguably too permissive as provenance. Tightening that
+        means tightening the constraint, which the B-05 card specifies
+        verbatim — so it belongs in a follow-up, not in a property whose job
+        is to mirror it.
+        """
+        return (
+            self.source_recording_id is not None
+            or self.source_span is not None
+            or self.source_media_id is not None
         )
