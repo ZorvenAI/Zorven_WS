@@ -64,6 +64,9 @@ documents, deliberately:
 |---|---|---|---|
 | Role denied | A-06 AC-3 says ERR-03 | **ERR-04** | §18.4 assigns ERR-03 to *consent* (IG-08). Collapsing them makes a permissions bug look like a consent bug on call. |
 | Unknown skill id | §5 PG-02 says ERR-06 | **ERR-17** (provisional) | §18.4 already spends ERR-06 on "live session already active" (409/4409). Reusing it would tell an operator a meeting is running when a skill id is simply wrong. |
+| Django cannot reach this service | C-01 AC-3 says ERR-13 | **ERR-19** (provisional) | §18.4 spends ERR-13 on a field conflict needing a human (202). ERR-07/08/09 are *this* service's degraded dependencies; nothing covers the reverse direction. |
+| Bad `X-Service-Token` | *(no code exists)* | **ERR-20** (provisional) | C-01 reached for ERR-01, which §18.4 defines as "Invalid or expired JWT" at 401. These endpoints have no JWT to be invalid. |
+| `SERVICE_TOKEN` unset | *(no code exists)* | **ERR-21** (provisional) | Distinct from ERR-20: a 503 the operator fixes by setting a secret, not a 401 the caller fixes. C-01 returned the 401-coded ERR-01 with a 503 status. |
 
 Both need reconciling in the design; until then the code is right and the
 documents are not.

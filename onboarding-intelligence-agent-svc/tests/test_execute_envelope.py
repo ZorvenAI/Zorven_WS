@@ -146,7 +146,7 @@ def test_a_wrong_token_is_refused(client):
     response = client.post(EXECUTE, json=valid_body(), headers=headers("nope"))
 
     assert response.status_code == 401
-    assert response.json()["detail"]["code"] == "ERR-01"
+    assert response.json()["detail"]["code"] == "ERR-20"
 
 
 def test_an_empty_token_is_refused(client):
@@ -174,6 +174,10 @@ def test_an_unconfigured_service_refuses_everything(monkeypatch, app_with_live_r
         response = test_client.post(EXECUTE, json=valid_body(), headers=headers())
 
     assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "ERR-21", (
+        "a misconfigured service must not report itself as a caller auth "
+        "failure — that sends an operator to the wrong runbook"
+    )
 
 
 # ── AC-2 · conversation state, as mechanism ──────────────────────────
@@ -249,3 +253,45 @@ async def test_the_chat_key_carries_a_ttl():
         await store.clear(tenant_id=tenant, chat_session_id=chat)
     finally:
         await manager.close()
+
+
+# ── The code and the status must agree with the taxonomy ─────────────
+
+
+@pytest.mark.parametrize(
+    "make_request,expected_code",
+    [
+        (lambda c: c.post(EXECUTE, json=valid_body(), headers={}), "ERR-20"),
+        (
+            lambda c: c.post(EXECUTE, json=valid_body(), headers=headers("nope")),
+            "ERR-20",
+        ),
+        (lambda c: c.post(EXECUTE, json=valid_body(), headers=headers("")), "ERR-20"),
+    ],
+)
+def test_an_auth_refusal_matches_its_own_spec(client, make_request, expected_code):
+    """C-01 shipped ERR-01 ("Invalid or expired JWT", 401) on a 503 branch.
+
+    The status happened to match on one of the two paths, which is why it read
+    as fine. Asserting the response against ERROR_SPECS rather than against a
+    hardcoded number is what makes the mismatch visible.
+    """
+    from app.core.errors import ERROR_SPECS, ErrorCode
+
+    response = make_request(client)
+    code = response.json()["detail"]["code"]
+
+    assert code == expected_code
+    spec = ERROR_SPECS[ErrorCode(code)]
+    assert response.status_code == spec.http_status, (
+        f"{code} responded {response.status_code} but its spec says "
+        f"{spec.http_status}"
+    )
+
+
+def test_service_token_failures_do_not_reuse_the_jwt_code(client):
+    """§18.4 reserves ERR-01 for JWT. This endpoint has no JWT to be invalid —
+    reporting one sends operators looking at the wrong subsystem."""
+    for hdrs in ({}, headers("nope"), headers("")):
+        body = client.post(EXECUTE, json=valid_body(), headers=hdrs).json()
+        assert body["detail"]["code"] != "ERR-01"

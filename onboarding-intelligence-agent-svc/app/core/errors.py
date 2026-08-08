@@ -61,6 +61,16 @@ class ErrorCode(StrEnum):
     #: the agent-to-Django direction. There is no code for the reverse.
     AGENT_UNAVAILABLE = "ERR-19"
 
+    #: Provisional (C-01 review). §10.2 authenticates the agent endpoints with
+    #: X-Service-Token, but §18.4 has no code for one — so C-01 reached for
+    #: ERR-01, which the taxonomy defines as "Invalid or expired JWT" at 401.
+    #: That misreports a service-token problem as an end-user auth problem,
+    #: and on the unconfigured path it pairs a 401 code with a 503 response.
+    #: These are two distinct conditions with different operator remedies, so
+    #: they get two codes rather than one shared "auth failed".
+    SERVICE_TOKEN_INVALID = "ERR-20"
+    SERVICE_TOKEN_NOT_CONFIGURED = "ERR-21"
+
 
 @dataclass(frozen=True)
 class ErrorSpec:
@@ -210,6 +220,28 @@ ERROR_SPECS: dict[ErrorCode, ErrorSpec] = {
         None,
         False,
         "Indicates a caller or configuration bug, not a user error",
+    ),
+    ErrorCode.SERVICE_TOKEN_INVALID: ErrorSpec(
+        ErrorCode.SERVICE_TOKEN_INVALID,
+        "Missing or incorrect X-Service-Token on an internal endpoint",
+        401,
+        None,
+        False,
+        (
+            "Check the caller's OIA_SERVICE_TOKEN matches this service's "
+            "SERVICE_TOKEN secret; retrying an unchanged token cannot succeed"
+        ),
+    ),
+    ErrorCode.SERVICE_TOKEN_NOT_CONFIGURED: ErrorSpec(
+        ErrorCode.SERVICE_TOKEN_NOT_CONFIGURED,
+        "This service has no SERVICE_TOKEN set and so authenticates nobody",
+        503,
+        None,
+        True,
+        (
+            "Set the SERVICE_TOKEN secret and redeploy; the service refuses "
+            "every caller until then, deliberately"
+        ),
     ),
     ErrorCode.AGENT_UNAVAILABLE: ErrorSpec(
         ErrorCode.AGENT_UNAVAILABLE,
