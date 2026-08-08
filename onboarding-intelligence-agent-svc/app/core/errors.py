@@ -237,7 +237,15 @@ ERROR_SPECS: dict[ErrorCode, ErrorSpec] = {
         "This service has no SERVICE_TOKEN set and so authenticates nobody",
         503,
         None,
-        True,
+        # Not retryable, though it is a 503 and it does resolve on its own
+        # eventually. Every other retryable=True code clears within seconds
+        # and without a human — a degraded dependency recovers, a rate limit
+        # expires, a buffered write flushes. This one needs someone to set a
+        # secret and redeploy, so the flag would only buy a retry storm across
+        # an unbounded window. It also contradicted this spec's own remedy
+        # text, which is the same kind of internal disagreement as the
+        # code/status mismatch that prompted these codes.
+        False,
         (
             "Set the SERVICE_TOKEN secret and redeploy; the service refuses "
             "every caller until then, deliberately"

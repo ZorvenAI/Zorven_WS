@@ -259,26 +259,33 @@ async def test_the_chat_key_carries_a_ttl():
 
 
 @pytest.mark.parametrize(
-    "make_request,expected_code",
+    "token,unconfigured,expected_code",
     [
-        (lambda c: c.post(EXECUTE, json=valid_body(), headers={}), "ERR-20"),
-        (
-            lambda c: c.post(EXECUTE, json=valid_body(), headers=headers("nope")),
-            "ERR-20",
-        ),
-        (lambda c: c.post(EXECUTE, json=valid_body(), headers=headers("")), "ERR-20"),
+        (None, False, "ERR-20"),
+        ("nope", False, "ERR-20"),
+        ("", False, "ERR-20"),
+        # The branch the whole change exists for. Review caught its absence:
+        # the three cases above are one code path sampled three ways, and the
+        # mismatch being fixed was on the *other* one.
+        (SERVICE_TOKEN, True, "ERR-21"),
     ],
 )
-def test_an_auth_refusal_matches_its_own_spec(client, make_request, expected_code):
+def test_an_auth_refusal_matches_its_own_spec(
+    app_with_live_redis, token, unconfigured, expected_code
+):
     """C-01 shipped ERR-01 ("Invalid or expired JWT", 401) on a 503 branch.
 
     The status happened to match on one of the two paths, which is why it read
     as fine. Asserting the response against ERROR_SPECS rather than against a
-    hardcoded number is what makes the mismatch visible.
+    hardcoded number is what makes the mismatch visible — on both paths.
     """
     from app.core.errors import ERROR_SPECS, ErrorCode
 
-    response = make_request(client)
+    with TestClient(app_with_live_redis) as test_client:
+        if unconfigured:
+            app_with_live_redis.state.settings.SERVICE_TOKEN = ""
+        response = test_client.post(EXECUTE, json=valid_body(), headers=headers(token))
+
     code = response.json()["detail"]["code"]
 
     assert code == expected_code
@@ -287,6 +294,21 @@ def test_an_auth_refusal_matches_its_own_spec(client, make_request, expected_cod
         f"{code} responded {response.status_code} but its spec says "
         f"{spec.http_status}"
     )
+
+
+def test_a_retryable_flag_must_not_promise_a_retry_that_cannot_work():
+    """ERR-21 shipped retryable=True while its own remedy said "redeploy".
+
+    Encoded as an invariant rather than a one-off: this flag is in to_body(),
+    so a client can act on it, and a 5xx that needs a human is the shape where
+    True turns into a retry storm across an unbounded window.
+    """
+    from app.core.errors import ERROR_SPECS, ErrorCode
+
+    spec = ERROR_SPECS[ErrorCode.SERVICE_TOKEN_NOT_CONFIGURED]
+
+    assert spec.retryable is False
+    assert "redeploy" in spec.operator_behaviour
 
 
 def test_service_token_failures_do_not_reuse_the_jwt_code(client):
