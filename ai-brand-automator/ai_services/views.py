@@ -314,6 +314,21 @@ def _resolve_brand_context(tenant, brand_context_id):
     return {}
 
 
+def _agent_role_for(user, tenant) -> str:
+    """The caller's platform role, for the agent's tenant_context.
+
+    §15 is explicit that roles come from the verified claim and never from a
+    body or a header the client controls. Django has already established the
+    membership; this reads it rather than trusting anything sent in.
+    """
+    from tenants.models import Membership
+
+    membership = Membership.objects.filter(user=user, tenant=tenant).first()
+    if membership is None:
+        return "VIEWER"
+    return str(membership.role).upper()
+
+
 def _process_chat_message(
     request, session, message, tenant, is_new_session, serializer
 ):
@@ -373,6 +388,63 @@ def _process_chat_message(
     # orchestrator selects a RAG-enabled manifest (e.g. rag-blog-social).
     if attachment_ids and intent_result["intent"] == "pipeline":
         intent_result["needs_rag"] = True
+
+    if intent_result["intent"] == "onboarding_prep":
+        # C-01: preparation happens in the chat the operator already uses,
+        # so this dispatches to the agent and answers in the same turn rather
+        # than spawning a pipeline job the operator would have to go and find.
+        from ai_services.onboarding_agent import dispatch_prep_turn
+
+        result = dispatch_prep_turn(
+            tenant_id=tenant.id,
+            user_id=request.user.id,
+            role=_agent_role_for(request.user, tenant),
+            trace_id=uuid.uuid4(),
+            chat_session_id=session.session_id,
+            prompt=message,
+        )
+
+        if result.ok:
+            payload = result.payload or {}
+            ai_response = payload.get("output", {}).get(
+                "detail", "Preparation is under way."
+            )
+            metadata = {
+                "onboarding_prep": True,
+                "skill_id": payload.get("skill_id"),
+            }
+        else:
+            # AC-3: name preparation as the thing that is unavailable and
+            # point at the manual path. A generic error would leave the
+            # operator retrying a feature that cannot answer.
+            ai_response = result.message
+            metadata = {"onboarding_prep": True, "error_code": result.code}
+
+        user_msg = ChatMessage.objects.create(
+            session=session, role="user", content=message
+        )
+        _push_input_history(tenant.id, session.session_id, message)
+        ChatMessage.objects.create(
+            session=session,
+            role="assistant",
+            content=ai_response,
+            metadata=metadata,
+        )
+        session.last_activity = timezone.now()
+        session.save(update_fields=["last_activity"])
+        _maybe_auto_title(session, message, is_new_session)
+        _invalidate_session_list_cache(tenant)
+
+        return Response(
+            {
+                "session_id": session.session_id,
+                "response": ai_response,
+                "thinking": "",
+                "onboarding_prep": metadata,
+                "user_message_id": user_msg.id,
+                "session_pk": session.pk,
+            }
+        )
 
     if intent_result["intent"] == "rag":
         # RAG / document query — dispatch to orchestrator general-chat pipeline

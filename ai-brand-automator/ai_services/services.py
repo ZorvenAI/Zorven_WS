@@ -972,6 +972,45 @@ class GeminiAIService:
         # When both RAG and pipeline signals are significant, prefer
         # "pipeline" — the orchestrator's PipelineComposer will include
         # RAG nodes in the dynamically composed pipeline.
+        # ── Onboarding preparation (C-01) ────────────────────────────
+        # Checked before the others because prep is a *specific* request that
+        # reads as generic to them: "prepare questions for the onboarding
+        # meeting" scores on pipeline keywords, and "what did we learn about
+        # this brand" scores on rag. Both would be routed away from the agent
+        # that exists to answer them.
+        #
+        # Two-signal, not keyword-count: the message must mention onboarding
+        # or a prep meeting *and* ask to prepare something. One signal alone
+        # is how "summarize the onboarding document" — a RAG query about an
+        # existing file — would get hijacked into the prep agent.
+        prep_subject = any(
+            kw in msg
+            for kw in (
+                "onboarding",
+                "onboarding call",
+                "onboarding meeting",
+                "discovery call",
+                "kickoff call",
+                "intake call",
+            )
+        )
+        prep_action = any(
+            kw in msg
+            for kw in (
+                "prepare",
+                "preparation",
+                "prep ",
+                "questionnaire",
+                "questions for",
+                "question list",
+                "what should i ask",
+                "what to ask",
+                "agenda",
+            )
+        )
+        if prep_subject and prep_action:
+            return {"intent": "onboarding_prep", "confidence": 0.9}
+
         if rag_score >= 2 and score >= 2:
             return {
                 "intent": "pipeline",
