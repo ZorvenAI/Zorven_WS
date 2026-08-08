@@ -381,5 +381,5 @@ def test_stop_relocks_through_the_tenant_scoped_queryset():
     from apps.onboarding.views import MeetingRecordingViewSet
 
     source = inspect.getsource(MeetingRecordingViewSet.stop)
-    assert "self.get_queryset().select_for_update()" in source
+    assert "self.get_queryset().select_for_update(" in source
     assert "MeetingRecording.objects.select_for_update()" not in source

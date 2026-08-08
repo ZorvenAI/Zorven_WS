@@ -493,4 +493,4 @@ def test_a_grant_locks_the_session_before_checking(public_tenant, editor):
     from apps.onboarding.views import OnboardingSessionViewSet
 
     source = inspect.getsource(OnboardingSessionViewSet._grant_consent)
-    assert "select_for_update()" in source
+    assert "select_for_update(" in source

@@ -42,8 +42,8 @@ LOCKING_METHODS = [
 def test_the_lock_uses_the_scoped_queryset(viewset, method):
     source = inspect.getsource(getattr(viewset, method))
 
-    assert "select_for_update()" in source, "this method no longer locks at all"
-    assert "self.get_queryset().select_for_update()" in source
+    assert "select_for_update(" in source, "this method no longer locks at all"
+    assert "self.get_queryset().select_for_update(" in source
     assert ".objects.select_for_update()" not in source, (
         "locking through the global manager: the lock and the permission "
         "check would disagree about which rows exist"

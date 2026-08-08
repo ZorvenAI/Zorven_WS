@@ -261,7 +261,7 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         # both see none and both create, and there is no unique constraint to
         # catch the second — which would make "was this lawful?" ambiguous in
         # exactly the way one record per conversation exists to prevent.
-        self.get_queryset().select_for_update().get(pk=session.pk)
+        self.get_queryset().select_for_update(of=("self",)).get(pk=session.pk)
 
         existing = (
             session.consent_records.filter(revoked_at__isnull=True)
@@ -425,7 +425,16 @@ class MeetingRecordingViewSet(
         # 404s a cross-tenant id — but a global re-fetch means the lock and
         # the permission check disagree about which rows exist, and it costs
         # an extra session query during serialisation.
-        recording = self.get_queryset().select_for_update().get(pk=recording.pk)
+        #
+        # of=("self",) is required, not stylistic. These querysets
+        # select_related nullable FKs, which become LEFT OUTER JOINs, and
+        # PostgreSQL refuses "FOR UPDATE cannot be applied to the nullable
+        # side of an outer join". Locking only this table sidesteps that
+        # while still locking the row that is about to be written — and it
+        # is why the original code reached for the global manager.
+        recording = (
+            self.get_queryset().select_for_update(of=("self",)).get(pk=recording.pk)
+        )
 
         if recording.stopped_at is not None:
             # Idempotent: a second stop must not move the duration. An
@@ -519,7 +528,7 @@ class FieldProvenanceViewSet(
         # is only *sequentially* idempotent: two concurrent confirms can both
         # read PENDING, both write CONFIRMED and both emit EVT-109, which
         # inflates the confirm-without-edit rate §17.3 reads as quality.
-        row = self.get_queryset().select_for_update().get(pk=row.pk)
+        row = self.get_queryset().select_for_update(of=("self",)).get(pk=row.pk)
 
         if row.status == ProvenanceStatus.CONFIRMED:
             return Response(self.get_serializer(row).data)
@@ -549,7 +558,7 @@ class FieldProvenanceViewSet(
         if refusal is not None:
             return refusal
 
-        row = self.get_queryset().select_for_update().get(pk=row.pk)
+        row = self.get_queryset().select_for_update(of=("self",)).get(pk=row.pk)
 
         payload = ProvenanceEditSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
