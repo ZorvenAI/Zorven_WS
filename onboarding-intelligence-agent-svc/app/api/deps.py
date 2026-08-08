@@ -39,7 +39,7 @@ async def verify_service_token(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
-                "code": ErrorCode.INVALID_JWT,
+                "code": ErrorCode.SERVICE_TOKEN_NOT_CONFIGURED,
                 "message": (
                     "This service has no SERVICE_TOKEN configured and cannot "
                     "authenticate callers."
@@ -51,7 +51,7 @@ async def verify_service_token(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
-                "code": ErrorCode.INVALID_JWT,
+                "code": ErrorCode.SERVICE_TOKEN_INVALID,
                 "message": f"A valid {SERVICE_TOKEN_HEADER} header is required.",
             },
         )
