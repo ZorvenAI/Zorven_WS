@@ -105,6 +105,12 @@ IMPLEMENTED = {
     "app.skills.registry",
 }
 
+#: C-01 implemented the PREP envelope and its auth: app.api.schemas carries
+#: the §10.2.1 models and app.api.deps verifies X-Service-Token. Neither is a
+#: stub any more, and this test failing is how that became a deliberate edit
+#: rather than a silent one.
+IMPLEMENTED |= {"app.api.deps", "app.api.schemas"}
+
 #: A-06 turned the sixteen skill modules into registry-resolvable classes.
 #: They are no longer bare stubs — the class is real and instantiable, and it
 #: is the *body* that is deferred. test_skill_bodies_are_deferred covers them.
@@ -211,3 +217,36 @@ def test_pyproject_pins_the_fleet_toolchain():
     assert "line-length = 88" in pyproject
     assert "strict = true" in pyproject
     assert 'python_version = "3.12"' in pyproject
+
+
+def test_every_error_code_has_a_spec():
+    """The taxonomy is "defined once, here" — so every member must resolve.
+
+    ``OIAError.code`` is a class attribute, so a subclass carrying a
+    spec-less code raises KeyError at construction: the failure surfaces the
+    first time that error is *raised*, which is exactly when nobody wants to
+    discover it. C-01 added ERR-19 to the enum and not to ERROR_SPECS, and
+    review caught it because no test did.
+    """
+    from app.core.errors import ERROR_SPECS, ErrorCode
+
+    missing = [code.name for code in ErrorCode if code not in ERROR_SPECS]
+    assert not missing, f"ErrorCode members with no ErrorSpec: {missing}"
+
+
+def test_no_spec_describes_a_code_that_does_not_exist():
+    """The reverse: a spec keyed to a retired code is dead weight that reads
+    as coverage."""
+    from app.core.errors import ERROR_SPECS, ErrorCode
+
+    unknown = [str(code) for code in ERROR_SPECS if code not in set(ErrorCode)]
+    assert not unknown, f"specs for unknown codes: {unknown}"
+
+
+def test_each_spec_is_self_consistent():
+    """A spec whose key and payload disagree would report the wrong code in
+    to_body(), which is what a caller logs and alerts on."""
+    from app.core.errors import ERROR_SPECS
+
+    for code, spec in ERROR_SPECS.items():
+        assert spec.code == code, f"{code} is keyed to a spec for {spec.code}"

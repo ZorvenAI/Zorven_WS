@@ -46,6 +46,12 @@ TTL_LOCK: Final[int] = 2 * 60 * 60
 #: or a documented exemption once the database is shared; this is the TTL.
 TTL_CONFIG: Final[int] = 7 * 24 * 60 * 60
 
+#: §14 lists no chat key at all — C-01 introduces one, so it needs a TTL the
+#: way TTL_CONFIG did. Four hours sliding, matching TTL_SESSION: a prep
+#: conversation is the same span of work as the session it prepares, and the
+#: card is explicit that "an untimed key on a shared Redis is a slow leak".
+TTL_CHAT: Final[int] = 4 * 60 * 60
+
 #: §14: the transcript list is capped so reconnect replay has a known worst
 #: case. ~8 segments/minute means a 60-minute meeting stays under 500.
 TRANSCRIPT_MAX_ENTRIES: Final[int] = 4000
@@ -74,6 +80,15 @@ class TenantKeys:
     def session_summary(self, session_id: str) -> str:
         """String · 24 h · compressed L3 summary."""
         return f"{self._scope}session:{session_id}:summary"
+
+    def chat(self, chat_session_id: str) -> str:
+        """List · 4 h sliding · prep conversation turns (C-01).
+
+        Keyed on the *chat* session, not the onboarding session: a prep
+        conversation starts before any OnboardingSession exists, which is the
+        whole point of preparing in the chat the operator already uses.
+        """
+        return f"{self._scope}chat:{chat_session_id}"
 
     # ── Live meeting ─────────────────────────────────────────
     def transcript(self, session_id: str) -> str:
