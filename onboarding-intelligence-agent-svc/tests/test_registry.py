@@ -215,5 +215,8 @@ async def test_a_normal_skill_is_unaffected_by_origin(registry):
         tenant_context=TenantContext(tenant_id="t-1", role="ADMIN"),
         origin=Origin.EXTERNAL,
     )
+    # SKL-OIA-02, not 01: C-02 gave SKL-OIA-01 a body, and this test needs a
+    # skill whose NotImplementedError proves the call reached the body rather
+    # than being stopped by the origin gate.
     with pytest.raises(NotImplementedError):
-        await registry.execute("SKL-OIA-01", ctx)
+        await registry.execute("SKL-OIA-02", ctx)

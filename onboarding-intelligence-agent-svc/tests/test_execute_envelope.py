@@ -90,13 +90,19 @@ def test_execute_envelope(client):
     assert set(body["usage"]) == {"input_tokens", "output_tokens", "duration_ms"}
 
 
-def test_the_response_says_plainly_that_no_skill_ran(client):
-    """C-02 and C-03 bring the skills. Until then a caller must be able to
-    tell "nothing is wired up" from "a skill ran and produced nothing"."""
+def test_the_response_names_the_skill_that_ran(client):
+    """Superseded C-01's ``skill_id == "NONE"`` case.
+
+    C-01 returned NONE so a caller could tell "nothing is wired up" from "a
+    skill ran and produced nothing", and said in its own docstring that C-02
+    and C-03 bring the skills. C-02 gives SKL-OIA-01 a body, so the honest
+    answer changed. Rewritten rather than deleted, because the property worth
+    keeping is that the response says truthfully what ran.
+    """
     body = client.post(EXECUTE, json=valid_body(), headers=headers()).json()
 
-    assert body["skill_id"] == "NONE"
-    assert "SKL-OIA-01" in body["output"]["detail"]
+    assert body["skill_id"] == "SKL-OIA-01"
+    assert "research_brief" in body["output"]
 
 
 @pytest.mark.parametrize(
@@ -198,10 +204,17 @@ def test_multi_turn_history_accumulates(client):
     body["input_prompt"] = "Go deeper on their supply chain."
     second = client.post(EXECUTE, json=body, headers=headers()).json()
 
-    assert second["output"]["turns"] == 2
-    texts = [turn["text"] for turn in second["output"]["history"]]
-    assert texts[0] == "We're onboarding a coffee roaster in Pune."
-    assert texts[1] == "Go deeper on their supply chain."
+    # C-02 appends the agent's reply too, so the operator's turns are every
+    # other one. Asserting on the filtered operator turns rather than on
+    # positions keeps this about accumulation, which is what AC-2 is for.
+    assert second["output"]["turns"] == 3
+    operator_said = [
+        t["text"] for t in second["output"]["history"] if t["role"] == "operator"
+    ]
+    assert operator_said == [
+        "We're onboarding a coffee roaster in Pune.",
+        "Go deeper on their supply chain.",
+    ]
 
 
 def test_conversations_do_not_bleed_between_chats(client):

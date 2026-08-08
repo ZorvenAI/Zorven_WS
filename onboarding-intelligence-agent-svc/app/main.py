@@ -20,7 +20,10 @@ from app.core.logging import configure_logging, get_logger
 from app.core.telemetry import TraceContextMiddleware, configure_telemetry
 from app.events.emitter import EventEmitter
 from app.messaging.consumer import CommandConsumer
+from app.logic.prep_executor import PrepExecutor
 from app.messaging.producer import KafkaProducer
+from app.providers.llm import LLMProvider
+from app.providers.tavily import TavilyProvider
 from app.messaging.provision import provision, verify
 
 settings = get_settings()
@@ -66,6 +69,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
         except Exception as exc:  # noqa: BLE001 — reported via /health
             logger.warning("kafka_topic_provisioning_failed", error=str(exc))
+
+    # C-02. Built once: loading the registry parses YAML and imports sixteen
+    # modules, which is startup work rather than per-request work. The
+    # providers are constructed here so a missing key is visible at boot in
+    # the logs rather than on the first operator's turn.
+    app.state.prep = PrepExecutor(
+        app.state.redis,
+        tavily=TavilyProvider(settings.TAVILY_API_KEY),
+        llm=LLMProvider(settings.GEMINI_KEY),
+    )
+    if not settings.TAVILY_API_KEY:
+        logger.warning(
+            "tavily_not_configured",
+            detail="research will degrade to operator-provided information only",
+        )
 
     app.state.events = EventEmitter(app.state.kafka)
     await app.state.events.start()
