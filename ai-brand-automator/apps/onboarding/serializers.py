@@ -276,6 +276,7 @@ class MeetingRecordingSerializer(serializers.ModelSerializer):
     """
 
     has_summary = serializers.SerializerMethodField()
+    has_transcript = serializers.SerializerMethodField()
 
     class Meta:
         model = MeetingRecording
@@ -286,7 +287,14 @@ class MeetingRecordingSerializer(serializers.ModelSerializer):
             "status",
             "duration_s",
             "audio_asset",
-            "transcript_gcs_path",
+            # transcript_gcs_path is deliberately absent. It is an internal
+            # bucket path, and FR-LIB-01 says media is served "only through
+            # short-lived signed URLs minted per request" — handing out the
+            # raw path leaks infrastructure detail and routes around the
+            # design before it exists. The library only needs to know whether
+            # a transcript is there yet, which is the same reasoning that
+            # makes summary a presence flag.
+            "has_transcript",
             "has_summary",
             "started_at",
             "stopped_at",
@@ -295,6 +303,9 @@ class MeetingRecordingSerializer(serializers.ModelSerializer):
 
     def get_has_summary(self, obj) -> bool:
         return bool(obj.summary)
+
+    def get_has_transcript(self, obj) -> bool:
+        return bool(obj.transcript_gcs_path)
 
 
 class RecordingStopSerializer(serializers.Serializer):

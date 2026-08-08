@@ -419,7 +419,13 @@ class MeetingRecordingViewSet(
         transcript that does not exist yet.
         """
         recording = self.get_object()
-        recording = MeetingRecording.objects.select_for_update().get(pk=recording.pk)
+        # Re-locked through get_queryset(), not the global manager: that
+        # keeps the tenant filter and select_related("session") applied. The
+        # authorisation is not lost today — get_object() above already
+        # 404s a cross-tenant id — but a global re-fetch means the lock and
+        # the permission check disagree about which rows exist, and it costs
+        # an extra session query during serialisation.
+        recording = self.get_queryset().select_for_update().get(pk=recording.pk)
 
         if recording.stopped_at is not None:
             # Idempotent: a second stop must not move the duration. An
