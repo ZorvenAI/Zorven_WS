@@ -11,7 +11,11 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from apps.onboarding.models import FieldProvenance, OnboardingSession
+from apps.onboarding.models import (
+    ConsentRecord,
+    FieldProvenance,
+    OnboardingSession,
+)
 
 
 class OnboardingSessionSerializer(serializers.ModelSerializer):
@@ -25,6 +29,9 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
 
     legal_next_states = serializers.SerializerMethodField(
         help_text="Statuses reachable from the current one (§9.4)",
+    )
+    consent = serializers.SerializerMethodField(
+        help_text="Consent state for this session (AC-2); granted: false when none",
     )
 
     class Meta:
@@ -40,6 +47,7 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
             "prompt_versions",
             "evidence_manifest_hash",
             "legal_next_states",
+            "consent",
             "created_at",
             "updated_at",
         ]
@@ -55,6 +63,7 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
             # L-03's, not a client's (§17.2).
             "prompt_versions",
             "legal_next_states",
+            "consent",
         ]
 
     def get_legal_next_states(self, obj) -> list[str]:
@@ -67,6 +76,42 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
         from apps.onboarding import state
 
         return sorted(state.legal_targets(obj.status, obj.escalated_from))
+
+    def get_consent(self, obj) -> dict:
+        """Consent state for this session, never inherited (AC-2, AC-4).
+
+        Consent attaches to the specific conversation being recorded, not to
+        the customer relationship — the card calls AC-4 "the one people get
+        wrong". Because the FK is to *session*, a new session simply has no
+        consent row and reports granted: false. There is no inheritance to
+        suppress; the absence is structural.
+        """
+        prefetched = getattr(obj, "active_consents", None)
+        if prefetched is not None:
+            # The list endpoint attaches this, so N sessions cost one query
+            # rather than N. Falling back below keeps the serializer correct
+            # when it is used without the prefetch.
+            record = prefetched[0] if prefetched else None
+        else:
+            record = (
+                obj.consent_records.filter(revoked_at__isnull=True)
+                .order_by("-granted_at")
+                .first()
+            )
+
+        if record is None:
+            return {
+                "granted": False,
+                "granted_at": None,
+                "method": None,
+                "scope": None,
+            }
+        return {
+            "granted": True,
+            "granted_at": record.granted_at,
+            "method": record.method,
+            "scope": record.scope,
+        }
 
 
 class FieldProvenanceSerializer(serializers.ModelSerializer):
@@ -127,3 +172,94 @@ class ProvenanceEditSerializer(serializers.Serializer):
     """
 
     final_value = serializers.JSONField()
+
+
+class ConsentScopeSerializer(serializers.Serializer):
+    """The v1 shape of ``ConsentRecord.scope``.
+
+    The technical note asks for a declared shape now, because the column is
+    JSON precisely so it can grow — audio, transcript, captured media,
+    retention period — without a migration. Declaring it here means the growth
+    is deliberate rather than whatever a caller happened to send.
+
+    Every key is optional with a default, so an operator who ticks nothing
+    still produces a record that says what was consented to.
+    """
+
+    audio = serializers.BooleanField(default=True)
+    transcript = serializers.BooleanField(default=True)
+    captured_media = serializers.BooleanField(default=True)
+    retention_days = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=3650,
+        help_text="Tenant retention window for this recording; M-03 erases on it",
+    )
+
+
+class ConsentRecordSerializer(serializers.ModelSerializer):
+    """Read and write shape for consent (§10.2, IG-08).
+
+    ``granted_at`` and ``granted_by`` are read-only. FR-REC-01 is explicit
+    that the timestamp is server-set, and a client-chosen consent time is the
+    single field an incident would turn on — so it is not accepted even to be
+    ignored politely.
+    """
+
+    is_active = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = ConsentRecord
+        fields = [
+            "id",
+            "session",
+            "subject_name",
+            "granted_by",
+            "method",
+            "scope",
+            "granted_at",
+            "revoked_at",
+            "is_active",
+        ]
+        read_only_fields = [
+            "id",
+            "session",
+            # Server-set (FR-REC-01). A client-supplied value is discarded.
+            "granted_by",
+            "granted_at",
+            # Set by the revoke action, never by a body.
+            "revoked_at",
+            "is_active",
+        ]
+
+    def validate_scope(self, value):
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("scope must be an object.")
+        nested = ConsentScopeSerializer(data=value)
+        nested.is_valid(raise_exception=True)
+        # Merged rather than either alone. Returning ``value`` preserved
+        # unlisted keys but silently dropped the declared defaults, so a
+        # caller who ticked nothing stored ``{}`` — a record that does not say
+        # what was consented to, which is the opposite of the point. Returning
+        # ``validated_data`` alone would apply the defaults but discard the
+        # growth the JSON column exists for.
+        #
+        # Unlisted keys first, then the validated known keys on top: the
+        # latter carry both the defaults and any coercion.
+        return {**value, **nested.validated_data}
+
+
+class SessionConsentStateSerializer(serializers.Serializer):
+    """The ``consent`` object on a session read (AC-2).
+
+    A flat ``granted: false`` rather than a null, so the frontend renders a
+    state rather than checking for absence — and so "no consent" and "consent
+    we failed to load" cannot look alike.
+    """
+
+    granted = serializers.BooleanField()
+    granted_at = serializers.DateTimeField(allow_null=True)
+    method = serializers.CharField(allow_null=True)
+    scope = serializers.JSONField(allow_null=True)
