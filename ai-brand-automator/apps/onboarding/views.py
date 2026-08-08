@@ -261,7 +261,7 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         # both see none and both create, and there is no unique constraint to
         # catch the second — which would make "was this lawful?" ambiguous in
         # exactly the way one record per conversation exists to prevent.
-        OnboardingSession.objects.select_for_update().get(pk=session.pk)
+        self.get_queryset().select_for_update().get(pk=session.pk)
 
         existing = (
             session.consent_records.filter(revoked_at__isnull=True)
@@ -519,7 +519,7 @@ class FieldProvenanceViewSet(
         # is only *sequentially* idempotent: two concurrent confirms can both
         # read PENDING, both write CONFIRMED and both emit EVT-109, which
         # inflates the confirm-without-edit rate §17.3 reads as quality.
-        row = FieldProvenance.objects.select_for_update().get(pk=row.pk)
+        row = self.get_queryset().select_for_update().get(pk=row.pk)
 
         if row.status == ProvenanceStatus.CONFIRMED:
             return Response(self.get_serializer(row).data)
@@ -549,7 +549,7 @@ class FieldProvenanceViewSet(
         if refusal is not None:
             return refusal
 
-        row = FieldProvenance.objects.select_for_update().get(pk=row.pk)
+        row = self.get_queryset().select_for_update().get(pk=row.pk)
 
         payload = ProvenanceEditSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
