@@ -20,6 +20,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.onboarding import errors
+from apps.onboarding.commands import publish_consent_revoked
 from apps.onboarding.field_map import label_for, page_for
 from apps.onboarding.events import (
     ACTION_CONFIRM,
@@ -34,6 +35,7 @@ from apps.onboarding.models import (
     tenant_scope_q,
 )
 from apps.onboarding.serializers import (
+    ConsentRecordSerializer,
     FieldProvenanceSerializer,
     OnboardingSessionSerializer,
     ProvenanceEditSerializer,
@@ -71,6 +73,15 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         # which is bare IsAuthenticated. A user with no tenant membership
         # would then reach tenant_scope_q(None) and read pre-tenant rows.
         "provenance": [IsAuthenticated, IsTenantViewer],
+        # §10.2 says Editor+ for consent. The story narrative says "As an
+        # Admin", but the endpoint table is the contract, and an Editor
+        # running the meeting is who captures consent. This is not the
+        # KEY/SECONDARY asymmetry from B-06 — consent is not Admin-gated.
+        #
+        # Listed explicitly because a custom action missing from this dict
+        # falls through to DEFAULT_PERMISSION_CLASSES, which is bare
+        # IsAuthenticated. That was the hole review caught on B-06.
+        "consent": [IsAuthenticated, IsTenantEditor],
     }
 
     def get_queryset(self):
@@ -202,6 +213,86 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             )
 
         return Response({"session": session.pk, "groups": groups})
+
+    @action(detail=True, methods=["post", "delete"])
+    @db_transaction.atomic
+    def consent(self, request, pk=None):
+        """``POST/DELETE /sessions/{id}/consent/`` — IG-08's prerequisite.
+
+        POST records consent; DELETE revokes it. One action for both because
+        they are the same resource, and a client that can find one can find
+        the other.
+        """
+        session = self.get_object()
+        if request.method == "DELETE":
+            return self._revoke_consent(session)
+        return self._grant_consent(request, session)
+
+    def _grant_consent(self, request, session):
+        """Record consent, with granted_by and granted_at set server-side.
+
+        FR-REC-01: the timestamp is the server's. A client-chosen consent time
+        is the single field an incident would turn on, so the serializer does
+        not accept it at all rather than accepting and discarding it.
+        """
+        existing = (
+            session.consent_records.filter(revoked_at__isnull=True)
+            .order_by("-granted_at")
+            .first()
+        )
+        if existing is not None:
+            # Idempotent rather than duplicating: two consent rows for one
+            # conversation would make "was this lawful?" ambiguous.
+            return Response(
+                ConsentRecordSerializer(existing).data, status=http.HTTP_200_OK
+            )
+
+        payload = ConsentRecordSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+
+        record = payload.save(
+            session=session,
+            tenant=session.tenant,
+            granted_by=request.user if request.user.is_authenticated else None,
+        )
+        return Response(
+            ConsentRecordSerializer(record).data, status=http.HTTP_201_CREATED
+        )
+
+    def _revoke_consent(self, session):
+        """Revoke, then tell the agent to drop any live socket.
+
+        The order matters: the revocation is committed to PostgreSQL before
+        the notification is attempted, because a revocation must succeed even
+        if the agent — or the broker — is down.
+
+        Closing the socket itself is F-04's; ``app/api/ws.py`` is still a stub,
+        so there is no socket to close today. This publishes the command with
+        the shape F-04 will consume.
+        """
+        record = (
+            session.consent_records.filter(revoked_at__isnull=True)
+            .order_by("-granted_at")
+            .select_for_update()
+            .first()
+        )
+        if record is None:
+            # Idempotent: nothing to revoke is not an error, and a 404 here
+            # would make a double-click look like a failure.
+            return Response(
+                {"granted": False, "detail": "No active consent for this session."},
+                status=http.HTTP_200_OK,
+            )
+
+        record.revoked_at = timezone.now()
+        record.save(update_fields=["revoked_at", "updated_at"])
+
+        publish_consent_revoked(
+            session_id=session.pk,
+            tenant_id=session.tenant_id,
+            consent_id=record.pk,
+        )
+        return Response(ConsentRecordSerializer(record).data, status=http.HTTP_200_OK)
 
 
 class FieldProvenanceViewSet(
