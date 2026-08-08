@@ -392,3 +392,105 @@ def test_the_serializer_itself_refuses_the_server_set_fields():
     fields = ConsentRecordSerializer().fields
     for name in ("granted_at", "granted_by", "revoked_at"):
         assert fields[name].read_only, f"{name} is writable by a client"
+
+
+# ── PR #549 review · all four findings were real ─────────────────────
+
+
+def test_scope_defaults_are_applied(public_tenant, editor):
+    """The docstring promised defaults; validate_scope returned the caller's
+    dict, so an operator who ticked nothing stored ``{}``.
+
+    A record that does not say what was consented to is the opposite of the
+    point of recording consent at all.
+    """
+    session = make_session(tenant=public_tenant, status=SessionStatus.READY)
+
+    client_for(editor, public_tenant).post(
+        consent_url(session),
+        {"subject_name": "Asha Kalyani", "method": ConsentMethod.CHECKBOX, "scope": {}},
+        format="json",
+    )
+
+    scope = session.consent_records.get().scope
+    assert scope["audio"] is True
+    assert scope["transcript"] is True
+    assert scope["captured_media"] is True
+
+
+def test_scope_defaults_do_not_overwrite_explicit_values(public_tenant, editor):
+    session = make_session(tenant=public_tenant, status=SessionStatus.READY)
+
+    client_for(editor, public_tenant).post(
+        consent_url(session),
+        {**VALID_BODY, "scope": {"audio": False}},
+        format="json",
+    )
+
+    scope = session.consent_records.get().scope
+    assert scope["audio"] is False, "an explicit value was overwritten by a default"
+    assert scope["transcript"] is True, "the default was not applied"
+
+
+def test_the_session_list_does_not_query_per_session(public_tenant, editor):
+    """The list and retrieve endpoints share a serializer, and the consent
+    field queried per row — 20 sessions meant 21 queries.
+
+    Asserted by counting, so a regression shows up as a number rather than as
+    a slow page nobody attributes to this.
+    """
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    client = client_for(editor, public_tenant)
+    for name in ("One", "Two", "Three", "Four"):
+        session = make_session(
+            company=make_company(tenant=None, name=name), tenant=public_tenant
+        )
+        make_consent(session=session)
+
+    with CaptureQueriesContext(connection) as captured:
+        response = client.get(SESSIONS)
+        assert response.status_code == 200
+
+    consent_queries = [
+        q
+        for q in captured.captured_queries
+        if "onboarding_sessions_consentrecord" in q["sql"]
+    ]
+    assert len(consent_queries) <= 1, (
+        f"{len(consent_queries)} consent queries for 4 sessions — the prefetch "
+        "is not being used"
+    )
+
+
+def test_the_revocation_command_is_published_after_the_commit():
+    """The docstring claimed commit-then-notify; the publish ran inside the
+    action's atomic block, so the command could be queued before the
+    revocation was visible.
+
+    Asserted against the source rather than by patching, because this codebase
+    does not mock and the requirement is precisely that the call site defers.
+    """
+    import inspect
+
+    from apps.onboarding.views import OnboardingSessionViewSet
+
+    source = inspect.getsource(OnboardingSessionViewSet._revoke_consent)
+    assert "on_commit(" in source
+    assert "\n        publish_consent_revoked(" not in source
+
+
+def test_a_grant_locks_the_session_before_checking(public_tenant, editor):
+    """Idempotency was only sequential: two concurrent POSTs could both see no
+    consent and both create, with no unique constraint to catch the second.
+
+    Asserts the lock is taken rather than simulating the interleaving, which
+    would need two connections and be flaky in CI.
+    """
+    import inspect
+
+    from apps.onboarding.views import OnboardingSessionViewSet
+
+    source = inspect.getsource(OnboardingSessionViewSet._grant_consent)
+    assert "select_for_update()" in source

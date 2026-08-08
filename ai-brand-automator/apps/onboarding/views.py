@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 
 from django.db import IntegrityError
+from django.db.models import Prefetch
 from django.db import transaction as db_transaction
 from django.utils import timezone
 from rest_framework import mixins
@@ -28,6 +29,7 @@ from apps.onboarding.events import (
     emit_provenance_reviewed,
 )
 from apps.onboarding.models import (
+    ConsentRecord,
     FieldClassification,
     FieldProvenance,
     OnboardingSession,
@@ -94,6 +96,17 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         """
         queryset = OnboardingSession.objects.select_related(
             "company", "questionnaire", "created_by"
+        ).prefetch_related(
+            # Without this the serializer's consent field costs one query per
+            # session, and the list endpoint uses the same serializer as
+            # retrieve — so a page of 20 sessions became 21 queries.
+            Prefetch(
+                "consent_records",
+                queryset=ConsentRecord.objects.filter(revoked_at__isnull=True).order_by(
+                    "-granted_at"
+                ),
+                to_attr="active_consents",
+            )
         )
         # Never read request.tenant directly — the fleet's defensive pattern.
         tenant = getattr(self.request, "tenant", None)
@@ -235,6 +248,13 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         is the single field an incident would turn on, so the serializer does
         not accept it at all rather than accepting and discarding it.
         """
+        # Lock the session before looking for existing consent. Without it
+        # the idempotency below is only sequential: two concurrent POSTs can
+        # both see none and both create, and there is no unique constraint to
+        # catch the second — which would make "was this lawful?" ambiguous in
+        # exactly the way one record per conversation exists to prevent.
+        OnboardingSession.objects.select_for_update().get(pk=session.pk)
+
         existing = (
             session.consent_records.filter(revoked_at__isnull=True)
             .order_by("-granted_at")
@@ -287,10 +307,17 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         record.revoked_at = timezone.now()
         record.save(update_fields=["revoked_at", "updated_at"])
 
-        publish_consent_revoked(
-            session_id=session.pk,
-            tenant_id=session.tenant_id,
-            consent_id=record.pk,
+        # on_commit, not inline: this runs inside the action's atomic block,
+        # so publishing here would queue the command before the revocation is
+        # visible to anyone else — an agent acting on it could read the row
+        # and still see consent granted. The docstring above already claimed
+        # commit-then-notify; this makes it true.
+        db_transaction.on_commit(
+            lambda: publish_consent_revoked(
+                session_id=session.pk,
+                tenant_id=session.tenant_id,
+                consent_id=record.pk,
+            )
         )
         return Response(ConsentRecordSerializer(record).data, status=http.HTTP_200_OK)
 

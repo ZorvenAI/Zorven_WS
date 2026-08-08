@@ -86,11 +86,19 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
         consent row and reports granted: false. There is no inheritance to
         suppress; the absence is structural.
         """
-        record = (
-            obj.consent_records.filter(revoked_at__isnull=True)
-            .order_by("-granted_at")
-            .first()
-        )
+        prefetched = getattr(obj, "active_consents", None)
+        if prefetched is not None:
+            # The list endpoint attaches this, so N sessions cost one query
+            # rather than N. Falling back below keeps the serializer correct
+            # when it is used without the prefetch.
+            record = prefetched[0] if prefetched else None
+        else:
+            record = (
+                obj.consent_records.filter(revoked_at__isnull=True)
+                .order_by("-granted_at")
+                .first()
+            )
+
         if record is None:
             return {
                 "granted": False,
@@ -231,10 +239,16 @@ class ConsentRecordSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("scope must be an object.")
         nested = ConsentScopeSerializer(data=value)
         nested.is_valid(raise_exception=True)
-        # The caller's dict, not validated_data: an unlisted key is kept so
-        # scope can grow without this serializer being the thing that drops
-        # it. Same reasoning as digital_presence in B-03.
-        return value
+        # Merged rather than either alone. Returning ``value`` preserved
+        # unlisted keys but silently dropped the declared defaults, so a
+        # caller who ticked nothing stored ``{}`` — a record that does not say
+        # what was consented to, which is the opposite of the point. Returning
+        # ``validated_data`` alone would apply the defaults but discard the
+        # growth the JSON column exists for.
+        #
+        # Unlisted keys first, then the validated known keys on top: the
+        # latter carry both the defaults and any coercion.
+        return {**value, **nested.validated_data}
 
 
 class SessionConsentStateSerializer(serializers.Serializer):
