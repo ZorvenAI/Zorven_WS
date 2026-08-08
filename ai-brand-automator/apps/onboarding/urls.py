@@ -12,12 +12,14 @@ from rest_framework.routers import DefaultRouter
 
 from apps.onboarding.views import (
     FieldProvenanceViewSet,
+    MeetingRecordingViewSet,
     OnboardingSessionViewSet,
 )
 
 router = DefaultRouter()
 router.register(r"sessions", OnboardingSessionViewSet, basename="onboarding-session")
 router.register(r"provenance", FieldProvenanceViewSet, basename="onboarding-provenance")
+router.register(r"recordings", MeetingRecordingViewSet, basename="onboarding-recording")
 
 urlpatterns = [
     path("", include(router.urls)),

@@ -20,6 +20,14 @@ the honest answer. Both the design and the backlog need reconciling.
 
 from __future__ import annotations
 
+#: No active ConsentRecord for the session (§18.4, 403 / 4403; IG-08).
+#:
+#: B-08's AC-1 asks for ERR-09, which §18.4 assigns to a degraded vision
+#: dependency at HTTP 200 — unrelated. ERR-03 is the code for exactly this,
+#: and its documented status is already 403. Unlike ERR-17 and ERR-18 no new
+#: code is needed here; the card simply names the wrong one.
+CONSENT_MISSING = "ERR-03"
+
 #: The caller's role does not permit this action (§18.4, 403).
 #:
 #: **Not ERR-03**, which several cards ask for. §18.4 spends ERR-03 on a
