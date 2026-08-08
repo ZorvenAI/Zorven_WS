@@ -10,10 +10,14 @@ the original app is mounted at the root rather than under its own name.
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from apps.onboarding.views import OnboardingSessionViewSet
+from apps.onboarding.views import (
+    FieldProvenanceViewSet,
+    OnboardingSessionViewSet,
+)
 
 router = DefaultRouter()
 router.register(r"sessions", OnboardingSessionViewSet, basename="onboarding-session")
+router.register(r"provenance", FieldProvenanceViewSet, basename="onboarding-provenance")
 
 urlpatterns = [
     path("", include(router.urls)),

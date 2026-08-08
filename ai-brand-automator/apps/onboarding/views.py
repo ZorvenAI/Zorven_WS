@@ -7,18 +7,41 @@ validated here rather than in the client.
 
 from __future__ import annotations
 
+import json
+
 from django.db import IntegrityError
 from django.db import transaction as db_transaction
+from django.utils import timezone
+from rest_framework import mixins
 from rest_framework import status as http
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.onboarding import errors
-from apps.onboarding.models import OnboardingSession, tenant_scope_q
-from apps.onboarding.serializers import OnboardingSessionSerializer
+from apps.onboarding.field_map import label_for, page_for
+from apps.onboarding.events import (
+    ACTION_CONFIRM,
+    ACTION_EDIT,
+    emit_provenance_reviewed,
+)
+from apps.onboarding.models import (
+    FieldClassification,
+    FieldProvenance,
+    OnboardingSession,
+    ProvenanceStatus,
+    tenant_scope_q,
+)
+from apps.onboarding.serializers import (
+    FieldProvenanceSerializer,
+    OnboardingSessionSerializer,
+    ProvenanceEditSerializer,
+)
 from apps.onboarding.services.session_state import InvalidTransition, transition
+from apps.onboarding.text import levenshtein
 from tenants.permissions import (
+    IsTenantAdmin,
     IsTenantEditor,
     IsTenantViewer,
     RoleBasedPermissionMixin,
@@ -139,3 +162,174 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         return Response(serializer.data)
+
+    @action(detail=True, methods=["get"])
+    def provenance(self, request, pk=None):
+        """``GET /sessions/{id}/provenance/`` — grouped by wizard page (AC-1).
+
+        Grouped rather than flat because the review page shows the extraction
+        in the order the operator would have typed it. A field with no page
+        lands in ``unmapped`` rather than being dropped, so a field added
+        without updating field_map.py looks wrong in review instead of
+        silently disappearing from it.
+        """
+        session = self.get_object()
+        rows = (
+            FieldProvenance.objects.filter(session=session)
+            .select_related("session")
+            .order_by("model_name", "field_name")
+        )
+
+        buckets: dict[object, list] = {}
+        for row in rows:
+            buckets.setdefault(page_for(row.field_name), []).append(row)
+
+        groups = []
+        for page in sorted(
+            buckets, key=lambda p: (p is None, p if p is not None else 0)
+        ):
+            groups.append(
+                {
+                    "page": page,
+                    "label": label_for(page),
+                    "fields": FieldProvenanceSerializer(buckets[page], many=True).data,
+                }
+            )
+
+        return Response({"session": session.pk, "groups": groups})
+
+
+class FieldProvenanceViewSet(
+    RoleBasedPermissionMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+):
+    """``/api/v1/onboarding/provenance/{id}/`` — review actions (§10.2).
+
+    Confirm and edit are POST actions rather than PATCH because they are not
+    field updates: each one records a human decision, sets the reviewer and
+    timestamp, and emits EVT-109. A PATCH surface would invite a client to
+    write ``status`` or ``extracted_value`` directly.
+    """
+
+    serializer_class = FieldProvenanceSerializer
+    queryset = FieldProvenance.objects.all()
+
+    role_permissions = {
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "confirm": [IsAuthenticated, IsTenantEditor],
+        "edit": [IsAuthenticated, IsTenantEditor],
+    }
+
+    def get_queryset(self):
+        tenant = getattr(self.request, "tenant", None)
+        return FieldProvenance.objects.select_related("session").filter(
+            tenant_scope_q(tenant)
+        )
+
+    def _refuse_key_without_admin(self, row):
+        """§15 and §10.2: "Admin (KEY) / Editor (SECONDARY)".
+
+        An Editor may run extraction but may not sign off an identity-defining
+        field — §3 puts it plainly, "KEY fields require explicit ADMIN
+        confirmation before final submit". Returns a response to send, or None
+        to proceed.
+        """
+        if row.classification != FieldClassification.KEY:
+            return None
+        if IsTenantAdmin().has_permission(self.request, self):
+            return None
+        return Response(
+            {
+                "code": errors.ROLE_DENIED,
+                "detail": (
+                    "A KEY field requires Admin confirmation. Editors may "
+                    "review SECONDARY fields only."
+                ),
+                "classification": row.classification,
+            },
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    @action(detail=True, methods=["post"])
+    def confirm(self, request, pk=None):
+        """Accept the extracted value as-is.
+
+        Idempotent: confirming an already-CONFIRMED row returns 200 and emits
+        nothing. A second event would inflate the confirm-without-edit rate
+        that §17.3 reads as extraction quality.
+        """
+        row = self.get_object()
+
+        refusal = self._refuse_key_without_admin(row)
+        if refusal is not None:
+            return refusal
+
+        if row.status == ProvenanceStatus.CONFIRMED:
+            return Response(self.get_serializer(row).data)
+
+        row.status = ProvenanceStatus.CONFIRMED
+        row.reviewed_by = request.user if request.user.is_authenticated else None
+        row.reviewed_at = timezone.now()
+        row.save(update_fields=["status", "reviewed_by", "reviewed_at", "updated_at"])
+
+        emit_provenance_reviewed(
+            tenant_id=row.tenant_id,
+            session_id=row.session_id,
+            field_name=row.field_name,
+            action=ACTION_CONFIRM,
+            edit_distance=0,
+            classification=row.classification,
+        )
+        return Response(self.get_serializer(row).data)
+
+    @action(detail=True, methods=["post"])
+    def edit(self, request, pk=None):
+        """Record a human value alongside — never over — the extracted one."""
+        row = self.get_object()
+
+        refusal = self._refuse_key_without_admin(row)
+        if refusal is not None:
+            return refusal
+
+        payload = ProvenanceEditSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        final_value = payload.validated_data["final_value"]
+
+        distance = levenshtein(_as_text(row.extracted_value), _as_text(final_value))
+
+        row.final_value = final_value
+        row.status = ProvenanceStatus.EDITED
+        row.reviewed_by = request.user if request.user.is_authenticated else None
+        row.reviewed_at = timezone.now()
+        # extracted_value is absent from update_fields on purpose: L-02 needs
+        # the agent's original proposal to compare against.
+        row.save(
+            update_fields=[
+                "final_value",
+                "status",
+                "reviewed_by",
+                "reviewed_at",
+                "updated_at",
+            ]
+        )
+
+        emit_provenance_reviewed(
+            tenant_id=row.tenant_id,
+            session_id=row.session_id,
+            field_name=row.field_name,
+            action=ACTION_EDIT,
+            edit_distance=distance,
+            classification=row.classification,
+        )
+        return Response(self.get_serializer(row).data)
+
+
+def _as_text(value) -> str:
+    """A value's string form, for edit distance only.
+
+    JSON values are canonicalised with sorted keys so that a reordering is
+    not mistaken for an edit. The result is used to compute one integer and
+    then discarded — it never reaches the event.
+    """
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, sort_keys=True, default=str)
