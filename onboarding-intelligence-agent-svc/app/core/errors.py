@@ -211,6 +211,17 @@ ERROR_SPECS: dict[ErrorCode, ErrorSpec] = {
         False,
         "Indicates a caller or configuration bug, not a user error",
     ),
+    ErrorCode.AGENT_UNAVAILABLE: ErrorSpec(
+        ErrorCode.AGENT_UNAVAILABLE,
+        "Django could not reach this service (C-01)",
+        503,
+        None,
+        True,
+        (
+            "Chat names preparation as temporarily unavailable and points at "
+            "the manual path; the caller's circuit breaker opens"
+        ),
+    ),
 }
 
 
