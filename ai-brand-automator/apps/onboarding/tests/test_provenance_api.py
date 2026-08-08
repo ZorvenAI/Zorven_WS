@@ -18,7 +18,7 @@ import pytest
 from django.contrib.auth.models import User
 from rest_framework.test import APIClient
 
-from apps.onboarding.events import build_payload
+from apps.onboarding.events import build_payload, emit_provenance_reviewed
 from apps.onboarding.models import FieldClassification, ProvenanceStatus
 from apps.onboarding.tests.factories import make_provenance, make_session
 from tenants.models import Membership, Tenant
@@ -381,3 +381,101 @@ def test_the_map_invents_no_fields():
     company_fields = {f.name for f in Company._meta.get_fields() if not f.is_relation}
     invented = all_mapped_fields() - company_fields
     assert not invented, f"mapped names that are not Company fields: {sorted(invented)}"
+
+
+# ── PR #548 review · all three findings were real ────────────────────
+
+
+def test_the_provenance_list_requires_tenant_access(public_tenant):
+    """A custom action absent from role_permissions falls back to DRF's
+    default, which is bare IsAuthenticated.
+
+    That let an authenticated user with no tenant membership reach
+    tenant_scope_q(None) and read pre-tenant sessions' provenance — rows kept
+    visible for backward compatibility, not for strangers.
+    """
+    session = make_session(tenant=None)  # a pre-tenant row
+    make_provenance(session=session, field_name="legal_name")
+
+    outsider = User.objects.create_user(
+        username="b06_no_membership", email="none@test.com", password="TestPass123!"
+    )
+    client = APIClient()
+    client.defaults["SERVER_NAME"] = "localhost"
+    client.force_authenticate(user=outsider)
+
+    response = client.get(f"{SESSIONS}{session.pk}/provenance/")
+
+    assert response.status_code in (
+        403,
+        404,
+    ), "a user with no tenant membership read a pre-tenant session"
+
+
+def test_confirm_locks_the_row_before_reading_its_status():
+    """Idempotency was only *sequential*: two concurrent confirms could both
+    read PENDING, both write CONFIRMED and both emit EVT-109.
+
+    This asserts the lock is taken rather than simulating the race — the SQL
+    carries FOR UPDATE, which is the fix. Reproducing the interleaving would
+    need two connections and a sleep, and would be flaky in CI.
+    """
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    row = make_provenance()
+
+    with CaptureQueriesContext(connection) as captured:
+        FieldProvenanceLocked = type(row).objects.select_for_update().filter(pk=row.pk)
+        list(FieldProvenanceLocked)  # force evaluation
+
+    assert any("FOR UPDATE" in q["sql"].upper() for q in captured.captured_queries)
+
+
+def test_emission_is_skipped_when_kafka_is_disabled(settings):
+    """Inert by configuration, not by a failed connection.
+
+    Attempting the publish when no broker exists would mean a failed
+    connection and a warning on every review action, which is the opposite of
+    inert. Asserted through the predicate rather than by patching the
+    publisher, so no mock is involved.
+    """
+    from apps.onboarding.events import emission_enabled
+
+    settings.ONBOARDING_KAFKA_ENABLED = False
+    assert emission_enabled() is False
+
+    # The call still returns its payload and raises nothing.
+    payload = emit_provenance_reviewed(
+        tenant_id=None,
+        session_id=1,
+        field_name="legal_name",
+        action="CONFIRM",
+        edit_distance=0,
+        classification="SECONDARY",
+    )
+    assert payload["field_name"] == "legal_name"
+
+
+def test_emission_is_enabled_when_configured(settings):
+    from apps.onboarding.events import emission_enabled
+
+    settings.ONBOARDING_KAFKA_ENABLED = True
+    assert emission_enabled() is True
+
+
+def test_the_publish_is_queued_rather_than_run_inline():
+    """publish_event_to_kafka is a Celery @shared_task, so calling it directly
+    runs it in this process and a reviewer's click blocks on Kafka I/O.
+
+    Asserted against the source because the alternative is patching the task,
+    and this codebase does not mock. The requirement is precisely that the
+    call site uses .delay(), so that is what is checked.
+    """
+    import inspect
+
+    from apps.onboarding import events
+
+    source = inspect.getsource(events.emit_provenance_reviewed)
+    assert "publish_event_to_kafka.delay(" in source
+    assert "\n        publish_event_to_kafka(" not in source

@@ -66,6 +66,11 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         "update": [IsAuthenticated, IsTenantEditor],
         "partial_update": [IsAuthenticated, IsTenantEditor],
         "destroy": [IsAuthenticated, IsTenantEditor],
+        # Custom actions are not covered by the entries above: an action name
+        # missing from this dict falls back to DEFAULT_PERMISSION_CLASSES,
+        # which is bare IsAuthenticated. A user with no tenant membership
+        # would then reach tenant_scope_q(None) and read pre-tenant rows.
+        "provenance": [IsAuthenticated, IsTenantViewer],
     }
 
     def get_queryset(self):
@@ -250,6 +255,7 @@ class FieldProvenanceViewSet(
         )
 
     @action(detail=True, methods=["post"])
+    @db_transaction.atomic
     def confirm(self, request, pk=None):
         """Accept the extracted value as-is.
 
@@ -262,6 +268,12 @@ class FieldProvenanceViewSet(
         refusal = self._refuse_key_without_admin(row)
         if refusal is not None:
             return refusal
+
+        # Lock before reading the status. Without this the idempotency below
+        # is only *sequentially* idempotent: two concurrent confirms can both
+        # read PENDING, both write CONFIRMED and both emit EVT-109, which
+        # inflates the confirm-without-edit rate §17.3 reads as quality.
+        row = FieldProvenance.objects.select_for_update().get(pk=row.pk)
 
         if row.status == ProvenanceStatus.CONFIRMED:
             return Response(self.get_serializer(row).data)
@@ -282,6 +294,7 @@ class FieldProvenanceViewSet(
         return Response(self.get_serializer(row).data)
 
     @action(detail=True, methods=["post"])
+    @db_transaction.atomic
     def edit(self, request, pk=None):
         """Record a human value alongside — never over — the extracted one."""
         row = self.get_object()
@@ -289,6 +302,8 @@ class FieldProvenanceViewSet(
         refusal = self._refuse_key_without_admin(row)
         if refusal is not None:
             return refusal
+
+        row = FieldProvenance.objects.select_for_update().get(pk=row.pk)
 
         payload = ProvenanceEditSerializer(data=request.data)
         payload.is_valid(raise_exception=True)

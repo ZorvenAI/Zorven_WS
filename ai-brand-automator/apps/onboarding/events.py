@@ -13,15 +13,22 @@ fans out to observability tooling with a different access model than the
 tenant-scoped store — a lower-trust surface that must never see a brand's
 actual data.
 
-Emission is best-effort by design. No ``deployment/gcp`` script provisions a
-broker and every deployed service sets ``*_KAFKA_ENABLED=false``, so this is
-inert in production today. A reviewer's click must not fail because a broker
-is missing, so every failure here is swallowed and logged.
+Emission is inert in production by *configuration*, not by failure. No
+``deployment/gcp`` script provisions a broker and every deployed service sets
+``*_KAFKA_ENABLED=false``, so the publish is skipped outright rather than
+attempted and lost — attempting it would mean a failed connection and a
+warning on every single review action.
+
+When it is enabled, the publish is queued through Celery rather than run
+inline: a reviewer's click must not block on Kafka I/O, and must not fail if
+the broker is unreachable.
 """
 
 from __future__ import annotations
 
 import logging
+
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +38,15 @@ EVENT_REF = "EVT-109"
 
 ACTION_CONFIRM = "CONFIRM"
 ACTION_EDIT = "EDIT"
+
+
+def emission_enabled() -> bool:
+    """Whether EVT-109 should be published at all.
+
+    A named predicate rather than an inline settings read, so the decision is
+    testable on its own without standing up a broker or patching one out.
+    """
+    return bool(getattr(settings, "ONBOARDING_KAFKA_ENABLED", False))
 
 
 def build_payload(
@@ -72,10 +88,21 @@ def emit_provenance_reviewed(
         classification=classification,
     )
 
+    if not emission_enabled():
+        # Inert by configuration rather than by failure. Every deployed
+        # service sets *_KAFKA_ENABLED=false and no deployment/gcp script
+        # provisions a broker, so attempting the publish would mean a failed
+        # connection and a warning on every single review action.
+        logger.debug("EVT-109 suppressed: Kafka disabled (field=%s)", field_name)
+        return payload
+
     try:
         from kafka_service.tasks import publish_event_to_kafka
 
-        publish_event_to_kafka(
+        # .delay(), not a direct call: publish_event_to_kafka is a Celery
+        # @shared_task, and calling it directly runs it in this process — a
+        # reviewer's click would then block on Kafka I/O.
+        publish_event_to_kafka.delay(
             topic=f"agent.events.{tenant_id}" if tenant_id else "agent.events",
             event_type=EVENT_TYPE,
             data={**payload, "session_id": str(session_id)},
@@ -83,7 +110,7 @@ def emit_provenance_reviewed(
         )
     except Exception:  # noqa: BLE001 - see the module docstring
         logger.warning(
-            "EVT-109 not published (event_ref=%s field=%s) — review still applied",
+            "EVT-109 not queued (event_ref=%s field=%s) — review still applied",
             EVENT_REF,
             field_name,
             exc_info=True,
