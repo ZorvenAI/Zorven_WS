@@ -366,20 +366,3 @@ def test_has_transcript_is_false_before_one_arrives(
     rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
 
     assert rows[0]["has_transcript"] is False
-
-
-def test_stop_relocks_through_the_tenant_scoped_queryset():
-    """A global re-fetch means the lock and the permission check disagree
-    about which rows exist.
-
-    Not a hole today — get_object() 404s a cross-tenant id first — but the
-    two should not be able to drift apart, and the scoped queryset also keeps
-    select_related("session") applied.
-    """
-    import inspect
-
-    from apps.onboarding.views import MeetingRecordingViewSet
-
-    source = inspect.getsource(MeetingRecordingViewSet.stop)
-    assert "self.get_queryset().select_for_update(" in source
-    assert "MeetingRecording.objects.select_for_update()" not in source

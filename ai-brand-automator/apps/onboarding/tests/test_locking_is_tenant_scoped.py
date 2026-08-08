@@ -40,11 +40,21 @@ LOCKING_METHODS = [
     ids=[f"{v.__name__}.{m}" for v, m in LOCKING_METHODS],
 )
 def test_the_lock_uses_the_scoped_queryset(viewset, method):
-    source = inspect.getsource(getattr(viewset, method))
+    # Three independent facts rather than one adjacency match: the method
+    # locks, the lock derives from the scoped queryset, and it does not use
+    # the global manager.
+    #
+    # The first version required "self.get_queryset().select_for_update("
+    # literally, and broke as soon as a comment appeared mid-chain — the
+    # brittleness a source-inspection test earns by asserting on shape
+    # instead of substance.
+    source = " ".join(inspect.getsource(getattr(viewset, method)).split())
 
     assert "select_for_update(" in source, "this method no longer locks at all"
-    assert "self.get_queryset().select_for_update(" in source
-    assert ".objects.select_for_update()" not in source, (
+    assert (
+        "self.get_queryset()" in source
+    ), "the lock does not derive from the tenant-scoped queryset"
+    assert ".objects.select_for_update(" not in source, (
         "locking through the global manager: the lock and the permission "
         "check would disagree about which rows exist"
     )
@@ -53,5 +63,5 @@ def test_the_lock_uses_the_scoped_queryset(viewset, method):
 def test_no_view_reaches_for_a_global_lock():
     """A blanket check, so a *new* action cannot reintroduce the pattern
     without this file noticing."""
-    source = inspect.getsource(views)
-    assert ".objects.select_for_update()" not in source
+    source = " ".join(inspect.getsource(views).split())
+    assert ".objects.select_for_update(" not in source

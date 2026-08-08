@@ -479,18 +479,3 @@ def test_the_revocation_command_is_published_after_the_commit():
     source = inspect.getsource(OnboardingSessionViewSet._revoke_consent)
     assert "on_commit(" in source
     assert "\n        publish_consent_revoked(" not in source
-
-
-def test_a_grant_locks_the_session_before_checking(public_tenant, editor):
-    """Idempotency was only sequential: two concurrent POSTs could both see no
-    consent and both create, with no unique constraint to catch the second.
-
-    Asserts the lock is taken rather than simulating the interleaving, which
-    would need two connections and be flaky in CI.
-    """
-    import inspect
-
-    from apps.onboarding.views import OnboardingSessionViewSet
-
-    source = inspect.getsource(OnboardingSessionViewSet._grant_consent)
-    assert "select_for_update(" in source

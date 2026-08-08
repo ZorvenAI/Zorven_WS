@@ -261,7 +261,17 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         # both see none and both create, and there is no unique constraint to
         # catch the second — which would make "was this lawful?" ambiguous in
         # exactly the way one record per conversation exists to prevent.
-        self.get_queryset().select_for_update(of=("self",)).get(pk=session.pk)
+        (
+            self.get_queryset()
+            # prefetch_related(None) because this get_queryset() prefetches
+            # consent_records for the list endpoint. The locked row is
+            # discarded — only the lock matters — so running that prefetch
+            # would be a second query inside the critical section, for a
+            # result nothing reads.
+            .prefetch_related(None)
+            .select_for_update(of=("self",))
+            .get(pk=session.pk)
+        )
 
         existing = (
             session.consent_records.filter(revoked_at__isnull=True)
