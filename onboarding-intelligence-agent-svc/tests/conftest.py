@@ -15,6 +15,9 @@ import pytest
 REQUIRED_ENV = {
     "OIA_BACKEND_BASE_URL": "http://backend:8001",
     "OIA_GCS_BUCKET": "zorven-raw-assets",
+    # C-01: /v1/execute refuses every caller when this is unset, which is the
+    # correct production behaviour but would make every test a 503.
+    "OIA_SERVICE_TOKEN": "test-service-token",
 }
 
 REDIS_URL = os.environ.get("OIA_TEST_REDIS_URL", "redis://localhost:6379/2")

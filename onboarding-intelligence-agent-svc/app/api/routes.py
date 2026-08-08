@@ -1,16 +1,26 @@
 """HTTP routes.
 
-A-05 delivers the health surface only. ``/v1/execute``, ``/v1/onboarding``,
-``/v1/process`` and ``/v1/process/{job_id}`` are declared in Design §4.2 and
-arrive with the stories that implement PREP and PROCESS.
+A-05 delivered the health surface. C-01 adds ``/v1/execute`` — the PREP
+envelope from §10.2.1 that C-02 through C-04 all ride. ``/v1/onboarding``,
+``/v1/process`` and ``/v1/process/{job_id}`` arrive with their own stories.
 """
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
-from fastapi import APIRouter, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+from app.api.deps import verify_service_token
+from app.api.schemas import (
+    ExecuteRequest,
+    ExecuteResponse,
+    GuardrailReport,
+    UsageReport,
+)
+from app.cache.conversation import ConversationStore
 
 router = APIRouter()
 
@@ -162,3 +172,53 @@ async def ready(request: Request, response: Response) -> dict[str, Any]:
 async def prometheus_metrics() -> Response:
     """Prometheus exposition (Design §20)."""
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+@router.post(
+    "/v1/execute",
+    response_model=ExecuteResponse,
+    dependencies=[Depends(verify_service_token)],
+)
+async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
+    """A PREP turn (§10.2.1, §2.1).
+
+    C-01 delivers the envelope, the auth and the conversation state. It does
+    not yet run a skill: SKL-OIA-01 and 02 are C-02 and C-03, and the registry
+    has no PREP skill registered to call. So the turn is recorded, the history
+    is returned, and ``skill_id`` says plainly that none ran.
+
+    Returning a truthful empty result beats either faking one or 501-ing: C-02
+    needs this envelope to exist to build against, and Django needs to be able
+    to route a turn end to end before there is anything to say back.
+    """
+    started = time.monotonic()
+    tenant_id = payload.tenant_context.tenant_id
+
+    store = ConversationStore(request.app.state.redis)
+    await store.append(
+        tenant_id=tenant_id,
+        chat_session_id=payload.chat_session_id,
+        role="operator",
+        text=payload.input_prompt,
+    )
+    history = await store.history(
+        tenant_id=tenant_id, chat_session_id=payload.chat_session_id
+    )
+
+    return ExecuteResponse(
+        status="SUCCEEDED",
+        # Named rather than left blank, so a caller reading the response can
+        # tell "no skill is wired up yet" from "a skill ran and produced
+        # nothing" — which are different bugs.
+        skill_id="NONE",
+        output={
+            "turns": len(history),
+            "history": history,
+            "detail": (
+                "Conversation recorded. Question generation arrives with "
+                "SKL-OIA-01 and SKL-OIA-02 (C-02, C-03)."
+            ),
+        },
+        guardrails=GuardrailReport(),
+        usage=UsageReport(duration_ms=int((time.monotonic() - started) * 1000)),
+    )

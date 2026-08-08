@@ -53,6 +53,14 @@ class ErrorCode(StrEnum):
     #: but §18.4 has already spent ERR-06 on live-session-active.
     SKILL_NOT_IN_ALLOWLIST = "ERR-17"
 
+    #: Provisional (C-01). Django could not reach this service — 503 or a
+    #: timeout. C-01's AC-3 asks for ERR-13, which §18.4 spends on a field
+    #: conflict requiring a human (202, SKL-OIA-14) — a different thing with a
+    #: different remedy. Nothing existing fits either: ERR-07/08/09 are *this*
+    #: service's own degraded dependencies and ERR-10 is a buffered write in
+    #: the agent-to-Django direction. There is no code for the reverse.
+    AGENT_UNAVAILABLE = "ERR-19"
+
 
 @dataclass(frozen=True)
 class ErrorSpec:

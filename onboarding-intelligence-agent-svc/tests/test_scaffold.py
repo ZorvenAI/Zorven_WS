@@ -105,6 +105,12 @@ IMPLEMENTED = {
     "app.skills.registry",
 }
 
+#: C-01 implemented the PREP envelope and its auth: app.api.schemas carries
+#: the §10.2.1 models and app.api.deps verifies X-Service-Token. Neither is a
+#: stub any more, and this test failing is how that became a deliberate edit
+#: rather than a silent one.
+IMPLEMENTED |= {"app.api.deps", "app.api.schemas"}
+
 #: A-06 turned the sixteen skill modules into registry-resolvable classes.
 #: They are no longer bare stubs — the class is real and instantiable, and it
 #: is the *body* that is deferred. test_skill_bodies_are_deferred covers them.
