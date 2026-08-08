@@ -111,6 +111,11 @@ IMPLEMENTED = {
 #: rather than a silent one.
 IMPLEMENTED |= {"app.api.deps", "app.api.schemas"}
 
+#: Implemented by C-02. §18.2 specified config/circuit_breakers.yaml and this
+#: module from the start, but no story owned building them — the scaffold
+#: docstring named A-06, whose acceptance criteria never mention breakers.
+IMPLEMENTED |= {"app.circuit_breaker.breaker", "app.providers.llm"}
+
 #: A-06 turned the sixteen skill modules into registry-resolvable classes.
 #: They are no longer bare stubs — the class is real and instantiable, and it
 #: is the *body* that is deferred. test_skill_bodies_are_deferred covers them.

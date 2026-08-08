@@ -1751,6 +1751,7 @@ services:
       - OIA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - OIA_POI_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - OIA_GEMINI_KEY=${GOOGLE_API_KEY:-}
+      - OIA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
       # Left empty by default on purpose. The kafka service sits behind the
       # with-kafka profile, so in the default stack there is no broker — and
       # unlike the rest of the fleet, OIA's /health treats a *configured*
