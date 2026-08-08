@@ -130,6 +130,11 @@ def dispatch_prep_turn(
     as unavailable, because AC-3 requires a specific message rather than "a
     generic error or a silent hang" — and because an exception escaping here
     would break the whole chat turn, not just its prep half.
+
+    "Never" includes the response body: an unreachable agent is the obvious
+    failure, but a *reachable* one answering 200 with a proxy's HTML error
+    page is the one that slipped through review. Decoding and shape-checking
+    are inside the guarantee, not after it.
     """
     if _breaker.is_open:
         logger.info("prep dispatch short-circuited: breaker open")
@@ -191,5 +196,35 @@ def dispatch_prep_turn(
             ok=False, code=ERR_AGENT_UNAVAILABLE, message=UNAVAILABLE_MESSAGE
         )
 
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        # A 2xx whose body is not JSON is something in front of the agent
+        # answering for it — a proxy error page served as 200 is the usual
+        # shape. requests raises JSONDecodeError here, which subclasses both
+        # ValueError and RequestException; ValueError is the portable half.
+        _breaker.record_failure()
+        logger.warning(
+            "prep dispatch got a %s with an undecodable body: %s",
+            response.status_code,
+            exc,
+        )
+        return AgentResult(
+            ok=False, code=ERR_AGENT_UNAVAILABLE, message=UNAVAILABLE_MESSAGE
+        )
+
+    if not isinstance(payload, dict):
+        # AgentResult.payload is typed dict | None and views.py calls .get()
+        # on it. A bare list or string decodes cleanly and then raises an
+        # AttributeError one frame further out, which is the same broken chat
+        # turn this function exists to prevent.
+        _breaker.record_failure()
+        logger.warning(
+            "prep dispatch got JSON that is not an object: %s", type(payload).__name__
+        )
+        return AgentResult(
+            ok=False, code=ERR_AGENT_UNAVAILABLE, message=UNAVAILABLE_MESSAGE
+        )
+
     _breaker.record_success()
-    return AgentResult(ok=True, payload=response.json())
+    return AgentResult(ok=True, payload=payload)

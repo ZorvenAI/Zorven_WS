@@ -214,3 +214,114 @@ def test_a_user_with_no_membership_is_a_viewer():
     user = User.objects.create_user("c01_none", "none@test.com", "TestPass123!")
 
     assert _agent_role_for(user, tenant) == "VIEWER"
+
+
+# ── AC-3 · a *reachable* agent that answers badly ────────────────────
+
+
+@pytest.fixture
+def bad_agent():
+    """A real HTTP server the dispatcher can actually call.
+
+    No mocks: a patched ``requests.post`` would prove the except-clause is
+    reachable, not that a real response takes it. The bug this covers —
+    ``response.json()`` outside the try — was invisible to every test that
+    pointed at a closed port, because a closed port never gets far enough to
+    decode a body.
+    """
+    import http.server
+    import threading
+
+    state = {"status": 200, "body": b"", "content_type": "application/json"}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.send_response(state["status"])
+            self.send_header("Content-Type", state["content_type"])
+            self.send_header("Content-Length", str(len(state["body"])))
+            self.end_headers()
+            self.wfile.write(state["body"])
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    import os
+
+    os.environ["OIA_SERVICE_URL"] = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        yield state
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def call_prep():
+    return dispatch_prep_turn(
+        tenant_id="t-1",
+        user_id="u-1",
+        role="ADMIN",
+        trace_id="trace-1",
+        chat_session_id="chat-1",
+        prompt="prepare questions for the onboarding meeting",
+    )
+
+
+def test_a_200_that_is_not_json_degrades_instead_of_raising(bad_agent):
+    """The review finding. A proxy in front of the agent serving its own HTML
+    error page with a 200 status is the realistic source."""
+    bad_agent["body"] = b"<html>502 Bad Gateway</html>"
+    bad_agent["content_type"] = "text/html"
+
+    result = call_prep()
+
+    assert result.ok is False
+    assert result.code == ERR_AGENT_UNAVAILABLE
+    assert result.message == UNAVAILABLE_MESSAGE
+
+
+def test_an_empty_200_body_degrades_instead_of_raising(bad_agent):
+    bad_agent["body"] = b""
+
+    assert call_prep().ok is False
+
+
+@pytest.mark.parametrize("body", [b"[1, 2, 3]", b'"just a string"', b"null", b"42"])
+def test_json_that_is_not_an_object_degrades(bad_agent, body):
+    """These decode cleanly, so the try/except alone does not catch them.
+
+    ``views.py`` calls ``payload.get("output", {})`` — a list would raise
+    AttributeError one frame out, which is the same broken chat turn measured
+    from a different place.
+    """
+    bad_agent["body"] = body
+
+    result = call_prep()
+
+    assert result.ok is False, f"{body!r} was accepted as a payload"
+    assert result.code == ERR_AGENT_UNAVAILABLE
+
+
+def test_a_well_formed_response_still_succeeds(bad_agent):
+    """The guard must not reject the good case it sits in front of."""
+    bad_agent["body"] = b'{"status": "SUCCEEDED", "output": {"detail": "ok"}}'
+
+    result = call_prep()
+
+    assert result.ok is True
+    assert result.payload["output"]["detail"] == "ok"
+
+
+def test_a_malformed_body_counts_toward_the_breaker(bad_agent):
+    """An agent returning garbage is unwell. Repeated garbage should open the
+    breaker rather than make every turn pay a full round-trip."""
+    from ai_services.onboarding_agent import BREAKER_THRESHOLD, _breaker
+
+    bad_agent["body"] = b"<html>nope</html>"
+
+    for _ in range(BREAKER_THRESHOLD):
+        assert call_prep().ok is False
+
+    assert _breaker.is_open, "malformed responses never tripped the breaker"
