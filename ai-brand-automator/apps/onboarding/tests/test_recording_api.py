@@ -307,14 +307,19 @@ def test_the_sweeper_index_exists():
     """
     from django.db import connection
 
+    # Introspection rather than a raw pg_indexes query against a hardcoded
+    # table name: _meta.db_table survives a rename, and the assertion then
+    # describes the *columns* the sweeper needs rather than a string that
+    # happens to match today.
     with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT indexdef FROM pg_indexes "
-            "WHERE tablename = 'onboarding_sessions_meetingrecording'"
+        constraints = connection.introspection.get_constraints(
+            cursor, MeetingRecording._meta.db_table
         )
-        definitions = " ".join(row[0].lower() for row in cursor.fetchall())
 
-    assert "status" in definitions and "started_at" in definitions
+    indexed_column_sets = [
+        tuple(c["columns"]) for c in constraints.values() if c.get("index")
+    ]
+    assert ("status", "started_at") in indexed_column_sets, indexed_column_sets
 
 
 def test_failed_is_reachable_and_visible_in_the_library(
@@ -328,3 +333,36 @@ def test_failed_is_reachable_and_visible_in_the_library(
 
     assert any(row["id"] == recording.pk for row in rows)
     assert rows[0]["status"] == RecordingStatus.FAILED
+
+
+# ── PR #550 review · all three findings were real ────────────────────
+
+
+def test_the_storage_path_is_not_exposed(consented_session, public_tenant, editor):
+    """FR-LIB-01: media is served "only through short-lived signed URLs minted
+    per request".
+
+    Handing out the raw bucket path leaks infrastructure detail and routes
+    around that design before it exists. The library only needs to know
+    whether a transcript has arrived.
+    """
+    make_recording(
+        session=consented_session,
+        transcript_gcs_path="gs://zorven-raw-assets/_raw/t-1/transcript.json",
+    )
+
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+
+    assert "transcript_gcs_path" not in rows[0]
+    assert rows[0]["has_transcript"] is True
+    assert "gs://" not in str(rows[0]), "a storage path reached the response"
+
+
+def test_has_transcript_is_false_before_one_arrives(
+    consented_session, public_tenant, editor
+):
+    make_recording(session=consented_session, transcript_gcs_path="")
+
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+
+    assert rows[0]["has_transcript"] is False
