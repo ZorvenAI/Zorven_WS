@@ -57,7 +57,7 @@ IG → RBAC → PG → OG.
 
 ## Error codes
 
-`app/core/errors.py` is the §18.4 taxonomy. Two codes deviate from the
+`app/core/errors.py` is the §18.4 taxonomy. Five codes deviate from the
 documents, deliberately:
 
 | Situation | Docs say | We use | Why |
@@ -68,8 +68,11 @@ documents, deliberately:
 | Bad `X-Service-Token` | *(no code exists)* | **ERR-20** (provisional) | C-01 reached for ERR-01, which §18.4 defines as "Invalid or expired JWT" at 401. These endpoints have no JWT to be invalid. |
 | `SERVICE_TOKEN` unset | *(no code exists)* | **ERR-21** (provisional) | Distinct from ERR-20: a 503 the operator fixes by setting a secret, not a 401 the caller fixes. C-01 returned the 401-coded ERR-01 with a 503 status. |
 
-Both need reconciling in the design; until then the code is right and the
-documents are not.
+All five need reconciling in the design; until then the code is right and the
+documents are not. The pattern behind them is worth naming: the documents were
+written before the taxonomy was, so cards cite codes §18.4 later spent on
+something else, and three conditions have no code at all. When a card names a
+code, check §18.4 before using it.
 
 ## Non-negotiables in this service
 
