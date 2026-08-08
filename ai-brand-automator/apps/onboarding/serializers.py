@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from apps.onboarding.models import OnboardingSession
+from apps.onboarding.models import FieldProvenance, OnboardingSession
 
 
 class OnboardingSessionSerializer(serializers.ModelSerializer):
@@ -67,3 +67,63 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
         from apps.onboarding import state
 
         return sorted(state.legal_targets(obj.status, obj.escalated_from))
+
+
+class FieldProvenanceSerializer(serializers.ModelSerializer):
+    """Read shape for the review page (§10.2).
+
+    ``extracted_value`` is read-only here and everywhere else. The B-06 card
+    calls preserving it "the single most important line in the endpoint":
+    L-02's golden-dataset candidates compare what a reviewer decided against
+    what the agent proposed, so an edit that overwrote the proposal would
+    leave the flywheel with no signal at all.
+    """
+
+    wizard_page = serializers.SerializerMethodField()
+    wizard_page_label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FieldProvenance
+        fields = [
+            "id",
+            "session",
+            "model_name",
+            "field_name",
+            "extracted_value",
+            "final_value",
+            "classification",
+            "confidence",
+            "source_recording",
+            "source_span",
+            "source_media",
+            "status",
+            "reviewed_by",
+            "reviewed_at",
+            "wizard_page",
+            "wizard_page_label",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields  # the whole row; writes go through the actions
+
+    def get_wizard_page(self, obj) -> int | None:
+        from apps.onboarding.field_map import page_for
+
+        return page_for(obj.field_name)
+
+    def get_wizard_page_label(self, obj) -> str:
+        from apps.onboarding.field_map import label_for, page_for
+
+        return label_for(page_for(obj.field_name))
+
+
+class ProvenanceEditSerializer(serializers.Serializer):
+    """The body of ``POST /provenance/{id}/edit/``.
+
+    Only ``final_value``: the reviewer says what the value should be, and the
+    server decides everything else — status, reviewer, timestamp and the edit
+    distance. Accepting ``extracted_value`` would hand a client the one field
+    that must not move.
+    """
+
+    final_value = serializers.JSONField()

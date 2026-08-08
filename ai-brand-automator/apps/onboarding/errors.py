@@ -20,6 +20,15 @@ the honest answer. Both the design and the backlog need reconciling.
 
 from __future__ import annotations
 
+#: The caller's role does not permit this action (§18.4, 403).
+#:
+#: **Not ERR-03**, which several cards ask for. §18.4 spends ERR-03 on a
+#: missing consent record (IG-08), so returning it for a permissions refusal
+#: would make an authorisation bug look like a consent bug on call — a
+#: materially different diagnosis at 2am. A-06 established ERR-04 for this and
+#: B-06 follows it; the cards are what need correcting.
+ROLE_DENIED = "ERR-04"
+
 #: Session id does not exist, or is not visible to this tenant (§18.4, 404).
 SESSION_NOT_FOUND = "ERR-05"
 
