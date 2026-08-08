@@ -31,16 +31,20 @@ from apps.onboarding.events import (
 from apps.onboarding.models import (
     ConsentRecord,
     FieldClassification,
+    MeetingRecording,
     FieldProvenance,
     OnboardingSession,
     ProvenanceStatus,
+    RecordingStatus,
     tenant_scope_q,
 )
 from apps.onboarding.serializers import (
     ConsentRecordSerializer,
     FieldProvenanceSerializer,
+    MeetingRecordingSerializer,
     OnboardingSessionSerializer,
     ProvenanceEditSerializer,
+    RecordingStopSerializer,
 )
 from apps.onboarding.services.session_state import InvalidTransition, transition
 from apps.onboarding.text import levenshtein
@@ -84,6 +88,10 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         # falls through to DEFAULT_PERMISSION_CLASSES, which is bare
         # IsAuthenticated. That was the hole review caught on B-06.
         "consent": [IsAuthenticated, IsTenantEditor],
+        # GET lists the library and POST opens a recording, so the method
+        # decides the role rather than the action name. Editor+ is enforced
+        # inside for the write; the entry keeps Viewer out of neither.
+        "recordings": [IsAuthenticated, IsTenantViewer],
     }
 
     def get_queryset(self):
@@ -320,6 +328,120 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             )
         )
         return Response(ConsentRecordSerializer(record).data, status=http.HTTP_200_OK)
+
+    @action(detail=True, methods=["get", "post"])
+    @db_transaction.atomic
+    def recordings(self, request, pk=None):
+        """``GET/POST /sessions/{id}/recordings/`` — the library and its opener."""
+        session = self.get_object()
+        if request.method == "POST":
+            return self._open_recording(request, session)
+        return self._list_recordings(session)
+
+    def _list_recordings(self, session):
+        """Newest first, with what the library rail needs (AC-3, FR-LIB-01).
+
+        Read-only for every role including Viewer: a Viewer sees the same
+        list, which is what "truthful mid-flight status" means for the person
+        watching rather than running the meeting.
+        """
+        rows = MeetingRecording.objects.filter(session=session).order_by("-started_at")
+        return Response(MeetingRecordingSerializer(rows, many=True).data)
+
+    def _open_recording(self, request, session):
+        """Refuse without consent, server-side (AC-1, IG-08).
+
+        The gate is here and not only in the UI because IG-08 says so, and
+        because a client that can call this endpoint can skip whatever the UI
+        would have prevented. No row is created on refusal — a RECORDING row
+        for a meeting that never lawfully started would be worse than the
+        error.
+        """
+        if not IsTenantEditor().has_permission(request, self):
+            return Response(
+                {
+                    "code": errors.ROLE_DENIED,
+                    "detail": "Opening a recording requires Editor or above.",
+                },
+                status=http.HTTP_403_FORBIDDEN,
+            )
+
+        has_consent = session.consent_records.filter(revoked_at__isnull=True).exists()
+        if not has_consent:
+            return Response(
+                {
+                    "code": errors.CONSENT_MISSING,
+                    "detail": (
+                        "This session has no active consent. Record consent "
+                        "before starting a recording."
+                    ),
+                },
+                status=http.HTTP_403_FORBIDDEN,
+            )
+
+        recording = MeetingRecording.objects.create(
+            session=session,
+            tenant=session.tenant,
+            status=RecordingStatus.RECORDING,
+        )
+        return Response(
+            MeetingRecordingSerializer(recording).data, status=http.HTTP_201_CREATED
+        )
+
+
+class MeetingRecordingViewSet(
+    RoleBasedPermissionMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+):
+    """``/api/v1/onboarding/recordings/{id}/`` — finalising a cycle (§10.2)."""
+
+    serializer_class = MeetingRecordingSerializer
+    queryset = MeetingRecording.objects.all()
+
+    role_permissions = {
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "stop": [IsAuthenticated, IsTenantEditor],
+    }
+
+    def get_queryset(self):
+        tenant = getattr(self.request, "tenant", None)
+        return MeetingRecording.objects.select_related("session").filter(
+            tenant_scope_q(tenant)
+        )
+
+    @action(detail=True, methods=["post"])
+    @db_transaction.atomic
+    def stop(self, request, pk=None):
+        """Finalise exactly the row it opened (AC-2).
+
+        ``UPLOADED``, never ``TRANSCRIBED``: the transcript arrives
+        asynchronously from F-05 or the F-06 backfill, and the library has to
+        be able to say "transcribing" honestly rather than claiming a
+        transcript that does not exist yet.
+        """
+        recording = self.get_object()
+        recording = MeetingRecording.objects.select_for_update().get(pk=recording.pk)
+
+        if recording.stopped_at is not None:
+            # Idempotent: a second stop must not move the duration. An
+            # operator double-clicking should not change what the library
+            # reports about their meeting.
+            return Response(MeetingRecordingSerializer(recording).data)
+
+        payload = RecordingStopSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+
+        recording.stopped_at = timezone.now()
+        recording.status = RecordingStatus.UPLOADED
+        # Only when the client reported one. Wall-clock is never computed —
+        # see RecordingStopSerializer for why.
+        duration = payload.validated_data.get("duration_s")
+        fields = ["stopped_at", "status", "updated_at"]
+        if duration is not None:
+            recording.duration_s = duration
+            fields.append("duration_s")
+
+        recording.save(update_fields=fields)
+        return Response(MeetingRecordingSerializer(recording).data)
 
 
 class FieldProvenanceViewSet(

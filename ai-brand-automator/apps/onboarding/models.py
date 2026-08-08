@@ -448,6 +448,11 @@ class MeetingRecording(models.Model):
         indexes = [
             models.Index(fields=["session", "status"]),
             models.Index(fields=["tenant", "status"]),
+            # For M-05's stuck-session sweeper (AC-4): "every recording still
+            # RECORDING that started before X". Added here rather than there
+            # because the query shape is a property of this table, and an
+            # index arriving with the sweeper would mean the first run scans.
+            models.Index(fields=["status", "started_at"]),
         ]
 
     def __str__(self) -> str:

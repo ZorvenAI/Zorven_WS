@@ -14,6 +14,7 @@ from rest_framework import serializers
 from apps.onboarding.models import (
     ConsentRecord,
     FieldProvenance,
+    MeetingRecording,
     OnboardingSession,
 )
 
@@ -263,3 +264,51 @@ class SessionConsentStateSerializer(serializers.Serializer):
     granted_at = serializers.DateTimeField(allow_null=True)
     method = serializers.CharField(allow_null=True)
     scope = serializers.JSONField(allow_null=True)
+
+
+class MeetingRecordingSerializer(serializers.ModelSerializer):
+    """The library row (AC-3, FR-LIB-01).
+
+    ``has_summary`` rather than the summary blob: AC-3 asks for "summary
+    presence", and the library lists rows rather than rendering them. Sending
+    the whole summary for every row would make a long meeting's list heavy for
+    a boolean's worth of information.
+    """
+
+    has_summary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MeetingRecording
+        fields = [
+            "id",
+            "session",
+            "modality",
+            "status",
+            "duration_s",
+            "audio_asset",
+            "transcript_gcs_path",
+            "has_summary",
+            "started_at",
+            "stopped_at",
+        ]
+        read_only_fields = fields  # writes go through open and stop
+
+    def get_has_summary(self, obj) -> bool:
+        return bool(obj.summary)
+
+
+class RecordingStopSerializer(serializers.Serializer):
+    """The body of ``POST /recordings/{id}/stop/``.
+
+    ``duration_s`` is optional and comes from the client's MediaRecorder,
+    which *is* the audio timeline FR-REC-02 requires — "elapsed time derives
+    from the audio timeline, not wall-clock, so a stalled tab does not report
+    phantom duration", to under a second over 45 minutes.
+
+    The server deliberately does not compute wall-clock between open and stop.
+    A paused upload or a slow network would make that number wrong, and a
+    wrong duration shown confidently in the library is worse than none.
+    F-03 corrects it from the stored asset once uploads exist.
+    """
+
+    duration_s = serializers.IntegerField(required=False, min_value=0, allow_null=True)
