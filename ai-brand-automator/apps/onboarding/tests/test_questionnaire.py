@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pytest
 from django.contrib.auth.models import User
+from django.db import DatabaseError, transaction
 from rest_framework.test import APIClient
 
 from apps.onboarding.field_map import all_mapped_fields
@@ -456,3 +457,440 @@ def test_a_malformed_tenant_header_is_a_400_not_a_500(api_client, bad):
 
     assert response.status_code == 400, response.content
     assert not Questionnaire.objects.exists()
+
+
+# ── C-04 AC-2 · approved questions are frozen, in the database ───────
+
+
+@pytest.fixture
+def approved(api_client, tenant):
+    """A questionnaire moved to APPROVED, with its questions in place."""
+    created = generate(api_client, tenant).json()
+    row = Questionnaire.objects.get(pk=created["id"])
+    row.status = QuestionnaireStatus.APPROVED
+    row.save()
+    return row
+
+
+def test_approval_freezes_version(approved):
+    """The card's named case.
+
+    Enforced by a PostgreSQL trigger rather than a save() guard, and the
+    parametrisation below is why: update() and bulk_update() skip save() and
+    every signal hanging off it, and both are the natural way to renumber a
+    set of questions. B-05 made the same call for the same reason.
+    """
+    question = Question.objects.filter(questionnaire=approved).first()
+    question.text = "edited after approval"
+
+    with pytest.raises(DatabaseError), transaction.atomic():
+        question.save()
+
+    question.refresh_from_db()
+    assert question.text != "edited after approval"
+
+
+@pytest.mark.parametrize("path", ["update", "bulk_update", "insert"])
+def test_every_write_path_to_an_approved_set_is_blocked(approved, path):
+    """The paths a Python guard would miss.
+
+    ``save()`` is the one people remember. These four are the ones that make a
+    model-level check a hole rather than a rule.
+    """
+    rows = list(Question.objects.filter(questionnaire=approved))
+
+    def act():
+        if path == "update":
+            Question.objects.filter(questionnaire=approved).update(text="x")
+        elif path == "bulk_update":
+            rows[0].text = "x"
+            Question.objects.bulk_update(rows, ["text"])
+        else:
+            Question.objects.create(
+                questionnaire=approved,
+                order=99,
+                text="sneaked in?",
+                origin=QuestionOrigin.PREPARED,
+                workflow_target="WF1",
+                target_field="",
+                status=QuestionStatus.OPEN,
+            )
+
+    with pytest.raises(DatabaseError), transaction.atomic():
+        act()
+
+    assert Question.objects.filter(questionnaire=approved).count() == len(rows)
+
+
+def test_a_draft_is_still_editable(api_client, tenant):
+    """The control. A trigger that froze everything would pass the tests above
+    while making refinement impossible — which is the rest of this story."""
+    created = generate(api_client, tenant).json()
+    question = Question.objects.filter(questionnaire_id=created["id"]).first()
+
+    question.text = "edited while draft"
+    question.save()
+
+    question.refresh_from_db()
+    assert question.text == "edited while draft"
+
+
+def test_deleting_the_questionnaire_still_cascades(approved):
+    """A cascade is not an edit. Blocking it would make an approved
+    questionnaire undeletable, which GDPR erasure (M-02) needs."""
+    approved.delete()
+
+    assert not Question.objects.filter(questionnaire_id=approved.pk).exists()
+
+
+def test_the_questionnaire_row_itself_can_still_change(approved):
+    """Approving is an UPDATE on Questionnaire, and superseding writes to it
+    again. Freezing the parent would block the very transition that sets
+    APPROVED."""
+    approved.is_template = True
+    approved.save()
+
+    approved.refresh_from_db()
+    assert approved.is_template is True
+
+
+def test_deleting_a_question_is_not_blocked_by_the_database(approved):
+    """A stated limit, not an oversight — recorded so nobody assumes otherwise.
+
+    The trigger covers INSERT and UPDATE, which are the paths an edit takes.
+    DELETE is not covered because no formulation of the check can tell an
+    individual delete apart from the cascade that M-02's erasure depends on:
+    Django removes children before the parent, so the parent still exists and
+    still reads APPROVED at the moment each child goes.
+
+    Refusing it is the service layer's job — see the refine endpoints, which
+    create a new version rather than touching an approved one. This test
+    exists so the gap is visible in the suite rather than only in a migration
+    docstring.
+    """
+    Question.objects.filter(questionnaire=approved).delete()
+
+    assert not Question.objects.filter(questionnaire=approved).exists()
+
+
+# ── C-04 AC-1 · refinement keeps ordering contiguous ─────────────────
+
+
+@pytest.fixture
+def editor(api_client, tenant):
+    user = User.objects.create_user("c04_editor", "e@test.com", "TestPass123!")
+    Membership.objects.create(user=user, tenant=tenant, role=Membership.Role.EDITOR)
+    api_client.force_authenticate(user=user)
+    return user
+
+
+@pytest.fixture
+def admin(api_client, tenant):
+    user = User.objects.create_user("c04_admin", "a@test.com", "TestPass123!")
+    Membership.objects.create(user=user, tenant=tenant, role=Membership.Role.ADMIN)
+    api_client.force_authenticate(user=user)
+    return user
+
+
+def a_draft(api_client, tenant) -> int:
+    """A stored DRAFT, created through the agent's endpoint."""
+    return generate(api_client, tenant).json()["id"]
+
+
+def orders(questionnaire_id) -> list[int]:
+    return list(
+        Question.objects.filter(questionnaire_id=questionnaire_id)
+        .order_by("order")
+        .values_list("order", flat=True)
+    )
+
+
+def test_rewrite_replaces_one_question(api_client, tenant):
+    qid = a_draft(api_client, tenant)
+    question = Question.objects.filter(questionnaire_id=qid).first()
+    editor_user = User.objects.create_user("rw", "rw@t.com", "TestPass123!")
+    Membership.objects.create(
+        user=editor_user, tenant=tenant, role=Membership.Role.EDITOR
+    )
+    api_client.force_authenticate(user=editor_user)
+
+    response = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/rewrite/",
+        {"question_id": question.pk, "text": "What is your average order value?"},
+        format="json",
+    )
+
+    assert response.status_code == 200, response.content
+    question.refresh_from_db()
+    assert question.text == "What is your average order value?"
+
+
+def test_dropping_a_question_closes_the_gap(api_client, tenant):
+    """AC-1: "leaves ordering contiguous". A hole would put the meeting view
+    out of step with the numbers the operator says out loud."""
+    qid = a_draft(api_client, tenant)
+    middle = Question.objects.filter(questionnaire_id=qid).order_by("order")[1]
+    user = User.objects.create_user("dr", "dr@t.com", "TestPass123!")
+    Membership.objects.create(user=user, tenant=tenant, role=Membership.Role.EDITOR)
+    api_client.force_authenticate(user=user)
+
+    response = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/drop/",
+        {"question_id": middle.pk},
+        format="json",
+    )
+
+    assert response.status_code == 200, response.content
+    assert orders(qid) == [0, 1]
+    assert Questionnaire.objects.get(pk=qid).question_count == 2
+
+
+def test_reorder_requires_every_question_exactly_once(api_client, tenant):
+    """A partial list would leave the rest in an order nobody chose."""
+    qid = a_draft(api_client, tenant)
+    ids = list(
+        Question.objects.filter(questionnaire_id=qid).values_list("id", flat=True)
+    )
+    user = User.objects.create_user("ro", "ro@t.com", "TestPass123!")
+    Membership.objects.create(user=user, tenant=tenant, role=Membership.Role.EDITOR)
+    api_client.force_authenticate(user=user)
+
+    partial = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/reorder/",
+        {"question_ids": ids[:2]},
+        format="json",
+    )
+    assert partial.status_code == 400
+
+    full = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/reorder/",
+        {"question_ids": list(reversed(ids))},
+        format="json",
+    )
+
+    assert full.status_code == 200, full.content
+    assert orders(qid) == [0, 1, 2]
+    reordered = list(
+        Question.objects.filter(questionnaire_id=qid)
+        .order_by("order")
+        .values_list("id", flat=True)
+    )
+    assert reordered == list(reversed(ids))
+
+
+def test_refining_an_approved_set_is_refused_with_advice(api_client, tenant, admin):
+    """The service-layer half of AC-2, and the delete gap the trigger leaves.
+
+    Refusing here rather than letting the trigger fire gives the operator the
+    useful answer — revise it — instead of an integrity error.
+    """
+    qid = a_draft(api_client, tenant)
+    api_client.post(f"/api/v1/onboarding/questionnaires/{qid}/approve/", format="json")
+    question = Question.objects.filter(questionnaire_id=qid).first()
+
+    for path, payload in (
+        ("rewrite", {"question_id": question.pk, "text": "x?"}),
+        ("drop", {"question_id": question.pk}),
+        ("reorder", {"question_ids": [question.pk]}),
+    ):
+        response = api_client.post(
+            f"/api/v1/onboarding/questionnaires/{qid}/{path}/", payload, format="json"
+        )
+        assert response.status_code == 409, (path, response.content)
+        assert "revise" in response.json()["detail"]
+
+    assert Question.objects.filter(questionnaire_id=qid).count() == 3
+
+
+# ── C-04 AC-2 · approval ─────────────────────────────────────────────
+
+
+def test_approval_sets_the_audit_fields(api_client, tenant, admin):
+    qid = a_draft(api_client, tenant)
+
+    response = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/approve/", format="json"
+    )
+
+    assert response.status_code == 200, response.content
+    row = Questionnaire.objects.get(pk=qid)
+    assert row.status == QuestionnaireStatus.APPROVED
+    assert row.approved_by == admin
+    assert row.approved_at is not None
+
+
+def test_approval_moves_the_session_to_ready(api_client, tenant, admin):
+    """AC-2's second half, through B-04's table rather than by assignment."""
+    from apps.onboarding.models import OnboardingSession, SessionStatus
+
+    company = Company.objects.create(tenant=tenant, name="Kalyani")
+    session = OnboardingSession.objects.create(
+        tenant=tenant, company=company, status=SessionStatus.PREPARING
+    )
+    qid = a_draft(api_client, tenant)
+    Questionnaire.objects.filter(pk=qid).update(session=session)
+
+    api_client.post(f"/api/v1/onboarding/questionnaires/{qid}/approve/", format="json")
+
+    session.refresh_from_db()
+    assert session.status == SessionStatus.READY
+
+
+def test_an_empty_questionnaire_cannot_be_approved(api_client, tenant, admin):
+    """Approving nothing would gate a meeting on a set with no questions."""
+    qid = a_draft(api_client, tenant)
+    Question.objects.filter(questionnaire_id=qid).delete()
+
+    response = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/approve/", format="json"
+    )
+
+    assert response.status_code == 400
+    assert Questionnaire.objects.get(pk=qid).status == QuestionnaireStatus.DRAFT
+
+
+def test_an_editor_cannot_approve(api_client, tenant, editor):
+    """§15 has no row for approval, so this follows the card's "As an Admin"
+    and CONFIRM_KEY_FIELD's precedent that a decision needs ADMIN."""
+    qid = a_draft(api_client, tenant)
+
+    response = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/approve/", format="json"
+    )
+
+    assert response.status_code == 403
+    assert Questionnaire.objects.get(pk=qid).status == QuestionnaireStatus.DRAFT
+
+
+# ── C-04 AC-3 · revision creates a version ───────────────────────────
+
+
+def test_reapproval_creates_new_version(api_client, tenant, admin):
+    """The card's named case. The approved version must survive intact — the
+    evidence spans on Question point at a specific version's rows."""
+    qid = a_draft(api_client, tenant)
+    api_client.post(f"/api/v1/onboarding/questionnaires/{qid}/approve/", format="json")
+    before = list(
+        Question.objects.filter(questionnaire_id=qid)
+        .order_by("order")
+        .values_list("text", flat=True)
+    )
+
+    response = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/revise/", format="json"
+    )
+
+    assert response.status_code == 201, response.content
+    draft = Questionnaire.objects.get(pk=response.json()["id"])
+    assert draft.version == 2
+    assert draft.status == QuestionnaireStatus.DRAFT
+    assert draft.supersedes_id == qid
+
+    approved = Questionnaire.objects.get(pk=qid)
+    assert approved.status == QuestionnaireStatus.APPROVED
+    after = list(
+        Question.objects.filter(questionnaire_id=qid)
+        .order_by("order")
+        .values_list("text", flat=True)
+    )
+    assert after == before, "the approved version changed"
+
+
+def test_editing_the_new_draft_leaves_the_approved_one_alone(api_client, tenant, admin):
+    """FR-PREP-05: the approved version stays byte-identical."""
+    qid = a_draft(api_client, tenant)
+    api_client.post(f"/api/v1/onboarding/questionnaires/{qid}/approve/", format="json")
+    draft_id = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/revise/", format="json"
+    ).json()["id"]
+    target = Question.objects.filter(questionnaire_id=draft_id).first()
+
+    api_client.post(
+        f"/api/v1/onboarding/questionnaires/{draft_id}/rewrite/",
+        {"question_id": target.pk, "text": "changed in v2?"},
+        format="json",
+    )
+
+    assert not Question.objects.filter(
+        questionnaire_id=qid, text="changed in v2?"
+    ).exists()
+
+
+def test_a_version_cannot_be_revised_twice(api_client, tenant, admin):
+    """Two operators revising the same approved set would otherwise both open
+    version 2. The row lock serialises them; this is the second one's answer."""
+    qid = a_draft(api_client, tenant)
+    api_client.post(f"/api/v1/onboarding/questionnaires/{qid}/approve/", format="json")
+    api_client.post(f"/api/v1/onboarding/questionnaires/{qid}/revise/", format="json")
+
+    second = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/revise/", format="json"
+    )
+
+    assert second.status_code == 409
+    assert Questionnaire.objects.filter(supersedes_id=qid).count() == 1
+
+
+def test_a_draft_cannot_be_revised(api_client, tenant, admin):
+    qid = a_draft(api_client, tenant)
+
+    response = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/revise/", format="json"
+    )
+
+    assert response.status_code == 409
+
+
+# ── D-05 · template reuse ────────────────────────────────────────────
+
+
+def test_a_template_can_be_cloned_for_another_company(api_client, tenant, editor):
+    qid = a_draft(api_client, tenant)
+    Questionnaire.objects.filter(pk=qid).update(is_template=True)
+    other = Company.objects.create(tenant=tenant, name="Second Client")
+
+    response = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/clone/",
+        {"company_id": other.pk},
+        format="json",
+    )
+
+    assert response.status_code == 201, response.content
+    clone = Questionnaire.objects.get(pk=response.json()["id"])
+    assert clone.company == other
+    assert clone.version == 1
+    assert clone.status == QuestionnaireStatus.DRAFT
+    assert clone.questions.count() == 3
+
+
+def test_a_non_template_cannot_be_cloned(api_client, tenant, editor):
+    """Cloning an arbitrary questionnaire would put one company's prepared
+    questions under another's name with no record of where they came from."""
+    qid = a_draft(api_client, tenant)
+    other = Company.objects.create(tenant=tenant, name="Third Client")
+
+    response = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/clone/",
+        {"company_id": other.pk},
+        format="json",
+    )
+
+    assert response.status_code == 409
+
+
+def test_a_template_cannot_be_cloned_onto_another_tenants_company(
+    api_client, tenant, editor
+):
+    qid = a_draft(api_client, tenant)
+    Questionnaire.objects.filter(pk=qid).update(is_template=True)
+    outsider = Tenant.objects.create(name="Outsider", schema_name="c04_outsider")
+    theirs = Company.objects.create(tenant=outsider, name="Not Yours")
+
+    response = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/clone/",
+        {"company_id": theirs.pk},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert not Questionnaire.objects.filter(company=theirs).exists()

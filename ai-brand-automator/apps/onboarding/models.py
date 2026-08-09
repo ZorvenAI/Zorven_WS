@@ -247,6 +247,19 @@ class Questionnaire(models.Model):
             "DRAFT rather than mutating an approved set."
         ),
     )
+    supersedes = models.OneToOneField(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="superseded_by",
+        help_text=(
+            "The version this one replaces (C-04 AC-3). Makes the chain "
+            "explicit rather than implied by a version number: the card "
+            "requires the approved version to survive intact, and the "
+            "evidence spans on Question point at a specific version's rows."
+        ),
+    )
     is_template = models.BooleanField(
         default=False,
         help_text="Reusable for another company in the same tenant (D-05)",
@@ -258,6 +271,26 @@ class Questionnaire(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            # At most one DRAFT per company, so two concurrent edits of an
+            # approved set cannot both create version n+1.
+            #
+            # **This does not cover the common case, and that is deliberate
+            # rather than overlooked.** company is nullable — prep precedes
+            # onboarding, which is why C-03 made it so — and PostgreSQL treats
+            # NULLs as distinct, so nothing is enforced while a questionnaire
+            # has no company. The real protection is select_for_update() on
+            # the row being superseded, which works regardless. This
+            # constraint is defence for the case where it can apply, not the
+            # mechanism.
+            models.UniqueConstraint(
+                fields=["tenant", "company"],
+                condition=Q(status="DRAFT")
+                & Q(company__isnull=False)
+                & Q(tenant__isnull=False),
+                name="one_draft_questionnaire_per_company",
+            ),
+        ]
         indexes = [models.Index(fields=["tenant", "status"])]
 
     def __str__(self) -> str:
