@@ -1012,6 +1012,23 @@ ILA_SERVICE_URL = config(
     "ILA_SERVICE_URL", default="http://intelligence-loop-agent-svc:8045"
 )
 ILA_SERVICE_TOKEN = config("ILA_SERVICE_TOKEN", default="dev-service-token")
+
+# Onboarding Intelligence Agent (C-02). Shares the token OIA already presents
+# on its own endpoints, so the trust is symmetric and there is one secret to
+# rotate rather than two. The default matches the fleet's other dev tokens —
+# the upsert endpoint still refuses an empty configured value, so an
+# unconfigured production deploy rejects every write rather than accepting
+# any.
+OIA_SERVICE_URL = config(
+    "OIA_SERVICE_URL", default="http://onboarding-intelligence-agent-svc:8120"
+)
+# Defaults to the orchestrator token rather than a literal, so the two sides
+# agree by construction. Compose gives OIA
+# OIA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}; a
+# literal default here would mean any deployment that sets
+# ORCHESTRATOR_SERVICE_TOKEN silently 403s every brief write, with the two
+# services each looking correctly configured on their own.
+OIA_SERVICE_TOKEN = config("OIA_SERVICE_TOKEN", default=ORCHESTRATOR_SERVICE_TOKEN)
 # HTTP timeout (seconds) when dispatching jobs to the orchestrator
 ORCHESTRATOR_TIMEOUT = config("ORCHESTRATOR_TIMEOUT", default=30, cast=int)
 # Backend URL for orchestrator callbacks (used to build callback_url in dispatch)

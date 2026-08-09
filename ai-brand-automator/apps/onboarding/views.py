@@ -20,6 +20,13 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+import hmac
+
+from decouple import config as decouple_config
+from django.conf import settings
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+
 from apps.onboarding import errors
 from apps.onboarding.commands import publish_consent_revoked
 from apps.onboarding.field_map import label_for, page_for
@@ -31,11 +38,12 @@ from apps.onboarding.events import (
 from apps.onboarding.models import (
     ConsentRecord,
     FieldClassification,
-    MeetingRecording,
     FieldProvenance,
+    MeetingRecording,
     OnboardingSession,
     ProvenanceStatus,
     RecordingStatus,
+    ResearchBrief,
     tenant_scope_q,
 )
 from apps.onboarding.serializers import (
@@ -45,9 +53,10 @@ from apps.onboarding.serializers import (
     OnboardingSessionSerializer,
     ProvenanceEditSerializer,
     RecordingStopSerializer,
+    ResearchBriefSerializer,
 )
 from apps.onboarding.services.session_state import InvalidTransition, transition
-from apps.onboarding.text import levenshtein
+from apps.onboarding.text import levenshtein, normalise_company_name
 from tenants.permissions import (
     IsTenantAdmin,
     IsTenantEditor,
@@ -613,3 +622,145 @@ def _as_text(value) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value, sort_keys=True, default=str)
+
+
+class ResearchBriefViewSet(
+    RoleBasedPermissionMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """``/api/v1/onboarding/research-briefs/`` — read a stored brief (C-02).
+
+    Read-only by design. The agent writes through
+    :func:`upsert_research_brief` behind ``X-Service-Token``; exposing a
+    writable surface here would be a second way into the same row with weaker
+    guarantees, and the brief is the agent's output rather than something an
+    operator authors.
+
+    VIEWER may read. §15 puts SKL-OIA-01 at ALLOW/ALLOW/ALLOW/DENY, but that
+    governs *invoking* research — spending money on Tavily calls — not reading
+    a brief that already exists. §15's own VIEW_RESULT verdict exists for
+    exactly this distinction.
+    """
+
+    serializer_class = ResearchBriefSerializer
+    queryset = ResearchBrief.objects.all()
+
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+    }
+
+    def get_queryset(self):
+        tenant = getattr(self.request, "tenant", None)
+        qs = ResearchBrief.objects.select_related("session").filter(
+            tenant_scope_q(tenant)
+        )
+        name = self.request.query_params.get("company_name")
+        if name:
+            # Normalised, so a caller searching "Kalyani Roasters Pvt Ltd"
+            # finds the brief stored under "kalyani roasters". Matching the
+            # raw string would make the lookup depend on how the operator
+            # typed it, which is the thing normalisation exists to remove.
+            qs = qs.filter(normalised_name=normalise_company_name(name))
+        return qs
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def upsert_research_brief(request):
+    """``POST /api/v1/onboarding/research-briefs/upsert/`` — the agent's write.
+
+    ``X-Service-Token`` rather than JWT, matching the fleet: the caller is
+    OIA, not a browser, and there is no user session behind it. ``AllowAny``
+    is on the DRF permission because the token check below *is* the
+    authentication — the same shape as ``orchestration.views.callback_debug``.
+
+    ``hmac.compare_digest`` rather than ``==``: token comparison is the one
+    place an early-exit equality check leaks length and prefix through timing.
+
+    **Upsert, not create.** Re-running research for the same business updates
+    the row in place. The alternative — accumulating versions — would put a
+    second, differently-shaped history alongside Questionnaire's for something
+    the backlog never asks to version.
+
+    **A degraded brief never overwrites a good one.** It represents the
+    absence of research, so persisting one would let a brief Tavily outage
+    erase real findings that cost money to obtain. The agent applies the same
+    rule to its Redis cache; enforcing it here too means a future caller
+    cannot bypass it.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "") or decouple_config(
+        "OIA_SERVICE_TOKEN", default=""
+    )
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    brief = request.data.get("brief")
+    company_name = str(request.data.get("company_name") or "").strip()
+    if not isinstance(brief, dict) or not company_name:
+        return Response(
+            {"error": "company_name and a brief object are required"},
+            status=http.HTTP_400_BAD_REQUEST,
+        )
+
+    degraded = bool(brief.get("degraded"))
+    normalised = normalise_company_name(company_name)
+    tenant = getattr(request, "tenant", None)
+
+    if degraded:
+        # Return the existing row if there is one, so the caller sees what is
+        # actually stored rather than assuming its degraded copy landed.
+        existing = (
+            ResearchBrief.objects.filter(tenant_scope_q(tenant))
+            .filter(normalised_name=normalised)
+            .first()
+        )
+        return Response(
+            {
+                "stored": False,
+                "reason": "a degraded brief does not overwrite stored research",
+                "existing": (
+                    ResearchBriefSerializer(existing).data if existing else None
+                ),
+            },
+            status=http.HTTP_200_OK,
+        )
+
+    session_id = request.data.get("session_id")
+    session = None
+    if session_id:
+        session = (
+            OnboardingSession.objects.filter(tenant_scope_q(tenant))
+            .filter(pk=session_id)
+            .first()
+        )
+
+    with db_transaction.atomic():
+        row, created = ResearchBrief.objects.update_or_create(
+            tenant=tenant,
+            normalised_name=normalised,
+            defaults={
+                "company_name": company_name,
+                "brief": brief,
+                "session": session,
+                "degraded": False,
+                "degraded_reason": "",
+                "fact_count": len(brief.get("facts") or []),
+                "unknown_count": len(brief.get("open_unknowns") or []),
+            },
+        )
+
+    return Response(
+        {
+            "stored": True,
+            "created": created,
+            "brief": ResearchBriefSerializer(row).data,
+        },
+        status=http.HTTP_201_CREATED if created else http.HTTP_200_OK,
+    )

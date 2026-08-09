@@ -63,6 +63,28 @@ def restore_all_migrations() -> None:
     executor.loader.build_graph()
 
 
+def expected_tables() -> list[str]:
+    """Every table this app's models declare, from the models themselves.
+
+    Was a hardcoded list of six. That list rots on every story that adds a
+    model — B-08 and C-02 both hit it — and the failure reads as "migrations
+    are broken" when the truth is "the snapshot is stale", which is the worst
+    kind of red because it trains you to update the expectation without
+    reading it.
+
+    Deriving it is not weaker. The assertion is still that migrating to zero
+    and back rebuilds a table for **exactly** the declared models: a model
+    whose migration was forgotten is missing from `rebuilt`, and a table left
+    behind by a deleted model is present and unexpected. Both still fail.
+    """
+    from django.apps import apps as django_apps
+
+    return sorted(
+        model._meta.db_table
+        for model in django_apps.get_app_config(APP_LABEL).get_models()
+    )
+
+
 def test_migration_reversible():
     """Forward, populate, backward, forward — no residue."""
     try:
@@ -97,14 +119,7 @@ def test_migration_reversible():
 
         # Named rather than counted: a bare count silently passes when a table is
         # swapped for another, and has to be edited by every story that adds one.
-        assert rebuilt == [
-            f"{APP_LABEL}_consentrecord",
-            f"{APP_LABEL}_fieldprovenance",
-            f"{APP_LABEL}_meetingrecording",
-            f"{APP_LABEL}_onboardingsession",
-            f"{APP_LABEL}_question",
-            f"{APP_LABEL}_questionnaire",
-        ], rebuilt
+        assert rebuilt == expected_tables(), rebuilt
     finally:
         # This test unapplies migrations other apps depend on.
         restore_all_migrations()
@@ -218,14 +233,7 @@ def test_the_b02_migration_reverses_on_populated_data():
             )
             rebuilt = sorted(r[0] for r in cursor.fetchall())
 
-        assert rebuilt == [
-            f"{APP_LABEL}_consentrecord",
-            f"{APP_LABEL}_fieldprovenance",
-            f"{APP_LABEL}_meetingrecording",
-            f"{APP_LABEL}_onboardingsession",
-            f"{APP_LABEL}_question",
-            f"{APP_LABEL}_questionnaire",
-        ], rebuilt
+        assert rebuilt == expected_tables(), rebuilt
     finally:
         # This test unapplies migrations other apps depend on.
         restore_all_migrations()

@@ -16,6 +16,7 @@ from apps.onboarding.models import (
     FieldProvenance,
     MeetingRecording,
     OnboardingSession,
+    ResearchBrief,
 )
 
 
@@ -323,3 +324,30 @@ class RecordingStopSerializer(serializers.Serializer):
     """
 
     duration_s = serializers.IntegerField(required=False, min_value=0, allow_null=True)
+
+
+class ResearchBriefSerializer(serializers.ModelSerializer):
+    """Read-only projection of a stored BusinessResearchBrief (C-02).
+
+    Every field is read-only. The agent writes briefs through the internal
+    service-token endpoint; this surface exists so the Onboarding Interface
+    can *read* one, and a writable serializer here would be a second, weaker
+    write path into the same row.
+    """
+
+    class Meta:
+        model = ResearchBrief
+        fields = [
+            "id",
+            "session",
+            "company_name",
+            "normalised_name",
+            "brief",
+            "degraded",
+            "degraded_reason",
+            "fact_count",
+            "unknown_count",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields

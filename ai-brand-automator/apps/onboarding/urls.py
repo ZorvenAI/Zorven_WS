@@ -14,13 +14,25 @@ from apps.onboarding.views import (
     FieldProvenanceViewSet,
     MeetingRecordingViewSet,
     OnboardingSessionViewSet,
+    ResearchBriefViewSet,
+    upsert_research_brief,
 )
 
 router = DefaultRouter()
 router.register(r"sessions", OnboardingSessionViewSet, basename="onboarding-session")
 router.register(r"provenance", FieldProvenanceViewSet, basename="onboarding-provenance")
 router.register(r"recordings", MeetingRecordingViewSet, basename="onboarding-recording")
+router.register(
+    r"research-briefs", ResearchBriefViewSet, basename="onboarding-research-brief"
+)
 
 urlpatterns = [
+    # Before the router: a bare "research-briefs/upsert/" would otherwise
+    # be read as a detail route with pk='upsert'.
+    path(
+        "research-briefs/upsert/",
+        upsert_research_brief,
+        name="onboarding-research-brief-upsert",
+    ),
     path("", include(router.urls)),
 ]
