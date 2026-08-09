@@ -69,12 +69,16 @@ def brk(name: str, **overrides) -> CircuitBreaker:
     return CircuitBreaker(BreakerConfig(**base))
 
 
-class StubModel:
-    """The one method LLMProvider calls on a Gemini model.
+class StubModels:
+    """Stands in for ``genai.Client(...).aio.models``.
 
-    Not a mock framework and not a patch — a real object satisfying a
-    one-method interface, so the provider's breaker, exception handling and
-    empty-completion check all still execute for real.
+    Not a mock framework and not a patch — a real object satisfying the
+    one-method surface the provider narrowed to, so the provider's breaker,
+    exception handling and empty-completion check all still execute for real.
+
+    The keyword-only signature mirrors google-genai's, so a drift in how the
+    provider calls it shows up here as a TypeError rather than being absorbed
+    by a permissive ``**kwargs``.
     """
 
     def __init__(self, text: str = "", raises: Exception | None = None) -> None:
@@ -82,8 +86,8 @@ class StubModel:
         self._raises = raises
         self.prompts: list[str] = []
 
-    async def generate_content_async(self, prompt, **kwargs):
-        self.prompts.append(prompt)
+    async def generate_content(self, *, model, contents, config=None):
+        self.prompts.append(contents)
         if self._raises:
             raise self._raises
 
@@ -152,7 +156,7 @@ def one_result(state):
 @pytest.mark.integration
 async def test_a_sourced_fact_survives(tavily_server):
     one_result(tavily_server)
-    model = StubModel(
+    model = StubModels(
         json.dumps(
             {
                 "facts": [
@@ -187,7 +191,7 @@ async def test_a_fact_citing_a_url_we_never_retrieved_becomes_an_unknown(tavily_
     against what search actually returned.
     """
     one_result(tavily_server)
-    model = StubModel(
+    model = StubModels(
         json.dumps(
             {
                 "facts": [
@@ -217,7 +221,7 @@ async def test_the_prompt_carries_the_retrieved_sources(tavily_server):
     If the sources never reach the prompt, every fact it produces is invented.
     """
     one_result(tavily_server)
-    model = StubModel(json.dumps({"facts": [], "open_unknowns": []}))
+    model = StubModels(json.dumps({"facts": [], "open_unknowns": []}))
     skill = ResearchBusiness(
         meta(), tavily=tavily_for(tavily_server), llm=llm_for(model)
     )
@@ -235,7 +239,7 @@ async def test_an_unparseable_completion_yields_unknowns_not_an_error(tavily_ser
     skill = ResearchBusiness(
         meta(),
         tavily=tavily_for(tavily_server),
-        llm=llm_for(StubModel("I'm afraid I can't do that.")),
+        llm=llm_for(StubModels("I'm afraid I can't do that.")),
     )
 
     brief = BusinessResearchBrief.model_validate((await skill.run(context())).output)
@@ -256,7 +260,7 @@ async def test_a_fenced_json_completion_is_still_read(tavily_server):
         + "\n```"
     )
     skill = ResearchBusiness(
-        meta(), tavily=tavily_for(tavily_server), llm=llm_for(StubModel(fenced))
+        meta(), tavily=tavily_for(tavily_server), llm=llm_for(StubModels(fenced))
     )
 
     brief = BusinessResearchBrief.model_validate((await skill.run(context())).output)
@@ -275,7 +279,7 @@ async def test_an_open_tavily_breaker_produces_a_degraded_brief(tavily_server):
     skill = ResearchBusiness(
         meta(),
         tavily=tavily_for(tavily_server, breaker),
-        llm=llm_for(StubModel("{}")),
+        llm=llm_for(StubModels("{}")),
     )
 
     brief = BusinessResearchBrief.model_validate((await skill.run(context())).output)
@@ -292,7 +296,7 @@ async def test_a_degraded_brief_keeps_the_operators_own_information(tavily_serve
     breaker = brk("tavily", failure_threshold=1)
     breaker.record_failure()
     skill = ResearchBusiness(
-        meta(), tavily=tavily_for(tavily_server, breaker), llm=llm_for(StubModel("{}"))
+        meta(), tavily=tavily_for(tavily_server, breaker), llm=llm_for(StubModels("{}"))
     )
 
     brief = BusinessResearchBrief.model_validate((await skill.run(context())).output)
@@ -332,7 +336,7 @@ async def test_the_summary_line_leads_with_the_degradation(tavily_server):
     breaker = brk("tavily", failure_threshold=1)
     breaker.record_failure()
     skill = ResearchBusiness(
-        meta(), tavily=tavily_for(tavily_server, breaker), llm=llm_for(StubModel("{}"))
+        meta(), tavily=tavily_for(tavily_server, breaker), llm=llm_for(StubModels("{}"))
     )
 
     brief = BusinessResearchBrief.model_validate((await skill.run(context())).output)
