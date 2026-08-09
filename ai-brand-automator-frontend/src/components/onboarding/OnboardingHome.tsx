@@ -95,7 +95,21 @@ function CalendarPane() {
 }
 
 export default function OnboardingHome() {
-  const { canEdit } = useTenantRole();
+  const { canEdit: canEditRole } = useTenantRole();
+  /**
+   * useTenantRole reads TenantContext, which is localStorage-backed, so the
+   * server render and the first client render disagree about the role and
+   * React reports a hydration mismatch. The project's own rule covers this —
+   * "Guard hydration for tenant-role-dependent UI" — and Navigation.tsx
+   * already does it. I wrote the role-gated markup without it.
+   *
+   * Treating an unmounted render as "cannot edit" is the safe direction: the
+   * affordances appear a beat late rather than flashing for a Viewer who
+   * should never see them.
+   */
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => setHasMounted(true), []);
+  const canEdit = hasMounted && canEditRole;
   const [sessions, setSessions] = useState<OnboardingSessionSummary[]>([]);
   const [recordings, setRecordings] = useState<MeetingRecordingSummary[]>([]);
   const [loading, setLoading] = useState(true);

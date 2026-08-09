@@ -45,11 +45,20 @@ export interface MeetingRecordingSummary {
 }
 
 /**
+ * Paths are relative to `/api/v1`, which `env.getApiUrl()` already prepends.
+ *
+ * Writing them in full produced `/api/v1/api/v1/onboarding/...` — every call
+ * 404ing while the UI showed an ordinary empty list. `workspace.ts` sets the
+ * same precedent with `const BASE = '/workspace'`.
+ */
+const BASE = '/onboarding';
+
+/**
  * A page of results, or a bare array.
  *
  * DRF returns `{count, results}` when pagination is on and a plain array when
- * it is not, and this project configures it per-view. Handling both here means
- * a pagination change in Django cannot turn a working list into an empty one
+ * it is not, and this project configures it per-view. Handling both means a
+ * pagination change in Django cannot turn a working list into an empty one
  * with no error.
  */
 function itemsOf<T>(body: unknown): T[] {
@@ -60,16 +69,29 @@ function itemsOf<T>(body: unknown): T[] {
   return [];
 }
 
+/**
+ * Read a list endpoint.
+ *
+ * `apiClient.get()` resolves to a `Response`, not to parsed JSON. Passing that
+ * object straight into `itemsOf` matched none of its branches and returned an
+ * empty array on every call, success or failure — the list looked empty rather
+ * than broken. Throwing on a non-ok status is the other half: a 500 that
+ * returns `[]` is indistinguishable from a tenant with no sessions.
+ */
+async function getList<T>(path: string): Promise<T[]> {
+  const response = await apiClient.get(path);
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return itemsOf<T>(await response.json());
+}
+
 export async function listSessions(): Promise<OnboardingSessionSummary[]> {
-  return itemsOf<OnboardingSessionSummary>(
-    await apiClient.get('/api/v1/onboarding/sessions/'),
-  );
+  return getList<OnboardingSessionSummary>(`${BASE}/sessions/`);
 }
 
 export async function listRecordings(): Promise<MeetingRecordingSummary[]> {
-  return itemsOf<MeetingRecordingSummary>(
-    await apiClient.get('/api/v1/onboarding/recordings/'),
-  );
+  return getList<MeetingRecordingSummary>(`${BASE}/recordings/`);
 }
 
 /**

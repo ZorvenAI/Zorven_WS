@@ -15,7 +15,25 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { wizardDeepLink } from '@/lib/onboarding-sessions';
+import { apiClient } from '@/lib/api';
+import {
+  listRecordings,
+  listSessions,
+  wizardDeepLink,
+} from '@/lib/onboarding-sessions';
+
+jest.mock('@/lib/api', () => ({ apiClient: { get: jest.fn() } }));
+
+const mockedGet = apiClient.get as jest.MockedFunction<typeof apiClient.get>;
+
+function responseOf(body: unknown, ok = true, status = 200): Response {
+  return {
+    ok,
+    status,
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  } as unknown as Response;
+}
 
 const APP = path.join(process.cwd(), 'src', 'app', 'onboarding');
 
@@ -70,5 +88,53 @@ describe('wizardDeepLink', () => {
 
     expect(link).toContain('sessionId=sess-2');
     expect(link).not.toContain('companyId');
+  });
+});
+
+
+describe('the list clients actually read the response', () => {
+  /**
+   * These exist because review found two bugs that made every call return an
+   * empty list, and nothing caught them: the component tests mocked
+   * `listSessions` and `listRecordings` themselves, which is to say they
+   * mocked the two functions that contained the bugs.
+   *
+   * Mocking `apiClient` instead leaves the code under test in the path.
+   */
+  beforeEach(() => jest.clearAllMocks());
+
+  it('parses the body rather than returning the Response', async () => {
+    // apiClient.get resolves to a Response. Passing it straight to a parser
+    // that expects a body matched nothing and yielded [] on every call.
+    mockedGet.mockResolvedValue(responseOf([{ id: 'sess-1' }]));
+
+    await expect(listSessions()).resolves.toHaveLength(1);
+  });
+
+  it('unwraps a paginated body too', async () => {
+    mockedGet.mockResolvedValue(responseOf({ count: 1, results: [{ id: 'sess-1' }] }));
+
+    await expect(listSessions()).resolves.toHaveLength(1);
+  });
+
+  it('does not double-prefix the api version', async () => {
+    // env.getApiUrl already prepends /api/v1, so a full path produced
+    // /api/v1/api/v1/onboarding/... — a 404 that surfaced as an empty list.
+    mockedGet.mockResolvedValue(responseOf([]));
+
+    await listSessions();
+    await listRecordings();
+
+    for (const [path] of mockedGet.mock.calls) {
+      expect(path).not.toContain('/api/v1');
+      expect(path).toMatch(/^\/onboarding\//);
+    }
+  });
+
+  it('throws on a non-ok response instead of reporting no sessions', async () => {
+    // A 500 that returns [] is indistinguishable from a tenant with none.
+    mockedGet.mockResolvedValue(responseOf({ detail: 'boom' }, false, 500));
+
+    await expect(listSessions()).rejects.toThrow('API 500');
   });
 });
