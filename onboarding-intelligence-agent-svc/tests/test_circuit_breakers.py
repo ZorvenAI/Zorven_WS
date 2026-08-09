@@ -231,16 +231,80 @@ def test_a_failed_trial_reopens_immediately():
 
 
 def test_sustained_success_closes_it():
+    """Every trial goes through before_call(), as a real caller must.
+
+    The earlier version of this test called record_success() twice directly
+    and passed — while the breaker was in fact wedged. A caller cannot record
+    a success without first claiming a trial slot, so skipping before_call()
+    tested a sequence production can never produce, and hid a bug that would
+    have left five of the seven §18.2 dependencies permanently degraded after
+    a single blip.
+    """
     breaker = make(failure_threshold=1, reset_timeout_seconds=1, success_threshold=2)
     breaker.record_failure()
     time.sleep(1.1)
 
+    breaker.before_call()
     breaker.record_success()
     assert breaker.state is State.HALF_OPEN, "closed on one success of two"
 
+    breaker.before_call()
     breaker.record_success()
     assert breaker.state is State.CLOSED
     assert breaker.is_open is False
+
+
+def test_the_shipped_defaults_can_actually_recover():
+    """The regression that review caught, stated as a property of the config.
+
+    Five of the seven declared dependencies ship success_threshold=2 with
+    half_open_max_calls=1. If a success does not release its trial slot, each
+    of them takes one trial, records one success, and then refuses every call
+    forever — degraded until the process restarts. Asserting it for every
+    declared dependency rather than one hand-built breaker, because the bug
+    lived in the interaction between two config values.
+    """
+    registry = BreakerRegistry()
+
+    for name in registry.names():
+        config = registry.get(name).config
+        breaker = CircuitBreaker(
+            BreakerConfig(
+                name=config.name,
+                failure_threshold=1,
+                window_seconds=config.window_seconds,
+                success_threshold=config.success_threshold,
+                half_open_max_calls=config.half_open_max_calls,
+                reset_timeout_seconds=1,
+                degraded_mode=config.degraded_mode,
+                user_message=config.user_message,
+            )
+        )
+        breaker.record_failure()
+        assert breaker.state is State.OPEN, name
+
+        for _ in range(config.success_threshold):
+            time.sleep(1.1)
+            breaker.before_call()
+            breaker.record_success()
+
+        assert breaker.state is State.CLOSED, f"{name} cannot recover"
+
+
+def test_a_concurrent_second_trial_is_still_refused():
+    """Releasing the slot on success must not reopen the stampede door.
+
+    The slot is released when a call *finishes*; two callers in flight at once
+    still only get one trial between them.
+    """
+    breaker = make(failure_threshold=1, reset_timeout_seconds=1, half_open_max_calls=1)
+    breaker.record_failure()
+    time.sleep(1.1)
+
+    breaker.before_call()  # first caller, still in flight
+
+    with pytest.raises(CircuitBreakerOpen):
+        breaker.before_call()  # second caller, concurrent
 
 
 def test_the_full_cycle():

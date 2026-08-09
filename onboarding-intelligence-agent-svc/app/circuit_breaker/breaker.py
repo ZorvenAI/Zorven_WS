@@ -20,6 +20,7 @@ staggered, which is invisible to an operator.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from dataclasses import dataclass, field
@@ -141,6 +142,19 @@ class CircuitBreaker:
             state = self._state_locked()
             if state is State.HALF_OPEN:
                 self._successes += 1
+                # Release the trial slot. before_call() claimed it to stop a
+                # stampede of *concurrent* callers; a call that has come back
+                # successfully is finished with it, and holding it would block
+                # the next sequential trial.
+                #
+                # Without this the breaker wedges. Every dependency whose
+                # success_threshold exceeds half_open_max_calls — five of the
+                # seven in §18.2 ship 2 and 1 — would take its one trial,
+                # record one success, and then refuse every subsequent call
+                # forever, never reaching the threshold that closes it. A
+                # single blip would degrade the dependency until the process
+                # restarted.
+                self._half_open_calls = max(0, self._half_open_calls - 1)
                 if self._successes >= self.config.success_threshold:
                     self._reset_locked()
             else:
@@ -219,7 +233,16 @@ class BreakerRegistry:
         self._load(config_path or CONFIG_PATH)
 
     def _load(self, path: Path) -> None:
-        raw: dict[str, Any] = yaml.safe_load(path.read_text()) or {}
+        parsed = yaml.safe_load(path.read_text())
+        if parsed is None:
+            parsed = {}
+        if not isinstance(parsed, dict):
+            # A malformed file otherwise fails with AttributeError on .get(),
+            # deep in startup, naming neither the file nor the problem.
+            raise ValueError(
+                f"{path} must contain a mapping, not {type(parsed).__name__}"
+            )
+        raw: dict[str, Any] = parsed
         defaults: dict[str, Any] = raw.get("defaults", {}) or {}
         dependencies: dict[str, Any] = raw.get("dependencies", {}) or {}
 
@@ -235,6 +258,37 @@ class BreakerRegistry:
             ]
             if missing:
                 raise ValueError(f"breaker '{name}' is missing {', '.join(missing)}")
+            for key in (
+                "failure_threshold",
+                "window_seconds",
+                "success_threshold",
+                "half_open_max_calls",
+                "reset_timeout_seconds",
+            ):
+                value = merged.get(key, 1)
+                if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                    # bool is an int in Python, and `failure_threshold: true`
+                    # is a plausible YAML slip that would otherwise become 1.
+                    raise ValueError(
+                        f"breaker '{name}': {key} must be a positive integer, "
+                        f"got {value!r}"
+                    )
+
+            if merged["success_threshold"] > merged.get("half_open_max_calls", 1):
+                # Not a style rule — this combination used to wedge the breaker
+                # permanently in HALF_OPEN. It is safe now that a success
+                # releases its trial slot, but a config that needs N sequential
+                # trials to recover takes N reset windows to do it, which is
+                # worth being deliberate about rather than discovering during
+                # an incident.
+                logger_warning = (
+                    f"breaker '{name}': success_threshold "
+                    f"({merged['success_threshold']}) exceeds half_open_max_calls "
+                    f"({merged.get('half_open_max_calls', 1)}); recovery needs "
+                    "that many sequential trial calls"
+                )
+                logging.getLogger(__name__).info(logger_warning)
+
             if "degraded_mode" not in merged:
                 # §18.2's whole point is that every dependency degrades to
                 # something. One without a mode would fail closed with no

@@ -7,7 +7,7 @@ acceptance criteria cover the registry, guardrail chain, RBAC evaluator and
 skill interfaces and never mention providers, so this stayed a stub. C-02 is
 the first story that needs to generate anything.
 
-**SDK choice.** ``google-generativeai`` 0.8.x, matching
+**SDK choice.** ``google-generativeai>=0.8.0``, matching
 ``ai-brand-automator`` and ``content-agent-service``, with the fleet default
 model ``gemini-3.5-flash``. Google's newer ``google-genai`` package supersedes
 it, but switching one service creates a second pattern in a fleet of

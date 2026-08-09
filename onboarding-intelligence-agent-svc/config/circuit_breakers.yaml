@@ -1,9 +1,12 @@
 # Onboarding Intelligence Agent (OIA) — Circuit Breakers
 #
-# This file IS Design §18.2, transcribed verbatim. Loaded by
-# app/circuit_breaker/breaker.py and validated by tests/test_circuit_breakers.py:
-# all seven dependencies present, every one carrying a degraded_mode, and the
-# numeric fields within sane bounds.
+# This file IS Design §18.2, transcribed verbatim.
+#
+# app/circuit_breaker/breaker.py loads it and rejects at startup: a non-mapping
+# file, a dependency with no degraded_mode, and any numeric field that is not a
+# positive integer. tests/test_circuit_breakers.py additionally asserts that
+# all seven dependencies are present and that every one of them can actually
+# recover from an open breaker.
 #
 # Created by C-02, which is the first story to need a working breaker. §18.2
 # specified this file from the start but no story owned building it — A-06's
