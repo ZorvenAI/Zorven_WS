@@ -118,6 +118,7 @@ IMPLEMENTED |= {
     "app.circuit_breaker.breaker",
     "app.providers.llm",
     "app.logic.prep_executor",
+    "app.services.backend_client",
 }
 
 #: A-06 turned the sixteen skill modules into registry-resolvable classes.

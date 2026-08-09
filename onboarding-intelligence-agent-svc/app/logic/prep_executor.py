@@ -26,6 +26,7 @@ from app.logic.grounding import ground_output
 from app.logic.guardrails import Layer
 from app.providers.llm import LLMProvider
 from app.providers.tavily import TavilyProvider
+from app.services.backend_client import BackendClient
 from app.skills.models import Origin, SkillContext, TenantContext
 from app.skills.registry import SkillRegistry
 from app.skills.research_business import normalise_company_name
@@ -57,9 +58,11 @@ class PrepExecutor:
         tavily: TavilyProvider | None = None,
         llm: LLMProvider | None = None,
         registry: SkillRegistry | None = None,
+        backend: BackendClient | None = None,
     ) -> None:
         self._redis = redis
         self._registry = registry or self._build_registry(tavily, llm)
+        self._backend = backend
 
     @staticmethod
     def _build_registry(
@@ -164,5 +167,25 @@ class PrepExecutor:
 
         if company_name:
             await self.store_brief(tenant.tenant_id, company_name, result.output)
+            await self._persist(tenant, company_name, result.output)
 
         return result.output, False
+
+    async def _persist(
+        self, tenant: TenantContext, company_name: str, brief: dict[str, Any]
+    ) -> None:
+        """Write the durable copy, never at the cost of the turn.
+
+        AC-2's "or opens the Onboarding Interface" needs storage outside this
+        service's TTL'd cache. By the time this runs the operator already has
+        their brief in the response, so a backend failure is logged and
+        swallowed — BackendClient does that internally, and this is the
+        statement that the executor relies on it.
+        """
+        if self._backend is None:
+            return
+        await self._backend.store_research_brief(
+            company_name=company_name,
+            brief=brief,
+            session_id=tenant.session_id,
+        )

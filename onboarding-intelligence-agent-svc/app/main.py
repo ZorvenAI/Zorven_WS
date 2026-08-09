@@ -24,6 +24,7 @@ from app.logic.prep_executor import PrepExecutor
 from app.messaging.producer import KafkaProducer
 from app.providers.llm import LLMProvider
 from app.providers.tavily import TavilyProvider
+from app.services.backend_client import BackendClient
 from app.messaging.provision import provision, verify
 
 settings = get_settings()
@@ -78,6 +79,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.redis,
         tavily=TavilyProvider(settings.TAVILY_API_KEY),
         llm=LLMProvider(settings.GEMINI_KEY),
+        backend=BackendClient(settings.BACKEND_BASE_URL, settings.SERVICE_TOKEN),
     )
     if not settings.TAVILY_API_KEY:
         logger.warning(

@@ -359,7 +359,17 @@ async def test_the_summary_line_leads_with_the_degradation(tavily_server):
     ],
 )
 def test_the_same_business_normalises_to_one_key(written):
-    """Each variant otherwise costs a fresh round of paid search."""
+    """Each variant otherwise costs a fresh round of paid search.
+
+    **This corpus is duplicated in**
+    ``ai-brand-automator/apps/onboarding/tests/test_research_brief.py``.
+    Django holds its own copy of ``normalise_company_name`` because the two
+    services are separate deployables with no common package, and if they
+    drift the agent stores a brief under one key while the Onboarding
+    Interface looks under another — the operator is told there is no research
+    when there is. Running one corpus on both sides makes a drift fail a test
+    rather than a demo.
+    """
     assert normalise_company_name(written) == "kalyani roasters"
 
 

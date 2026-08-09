@@ -724,3 +724,103 @@ class FieldProvenance(models.Model):
             or self.source_span is not None
             or self.source_media_id is not None
         )
+
+
+class ResearchBrief(models.Model):
+    """A BusinessResearchBrief from SKL-OIA-01 (Design §8.1, story C-02).
+
+    AC-2 requires the brief to survive the conversation: "when the operator
+    returns to the conversation later, **or opens the Onboarding Interface**,
+    the same brief is available without re-running research". The agent also
+    caches briefs in Redis for an hour, which covers a tuning session — but a
+    TTL'd cache cannot serve the Interface, and a re-run costs paid Tavily
+    calls. This is the durable copy.
+
+    **Keyed on the normalised business name, not on a session.** Prep starts
+    before an ``OnboardingSession`` exists — that is the whole point of
+    preparing in the chat the operator already uses — so a required session FK
+    would make the common case unstorable. The session is attached when one
+    exists, which is what makes the brief reachable from the Interface.
+    """
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)ss",
+    )
+    session = models.ForeignKey(
+        OnboardingSession,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="research_briefs",
+        help_text="Attached once a session exists; prep can precede one",
+    )
+
+    company_name = models.CharField(
+        max_length=255, help_text="As the operator typed it"
+    )
+    normalised_name = models.CharField(
+        max_length=255,
+        db_index=True,
+        help_text=(
+            "Lower-cased, punctuation and legal suffixes stripped — the same "
+            "normalisation the agent's Redis cache key uses, so the two "
+            "layers agree on what counts as the same business"
+        ),
+    )
+
+    # JSON, for the reason B-05 chose it for provenance values: the brief is a
+    # nested structure (facts with sources, digital presence, unknowns) and
+    # flattening it into columns would make this row and the agent's own model
+    # disagree about their shape on every future field.
+    brief = models.JSONField(help_text="The full BusinessResearchBrief payload")
+
+    # Denormalised out of the JSON because operators and dashboards filter on
+    # them, and a JSON containment query for "show me the thin briefs" is both
+    # slower and easier to get wrong.
+    degraded = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True when research could not run (AC-3)",
+    )
+    degraded_reason = models.CharField(max_length=255, blank=True, default="")
+    fact_count = models.PositiveIntegerField(default=0)
+    unknown_count = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            # One current brief per business per tenant. Re-running research
+            # updates in place rather than accumulating versions: the backlog
+            # asks for no versioning here, and inventing one would put a
+            # second, differently-shaped history next to Questionnaire's.
+            #
+            # Two constraints rather than one, because PostgreSQL treats NULLs
+            # as distinct — a single constraint over a nullable tenant would
+            # silently permit unlimited duplicate pre-tenant rows, which is
+            # exactly the case that would slip through review.
+            models.UniqueConstraint(
+                fields=["tenant", "normalised_name"],
+                condition=Q(tenant__isnull=False),
+                name="unique_brief_per_business_per_tenant",
+            ),
+            models.UniqueConstraint(
+                fields=["normalised_name"],
+                condition=Q(tenant__isnull=True),
+                name="unique_brief_per_business_without_tenant",
+            ),
+            models.CheckConstraint(
+                check=Q(degraded=False) | ~Q(degraded_reason=""),
+                name="degraded_brief_states_its_reason",
+            ),
+        ]
+        indexes = [models.Index(fields=["tenant", "normalised_name"])]
+
+    def __str__(self) -> str:
+        return f"{self.company_name} ({self.fact_count} facts)"
