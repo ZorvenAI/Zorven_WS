@@ -53,6 +53,12 @@ jobs:
           black --check .
           flake8 .
           pylint --load-plugins pylint_django --django-settings-module=brand_automator.settings */**.py || true
+
+      # Assertions that pass regardless of behaviour. A sweep of the OIA suite
+      # found four, each of which survived review because a passing test reads
+      # as a covered one. Suppressible, but only with a written reason.
+      - name: Check for weak assertions
+        run: python scripts/check_weak_assertions.py ai-brand-automator/apps/onboarding/tests
       
       - name: Run security scan
         run: |
@@ -409,6 +415,12 @@ jobs:
         run: |
           black --check app/ tests/
           flake8 app/ tests/
+
+      # Assertions that pass regardless of behaviour. A sweep of this suite
+      # found four, each of which had survived review because a passing test
+      # reads as a covered one. Suppressible, but only with a written reason.
+      - name: Check for weak assertions
+        run: python scripts/check_weak_assertions.py onboarding-intelligence-agent-svc/tests
 
       - name: Type check
         working-directory: onboarding-intelligence-agent-svc

@@ -138,7 +138,9 @@ def test_entity_types_allowed_while_entity_values_are_not():
         )
 
 
-def test_empty_payload_is_fine():
+def test_empty_payload_is_fine():  # weak-assert: ok — assert_no_pii raises
+    # The call is the assertion: assert_no_pii raises PIILeakError on a
+    # violation, so reaching the next line is the pass condition.
     assert_no_pii(EventType.AGENT_INVOKED, {})
 
 

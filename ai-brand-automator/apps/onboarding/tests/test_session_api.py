@@ -278,6 +278,7 @@ def test_a_list_never_leaks_another_tenants_session(public_tenant, editor):
 def test_anonymous_is_refused():
     client = APIClient()
     client.defaults["SERVER_NAME"] = "localhost"
+    # weak-assert: ok — either is refusal; which one depends on DRF's auth ordering
     assert client.get(SESSIONS).status_code in (401, 403)
 
 

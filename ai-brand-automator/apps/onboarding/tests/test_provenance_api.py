@@ -406,7 +406,7 @@ def test_the_provenance_list_requires_tenant_access(public_tenant):
 
     response = client.get(f"{SESSIONS}{session.pk}/provenance/")
 
-    assert response.status_code in (
+    assert response.status_code in (  # weak-assert: ok — either is a non-leak
         403,
         404,
     ), "a user with no tenant membership read a pre-tenant session"

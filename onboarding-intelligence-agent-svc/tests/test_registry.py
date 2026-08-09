@@ -42,6 +42,7 @@ def test_lookup_by_id_and_by_name_reach_the_same_skill(registry):
 def test_every_skill_is_a_base_or_streaming_skill(registry):
     for skill_id in registry.skill_ids:
         skill = registry.get(skill_id)
+        # weak-assert: ok — the type is the contract the YAML declares
         assert isinstance(skill, (BaseSkill, StreamingSkill)), skill_id
 
 
@@ -50,8 +51,10 @@ def test_streaming_skills_are_streaming_and_the_rest_are_not(registry):
     for skill_id in registry.skill_ids:
         skill = registry.get(skill_id)
         if skill_id in streaming:
+            # weak-assert: ok — streaming: true must give a StreamingSkill
             assert isinstance(skill, StreamingSkill), skill_id
         else:
+            # weak-assert: ok — the absence of streaming: true must produce a BaseSkill
             assert isinstance(skill, BaseSkill), skill_id
 
 

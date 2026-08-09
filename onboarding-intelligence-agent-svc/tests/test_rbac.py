@@ -36,6 +36,7 @@ def test_matrix_exhaustive(engine):
 
     for role, capability in ALL_PAIRS:
         verdict = engine.verdict(role, capability)
+        # weak-assert: ok — values are pinned in the row tests below
         assert isinstance(verdict, Verdict), (role, capability)
 
 

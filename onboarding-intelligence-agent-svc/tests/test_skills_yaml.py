@@ -48,6 +48,7 @@ def test_file_parses(document):
     """The manifest must be valid YAML with the fleet envelope."""
     assert document["service"] == "onboarding-intelligence-agent"
     assert document["version"] == 1
+    # weak-assert: ok — a parse test; the document shape is what it checks
     assert isinstance(document["skills"], list)
 
 
