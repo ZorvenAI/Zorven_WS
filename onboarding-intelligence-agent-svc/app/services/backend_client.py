@@ -66,7 +66,9 @@ class BackendClient:
         """
         return bool(self._base_url) and "PLACEHOLDER" not in self._base_url
 
-    async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    async def _post(
+        self, path: str, payload: dict[str, Any], *, tenant_id: str
+    ) -> dict[str, Any] | None:
         if not self.configured:
             logger.warning(
                 "backend_not_configured", base_url=self._base_url or "(unset)"
@@ -85,7 +87,15 @@ class BackendClient:
             response = await client.post(
                 f"{self._base_url}{path}",
                 json=payload,
-                headers={"X-Service-Token": self._token},
+                headers={
+                    "X-Service-Token": self._token,
+                    # Django cannot infer the tenant on this path: its
+                    # DefaultTenantMiddleware resolves an unmatched host to the
+                    # *public* tenant, so an internal call with no header is
+                    # attributed to the wrong tenant rather than rejected. The
+                    # agent is the only party that knows, so it says.
+                    "X-Tenant-ID": tenant_id,
+                },
                 timeout=TIMEOUT_S,
             )
             response.raise_for_status()
@@ -106,6 +116,7 @@ class BackendClient:
     async def store_research_brief(
         self,
         *,
+        tenant_id: str,
         company_name: str,
         brief: dict[str, Any],
         session_id: str | None = None,
@@ -124,5 +135,5 @@ class BackendClient:
         if session_id:
             payload["session_id"] = session_id
 
-        body = await self._post(UPSERT_PATH, payload)
+        body = await self._post(UPSERT_PATH, payload, tenant_id=tenant_id)
         return bool(body and body.get("stored"))

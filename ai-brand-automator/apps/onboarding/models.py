@@ -202,7 +202,17 @@ class Questionnaire(models.Model):
     company = models.ForeignKey(
         "onboarding.Company",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="questionnaires",
+        help_text=(
+            "Nullable because preparation precedes onboarding. C-01 routes a "
+            "prep turn with no session, C-02 stores a research brief keyed on "
+            "a business name rather than a Company, and C-03 generates a "
+            "questionnaire from that brief — none of which require the "
+            "company to exist yet. Requiring it here would make the epic's "
+            "normal path unstorable. Attached once a Company is created."
+        ),
     )
     session = models.ForeignKey(
         OnboardingSession,
@@ -824,3 +834,32 @@ class ResearchBrief(models.Model):
 
     def __str__(self) -> str:
         return f"{self.company_name} ({self.fact_count} facts)"
+
+
+#: Named depths, mapped onto the 1-5 scale B-01 chose for
+#: ``Questionnaire.depth`` (C-03, D2).
+#:
+#: The C-03 card and FR-PREP-04 talk in names — "12 questions at standard
+#: depth", "the same request at deep" — while the column is an integer. Mapping
+#: rather than changing the column keeps B-01's deliberate scale and gives the
+#: chat surface the vocabulary its operators actually use. Defined here, beside
+#: the field, so the agent and the API cannot disagree about what "deep" means.
+DEPTH_NAMES = {"quick": 1, "standard": 3, "deep": 5}
+DEFAULT_DEPTH = DEPTH_NAMES["standard"]
+
+
+def depth_from(value: object) -> int:
+    """Resolve a named or numeric depth to the stored 1-5 integer.
+
+    Accepts either because the chat says "deep" and a programmatic caller says
+    5. An unrecognised value falls back to standard rather than raising:
+    preparation with a slightly wrong research budget beats no preparation,
+    and the operator can regenerate.
+    """
+    if isinstance(value, str):
+        return DEPTH_NAMES.get(value.strip().lower(), DEFAULT_DEPTH)
+    if isinstance(value, bool):
+        return DEFAULT_DEPTH
+    if isinstance(value, int) and 1 <= value <= 5:
+        return value
+    return DEFAULT_DEPTH

@@ -27,9 +27,12 @@ from django.conf import settings
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 
+from onboarding.models import Company
+from tenants.models import Tenant
+
 from apps.onboarding import errors
 from apps.onboarding.commands import publish_consent_revoked
-from apps.onboarding.field_map import label_for, page_for
+from apps.onboarding.field_map import all_mapped_fields, label_for, page_for
 from apps.onboarding.events import (
     ACTION_CONFIRM,
     ACTION_EDIT,
@@ -42,8 +45,15 @@ from apps.onboarding.models import (
     MeetingRecording,
     OnboardingSession,
     ProvenanceStatus,
+    Question,
+    QuestionOrigin,
+    QuestionStatus,
+    Questionnaire,
+    QuestionnaireStatus,
     RecordingStatus,
     ResearchBrief,
+    WorkflowTarget,
+    depth_from,
     tenant_scope_q,
 )
 from apps.onboarding.serializers import (
@@ -52,6 +62,7 @@ from apps.onboarding.serializers import (
     MeetingRecordingSerializer,
     OnboardingSessionSerializer,
     ProvenanceEditSerializer,
+    QuestionnaireSerializer,
     RecordingStopSerializer,
     ResearchBriefSerializer,
 )
@@ -667,6 +678,48 @@ class ResearchBriefViewSet(
         return qs
 
 
+def _service_tenant(request):
+    """The tenant an internal service is acting for, from ``X-Tenant-ID``.
+
+    **Not** ``request.tenant``. Settings put
+    ``django_tenants.middleware.default.DefaultTenantMiddleware`` in the chain,
+    which falls back to the *public* tenant whenever the host does not match a
+    tenant domain — which is always, for an internal service-to-service call
+    over the cluster network. Reading ``request.tenant`` on these endpoints
+    therefore attributed every agent write to the public tenant regardless of
+    which operator it was for.
+
+    That is a cross-tenant defect, not a cosmetic one: ResearchBrief is unique
+    on ``(tenant, normalised_name)``, so two tenants researching the same
+    business would collide on one public-tenant row — the second overwriting
+    the first, and both able to read it.
+
+    ``X-Tenant-ID`` is the fleet's established convention for this; see
+    ``automation/internal_views.py`` and the header table in the root
+    CLAUDE.md. It is trusted because the caller already proved itself with the
+    shared service token. §15's "never read the role from a body" governs a
+    *user's* claims; this is a service naming which tenant it acts for.
+
+    Returns ``(tenant, error_response)``. A missing or unknown id is an error
+    rather than a fallback, because every fallback available here is wrong:
+    the public tenant mixes tenants together, and None makes the row visible
+    to all of them.
+    """
+    raw = request.META.get("HTTP_X_TENANT_ID", "").strip()
+    if not raw:
+        return None, Response(
+            {"error": "X-Tenant-ID header required"},
+            status=http.HTTP_400_BAD_REQUEST,
+        )
+    tenant = Tenant.objects.filter(pk=raw).first()
+    if tenant is None:
+        return None, Response(
+            {"error": f"unknown tenant {raw!r}"},
+            status=http.HTTP_400_BAD_REQUEST,
+        )
+    return tenant, None
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def upsert_research_brief(request):
@@ -711,7 +764,10 @@ def upsert_research_brief(request):
 
     degraded = bool(brief.get("degraded"))
     normalised = normalise_company_name(company_name)
-    tenant = getattr(request, "tenant", None)
+
+    tenant, error = _service_tenant(request)
+    if error is not None:
+        return error
 
     if degraded:
         # Return the existing row if there is one, so the caller sees what is
@@ -764,3 +820,191 @@ def upsert_research_brief(request):
         },
         status=http.HTTP_201_CREATED if created else http.HTTP_200_OK,
     )
+
+
+class QuestionnaireViewSet(
+    RoleBasedPermissionMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """``/api/v1/onboarding/questionnaires/`` — read a generated set (C-03).
+
+    Read-only here. The agent writes through :func:`create_questionnaire`
+    behind ``X-Service-Token``, and C-04 adds the edit and approval actions as
+    explicit POSTs rather than a PATCH surface, for the same reason
+    FieldProvenance does: those record human decisions, not field updates.
+    """
+
+    serializer_class = QuestionnaireSerializer
+    queryset = Questionnaire.objects.all()
+
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+    }
+
+    def get_queryset(self):
+        tenant = getattr(self.request, "tenant", None)
+        # Prefetch the children: the serializer nests them, and without this
+        # a list of N questionnaires is N+1 queries.
+        return (
+            Questionnaire.objects.select_related("company", "session")
+            .prefetch_related("questions")
+            .filter(tenant_scope_q(tenant))
+        )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def create_questionnaire(request):
+    """``POST /api/v1/onboarding/questionnaires/generate/`` — the agent's write.
+
+    ``X-Service-Token`` and ``AllowAny`` for the same reason as
+    :func:`upsert_research_brief`: the caller is OIA, not a browser, and the
+    token check below is the authentication.
+
+    **Validation happens here, not only in the agent.** ``target_field`` is
+    checked against B-06's shared vocabulary and WF3 coverage is required,
+    because C-03's technical note is explicit that an invented field name
+    breaks J-02's join, and FR-PREP-08 says a set covering only the wizard
+    pages "fails generation". Enforcing that at the write boundary means a
+    second caller — a replay, a fixture, a future story — cannot bypass it.
+
+    Always creates version 1 in DRAFT (AC-4). Regeneration and versioning are
+    C-04's, and inventing a version scheme here would prejudge it.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "")
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    questions = request.data.get("questions")
+    if not isinstance(questions, list) or not questions:
+        return Response(
+            {"error": "questions must be a non-empty list"},
+            status=http.HTTP_400_BAD_REQUEST,
+        )
+
+    vocabulary = all_mapped_fields()
+    cleaned: list[dict] = []
+    invented: list[str] = []
+
+    for index, item in enumerate(questions):
+        if not isinstance(item, dict):
+            return Response(
+                {"error": f"question {index} is not an object"},
+                status=http.HTTP_400_BAD_REQUEST,
+            )
+        text = str(item.get("text") or "").strip()
+        if not text:
+            return Response(
+                {"error": f"question {index} has no text"},
+                status=http.HTTP_400_BAD_REQUEST,
+            )
+
+        target = str(item.get("workflow_target") or "").strip().upper()
+        if target not in WorkflowTarget.values:
+            return Response(
+                {
+                    "error": (
+                        f"question {index} has workflow_target {target!r}; "
+                        f"expected one of {sorted(WorkflowTarget.values)}"
+                    )
+                },
+                status=http.HTTP_400_BAD_REQUEST,
+            )
+
+        field = str(item.get("target_field") or "").strip()
+        if field and field not in vocabulary:
+            # Dropped to empty rather than rejecting the whole set: one
+            # invented name should cost that question its mapping, not cost
+            # the operator their questionnaire. Reported so it is visible.
+            invented.append(field)
+            field = ""
+
+        cleaned.append(
+            {
+                "text": text,
+                "workflow_target": target,
+                "target_field": field,
+            }
+        )
+
+    covered = {q["workflow_target"] for q in cleaned}
+    missing = sorted(set(WorkflowTarget.values) - covered)
+    if WorkflowTarget.WF3 in missing:
+        # FR-PREP-08 names this one specifically: "a set that covers only the
+        # five wizard pages fails generation". WF3 is the clause the
+        # requirement review added, and it is the one a model silently drops.
+        return Response(
+            {
+                "error": "no WF3 question was generated",
+                "detail": (
+                    "FR-PREP-08 requires campaign and creative coverage — "
+                    "existing ads, business photography, brand assets in use"
+                ),
+                "missing_workflows": missing,
+            },
+            status=http.HTTP_400_BAD_REQUEST,
+        )
+
+    tenant, error = _service_tenant(request)
+    if error is not None:
+        return error
+
+    session = None
+    session_id = request.data.get("session_id")
+    if session_id:
+        session = (
+            OnboardingSession.objects.filter(tenant_scope_q(tenant))
+            .filter(pk=session_id)
+            .first()
+        )
+
+    company = None
+    company_id = request.data.get("company_id")
+    if company_id:
+        company = Company.objects.filter(pk=company_id).first()
+    elif session is not None:
+        company = session.company
+
+    with db_transaction.atomic():
+        questionnaire = Questionnaire.objects.create(
+            tenant=tenant,
+            company=company,
+            session=session,
+            status=QuestionnaireStatus.DRAFT,
+            version=1,
+            depth=depth_from(request.data.get("depth")),
+            question_count=len(cleaned),
+            source_chat_session_id=str(request.data.get("chat_session_id") or "")[:64],
+        )
+        Question.objects.bulk_create(
+            [
+                Question(
+                    # No tenant field: B-01 scopes Question through its
+                    # questionnaire rather than repeating the FK, so the
+                    # tenant is one row away and cannot disagree with itself.
+                    questionnaire=questionnaire,
+                    order=index,
+                    text=item["text"],
+                    origin=QuestionOrigin.PREPARED,
+                    workflow_target=item["workflow_target"],
+                    target_field=item["target_field"],
+                    status=QuestionStatus.OPEN,
+                )
+                for index, item in enumerate(cleaned)
+            ]
+        )
+
+    body = QuestionnaireSerializer(questionnaire).data
+    if invented:
+        body["dropped_target_fields"] = sorted(set(invented))
+    if missing:
+        body["thin_workflows"] = missing
+
+    return Response(body, status=http.HTTP_201_CREATED)

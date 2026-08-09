@@ -185,6 +185,7 @@ class PrepExecutor:
         if self._backend is None:
             return
         await self._backend.store_research_brief(
+            tenant_id=tenant.tenant_id,
             company_name=company_name,
             brief=brief,
             session_id=tenant.session_id,

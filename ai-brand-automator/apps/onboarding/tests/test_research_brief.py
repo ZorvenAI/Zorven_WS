@@ -55,12 +55,13 @@ def good_brief(**overrides):
 # ── The internal write endpoint ──────────────────────────────────────
 
 
-def test_the_agent_can_store_a_brief(api_client):
+def test_the_agent_can_store_a_brief(api_client, tenant):
     response = api_client.post(
         UPSERT,
         {"company_name": "Kalyani Roasters", "brief": good_brief()},
         format="json",
         HTTP_X_SERVICE_TOKEN=TOKEN,
+        HTTP_X_TENANT_ID=str(tenant.pk),
     )
 
     assert response.status_code == 201, response.content
@@ -93,7 +94,7 @@ def test_a_write_with_a_wrong_token_is_refused(api_client):
     assert response.status_code == 403
 
 
-def test_re_running_research_updates_in_place(api_client):
+def test_re_running_research_updates_in_place(api_client, tenant):
     """Upsert, not accumulate. Versioning here would put a second,
     differently-shaped history alongside Questionnaire's."""
     api_client.post(
@@ -101,6 +102,7 @@ def test_re_running_research_updates_in_place(api_client):
         {"company_name": "Kalyani Roasters", "brief": good_brief()},
         format="json",
         HTTP_X_SERVICE_TOKEN=TOKEN,
+        HTTP_X_TENANT_ID=str(tenant.pk),
     )
     second = api_client.post(
         UPSERT,
@@ -110,6 +112,7 @@ def test_re_running_research_updates_in_place(api_client):
         },
         format="json",
         HTTP_X_SERVICE_TOKEN=TOKEN,
+        HTTP_X_TENANT_ID=str(tenant.pk),
     )
 
     assert second.status_code == 200
@@ -119,7 +122,7 @@ def test_re_running_research_updates_in_place(api_client):
     assert row.unknown_count == 3
 
 
-def test_a_degraded_brief_never_overwrites_stored_research(api_client):
+def test_a_degraded_brief_never_overwrites_stored_research(api_client, tenant):
     """The rule the agent applies to its Redis cache, enforced here too so a
     future caller cannot bypass it.
 
@@ -131,6 +134,7 @@ def test_a_degraded_brief_never_overwrites_stored_research(api_client):
         {"company_name": "Kalyani Roasters", "brief": good_brief()},
         format="json",
         HTTP_X_SERVICE_TOKEN=TOKEN,
+        HTTP_X_TENANT_ID=str(tenant.pk),
     )
 
     response = api_client.post(
@@ -143,6 +147,7 @@ def test_a_degraded_brief_never_overwrites_stored_research(api_client):
         },
         format="json",
         HTTP_X_SERVICE_TOKEN=TOKEN,
+        HTTP_X_TENANT_ID=str(tenant.pk),
     )
 
     assert response.status_code == 200
@@ -152,13 +157,14 @@ def test_a_degraded_brief_never_overwrites_stored_research(api_client):
     assert row.fact_count == 1, "real research was overwritten"
 
 
-def test_a_degraded_brief_reports_what_is_actually_stored(api_client):
+def test_a_degraded_brief_reports_what_is_actually_stored(api_client, tenant):
     """So the caller does not assume its copy landed."""
     api_client.post(
         UPSERT,
         {"company_name": "Kalyani Roasters", "brief": good_brief()},
         format="json",
         HTTP_X_SERVICE_TOKEN=TOKEN,
+        HTTP_X_TENANT_ID=str(tenant.pk),
     )
     response = api_client.post(
         UPSERT,
@@ -168,12 +174,13 @@ def test_a_degraded_brief_reports_what_is_actually_stored(api_client):
         },
         format="json",
         HTTP_X_SERVICE_TOKEN=TOKEN,
+        HTTP_X_TENANT_ID=str(tenant.pk),
     )
 
     assert response.json()["existing"]["fact_count"] == 1
 
 
-def test_a_degraded_brief_with_nothing_stored_creates_nothing(api_client):
+def test_a_degraded_brief_with_nothing_stored_creates_nothing(api_client, tenant):
     response = api_client.post(
         UPSERT,
         {
@@ -182,6 +189,7 @@ def test_a_degraded_brief_with_nothing_stored_creates_nothing(api_client):
         },
         format="json",
         HTTP_X_SERVICE_TOKEN=TOKEN,
+        HTTP_X_TENANT_ID=str(tenant.pk),
     )
 
     assert response.status_code == 200
@@ -198,9 +206,13 @@ def test_a_degraded_brief_with_nothing_stored_creates_nothing(api_client):
         {"company_name": "X", "brief": "not-an-object"},
     ],
 )
-def test_a_malformed_write_is_refused(api_client, payload):
+def test_a_malformed_write_is_refused(api_client, payload, tenant):
     response = api_client.post(
-        UPSERT, payload, format="json", HTTP_X_SERVICE_TOKEN=TOKEN
+        UPSERT,
+        payload,
+        format="json",
+        HTTP_X_SERVICE_TOKEN=TOKEN,
+        HTTP_X_TENANT_ID=str(tenant.pk),
     )
 
     assert response.status_code == 400
@@ -371,3 +383,83 @@ def test_the_shared_normalisation_corpus(written):
     is what makes a drift fail a test rather than a demo.
     """
     assert normalise_company_name(written) == "kalyani roasters"
+
+
+# ── Tenant attribution through the endpoint (the C-03 finding) ───────
+
+
+def test_the_brief_is_attributed_to_the_header_tenant(api_client, tenant):
+    """The bug this file did not catch when it shipped.
+
+    Every service-endpoint test here sent a token and no tenant, and the view
+    read ``request.tenant``. Settings put DefaultTenantMiddleware in the
+    chain, which resolves an unmatched host — always, for an internal call —
+    to the *public* tenant. So every brief the agent wrote was attributed to
+    the public tenant, and no test noticed, because the read-side tests built
+    their rows through the ORM with an explicit tenant and never went through
+    the endpoint at all.
+    """
+    api_client.post(
+        UPSERT,
+        {"company_name": "Kalyani Roasters", "brief": good_brief()},
+        format="json",
+        HTTP_X_SERVICE_TOKEN=TOKEN,
+        HTTP_X_TENANT_ID=str(tenant.pk),
+    )
+
+    assert ResearchBrief.objects.get().tenant == tenant
+
+
+def test_two_tenants_researching_the_same_business_do_not_collide(api_client, tenant):
+    """The concrete harm. ResearchBrief is unique on
+    ``(tenant, normalised_name)``. With both writes landing on the public
+    tenant, the second tenant's research silently overwrote the first's — and
+    each could read the other's.
+    """
+    other = Tenant.objects.create(name="Other", schema_name="c02_other_tenant")
+
+    for owner, fact in ((tenant, "First tenant's finding."), (other, "Second's.")):
+        api_client.post(
+            UPSERT,
+            {
+                "company_name": "Kalyani Roasters",
+                "brief": good_brief(
+                    facts=[{"statement": fact, "source_url": "https://k.example/a"}]
+                ),
+            },
+            format="json",
+            HTTP_X_SERVICE_TOKEN=TOKEN,
+            HTTP_X_TENANT_ID=str(owner.pk),
+        )
+
+    assert ResearchBrief.objects.count() == 2, "one tenant overwrote the other"
+    assert {b.tenant for b in ResearchBrief.objects.all()} == {tenant, other}
+
+
+def test_a_write_without_the_tenant_header_is_refused(api_client):
+    """Rejected rather than defaulted. Every fallback available here is wrong:
+    the public tenant mixes tenants together, and None makes the row visible
+    to all of them."""
+    response = api_client.post(
+        UPSERT,
+        {"company_name": "Kalyani Roasters", "brief": good_brief()},
+        format="json",
+        HTTP_X_SERVICE_TOKEN=TOKEN,
+    )
+
+    assert response.status_code == 400
+    assert "X-Tenant-ID" in response.json()["error"]
+    assert not ResearchBrief.objects.exists()
+
+
+def test_a_write_naming_an_unknown_tenant_is_refused(api_client):
+    response = api_client.post(
+        UPSERT,
+        {"company_name": "Kalyani Roasters", "brief": good_brief()},
+        format="json",
+        HTTP_X_SERVICE_TOKEN=TOKEN,
+        HTTP_X_TENANT_ID="999999",
+    )
+
+    assert response.status_code == 400
+    assert not ResearchBrief.objects.exists()
