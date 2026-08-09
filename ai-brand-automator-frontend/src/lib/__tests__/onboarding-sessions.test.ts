@@ -17,6 +17,7 @@ import path from 'node:path';
 
 import { apiClient } from '@/lib/api';
 import {
+  getApprovedQuestionnaire,
   listRecordings,
   listSessions,
   wizardDeepLink,
@@ -136,5 +137,57 @@ describe('the list clients actually read the response', () => {
     mockedGet.mockResolvedValue(responseOf({ detail: 'boom' }, false, 500));
 
     await expect(listSessions()).rejects.toThrow('API 500');
+  });
+});
+
+
+describe('getApprovedQuestionnaire', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('asks the server for one session\'s approved set', () => {
+    /**
+     * Filtered server-side. Fetching everything and picking in the browser is
+     * correct only until the list paginates, and then it silently shows
+     * nothing — a failure indistinguishable from "not approved yet".
+     */
+    mockedGet.mockResolvedValue(responseOf([]));
+
+    return getApprovedQuestionnaire('sess-1').then(() => {
+      const [path] = mockedGet.mock.calls[0];
+      expect(path).toContain('session=sess-1');
+      expect(path).toContain('status=APPROVED');
+    });
+  });
+
+  it('returns the newest version when a session has been re-approved', async () => {
+    // C-04 AC-3 supersedes rather than replacing, so more than one approved
+    // row can exist over a session's life. The operator means the last one.
+    mockedGet.mockResolvedValue(
+      responseOf([
+        { id: 'q-v1', version: 1, questions: [] },
+        { id: 'q-v3', version: 3, questions: [] },
+        { id: 'q-v2', version: 2, questions: [] },
+      ]),
+    );
+
+    await expect(getApprovedQuestionnaire('sess-1')).resolves.toMatchObject({
+      id: 'q-v3',
+    });
+  });
+
+  it('returns null when nothing is approved, rather than throwing', async () => {
+    // An unapproved session is an ordinary state with its own empty view
+    // (AC-2), not an error.
+    mockedGet.mockResolvedValue(responseOf([]));
+
+    await expect(getApprovedQuestionnaire('sess-1')).resolves.toBeNull();
+  });
+
+  it('escapes the session id', async () => {
+    mockedGet.mockResolvedValue(responseOf([]));
+
+    await getApprovedQuestionnaire('a b&c');
+
+    expect(mockedGet.mock.calls[0][0]).toContain('session=a%20b%26c');
   });
 });

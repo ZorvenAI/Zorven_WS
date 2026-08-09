@@ -36,6 +36,36 @@ export interface OnboardingSessionSummary {
   updated_at: string;
 }
 
+/** §9.4's three workflows, as tagged on a question. */
+export type WorkflowTarget = 'WF1' | 'WF2' | 'WF3';
+
+export interface PreparedQuestion {
+  id: string;
+  order: number;
+  text: string;
+  origin: string;
+  workflow_target: WorkflowTarget;
+  target_field: string;
+  /**
+   * Server-authoritative checkbox state. OPEN is unchecked, GREEN is ticked.
+   *
+   * The C-05 card is explicit that this must not become client state: G-03
+   * drives it from the agent's sufficiency signals during the meeting, and
+   * "a component built around local state has to be rewritten".
+   */
+  status: 'OPEN' | 'GREEN' | 'SKIPPED';
+}
+
+export interface QuestionnaireDetail {
+  id: string;
+  session: string | null;
+  status: 'DRAFT' | 'APPROVED' | 'SUPERSEDED';
+  version: number;
+  question_count: number;
+  questions: PreparedQuestion[];
+  coverage: Record<WorkflowTarget, number>;
+}
+
 export interface MeetingRecordingSummary {
   id: string;
   session: string;
@@ -112,4 +142,26 @@ export function wizardDeepLink(
   if (session.company) params.set('companyId', session.company);
   params.set('sessionId', session.id);
   return `/onboarding/step-1?${params.toString()}`;
+}
+
+/**
+ * The approved questionnaire for a session, or null.
+ *
+ * Filtered server-side. Fetching every questionnaire and picking one in the
+ * browser is correct only until the list paginates, and then it silently
+ * shows nothing — the failure looks identical to "not approved yet".
+ *
+ * Null rather than throwing when there is none: an unapproved session is an
+ * ordinary state with its own empty view (AC-2), not an error.
+ */
+export async function getApprovedQuestionnaire(
+  sessionId: string,
+): Promise<QuestionnaireDetail | null> {
+  const rows = await getList<QuestionnaireDetail>(
+    `${BASE}/questionnaires/?session=${encodeURIComponent(sessionId)}&status=APPROVED`,
+  );
+  // Highest version wins. Re-approval supersedes rather than replacing
+  // (C-04 AC-3), so more than one approved row can exist over a session's
+  // life and the newest is the one the operator just approved.
+  return rows.sort((a, b) => b.version - a.version)[0] ?? null;
 }

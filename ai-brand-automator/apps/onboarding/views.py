@@ -870,11 +870,28 @@ class QuestionnaireViewSet(
         tenant = getattr(self.request, "tenant", None)
         # Prefetch the children: the serializer nests them, and without this
         # a list of N questionnaires is N+1 queries.
-        return (
+        queryset = (
             Questionnaire.objects.select_related("company", "session")
             .prefetch_related("questions")
             .filter(tenant_scope_q(tenant))
         )
+
+        # Filtered server-side (C-05). The Onboarding Interface wants "the
+        # approved questionnaire for this session"; without these the client
+        # would fetch the list and filter it, which is correct only until the
+        # list is long enough to paginate and then silently shows nothing.
+        session = self.request.query_params.get("session")
+        if session:
+            try:
+                queryset = queryset.filter(session_id=session)
+            except (ValueError, TypeError):
+                queryset = queryset.none()
+
+        status = self.request.query_params.get("status")
+        if status:
+            queryset = queryset.filter(status=status.upper())
+
+        return queryset
 
     # ── AC-1 · refinement, per question and per set ──────────────────
 
