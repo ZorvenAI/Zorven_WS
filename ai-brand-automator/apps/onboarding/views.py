@@ -24,6 +24,7 @@ import hmac
 
 from decouple import config as decouple_config
 from django.conf import settings
+from django.http import Http404
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 
@@ -52,6 +53,7 @@ from apps.onboarding.models import (
     QuestionnaireStatus,
     RecordingStatus,
     ResearchBrief,
+    SessionStatus,
     WorkflowTarget,
     depth_from,
     tenant_scope_q,
@@ -850,6 +852,18 @@ class QuestionnaireViewSet(
     role_permissions = {
         "list": [IsAuthenticated, IsTenantViewer],
         "retrieve": [IsAuthenticated, IsTenantViewer],
+        # Refinement follows §15's SKL-OIA-01..03 row, which is ALLOW for
+        # OWNER, ADMIN and EDITOR and DENY for VIEWER.
+        "rewrite": [IsAuthenticated, IsTenantEditor],
+        "drop": [IsAuthenticated, IsTenantEditor],
+        "reorder": [IsAuthenticated, IsTenantEditor],
+        "revise": [IsAuthenticated, IsTenantEditor],
+        "clone": [IsAuthenticated, IsTenantEditor],
+        # Approval is ADMIN. §15 has no row for it — a gap worth reporting —
+        # so this follows the card's "As an Admin" and the precedent of
+        # CONFIRM_KEY_FIELD, which is ADMIN-only because it is a decision
+        # rather than an edit. Approval gates whether a meeting may start.
+        "approve": [IsAuthenticated, IsTenantAdmin],
     }
 
     def get_queryset(self):
@@ -860,6 +874,300 @@ class QuestionnaireViewSet(
             Questionnaire.objects.select_related("company", "session")
             .prefetch_related("questions")
             .filter(tenant_scope_q(tenant))
+        )
+
+    # ── AC-1 · refinement, per question and per set ──────────────────
+
+    def _draft_or_refuse(self, locked: bool = True):
+        """The questionnaire, if it is still a DRAFT.
+
+        An APPROVED set is frozen (AC-2). Refusing here rather than letting
+        the database trigger fire gives the operator the useful answer —
+        "revise it" — instead of an integrity error.
+        """
+        queryset = self.get_queryset()
+        if locked:
+            queryset = queryset.select_for_update(of=("self",))
+        row = queryset.filter(pk=self.kwargs["pk"]).first()
+        if row is None:
+            raise Http404
+        if row.status != QuestionnaireStatus.DRAFT:
+            return None, Response(
+                {
+                    "error": f"questionnaire {row.pk} is {row.status}",
+                    "detail": "Approved sets are frozen. POST to revise/ first.",
+                },
+                status=http.HTTP_409_CONFLICT,
+            )
+        return row, None
+
+    @staticmethod
+    def _renumber(questionnaire) -> None:
+        """Make ordering contiguous from zero.
+
+        AC-1 requires it after *every* operation, which is why this is one
+        helper rather than arithmetic repeated in four places — a dropped
+        question that left a hole would put the meeting view out of step with
+        the numbers the operator refers to out loud.
+        """
+        for index, question in enumerate(
+            questionnaire.questions.order_by("order", "id")
+        ):
+            if question.order != index:
+                question.order = index
+                question.save(update_fields=["order"])
+        # Queried fresh, not through the related manager: get_queryset()
+        # prefetches "questions", so questionnaire.questions.count() answers
+        # from the cache populated before this request deleted anything, and
+        # the stored count silently drifts from the rows.
+        questionnaire.question_count = Question.objects.filter(
+            questionnaire=questionnaire
+        ).count()
+        questionnaire.save(update_fields=["question_count", "updated_at"])
+
+    @action(detail=True, methods=["post"])
+    def rewrite(self, request, pk=None):
+        """Replace one question's text."""
+        with db_transaction.atomic():
+            questionnaire, refusal = self._draft_or_refuse()
+            if refusal is not None:
+                return refusal
+
+            question = questionnaire.questions.filter(
+                pk=request.data.get("question_id")
+            ).first()
+            text = str(request.data.get("text") or "").strip()
+            if question is None:
+                return Response(
+                    {"error": "question_id is not in this questionnaire"},
+                    status=http.HTTP_400_BAD_REQUEST,
+                )
+            if not text:
+                return Response(
+                    {"error": "text is required"},
+                    status=http.HTTP_400_BAD_REQUEST,
+                )
+
+            question.text = text
+            question.origin = QuestionOrigin.PREPARED
+            question.save(update_fields=["text", "origin", "updated_at"])
+
+        return Response(QuestionnaireSerializer(questionnaire).data)
+
+    @action(detail=True, methods=["post"])
+    def drop(self, request, pk=None):
+        """Remove one question and close the gap."""
+        with db_transaction.atomic():
+            questionnaire, refusal = self._draft_or_refuse()
+            if refusal is not None:
+                return refusal
+
+            question = questionnaire.questions.filter(
+                pk=request.data.get("question_id")
+            ).first()
+            if question is None:
+                return Response(
+                    {"error": "question_id is not in this questionnaire"},
+                    status=http.HTTP_400_BAD_REQUEST,
+                )
+            question.delete()
+            self._renumber(questionnaire)
+
+        questionnaire.refresh_from_db()
+        return Response(QuestionnaireSerializer(questionnaire).data)
+
+    @action(detail=True, methods=["post"])
+    def reorder(self, request, pk=None):
+        """Set the order from a full list of question ids.
+
+        The list must name every question exactly once. A partial list would
+        leave the rest in an order nobody chose, and silently accepting one
+        is how an operator ends up reading questions in a sequence they did
+        not approve.
+        """
+        with db_transaction.atomic():
+            questionnaire, refusal = self._draft_or_refuse()
+            if refusal is not None:
+                return refusal
+
+            requested = request.data.get("question_ids")
+            existing = list(questionnaire.questions.values_list("id", flat=True))
+            if not isinstance(requested, list) or sorted(
+                str(i) for i in requested
+            ) != sorted(str(i) for i in existing):
+                return Response(
+                    {
+                        "error": "question_ids must list every question exactly once",
+                        "expected": existing,
+                    },
+                    status=http.HTTP_400_BAD_REQUEST,
+                )
+
+            for index, question_id in enumerate(requested):
+                questionnaire.questions.filter(pk=question_id).update(order=index)
+            self._renumber(questionnaire)
+
+        questionnaire.refresh_from_db()
+        return Response(QuestionnaireSerializer(questionnaire).data)
+
+    # ── AC-2 · approval freezes a version ────────────────────────────
+
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        """Freeze the set and move the session PREPARING → READY."""
+        with db_transaction.atomic():
+            questionnaire, refusal = self._draft_or_refuse()
+            if refusal is not None:
+                return refusal
+
+            if not questionnaire.questions.exists():
+                return Response(
+                    {"error": "an empty questionnaire cannot be approved"},
+                    status=http.HTTP_400_BAD_REQUEST,
+                )
+
+            questionnaire.status = QuestionnaireStatus.APPROVED
+            questionnaire.approved_by = request.user
+            questionnaire.approved_at = timezone.now()
+            questionnaire.save(
+                update_fields=["status", "approved_by", "approved_at", "updated_at"]
+            )
+
+            # Through B-04's table, never by assignment — the card's note, and
+            # the reason the state machine has no hole. The table already had
+            # this edge.
+            if questionnaire.session is not None:
+                try:
+                    transition(questionnaire.session, SessionStatus.READY)
+                except InvalidTransition as exc:
+                    return Response(
+                        {"error": errors.INVALID_TRANSITION, "detail": str(exc)},
+                        status=http.HTTP_409_CONFLICT,
+                    )
+
+        questionnaire.refresh_from_db()
+        return Response(QuestionnaireSerializer(questionnaire).data)
+
+    # ── AC-3 · revision creates a version, never mutates ─────────────
+
+    @action(detail=True, methods=["post"])
+    def revise(self, request, pk=None):
+        """Open version n+1 as a DRAFT, leaving version n intact.
+
+        ``select_for_update`` on the approved row is the real protection
+        against two operators revising at once — not the partial unique
+        constraint, which cannot bite while ``company`` is NULL, and NULL is
+        the common case because prep precedes onboarding.
+        """
+        with db_transaction.atomic():
+            approved = (
+                self.get_queryset()
+                .select_for_update(of=("self",))
+                .filter(pk=pk)
+                .first()
+            )
+            if approved is None:
+                raise Http404
+            if approved.status != QuestionnaireStatus.APPROVED:
+                return Response(
+                    {"error": f"questionnaire {approved.pk} is not APPROVED"},
+                    status=http.HTTP_409_CONFLICT,
+                )
+            if hasattr(approved, "superseded_by"):
+                return Response(
+                    {
+                        "error": "this version has already been revised",
+                        "next_version": approved.superseded_by.pk,
+                    },
+                    status=http.HTTP_409_CONFLICT,
+                )
+
+            draft = Questionnaire.objects.create(
+                tenant=approved.tenant,
+                company=approved.company,
+                session=approved.session,
+                status=QuestionnaireStatus.DRAFT,
+                version=approved.version + 1,
+                depth=approved.depth,
+                question_count=approved.question_count,
+                source_chat_session_id=approved.source_chat_session_id,
+                supersedes=approved,
+            )
+            Question.objects.bulk_create(
+                [
+                    Question(
+                        questionnaire=draft,
+                        order=q.order,
+                        text=q.text,
+                        origin=q.origin,
+                        workflow_target=q.workflow_target,
+                        target_field=q.target_field,
+                        status=QuestionStatus.OPEN,
+                    )
+                    for q in approved.questions.order_by("order", "id")
+                ]
+            )
+
+        return Response(
+            QuestionnaireSerializer(draft).data, status=http.HTTP_201_CREATED
+        )
+
+    # ── D-05 · reuse a template for another company ──────────────────
+
+    @action(detail=True, methods=["post"])
+    def clone(self, request, pk=None):
+        """Copy a template questionnaire for another company in this tenant.
+
+        Only from ``is_template``: cloning an arbitrary questionnaire would
+        let one company's prepared questions appear under another's name with
+        no record of where they came from. The template flag is the operator
+        saying "this set is meant to be reused".
+        """
+        source = self.get_queryset().filter(pk=pk).first()
+        if source is None:
+            raise Http404
+        if not source.is_template:
+            return Response(
+                {"error": "only a template questionnaire can be cloned"},
+                status=http.HTTP_409_CONFLICT,
+            )
+
+        tenant = getattr(request, "tenant", None)
+        company = Company.objects.filter(
+            tenant=tenant, pk=request.data.get("company_id")
+        ).first()
+        if company is None:
+            return Response(
+                {"error": "company_id must name a company in this tenant"},
+                status=http.HTTP_400_BAD_REQUEST,
+            )
+
+        with db_transaction.atomic():
+            clone = Questionnaire.objects.create(
+                tenant=source.tenant,
+                company=company,
+                status=QuestionnaireStatus.DRAFT,
+                version=1,
+                depth=source.depth,
+                question_count=source.question_count,
+            )
+            Question.objects.bulk_create(
+                [
+                    Question(
+                        questionnaire=clone,
+                        order=q.order,
+                        text=q.text,
+                        origin=QuestionOrigin.PREPARED,
+                        workflow_target=q.workflow_target,
+                        target_field=q.target_field,
+                        status=QuestionStatus.OPEN,
+                    )
+                    for q in source.questions.order_by("order", "id")
+                ]
+            )
+
+        return Response(
+            QuestionnaireSerializer(clone).data, status=http.HTTP_201_CREATED
         )
 
 
