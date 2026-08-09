@@ -408,6 +408,77 @@ async def test_the_count_is_always_honoured(returned, requested):
     """
     result = await generate(payload(returned), count=requested)
 
-    assert result.count == requested or result.count < requested
+    # The previous version of this assertion was
+    #     result.count == requested or result.count < requested
+    # which is `count <= requested` — it accepted every short result and so
+    # asserted nothing about the property it was named for. Review caught the
+    # shortfall it was hiding.
+    #
+    # The fixture brief carries 8 unknowns and the standing pool holds 15, so
+    # any request up to 23 is reachable and must be met exactly.
+    assert result.count == requested, f"asked for {requested}, got {result.count}"
+
     texts = [q.text.strip().lower() for q in result.questions]
     assert len(texts) == len(set(texts)), "a question was duplicated"
+
+
+# ── Review finding · the count must be met, or reported ──────────────
+
+
+@pytest.mark.unit
+async def test_a_large_request_is_still_met_exactly():
+    """The gap review found: topping up drew only on the brief's unknowns and
+    five WF3 fallbacks, so a big request with a thin brief came back short
+    while claiming to honour the count."""
+    result = await generate(payload(2), count=20)
+
+    assert result.count == 20
+    texts = [q.text.strip().lower() for q in result.questions]
+    assert len(texts) == len(set(texts))
+
+
+@pytest.mark.unit
+async def test_top_up_questions_are_real_questions():
+    """Not numbered filler. An operator approving a questionnaire should not
+    be able to tell which questions came from the standing pool — padding to
+    hit a number with "Additional question 13" would satisfy AC-1 while
+    handing them something that is not a question.
+    """
+    result = await generate(payload(1), count=12)
+
+    for question in result.questions:
+        assert question.text.strip().endswith("?"), question.text
+        assert "question 1" not in question.text.lower()
+
+
+@pytest.mark.unit
+async def test_an_unmeetable_request_reports_the_shortfall(caplog):
+    """Beyond the reachable pool the set is short — and says so, rather than
+    letting the operator assume this is what they asked for."""
+    result = await generate(
+        payload(0),
+        count=MAX_COUNT,
+        research_brief={"company_name": "X", "facts": [], "open_unknowns": []},
+    )
+
+    assert result.count < MAX_COUNT
+    assert str(result.requested_count) in result.summary_line()
+    assert "requested" in result.summary_line()
+
+
+@pytest.mark.unit
+async def test_the_standing_pool_leads_with_wf3():
+    """The coverage most often short, and the one FR-PREP-08 makes fatal."""
+    from app.skills.generate_questionnaire import STANDING_QUESTIONS
+
+    assert STANDING_QUESTIONS[0][1] == "WF3"
+    assert sum(1 for _, w in STANDING_QUESTIONS if w == "WF3") >= 5
+
+
+@pytest.mark.unit
+def test_the_standing_pool_has_no_duplicates():
+    """A duplicate would silently reduce the reachable count."""
+    from app.skills.generate_questionnaire import STANDING_QUESTIONS
+
+    texts = [t.strip().lower() for t, _ in STANDING_QUESTIONS]
+    assert len(texts) == len(set(texts))

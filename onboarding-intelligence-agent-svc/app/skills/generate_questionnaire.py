@@ -91,6 +91,31 @@ Return ONLY a JSON array of objects. No prose, no code fence.
 """
 
 
+#: A curated pool for topping up, ordered WF3-first because that is the
+#: coverage most often short and the one FR-PREP-08 makes fatal.
+#:
+#: Real onboarding questions rather than generated filler. This list is the
+#: floor on quality when a model under-generates: an operator approving a
+#: questionnaire should not be able to tell which questions came from here.
+STANDING_QUESTIONS: tuple[tuple[str, str], ...] = (
+    ("Do you have previous ads or marketing materials we could reuse?", "WF3"),
+    ("What photography do you have of the business, products or team?", "WF3"),
+    ("Which brand assets — logo, colours, fonts — are currently in use?", "WF3"),
+    ("Which channels have you advertised on, and what worked?", "WF3"),
+    ("What does a realistic monthly marketing budget look like?", "WF3"),
+    ("Which campaigns have you run that you would not run again, and why?", "WF3"),
+    ("Who buys from you most often, and what do they have in common?", "WF1"),
+    ("Which competitors do customers mention when they compare you?", "WF1"),
+    ("What do customers most often misunderstand about what you do?", "WF1"),
+    ("Where do most of your new customers come from today?", "WF1"),
+    ("What would you want a customer to say about you to a friend?", "WF2"),
+    ("What tone would feel wrong for your brand, and why?", "WF2"),
+    ("What does the business stand for beyond the product itself?", "WF2"),
+    ("How did the business start, and what has changed since?", "WF2"),
+    ("What are you hoping will be different twelve months from now?", "WF1"),
+)
+
+
 class GenerateQuestionnaire(BaseSkill):
     """Generate a questionnaire to the requested count and depth."""
 
@@ -145,6 +170,14 @@ class GenerateQuestionnaire(BaseSkill):
             requested_count=count,
         )
         result.recompute_coverage()
+        if result.count < count:
+            # Only reachable when the model under-generated *and* the brief's
+            # unknowns and the standing pool were exhausted. Reported so the
+            # operator sees a short set as a short set rather than assuming
+            # this is what they asked for.
+            logger.warning(
+                "questionnaire_short", requested=count, produced=result.count
+            )
         return SkillResult(skill_id=SKILL_ID, output=result.model_dump())
 
     # ── The request ──────────────────────────────────────────────────
@@ -300,25 +333,19 @@ class GenerateQuestionnaire(BaseSkill):
             filler.append(GeneratedQuestion(text=question, workflow_target="WF1"))
             asked.add(question.strip().lower())
 
-        wf3_fallbacks = [
-            "Do you have previous ads or marketing materials we could reuse?",
-            "What photography do you have of the business, products or team?",
-            "Which brand assets — logo, colours, fonts — are currently in use?",
-            "Which channels have you advertised on, and what worked?",
-            "What does a realistic monthly marketing budget look like?",
-        ]
-        index = 0
-        while len(filler) < needed and index < len(wf3_fallbacks):
-            text = wf3_fallbacks[index]
-            index += 1
+        for text, workflow in STANDING_QUESTIONS:
+            if len(filler) >= needed:
+                break
             if text.strip().lower() in asked:
                 continue
-            filler.append(GeneratedQuestion(text=text, workflow_target="WF3"))
+            filler.append(GeneratedQuestion(text=text, workflow_target=workflow))
             asked.add(text.strip().lower())
 
-        # Still short only if the brief was empty and the fallbacks were all
-        # already asked. Repeating a question is worse than returning fewer,
-        # and Django reports the real count either way.
+        # If the pool is exhausted the caller returns fewer than asked and
+        # says so. The alternative — numbered filler like "Additional question
+        # 13" — would hit the count while handing an operator something to
+        # approve that is not a question. A short set that reports itself is
+        # honest; a padded one is not.
         return filler[:needed]
 
     # ── Degradation ──────────────────────────────────────────────────

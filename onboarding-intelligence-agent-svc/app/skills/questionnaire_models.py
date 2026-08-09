@@ -93,6 +93,12 @@ class GeneratedQuestionnaire(BaseModel):
             )
         parts = ", ".join(f"{w} {self.coverage.get(w, 0.0):.0%}" for w in WORKFLOWS)
         line = f"{self.count} questions at {self.depth} depth — coverage {parts}."
+        if self.requested_count and self.count < self.requested_count:
+            line = (
+                f"{self.count} questions at {self.depth} depth — "
+                f"{self.requested_count} were requested, but there was not "
+                f"enough to ask about without repeating. Coverage {parts}."
+            )
         if self.thin_workflows:
             line += (
                 f" Nothing yet for {', '.join(self.thin_workflows)} — "
