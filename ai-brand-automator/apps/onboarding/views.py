@@ -44,6 +44,7 @@ from apps.onboarding.models import (
     FieldClassification,
     FieldProvenance,
     MeetingRecording,
+    MeetingStatus,
     OnboardingSession,
     ProvenanceStatus,
     Question,
@@ -53,6 +54,7 @@ from apps.onboarding.models import (
     QuestionnaireStatus,
     RecordingStatus,
     ResearchBrief,
+    ScheduledMeeting,
     SessionStatus,
     WorkflowTarget,
     depth_from,
@@ -67,6 +69,7 @@ from apps.onboarding.serializers import (
     QuestionnaireSerializer,
     RecordingStopSerializer,
     ResearchBriefSerializer,
+    ScheduledMeetingSerializer,
 )
 from apps.onboarding.services.session_state import InvalidTransition, transition
 from apps.onboarding.text import levenshtein, normalise_company_name
@@ -1461,3 +1464,89 @@ def live_precheck(request, pk):
             ),
         }
     )
+
+
+class ScheduledMeetingViewSet(
+    RoleBasedPermissionMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """``/api/v1/onboarding/calendar/events/`` — the in-app calendar (D-01).
+
+    §10.2 writes the path as ``/calendar/events/``. Mounted under
+    ``/onboarding/`` because every other endpoint in this app is, and a lone
+    top-level route would be the odd one out for a calendar that, per the
+    card, "shows onboarding meetings and nothing else".
+
+    AC-3 maps directly onto §15: Owner, Admin and Editor create and edit; a
+    Viewer reads. Deletion is deliberately absent — cancelling *releases* the
+    session and keeps the record, which is what AC-1 asks for and what D-03's
+    sync will need to reconcile against.
+    """
+
+    serializer_class = ScheduledMeetingSerializer
+    queryset = ScheduledMeeting.objects.all()
+
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "create": [IsAuthenticated, IsTenantEditor],
+        "update": [IsAuthenticated, IsTenantEditor],
+        "partial_update": [IsAuthenticated, IsTenantEditor],
+        "cancel": [IsAuthenticated, IsTenantEditor],
+    }
+
+    def get_queryset(self):
+        tenant = getattr(self.request, "tenant", None)
+        queryset = ScheduledMeeting.objects.select_related(
+            "session", "session__company"
+        ).filter(tenant_scope_q(tenant))
+
+        # A calendar asks for a window, not for everything. Filtered
+        # server-side for the same reason C-05's questionnaire list is: a
+        # client narrowing a paginated response is correct until page two.
+        since = self.request.query_params.get("from")
+        until = self.request.query_params.get("to")
+        if since:
+            queryset = queryset.filter(ends_at__gte=since)
+        if until:
+            queryset = queryset.filter(starts_at__lte=until)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(
+            tenant=getattr(self.request, "tenant", None),
+            organiser=self.request.user,
+        )
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        """Cancel the meeting and release its session (AC-1).
+
+        The row survives. Deleting it would erase the fact that a meeting was
+        booked at all, which an operator asking "what happened to Tuesday"
+        needs, and would leave D-03 unable to tell a cancellation from a
+        record that never existed.
+        """
+        with db_transaction.atomic():
+            meeting = (
+                self.get_queryset()
+                .select_for_update(of=("self",))
+                .filter(pk=pk)
+                .first()
+            )
+            if meeting is None:
+                raise Http404
+            if meeting.status == MeetingStatus.CANCELLED:
+                return Response(
+                    {"error": "this meeting is already cancelled"},
+                    status=http.HTTP_409_CONFLICT,
+                )
+
+            meeting.status = MeetingStatus.CANCELLED
+            meeting.save(update_fields=["status", "updated_at"])
+
+        return Response(ScheduledMeetingSerializer(meeting).data)
