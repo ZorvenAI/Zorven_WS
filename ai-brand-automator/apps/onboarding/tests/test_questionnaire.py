@@ -385,3 +385,70 @@ def test_a_write_without_the_tenant_header_is_refused(api_client):
     assert response.status_code == 400
     assert "X-Tenant-ID" in response.json()["error"]
     assert not Questionnaire.objects.exists()
+
+
+# ── Review findings · the tenant is the authority for every lookup ───
+
+
+def test_a_company_from_another_tenant_is_refused(api_client, tenant):
+    """Review finding. Unscoped, a service-token caller could attach this
+    questionnaire to another tenant's Company by guessing an id — the same
+    class of cross-tenant defect this PR exists to fix, one field along.
+    """
+    other = Tenant.objects.create(name="Other", schema_name="c03_other")
+    theirs = Company.objects.create(tenant=other, name="Not Yours")
+
+    response = generate(api_client, tenant, company_id=theirs.pk)
+
+    assert response.status_code == 400
+    assert "does not belong to this tenant" in response.json()["error"]
+    assert not Questionnaire.objects.exists()
+
+
+def test_a_company_id_that_does_not_exist_is_refused(api_client, tenant):
+    response = generate(api_client, tenant, company_id=999999)
+
+    assert response.status_code == 400
+    assert not Questionnaire.objects.exists()
+
+
+def test_a_malformed_company_id_is_a_400_not_a_500(api_client, tenant):
+    """The pk is a BigAutoField; a non-numeric value raises out of the
+    queryset rather than returning nothing."""
+    response = generate(api_client, tenant, company_id="not-a-number")
+
+    assert response.status_code == 400
+
+
+def test_a_session_from_another_tenant_is_ignored(api_client, tenant):
+    """Strict scoping, not tenant_scope_q: that predicate admits tenant-less
+    rows, which is right for a user's read and wrong for a service write
+    handed an explicit tenant."""
+    other = Tenant.objects.create(name="Other2", schema_name="c03_other2")
+    company = Company.objects.create(tenant=other, name="Theirs")
+    from apps.onboarding.models import OnboardingSession
+
+    theirs = OnboardingSession.objects.create(tenant=other, company=company)
+
+    response = generate(api_client, tenant, session_id=theirs.pk)
+
+    assert response.status_code == 201
+    assert (
+        Questionnaire.objects.get().session is None
+    ), "attached another tenant's session"
+
+
+@pytest.mark.parametrize("bad", ["not-a-number", "", "1; DROP TABLE", "٣"])
+def test_a_malformed_tenant_header_is_a_400_not_a_500(api_client, bad):
+    """Review finding. A request boundary must not 500 on a malformed header
+    from a caller that has otherwise authenticated correctly."""
+    response = api_client.post(
+        GENERATE,
+        {"questions": questions()},
+        format="json",
+        HTTP_X_SERVICE_TOKEN=TOKEN,
+        HTTP_X_TENANT_ID=bad,
+    )
+
+    assert response.status_code == 400, response.content
+    assert not Questionnaire.objects.exists()

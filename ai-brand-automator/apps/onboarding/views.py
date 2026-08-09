@@ -711,7 +711,15 @@ def _service_tenant(request):
             {"error": "X-Tenant-ID header required"},
             status=http.HTTP_400_BAD_REQUEST,
         )
-    tenant = Tenant.objects.filter(pk=raw).first()
+    try:
+        tenant = Tenant.objects.filter(pk=raw).first()
+    except (ValueError, TypeError):
+        # The pk is a BigAutoField, so a non-numeric header raises ValueError
+        # out of the queryset rather than returning nothing — a 500 on a
+        # request boundary, from a caller sending a malformed header. An id
+        # that cannot name a tenant is the same answer as one that names no
+        # tenant.
+        tenant = None
     if tenant is None:
         return None, Response(
             {"error": f"unknown tenant {raw!r}"},
@@ -959,16 +967,33 @@ def create_questionnaire(request):
     session = None
     session_id = request.data.get("session_id")
     if session_id:
-        session = (
-            OnboardingSession.objects.filter(tenant_scope_q(tenant))
-            .filter(pk=session_id)
-            .first()
-        )
+        # Strict, not tenant_scope_q. That predicate admits tenant-less rows,
+        # which is correct for a user reading data that predates
+        # multi-tenancy and wrong for a service write that was handed an
+        # explicit tenant: there is no reason to attach a row from outside it.
+        try:
+            session = OnboardingSession.objects.filter(
+                tenant=tenant, pk=session_id
+            ).first()
+        except (ValueError, TypeError):
+            session = None
 
     company = None
     company_id = request.data.get("company_id")
     if company_id:
-        company = Company.objects.filter(pk=company_id).first()
+        # Scoped to the header tenant. Unscoped, a service-token caller could
+        # attach this questionnaire to another tenant's Company by guessing an
+        # id — the same class of cross-tenant defect this PR exists to fix,
+        # one field further along.
+        try:
+            company = Company.objects.filter(tenant=tenant, pk=company_id).first()
+        except (ValueError, TypeError):
+            company = None
+        if company is None:
+            return Response(
+                {"error": f"company {company_id!r} does not belong to this tenant"},
+                status=http.HTTP_400_BAD_REQUEST,
+            )
     elif session is not None:
         company = session.company
 

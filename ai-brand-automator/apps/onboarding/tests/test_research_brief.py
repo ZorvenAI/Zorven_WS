@@ -463,3 +463,18 @@ def test_a_write_naming_an_unknown_tenant_is_refused(api_client):
 
     assert response.status_code == 400
     assert not ResearchBrief.objects.exists()
+
+
+@pytest.mark.parametrize("bad", ["not-a-number", "1; DROP TABLE", "٣"])
+def test_a_malformed_tenant_header_is_a_400_not_a_500(api_client, bad):
+    """The same guard on the brief endpoint — it shares _service_tenant."""
+    response = api_client.post(
+        UPSERT,
+        {"company_name": "Kalyani Roasters", "brief": good_brief()},
+        format="json",
+        HTTP_X_SERVICE_TOKEN=TOKEN,
+        HTTP_X_TENANT_ID=bad,
+    )
+
+    assert response.status_code == 400, response.content
+    assert not ResearchBrief.objects.exists()
