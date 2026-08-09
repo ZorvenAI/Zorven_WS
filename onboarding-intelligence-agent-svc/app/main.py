@@ -14,6 +14,7 @@ from typing import AsyncIterator
 from fastapi import FastAPI
 
 from app.api.routes import router
+from app.api.ws import router as ws_router
 from app.cache.redis_manager import RedisManager
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
@@ -75,11 +76,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # modules, which is startup work rather than per-request work. The
     # providers are constructed here so a missing key is visible at boot in
     # the logs rather than on the first operator's turn.
+    # One BackendClient, shared. Each one builds its own BreakerRegistry, so
+    # two would give the PREP path and the IG-10 gate independent breakers for
+    # the same dependency: Django could be failing for one and "healthy" for
+    # the other, and the gate would keep paying a full timeout per socket
+    # while PREP had already given up. The comment here used to claim they
+    # shared one while the code created two.
+    app.state.backend = BackendClient(settings.BACKEND_BASE_URL, settings.SERVICE_TOKEN)
     app.state.prep = PrepExecutor(
         app.state.redis,
         tavily=TavilyProvider(settings.TAVILY_API_KEY),
         llm=LLMProvider(settings.GEMINI_KEY),
-        backend=BackendClient(settings.BACKEND_BASE_URL, settings.SERVICE_TOKEN),
+        backend=app.state.backend,
     )
     if not settings.TAVILY_API_KEY:
         logger.warning(
@@ -143,3 +151,6 @@ app = FastAPI(
 )
 app.add_middleware(TraceContextMiddleware)
 app.include_router(router)
+# The LIVE socket. Only the IG-10 gate is behind it until F-04 lands; see
+# app/api/ws.py and the A-02 spike note it cites.
+app.include_router(ws_router)

@@ -18,6 +18,7 @@ from apps.onboarding.views import (
     ResearchBriefViewSet,
     create_questionnaire,
     field_vocabulary,
+    live_precheck,
     upsert_research_brief,
 )
 
@@ -49,6 +50,11 @@ urlpatterns = [
         "field-vocabulary/",
         field_vocabulary,
         name="onboarding-field-vocabulary",
+    ),
+    path(
+        "sessions/<pk>/live-precheck/",
+        live_precheck,
+        name="onboarding-live-precheck",
     ),
     path("", include(router.urls)),
 ]

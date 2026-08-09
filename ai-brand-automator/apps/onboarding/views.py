@@ -1370,3 +1370,77 @@ def field_vocabulary(request):
             status=http.HTTP_403_FORBIDDEN,
         )
     return Response({"fields": sorted(all_mapped_fields())}, status=http.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def live_precheck(request, pk):
+    """``GET /api/v1/onboarding/sessions/{id}/live-precheck/`` — IG-10's data.
+
+    One call that answers exactly the question the WebSocket gate asks, rather
+    than making the agent fetch a session, read its questionnaire id and fetch
+    that too. Two reads to decide one thing is two chances to decide it on a
+    stale half.
+
+    Returns ``approved`` plus the reason, because C-04 AC-4 requires the close
+    to carry "a message naming the missing approval" — a bare false would make
+    the agent invent the wording, and it would drift from what Django knows.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "")
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    tenant, error = _service_tenant(request)
+    if error is not None:
+        return error
+
+    try:
+        session = (
+            OnboardingSession.objects.select_related("questionnaire")
+            .filter(tenant=tenant, pk=pk)
+            .first()
+        )
+    except (ValueError, TypeError):
+        session = None
+
+    if session is None:
+        # 404, not 403 — FR-PREP-06 is explicit that a cross-tenant read must
+        # not confirm the row exists.
+        return Response({"error": "session not found"}, status=http.HTTP_404_NOT_FOUND)
+
+    questionnaire = session.questionnaire
+    if questionnaire is None:
+        return Response(
+            {
+                "approved": False,
+                "session_status": session.status,
+                "questionnaire_status": None,
+                "reason": (
+                    "This session has no questionnaire yet. Prepare and approve "
+                    "one before starting the meeting."
+                ),
+            }
+        )
+
+    approved = questionnaire.status == QuestionnaireStatus.APPROVED
+    return Response(
+        {
+            "approved": approved,
+            "session_status": session.status,
+            "questionnaire_status": questionnaire.status,
+            "questionnaire_id": questionnaire.pk,
+            "reason": (
+                ""
+                if approved
+                else (
+                    f"Questionnaire {questionnaire.pk} is "
+                    f"{questionnaire.status}. Approve it in preparation before "
+                    "starting the meeting."
+                )
+            ),
+        }
+    )
