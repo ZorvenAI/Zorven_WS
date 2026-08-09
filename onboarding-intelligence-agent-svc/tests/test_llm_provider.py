@@ -143,3 +143,36 @@ async def test_a_real_generation_round_trip():
 
     assert text.strip(), "the model returned nothing"
     assert brk.state is State.CLOSED
+
+
+@pytest.mark.integration
+async def test_repeated_real_generations_reuse_a_live_client():
+    """The regression the C-03 e2e found, and the reason it is worth having.
+
+    Discarding the owning ``genai.Client`` made the first generation in a
+        container succeed and every one after it fail with "Cannot send a request,
+        as the client has been closed" — in production, every prep turn after the
+        first until the pod restarted.
+
+        **Three calls, not one.** The existing round-trip test made exactly one
+        request and passed throughout, which is why the bug survived to the e2e.
+
+        Honest limitation: this test does **not** reproduce the failure outside a
+        container — reverting the fix leaves it green here. It is kept as a cheap
+        guard on the repeat path, and the A/B against the built image is what
+        actually establishes the fix.
+    """
+    key = os.environ.get("OIA_GEMINI_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
+    if not key:
+        if os.environ.get("OIA_TEST_GEMINI"):
+            pytest.fail("OIA_TEST_GEMINI is set but no Gemini key is configured")
+        pytest.skip("no Gemini key configured")
+
+    brk = breaker()
+    provider = LLMProvider(key, breaker=brk)
+
+    for attempt in range(3):
+        text = await provider.generate("Reply with the single word: ready")
+        assert text.strip(), f"generation {attempt + 1} returned nothing"
+
+    assert brk.state is State.CLOSED, "a repeat generation tripped the breaker"

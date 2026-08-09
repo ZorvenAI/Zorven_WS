@@ -73,6 +73,9 @@ class LLMProvider:
         self._model_name = model
         self._breaker = breaker or BreakerRegistry().get(DEPENDENCY)
         self._client = client
+        #: The owning genai.Client. Held only to keep it alive — see
+        #: _ensure_client. Never used directly.
+        self._owner: Any = None
 
     @property
     def configured(self) -> bool:
@@ -93,7 +96,28 @@ class LLMProvider:
         if self._client is None:
             from google import genai
 
-            self._client = genai.Client(api_key=self._api_key).aio.models
+            # Keep the owning Client, do not discard it.
+            #
+            # `genai.Client(...).aio.models` on its own made the first
+            # generation in a container succeed and every one after it fail
+            # with "Cannot send a request, as the client has been closed".
+            # Verified by A/B against the same workload and key: the image
+            # without this line failed turns 2-4, the image with it passed
+            # 4/4.
+            #
+            # The precise mechanism is not established — the Client has no
+            # __del__, and the models handle does hold _api_client, so a
+            # plain "it was garbage collected" story does not survive a local
+            # probe. Holding the owner is the SDK's documented usage either
+            # way, so this is the shape to keep regardless of which detail of
+            # the SDK's lifetime management is responsible.
+            #
+            # Found by the C-03 e2e and only findable there: the unit tests
+            # inject a stand-in, and the real-call test made exactly one
+            # request. In production this broke every prep turn after the
+            # first until the pod restarted.
+            self._owner = genai.Client(api_key=self._api_key)
+            self._client = self._owner.aio.models
         return self._client
 
     async def generate(self, prompt: str, *, temperature: float = 0.2) -> str:
