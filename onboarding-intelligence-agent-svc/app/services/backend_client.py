@@ -33,6 +33,7 @@ DEPENDENCY = "backend"
 UPSERT_PATH = "/api/v1/onboarding/research-briefs/upsert/"
 QUESTIONNAIRE_PATH = "/api/v1/onboarding/questionnaires/generate/"
 VOCABULARY_PATH = "/api/v1/onboarding/field-vocabulary/"
+PRECHECK_PATH = "/api/v1/onboarding/sessions/{session_id}/live-precheck/"
 
 #: Short. This is a fire-and-forget write on the tail of a turn the operator
 #: is waiting on, and §2.1 gives PREP a 60 s budget that research and synthesis
@@ -212,3 +213,17 @@ class BackendClient:
 
         self._breaker.record_success()
         return body if isinstance(body, dict) else None
+
+    async def live_precheck(
+        self, *, tenant_id: str, session_id: str
+    ) -> dict[str, Any] | None:
+        """IG-10's data: may this session open a live socket?
+
+        None on any failure, which the caller treats as a refusal. This is the
+        one read in this client where failing closed matters — everywhere else
+        a backend problem costs a stored copy, and here it would put a meeting
+        on air against a questionnaire nobody approved.
+        """
+        return await self._get(
+            PRECHECK_PATH.format(session_id=session_id), tenant_id=tenant_id
+        )

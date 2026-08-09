@@ -24,6 +24,7 @@ from app.providers.llm import LLMProvider
 from app.skills.generate_questionnaire import (
     DEFAULT_COUNT,
     MAX_COUNT,
+    STANDING_QUESTIONS,
     GenerateQuestionnaire,
 )
 from app.skills.models import SkillContext, SkillMeta, TenantContext
@@ -116,6 +117,14 @@ def payload(n: int, workflow_cycle=("WF1", "WF2", "WF3")) -> list[dict]:
         }
         for i in range(n)
     ]
+
+
+#: What the top-up can actually reach for the fixture brief: its unknowns plus
+#: the standing pool. Derived rather than written as 23, so growing the pool
+#: cannot leave this test quietly asserting less than it could.
+REACHABLE = len(context().input_context["research_brief"]["open_unknowns"]) + len(
+    STANDING_QUESTIONS
+)
 
 
 async def generate(model_payload, **ctx) -> GeneratedQuestionnaire:
@@ -407,7 +416,7 @@ async def test_unusable_model_output_does_not_raise(bad):
 @hyp_settings(max_examples=40, deadline=None)
 @given(
     returned=st.integers(min_value=0, max_value=30),
-    requested=st.integers(min_value=1, max_value=25),
+    requested=st.integers(min_value=1, max_value=REACHABLE),
 )
 async def test_the_count_is_always_honoured(returned, requested):
     """AC-1 over arbitrary model behaviour.
@@ -424,8 +433,12 @@ async def test_the_count_is_always_honoured(returned, requested):
     # asserted nothing about the property it was named for. Review caught the
     # shortfall it was hiding.
     #
-    # The fixture brief carries 8 unknowns and the standing pool holds 15, so
-    # any request up to 23 is reachable and must be met exactly.
+    # Bounded by REACHABLE. Hypothesis found the edge the previous bound hid:
+    # it generated 25 while the fixture could reach 23, so the assertion was
+    # failing on a request the code correctly reports as short. Beyond the
+    # pool is a real case and it has its own test —
+    # test_an_unmeetable_request_reports_the_shortfall — rather than being
+    # folded in here where it would read as a bug.
     assert result.count == requested, f"asked for {requested}, got {result.count}"
 
     texts = [q.text.strip().lower() for q in result.questions]

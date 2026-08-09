@@ -14,6 +14,7 @@ from typing import AsyncIterator
 from fastapi import FastAPI
 
 from app.api.routes import router
+from app.api.ws import router as ws_router
 from app.cache.redis_manager import RedisManager
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
@@ -81,6 +82,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         llm=LLMProvider(settings.GEMINI_KEY),
         backend=BackendClient(settings.BACKEND_BASE_URL, settings.SERVICE_TOKEN),
     )
+    # The IG-10 gate reads through this too. One client, so a backend outage
+    # opens one breaker rather than two that disagree about whether Django is
+    # up.
+    app.state.backend = BackendClient(settings.BACKEND_BASE_URL, settings.SERVICE_TOKEN)
     if not settings.TAVILY_API_KEY:
         logger.warning(
             "tavily_not_configured",
@@ -143,3 +148,6 @@ app = FastAPI(
 )
 app.add_middleware(TraceContextMiddleware)
 app.include_router(router)
+# The LIVE socket. Only the IG-10 gate is behind it until F-04 lands; see
+# app/api/ws.py and the A-02 spike note it cites.
+app.include_router(ws_router)

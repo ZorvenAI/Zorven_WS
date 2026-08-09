@@ -119,6 +119,7 @@ IMPLEMENTED |= {
     "app.providers.llm",
     "app.logic.prep_executor",
     "app.services.backend_client",
+    "app.api.ws",  # C-04: the IG-10 gate only; F-04 owns the protocol
 }
 
 #: A-06 turned the sixteen skill modules into registry-resolvable classes.
