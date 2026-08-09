@@ -401,3 +401,61 @@ def test_every_surviving_fact_is_sourced_and_nothing_is_silently_lost(statements
     assert len(brief.facts) + len(brief.open_unknowns) == len(
         [s for s, _ in pairs if s.strip()]
     ), "a claim was neither kept nor demoted"
+
+
+# ── Malformed model output must not take down the turn ───────────────
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "presence", [[1, 2], "a website", 42, None, True, {"website": None}]
+)
+def test_a_non_object_digital_presence_does_not_raise(presence):
+    """Review finding. ``(presence or {}).get(...)`` raised AttributeError on a
+    list, a string or a number — taking down the whole turn, which is exactly
+    what the degraded path exists to avoid.
+    """
+    skill = ResearchBusiness(meta())
+    raw = json.dumps({"facts": [], "digital_presence": presence})
+
+    brief = skill._parse(raw, "Acme", [])
+
+    assert brief.digital_presence.website is None
+
+
+@pytest.mark.unit
+def test_a_string_social_profiles_is_not_split_into_characters():
+    """The quieter half of the same finding, and the worse one.
+
+    Iterating a string yields single characters, so "twitter" became eight
+    one-letter "profiles" carried into the brief as if they were data. A crash
+    gets noticed; this would not have.
+    """
+    skill = ResearchBusiness(meta())
+    raw = json.dumps({"facts": [], "digital_presence": {"social_profiles": "twitter"}})
+
+    brief = skill._parse(raw, "Acme", [])
+
+    assert brief.digital_presence.social_profiles == []
+
+
+@pytest.mark.unit
+def test_a_well_formed_digital_presence_still_reads():
+    """The guard must not reject the shape it sits in front of."""
+    skill = ResearchBusiness(meta())
+    raw = json.dumps(
+        {
+            "facts": [],
+            "digital_presence": {
+                "website": "https://k.example",
+                "social_profiles": ["https://x.com/k", "  ", "https://ig.com/k"],
+                "notes": "active",
+            },
+        }
+    )
+
+    presence = skill._parse(raw, "Acme", []).digital_presence
+
+    assert presence.website == "https://k.example"
+    assert presence.social_profiles == ["https://x.com/k", "https://ig.com/k"]
+    assert presence.notes == "active"

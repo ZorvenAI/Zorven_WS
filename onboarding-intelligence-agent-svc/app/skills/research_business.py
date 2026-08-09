@@ -201,14 +201,7 @@ class ResearchBusiness(BaseSkill):
                 continue
             facts.append(Fact(statement=statement, source_url=url))
 
-        presence = payload.get("digital_presence")
-        digital = DigitalPresence(
-            website=(presence or {}).get("website"),
-            social_profiles=[
-                str(p) for p in (presence or {}).get("social_profiles", []) if p
-            ],
-            notes=str((presence or {}).get("notes") or ""),
-        )
+        digital = self._digital_presence(payload.get("digital_presence"))
 
         return BusinessResearchBrief(
             company_name=company_name,
@@ -221,6 +214,37 @@ class ResearchBusiness(BaseSkill):
             digital_presence=digital,
             open_unknowns=unknowns,
             sources=[r.url for r in results],
+        )
+
+    @staticmethod
+    def _digital_presence(presence: Any) -> DigitalPresence:
+        """Read the digital-presence block, whatever the model actually sent.
+
+        Two distinct failures, both found by review:
+
+        A non-object — a list, a bare string, a number — made ``.get()`` raise
+        ``AttributeError`` and took down the whole turn, which is precisely
+        what the degraded path exists to avoid.
+
+        A *string* ``social_profiles`` was quieter and worse: iterating it
+        yields single characters, so ``"twitter"`` became eight one-letter
+        "profiles" and was carried into the brief as if it were data. A crash
+        gets noticed; this would not have.
+        """
+        if not isinstance(presence, dict):
+            return DigitalPresence()
+
+        website = presence.get("website")
+        profiles = presence.get("social_profiles")
+
+        return DigitalPresence(
+            website=website if isinstance(website, str) and website.strip() else None,
+            social_profiles=(
+                [str(p).strip() for p in profiles if str(p).strip()]
+                if isinstance(profiles, list)
+                else []
+            ),
+            notes=str(presence.get("notes") or ""),
         )
 
     @staticmethod
