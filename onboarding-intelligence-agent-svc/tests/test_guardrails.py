@@ -270,3 +270,108 @@ async def test_output_transforms_reach_the_caller(chain):
 
     result = await registry.execute("SKL-OIA-01", context())
     assert result.output["email"] == "***", "the caller got the pre-guardrail output"
+
+
+# ── OG-01, with a real body (C-02) ───────────────────────────────────
+
+
+def _research_context():
+    from app.skills.models import SkillContext, TenantContext
+
+    return SkillContext(
+        input_prompt="prep",
+        tenant_context=TenantContext(tenant_id="t-1", user_id="u-1", role="ADMIN"),
+        input_context={},
+    )
+
+
+def test_og_unsourced_fact_moves_to_unknowns():
+    """The C-02 card's named case: "OG grounding applies to research too".
+
+    Demotion, not deletion. A claim the agent could not source is a thing
+    worth *asking about*, and SKL-OIA-02 turns unknowns straight into
+    questions — deleting it would throw away the signal that the agent looked
+    and came back empty.
+    """
+    from app.logic.grounding import ground_output
+
+    verdict = ground_output(
+        {
+            "facts": [
+                {"statement": "Founded 2016.", "source_url": "https://x.example/a"},
+                {"statement": "Revenue is 40 crore.", "source_url": ""},
+            ],
+            "open_unknowns": ["What is their AOV?"],
+        },
+        _research_context(),
+    )
+
+    assert verdict.action is Action.DROP
+    assert verdict.payload["facts"] == [
+        {"statement": "Founded 2016.", "source_url": "https://x.example/a"}
+    ]
+    assert verdict.payload["open_unknowns"] == [
+        "What is their AOV?",
+        "Unverified: Revenue is 40 crore.",
+    ]
+
+
+def test_og_01_passes_a_fully_sourced_payload_through_unchanged():
+    from app.logic.grounding import ground_output
+
+    payload = {
+        "facts": [{"statement": "Founded 2016.", "source_url": "https://x.example/a"}],
+        "open_unknowns": [],
+    }
+
+    verdict = ground_output(payload, _research_context())
+
+    assert verdict.action is Action.PASS
+    assert verdict.payload == payload
+
+
+def test_og_01_does_not_ground_the_unknowns_list():
+    """An unknown is by definition unsourced. A universal rule would strip the
+    most valuable part of the brief."""
+    from app.logic.grounding import ground_output
+
+    verdict = ground_output(
+        {"facts": [], "open_unknowns": ["no source, and that is the point"]},
+        _research_context(),
+    )
+
+    assert verdict.action is Action.PASS
+    assert verdict.payload["open_unknowns"] == ["no source, and that is the point"]
+
+
+@pytest.mark.parametrize(
+    "bad_url", ["", "   ", "unknown", "the company website", "ftp://x", None, 42]
+)
+def test_og_01_rejects_anything_that_is_not_an_http_url(bad_url):
+    """ "the company website" is not a citation. The rule exists to stop a
+    plausible-looking string standing in for one."""
+    from app.logic.grounding import ground_output
+
+    verdict = ground_output(
+        {"facts": [{"statement": "A claim.", "source_url": bad_url}]},
+        _research_context(),
+    )
+
+    assert verdict.payload["facts"] == []
+    assert verdict.payload["open_unknowns"] == ["Unverified: A claim."]
+
+
+def test_og_01_is_registered_in_place_not_appended():
+    """A-06's ordering guarantee. §5 numbers its rules in reading order, and a
+    replacement that moved OG-01 to the end would let later rules act on
+    ungrounded values first.
+    """
+    from app.logic.grounding import RULE_ID, ground_output
+
+    chain = GuardrailChain()
+    before = chain.rules(Layer.OUTPUT)
+
+    chain.register(Layer.OUTPUT, RULE_ID, ground_output)
+
+    assert chain.rules(Layer.OUTPUT) == before
+    assert chain.rules(Layer.OUTPUT)[0] == "OG-01"

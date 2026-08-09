@@ -21,6 +21,9 @@ from app.api.schemas import (
     UsageReport,
 )
 from app.cache.conversation import ConversationStore
+from app.logic.prep_executor import RESEARCH_SKILL
+from app.skills.models import TenantContext
+from app.skills.research_brief import BusinessResearchBrief
 
 router = APIRouter()
 
@@ -205,20 +208,51 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
         tenant_id=tenant_id, chat_session_id=payload.chat_session_id
     )
 
+    brief, from_cache = await request.app.state.prep.research(
+        tenant=TenantContext(
+            tenant_id=tenant_id,
+            user_id=payload.tenant_context.user_id,
+            role=payload.tenant_context.role,
+            session_id=payload.session_id,
+        ),
+        input_context=payload.input_context,
+        input_prompt=payload.input_prompt,
+        correlation_id=payload.tenant_context.correlation_id or "",
+    )
+
+    summary = BusinessResearchBrief.model_validate(brief).summary_line()
+
+    # The brief is recorded as an agent turn so the next turn sees it. C-01
+    # built the history for exactly this — an operator saying "go deeper on
+    # their supply chain" needs the agent to know what it already found.
+    await store.append(
+        tenant_id=tenant_id,
+        chat_session_id=payload.chat_session_id,
+        role="agent",
+        text=summary,
+    )
+
     return ExecuteResponse(
         status="SUCCEEDED",
-        # Named rather than left blank, so a caller reading the response can
-        # tell "no skill is wired up yet" from "a skill ran and produced
-        # nothing" — which are different bugs.
-        skill_id="NONE",
+        skill_id=RESEARCH_SKILL,
         output={
             "turns": len(history),
             "history": history,
-            "detail": (
-                "Conversation recorded. Question generation arrives with "
-                "SKL-OIA-01 and SKL-OIA-02 (C-02, C-03)."
-            ),
+            # `detail` is what the operator actually reads: Django's dispatcher
+            # renders output.detail into the chat bubble and falls back to
+            # "Preparation is under way." when it is absent. Dropping this key
+            # would replace every prep reply with that placeholder, and no test
+            # on this side would have noticed.
+            "detail": summary,
+            "research_brief": brief,
+            "from_cache": from_cache,
         },
-        guardrails=GuardrailReport(),
+        guardrails=GuardrailReport(
+            # OG-01 demotes rather than blocks, so a brief that lost facts
+            # still passes — the demotion is visible in open_unknowns, and
+            # reporting FAIL would tell an operator the turn failed when it
+            # did exactly what it should.
+            output="PASS",
+        ),
         usage=UsageReport(duration_ms=int((time.monotonic() - started) * 1000)),
     )

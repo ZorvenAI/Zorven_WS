@@ -114,7 +114,11 @@ IMPLEMENTED |= {"app.api.deps", "app.api.schemas"}
 #: Implemented by C-02. §18.2 specified config/circuit_breakers.yaml and this
 #: module from the start, but no story owned building them — the scaffold
 #: docstring named A-06, whose acceptance criteria never mention breakers.
-IMPLEMENTED |= {"app.circuit_breaker.breaker", "app.providers.llm"}
+IMPLEMENTED |= {
+    "app.circuit_breaker.breaker",
+    "app.providers.llm",
+    "app.logic.prep_executor",
+}
 
 #: A-06 turned the sixteen skill modules into registry-resolvable classes.
 #: They are no longer bare stubs — the class is real and instantiable, and it
@@ -169,7 +173,15 @@ def test_skills_yaml_declares_all_sixteen_skills():
     assert len(parsed["skills"]) == 16
 
 
-@pytest.mark.parametrize("dotted", SKILL_MODULES)
+#: Skills whose bodies have landed. Named individually rather than removed
+#: from SKILL_MODULES, so the deferred-body check keeps covering the other
+#: fifteen and this list reads as a progress marker.
+IMPLEMENTED_BODIES = {"app.skills.research_business"}  # C-02
+
+
+@pytest.mark.parametrize(
+    "dotted", [m for m in SKILL_MODULES if m not in IMPLEMENTED_BODIES]
+)
 def test_skill_bodies_are_deferred(dotted):
     """The class resolves and instantiates; run/stream still refuse to run.
 
@@ -255,3 +267,27 @@ def test_each_spec_is_self_consistent():
 
     for code, spec in ERROR_SPECS.items():
         assert spec.code == code, f"{code} is keyed to a spec for {spec.code}"
+
+
+def test_the_implemented_body_list_stays_honest():
+    """A skill listed here but still raising would quietly lose its coverage —
+    the deferred check skips it and no other test would notice."""
+    import asyncio
+    import importlib
+
+    from app.skills.models import SkillContext, SkillMeta, TenantContext
+
+    for dotted in IMPLEMENTED_BODIES:
+        module = importlib.import_module(dotted)
+        name = dotted.rsplit(".", 1)[1]
+        cls = getattr(module, "".join(p.title() for p in name.split("_")))
+        skill = cls(SkillMeta(skill_id="SKL-OIA-00", name=name))
+
+        context = SkillContext(
+            input_prompt="p",
+            tenant_context=TenantContext(tenant_id="t-1", role="ADMIN"),
+            input_context={"company_name": "Acme"},
+        )
+        result = asyncio.run(skill.run(context))
+
+        assert result is not None, f"{dotted} is listed as implemented but returns None"

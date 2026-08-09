@@ -110,6 +110,19 @@ code, check §18.4 before using it.
 
 Providers wrap dependencies: `app/providers/tavily.py` and `app/providers/llm.py`. Both differ from `discovery-agent-svc`'s Tavily code on purpose — they use the async client (the fleet's blocks the event loop, which would stall a live meeting) and they **do not swallow failures into an empty result**, because "we could not look" and "there is nothing to find" need different operator responses.
 
+## PREP: how a turn becomes research (C-02)
+
+`POST /v1/execute` → `PrepExecutor` (`app/logic/prep_executor.py`, on `app.state.prep`) → `SkillRegistry.execute("SKL-OIA-01")` → `ResearchBusiness`. The executor owns the registry and the brief cache because both are decisions that move as C-03 and C-04 land, and neither belongs in an HTTP handler.
+
+- **The model never researches.** It only organises text Tavily retrieved. A model asked to research a small business produces fluent, plausible, unsourced claims — the exact failure AC-1 exists to prevent.
+- **Two grounding checks, not one.** The skill drops any fact whose `source_url` was not in the retrieved set (an invented-but-plausible citation passes a URL-shape check), and OG-01 then demotes anything still unsourced.
+- **OG-01 is a real registered rule**, not logic inside the skill — installed via `GuardrailChain.register`, which replaces a body in place without reordering the layer. M-01 will extend it rather than find a no-op plus a private copy.
+- **Unsourced facts are demoted, never deleted.** SKL-OIA-02 turns `open_unknowns` into questions, so a claim the agent could not source is signal, not noise.
+- **A degraded brief is never cached.** It is the *absence* of research; caching it would let a one-minute Tavily outage suppress real research for the next hour with nothing to tell the operator why.
+- `output.detail` is load-bearing: Django renders it into the chat bubble and falls back to "Preparation is under way." if absent.
+
+Skills receive shared dependencies through `SkillRegistry(providers={...})`, matched against each skill's `__init__` signature. A skill that grows a dependency picks it up by adding the parameter — there is no second place to register it.
+
 ## Non-negotiables in this service
 
 ### Eviction: the shared instance is `noeviction`, and must stay that way

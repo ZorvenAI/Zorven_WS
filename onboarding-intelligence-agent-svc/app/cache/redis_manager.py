@@ -37,6 +37,7 @@ PROMPT_CACHE_PREFIX: Final[str] = "poi:"
 TTL_SESSION: Final[int] = 4 * 60 * 60  # sliding
 TTL_LIVE: Final[int] = 4 * 60 * 60
 TTL_SUMMARY: Final[int] = 24 * 60 * 60
+TTL_BRIEF: Final[int] = 60 * 60  # research brief (C-02)
 TTL_IDEMPOTENCY: Final[int] = 24 * 60 * 60
 TTL_OUTBOX: Final[int] = 24 * 60 * 60
 TTL_CIRCUIT: Final[int] = 5 * 60
@@ -80,6 +81,17 @@ class TenantKeys:
     def session_summary(self, session_id: str) -> str:
         """String · 24 h · compressed L3 summary."""
         return f"{self._scope}session:{session_id}:summary"
+
+    def brief(self, company_slug: str) -> str:
+        """String · 1 h · a BusinessResearchBrief (C-02).
+
+        Keyed on the *normalised* company name rather than a session or a
+        chat: the card asks for "(tenant, normalised business name)" because
+        an operator re-running prep for the same business — often in a new
+        chat while tuning question count — should not pay for a fresh round
+        of Tavily searches each time.
+        """
+        return f"{self._scope}brief:{company_slug}"
 
     def chat(self, chat_session_id: str) -> str:
         """List · 4 h sliding · prep conversation turns (C-01).

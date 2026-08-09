@@ -18,7 +18,9 @@ way to invoke a skill without passing IG → PG → OG and the §15 matrix.
 from __future__ import annotations
 
 import importlib
+import inspect
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, AsyncIterator
 
@@ -51,6 +53,7 @@ class SkillRegistry:
         self,
         chain: GuardrailChain | None = None,
         rbac: RBACEngine | None = None,
+        providers: Mapping[str, Any] | None = None,
     ) -> None:
         self._by_id: dict[str, Skill] = {}
         self._by_name: dict[str, Skill] = {}
@@ -58,6 +61,12 @@ class SkillRegistry:
         self._internal_only: set[str] = set()
         self.chain = chain or GuardrailChain()
         self.rbac = rbac or RBACEngine()
+        #: Shared dependencies offered to skills that declare them (C-02).
+        #: Keyed by keyword-argument name — "tavily", "llm", "vision" — and
+        #: passed only to skills whose __init__ accepts that name, so a skill
+        #: takes what it needs and nothing else. Doing this generically once
+        #: avoids a bespoke wiring method on each of the sixteen.
+        self._providers: Mapping[str, Any] = providers or {}
 
     # ── Loading ──────────────────────────────────────────────
     def load(self, config_path: Path | None = None, *, resolve: bool = True) -> None:
@@ -116,8 +125,7 @@ class SkillRegistry:
             or "",
         )
 
-    @staticmethod
-    def _resolve(meta: SkillMeta) -> Skill:
+    def _resolve(self, meta: SkillMeta) -> Skill:
         """Import the module and instantiate the class named by the skill."""
         module_path = MODULE_TEMPLATE.format(name=meta.name)
         class_name = "".join(part.title() for part in meta.name.split("_"))
@@ -142,7 +150,25 @@ class SkillRegistry:
                 f"{meta.skill_id} ({meta.name}): {class_name} is not a BaseSkill "
                 "or StreamingSkill"
             )
-        return implementation(meta)
+        return implementation(meta, **self._provider_kwargs(implementation))
+
+    def _provider_kwargs(self, implementation: type) -> dict[str, Any]:
+        """The subset of shared providers this skill's __init__ accepts.
+
+        Signature-driven rather than declaration-driven: a skill that grows a
+        dependency picks it up by adding the parameter, with no second place
+        to remember to update. A skill that accepts none — most of them — is
+        constructed exactly as before.
+        """
+        if not self._providers:
+            return {}
+        try:
+            parameters = inspect.signature(implementation).parameters
+        except (TypeError, ValueError):  # pragma: no cover - builtins only
+            return {}
+        return {
+            name: value for name, value in self._providers.items() if name in parameters
+        }
 
     # ── Lookup ───────────────────────────────────────────────
     def get(self, key: str) -> Skill:
