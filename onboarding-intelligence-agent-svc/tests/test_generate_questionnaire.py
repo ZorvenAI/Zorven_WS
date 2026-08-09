@@ -383,11 +383,21 @@ async def test_no_llm_returns_no_questions_rather_than_invented_ones():
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("bad", ["not json", "", "{}", "[1,2,3]", '{"questions": []}'])
+@pytest.mark.parametrize("bad", ["not json", "{}", "[1,2,3]", '{"questions": []}'])
 async def test_unusable_model_output_does_not_raise(bad):
+    """Strengthened by the weak-assertion sweep.
+
+    This asserted ``isinstance(result.count, int)``, which is true of every
+    possible outcome including the skill returning nothing at all. What
+    actually matters is that garbage from the model still produces the set
+    the operator asked for — the top-up path is what makes that true, and the
+    old assertion would have passed with it removed.
+    """
     result = await generate(bad, count=5)
 
-    assert isinstance(result.count, int)
+    assert result.count == 5, f"{bad!r} produced {result.count} questions"
+    assert all(q.text.strip().endswith("?") for q in result.questions)
+    assert result.degraded is False, "unusable output is not a dependency outage"
 
 
 # ── Property ─────────────────────────────────────────────────────────
@@ -482,3 +492,24 @@ def test_the_standing_pool_has_no_duplicates():
 
     texts = [t.strip().lower() for t, _ in STANDING_QUESTIONS]
     assert len(texts) == len(set(texts))
+
+
+@pytest.mark.unit
+async def test_an_empty_completion_degrades_rather_than_topping_up():
+    """The distinction the sweep surfaced.
+
+    An empty completion is a *provider* failure — LLMProvider treats it as one
+    deliberately, so a safety block cannot silently produce nothing — and it
+    reaches this skill as LLMUnavailable. Output that is present but
+    unparseable is a different thing: the model answered, we could not use it,
+    and the top-up path fills the set.
+
+    The old test parametrised both together behind
+    ``assert isinstance(result.count, int)``, which was true either way and
+    hid that they take different paths.
+    """
+    result = await generate("", count=5)
+
+    assert result.degraded is True
+    assert result.questions == []
+    assert "Nothing was saved" in result.summary_line()

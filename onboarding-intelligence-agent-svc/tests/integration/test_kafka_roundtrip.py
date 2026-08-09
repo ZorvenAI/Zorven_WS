@@ -504,14 +504,19 @@ async def test_a_topic_with_wrong_retention_is_reconciled(broker):
         await admin.close()
 
 
-async def test_consumer_commits_only_after_handling(settings, producer, broker):
+async def test_auto_commit_is_disabled_on_the_real_consumer(settings, producer, broker):
     """Review finding: auto-commit can advance past an unhandled message.
 
-    The consumer now commits explicitly after handle_raw, so a crash mid-handle
-    replays the message rather than losing it.
-    """
-    from aiokafka import AIOKafkaConsumer
+    Renamed by the weak-assertion sweep. It was
+    ``test_consumer_commits_only_after_handling``, which is not what it
+    checks — it asserts the *precondition* for that behaviour (auto-commit
+    off) on the real client, not that the commit follows handle_raw. Proving
+    the ordering needs a consumer crashed mid-handle and a replay observed,
+    which is N-03's failure-injection story.
 
+    A name that overstates its test is worse than a narrow test: it makes the
+    gap invisible to anyone auditing coverage.
+    """
     from app.messaging.consumer import CommandConsumer
 
     consumer = CommandConsumer(settings, producer)
@@ -522,6 +527,3 @@ async def test_consumer_commits_only_after_handling(settings, producer, broker):
         assert consumer._consumer._enable_auto_commit is False
     finally:
         await stop(consumer)
-
-    assert isinstance(consumer, CommandConsumer)
-    assert AIOKafkaConsumer is not None
