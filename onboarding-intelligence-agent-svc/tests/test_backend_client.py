@@ -254,3 +254,44 @@ async def test_the_tenant_is_sent_as_a_header(django_stub):
     )
 
     assert django_stub["requests"][0]["tenant"] == "tenant-42"
+
+
+@pytest.mark.unit
+def test_two_clients_do_not_share_a_breaker():
+    """The property that makes sharing one client necessary.
+
+    Each BackendClient builds its own BreakerRegistry, so two of them hold
+    independent state for the same dependency. This is not a bug in the client
+    — a caller may legitimately want an isolated breaker — but it is why the
+    app must construct exactly one and hand it to everything.
+    """
+    first = BackendClient("http://x", "tok")
+    second = BackendClient("http://x", "tok")
+
+    for _ in range(5):
+        first._breaker.record_failure()
+
+    assert first._breaker is not second._breaker
+    assert first._breaker.is_open is True
+    assert second._breaker.is_open is False
+
+
+@pytest.mark.unit
+def test_the_app_shares_one_backend_client_across_prep_and_the_gate():
+    """Review finding, asserted on the wiring rather than trusted to a comment.
+
+    Two clients meant Django could be failing for the PREP path and "healthy"
+    for the IG-10 gate, with the gate paying a full timeout per socket after
+    PREP had already given up. The comment in main.py claimed they shared one
+    while the code created two.
+    """
+    import inspect
+
+    import app.main as main
+
+    source = inspect.getsource(main)
+    assert source.count("BackendClient(") == 1, (
+        "main.py constructs more than one BackendClient; the PREP path and "
+        "the IG-10 gate would hold independent breakers"
+    )
+    assert "backend=app.state.backend" in source

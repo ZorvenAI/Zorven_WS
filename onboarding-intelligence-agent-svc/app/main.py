@@ -76,16 +76,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # modules, which is startup work rather than per-request work. The
     # providers are constructed here so a missing key is visible at boot in
     # the logs rather than on the first operator's turn.
+    # One BackendClient, shared. Each one builds its own BreakerRegistry, so
+    # two would give the PREP path and the IG-10 gate independent breakers for
+    # the same dependency: Django could be failing for one and "healthy" for
+    # the other, and the gate would keep paying a full timeout per socket
+    # while PREP had already given up. The comment here used to claim they
+    # shared one while the code created two.
+    app.state.backend = BackendClient(settings.BACKEND_BASE_URL, settings.SERVICE_TOKEN)
     app.state.prep = PrepExecutor(
         app.state.redis,
         tavily=TavilyProvider(settings.TAVILY_API_KEY),
         llm=LLMProvider(settings.GEMINI_KEY),
-        backend=BackendClient(settings.BACKEND_BASE_URL, settings.SERVICE_TOKEN),
+        backend=app.state.backend,
     )
-    # The IG-10 gate reads through this too. One client, so a backend outage
-    # opens one breaker rather than two that disagree about whether Django is
-    # up.
-    app.state.backend = BackendClient(settings.BACKEND_BASE_URL, settings.SERVICE_TOKEN)
     if not settings.TAVILY_API_KEY:
         logger.warning(
             "tavily_not_configured",
