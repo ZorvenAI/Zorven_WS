@@ -187,6 +187,15 @@ class SkillRegistry:
             raise SkillNotFound(f"no skill declared as {key!r}", skill_id=key)
         return meta
 
+    def ids(self) -> list[str]:
+        """Every resolved skill id.
+
+        Public so tests and operators can sweep the registry without reaching
+        into ``_by_id`` — a test that touches privates breaks on a refactor
+        that changed nothing it was testing.
+        """
+        return sorted(self._by_id)
+
     def is_internal_only(self, skill_id: str) -> bool:
         return skill_id in self._internal_only
 

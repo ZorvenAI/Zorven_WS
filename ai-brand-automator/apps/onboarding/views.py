@@ -1033,3 +1033,32 @@ def create_questionnaire(request):
         body["thin_workflows"] = missing
 
     return Response(body, status=http.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def field_vocabulary(request):
+    """``GET /api/v1/onboarding/field-vocabulary/`` — the target_field names.
+
+    C-03's technical note requires target_field to be "drawn from the shared
+    apps/onboarding/field_map.py vocabulary introduced in B-06, not invented
+    per generation, or J-02 cannot join questions to fields".
+
+    Served rather than duplicated into the agent. The generator needs the list
+    *in its prompt* — the write endpoint already drops invented names, but a
+    generator working blind would have most of its mappings dropped, which
+    satisfies the constraint while losing the joins J-02 needs. One source
+    beats two that drift, and this is a list of field names, not a secret.
+
+    Service-token authenticated because the caller is OIA, and tenant-free
+    because the vocabulary is a property of the schema rather than of a
+    tenant's data.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "")
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+    return Response({"fields": sorted(all_mapped_fields())}, status=http.HTTP_200_OK)

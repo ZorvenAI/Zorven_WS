@@ -31,6 +31,8 @@ logger = get_logger(__name__)
 
 DEPENDENCY = "backend"
 UPSERT_PATH = "/api/v1/onboarding/research-briefs/upsert/"
+QUESTIONNAIRE_PATH = "/api/v1/onboarding/questionnaires/generate/"
+VOCABULARY_PATH = "/api/v1/onboarding/field-vocabulary/"
 
 #: Short. This is a fire-and-forget write on the tail of a turn the operator
 #: is waiting on, and §2.1 gives PREP a 60 s budget that research and synthesis
@@ -137,3 +139,76 @@ class BackendClient:
 
         body = await self._post(UPSERT_PATH, payload, tenant_id=tenant_id)
         return bool(body and body.get("stored"))
+
+    async def store_questionnaire(
+        self,
+        *,
+        tenant_id: str,
+        questions: list[dict[str, Any]],
+        depth: str,
+        session_id: str | None = None,
+        company_id: str | None = None,
+        chat_session_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Persist a generated set as a DRAFT (C-03 AC-4).
+
+        Returns the stored questionnaire, or None. Unlike the research brief,
+        a failure here **is** worth surfacing: AC-4 says a row exists, and an
+        operator told "12 questions ready" who then finds nothing to approve
+        has been misled. The caller decides what to say; this still does not
+        raise.
+        """
+        payload: dict[str, Any] = {"questions": questions, "depth": depth}
+        if session_id:
+            payload["session_id"] = session_id
+        if company_id:
+            payload["company_id"] = company_id
+        if chat_session_id:
+            payload["chat_session_id"] = chat_session_id
+
+        return await self._post(QUESTIONNAIRE_PATH, payload, tenant_id=tenant_id)
+
+    async def field_vocabulary(self, *, tenant_id: str) -> list[str]:
+        """The target_field names B-06 defines (C-03).
+
+        Empty on failure rather than raising: without it the generator omits
+        field hints and Django drops any name it invents, so the questionnaire
+        is still usable — it just loses the J-02 joins until the next fetch.
+        """
+        body = await self._get(VOCABULARY_PATH, tenant_id=tenant_id)
+        fields = (body or {}).get("fields")
+        return [str(f) for f in fields] if isinstance(fields, list) else []
+
+    async def _get(self, path: str, *, tenant_id: str) -> dict[str, Any] | None:
+        if not self.configured:
+            return None
+        try:
+            self._breaker.before_call()
+        except CircuitBreakerOpen:
+            return None
+
+        client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
+        owns_client = self._client is None
+        try:
+            response = await client.get(
+                f"{self._base_url}{path}",
+                headers={
+                    "X-Service-Token": self._token,
+                    "X-Tenant-ID": tenant_id,
+                },
+                timeout=TIMEOUT_S,
+            )
+            response.raise_for_status()
+            body = response.json()
+        except Exception as exc:
+            self._breaker.record_failure()
+            logger.warning(
+                "backend_read_failed", path=path, error=f"{type(exc).__name__}: {exc}"
+            )
+            return None
+        finally:
+            if owns_client:
+                await client.aclose()
+
+        self._breaker.record_success()
+        return body if isinstance(body, dict) else None

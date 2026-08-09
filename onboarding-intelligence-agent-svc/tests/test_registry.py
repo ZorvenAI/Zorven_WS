@@ -206,6 +206,23 @@ async def test_internal_callers_pass_the_origin_gate(registry):
         await registry.execute("SKL-OIA-13", ctx)
 
 
+def _first_deferred_skill(registry) -> str:
+    """A skill id whose body still raises NotImplementedError.
+
+    Internal-only skills are excluded: they are gated by origin before the
+    body runs, which is the very thing the caller is trying to distinguish.
+    """
+    import inspect
+
+    for skill_id in sorted(registry.ids()):
+        if registry.is_internal_only(skill_id):
+            continue
+        source = inspect.getsource(type(registry.get(skill_id)))
+        if "NotImplementedError" in source:
+            return skill_id
+    raise AssertionError("every skill has a body — this test needs rewriting")
+
+
 async def test_a_normal_skill_is_unaffected_by_origin(registry):
     """Only the three internal_only skills are gated."""
     from app.skills.models import Origin, SkillContext, TenantContext
@@ -215,8 +232,15 @@ async def test_a_normal_skill_is_unaffected_by_origin(registry):
         tenant_context=TenantContext(tenant_id="t-1", role="ADMIN"),
         origin=Origin.EXTERNAL,
     )
-    # SKL-OIA-02, not 01: C-02 gave SKL-OIA-01 a body, and this test needs a
-    # skill whose NotImplementedError proves the call reached the body rather
-    # than being stopped by the origin gate.
+    # Any still-deferred, non-internal skill will do: the NotImplementedError
+    # is the proof the call reached the body rather than being stopped by the
+    # origin gate.
+    #
+    # Chosen at runtime rather than named. C-02 gave SKL-OIA-01 a body and
+    # this test moved to 02; C-03 gave 02 a body and it would have moved
+    # again. A hardcoded id makes every skill story edit an unrelated test,
+    # which trains people to change the expectation without reading it.
+    deferred = _first_deferred_skill(registry)
+
     with pytest.raises(NotImplementedError):
-        await registry.execute("SKL-OIA-02", ctx)
+        await registry.execute(deferred, ctx)

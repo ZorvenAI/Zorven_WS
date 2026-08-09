@@ -177,7 +177,10 @@ def test_skills_yaml_declares_all_sixteen_skills():
 #: Skills whose bodies have landed. Named individually rather than removed
 #: from SKILL_MODULES, so the deferred-body check keeps covering the other
 #: fifteen and this list reads as a progress marker.
-IMPLEMENTED_BODIES = {"app.skills.research_business"}  # C-02
+IMPLEMENTED_BODIES = {
+    "app.skills.research_business",  # C-02
+    "app.skills.generate_questionnaire",  # C-03
+}
 
 
 @pytest.mark.parametrize(

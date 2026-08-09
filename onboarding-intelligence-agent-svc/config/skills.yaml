@@ -47,7 +47,7 @@ skills:
   - skill_id: SKL-OIA-02
     name: generate_questionnaire
     description: >-
-      Generate a questionnaire to the operator's requested count and depth. input_context carries the BusinessResearchBrief from SKL-OIA-01.
+      Generate a questionnaire to the operator's requested count and depth. input_context carries {research_brief, count, depth, operator_notes} — the BusinessResearchBrief from SKL-OIA-01 plus the operator's request. count is honoured exactly (C-03 AC-1) and depth is one of quick|standard|deep, mapped onto Questionnaire.depth's 1-5 scale. Both live inside input_context rather than as top-level fields, because every skill in this file takes the same five inputs and test_skills_yaml.py enforces that across all sixteen.
     input_schema:
       - field: input_prompt
         type: string

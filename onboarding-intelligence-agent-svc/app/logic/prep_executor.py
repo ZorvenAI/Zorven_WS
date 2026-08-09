@@ -34,6 +34,7 @@ from app.skills.research_business import normalise_company_name
 logger = get_logger(__name__)
 
 RESEARCH_SKILL = "SKL-OIA-01"
+QUESTIONNAIRE_SKILL = "SKL-OIA-02"
 
 # TTL_BRIEF is one hour, declared beside the other TTLs in redis_manager. The
 # card asks for "a short TTL" because "operators re-run prep several times
@@ -63,6 +64,11 @@ class PrepExecutor:
         self._redis = redis
         self._registry = registry or self._build_registry(tavily, llm)
         self._backend = backend
+        #: Fetched once and reused. The vocabulary is a property of the Django
+        #: schema, not of a tenant or a turn, so re-reading it per generation
+        #: would put a round trip on the path for a list that changes when a
+        #: migration ships.
+        self._vocabulary: list[str] | None = None
 
     @staticmethod
     def _build_registry(
@@ -190,3 +196,70 @@ class PrepExecutor:
             brief=brief,
             session_id=tenant.session_id,
         )
+
+    async def _ensure_vocabulary(self, tenant_id: str) -> list[str]:
+        """The target_field names, fetched once per process."""
+        if self._vocabulary is not None:
+            return self._vocabulary
+        if self._backend is None:
+            self._vocabulary = []
+            return self._vocabulary
+        self._vocabulary = await self._backend.field_vocabulary(tenant_id=tenant_id)
+        if not self._vocabulary:
+            # Not cached as final — an empty list here usually means the
+            # backend was briefly unreachable, and pinning that for the life
+            # of the process would cost every later generation its field
+            # mappings.
+            self._vocabulary = None
+            return []
+        return self._vocabulary
+
+    async def generate_questionnaire(
+        self,
+        *,
+        tenant: TenantContext,
+        brief: dict[str, Any],
+        count: int,
+        depth: str,
+        input_prompt: str,
+        chat_session_id: str = "",
+        correlation_id: str = "",
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        """Run SKL-OIA-02 and store the result as a DRAFT.
+
+        Returns ``(generated, stored)``. ``stored`` is None when persistence
+        failed or was refused — Django rejects a set with no WF3 coverage per
+        FR-PREP-08 — so the caller can tell "here are your questions" from
+        "here are your questions and they are saved".
+        """
+        skill = self._registry.get(QUESTIONNAIRE_SKILL)
+        vocabulary = await self._ensure_vocabulary(tenant.tenant_id)
+        setter = getattr(skill, "set_vocabulary", None)
+        if setter is not None:
+            setter(vocabulary)
+
+        context = SkillContext(
+            input_prompt=input_prompt,
+            tenant_context=tenant,
+            input_context={
+                "research_brief": brief,
+                "count": count,
+                "depth": depth,
+            },
+            correlation_id=correlation_id,
+            origin=Origin.EXTERNAL,
+        )
+        result = await self._registry.execute(QUESTIONNAIRE_SKILL, context)
+        generated = result.output
+
+        stored = None
+        if self._backend is not None and generated.get("questions"):
+            stored = await self._backend.store_questionnaire(
+                tenant_id=tenant.tenant_id,
+                questions=generated["questions"],
+                depth=generated.get("depth", "standard"),
+                session_id=tenant.session_id,
+                chat_session_id=chat_session_id,
+            )
+
+        return generated, stored
