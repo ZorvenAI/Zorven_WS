@@ -21,8 +21,9 @@ from app.api.schemas import (
     UsageReport,
 )
 from app.cache.conversation import ConversationStore
-from app.logic.prep_executor import RESEARCH_SKILL
+from app.logic.prep_executor import QUESTIONNAIRE_SKILL, RESEARCH_SKILL
 from app.skills.models import TenantContext
+from app.skills.questionnaire_models import GeneratedQuestionnaire
 from app.skills.research_brief import BusinessResearchBrief
 
 router = APIRouter()
@@ -208,19 +209,53 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
         tenant_id=tenant_id, chat_session_id=payload.chat_session_id
     )
 
+    tenant = TenantContext(
+        tenant_id=tenant_id,
+        user_id=payload.tenant_context.user_id,
+        role=payload.tenant_context.role,
+        session_id=payload.session_id,
+    )
+
     brief, from_cache = await request.app.state.prep.research(
-        tenant=TenantContext(
-            tenant_id=tenant_id,
-            user_id=payload.tenant_context.user_id,
-            role=payload.tenant_context.role,
-            session_id=payload.session_id,
-        ),
+        tenant=tenant,
         input_context=payload.input_context,
         input_prompt=payload.input_prompt,
         correlation_id=payload.tenant_context.correlation_id or "",
     )
 
     summary = BusinessResearchBrief.model_validate(brief).summary_line()
+
+    # C-03. A turn asking for questions gets them in the same turn as the
+    # research they are built from — the operator asked once, and making them
+    # ask again after seeing a brief would be a worse conversation.
+    #
+    # `count` is the trigger. Intent detection lives in Django (C-01's
+    # classifier); by the time a turn reaches here the caller has already
+    # decided this is preparation, and the presence of a requested count is
+    # what distinguishes "research this" from "research it and draft me
+    # twelve questions".
+    generated: dict[str, Any] | None = None
+    stored: dict[str, Any] | None = None
+    if payload.input_context.get("count") is not None:
+        generated, stored = await request.app.state.prep.generate_questionnaire(
+            tenant=tenant,
+            brief=brief,
+            count=payload.input_context.get("count"),
+            depth=payload.input_context.get("depth", "standard"),
+            input_prompt=payload.input_prompt,
+            chat_session_id=payload.chat_session_id,
+            correlation_id=payload.tenant_context.correlation_id or "",
+        )
+        questionnaire = GeneratedQuestionnaire.model_validate(generated)
+        # The questionnaire's summary replaces the brief's: it is the answer to
+        # what the operator asked, and it already names the coverage gaps AC-3
+        # wants them to act on before approving.
+        summary = questionnaire.summary_line()
+        if questionnaire.questions and stored is None:
+            # AC-4 says a DRAFT row exists. Telling an operator "12 questions
+            # ready" when nothing was saved would send them looking for an
+            # approval screen with nothing on it.
+            summary += " (not saved — the questions are above but could not be stored.)"
 
     # The brief is recorded as an agent turn so the next turn sees it. C-01
     # built the history for exactly this — an operator saying "go deeper on
@@ -234,7 +269,7 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
 
     return ExecuteResponse(
         status="SUCCEEDED",
-        skill_id=RESEARCH_SKILL,
+        skill_id=QUESTIONNAIRE_SKILL if generated else RESEARCH_SKILL,
         output={
             "turns": len(history),
             "history": history,
@@ -246,6 +281,8 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
             "detail": summary,
             "research_brief": brief,
             "from_cache": from_cache,
+            "questionnaire": generated,
+            "stored_questionnaire_id": (stored or {}).get("id"),
         },
         guardrails=GuardrailReport(
             # OG-01 demotes rather than blocks, so a brief that lost facts
