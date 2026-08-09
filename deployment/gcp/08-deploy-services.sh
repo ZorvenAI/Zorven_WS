@@ -467,7 +467,7 @@ deploy_service zorven-onboarding-intelligence-agent zorven-onboarding-intelligen
   --max-instances="${CR_MAX_INSTANCES_AGENT}" \
   --timeout="${CR_WS_TIMEOUT}" \
   --session-affinity \
-  --set-secrets="OIA_GEMINI_KEY=GOOGLE_API_KEY:latest" \
+  --set-secrets="OIA_GEMINI_KEY=GOOGLE_API_KEY:latest,OIA_TAVILY_API_KEY=TAVILY_API_KEY:latest" \
   --set-env-vars="\
 OIA_REDIS_URL=${REDIS_BASE}/2,\
 OIA_REDIS_DB=2,\

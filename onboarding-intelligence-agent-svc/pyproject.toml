@@ -19,3 +19,4 @@ ignore_missing_imports = true
 # Stubs raise NotImplementedError from bodies typed as returning a value;
 # that is intentional scaffolding, not a type error.
 disable_error_code = ["empty-body"]
+

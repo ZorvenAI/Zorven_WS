@@ -98,6 +98,18 @@ written before the taxonomy was, so cards cite codes §18.4 later spent on
 something else, and three conditions have no code at all. When a card names a
 code, check §18.4 before using it.
 
+## Circuit breakers (§18.2)
+
+`config/circuit_breakers.yaml` is §18.2 transcribed verbatim; `app/circuit_breaker/breaker.py` loads it. Both arrived with **C-02**, not A-06 — the scaffolded stub named A-06 as its implementer, but A-06's acceptance criteria cover the registry, guardrail chain, RBAC evaluator and skill interfaces and never mention breakers. No story in the backlog owned this. Check the ACs, not the stub docstring, before assuming something landed.
+
+- All seven dependencies are declared. `tavily` and `llm` have providers (`app/providers/`); the skill that calls them arrives with C-02's second PR, so until that lands the providers are exercised only by their tests.
+- **State is per-process.** Cloud Run runs several instances, so a failing dependency opens N breakers independently. A shared breaker in Redis would add a hop to the very call path it protects and would fail when Redis does.
+- Call `before_call()`, never `is_open`, when you are about to use a dependency — the check and the half-open trial claim must be one atomic step or concurrent callers all slip through.
+- `user_message` is config, not code (§18.2: "these strings are the entire user experience of a failure"). A `null` message means invisible by design, as with `poi`.
+- A missing API key is **not** a breaker failure. It degrades with a distinct reason so an operator can tell a config gap from an outage.
+
+Providers wrap dependencies: `app/providers/tavily.py` and `app/providers/llm.py`. Both differ from `discovery-agent-svc`'s Tavily code on purpose — they use the async client (the fleet's blocks the event loop, which would stall a live meeting) and they **do not swallow failures into an empty result**, because "we could not look" and "there is nothing to find" need different operator responses.
+
 ## Non-negotiables in this service
 
 ### Eviction: the shared instance is `noeviction`, and must stay that way

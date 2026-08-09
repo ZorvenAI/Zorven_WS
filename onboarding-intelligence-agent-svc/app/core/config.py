@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     # ── Secret references (never inline; Design §19) ─────────
     STT_CREDENTIALS: str = ""
     GEMINI_KEY: str = ""
+    #: Empty is a supported state, not a misconfiguration: research degrades
+    #: to the operator-provided information only (C-02 AC-3), which is the
+    #: same path the tavily breaker takes when it opens. Local development and
+    #: CI run this way.
+    TAVILY_API_KEY: str = ""
     SERVICE_TOKEN: str = ""
     POI_TOKEN: str = ""
 
