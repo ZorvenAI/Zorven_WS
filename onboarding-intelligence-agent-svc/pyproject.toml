@@ -20,14 +20,3 @@ ignore_missing_imports = true
 # that is intentional scaffolding, not a type error.
 disable_error_code = ["empty-body"]
 
-# google-generativeai ships py.typed from 0.8.4 but re-exports `configure` and
-# `GenerativeModel` implicitly, which strict's no_implicit_reexport rejects.
-# That is the package's packaging choice, not a typing problem in our code.
-#
-# A per-module override rather than `# type: ignore` on the import: strict also
-# enables warn_unused_ignores, so an ignore would itself error on any
-# environment that resolves an *untyped* build of the same package — which is
-# exactly the local-versus-CI split that produced this failure.
-[[tool.mypy.overrides]]
-module = "google.generativeai"
-implicit_reexport = true

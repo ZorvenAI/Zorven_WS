@@ -7,12 +7,20 @@ acceptance criteria cover the registry, guardrail chain, RBAC evaluator and
 skill interfaces and never mention providers, so this stayed a stub. C-02 is
 the first story that needs to generate anything.
 
-**SDK choice.** ``google-generativeai>=0.8.6,<0.9``, matching
-``ai-brand-automator`` and ``content-agent-service``, with the fleet default
-model ``gemini-3.5-flash``. Google's newer ``google-genai`` package supersedes
-it, but switching one service creates a second pattern in a fleet of
-twenty-seven; that migration is worth doing deliberately and everywhere, not
-as a side effect of this story.
+**SDK choice.** ``google-genai``, the supported SDK, with the fleet default
+model ``gemini-3.5-flash``.
+
+This started on ``google-generativeai`` to match ``ai-brand-automator`` and
+``content-agent-service``, argued on fleet consistency. That argument did not
+survive contact with the package: from 0.8.6 it prints, at import, "All
+support for the google.generativeai package has ended… please switch to the
+google.genai package as soon as possible." Consistency with twenty-seven
+services is worth something; inheriting an end-of-life dependency into a
+brand-new service is worth less. OIA is the one place the switch costs
+nothing, so it happens here first rather than never.
+
+The other services still need migrating. That is a fleet-wide piece of work,
+not something to do as a side effect of this story.
 """
 
 from __future__ import annotations
@@ -75,11 +83,17 @@ class LLMProvider:
         return self._model_name
 
     def _ensure_client(self) -> Any:
-        if self._client is None:
-            import google.generativeai as genai
+        """The ``aio.models`` handle, which is the whole surface we use.
 
-            genai.configure(api_key=self._api_key)
-            self._client = genai.GenerativeModel(self._model_name)
+        Narrowed deliberately: injecting the full ``genai.Client`` would make
+        a test double reproduce two levels of nesting to stand in for one
+        method call, and the extra structure would be scaffolding rather than
+        anything the provider depends on.
+        """
+        if self._client is None:
+            from google import genai
+
+            self._client = genai.Client(api_key=self._api_key).aio.models
         return self._client
 
     async def generate(self, prompt: str, *, temperature: float = 0.2) -> str:
@@ -101,9 +115,10 @@ class LLMProvider:
             ) from exc
 
         try:
-            response = await self._ensure_client().generate_content_async(
-                prompt,
-                generation_config={"temperature": temperature},
+            response = await self._ensure_client().generate_content(
+                model=self._model_name,
+                contents=prompt,
+                config={"temperature": temperature},
             )
             text = self._text_of(response)
         except Exception as exc:
