@@ -219,11 +219,14 @@ def test_a_prep_turn_produces_a_reachable_brief(agent):
         assert brief["open_unknowns"], "a degraded brief still owes questions"
 
 
+SENTENCE_ENDINGS = (".", ".)", "?", "!")
+
+
 def test_the_chat_reply_is_a_sentence_not_a_payload(agent):
     """``output.detail`` is what Django renders into the chat bubble."""
     detail = prep_turn(agent)["output"]["detail"]
 
-    assert detail and detail.endswith(".")
+    assert detail and detail.endswith(SENTENCE_ENDINGS)
     for leak in ("Traceback", "{", "None"):
         assert leak not in detail
 
@@ -380,5 +383,31 @@ def test_prep_to_questionnaire(agent):
     assert output["research_brief"]["company_name"] == "Kalyani Roasters"
     assert len(output["questionnaire"]["questions"]) == 12
     assert output["questionnaire"]["coverage"]
-    assert output["detail"].endswith(".")
+    # ".)" is a sentence ending too. The first version of this asserted a
+    # bare "." and failed on the perfectly correct
+    #   "... coverage WF3 33%. (not saved — ... could not be stored.)"
+    # which is the agent telling the truth about a backend this test does not
+    # run. The assertion was wrong, not the message.
+    assert output["detail"].endswith(SENTENCE_ENDINGS)
     assert body["guardrails"] == {"input": "PASS", "plan": "PASS", "output": "PASS"}
+
+
+def test_an_unreachable_backend_is_admitted_in_the_reply(agent):
+    """AC-4 says a DRAFT row exists. This harness runs the agent with no
+    Django — OIA_BACKEND_BASE_URL is PLACEHOLDER unless OIA_TEST_BACKEND_URL
+    is set — so storage genuinely fails here, and the operator must be told.
+
+    Promoted from an incidental to a covered case: the "(not saved)" suffix
+    turned up as a surprise in an unrelated assertion, which means nothing was
+    checking the behaviour it represents. Telling someone "12 questions ready"
+    when nothing was stored sends them to an approval screen with nothing on
+    it.
+    """
+    if os.environ.get("OIA_TEST_BACKEND_URL"):
+        pytest.skip("a real backend is configured, so storage should succeed")
+
+    output = prep_turn(agent, input_context={"count": 6})["output"]
+
+    assert len(output["questionnaire"]["questions"]) == 6
+    assert output["stored_questionnaire_id"] is None
+    assert "not saved" in output["detail"]
