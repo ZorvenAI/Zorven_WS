@@ -361,6 +361,7 @@ def test_the_consent_action_requires_tenant_access(public_tenant):
 
     response = client.post(consent_url(session), VALID_BODY, format="json")
 
+    # weak-assert: ok — either is a non-leak; pinning one would assert DRF's ordering
     assert response.status_code in (403, 404)
 
 

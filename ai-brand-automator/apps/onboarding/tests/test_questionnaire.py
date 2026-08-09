@@ -206,6 +206,7 @@ def test_every_stored_target_field_is_in_the_vocabulary_or_empty(api_client, ten
 
     vocabulary = all_mapped_fields()
     for question in Question.objects.all():
+        # weak-assert: ok — empty-or-valid is the invariant; "" means not applicable
         assert question.target_field == "" or question.target_field in vocabulary
 
 
@@ -233,9 +234,12 @@ def test_wf3_coverage_present(api_client, tenant):
     )
 
     assert response.status_code == 400
-    assert "WF3" in response.json()["error"] or "WF3" in str(
-        response.json().get("missing_workflows")
-    )
+    # Tightened by the weak-assertion sweep: this accepted WF3 appearing in
+    # either field, so it would have passed if the endpoint stopped reporting
+    # which workflow was missing. Both are part of the contract.
+    body = response.json()
+    assert body["missing_workflows"] == ["WF3"]
+    assert "WF3" in body["error"]
     assert not Questionnaire.objects.exists(), "a set with no WF3 was stored"
 
 

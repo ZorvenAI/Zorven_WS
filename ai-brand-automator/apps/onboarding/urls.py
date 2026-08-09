@@ -17,6 +17,7 @@ from apps.onboarding.views import (
     QuestionnaireViewSet,
     ResearchBriefViewSet,
     create_questionnaire,
+    field_vocabulary,
     upsert_research_brief,
 )
 
@@ -43,6 +44,11 @@ urlpatterns = [
         "questionnaires/generate/",
         create_questionnaire,
         name="onboarding-questionnaire-generate",
+    ),
+    path(
+        "field-vocabulary/",
+        field_vocabulary,
+        name="onboarding-field-vocabulary",
     ),
     path("", include(router.urls)),
 ]

@@ -270,13 +270,19 @@ def test_the_read_surface_is_read_only(api_client, tenant):
     Membership.objects.create(user=user, tenant=tenant, role=Membership.Role.ADMIN)
     api_client.force_authenticate(user=user)
 
+    before = ResearchBrief.objects.count()
     response = api_client.post(
         "/api/v1/onboarding/research-briefs/",
         {"company_name": "X", "brief": {}},
         format="json",
     )
 
-    assert response.status_code in (403, 405)
+    # 405 specifically: the viewset exposes no create action, so DRF refuses
+    # the method. Accepting (403, 405) — as this did — would also pass if the
+    # surface became writable and merely denied this user, which is a
+    # different and weaker guarantee.
+    assert response.status_code == 405, response.content
+    assert ResearchBrief.objects.count() == before
 
 
 # ── The constraints ──────────────────────────────────────────────────

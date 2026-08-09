@@ -48,6 +48,7 @@ def test_file_parses(document):
     """The manifest must be valid YAML with the fleet envelope."""
     assert document["service"] == "onboarding-intelligence-agent"
     assert document["version"] == 1
+    # weak-assert: ok — a parse test; the document shape is what it checks
     assert isinstance(document["skills"], list)
 
 
@@ -130,3 +131,27 @@ def test_declared_skills_match_the_registry_modules(skills):
     for skill in skills:
         module = ROOT / "app" / "skills" / f"{skill['name']}.py"
         assert module.is_file(), f"{skill['skill_id']} has no module {module.name}"
+
+
+def test_skl_oia_02_declares_count_and_depth(skills):
+    """C-03's named case, adapted to the fleet's five-input contract (D3).
+
+    The card asks for "Input schema declares count and depth as required".
+    They cannot be top-level input_schema entries: §8's contract is that every
+    skill takes the same five inputs, and the sweep above enforces it across
+    all sixteen. Adding two fields to one skill would break the property that
+    makes the registry uniform.
+
+    So they live inside ``input_context`` — which is already required — and
+    the declaration's description is where they are contracted. Asserting on
+    the description keeps the card's intent testable rather than dropping it.
+    """
+    declaration = next(d for d in skills if d["skill_id"] == "SKL-OIA-02")
+
+    description = declaration["description"]
+    assert "count" in description
+    assert "depth" in description
+    assert "quick|standard|deep" in description
+
+    required = {f["field"] for f in declaration["input_schema"] if f["required"]}
+    assert "input_context" in required, "count and depth arrive inside it"
