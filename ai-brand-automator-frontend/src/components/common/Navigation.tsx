@@ -126,9 +126,10 @@ export function Navigation({ children }: { children: React.ReactNode }) {
       ? [{ href: '/chat', label: 'AI Chat', icon: <MessageSquare className={iconCls} />, active: pathname === '/chat' }]
       : []),
     { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className={iconCls} />, active: pathname === '/dashboard' },
-    ...(canEdit
-      ? [{ href: '/onboarding', label: 'Onboarding', icon: <Compass className={iconCls} />, active: pathname?.startsWith('/onboarding') ?? false }]
-      : []),
+    // Not gated on canEdit. E-01 AC-3 gives a Viewer a real read-only
+    // Onboarding Interface, and a link they cannot see is an interface
+    // they cannot reach — the page itself decides what they may do.
+    { href: '/onboarding', label: 'Onboarding', icon: <Compass className={iconCls} />, active: pathname?.startsWith('/onboarding') ?? false },
     { href: '/files', label: 'Files', icon: <FolderOpen className={iconCls} />, active: pathname === '/files' },
     { href: '/automation', label: 'Automation', icon: <Zap className={iconCls} />, active: pathname === '/automation' },
     { href: '/dashboard/pipelines', label: 'Pipelines', icon: <GitBranch className={iconCls} />, active: pathname?.startsWith('/dashboard/pipelines') ?? false },
