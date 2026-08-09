@@ -894,3 +894,51 @@ def test_a_template_cannot_be_cloned_onto_another_tenants_company(
 
     assert response.status_code == 400
     assert not Questionnaire.objects.filter(company=theirs).exists()
+
+
+# ── C-05 · the Interface asks for one session's approved set ─────────
+
+
+def test_questionnaires_can_be_filtered_by_session(api_client, tenant, admin):
+    """Server-side, because the client filtering a paginated list is correct
+    only until page 2 and then silently shows nothing."""
+    from apps.onboarding.models import OnboardingSession
+
+    company = Company.objects.create(tenant=tenant, name="Kalyani")
+    session = OnboardingSession.objects.create(tenant=tenant, company=company)
+    mine = a_draft(api_client, tenant)
+    Questionnaire.objects.filter(pk=mine).update(session=session)
+    a_draft(api_client, tenant)  # a second, unattached
+
+    body = api_client.get(
+        f"/api/v1/onboarding/questionnaires/?session={session.pk}"
+    ).json()
+
+    rows = body["results"] if isinstance(body, dict) else body
+    assert [r["id"] for r in rows] == [mine]
+
+
+def test_questionnaires_can_be_filtered_by_status(api_client, tenant, admin):
+    approved_id = a_draft(api_client, tenant)
+    api_client.post(
+        f"/api/v1/onboarding/questionnaires/{approved_id}/approve/", format="json"
+    )
+    a_draft(api_client, tenant)  # stays DRAFT
+
+    body = api_client.get("/api/v1/onboarding/questionnaires/?status=approved").json()
+
+    rows = body["results"] if isinstance(body, dict) else body
+    assert [r["id"] for r in rows] == [approved_id]
+
+
+def test_a_malformed_session_filter_returns_nothing_not_a_500(
+    api_client, tenant, admin
+):
+    """The session pk is a bigint; a non-numeric filter would otherwise raise
+    out of the queryset on a plain GET."""
+    response = api_client.get("/api/v1/onboarding/questionnaires/?session=not-a-number")
+
+    assert response.status_code == 200
+    body = response.json()
+    rows = body["results"] if isinstance(body, dict) else body
+    assert rows == []
