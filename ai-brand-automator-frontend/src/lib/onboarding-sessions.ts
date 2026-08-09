@@ -66,6 +66,28 @@ export interface QuestionnaireDetail {
   coverage: Record<WorkflowTarget, number>;
 }
 
+export type MeetingStatus = 'SCHEDULED' | 'CANCELLED';
+
+export interface ScheduledMeeting {
+  id: string;
+  session: string;
+  company: string | null;
+  title: string;
+  /** UTC instant, ISO-8601. Rendered in the *viewer's* zone, never this one. */
+  starts_at: string;
+  ends_at: string;
+  /**
+   * The IANA zone the meeting was scheduled in.
+   *
+   * Carried for display — "09:00 in Europe/London" is what the operator
+   * agreed with the brand owner, and a viewer in Sydney wants to know that as
+   * well as their own 20:00. It is never used to compute an instant; the
+   * instant is already in starts_at.
+   */
+  timezone: string;
+  status: MeetingStatus;
+}
+
 export interface MeetingRecordingSummary {
   id: string;
   session: string;
@@ -164,4 +186,69 @@ export async function getApprovedQuestionnaire(
   // (C-04 AC-3), so more than one approved row can exist over a session's
   // life and the newest is the one the operator just approved.
   return rows.sort((a, b) => b.version - a.version)[0] ?? null;
+}
+
+/** Meetings overlapping a window. The server narrows; see the D-01 viewset. */
+export async function listMeetings(
+  from: Date,
+  to: Date,
+): Promise<ScheduledMeeting[]> {
+  const params = new URLSearchParams({
+    from: from.toISOString(),
+    to: to.toISOString(),
+  });
+  return getList<ScheduledMeeting>(`${BASE}/calendar/events/?${params.toString()}`);
+}
+
+async function sendMeeting(
+  path: string,
+  method: 'post' | 'patch',
+  payload: unknown,
+): Promise<ScheduledMeeting> {
+  const response = await apiClient[method](path, payload);
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as ScheduledMeeting;
+}
+
+export interface MeetingDraft {
+  session: string;
+  title?: string;
+  starts_at: string;
+  ends_at: string;
+  timezone: string;
+}
+
+export async function createMeeting(draft: MeetingDraft): Promise<ScheduledMeeting> {
+  return sendMeeting(`${BASE}/calendar/events/`, 'post', draft);
+}
+
+export async function updateMeeting(
+  id: string,
+  changes: Partial<MeetingDraft>,
+): Promise<ScheduledMeeting> {
+  return sendMeeting(`${BASE}/calendar/events/${id}/`, 'patch', changes);
+}
+
+export async function cancelMeeting(id: string): Promise<ScheduledMeeting> {
+  // A POST, not a DELETE: cancelling releases the session and keeps the
+  // record (D-01 AC-1), so the row survives and DELETE would misdescribe it.
+  return sendMeeting(`${BASE}/calendar/events/${id}/cancel/`, 'post', {});
+}
+
+/**
+ * The viewer's own IANA zone, from the browser.
+ *
+ * AC-2 wants "the same instant rendered in the viewer's local zone", and the
+ * browser is the only thing that knows what that is. Falls back to UTC rather
+ * than guessing an offset — a wrong zone name is recoverable, a fabricated
+ * offset is the bug this story exists to avoid.
+ */
+export function viewerTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
 }

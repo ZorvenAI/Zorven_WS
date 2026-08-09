@@ -21,6 +21,17 @@ jest.mock('@/lib/onboarding-sessions', () => ({
   listRecordings: jest.fn(),
 }));
 jest.mock('@/hooks/useTenantRole');
+/**
+ * The real CalendarPane arrived with D-01 and does its own fetching. Stubbed
+ * here because this suite is about the landing *composition* — that the pane
+ * is present and in the right place — while the calendar's own behaviour has
+ * a dedicated suite. Rendering the real one would make these tests fail on a
+ * change to the calendar, which is the wrong place to hear about it.
+ */
+jest.mock('@/components/onboarding/CalendarPane', () => ({
+  __esModule: true,
+  default: () => <section aria-label="Calendar" />,
+}));
 
 const mockedSessions = listSessions as jest.MockedFunction<typeof listSessions>;
 const mockedRecordings = listRecordings as jest.MockedFunction<typeof listRecordings>;
@@ -58,7 +69,10 @@ describe('OnboardingHome', () => {
     render(<OnboardingHome />);
 
     // AC-1: the calendar pane, the sessions list and clear entry points.
-    expect(await screen.findByRole('heading', { name: /schedule/i })).toBeInTheDocument();
+    // The pane is asserted by presence, not by its wording — E-01 shipped a
+    // placeholder that said "Schedule" and D-01 replaced it with a real
+    // calendar headed by the month, and this test should survive that.
+    expect(await screen.findByRole('region', { name: /calendar/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /sessions/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /prepare in chat/i })).toBeInTheDocument();
     expect(

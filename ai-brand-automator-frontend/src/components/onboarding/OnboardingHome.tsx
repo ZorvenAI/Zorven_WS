@@ -16,13 +16,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  CalendarDays,
   ClipboardList,
   FileText,
   MessageSquare,
   Video,
 } from 'lucide-react';
 
+import CalendarPane from '@/components/onboarding/CalendarPane';
 import { useTenantRole } from '@/hooks/useTenantRole';
 import {
   listRecordings,
@@ -59,38 +59,6 @@ function StatusChip({ status }: { status: SessionStatus }) {
     >
       {status.replace('_', ' ').toLowerCase()}
     </span>
-  );
-}
-
-/**
- * The calendar pane, before there is a calendar.
- *
- * §11 lists it and AC-1 expects it to render, but scheduling is D-01 — which
- * this story *blocks*, so there is no data source yet and cannot be. A
- * labelled placeholder is the honest shape: leaving the region out would make
- * the page look finished when a quarter of it is not, and stubbing a fake
- * calendar would be worse.
- */
-function CalendarPane() {
-  return (
-    <section
-      aria-labelledby="onboarding-calendar-heading"
-      className="glass-card p-5"
-    >
-      <div className="flex items-center gap-2">
-        <CalendarDays className="h-4 w-4 text-brand-electric" aria-hidden />
-        <h2
-          id="onboarding-calendar-heading"
-          className="text-sm font-semibold text-white"
-        >
-          Schedule
-        </h2>
-      </div>
-      <p className="mt-3 text-sm text-brand-silver">
-        Booking and calendar sync arrive with the scheduling story. Sessions
-        you create here will appear on this pane once it does.
-      </p>
-    </section>
   );
 }
 
