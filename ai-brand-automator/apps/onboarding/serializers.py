@@ -9,6 +9,8 @@ to the same field, which is the shape of bug B-02's review caught on
 
 from __future__ import annotations
 
+from collections import Counter
+
 from rest_framework import serializers
 
 from apps.onboarding.models import (
@@ -16,7 +18,10 @@ from apps.onboarding.models import (
     FieldProvenance,
     MeetingRecording,
     OnboardingSession,
+    Question,
+    Questionnaire,
     ResearchBrief,
+    WorkflowTarget,
 )
 
 
@@ -351,3 +356,69 @@ class ResearchBriefSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+
+class QuestionSerializer(serializers.ModelSerializer):
+    """One question, as stored (C-03)."""
+
+    class Meta:
+        model = Question
+        fields = [
+            "id",
+            "order",
+            "text",
+            "origin",
+            "workflow_target",
+            "target_field",
+            "status",
+        ]
+        read_only_fields = fields
+
+
+class QuestionnaireSerializer(serializers.ModelSerializer):
+    """A questionnaire with its ordered children and workflow coverage.
+
+    ``questions`` is nested rather than a separate fetch: every consumer —
+    the chat turn, the Onboarding Interface, C-04's approval — wants the set,
+    and Question.Meta already orders by (questionnaire_id, order) so the
+    ordering AC-4 requires comes from the database rather than from the
+    serializer remembering to sort.
+    """
+
+    questions = QuestionSerializer(many=True, read_only=True)
+    coverage = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Questionnaire
+        fields = [
+            "id",
+            "company",
+            "session",
+            "status",
+            "version",
+            "depth",
+            "question_count",
+            "is_template",
+            "questions",
+            "coverage",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_coverage(self, obj) -> dict:
+        """WF1/WF2/WF3 as three fractions of the set (FR-PREP-08).
+
+        Computed rather than stored: a stored figure would drift the moment
+        C-04 edits or removes a question, and the number is cheap.
+        """
+        questions = list(obj.questions.all())
+        total = len(questions)
+        if not total:
+            return {t: 0.0 for t in WorkflowTarget.values}
+        counts = Counter(q.workflow_target for q in questions)
+        # Deliberately unrounded. Rounding to three places made three equal
+        # thirds sum to 0.999, and "coverage" that does not add up invites a
+        # reader to hunt for the missing question. Formatting is the display
+        # layer's job; the invariant is this layer's.
+        return {t: counts.get(t, 0) / total for t in WorkflowTarget.values}

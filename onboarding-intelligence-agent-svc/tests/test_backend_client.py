@@ -47,6 +47,7 @@ def django_stub():
                 {
                     "path": self.path,
                     "token": self.headers.get("X-Service-Token"),
+                    "tenant": self.headers.get("X-Tenant-ID"),
                     "body": json.loads(raw or b"{}"),
                 }
             )
@@ -88,7 +89,7 @@ async def test_a_brief_is_posted_with_the_service_token(django_stub):
     client = BackendClient(django_stub["url"], "tok", breaker=breaker())
 
     stored = await client.store_research_brief(
-        company_name="Kalyani Roasters", brief=good_brief()
+        tenant_id="t-1", company_name="Kalyani Roasters", brief=good_brief()
     )
 
     assert stored is True
@@ -102,7 +103,7 @@ async def test_a_session_id_is_included_when_there_is_one(django_stub):
     client = BackendClient(django_stub["url"], "tok", breaker=breaker())
 
     await client.store_research_brief(
-        company_name="Kalyani", brief=good_brief(), session_id="sess-1"
+        tenant_id="t-1", company_name="Kalyani", brief=good_brief(), session_id="sess-1"
     )
 
     assert django_stub["requests"][0]["body"]["session_id"] == "sess-1"
@@ -113,7 +114,9 @@ async def test_no_session_id_is_sent_when_there_is_none(django_stub):
     an explicit null means."""
     client = BackendClient(django_stub["url"], "tok", breaker=breaker())
 
-    await client.store_research_brief(company_name="Kalyani", brief=good_brief())
+    await client.store_research_brief(
+        tenant_id="t-1", company_name="Kalyani", brief=good_brief()
+    )
 
     assert "session_id" not in django_stub["requests"][0]["body"]
 
@@ -128,7 +131,7 @@ async def test_an_error_response_is_swallowed(django_stub, status):
     client = BackendClient(django_stub["url"], "tok", breaker=breaker())
 
     stored = await client.store_research_brief(
-        company_name="Kalyani", brief=good_brief()
+        tenant_id="t-1", company_name="Kalyani", brief=good_brief()
     )
 
     assert stored is False, "a storage failure must not raise"
@@ -139,7 +142,10 @@ async def test_an_unreachable_backend_is_swallowed():
     client = BackendClient("http://127.0.0.1:1", "tok", breaker=breaker())
 
     assert (
-        await client.store_research_brief(company_name="K", brief=good_brief()) is False
+        await client.store_research_brief(
+            tenant_id="t-1", company_name="K", brief=good_brief()
+        )
+        is False
     )
 
 
@@ -148,7 +154,10 @@ async def test_a_non_json_response_is_swallowed(django_stub):
     client = BackendClient(django_stub["url"], "tok", breaker=breaker())
 
     assert (
-        await client.store_research_brief(company_name="K", brief=good_brief()) is False
+        await client.store_research_brief(
+            tenant_id="t-1", company_name="K", brief=good_brief()
+        )
+        is False
     )
 
 
@@ -158,8 +167,12 @@ async def test_failures_open_the_breaker(django_stub):
     brk = breaker(failure_threshold=2)
     client = BackendClient(django_stub["url"], "tok", breaker=brk)
 
-    await client.store_research_brief(company_name="K", brief=good_brief())
-    await client.store_research_brief(company_name="K", brief=good_brief())
+    await client.store_research_brief(
+        tenant_id="t-1", company_name="K", brief=good_brief()
+    )
+    await client.store_research_brief(
+        tenant_id="t-1", company_name="K", brief=good_brief()
+    )
 
     assert brk.state is State.OPEN
 
@@ -169,7 +182,9 @@ async def test_an_open_breaker_does_not_call_out(django_stub):
     brk.record_failure()
     client = BackendClient(django_stub["url"], "tok", breaker=brk)
 
-    await client.store_research_brief(company_name="K", brief=good_brief())
+    await client.store_research_brief(
+        tenant_id="t-1", company_name="K", brief=good_brief()
+    )
 
     assert django_stub["requests"] == []
 
@@ -191,7 +206,10 @@ async def test_a_placeholder_base_url_is_treated_as_unconfigured():
 
     assert client.configured is False
     assert (
-        await client.store_research_brief(company_name="K", brief=good_brief()) is False
+        await client.store_research_brief(
+            tenant_id="t-1", company_name="K", brief=good_brief()
+        )
+        is False
     )
     assert brk.state is State.CLOSED, "a config gap was reported as an outage"
 
@@ -214,9 +232,25 @@ async def test_a_degraded_brief_is_not_sent(django_stub):
     client = BackendClient(django_stub["url"], "tok", breaker=breaker())
 
     stored = await client.store_research_brief(
+        tenant_id="t-1",
         company_name="K",
         brief=good_brief(degraded=True, degraded_reason="tavily breaker open"),
     )
 
     assert stored is False
     assert django_stub["requests"] == []
+
+
+async def test_the_tenant_is_sent_as_a_header(django_stub):
+    """Django cannot infer it. DefaultTenantMiddleware resolves an unmatched
+    host — always, for an internal call — to the *public* tenant, so a write
+    with no header is attributed to the wrong tenant rather than rejected.
+    The agent is the only party that knows which tenant it is acting for.
+    """
+    client = BackendClient(django_stub["url"], "tok", breaker=breaker())
+
+    await client.store_research_brief(
+        tenant_id="tenant-42", company_name="Kalyani", brief=good_brief()
+    )
+
+    assert django_stub["requests"][0]["tenant"] == "tenant-42"

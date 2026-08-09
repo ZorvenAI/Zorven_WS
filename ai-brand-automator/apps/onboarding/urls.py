@@ -14,7 +14,9 @@ from apps.onboarding.views import (
     FieldProvenanceViewSet,
     MeetingRecordingViewSet,
     OnboardingSessionViewSet,
+    QuestionnaireViewSet,
     ResearchBriefViewSet,
+    create_questionnaire,
     upsert_research_brief,
 )
 
@@ -25,6 +27,9 @@ router.register(r"recordings", MeetingRecordingViewSet, basename="onboarding-rec
 router.register(
     r"research-briefs", ResearchBriefViewSet, basename="onboarding-research-brief"
 )
+router.register(
+    r"questionnaires", QuestionnaireViewSet, basename="onboarding-questionnaire"
+)
 
 urlpatterns = [
     # Before the router: a bare "research-briefs/upsert/" would otherwise
@@ -33,6 +38,11 @@ urlpatterns = [
         "research-briefs/upsert/",
         upsert_research_brief,
         name="onboarding-research-brief-upsert",
+    ),
+    path(
+        "questionnaires/generate/",
+        create_questionnaire,
+        name="onboarding-questionnaire-generate",
     ),
     path("", include(router.urls)),
 ]
