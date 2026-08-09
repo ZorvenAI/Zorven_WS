@@ -30,7 +30,15 @@ export default function SessionPage() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!sessionId) return;
+    if (!sessionId) {
+      // Not `return` on its own: that leaves loading true forever, so a
+      // moment without params — or a mis-mounted route — shows "Loading
+      // questions…" and never anything else. The empty state is the honest
+      // answer when there is no session to load.
+      setQuestionnaire(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       setQuestionnaire(await getApprovedQuestionnaire(sessionId));

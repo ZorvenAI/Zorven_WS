@@ -5,7 +5,7 @@
  * `test_empty_state_links_to_prep`.
  */
 
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 import QuestionChecklist from '@/components/onboarding/QuestionChecklist';
 import type { PreparedQuestion } from '@/lib/onboarding-sessions';
@@ -89,10 +89,34 @@ describe('QuestionChecklist', () => {
      * The control for the test above. A writable checkbox would look correct
      * on first render and then drift from the server the moment anyone
      * clicked it — the exact rewrite the card is trying to prevent.
+     *
+     * This asserted `toHaveAttribute('readonly')`, which review pointed out
+     * proves nothing: HTML does not honour readonly on a checkbox at all. The
+     * assertion passed while the guarantee did not hold. Clicking it is the
+     * only assertion that means anything.
+     *
+     * Honest limit: jsdom does not reproduce the transient flip a real
+     * browser shows before React re-renders, so this proves the state is
+     * stable, not that no pixel ever changes.
      */
-    render(<QuestionChecklist questions={[question()]} />);
+    render(<QuestionChecklist questions={[question({ status: 'OPEN' })]} />);
+    const box = screen.getByRole('checkbox');
 
-    expect(screen.getByRole('checkbox')).toHaveAttribute('readonly');
+    fireEvent.click(box);
+    fireEvent.keyDown(box, { key: ' ' });
+
+    expect(box).not.toBeChecked();
+    expect(box).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('stays checked when a GREEN box is clicked', () => {
+    /** The other direction — an operator cannot untick the agent either. */
+    render(<QuestionChecklist questions={[question({ status: 'GREEN' })]} />);
+    const box = screen.getByRole('checkbox');
+
+    fireEvent.click(box);
+
+    expect(box).toBeChecked();
   });
 
   it('keeps the workflow tag out of the row’s accessible name', () => {

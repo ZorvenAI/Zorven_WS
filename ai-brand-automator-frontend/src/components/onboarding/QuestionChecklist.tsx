@@ -103,6 +103,28 @@ export default function QuestionChecklist({
             <input
               type="checkbox"
               readOnly
+              /*
+               * Review was right that HTML ignores `readonly` on a checkbox,
+               * and wrong about the remedy — and I checked before believing
+               * either. A *controlled* checkbox is held by React: with
+               * `checked` bound to server state and no onChange, React
+               * restores the DOM after a click and the box does not move.
+               * `readOnly` is there to suppress React's warning about
+               * exactly that arrangement.
+               *
+               * Adding onClick={preventDefault} — the suggested fix — broke
+               * it. Preventing the default interferes with React's own
+               * restoration, and the box then really did toggle. The test
+               * that clicks it caught that immediately, which is the whole
+               * reason it clicks instead of reading an attribute.
+               *
+               * aria-disabled stays: the semantics were the sound half of the
+               * finding. It says "this reflects a value, do not try to change
+               * it" without `disabled` dropping the box out of the tab order
+               * or announcing "unavailable" — G-03 makes these interactive
+               * and the element should not change shape for that.
+               */
+              aria-disabled
               checked={question.status === 'GREEN'}
               aria-label={question.text}
               className="mt-1 h-4 w-4 shrink-0 rounded border-white/20 bg-transparent"
