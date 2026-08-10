@@ -1528,7 +1528,11 @@ class ScheduledMeetingViewSet(
         # became a 500 on an ordinary GET; a naive value also compares against
         # aware columns unpredictably. An unparseable window is a client bug,
         # so it is a 400 rather than a silent full-range read.
-        for param, lookup in (("from", "ends_at__gte"), ("to", "starts_at__lte")):
+        # `to` is exclusive. The pane sends the day *after* the last square in
+        # the grid, so an inclusive lte fetched a meeting starting exactly on
+        # that boundary and then never rendered it — a row paid for, counted,
+        # and invisible. `from` stays inclusive: it is the first square.
+        for param, lookup in (("from", "ends_at__gte"), ("to", "starts_at__lt")):
             raw = self.request.query_params.get(param)
             if not raw:
                 continue
@@ -1570,7 +1574,7 @@ class ScheduledMeetingViewSet(
                 raise Http404
             if meeting.status == MeetingStatus.CANCELLED:
                 return Response(
-                    {"error": "this meeting is already cancelled"},
+                    {"error": "This meeting is already cancelled."},
                     status=http.HTTP_409_CONFLICT,
                 )
 

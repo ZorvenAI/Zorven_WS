@@ -553,3 +553,65 @@ def test_a_non_zone_is_refused_by_the_serializer(
 
     assert response.status_code == 400, response.content
     assert not ScheduledMeeting.objects.exists()
+
+
+def test_the_window_end_is_exclusive(api_client, tenant, session, editor):
+    """Review finding. The pane sends `to` as the day after the last square,
+    so an inclusive bound fetched a meeting it would never draw — a row paid
+    for, counted in the response, and invisible on screen.
+    """
+    boundary = datetime(2024, 7, 1, 0, 0, tzinfo=UTC)
+    a_meeting(session, tenant, starts=boundary)
+
+    # "Z", not isoformat(). isoformat() emits "+00:00" and a bare + in a query
+    # string decodes as a space, so the server saw "2024-07-01T00:00:00 00:00"
+    # and answered 400 — which the rows helper below would have swallowed as
+    # an empty list, passing this test for entirely the wrong reason. The pane
+    # sends toISOString(), which is already Z-suffixed.
+    response = api_client.get(
+        f"{EVENTS}?from=2024-06-01T00:00:00Z&to=2024-07-01T00:00:00Z"
+    )
+
+    assert response.status_code == 200, response.content
+    body = response.json()
+    rows = body["results"] if "results" in body else body
+    assert rows == [], "a meeting starting on the exclusive bound was returned"
+
+
+def test_a_meeting_just_inside_the_window_is_returned(
+    api_client, tenant, session, editor
+):
+    """The control. An exclusive bound that excluded the last minute too would
+    pass the test above while hiding real meetings."""
+    a_meeting(session, tenant, starts=datetime(2024, 6, 30, 23, 59, tzinfo=UTC))
+
+    body = api_client.get(
+        f"{EVENTS}?from=2024-06-01T00:00:00Z&to=2024-07-01T00:00:00Z"
+    ).json()
+
+    rows = body["results"] if isinstance(body, dict) else body
+    assert len(rows) == 1
+
+
+def test_the_already_cancelled_message_reads_as_a_sentence(
+    api_client, tenant, session, editor
+):
+    """It is user-facing API output; a client should be able to show it."""
+    created = api_client.post(
+        EVENTS,
+        {
+            "session": session.pk,
+            "starts_at": "2024-06-15T12:00:00Z",
+            "ends_at": "2024-06-15T13:00:00Z",
+            "timezone": "UTC",
+        },
+        format="json",
+    ).json()
+    api_client.post(f"{EVENTS}{created['id']}/cancel/", format="json")
+
+    message = api_client.post(f"{EVENTS}{created['id']}/cancel/", format="json").json()[
+        "error"
+    ]
+
+    assert message[0].isupper()
+    assert message.endswith(".")
