@@ -962,8 +962,10 @@ class ScheduledMeeting(models.Model):
         db_index=True,
     )
 
-    #: D-03 writes this. Present from the start so two-way sync does not need a
-    #: migration to begin, and null until then.
+    #: D-03 writes this. Present from the start so two-way sync does not need
+    #: a migration to begin, and **empty** until then — a blank CharField
+    #: rather than null, matching the rest of this app and keeping "no
+    #: provider event" a single value instead of two.
     provider_event_id = models.CharField(max_length=255, blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -978,14 +980,31 @@ class ScheduledMeeting(models.Model):
                 check=Q(ends_at__gt=F("starts_at")),
                 name="meeting_ends_after_it_starts",
             ),
-            # The rule the card names, in the database. An IANA zone contains
-            # a slash (Europe/London) or is one of the handful of bare names;
-            # an offset does not. Rejecting "+05:30" and "UTC+5" here means a
-            # data migration or a shell session cannot introduce the bug that
-            # only shows up at a DST boundary.
+            # The rule the card names, in the database: not an offset.
+            #
+            # This asks the narrow question deliberately. An earlier version
+            # allow-listed what an IANA name looks like — a slash, or "UTC" —
+            # and rejected 44 real zones in the process, including EST5EDT,
+            # GMT, CET and Eire. The serializer accepted those (zoneinfo knows
+            # them) and the database refused them, so a valid zone produced an
+            # IntegrityError and a 500.
+            #
+            # So the two layers answer different questions, each the one it
+            # can actually answer — and the boundary sits where the data
+            # allows rather than where it felt tidy. **No IANA zone begins
+            # with + or -**, so a leading sign is unambiguously an offset
+            # literal and the column refuses it. A second clause rejecting
+            # "UTC or GMT followed by a sign" looked right and was not: GMT+0
+            # and GMT-0 are real zones, which a sweep over every zone caught
+            # within a minute of being written.
+            #
+            # "UTC+5" therefore reaches the column, and the serializer stops
+            # it — zoneinfo knows it is not a place. The constraint's job is
+            # to hold against a data migration or a shell session writing the
+            # canonical offset shape, and that it does.
             models.CheckConstraint(
-                check=Q(timezone__regex=r"^([A-Za-z_]+/[A-Za-z0-9_+\-/]+|UTC)$"),
-                name="meeting_timezone_is_an_iana_name",
+                check=~Q(timezone__regex=r"^[+-]"),
+                name="meeting_timezone_is_not_an_offset",
             ),
             # One live meeting per session. A rescheduled meeting leaves its
             # cancelled predecessor behind, so history survives without a

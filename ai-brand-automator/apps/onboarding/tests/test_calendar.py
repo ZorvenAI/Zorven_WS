@@ -160,13 +160,14 @@ def test_one_instant_renders_correctly_in_every_viewer_zone(
 # ── The rules, in the database ───────────────────────────────────────
 
 
-@pytest.mark.parametrize("bad", ["+05:30", "UTC+5", "GMT+0530", "-0800", "EST5EDT"])
-def test_an_offset_cannot_be_stored_as_a_timezone(session, tenant, bad):
+@pytest.mark.parametrize("bad", ["+05:30", "-0800", "+00:00"])
+def test_an_offset_literal_cannot_be_stored_as_a_timezone(session, tenant, bad):
     """The bug the card names, refused by the column.
 
-    An offset is a fact about one moment; a zone is a rule. Only the rule
-    survives a DST boundary, and a constraint is what stops a data migration
-    or a shell session reintroducing the difference.
+    Leading-sign forms only. No IANA zone begins with + or -, so these are
+    unambiguous. "UTC+5" cannot be refused here without also refusing GMT+0,
+    which is a real zone — that one belongs to the serializer and has its own
+    test below.
     """
     with pytest.raises(IntegrityError), transaction.atomic():
         a_meeting(
@@ -175,7 +176,21 @@ def test_an_offset_cannot_be_stored_as_a_timezone(session, tenant, bad):
 
 
 @pytest.mark.parametrize(
-    "good", ["Europe/London", "America/Argentina/Buenos_Aires", "UTC"]
+    "good",
+    [
+        "Europe/London",
+        "America/Argentina/Buenos_Aires",
+        "UTC",
+        # Real IANA zones my first constraint rejected. The regex allow-listed
+        # what a zone "looks like" and refused 44 of them, including these —
+        # so the serializer accepted a valid zone and the database raised,
+        # turning correct input into a 500. This test listed EST5EDT as an
+        # *offset*, which encoded the same misunderstanding.
+        "EST5EDT",
+        "GMT",
+        "Eire",
+        "CET",
+    ],
 )
 def test_real_zone_names_are_accepted(session, tenant, good):
     """The control. A constraint that rejected everything would pass the test
@@ -365,3 +380,176 @@ def test_a_viewer_cannot_cancel(api_client, tenant, session):
     assert response.status_code == 403
     meeting.refresh_from_db()
     assert meeting.status == MeetingStatus.SCHEDULED
+
+
+# ── Review findings on #567 ──────────────────────────────────────────
+
+
+def test_a_real_zone_is_never_refused_by_the_database(session, tenant):
+    """The mismatch that produced a 500 on valid input, as a sweep.
+
+    Anything zoneinfo accepts, the column must accept. The two layers answer
+    different questions now — the serializer asks "is this a real place", the
+    constraint asks "is this an offset literal" — and this asserts they cannot
+    disagree.
+    """
+    from zoneinfo import available_timezones
+
+    for zone in sorted(available_timezones()):
+        ScheduledMeeting.objects.create(
+            tenant=tenant,
+            session=session,
+            starts_at=datetime(2024, 6, 15, 12, 0, tzinfo=UTC),
+            ends_at=datetime(2024, 6, 15, 13, 0, tzinfo=UTC),
+            timezone=zone,
+            status=MeetingStatus.CANCELLED,  # keeps the one-live constraint happy
+        )
+
+    assert ScheduledMeeting.objects.count() == len(available_timezones())
+
+
+def test_a_session_from_another_tenant_is_refused(api_client, tenant, session, editor):
+    """Without this, the meeting's own serializer reads the other tenant's
+    company straight back out through select_related — a write that leaks on
+    read."""
+    outsider = Tenant.objects.create(name="Outsider", schema_name="d01_outsider")
+    theirs = OnboardingSession.objects.create(
+        tenant=outsider,
+        company=Company.objects.create(tenant=outsider, name="Not Yours"),
+    )
+
+    response = api_client.post(
+        EVENTS,
+        {
+            "session": theirs.pk,
+            "starts_at": "2024-06-15T12:00:00Z",
+            "ends_at": "2024-06-15T13:00:00Z",
+            "timezone": "UTC",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert not ScheduledMeeting.objects.filter(session=theirs).exists()
+
+
+def test_status_cannot_be_set_directly(api_client, tenant, session, editor):
+    """Writable status let a client PATCH past the cancel action — and back
+    again, un-cancelling a meeting whose session had already been released."""
+    created = api_client.post(
+        EVENTS,
+        {
+            "session": session.pk,
+            "starts_at": "2024-06-15T12:00:00Z",
+            "ends_at": "2024-06-15T13:00:00Z",
+            "timezone": "UTC",
+        },
+        format="json",
+    ).json()
+
+    api_client.patch(
+        f"{EVENTS}{created['id']}/", {"status": "CANCELLED"}, format="json"
+    )
+
+    assert ScheduledMeeting.objects.get(pk=created["id"]).status == (
+        MeetingStatus.SCHEDULED
+    )
+
+
+def test_a_meeting_cannot_be_moved_to_another_session(
+    api_client, tenant, session, editor
+):
+    """Rescheduling changes the time. Moving a meeting between sessions would
+    breach one-live-per-session from the far side and carry its history onto a
+    session it never belonged to."""
+    created = api_client.post(
+        EVENTS,
+        {
+            "session": session.pk,
+            "starts_at": "2024-06-15T12:00:00Z",
+            "ends_at": "2024-06-15T13:00:00Z",
+            "timezone": "UTC",
+        },
+        format="json",
+    ).json()
+    other_company = Company.objects.create(
+        tenant=Tenant.objects.create(name="Other", schema_name="d01_other"),
+        name="Other Co",
+    )
+    elsewhere = OnboardingSession.objects.create(
+        tenant=other_company.tenant, company=other_company
+    )
+
+    response = api_client.patch(
+        f"{EVENTS}{created['id']}/", {"session": elsewhere.pk}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert ScheduledMeeting.objects.get(pk=created["id"]).session_id == session.pk
+
+
+@pytest.mark.parametrize("bad", ["soon", "2024-13-45", "", "not-a-date"])
+def test_a_malformed_window_is_a_400_not_a_500(
+    api_client, tenant, session, editor, bad
+):
+    """A raw string went into a DateTimeField lookup, so an ordinary GET with
+    a typo raised out of the queryset."""
+    response = api_client.get(f"{EVENTS}?from={bad}")
+
+    assert response.status_code in (200, 400), response.content
+    if bad:
+        assert response.status_code == 400
+
+
+def test_cancelling_works_even_with_window_parameters(
+    api_client, tenant, session, editor
+):
+    """cancel() read through the list queryset, so a client that happened to
+    send from/to could 404 on a meeting that plainly exists."""
+    created = api_client.post(
+        EVENTS,
+        {
+            "session": session.pk,
+            "starts_at": "2024-06-15T12:00:00Z",
+            "ends_at": "2024-06-15T13:00:00Z",
+            "timezone": "UTC",
+        },
+        format="json",
+    ).json()
+
+    # A window that excludes the meeting entirely.
+    response = api_client.post(
+        f"{EVENTS}{created['id']}/cancel/"
+        "?from=2030-01-01T00:00:00Z&to=2030-01-31T00:00:00Z",
+        format="json",
+    )
+
+    assert response.status_code == 200, response.content
+    assert ScheduledMeeting.objects.get(pk=created["id"]).status == (
+        MeetingStatus.CANCELLED
+    )
+
+
+@pytest.mark.parametrize("bad", ["UTC+5", "GMT+0530", "Europe/Atlantis", "EST5EDTX"])
+def test_a_non_zone_is_refused_by_the_serializer(
+    api_client, tenant, session, editor, bad
+):
+    """The half the column cannot do.
+
+    "UTC+5" has no leading sign and is not a real zone; refusing it by shape
+    would also refuse GMT+0, which is one. Only zoneinfo can tell them apart,
+    so the API is where this is caught.
+    """
+    response = api_client.post(
+        EVENTS,
+        {
+            "session": session.pk,
+            "starts_at": "2024-06-15T12:00:00Z",
+            "ends_at": "2024-06-15T13:00:00Z",
+            "timezone": bad,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400, response.content
+    assert not ScheduledMeeting.objects.exists()

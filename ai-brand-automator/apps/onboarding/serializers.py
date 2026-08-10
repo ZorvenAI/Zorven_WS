@@ -24,6 +24,7 @@ from apps.onboarding.models import (
     ResearchBrief,
     ScheduledMeeting,
     WorkflowTarget,
+    tenant_scope_q,
 )
 
 
@@ -452,7 +453,19 @@ class ScheduledMeetingSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "company", "organiser", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "company",
+            "organiser",
+            # Writable status let a client PATCH its way past the cancel
+            # action — and back again, un-cancelling a meeting. Cancellation
+            # is the only supported transition and it releases the session, so
+            # it goes through the action that does that rather than a field
+            # anyone can set.
+            "status",
+            "created_at",
+            "updated_at",
+        ]
 
     def get_company(self, obj) -> str | None:
         """AC-1: "the meeting shows the company".
@@ -474,6 +487,27 @@ class ScheduledMeetingSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_session(self, value):
+        """The session must belong to the caller's tenant.
+
+        Without this a service-authenticated caller — or any caller who can
+        guess an id — could attach a meeting to another tenant's session, and
+        the serializer's ``company`` field would then read that tenant's
+        company straight back out through select_related. A write that leaks
+        on read.
+        """
+        request = self.context.get("request")
+        tenant = getattr(request, "tenant", None) if request else None
+        if (
+            not OnboardingSession.objects.filter(tenant_scope_q(tenant))
+            .filter(pk=value.pk)
+            .exists()
+        ):
+            raise serializers.ValidationError(
+                "That session does not belong to this tenant."
+            )
+        return value
+
     def validate(self, attrs):
         starts = attrs.get("starts_at", getattr(self.instance, "starts_at", None))
         ends = attrs.get("ends_at", getattr(self.instance, "ends_at", None))
@@ -481,4 +515,20 @@ class ScheduledMeetingSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"ends_at": "A meeting must end after it starts."}
             )
+
+        # A meeting cannot move between sessions. Rescheduling changes the
+        # time; moving it to another session would break "one live meeting per
+        # session" from the far side — the constraint counts rows per session
+        # and cannot see a row arriving from elsewhere — and would carry a
+        # cancelled-and-rebooked history onto a session it never belonged to.
+        if self.instance is not None and "session" in attrs:
+            if attrs["session"].pk != self.instance.session_id:
+                raise serializers.ValidationError(
+                    {
+                        "session": (
+                            "A meeting cannot be moved to another session. "
+                            "Cancel it and schedule a new one."
+                        )
+                    }
+                )
         return attrs

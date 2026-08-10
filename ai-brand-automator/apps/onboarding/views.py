@@ -23,6 +23,10 @@ from rest_framework.response import Response
 import hmac
 
 from decouple import config as decouple_config
+from django.utils.dateparse import parse_datetime
+from django.utils import timezone as django_timezone
+from datetime import timezone as dt_timezone
+from rest_framework.exceptions import ValidationError
 from django.conf import settings
 from django.http import Http404
 from rest_framework.decorators import api_view, permission_classes
@@ -1499,21 +1503,43 @@ class ScheduledMeetingViewSet(
         "cancel": [IsAuthenticated, IsTenantEditor],
     }
 
-    def get_queryset(self):
+    def _tenant_scoped(self):
+        """Every meeting this tenant may see, with no window applied.
+
+        Separate from get_queryset because the window belongs to *listing*.
+        cancel() used the filtered queryset and would 404 a meeting that
+        exists whenever the client happened to send from/to — a detail route
+        inheriting a list concern.
+        """
         tenant = getattr(self.request, "tenant", None)
-        queryset = ScheduledMeeting.objects.select_related(
+        return ScheduledMeeting.objects.select_related(
             "session", "session__company"
         ).filter(tenant_scope_q(tenant))
+
+    def get_queryset(self):
+        queryset = self._tenant_scoped()
 
         # A calendar asks for a window, not for everything. Filtered
         # server-side for the same reason C-05's questionnaire list is: a
         # client narrowing a paginated response is correct until page two.
-        since = self.request.query_params.get("from")
-        until = self.request.query_params.get("to")
-        if since:
-            queryset = queryset.filter(ends_at__gte=since)
-        if until:
-            queryset = queryset.filter(starts_at__lte=until)
+        #
+        # Parsed rather than passed through. A raw string went straight into a
+        # DateTimeField lookup, so "?from=soon" raised out of the queryset and
+        # became a 500 on an ordinary GET; a naive value also compares against
+        # aware columns unpredictably. An unparseable window is a client bug,
+        # so it is a 400 rather than a silent full-range read.
+        for param, lookup in (("from", "ends_at__gte"), ("to", "starts_at__lte")):
+            raw = self.request.query_params.get(param)
+            if not raw:
+                continue
+            parsed = parse_datetime(raw)
+            if parsed is None:
+                raise ValidationError({param: f"{raw!r} is not an ISO-8601 datetime."})
+            if django_timezone.is_naive(parsed):
+                # UTC, not the server's local zone: the column is UTC and a
+                # naive value from a browser is already an instant.
+                parsed = django_timezone.make_aware(parsed, dt_timezone.utc)
+            queryset = queryset.filter(**{lookup: parsed})
         return queryset
 
     def perform_create(self, serializer):
@@ -1532,8 +1558,10 @@ class ScheduledMeetingViewSet(
         record that never existed.
         """
         with db_transaction.atomic():
+            # _tenant_scoped, not get_queryset: cancelling must not depend on
+            # whether the caller happened to include from/to on the request.
             meeting = (
-                self.get_queryset()
+                self._tenant_scoped()
                 .select_for_update(of=("self",))
                 .filter(pk=pk)
                 .first()
