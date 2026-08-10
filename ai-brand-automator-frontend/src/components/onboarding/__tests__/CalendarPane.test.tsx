@@ -26,6 +26,14 @@ jest.mock('@/lib/onboarding-sessions', () => ({
   listSessions: jest.fn(),
   createMeeting: jest.fn(),
   cancelMeeting: jest.fn(),
+  /**
+   * Pinned to UTC. The real implementation reads the machine's Intl zone, so
+   * "booked Europe/London" only renders when the viewer's zone differs from
+   * the booking's — and the suite would have failed for anyone running it in
+   * London, including a CI runner configured that way. A test whose result
+   * depends on where it runs reports geography, not correctness.
+   */
+  viewerTimezone: () => 'UTC',
 }));
 jest.mock('@/hooks/useTenantRole');
 
