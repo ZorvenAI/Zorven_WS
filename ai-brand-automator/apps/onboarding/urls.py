@@ -15,6 +15,7 @@ from apps.onboarding.views import (
     MeetingRecordingViewSet,
     OnboardingSessionViewSet,
     QuestionnaireViewSet,
+    ScheduledMeetingViewSet,
     ResearchBriefViewSet,
     create_questionnaire,
     field_vocabulary,
@@ -31,6 +32,11 @@ router.register(
 )
 router.register(
     r"questionnaires", QuestionnaireViewSet, basename="onboarding-questionnaire"
+)
+# §10.2 writes this as /calendar/events/; mounted under /onboarding/ with
+# the rest of the app.
+router.register(
+    r"calendar/events", ScheduledMeetingViewSet, basename="onboarding-calendar-event"
 )
 
 urlpatterns = [

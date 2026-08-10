@@ -23,6 +23,10 @@ from rest_framework.response import Response
 import hmac
 
 from decouple import config as decouple_config
+from django.utils.dateparse import parse_datetime
+from django.utils import timezone as django_timezone
+from datetime import timezone as dt_timezone
+from rest_framework.exceptions import ValidationError
 from django.conf import settings
 from django.http import Http404
 from rest_framework.decorators import api_view, permission_classes
@@ -44,6 +48,7 @@ from apps.onboarding.models import (
     FieldClassification,
     FieldProvenance,
     MeetingRecording,
+    MeetingStatus,
     OnboardingSession,
     ProvenanceStatus,
     Question,
@@ -53,6 +58,7 @@ from apps.onboarding.models import (
     QuestionnaireStatus,
     RecordingStatus,
     ResearchBrief,
+    ScheduledMeeting,
     SessionStatus,
     WorkflowTarget,
     depth_from,
@@ -67,6 +73,7 @@ from apps.onboarding.serializers import (
     QuestionnaireSerializer,
     RecordingStopSerializer,
     ResearchBriefSerializer,
+    ScheduledMeetingSerializer,
 )
 from apps.onboarding.services.session_state import InvalidTransition, transition
 from apps.onboarding.text import levenshtein, normalise_company_name
@@ -1461,3 +1468,113 @@ def live_precheck(request, pk):
             ),
         }
     )
+
+
+class ScheduledMeetingViewSet(
+    RoleBasedPermissionMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """``/api/v1/onboarding/calendar/events/`` — the in-app calendar (D-01).
+
+    §10.2 writes the path as ``/calendar/events/``. Mounted under
+    ``/onboarding/`` because every other endpoint in this app is, and a lone
+    top-level route would be the odd one out for a calendar that, per the
+    card, "shows onboarding meetings and nothing else".
+
+    AC-3 maps directly onto §15: Owner, Admin and Editor create and edit; a
+    Viewer reads. Deletion is deliberately absent — cancelling *releases* the
+    session and keeps the record, which is what AC-1 asks for and what D-03's
+    sync will need to reconcile against.
+    """
+
+    serializer_class = ScheduledMeetingSerializer
+    queryset = ScheduledMeeting.objects.all()
+
+    role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
+        "retrieve": [IsAuthenticated, IsTenantViewer],
+        "create": [IsAuthenticated, IsTenantEditor],
+        "update": [IsAuthenticated, IsTenantEditor],
+        "partial_update": [IsAuthenticated, IsTenantEditor],
+        "cancel": [IsAuthenticated, IsTenantEditor],
+    }
+
+    def _tenant_scoped(self):
+        """Every meeting this tenant may see, with no window applied.
+
+        Separate from get_queryset because the window belongs to *listing*.
+        cancel() used the filtered queryset and would 404 a meeting that
+        exists whenever the client happened to send from/to — a detail route
+        inheriting a list concern.
+        """
+        tenant = getattr(self.request, "tenant", None)
+        return ScheduledMeeting.objects.select_related(
+            "session", "session__company"
+        ).filter(tenant_scope_q(tenant))
+
+    def get_queryset(self):
+        queryset = self._tenant_scoped()
+
+        # A calendar asks for a window, not for everything. Filtered
+        # server-side for the same reason C-05's questionnaire list is: a
+        # client narrowing a paginated response is correct until page two.
+        #
+        # Parsed rather than passed through. A raw string went straight into a
+        # DateTimeField lookup, so "?from=soon" raised out of the queryset and
+        # became a 500 on an ordinary GET; a naive value also compares against
+        # aware columns unpredictably. An unparseable window is a client bug,
+        # so it is a 400 rather than a silent full-range read.
+        for param, lookup in (("from", "ends_at__gte"), ("to", "starts_at__lte")):
+            raw = self.request.query_params.get(param)
+            if not raw:
+                continue
+            parsed = parse_datetime(raw)
+            if parsed is None:
+                raise ValidationError({param: f"{raw!r} is not an ISO-8601 datetime."})
+            if django_timezone.is_naive(parsed):
+                # UTC, not the server's local zone: the column is UTC and a
+                # naive value from a browser is already an instant.
+                parsed = django_timezone.make_aware(parsed, dt_timezone.utc)
+            queryset = queryset.filter(**{lookup: parsed})
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(
+            tenant=getattr(self.request, "tenant", None),
+            organiser=self.request.user,
+        )
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        """Cancel the meeting and release its session (AC-1).
+
+        The row survives. Deleting it would erase the fact that a meeting was
+        booked at all, which an operator asking "what happened to Tuesday"
+        needs, and would leave D-03 unable to tell a cancellation from a
+        record that never existed.
+        """
+        with db_transaction.atomic():
+            # _tenant_scoped, not get_queryset: cancelling must not depend on
+            # whether the caller happened to include from/to on the request.
+            meeting = (
+                self._tenant_scoped()
+                .select_for_update(of=("self",))
+                .filter(pk=pk)
+                .first()
+            )
+            if meeting is None:
+                raise Http404
+            if meeting.status == MeetingStatus.CANCELLED:
+                return Response(
+                    {"error": "this meeting is already cancelled"},
+                    status=http.HTTP_409_CONFLICT,
+                )
+
+            meeting.status = MeetingStatus.CANCELLED
+            meeting.save(update_fields=["status", "updated_at"])
+
+        return Response(ScheduledMeetingSerializer(meeting).data)

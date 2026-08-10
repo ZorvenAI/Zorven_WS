@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 
 from tenants.models import Tenant
 
@@ -896,3 +896,127 @@ def depth_from(value: object) -> int:
     if isinstance(value, int) and 1 <= value <= 5:
         return value
     return DEFAULT_DEPTH
+
+
+class MeetingStatus(models.TextChoices):
+    SCHEDULED = "SCHEDULED", "Scheduled"
+    CANCELLED = "CANCELLED", "Cancelled"
+
+
+class ScheduledMeeting(models.Model):
+    """An onboarding meeting on the in-app calendar (D-01, Design §11).
+
+    Separate from OnboardingSession rather than a pair of columns on it, for
+    two reasons. AC-1 says cancelling *releases* the session, which needs a
+    record to cancel rather than two fields to null — otherwise the fact that a
+    meeting was ever booked disappears with it. And D-03's two-way sync needs a
+    provider event id, which is a property of a calendar entry and has no
+    business on a session.
+
+    Not to be confused with ``automation.ContentCalendar``, which schedules
+    social posts.
+    """
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)ss",
+    )
+    session = models.ForeignKey(
+        OnboardingSession,
+        on_delete=models.CASCADE,
+        related_name="meetings",
+    )
+
+    # ── The instant, and where it was meant to happen ────────────────
+    #
+    # Stored as UTC plus an IANA zone name, never an offset. The card is blunt
+    # about why: offset-storing "surfaces twice a year, in production, on a
+    # customer call". An offset is a fact about one moment; a zone is a rule,
+    # and only the rule survives a daylight-saving boundary.
+    starts_at = models.DateTimeField(help_text="The instant the meeting begins, in UTC")
+    ends_at = models.DateTimeField(help_text="The instant it ends, in UTC")
+    timezone = models.CharField(
+        max_length=64,
+        help_text=(
+            "IANA zone the meeting was scheduled in, e.g. 'Europe/London'. "
+            "Kept alongside the UTC instant so a rescheduled or recurring "
+            "meeting lands at the same *local* time across a DST change."
+        ),
+    )
+
+    organiser = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="onboarding_meetings",
+    )
+    title = models.CharField(max_length=255, blank=True, default="")
+    status = models.CharField(
+        max_length=16,
+        choices=MeetingStatus.choices,
+        default=MeetingStatus.SCHEDULED,
+        db_index=True,
+    )
+
+    #: D-03 writes this. Present from the start so two-way sync does not need
+    #: a migration to begin, and **empty** until then — a blank CharField
+    #: rather than null, matching the rest of this app and keeping "no
+    #: provider event" a single value instead of two.
+    provider_event_id = models.CharField(max_length=255, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = TenantScopedManager()
+
+    class Meta:
+        ordering = ["starts_at"]
+        constraints = [
+            models.CheckConstraint(
+                check=Q(ends_at__gt=F("starts_at")),
+                name="meeting_ends_after_it_starts",
+            ),
+            # The rule the card names, in the database: not an offset.
+            #
+            # This asks the narrow question deliberately. An earlier version
+            # allow-listed what an IANA name looks like — a slash, or "UTC" —
+            # and rejected 44 real zones in the process, including EST5EDT,
+            # GMT, CET and Eire. The serializer accepted those (zoneinfo knows
+            # them) and the database refused them, so a valid zone produced an
+            # IntegrityError and a 500.
+            #
+            # So the two layers answer different questions, each the one it
+            # can actually answer — and the boundary sits where the data
+            # allows rather than where it felt tidy. **No IANA zone begins
+            # with + or -**, so a leading sign is unambiguously an offset
+            # literal and the column refuses it. A second clause rejecting
+            # "UTC or GMT followed by a sign" looked right and was not: GMT+0
+            # and GMT-0 are real zones, which a sweep over every zone caught
+            # within a minute of being written.
+            #
+            # "UTC+5" therefore reaches the column, and the serializer stops
+            # it — zoneinfo knows it is not a place. The constraint's job is
+            # to hold against a data migration or a shell session writing the
+            # canonical offset shape, and that it does.
+            models.CheckConstraint(
+                check=~Q(timezone__regex=r"^[+-]"),
+                name="meeting_timezone_is_not_an_offset",
+            ),
+            # One live meeting per session. A rescheduled meeting leaves its
+            # cancelled predecessor behind, so history survives without a
+            # one-to-one that would have to be deleted to reschedule.
+            models.UniqueConstraint(
+                fields=["session"],
+                condition=Q(status="SCHEDULED"),
+                name="one_scheduled_meeting_per_session",
+            ),
+        ]
+        indexes = [models.Index(fields=["tenant", "starts_at"])]
+
+    def __str__(self) -> str:
+        when = self.starts_at.strftime("%Y-%m-%d %H:%M")
+        return f"{self.title or 'Onboarding meeting'} @ {when} UTC"

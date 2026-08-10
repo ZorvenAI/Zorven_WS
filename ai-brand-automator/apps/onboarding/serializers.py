@@ -10,6 +10,7 @@ to the same field, which is the shape of bug B-02's review caught on
 from __future__ import annotations
 
 from collections import Counter
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from rest_framework import serializers
 
@@ -21,7 +22,9 @@ from apps.onboarding.models import (
     Question,
     Questionnaire,
     ResearchBrief,
+    ScheduledMeeting,
     WorkflowTarget,
+    tenant_scope_q,
 )
 
 
@@ -422,3 +425,110 @@ class QuestionnaireSerializer(serializers.ModelSerializer):
         # reader to hunt for the missing question. Formatting is the display
         # layer's job; the invariant is this layer's.
         return {t: counts.get(t, 0) / total for t in WorkflowTarget.values}
+
+
+class ScheduledMeetingSerializer(serializers.ModelSerializer):
+    """An onboarding meeting (D-01).
+
+    ``timezone`` is validated against the live IANA database, not just the
+    column's regex. The constraint can reject an offset by shape; only
+    ``zoneinfo`` can tell that "Europe/Atlantis" is not a place. Both matter:
+    the constraint holds against a data migration, this holds against a typo.
+    """
+
+    company = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ScheduledMeeting
+        fields = [
+            "id",
+            "session",
+            "company",
+            "title",
+            "starts_at",
+            "ends_at",
+            "timezone",
+            "organiser",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "company",
+            "organiser",
+            # Writable status let a client PATCH its way past the cancel
+            # action — and back again, un-cancelling a meeting. Cancellation
+            # is the only supported transition and it releases the session, so
+            # it goes through the action that does that rather than a field
+            # anyone can set.
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_company(self, obj) -> str | None:
+        """AC-1: "the meeting shows the company".
+
+        Read through the session rather than stored: a meeting whose company
+        disagreed with its session's would be a bug nobody could see.
+        """
+        company = getattr(obj.session, "company", None)
+        return str(company) if company else None
+
+    def validate_timezone(self, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise serializers.ValidationError(
+                f"{value!r} is not an IANA timezone name. Use e.g. "
+                "'Europe/London' — an offset like '+05:30' is a fact about "
+                "one moment, not a rule that survives a DST change."
+            )
+        return value
+
+    def validate_session(self, value):
+        """The session must belong to the caller's tenant.
+
+        Without this a service-authenticated caller — or any caller who can
+        guess an id — could attach a meeting to another tenant's session, and
+        the serializer's ``company`` field would then read that tenant's
+        company straight back out through select_related. A write that leaks
+        on read.
+        """
+        request = self.context.get("request")
+        tenant = getattr(request, "tenant", None) if request else None
+        if (
+            not OnboardingSession.objects.filter(tenant_scope_q(tenant))
+            .filter(pk=value.pk)
+            .exists()
+        ):
+            raise serializers.ValidationError(
+                "That session does not belong to this tenant."
+            )
+        return value
+
+    def validate(self, attrs):
+        starts = attrs.get("starts_at", getattr(self.instance, "starts_at", None))
+        ends = attrs.get("ends_at", getattr(self.instance, "ends_at", None))
+        if starts and ends and ends <= starts:
+            raise serializers.ValidationError(
+                {"ends_at": "A meeting must end after it starts."}
+            )
+
+        # A meeting cannot move between sessions. Rescheduling changes the
+        # time; moving it to another session would break "one live meeting per
+        # session" from the far side — the constraint counts rows per session
+        # and cannot see a row arriving from elsewhere — and would carry a
+        # cancelled-and-rebooked history onto a session it never belonged to.
+        if self.instance is not None and "session" in attrs:
+            if attrs["session"].pk != self.instance.session_id:
+                raise serializers.ValidationError(
+                    {
+                        "session": (
+                            "A meeting cannot be moved to another session. "
+                            "Cancel it and schedule a new one."
+                        )
+                    }
+                )
+        return attrs
