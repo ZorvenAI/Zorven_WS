@@ -106,6 +106,10 @@ SHARED_APPS = [
     # OIA session models. Label is "onboarding_sessions", not "onboarding" —
     # that label belongs to the wizard app above. See apps/onboarding/apps.py.
     "apps.onboarding.apps.OnboardingSessionsConfig",
+    # Tenant-owned provider connections (D-02). Shared rather than per-tenant:
+    # the row carries its own tenant FK like everything else in this project,
+    # and only the `files` app runs in per-tenant schemas.
+    "apps.integrations.apps.IntegrationsConfig",
 ]
 
 TENANT_APPS = [
@@ -918,6 +922,16 @@ CELERY_BEAT_SCHEDULE = {
     "check-stale-orchestration-jobs": {
         "task": "orchestration.tasks.check_stale_jobs",
         "schedule": 300.0,  # Every 5 minutes
+    },
+    # Google Calendar grants (D-02). Scheduled rather than lazy-on-use, per the
+    # card: a grant revoked in Google's account settings should be discovered
+    # by this sweep and shown as "needs reconnect", not by the operator at the
+    # moment they open the calendar. Hourly is well inside an access token's
+    # life and far cheaper than the alternative of finding out during a
+    # meeting.
+    "refresh-google-calendar-tokens": {
+        "task": "integrations.refresh_calendar_tokens",
+        "schedule": 3600.0,
     },
 }
 

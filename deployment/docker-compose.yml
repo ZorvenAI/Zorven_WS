@@ -94,6 +94,8 @@ services:
       # Orchestration service configuration
       - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://orchestrator:8010}
       - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
       - ORCHESTRATOR_TIMEOUT=${ORCHESTRATOR_TIMEOUT:-30}
       - BACKEND_URL=${BACKEND_URL:-http://backend:8001}
@@ -231,6 +233,12 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      # Google Calendar OAuth (D-02). The worker runs the hourly
+      # refresh_calendar_tokens sweep, which calls Google's token endpoint with
+      # the client credentials — without these it marks every healthy calendar
+      # NEEDS_RECONNECT. Beat only enqueues the task and needs neither.
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
       - CELERY_CONCURRENCY=4
       - CELERY_LOG_LEVEL=info
       # Multi-tenancy: default GCS buckets

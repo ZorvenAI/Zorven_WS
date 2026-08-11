@@ -73,6 +73,10 @@ urlpatterns = [
                 # onboarding_sessions). A distinct prefix from the line
                 # above, which is mounted at the root.
                 path("onboarding/", include("apps.onboarding.urls")),
+                # Tenant-owned provider connections (D-02). Its own prefix:
+                # a calendar grant belongs to the tenant, not to an
+                # onboarding session, and D-03 syncs against it.
+                path("integrations/", include("apps.integrations.urls")),
                 # AI Services
                 path("ai/", include("ai_services.urls")),
                 # Subscriptions
