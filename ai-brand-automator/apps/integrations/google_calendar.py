@@ -80,7 +80,7 @@ def is_configured() -> bool:
     return bool(client_id and client_secret)
 
 
-def authorisation_url(*, redirect_uri: str, state: str) -> str:
+def authorization_url(*, redirect_uri: str, state: str) -> str:
     """Where to send the operator's browser to consent."""
     client_id, _ = client_credentials()
     query = {

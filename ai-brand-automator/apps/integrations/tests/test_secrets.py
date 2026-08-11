@@ -89,6 +89,22 @@ def admin_client():
     return client, tenant
 
 
+@pytest.fixture
+def browser():
+    """Google's redirect: unauthenticated, and a different client entirely."""
+    client = APIClient()
+    client.defaults["SERVER_NAME"] = "localhost"
+    return client
+
+
+def connect_via_google(client, browser):
+    """The full round trip, driven the way Google drives it."""
+    state = (
+        client.get(CONNECT).json()["authorization_url"].split("state=")[1].split("&")[0]
+    )
+    return browser.get(CALLBACK, {"code": "auth-code", "state": state})
+
+
 class Recorder(logging.Handler):
     """Captures records whole, not just their rendered message.
 
@@ -130,7 +146,7 @@ def captured_logs():
         root.setLevel(previous_level)
 
 
-def test_no_token_in_logs_or_events(admin_client, google, captured_logs):
+def test_no_token_in_logs_or_events(admin_client, browser, google, captured_logs):
     """The card's named case, over a whole connect-and-disconnect.
 
     Everything the system logs while handling both halves of the flow is
@@ -138,10 +154,7 @@ def test_no_token_in_logs_or_events(admin_client, google, captured_logs):
     """
     client, _ = admin_client
 
-    state = (
-        client.get(CONNECT).json()["authorisation_url"].split("state=")[1].split("&")[0]
-    )
-    client.post(CALLBACK, {"code": "auth-code", "state": state}, format="json")
+    connect_via_google(client, browser)
     client.post(DISCONNECT, format="json")
 
     haystack = captured_logs.haystack()
@@ -152,16 +165,13 @@ def test_no_token_in_logs_or_events(admin_client, google, captured_logs):
 
 
 def test_the_audit_records_the_connection_without_the_material(
-    admin_client, google, captured_logs
+    admin_client, browser, google, captured_logs
 ):
     """AC-2's second half: the event names the acting user and the secret's
     path, and carries nothing that could be replayed."""
     client, tenant = admin_client
 
-    state = (
-        client.get(CONNECT).json()["authorisation_url"].split("state=")[1].split("&")[0]
-    )
-    client.post(CALLBACK, {"code": "auth-code", "state": state}, format="json")
+    connect_via_google(client, browser)
 
     events = [
         r
@@ -191,13 +201,10 @@ def test_the_recorder_would_actually_catch_a_leak(captured_logs):
     assert SECRET in captured_logs.haystack()
 
 
-def test_the_model_repr_carries_nothing(admin_client, google):
+def test_the_model_repr_carries_nothing(admin_client, browser, google):
     """__str__ lands in admin pages, shell transcripts and error reports."""
     client, _ = admin_client
-    state = (
-        client.get(CONNECT).json()["authorisation_url"].split("state=")[1].split("&")[0]
-    )
-    client.post(CALLBACK, {"code": "auth-code", "state": state}, format="json")
+    connect_via_google(client, browser)
 
     connection = CalendarConnection.objects.get()
 
@@ -206,16 +213,13 @@ def test_the_model_repr_carries_nothing(admin_client, google):
 
 
 def test_a_failed_exchange_does_not_log_the_client_secret(
-    admin_client, google, captured_logs
+    admin_client, browser, google, captured_logs
 ):
     """The error path is where secrets usually escape — someone logs the
     request body to work out what went wrong."""
     client, _ = admin_client
     google["token_status"] = 400
 
-    state = (
-        client.get(CONNECT).json()["authorisation_url"].split("state=")[1].split("&")[0]
-    )
-    client.post(CALLBACK, {"code": "auth-code", "state": state}, format="json")
+    connect_via_google(client, browser)
 
     assert CLIENT_SECRET not in captured_logs.haystack()

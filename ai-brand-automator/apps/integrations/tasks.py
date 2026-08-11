@@ -33,6 +33,20 @@ def refresh_calendar_tokens() -> dict[str, int]:
     """
     refreshed = failed = 0
 
+    if not google_calendar.is_configured():
+        # Abandon the sweep rather than run it. Without client credentials
+        # every refresh comes back `invalid_client` — which is this deployment
+        # being misconfigured, not any operator's grant being revoked — and the
+        # loop below would mark every healthy calendar in the fleet
+        # NEEDS_RECONNECT on the strength of it. A worker that lost the
+        # credentials (they live only on the backend and the worker) must fail
+        # loudly and change nothing.
+        logger.error(
+            "calendar_refresh_skipped_unconfigured",
+            extra={"reason": "GOOGLE_OAUTH_CLIENT_ID/SECRET missing on this worker"},
+        )
+        return {"refreshed": 0, "needs_reconnect": 0, "skipped": "unconfigured"}
+
     for connection in CalendarConnection.objects.filter(
         status=ConnectionStatus.CONNECTED
     ).exclude(_refresh_token=""):
