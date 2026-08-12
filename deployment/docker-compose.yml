@@ -96,6 +96,10 @@ services:
       - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
       - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
       - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # Distinct per deployment: Google's private extended properties are
+      # private to the calendar, not the app, so a local stack and production
+      # sharing a test Google account would disown each other's events.
+      - CALENDAR_SYNC_NAMESPACE=${CALENDAR_SYNC_NAMESPACE:-zorven-local}
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
       - ORCHESTRATOR_TIMEOUT=${ORCHESTRATOR_TIMEOUT:-30}
       - BACKEND_URL=${BACKEND_URL:-http://backend:8001}
@@ -239,6 +243,10 @@ services:
       # NEEDS_RECONNECT. Beat only enqueues the task and needs neither.
       - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
       - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # Distinct per deployment: Google's private extended properties are
+      # private to the calendar, not the app, so a local stack and production
+      # sharing a test Google account would disown each other's events.
+      - CALENDAR_SYNC_NAMESPACE=${CALENDAR_SYNC_NAMESPACE:-zorven-local}
       - CELERY_CONCURRENCY=4
       - CELERY_LOG_LEVEL=info
       # Multi-tenancy: default GCS buckets

@@ -1,0 +1,204 @@
+"""The Google Calendar REST API, as much of it as D-03 needs.
+
+Raw ``requests``, matching ``google_calendar.py``. Adding
+``google-api-python-client`` would pull a large dependency tree in to save a
+handful of URL constructions, and — the deciding reason — its transport is
+hard to point at a local server, which is what lets the tests here drive *this*
+code rather than a mock of it.
+
+Endpoint URLs come from :func:`_base` for the same reason.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime
+
+import requests
+from decouple import config
+from django.utils.dateparse import parse_datetime
+
+from apps.integrations.google_calendar import OAuthError
+
+logger = logging.getLogger(__name__)
+
+API_BASE = "https://www.googleapis.com/calendar/v3"
+
+#: Which calendar. `primary` is the operator's own, which is what a Google
+#: Calendar connection means to the person who clicked connect.
+CALENDAR_ID = "primary"
+
+TIMEOUT_S = 20
+
+#: Google's own ceiling is 2500. A smaller page means more round trips on the
+#: first sync and a shorter transaction on every later one; incremental syncs
+#: almost always fit in a single page anyway.
+PAGE_SIZE = 250
+
+#: A page loop that cannot end is a worker that never returns. Google paginates
+#: an incremental sync in single figures; a thousand pages is not a large
+#: calendar, it is a bug at one end or the other.
+MAX_PAGES = 1000
+
+
+class CalendarApiError(OAuthError):
+    """A call to the Calendar API failed.
+
+    Subclasses OAuthError so a caller that already handles the connection
+    going bad does not have to learn a second exception to stay correct.
+    """
+
+
+class SyncTokenExpired(Exception):
+    """Google answered 410 for our sync token.
+
+    Not an error in any meaningful sense — Google expires tokens on its own
+    schedule and says so in the docs. The only correct response is to discard
+    the token and re-read the window from scratch, which is why this is its own
+    type rather than a status code the caller has to remember to special-case.
+    """
+
+
+@dataclass
+class EventPage:
+    events: list[dict] = field(default_factory=list)
+    next_sync_token: str = ""
+
+
+def _base() -> str:
+    """The API root, overridable for tests."""
+    return (config("GOOGLE_CALENDAR_API_BASE", default="").strip() or API_BASE).rstrip(
+        "/"
+    )
+
+
+def _events_url() -> str:
+    return f"{_base()}/calendars/{CALENDAR_ID}/events"
+
+
+def _get(url: str, *, access_token: str, params: dict) -> dict:
+    """GET and parse, translating Google's failures into ours.
+
+    410 is separated out before anything else: it is the one status whose
+    correct handling is "carry on differently" rather than "give up".
+    """
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=TIMEOUT_S,
+        )
+    except requests.RequestException as exc:
+        raise CalendarApiError(f"Could not reach Google Calendar: {type(exc).__name__}")
+
+    if response.status_code == 410:
+        raise SyncTokenExpired()
+
+    try:
+        body = response.json()
+    except ValueError:
+        raise CalendarApiError(
+            f"Google Calendar returned a non-JSON response ({response.status_code})"
+        )
+
+    if not response.ok or not isinstance(body, dict):
+        reason = "unknown"
+        if isinstance(body, dict):
+            error = body.get("error")
+            # Google nests the useful string two different ways depending on
+            # which front end answers.
+            if isinstance(error, dict):
+                reason = error.get("message") or error.get("status") or reason
+            elif error:
+                reason = str(error)
+        # The status is logged, the token never is.
+        logger.warning(
+            "google calendar call failed: %s (%s)", reason, response.status_code
+        )
+        raise CalendarApiError(f"Google Calendar rejected the request: {reason}")
+
+    return body
+
+
+def list_events(
+    *,
+    access_token: str,
+    sync_token: str = "",
+    time_min: datetime | None = None,
+) -> EventPage:
+    """Read events, incrementally when we have a cursor.
+
+    With a sync token Google returns only what changed since it was issued —
+    including deletions, as entries with ``status: cancelled``, which a date
+    range would never show. Without one it returns everything from
+    ``time_min``, and issues a token for next time.
+
+    ``singleEvents`` expands recurrence into instances. The alternative is
+    storing recurrence rules and evaluating them locally, which is a calendar
+    engine and not what this story is.
+
+    Raises :class:`SyncTokenExpired` if the cursor has aged out.
+    """
+    params: dict[str, object] = {
+        "maxResults": PAGE_SIZE,
+        "singleEvents": "true",
+        "showDeleted": "true",
+    }
+    if sync_token:
+        params["syncToken"] = sync_token
+    else:
+        # Only meaningful on a full read. Google rejects a request that sends
+        # both a sync token and a time window.
+        if time_min is not None:
+            params["timeMin"] = time_min.isoformat().replace("+00:00", "Z")
+
+    events: list[dict] = []
+    page_token = ""
+    for _ in range(MAX_PAGES):
+        if page_token:
+            params["pageToken"] = page_token
+        body = _get(_events_url(), access_token=access_token, params=params)
+        events.extend(body.get("items") or [])
+
+        page_token = body.get("nextPageToken") or ""
+        if not page_token:
+            # Google sends the sync token only on the final page. Taking one
+            # from an earlier page would acknowledge changes we had not read
+            # and lose them permanently — the next incremental sync would
+            # start after them.
+            return EventPage(
+                events=events, next_sync_token=body.get("nextSyncToken", "")
+            )
+
+    raise CalendarApiError(
+        f"Google Calendar paginated past {MAX_PAGES} pages; refusing to continue"
+    )
+
+
+def event_instant(payload: dict | None) -> tuple[datetime | None, str]:
+    """Read a Google start/end block into a UTC instant and an IANA zone.
+
+    Google sends one of two shapes: ``dateTime`` with an offset for a timed
+    event, and ``date`` for an all-day one. The zone arrives separately in
+    ``timeZone`` and is the thing worth keeping — D-01 stores a zone rather
+    than an offset precisely so a meeting survives a DST boundary, and
+    discarding it here would put external events back on the footing that
+    decision was made to avoid.
+    """
+    if not isinstance(payload, dict):
+        return None, ""
+
+    raw = payload.get("dateTime") or payload.get("date") or ""
+    parsed = parse_datetime(raw) if raw else None
+    if parsed is None and raw:
+        # An all-day event's `date` is a plain date, which parse_datetime
+        # declines. Midnight in the event's own zone is the honest reading.
+        from django.utils.dateparse import parse_date
+
+        day = parse_date(raw)
+        if day is not None:
+            parsed = datetime(day.year, day.month, day.day)
+
+    return parsed, str(payload.get("timeZone") or "")

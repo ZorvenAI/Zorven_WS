@@ -82,6 +82,28 @@ class CalendarConnection(models.Model):
     last_refreshed_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # ── Sync bookkeeping (D-03) ──────────────────────────────────────
+    #
+    # The card is specific: "use a sync token rather than polling a date
+    # range; full re-fetch on every cycle will hit quota with a handful of
+    # tenants". The token is Google's cursor — hand it back and receive only
+    # what changed.
+    #
+    # Not a secret. It names no event and grants nothing without an access
+    # token, so unlike the refresh token it is stored in the clear and may
+    # appear in a log line.
+    sync_token = models.TextField(blank=True, default="")
+    last_sync_at = models.DateTimeField(null=True, blank=True)
+    last_sync_error = models.CharField(max_length=255, blank=True, default="")
+
+    #: Consecutive failures, which drive the backoff below. Reset on success.
+    sync_failures = models.PositiveIntegerField(default=0)
+
+    #: AC-3: "the next cycle retries with backoff". Held as an instant rather
+    #: than a delay so a worker restart does not reset everybody's backoff to
+    #: zero and stampede a provider that is already struggling.
+    sync_backoff_until = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["-connected_at"]
         constraints = [

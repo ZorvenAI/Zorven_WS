@@ -22,6 +22,7 @@ from apps.onboarding.models import (
     Question,
     Questionnaire,
     ResearchBrief,
+    MeetingOrigin,
     ScheduledMeeting,
     WorkflowTarget,
     tenant_scope_q,
@@ -437,12 +438,27 @@ class ScheduledMeetingSerializer(serializers.ModelSerializer):
     """
 
     company = serializers.SerializerMethodField()
+    editable = serializers.SerializerMethodField()
+
+    #: Required on write even though the column is nullable.
+    #:
+    #: D-03 made `session` nullable so external Google events — which have no
+    #: onboarding session and never will — can share this table. ModelSerializer
+    #: read that as "optional", which would let a client create an in-app
+    #: meeting attached to nothing: a row D-01's cancel-releases-the-session
+    #: rule has no meaning for. Null stays legal to *read*, so external events
+    #: serialise, and illegal to *send*.
+    session = serializers.PrimaryKeyRelatedField(
+        queryset=OnboardingSession.objects.all(), required=True, allow_null=False
+    )
 
     class Meta:
         model = ScheduledMeeting
         fields = [
             "id",
             "session",
+            "origin",
+            "editable",
             "company",
             "title",
             "starts_at",
@@ -456,6 +472,11 @@ class ScheduledMeetingSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "company",
+            "editable",
+            # Never client-settable. A meeting posted as GOOGLE would be
+            # uneditable the moment it was created, and the sync loop would
+            # treat it as somebody else's.
+            "origin",
             "organiser",
             # Writable status let a client PATCH its way past the cancel
             # action — and back again, un-cancelling a meeting. Cancellation
@@ -466,6 +487,16 @@ class ScheduledMeetingSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_editable(self, obj) -> bool:
+        """Whether this app is the system of record for this entry.
+
+        Sent explicitly rather than left for the client to derive from
+        `origin`. The pane has to disable its controls, and a rule duplicated
+        in TypeScript is a rule that drifts — the API already knows the answer
+        and the viewset enforces the same one.
+        """
+        return obj.origin != MeetingOrigin.GOOGLE
 
     def get_company(self, obj) -> str | None:
         """AC-1: "the meeting shows the company".

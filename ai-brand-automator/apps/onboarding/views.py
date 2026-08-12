@@ -17,7 +17,7 @@ from rest_framework import mixins
 from rest_framework import status as http
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
 from rest_framework.response import Response
 
 import hmac
@@ -26,7 +26,7 @@ from decouple import config as decouple_config
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone as django_timezone
 from datetime import timezone as dt_timezone
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from django.conf import settings
 from django.http import Http404
 from rest_framework.decorators import api_view, permission_classes
@@ -47,6 +47,7 @@ from apps.onboarding.models import (
     ConsentRecord,
     FieldClassification,
     FieldProvenance,
+    MeetingOrigin,
     MeetingRecording,
     MeetingStatus,
     OnboardingSession,
@@ -1503,6 +1504,35 @@ class ScheduledMeetingViewSet(
         "cancel": [IsAuthenticated, IsTenantEditor],
     }
 
+    #: What a client is told when it tries to edit somebody's own diary entry.
+    EXTERNAL_IS_READ_ONLY = (
+        "This meeting was created in Google Calendar. Edit it there — this app "
+        "mirrors it and is not its system of record."
+    )
+
+    def _refuse_if_external(self, meeting) -> None:
+        """§11: external meetings appear "read-only alongside in-app ones".
+
+        Enforced here rather than by the database, because sharing one table
+        was the deliberate choice (§10.2 names a single endpoint) and a check
+        constraint cannot express "writable through the API but writable by
+        the sync loop". Every write path routes through this method so there
+        is one place to be wrong, and a test per path.
+
+        It also keeps AC-4 honest. If a client could edit a GOOGLE-origin
+        meeting, the next pull would silently overwrite the edit — the rule
+        says Google wins for externally created events — and the operator
+        would watch their change evaporate with no explanation.
+        """
+        if meeting is not None and meeting.origin == MeetingOrigin.GOOGLE:
+            raise PermissionDenied(self.EXTERNAL_IS_READ_ONLY)
+
+    def get_object(self):
+        instance = super().get_object()
+        if self.request.method not in SAFE_METHODS:
+            self._refuse_if_external(instance)
+        return instance
+
     def _tenant_scoped(self):
         """Every meeting this tenant may see, with no window applied.
 
@@ -1550,6 +1580,10 @@ class ScheduledMeetingViewSet(
         serializer.save(
             tenant=getattr(self.request, "tenant", None),
             organiser=self.request.user,
+            # Set here, never taken from the client. A caller that could post
+            # origin=GOOGLE would mint a meeting nobody can subsequently edit,
+            # and one the sync loop believes Google owns.
+            origin=MeetingOrigin.APP,
         )
 
     @action(detail=True, methods=["post"])
@@ -1572,6 +1606,10 @@ class ScheduledMeetingViewSet(
             )
             if meeting is None:
                 raise Http404
+            # cancel() reads through _tenant_scoped rather than get_object, so
+            # the guard there does not cover it. Cancelling an external meeting
+            # is an edit like any other.
+            self._refuse_if_external(meeting)
             if meeting.status == MeetingStatus.CANCELLED:
                 return Response(
                     {"error": "This meeting is already cancelled."},

@@ -933,6 +933,22 @@ CELERY_BEAT_SCHEDULE = {
         "task": "integrations.refresh_calendar_tokens",
         "schedule": 3600.0,
     },
+    # D-03 AC-1: an externally created meeting "appears in the calendar pane
+    # within 5 minutes".
+    #
+    # Three, not five. A five-minute cadence cannot meet a five-minute budget:
+    # an event created one second after a cycle waits the best part of a full
+    # interval before the next one starts, and then has to be fetched and
+    # written. Three leaves room for the work.
+    #
+    # Cheap because it is incremental — a sync token means an idle calendar
+    # costs one token refresh and one empty list per cycle, and that cost does
+    # not grow as the calendar does. The card is explicit that a date-range
+    # re-fetch here "will hit quota with a handful of tenants".
+    "sync-google-calendars": {
+        "task": "integrations.sync_calendars",
+        "schedule": 180.0,
+    },
 }
 
 # Explicit flag to enable Kafka consumer Celery tasks.

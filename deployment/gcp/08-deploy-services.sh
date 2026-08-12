@@ -59,6 +59,13 @@ deploy_service() {
 log "Deploying core services..."
 
 # Backend (Django/Gunicorn) — skip startup migrations, run Gunicorn directly
+# CALENDAR_SYNC_NAMESPACE (D-03) is set on zorven-backend and
+# zorven-celery-worker only — the two services that hold the Google OAuth
+# credentials. It namespaces the private extended property that marks a
+# calendar event as ours. Google scopes those properties to the calendar
+# rather than to the application, so without it a staging deployment and
+# production syncing the same operator's calendar read each other's tags and
+# each disowns the other's meetings. celery-beat only enqueues the sweep.
 deploy_service zorven-backend zorven-backend 8001 \
   --memory=1Gi --cpu=1 \
   --max-instances="${CR_MAX_INSTANCES}" \
@@ -71,6 +78,7 @@ REDIS_URL=${REDIS_BASE}/0,\
 CELERY_BROKER_URL=${REDIS_BASE}/0,\
 CELERY_RESULT_BACKEND=${REDIS_BASE}/0,\
 DEBUG=False,\
+CALENDAR_SYNC_NAMESPACE=zorven-prod,\
 KONG_ENABLED=false,\
 ALLOWED_HOSTS=*,\
 GUNICORN_WORKERS=2,\
@@ -158,6 +166,7 @@ REDIS_URL=${REDIS_BASE}/0,\
 CELERY_BROKER_URL=${REDIS_BASE}/0,\
 CELERY_RESULT_BACKEND=${REDIS_BASE}/0,\
 DEBUG=False,\
+CALENDAR_SYNC_NAMESPACE=zorven-prod,\
 ORCHESTRATION_KAFKA_ENABLED=false,\
 ONBOARDING_KAFKA_ENABLED=false,\
 ANALYTICS_KAFKA_ENABLED=false,\
