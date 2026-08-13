@@ -496,9 +496,13 @@ def test_a_malformed_window_is_a_400_not_a_500(
     a typo raised out of the queryset."""
     response = api_client.get(f"{EVENTS}?from={bad}")
 
-    assert response.status_code in (200, 400), response.content
-    if bad:
-        assert response.status_code == 400
+    # Which status is right depends on the case, so say so per case rather
+    # than accepting either for all of them. An empty `?from=` is not a
+    # malformed window — it is no window, which the view ignores — and a set
+    # covering both hid the fact that only one of these four is a 400 by
+    # accident of the parametrize list.
+    expected = 400 if bad else 200
+    assert response.status_code == expected, response.content
 
 
 def test_cancelling_works_even_with_window_parameters(

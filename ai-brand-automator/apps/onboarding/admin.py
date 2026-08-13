@@ -16,6 +16,7 @@ from __future__ import annotations
 from django.contrib import admin
 
 from .models import (
+    CalendarSyncConflict,
     ConsentRecord,
     FieldProvenance,
     MeetingRecording,
@@ -189,3 +190,28 @@ class FieldProvenanceAdmin(TenantScopedAdmin):
         "reviewed_by",
         "tenant",
     )
+
+
+@admin.register(CalendarSyncConflict)
+class CalendarSyncConflictAdmin(TenantScopedAdmin):
+    """D-03 AC-4: "the losing change is recorded rather than discarded".
+
+    Read-only, and registered so that recording it means something. A row
+    nobody can read is a log line with extra steps — and the question this
+    answers, "what happened to the time I set on Tuesday", is asked by an
+    operator to a support engineer, not by anyone with a database console.
+
+    Nothing here is editable: it is the evidence of a reconciliation, and an
+    editable audit record is not one.
+    """
+
+    list_display = ("id", "meeting", "winner", "rule", "detected_at")
+    list_filter = ("winner", "detected_at")
+    search_fields = ("meeting__title", "rule")
+    readonly_fields = ("meeting", "winner", "discarded", "rule", "detected_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

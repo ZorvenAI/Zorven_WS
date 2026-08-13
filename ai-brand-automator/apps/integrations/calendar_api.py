@@ -50,7 +50,15 @@ class CalendarApiError(OAuthError):
 
     Subclasses OAuthError so a caller that already handles the connection
     going bad does not have to learn a second exception to stay correct.
+
+    Carries the HTTP status. Callers that need to distinguish one failure from
+    another — a delete finding nothing, say — get to ask a question with an
+    answer, instead of searching the message for a number that is not in it.
     """
+
+    def __init__(self, reason: str, *, status: int | None = None) -> None:
+        super().__init__(reason)
+        self.status = status
 
 
 class SyncTokenExpired(Exception):
@@ -120,7 +128,10 @@ def _get(url: str, *, access_token: str, params: dict) -> dict:
         logger.warning(
             "google calendar call failed: %s (%s)", reason, response.status_code
         )
-        raise CalendarApiError(f"Google Calendar rejected the request: {reason}")
+        raise CalendarApiError(
+            f"Google Calendar rejected the request: {reason}",
+            status=response.status_code,
+        )
 
     return body
 
@@ -234,3 +245,88 @@ def _zone(name: str) -> ZoneInfo | dt_timezone:
         # to get through.
         logger.info("unknown calendar timezone %r; reading the instant as UTC", name)
         return dt_timezone.utc
+
+
+def _send(
+    method: str, url: str, *, access_token: str, body: dict | None = None
+) -> dict:
+    """POST/PATCH/DELETE with a JSON body, translating Google's failures.
+
+    Separate from :func:`_get` because a write that 404s means something
+    different from a read that does — see :func:`delete_event`.
+    """
+    try:
+        response = requests.request(
+            method,
+            url,
+            json=body,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=TIMEOUT_S,
+        )
+    except requests.RequestException as exc:
+        raise CalendarApiError(f"Could not reach Google Calendar: {type(exc).__name__}")
+
+    if response.status_code == 204 or not (response.content or b"").strip():
+        return {}
+
+    try:
+        parsed = response.json()
+    except ValueError:
+        if response.ok:
+            return {}
+        raise CalendarApiError(
+            f"Google Calendar returned a non-JSON response ({response.status_code})"
+        )
+
+    if not response.ok or not isinstance(parsed, dict):
+        reason = "unknown"
+        if isinstance(parsed, dict):
+            error = parsed.get("error")
+            if isinstance(error, dict):
+                reason = error.get("message") or error.get("status") or reason
+            elif error:
+                reason = str(error)
+        logger.warning(
+            "google calendar write failed: %s (%s)", reason, response.status_code
+        )
+        raise CalendarApiError(
+            f"Google Calendar rejected the write: {reason}", status=response.status_code
+        )
+
+    return parsed
+
+
+def insert_event(*, access_token: str, body: dict) -> dict:
+    """Create an event and return it, including the id Google assigned."""
+    return _send("POST", _events_url(), access_token=access_token, body=body)
+
+
+def patch_event(*, access_token: str, event_id: str, body: dict) -> dict:
+    """Update an existing event in place.
+
+    PATCH rather than PUT: a full replace would drop every field this app does
+    not model — the operator's own notes, conferencing links, reminders — on
+    an event that lives in their personal calendar.
+    """
+    return _send(
+        "PATCH",
+        f"{_events_url()}/{event_id}",
+        access_token=access_token,
+        body=body,
+    )
+
+
+def delete_event(*, access_token: str, event_id: str) -> None:
+    """Remove an event.
+
+    A 404 or 410 is success: the goal state is "the event is not there", and
+    it has been reached. Treating it as a failure would strand a cancelled
+    meeting in a permanent retry loop against an event nobody can produce.
+    """
+    try:
+        _send("DELETE", f"{_events_url()}/{event_id}", access_token=access_token)
+    except CalendarApiError as exc:
+        if exc.status in (404, 410):
+            logger.info("delete found nothing to delete; the event was already gone")
+            return
+        raise
