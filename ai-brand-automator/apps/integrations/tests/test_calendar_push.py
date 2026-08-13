@@ -544,3 +544,46 @@ def test_deleting_an_event_google_has_already_forgotten_is_success(
     assert result["failed"] == 0
     meeting.refresh_from_db()
     assert meeting.provider_synced_at is not None
+
+
+def test_another_tenants_tagged_event_is_not_reconciled_as_ours(
+    connection, tenant, calendar
+):
+    """Where #570's tenant check meets this PR's reconciliation.
+
+    Two tenants can connect the same Google account. Before the tenant part of
+    the tag was checked, tenant A's tagged event read during tenant B's sync
+    counted as B's own — which under this PR is worse than a skip: it would
+    reach `reconcile_owned`, and a mismatch against a meeting B does not have
+    is exactly the shape that records a conflict. B would accumulate conflict
+    rows about A's meetings.
+
+    From B's side it is an ordinary external event, and that is what it becomes.
+    """
+    other = Tenant.objects.create(name="Other tenant", schema_name="d03_push_other")
+    start = timezone.now() + timedelta(days=1)
+    calendar.insert(
+        {
+            "summary": "Their onboarding call",
+            "start": {
+                "dateTime": start.isoformat().replace("+00:00", "Z"),
+                "timeZone": "Europe/London",
+            },
+            "end": {
+                "dateTime": (start + timedelta(minutes=30))
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "timeZone": "Europe/London",
+            },
+            "extendedProperties": {
+                "private": {sync.TAG_KEY: f"zorven-test:{other.pk}:99"}
+            },
+        }
+    )
+
+    sync.pull_connection(connection)
+
+    mirrored = ScheduledMeeting.objects.get()
+    assert mirrored.origin == MeetingOrigin.GOOGLE
+    assert mirrored.tenant_id == tenant.pk
+    assert not CalendarSyncConflict.objects.exists()
