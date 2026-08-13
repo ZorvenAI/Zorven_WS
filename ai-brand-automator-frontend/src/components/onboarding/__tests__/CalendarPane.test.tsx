@@ -63,7 +63,7 @@ const MEETING: ScheduledMeeting = {
 const EXTERNAL: ScheduledMeeting = {
   ...MEETING,
   id: 'm-ext',
-  session: '',
+  session: null,
   company: null,
   title: 'Dentist',
   origin: 'GOOGLE',

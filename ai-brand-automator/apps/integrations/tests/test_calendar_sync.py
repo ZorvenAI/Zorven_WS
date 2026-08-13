@@ -361,13 +361,13 @@ def test_a_remote_cancellation_cancels_the_mirror(connection, google):
 # ── Ownership · AC-4's precondition ──────────────────────────────────
 
 
-def test_an_event_we_created_is_not_mirrored_back(connection, google):
+def test_an_event_we_created_is_not_mirrored_back(connection, tenant, google):
     """The tag is what makes AC-4 decidable rather than heuristic. Without it
     the outbound half's own event returns on the next pull and becomes a second
     meeting — the duplicate FR-CAL-03 forbids, arriving by the other door."""
     tagged = an_event(
         "evt-ours",
-        extendedProperties={"private": {sync.TAG_KEY: "zorven-test:1:42"}},
+        extendedProperties={"private": {sync.TAG_KEY: f"zorven-test:{tenant.pk}:42"}},
     )
     google["responses"] = [a_page([tagged])]
 
@@ -377,14 +377,14 @@ def test_an_event_we_created_is_not_mirrored_back(connection, google):
     assert not ScheduledMeeting.objects.exists()
 
 
-def test_another_deployments_tag_is_not_ours(connection, google):
+def test_another_deployments_tag_is_not_ours(connection, tenant, google):
     """Google's "private" extended properties are private to the calendar, not
     to the app: staging and production reading the same operator's calendar see
     each other's tags. Without the namespace, staging would silently disown a
     production meeting."""
     foreign = an_event(
         "evt-theirs",
-        extendedProperties={"private": {sync.TAG_KEY: "someone-else:1:42"}},
+        extendedProperties={"private": {sync.TAG_KEY: f"someone-else:{tenant.pk}:42"}},
     )
     google["responses"] = [a_page([foreign])]
 
@@ -782,3 +782,89 @@ def test_a_dead_cursor_is_discarded_even_if_the_retry_fails(connection, google):
 
     connection.refresh_from_db()
     assert connection.sync_token == ""
+
+
+# ── Review findings on #570 ──────────────────────────────────────────
+
+
+def test_another_tenants_tag_is_not_ours(connection, tenant, google):
+    """The docstring claimed this and the code did not do it.
+
+    Two tenants can connect the same Google account — a consultancy running
+    onboarding for several brands from one calendar is the ordinary case. A tag
+    naming tenant A, read during tenant B's sync, is not B's meeting: it is an
+    external event as far as B is concerned, and skipping it means B never sees
+    a meeting that is on their calendar.
+    """
+    other = Tenant.objects.create(name="Other tenant", schema_name="d03_tag_other")
+    foreign = an_event(
+        "evt-theirs",
+        extendedProperties={"private": {sync.TAG_KEY: f"zorven-test:{other.pk}:42"}},
+    )
+    google["responses"] = [a_page([foreign])]
+
+    counts = sync.pull_connection(connection)
+
+    assert counts["created"] == 1
+    mirrored = ScheduledMeeting.objects.get()
+    assert mirrored.origin == MeetingOrigin.GOOGLE
+    assert mirrored.tenant_id == tenant.pk
+
+
+def test_our_own_tag_is_still_recognised(connection, tenant, google):
+    """The control. A tenant check that rejected everything would pass the test
+    above and mirror every meeting this app created — the duplicate
+    FR-CAL-03 forbids."""
+    ours = an_event(
+        "evt-ours",
+        extendedProperties={"private": {sync.TAG_KEY: f"zorven-test:{tenant.pk}:42"}},
+    )
+    google["responses"] = [a_page([ours])]
+
+    counts = sync.pull_connection(connection)
+
+    assert counts["created"] == 0
+    assert not ScheduledMeeting.objects.exists()
+
+
+def test_an_all_day_event_is_stored_as_an_aware_instant(connection, google):
+    """`date` payloads have no time and no offset.
+
+    Parsed naively and handed to a DateTimeField under USE_TZ, the value is
+    reinterpreted against whatever the process timezone happens to be — so the
+    stored instant depends on the server, and an all-day event lands on the
+    wrong day for anyone far enough east or west.
+    """
+    all_day = {
+        "id": "evt-allday",
+        "summary": "Company offsite",
+        "status": "confirmed",
+        "start": {"date": "2026-09-01", "timeZone": "Europe/London"},
+        "end": {"date": "2026-09-02", "timeZone": "Europe/London"},
+    }
+    google["responses"] = [a_page([all_day])]
+
+    sync.pull_connection(connection)
+
+    meeting = ScheduledMeeting.objects.get()
+    assert meeting.starts_at.tzinfo is not None, "a naive instant reached the column"
+    # 2026-09-01 00:00 in London is BST, so 23:00 UTC on the previous day.
+    assert meeting.starts_at.isoformat() == "2026-08-31T23:00:00+00:00"
+
+
+def test_an_all_day_event_without_a_zone_is_read_as_utc(connection, google):
+    """Google omits timeZone on some all-day events. UTC is the only defensible
+    reading; the process timezone is not a fact about the event."""
+    all_day = {
+        "id": "evt-allday-2",
+        "summary": "Bank holiday",
+        "status": "confirmed",
+        "start": {"date": "2026-09-01"},
+        "end": {"date": "2026-09-02"},
+    }
+    google["responses"] = [a_page([all_day])]
+
+    sync.pull_connection(connection)
+
+    meeting = ScheduledMeeting.objects.get()
+    assert meeting.starts_at.isoformat() == "2026-09-01T00:00:00+00:00"

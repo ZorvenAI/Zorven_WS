@@ -72,7 +72,15 @@ export type MeetingOrigin = 'APP' | 'GOOGLE';
 
 export interface ScheduledMeeting {
   id: string;
-  session: string;
+  /**
+   * Null for GOOGLE-origin entries.
+   *
+   * An event created in the operator's own calendar has no onboarding
+   * session and never will, so the API serialises null. Typing this as
+   * `string` invites an empty-string stand-in, which reads as a real id
+   * everywhere it is passed.
+   */
+  session: string | null;
   company: string | null;
   title: string;
   /** UTC instant, ISO-8601. Rendered in the *viewer's* zone, never this one. */

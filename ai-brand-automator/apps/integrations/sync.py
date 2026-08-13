@@ -57,11 +57,16 @@ def tag_for(meeting: ScheduledMeeting) -> str:
     return f"{namespace()}:{meeting.tenant_id}:{meeting.pk}"
 
 
-def owned_meeting_id(event: dict) -> int | None:
-    """The meeting an event came from, or None if it is not ours.
+def owned_meeting_id(event: dict, tenant_id: int | None) -> int | None:
+    """The meeting an event came from, or None if it is not this tenant's.
 
-    Returns None for a tag from another deployment or another tenant, which is
-    the point of carrying all three parts.
+    All three parts of the tag are checked, which is the point of carrying
+    three. The tenant part matters as much as the deployment one: two tenants
+    can connect the same Google account — a consultancy onboarding several
+    brands from one calendar is the ordinary case — and a tag naming tenant A,
+    read during tenant B's sync, is not B's meeting. It is an external event
+    as far as B is concerned, and treating it as owned means B never sees a
+    meeting that is on their own calendar.
     """
     private = ((event.get("extendedProperties") or {}).get("private")) or {}
     raw = private.get(TAG_KEY)
@@ -69,6 +74,8 @@ def owned_meeting_id(event: dict) -> int | None:
         return None
     parts = raw.split(":")
     if len(parts) != 3 or parts[0] != namespace():
+        return None
+    if parts[1] != str(tenant_id):
         return None
     try:
         return int(parts[2])
@@ -184,7 +191,7 @@ def _apply(connection: CalendarConnection, event: dict, counts: dict) -> None:
         counts["skipped"] += 1
         return
 
-    if owned_meeting_id(event) is not None:
+    if owned_meeting_id(event, connection.tenant_id) is not None:
         # Ours. The inbound half does not touch app-owned events at all — AC-4
         # gives in-app the win, and the outbound half is what enforces it.
         counts["skipped"] += 1

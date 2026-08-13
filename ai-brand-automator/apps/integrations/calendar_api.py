@@ -14,10 +14,13 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
+from datetime import timezone as dt_timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 from decouple import config
-from django.utils.dateparse import parse_datetime
+from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 
 from apps.integrations.google_calendar import OAuthError
 
@@ -190,15 +193,44 @@ def event_instant(payload: dict | None) -> tuple[datetime | None, str]:
     if not isinstance(payload, dict):
         return None, ""
 
+    zone_name = str(payload.get("timeZone") or "")
     raw = payload.get("dateTime") or payload.get("date") or ""
-    parsed = parse_datetime(raw) if raw else None
-    if parsed is None and raw:
+    if not raw:
+        return None, zone_name
+
+    parsed = parse_datetime(raw)
+    if parsed is None:
         # An all-day event's `date` is a plain date, which parse_datetime
         # declines. Midnight in the event's own zone is the honest reading.
-        from django.utils.dateparse import parse_date
-
         day = parse_date(raw)
-        if day is not None:
-            parsed = datetime(day.year, day.month, day.day)
+        if day is None:
+            return None, zone_name
+        parsed = datetime(day.year, day.month, day.day)
 
-    return parsed, str(payload.get("timeZone") or "")
+    if timezone.is_naive(parsed):
+        # Every value that leaves here is aware and in UTC.
+        #
+        # An all-day `date` carries no time and no offset, and the column is a
+        # UTC instant. Handed over naive under USE_TZ, it is reinterpreted
+        # against whatever the process timezone happens to be — so the stored
+        # instant depends on the server, and an all-day event lands on the
+        # wrong day for anyone far enough from it. The event's own zone is the
+        # fact worth using; UTC is the only defensible fallback, because the
+        # server's zone is not a fact about the event.
+        parsed = parsed.replace(tzinfo=_zone(zone_name))
+
+    return parsed.astimezone(dt_timezone.utc), zone_name
+
+
+def _zone(name: str) -> ZoneInfo | dt_timezone:
+    """The event's IANA zone, or UTC if Google did not name a usable one."""
+    if not name:
+        return dt_timezone.utc
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        # A zone this machine's database does not know. UTC beats guessing,
+        # and beats raising out of a sync that has thousands of other events
+        # to get through.
+        logger.info("unknown calendar timezone %r; reading the instant as UTC", name)
+        return dt_timezone.utc
