@@ -57,8 +57,16 @@ jobs:
       # Assertions that pass regardless of behaviour. A sweep of the OIA suite
       # found four, each of which survived review because a passing test reads
       # as a covered one. Suppressible, but only with a written reason.
+      #
+      # apps/integrations was outside the gate until D-03: the D-02 and D-03
+      # suites had been checked by hand and never by CI, which is the same as
+      # not being checked — a gate that covers only the directory it was
+      # written for stops being a gate as soon as the next one appears.
       - name: Check for weak assertions
-        run: python scripts/check_weak_assertions.py ai-brand-automator/apps/onboarding/tests
+        run: |
+          python scripts/check_weak_assertions.py \
+            ai-brand-automator/apps/onboarding/tests \
+            ai-brand-automator/apps/integrations/tests
       
       - name: Run security scan
         run: |
