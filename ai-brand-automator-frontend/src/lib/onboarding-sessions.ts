@@ -68,9 +68,19 @@ export interface QuestionnaireDetail {
 
 export type MeetingStatus = 'SCHEDULED' | 'CANCELLED';
 
+export type MeetingOrigin = 'APP' | 'GOOGLE';
+
 export interface ScheduledMeeting {
   id: string;
-  session: string;
+  /**
+   * Null for GOOGLE-origin entries.
+   *
+   * An event created in the operator's own calendar has no onboarding
+   * session and never will, so the API serialises null. Typing this as
+   * `string` invites an empty-string stand-in, which reads as a real id
+   * everywhere it is passed.
+   */
+  session: string | null;
   company: string | null;
   title: string;
   /** UTC instant, ISO-8601. Rendered in the *viewer's* zone, never this one. */
@@ -86,6 +96,17 @@ export interface ScheduledMeeting {
    */
   timezone: string;
   status: MeetingStatus;
+  /** Where the entry came from. GOOGLE entries are mirrors of the operator's
+   *  own calendar and this app is not their system of record (D-03, §11). */
+  origin: MeetingOrigin;
+  /**
+   * Whether this app may edit the entry.
+   *
+   * Sent by the API rather than derived from `origin` here. The viewset
+   * enforces the same rule server-side, and a rule written twice is a rule
+   * that drifts — the second copy always outlives the reason for the first.
+   */
+  editable: boolean;
 }
 
 export interface MeetingRecordingSummary {

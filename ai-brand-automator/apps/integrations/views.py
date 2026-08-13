@@ -22,7 +22,7 @@ from rest_framework.response import Response
 from apps.integrations import google_calendar
 from apps.integrations.models import CalendarConnection, ConnectionStatus
 from automation.models import OAuthState
-from tenants.permissions import IsTenantAdmin
+from tenants.permissions import IsTenantAdmin, IsTenantViewer
 
 logger = logging.getLogger(__name__)
 
@@ -279,6 +279,54 @@ def connection_status(request):
     return Response(_describe(connection))
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsTenantViewer])
+def sync_now(request):
+    """AC-1's "or immediately on manual refresh".
+
+    A Viewer may trigger this. It writes nothing they could not already see —
+    it is a read of Google reflected into rows they have permission to read —
+    and the alternative is an operator staring at a pane they know is stale
+    because the person who can refresh it is at lunch.
+
+    Runs inline rather than queued. The point of the button is that the answer
+    is on screen when it returns; dispatching to Celery would give back a 202
+    and leave the pane to poll for a result that arrives no sooner.
+
+    §10.2 names only ``/calendar/events/`` and ``/calendar/connect/``, so this
+    path is new. It sits beside the other Google Calendar endpoints rather than
+    under ``/onboarding/calendar/`` because D-02 already put ``connect`` here,
+    and one integration split across two prefixes is worse than one that does
+    not match a document.
+    """
+    from apps.integrations import sync
+
+    connection = (
+        CalendarConnection.objects.filter(
+            tenant=_tenant_of(request),
+            provider=PLATFORM,
+            status=ConnectionStatus.CONNECTED,
+        )
+        .exclude(_refresh_token="")
+        .first()
+    )
+    if connection is None:
+        return Response(
+            {"error": "no calendar is connected"}, status=http.HTTP_404_NOT_FOUND
+        )
+
+    # Deliberately ignores the backoff. The backoff exists to stop an automated
+    # sweep hammering a failing provider; a person pressing refresh is a
+    # different thing, and telling them to wait an hour is the behaviour AC-3
+    # was written to prevent.
+    result = sync.pull_connection(connection)
+
+    # A failed manual sync is a 200 with the failure in it, not a 5xx. AC-3:
+    # the failure is "surfaced as a non-blocking notice", and the calendar it
+    # was refreshing still works.
+    return Response({"result": result, "connection": _describe(connection)})
+
+
 def _describe(connection: CalendarConnection) -> dict:
     """The public shape of a connection.
 
@@ -300,4 +348,9 @@ def _describe(connection: CalendarConnection) -> dict:
         "needs_reconnect": connection.status == ConnectionStatus.NEEDS_RECONNECT,
         "last_error": connection.last_error,
         "configured": google_calendar.is_configured(),
+        # AC-3's non-blocking notice. The pane shows these without preventing
+        # anything: an in-app calendar that works is the point of the story.
+        "last_sync_at": connection.last_sync_at,
+        "last_sync_error": connection.last_sync_error,
+        "sync_failing": bool(connection.last_sync_error),
     }

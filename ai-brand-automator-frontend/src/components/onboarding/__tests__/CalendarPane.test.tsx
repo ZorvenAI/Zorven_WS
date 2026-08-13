@@ -55,6 +55,19 @@ const MEETING: ScheduledMeeting = {
   ends_at: '2024-06-12T14:00:00Z',
   timezone: 'Europe/London',
   status: 'SCHEDULED',
+  origin: 'APP',
+  editable: true,
+};
+
+/** The same shape as it arrives for somebody's own diary entry (D-03). */
+const EXTERNAL: ScheduledMeeting = {
+  ...MEETING,
+  id: 'm-ext',
+  session: null,
+  company: null,
+  title: 'Dentist',
+  origin: 'GOOGLE',
+  editable: false,
 };
 
 function asRole(role: 'admin' | 'editor' | 'viewer') {
@@ -245,5 +258,42 @@ describe('CalendarPane', () => {
     const local = new Date(late.starts_at);
     const cell = screen.getByRole('gridcell', { name: local.toDateString() });
     expect(within(cell).getByText(/Kickoff/)).toBeInTheDocument();
+  });
+});
+
+describe('external calendar entries (D-03)', () => {
+  it('shows an external meeting without a way to cancel it', async () => {
+    asRole('admin');
+    mockedMeetings.mockResolvedValue([EXTERNAL]);
+
+    render(<CalendarPane now={NOW} />);
+
+    expect(await screen.findByText(/Dentist/)).toBeInTheDocument();
+    // An Admin sees Cancel on their own meetings, so its absence here is the
+    // read-only rule and not merely a role check.
+    expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/from Google Calendar/i)).toBeInTheDocument();
+  });
+
+  it('still offers cancel on an in-app meeting', async () => {
+    asRole('admin');
+    mockedMeetings.mockResolvedValue([MEETING]);
+
+    render(<CalendarPane now={NOW} />);
+
+    await screen.findByText(/Kickoff/);
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+  });
+
+  it('distinguishes the two side by side', async () => {
+    asRole('admin');
+    mockedMeetings.mockResolvedValue([MEETING, EXTERNAL]);
+
+    render(<CalendarPane now={NOW} />);
+
+    await screen.findByText(/Kickoff/);
+    // One cancellable, one not — an operator who cannot tell them apart reads
+    // their own dentist appointment as an unprepared onboarding meeting.
+    expect(screen.getAllByRole('button', { name: /cancel/i })).toHaveLength(1);
   });
 });

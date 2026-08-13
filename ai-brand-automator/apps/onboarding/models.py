@@ -903,6 +903,19 @@ class MeetingStatus(models.TextChoices):
     CANCELLED = "CANCELLED", "Cancelled"
 
 
+class MeetingOrigin(models.TextChoices):
+    """Who owns a calendar entry, which is what makes D-03 AC-4 decidable.
+
+    The rule is "in-app wins for onboarding-owned events; Google wins for
+    externally created ones". That is answerable only if ownership is a fact
+    on the row rather than something inferred from which fields happen to be
+    filled in.
+    """
+
+    APP = "APP", "Created in the app"
+    GOOGLE = "GOOGLE", "Created in Google Calendar"
+
+
 class ScheduledMeeting(models.Model):
     """An onboarding meeting on the in-app calendar (D-01, Design §11).
 
@@ -924,10 +937,33 @@ class ScheduledMeeting(models.Model):
         blank=True,
         related_name="%(class)ss",
     )
+    #: Nullable since D-03. A meeting created in Google Calendar has no
+    #: onboarding session and never will — it is somebody's dentist
+    #: appointment that happens to share the operator's calendar. §11 asks for
+    #: those to appear "read-only alongside in-app ones so the operator has a
+    #: single view", and §10.2 names a single endpoint, so they share this
+    #: table rather than sitting in one of their own and being merged on every
+    #: read.
+    #:
+    #: The partial unique on `session` is unaffected: Postgres treats NULLs as
+    #: distinct, so any number of external meetings can be SCHEDULED at once.
     session = models.ForeignKey(
         OnboardingSession,
         on_delete=models.CASCADE,
         related_name="meetings",
+        null=True,
+        blank=True,
+    )
+    origin = models.CharField(
+        max_length=8,
+        choices=MeetingOrigin.choices,
+        default=MeetingOrigin.APP,
+        db_index=True,
+        help_text=(
+            "APP entries are editable here and pushed outward. GOOGLE entries "
+            "are read-only here — the viewset refuses writes to them — because "
+            "this app is not the system of record for somebody's own diary."
+        ),
     )
 
     # ── The instant, and where it was meant to happen ────────────────
@@ -967,6 +1003,11 @@ class ScheduledMeeting(models.Model):
     #: rather than null, matching the rest of this app and keeping "no
     #: provider event" a single value instead of two.
     provider_event_id = models.CharField(max_length=255, blank=True, default="")
+
+    #: Google's own `updated` stamp for the event, as of the last pull. AC-4
+    #: needs to know whether the remote copy moved since we last looked, and
+    #: our `updated_at` cannot answer that — it changes when *we* write.
+    provider_updated_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1013,6 +1054,24 @@ class ScheduledMeeting(models.Model):
                 fields=["session"],
                 condition=Q(status="SCHEDULED"),
                 name="one_scheduled_meeting_per_session",
+            ),
+            # FR-CAL-03's verification, in the database rather than in the
+            # sync loop: "a round-trip creates no duplicate on either side
+            # when sync runs twice, keyed on the provider event ID".
+            #
+            # Written as a constraint because idempotence enforced only by a
+            # get_or_create is idempotence until two cycles overlap — a slow
+            # cycle and a manual refresh are enough — and the duplicate it
+            # produces is a second copy of a real meeting on somebody's
+            # calendar, which is exactly the failure the requirement names.
+            #
+            # Partial, because the empty string is the overwhelming majority:
+            # every meeting that has never been pushed carries it, and a plain
+            # unique would allow exactly one of them.
+            models.UniqueConstraint(
+                fields=["tenant", "provider_event_id"],
+                condition=~Q(provider_event_id=""),
+                name="one_meeting_per_provider_event",
             ),
         ]
         indexes = [models.Index(fields=["tenant", "starts_at"])]

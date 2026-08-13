@@ -265,7 +265,19 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
               >
                 <span className="text-[10px] text-brand-silver">{day.getDate()}</span>
                 {dayMeetings.map((meeting) => (
-                  <div key={meeting.id} className="mt-1 rounded bg-brand-electric/15 p-1">
+                  <div
+                    key={meeting.id}
+                    // External entries are visually distinct rather than
+                    // merely uneditable. §11 puts them "read-only alongside
+                    // in-app ones"; an operator who cannot tell which is which
+                    // reads their own dentist appointment as an onboarding
+                    // meeting somebody forgot to prepare for.
+                    className={`mt-1 rounded p-1 ${
+                      meeting.editable
+                        ? 'bg-brand-electric/15'
+                        : 'border border-brand-silver/25 bg-brand-silver/10'
+                    }`}
+                  >
                     <p className="truncate text-[11px] text-white">
                       {new Date(meeting.starts_at).toLocaleTimeString(undefined, {
                         hour: '2-digit',
@@ -280,7 +292,12 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
                         booked {meeting.timezone}
                       </p>
                     )}
-                    {canEdit && (
+                    {!meeting.editable && (
+                      <p className="truncate text-[10px] text-brand-silver">
+                        from Google Calendar
+                      </p>
+                    )}
+                    {canEdit && meeting.editable && (
                       <button
                         type="button"
                         onClick={() => onCancel(meeting)}

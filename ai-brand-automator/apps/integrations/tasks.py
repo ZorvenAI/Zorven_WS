@@ -77,3 +77,45 @@ def refresh_calendar_tokens() -> dict[str, int]:
         refreshed += 1
 
     return {"refreshed": refreshed, "needs_reconnect": failed}
+
+
+@shared_task(name="integrations.sync_calendars")
+def sync_calendars() -> dict[str, int]:
+    """Pull every connected calendar (D-03 AC-1).
+
+    Scheduled rather than lazy for the same reason the token refresh is: an
+    external meeting the operator cannot see is indistinguishable from one that
+    does not exist, and discovering it when they open the pane means the lag is
+    however long the pane took to load.
+
+    Never raises, and never lets one tenant's failure reach another's. AC-3 is
+    explicit that the in-app calendar keeps working while Google does not.
+    """
+    from apps.integrations import sync
+
+    if not google_calendar.is_configured():
+        # Same hazard as the token refresh: without credentials every call
+        # fails, and recording those failures would put the whole fleet into
+        # backoff over one missing env var on one worker.
+        logger.error(
+            "calendar_sync_skipped_unconfigured",
+            extra={"reason": "GOOGLE_OAUTH_CLIENT_ID/SECRET missing on this worker"},
+        )
+        return {"synced": 0, "failed": 0, "skipped": 0}
+
+    synced = failed = skipped = 0
+    for connection in CalendarConnection.objects.filter(
+        status=ConnectionStatus.CONNECTED
+    ).exclude(_refresh_token=""):
+        if not sync.due(connection):
+            # Backing off. Counted rather than silent, so a fleet stuck in
+            # backoff is visible in the return value rather than looking idle.
+            skipped += 1
+            continue
+        result = sync.pull_connection(connection)
+        if "error" in result:
+            failed += 1
+        else:
+            synced += 1
+
+    return {"synced": synced, "failed": failed, "skipped": skipped}
