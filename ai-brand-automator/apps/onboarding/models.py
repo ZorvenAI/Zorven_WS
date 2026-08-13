@@ -1009,6 +1009,19 @@ class ScheduledMeeting(models.Model):
     #: our `updated_at` cannot answer that — it changes when *we* write.
     provider_updated_at = models.DateTimeField(null=True, blank=True)
 
+    #: When this meeting was last pushed outward. Compared against
+    #: ``updated_at`` to decide whether there is anything to push.
+    #:
+    #: Written with ``QuerySet.update()``, never ``save()``, precisely because
+    #: ``updated_at`` is ``auto_now``: saving would bump the very field the
+    #: comparison uses and every meeting would look dirty forever, patching
+    #: itself on every cycle. ``updated_at`` therefore keeps meaning "last
+    #: edited", not "last touched by sync".
+    #:
+    #: Null means "never pushed, or pushed and since invalidated" — the second
+    #: is how a detected conflict asks to be re-pushed.
+    provider_synced_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1079,3 +1092,56 @@ class ScheduledMeeting(models.Model):
     def __str__(self) -> str:
         when = self.starts_at.strftime("%Y-%m-%d %H:%M")
         return f"{self.title or 'Onboarding meeting'} @ {when} UTC"
+
+
+class ConflictWinner(models.TextChoices):
+    APP = "APP", "The in-app copy was kept"
+    GOOGLE = "GOOGLE", "The Google copy was kept"
+
+
+class CalendarSyncConflict(models.Model):
+    """A change that lost a two-way reconciliation (D-03 AC-4).
+
+    The criterion is explicit that "the losing change is recorded rather than
+    discarded silently". A log line does not satisfy that: logs are sampled,
+    rotated and unreadable to the operator whose edit vanished. This is a row,
+    so the question "what happened to the time I set on Tuesday" has an answer
+    somebody can be shown.
+
+    Deliberately not surfaced through the calendar endpoint. Reading these is
+    a support and audit concern rather than something the pane should
+    interrupt an operator with, and inventing a notifications surface is not
+    this story.
+    """
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)ss",
+    )
+    meeting = models.ForeignKey(
+        ScheduledMeeting,
+        on_delete=models.CASCADE,
+        related_name="sync_conflicts",
+    )
+    winner = models.CharField(max_length=8, choices=ConflictWinner.choices)
+
+    #: What the losing side said, as it was read. A shape rather than prose so
+    #: it can be replayed or diffed; whichever side lost, this is the content
+    #: that did not survive.
+    discarded = models.JSONField(default=dict)
+
+    #: Which rule applied, in words, so a reader does not have to reconstruct
+    #: the policy from the code as it was on the day.
+    rule = models.CharField(max_length=255, blank=True, default="")
+
+    detected_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-detected_at"]
+        indexes = [models.Index(fields=["tenant", "-detected_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.winner} won for meeting {self.meeting_id}"
