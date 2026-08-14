@@ -62,8 +62,9 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          review_instructions: |
+          prompt: |
+            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+
             Focus on:
             - Multi-tenancy: ensure tenant-scoped queries use Q(tenant=tenant) | Q(tenant__isnull=True)
             - Security: no os.environ (use decouple.config()), no raw fetch() in frontend (use apiClient)
