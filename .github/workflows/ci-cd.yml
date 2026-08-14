@@ -500,7 +500,36 @@ jobs:
         run: |
           cd ai-brand-automator-frontend
           npm test -- --coverage || echo "No tests configured yet"
-      
+
+      # Browser tests, added by E-02 for claims jsdom cannot make. Its AC-2 is
+      # about rendered geometry — no horizontal scrolling at a 13-inch
+      # viewport, question text not truncated — and jsdom reports every element
+      # as zero by zero.
+      #
+      # It earned its place immediately: it caught the checklist pane scrolling
+      # sideways by 665px on an unbroken reference code, and the page itself
+      # scrolling by 28px. Neither is visible to any jsdom test.
+      #
+      # Deliberately not suffixed with `|| echo`. The step above is (see #565)
+      # and cannot fail; a gate that cannot fail is not a gate.
+      - name: Install Playwright browsers
+        run: |
+          cd ai-brand-automator-frontend
+          npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: |
+          cd ai-brand-automator-frontend
+          npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: ai-brand-automator-frontend/playwright-report/
+          retention-days: 7
+
       - name: Upload coverage
         uses: codecov/codecov-action@v3
         with:
