@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Radio } from 'lucide-react';
 
 import { useAuth } from '@/hooks/useAuth';
 import QuestionChecklist from '@/components/onboarding/QuestionChecklist';
@@ -67,7 +67,24 @@ export default function SessionPage() {
         Onboarding
       </Link>
 
-      <h1 className="text-2xl font-semibold text-white">Session</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold text-white">Session</h1>
+        {/*
+          §11 gives OnboardingHome an "entry point to the meeting view" and
+          E-01 shipped without one. It sits here rather than on the home list
+          so the link is next to the questions it opens with, and so it is
+          never rendered for a session id that does not resolve.
+        */}
+        {sessionId && (
+          <Link
+            href={`/onboarding/sessions/${sessionId}/meeting`}
+            className="btn-primary inline-flex items-center gap-2 text-sm"
+          >
+            <Radio className="h-4 w-4" aria-hidden />
+            Open meeting view
+          </Link>
+        )}
+      </div>
 
       {loading ? (
         <p className="text-sm text-brand-silver">Loading questions…</p>

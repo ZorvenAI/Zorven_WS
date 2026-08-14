@@ -48,12 +48,33 @@ export interface QuestionChecklistProps {
   questions: PreparedQuestion[];
   /** Null when the session has no approved questionnaire yet (AC-2). */
   version?: number | null;
+  /**
+   * Ids the operator has ticked (E-02).
+   *
+   * Only meaningful alongside `onToggle`. Held by the caller rather than here
+   * so G-03 can replace local state with server-authoritative state without
+   * touching this component — the boundary the E-02 card asks for.
+   */
+  checkedIds?: ReadonlySet<string>;
+  /**
+   * Omit for a read-only checklist, which is C-05's session page: the boxes
+   * report the agent's sufficiency signal and must not move when clicked.
+   * Supply it for the meeting view, where ticking one is the operator's job.
+   *
+   * Two modes rather than two components because the markup, the ordering
+   * rule and the workflow tags are the same in both, and a fork would let
+   * them drift — the numbering in particular, which the operator reads aloud.
+   */
+  onToggle?: (questionId: string) => void;
 }
 
 export default function QuestionChecklist({
   questions,
   version,
+  checkedIds,
+  onToggle,
 }: QuestionChecklistProps) {
+  const interactive = typeof onToggle === 'function';
   if (questions.length === 0) {
     return (
       <section aria-labelledby="checklist-heading" className="glass-card p-5">
@@ -102,7 +123,13 @@ export default function QuestionChecklist({
           <li key={question.id} className="flex items-start gap-3">
             <input
               type="checkbox"
-              readOnly
+              /*
+               * E-02: `readOnly` belongs to the display mode only. An
+               * interactive box is controlled by `checked` + `onChange` in the
+               * ordinary way, and leaving `readOnly` on it would suppress the
+               * very warning that tells you the handler is missing.
+               */
+              readOnly={!interactive}
               /*
                * Review was right that HTML ignores `readonly` on a checkbox,
                * and wrong about the remedy — and I checked before believing
@@ -124,13 +151,34 @@ export default function QuestionChecklist({
                * or announcing "unavailable" — G-03 makes these interactive
                * and the element should not change shape for that.
                */
-              aria-disabled
-              checked={question.status === 'GREEN'}
+              aria-disabled={interactive ? undefined : true}
+              /*
+               * Two sources of truth, deliberately not merged. In the display
+               * mode the box reports the agent's sufficiency signal; in the
+               * meeting it reports what the operator has ticked. G-03 is what
+               * reconciles them, and doing it early here would bake in a
+               * precedence rule that story has not decided yet.
+               */
+              checked={
+                interactive
+                  ? (checkedIds?.has(question.id) ?? false)
+                  : question.status === 'GREEN'
+              }
+              onChange={interactive ? () => onToggle?.(question.id) : undefined}
               aria-label={question.text}
               className="mt-1 h-4 w-4 shrink-0 rounded border-white/20 bg-transparent"
             />
             <div className="min-w-0">
-              <p className="text-sm text-white">
+              {/*
+                `break-words` is load-bearing, not decoration. Ordinary prose
+                wraps on its own and so does a URL — browsers break after `/`,
+                `?` and `&`. An unbroken run of characters does not, and
+                operators paste those: a reference code, an API key, an order
+                id. Without this the pane scrolls sideways, which is what AC-2
+                forbids, and the document does not — so a page-level overflow
+                check never sees it.
+              */}
+              <p className="break-words text-sm text-white">
                 <span className="mr-2 text-brand-silver">{index + 1}.</span>
                 {question.text}
               </p>
