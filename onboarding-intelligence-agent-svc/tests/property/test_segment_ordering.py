@@ -60,27 +60,6 @@ def build(kind: str, seq: int):
 KINDS = ["partial", "final", "green", "followups", "fact", "coverage", "error"]
 
 
-@pytest.fixture
-async def live_redis(monkeypatch):
-    from tests.conftest import REDIS_URL, redis_available
-
-    if not redis_available():
-        pytest.skip("Redis is not running on localhost:6379")
-
-    monkeypatch.setenv("OIA_REDIS_URL", REDIS_URL)
-    from app.cache.redis_manager import RedisManager
-    from app.core.config import get_settings
-
-    get_settings.cache_clear()
-    manager = RedisManager(get_settings())
-    await manager.connect()
-    try:
-        yield manager
-    finally:
-        await manager.close()
-        get_settings.cache_clear()
-
-
 @settings(
     max_examples=20,
     deadline=None,

@@ -89,6 +89,30 @@ def app_with_dead_redis(monkeypatch):
     return _build_app()
 
 
+@pytest.fixture
+async def live_redis(monkeypatch):
+    """A connected RedisManager against the real server.
+
+    Shared by test_session_state.py, test_segment_ordering.py, and any future
+    file that needs the manager without the full app wiring.
+    """
+    if not redis_available():
+        pytest.skip("Redis is not running on localhost:6379")
+
+    monkeypatch.setenv("OIA_REDIS_URL", REDIS_URL)
+    from app.cache.redis_manager import RedisManager
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    manager = RedisManager(get_settings())
+    await manager.connect()
+    try:
+        yield manager
+    finally:
+        await manager.close()
+        get_settings.cache_clear()
+
+
 def _build_app():
     import importlib
 

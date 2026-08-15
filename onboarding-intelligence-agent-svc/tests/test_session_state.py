@@ -28,33 +28,6 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-async def live_redis(monkeypatch):
-    """A connected RedisManager against the real server.
-
-    conftest offers `app_with_live_redis` (a whole app) and nothing smaller;
-    this needs the manager alone, because the subject is the key operations
-    rather than the wiring.
-    """
-    from tests.conftest import REDIS_URL, redis_available
-
-    if not redis_available():
-        pytest.skip("Redis is not running on localhost:6379")
-
-    monkeypatch.setenv("OIA_REDIS_URL", REDIS_URL)
-    from app.cache.redis_manager import RedisManager
-    from app.core.config import get_settings
-
-    get_settings.cache_clear()
-    manager = RedisManager(get_settings())
-    await manager.connect()
-    try:
-        yield manager
-    finally:
-        await manager.close()
-        get_settings.cache_clear()
-
-
-@pytest.fixture
 def manager(live_redis):
     """A manager on a session id no other test uses.
 
@@ -260,3 +233,23 @@ async def test_every_frame_type_round_trips_through_the_buffer(manager):
     ]
     # FR-LIVE-09: three fractions, never blended into one number.
     assert frames[1]["map"] == {"WF1": 0.71, "WF2": 0.44, "WF3": 0.3}
+
+
+async def test_concurrent_emits_replay_in_seq_order(manager):
+    """Two coroutines emitting concurrently can rpush in wrong order.
+
+    The replay must sort by seq regardless of insertion order — a client that
+    receives frame 6 before frame 5 cannot render the transcript correctly,
+    and "strictly increasing" would be false for the frames it actually sees.
+    """
+    seqs = [await manager.next_seq() for _ in range(10)]
+    await asyncio.gather(
+        *(manager.emit(partial(text=f"chunk {s}", seq=s)) for s in seqs)
+    )
+
+    frames, resync = await manager.replay_after(0)
+
+    assert resync is None
+    replayed = [f["seq"] for f in frames]
+    assert replayed == sorted(replayed), "concurrent emit broke replay order"
+    assert replayed == list(range(1, 11))

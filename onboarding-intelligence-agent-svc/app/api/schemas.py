@@ -207,8 +207,16 @@ class ErrorFrame(ServerFrame):
     recoverable: bool
 
 
-class Resync(ServerFrame):
-    """AC-3's explicit answer to a resume the buffer cannot satisfy."""
+class Resync(BaseModel):
+    """AC-3's explicit answer to a resume the buffer cannot satisfy.
+
+    Not a data frame — a resync is metadata about the stream, so it does not
+    extend ServerFrame and does not carry or consume a seq. Burning a counter
+    increment for every reconnect would create unbuffered gaps in the data
+    sequence and waste seq numbers on a flaky connection.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     type: Literal[ServerFrameType.RESYNC] = ServerFrameType.RESYNC
     #: The oldest seq still replayable. The client knows precisely what it

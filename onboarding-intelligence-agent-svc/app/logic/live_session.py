@@ -15,14 +15,14 @@ that survives a reconnect.
 from __future__ import annotations
 
 import json
-import logging
 from dataclasses import dataclass
 from typing import Any
 
 from app.api.schemas import Resync, ServerFrame
 from app.cache.redis_manager import TTL_LIVE
+from app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 #: How many frames a reconnect can replay.
 #:
@@ -35,6 +35,22 @@ logger = logging.getLogger(__name__)
 #: another service's data, which the eviction note in this service's CLAUDE.md
 #: makes non-negotiable.
 BUFFER_FRAMES = 2000
+
+
+def _parse_seq(raw: str | bytes | None) -> int | None:
+    """Extract the seq from a single raw Redis entry.
+
+    Returns ``None`` for anything unparseable rather than a sentinel like 0,
+    which would defeat the resync guard.
+    """
+    if raw is None:
+        return None
+    try:
+        frame = json.loads(raw)
+        seq = frame.get("seq")
+        return int(seq) if isinstance(seq, (int, float)) and seq > 0 else None
+    except (TypeError, ValueError):
+        return None
 
 
 @dataclass
@@ -62,15 +78,26 @@ class LiveSessionManager:
         increasing" would be false in exactly the situation that makes it
         matter.
 
+        Pipelined with EXPIRE so a crash between the two cannot orphan a
+        TTL-less key on the shared noeviction Redis.
+
         Starts at 1: seq 0 is what a client sends in `resume` before it has
         ever received anything, and a frame numbered 0 would be
         indistinguishable from that.
         """
         keys = self._keys()
         key = keys.live_seq(self.session_id)
-        value = await self.redis.client.incr(key)
-        await self.redis.client.expire(key, TTL_LIVE)
-        return int(value)
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.incr(key)
+        pipe.expire(key, TTL_LIVE)
+        results = await pipe.execute()
+        return int(results[0])
+
+    async def _peek_seq(self) -> int:
+        """Read the counter without advancing it."""
+        key = self._keys().live_seq(self.session_id)
+        val = await self.redis.client.get(key)
+        return int(val) if val else 0
 
     async def emit(self, frame: ServerFrame) -> dict[str, Any]:
         """Record a frame in the replay buffer and return it as JSON.
@@ -78,16 +105,20 @@ class LiveSessionManager:
         Buffered *before* it is sent, not after. A frame delivered and not
         recorded is one a reconnect cannot replay, and the client would resume
         from a seq the server has no memory of.
+
+        All three operations (rpush, ltrim, expire) are pipelined into a single
+        round-trip. Separate awaits would let a crash between rpush and expire
+        orphan a TTL-less key on the shared noeviction Redis.
         """
         payload = frame.model_dump(mode="json")
         keys = self._keys()
         key = keys.live_frames(self.session_id)
 
-        await self.redis.client.rpush(key, json.dumps(payload))
-        # Trim to the newest BUFFER_FRAMES. ltrim with negative indices keeps
-        # the tail, which is the end a resume reads from.
-        await self.redis.client.ltrim(key, -BUFFER_FRAMES, -1)
-        await self.redis.client.expire(key, TTL_LIVE)
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.rpush(key, json.dumps(payload))
+        pipe.ltrim(key, -BUFFER_FRAMES, -1)
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
         return payload
 
     async def replay_after(
@@ -101,38 +132,55 @@ class LiveSessionManager:
         seq" — a client that receives nothing cannot tell "you missed nothing"
         from "we no longer have what you missed", and renders a meeting with a
         hole in it either way.
+
+        Bounds are checked via LLEN + LINDEX in a single pipeline round-trip
+        before any frames are read, so a resync or an up-to-date client never
+        transfers the full buffer. The replay tail is sorted by seq to handle
+        the rare case where concurrent emit() calls interleave their rpush
+        operations.
         """
         keys = self._keys()
-        raw = await self.redis.client.lrange(keys.live_frames(self.session_id), 0, -1)
+        key = keys.live_frames(self.session_id)
 
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.llen(key)
+        pipe.lindex(key, 0)
+        pipe.lindex(key, -1)
+        length, first_raw, last_raw = await pipe.execute()
+
+        if not length:
+            current = await self._peek_seq()
+            return [], Resync(from_seq=current + 1)
+
+        oldest = _parse_seq(first_raw)
+        newest = _parse_seq(last_raw)
+
+        if oldest is None or newest is None:
+            raw = await self.redis.client.lrange(key, 0, -1)
+            return self._filter_and_sort(raw, last_seq)
+
+        if last_seq + 1 < oldest:
+            return [], Resync(from_seq=oldest)
+
+        if last_seq > newest:
+            return [], Resync(from_seq=oldest)
+
+        offset = max(0, last_seq - oldest + 1)
+        raw = await self.redis.client.lrange(key, offset, -1)
+        return self._filter_and_sort(raw, last_seq)
+
+    def _filter_and_sort(
+        self, raw: list[Any], last_seq: int
+    ) -> tuple[list[dict[str, Any]], None]:
+        """Parse, filter by seq, and sort the result."""
         frames: list[dict[str, Any]] = []
         for item in raw:
             try:
-                frames.append(json.loads(item))
+                frame = json.loads(item)
+                seq = frame.get("seq")
+                if isinstance(seq, int) and seq > 0 and seq > last_seq:
+                    frames.append(frame)
             except (TypeError, ValueError):
-                # A malformed entry is skipped rather than fatal: one bad frame
-                # must not cost the client every good one after it.
-                logger.warning(
-                    "live_frame_unreadable", extra={"session": self.session_id}
-                )
-
-        if not frames:
-            # Nothing buffered. Only a resync is honest — the server cannot
-            # say whether the client is up to date.
-            return [], Resync(seq=await self.next_seq(), from_seq=last_seq)
-
-        oldest = min(int(f.get("seq", 0)) for f in frames)
-        newest = max(int(f.get("seq", 0)) for f in frames)
-
-        if last_seq + 1 < oldest:
-            # The client's next frame has already been trimmed away.
-            return [], Resync(seq=await self.next_seq(), from_seq=oldest)
-
-        if last_seq > newest:
-            # The client claims a seq the server never produced — the counter
-            # was reset, the session was confused, or the keys collided across
-            # tests. An empty "nothing to replay" would be indistinguishable
-            # from "you are up to date" on the client side.
-            return [], Resync(seq=await self.next_seq(), from_seq=oldest)
-
-        return [f for f in frames if int(f.get("seq", 0)) > last_seq], None
+                logger.warning("live_frame_unreadable", session=self.session_id)
+        frames.sort(key=lambda f: f["seq"])
+        return frames, None
