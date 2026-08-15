@@ -87,6 +87,12 @@ def test_regex_fallback_ssn():
     assert "<US_SSN>" in result
 
 
+def test_regex_fallback_credit_card():
+    result = _regex_fallback("Card: 4111 1111 1111 1111.")
+    assert "4111 1111 1111 1111" not in result
+    assert "<CREDIT_CARD>" in result
+
+
 # ── IG-04 guardrail rule ───────────────────────────────────────────
 
 

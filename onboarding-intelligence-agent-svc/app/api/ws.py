@@ -209,6 +209,18 @@ async def _stt_loop(
         pass
     except Exception as exc:  # noqa: BLE001
         logger.error("stt_loop_failed", error=f"{type(exc).__name__}: {exc}")
+        seq = await session.next_seq()
+        err = ErrorFrame(
+            seq=seq,
+            code="ERR-07",
+            message="Transcription temporarily unavailable.",
+            recoverable=True,
+        )
+        payload = await session.emit(err)
+        try:
+            await websocket.send_json(payload)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 async def _emit_partial(
@@ -232,7 +244,12 @@ async def _emit_final(
     words live and does not benefit from seeing ``<PHONE_NUMBER>`` on screen.
     """
     seq = await session.next_seq()
-    redacted = redact_text(result.text)
+
+    try:
+        redacted = redact_text(result.text)
+    except Exception:  # noqa: BLE001
+        logger.warning("redact_text_failed", text_len=len(result.text))
+        redacted = result.text
 
     buffered = TranscriptFinal(
         seq=seq,
@@ -318,6 +335,7 @@ async def _handle_control(
         )
         stt_state["audio_q"] = audio_q
         stt_state["stt_task"] = task
+        task.add_done_callback(lambda _: stt_state.update(audio_q=None))
         logger.info(
             "stt_started",
             codec=start.codec,
@@ -337,6 +355,10 @@ async def _handle_control(
                     await asyncio.wait_for(task, timeout=5.0)
                 except (asyncio.TimeoutError, asyncio.CancelledError):
                     task.cancel()
+                    try:
+                        await task
+                    except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                        pass
             stt_state["stt_task"] = None
         logger.info("stt_stopped")
         return

@@ -131,13 +131,15 @@ def _configured_entities() -> list[str]:
 _PHONE_RE = re.compile(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b")
 _EMAIL_RE = re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b")
 _SSN_RE = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
+_CC_RE = re.compile(r"\b(?:\d[ -]*?){13,16}\b")
 
 
 def _regex_fallback(text: str) -> str:
     """Pattern-only redaction when Presidio is unavailable."""
+    text = _SSN_RE.sub("<US_SSN>", text)
+    text = _CC_RE.sub("<CREDIT_CARD>", text)
     text = _PHONE_RE.sub("<PHONE_NUMBER>", text)
     text = _EMAIL_RE.sub("<EMAIL_ADDRESS>", text)
-    text = _SSN_RE.sub("<US_SSN>", text)
     return text
 
 
