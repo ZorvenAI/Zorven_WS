@@ -348,3 +348,60 @@ export async function grantConsent(
   // a banner and a button end up disagreeing.
   return getSessionConsent(sessionId);
 }
+
+// ── Recording lifecycle and upload (F-03) ────────────────────────────
+
+export interface RecordingSession {
+  recording_id: string;
+  session_url: string;
+  degraded_message: string;
+}
+
+/** Open a MeetingRecording row (B-08) and mint its upload session (F-03). */
+export async function openRecording(sessionId: string): Promise<RecordingSession> {
+  const opened = await apiClient.post(`${BASE}/sessions/${sessionId}/recordings/`, {
+    modality: 'AUDIO',
+  });
+  if (!opened.ok) {
+    throw new Error(`API ${opened.status}: ${await opened.text()}`);
+  }
+  const recording = await opened.json();
+
+  const minted = await apiClient.post(
+    `${BASE}/recordings/${recording.id}/upload-session/`,
+    {},
+  );
+  if (!minted.ok) {
+    throw new Error(`API ${minted.status}: ${await minted.text()}`);
+  }
+  const session = await minted.json();
+  return {
+    recording_id: String(recording.id),
+    session_url: session.session_url,
+    degraded_message: session.degraded_message,
+  };
+}
+
+/**
+ * Finalise a recording (AC-4).
+ *
+ * The Idempotency-Key is the recording id, which is stable across retries by
+ * construction. A key derived from the attempt — a timestamp, a uuid per call
+ * — would make every retry look like a new finalisation, which is the exact
+ * duplicate the header exists to prevent.
+ */
+export async function finaliseRecording(
+  recordingId: string,
+  durationSeconds: number,
+): Promise<void> {
+  const response = await apiClient.post(`${BASE}/recordings/${recordingId}/stop/`, {
+    duration_s: Math.round(durationSeconds),
+    // In the body rather than a header: apiClient takes no custom headers and
+    // this project forbids raw fetch. The server reads either, preferring the
+    // header, so a client that can send one is unaffected.
+    idempotency_key: `finalise-${recordingId}`,
+  });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+}

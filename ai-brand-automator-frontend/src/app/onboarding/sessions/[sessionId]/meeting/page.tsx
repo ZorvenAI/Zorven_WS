@@ -114,6 +114,7 @@ export default function MeetingPage() {
       questions={questionnaire?.questions ?? []}
       version={questionnaire?.version ?? null}
       backHref={sessionId ? `/onboarding/sessions/${sessionId}` : '/onboarding'}
+      sessionId={sessionId ?? null}
       consent={consent}
       onGrantConsent={onGrantConsent}
     />

@@ -21,6 +21,11 @@ import RecorderControl, {
   formatElapsed,
 } from '@/components/onboarding/RecorderControl';
 import {
+  BOUND_REACHED_MESSAGE,
+  type UseChunkUploader,
+} from '@/hooks/useChunkUploader';
+import type { UseMeetingRecorder } from '@/hooks/useMeetingRecorder';
+import {
   BLOCKED_MESSAGE,
   TIMESLICE_MS,
   UNSUPPORTED_MESSAGE,
@@ -107,6 +112,18 @@ beforeEach(() => {
 });
 
 const latest = () => FakeMediaRecorder.instances.at(-1)!;
+
+/** A recorder in a chosen state, for the upload-indicator tests. */
+const recorderStub = (over: Partial<UseMeetingRecorder> = {}): UseMeetingRecorder => ({
+  state: 'idle',
+  error: null,
+  elapsedSeconds: 0,
+  chunks: [],
+  mimeType: null,
+  start: async () => {},
+  stop: async () => {},
+  ...over,
+});
 
 // ── AC-1 · permission ────────────────────────────────────────────────
 
@@ -383,5 +400,88 @@ describe('AC-4 · stopping is safe', () => {
     await act(() => result.current.stop());
 
     await waitFor(() => expect(result.current.elapsedSeconds).toBeCloseTo(128.25, 1));
+  });
+});
+
+// ── F-03 · upload state is visible ───────────────────────────────────
+
+describe('F-03 · the operator can see whether audio is safe', () => {
+  const uploaderStub = (over: Partial<UseChunkUploader> = {}): UseChunkUploader => ({
+    status: 'uploading',
+    uploadedBytes: 0,
+    pendingBytes: 0,
+    message: null,
+    finalise: async () => {},
+    ...over,
+  });
+
+  it('shows "Saving delayed" rather than an error while retrying', () => {
+    /**
+     * AC-2: "the operator sees a transient 'Saving delayed' indicator, not an
+     * error". The audio is not lost — it is held — and an error would make an
+     * operator stop a meeting that is working.
+     */
+    render(
+      <RecorderControl
+        consentGranted
+        recorder={recorderStub({ state: 'recording' })}
+        uploader={uploaderStub({ status: 'delayed' })}
+      />,
+    );
+
+    expect(screen.getByText(/saving delayed/i)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('surfaces the breaker message when uploads keep failing', () => {
+    /** AC-3: the string comes from the breaker config the server serves, not
+     *  from this component. §18.2: "these strings are the entire user
+     *  experience of a failure". */
+    render(
+      <RecorderControl
+        consentGranted
+        recorder={recorderStub({ state: 'recording' })}
+        uploader={uploaderStub({
+          status: 'degraded',
+          message: 'Upload delayed — recording continues locally.',
+        })}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /recording continues locally/i,
+    );
+  });
+
+  it('says nothing about uploads while they are working', () => {
+    /** The control. A permanently visible "saving" notice is wallpaper, and
+     *  the delayed state would stop meaning anything. */
+    render(
+      <RecorderControl
+        consentGranted
+        recorder={recorderStub({ state: 'recording' })}
+        uploader={uploaderStub({ status: 'uploading' })}
+      />,
+    );
+
+    expect(screen.queryByText(/saving delayed/i)).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('reports the bound explicitly when recording is stopped for it', () => {
+    /** AC-3: "recording stops gracefully with an explicit message rather than
+     *  silently discarding audio". Silence here is the failure. */
+    render(
+      <RecorderControl
+        consentGranted
+        recorder={recorderStub({ state: 'idle' })}
+        uploader={uploaderStub({
+          status: 'stopped',
+          message: BOUND_REACHED_MESSAGE,
+        })}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/could not be saved/i);
   });
 });

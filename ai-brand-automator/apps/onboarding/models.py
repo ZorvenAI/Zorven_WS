@@ -463,6 +463,28 @@ class MeetingRecording(models.Model):
         ),
     )
     transcript_gcs_path = models.CharField(max_length=500, blank=True, default="")
+
+    # ── Resumable upload (F-03) ──────────────────────────────────────
+    #
+    # AC-1: "the upload session id is persisted so a process restart can
+    # resume rather than restart". A resumable session is addressed by a URL
+    # GCS issues once; losing it means the bytes already accepted are
+    # unreachable and the operator re-uploads a meeting they already gave us.
+    #
+    # The URL carries its own authorisation, so it is a credential with a
+    # short life. It is never logged and never leaves this row except to the
+    # browser that is uploading — see the serializer, which does not expose it.
+    upload_session_url = models.TextField(blank=True, default="")
+
+    #: Where the object lands. Held separately from the session URL because
+    #: the path outlives the session: finalisation registers a BrandAsset
+    #: against it after the session is spent.
+    upload_gcs_path = models.CharField(max_length=500, blank=True, default="")
+
+    #: Guards AC-4's replay rule. A second finalisation carrying the key that
+    #: already finalised this row is answered from the row rather than
+    #: creating a second BrandAsset for one recording.
+    finalise_key = models.CharField(max_length=128, blank=True, default="")
     duration_s = models.PositiveIntegerField(
         null=True,
         blank=True,

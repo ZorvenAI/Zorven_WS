@@ -14,19 +14,29 @@
  * server-side too.
  */
 
-import { Mic, Square } from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
+import { CloudOff, Mic, Square, UploadCloud } from 'lucide-react';
 
 import {
   useMeetingRecorder,
   type UseMeetingRecorder,
 } from '@/hooks/useMeetingRecorder';
+import {
+  useChunkUploader,
+  type UseChunkUploader,
+} from '@/hooks/useChunkUploader';
+import { finaliseRecording, openRecording } from '@/lib/onboarding-sessions';
 
 export interface RecorderControlProps {
   /** F-01: false keeps the control inert and pointing at the consent modal. */
   consentGranted: boolean;
   onRecordConsent?: () => void;
+  /** F-03: which session the recording attaches to. */
+  sessionId?: string | null;
   /** Injected in tests; the hook is the default. */
   recorder?: UseMeetingRecorder;
+  /** Injected in tests; the hook is the default. */
+  uploader?: UseChunkUploader;
 }
 
 /** mm:ss. Hours are not shown: a meeting that long has other problems. */
@@ -40,7 +50,9 @@ export function formatElapsed(seconds: number): string {
 export default function RecorderControl({
   consentGranted,
   onRecordConsent,
+  sessionId,
   recorder,
+  uploader: injectedUploader,
 }: RecorderControlProps) {
   /*
    * The hook is always called and the injection only chooses which result to
@@ -56,9 +68,53 @@ export default function RecorderControl({
   const own = useMeetingRecorder();
   const live = recorder ?? own;
 
-  const { state, error, elapsedSeconds, start, stop } = live;
+  const { state, error, elapsedSeconds, chunks, start, stop } = live;
   const recording = state === 'recording';
   const busy = state === 'requesting' || state === 'stopping';
+
+  const [recordingId, setRecordingId] = useState<string | null>(null);
+  const elapsedAtStop = useRef(0);
+
+  const ownUploader = useChunkUploader({
+    recordingId,
+    chunks,
+    recording,
+    // AC-3: the local bound stops the recording rather than discarding audio.
+    onBoundReached: () => void stop(),
+  });
+  const uploader = injectedUploader ?? ownUploader;
+
+  const begin = useCallback(async () => {
+    // The row is opened before the microphone, not after. A recording with
+    // audio and no row to attach it to has nowhere to be finalised, and the
+    // operator would have spoken for ten minutes into a queue with no
+    // destination.
+    try {
+      const opened = await openRecording(String(sessionId));
+      setRecordingId(opened.recording_id);
+    } catch {
+      // Recording still starts. F-03's durability is the point, but refusing
+      // to record because the *upload* could not be arranged would lose the
+      // meeting outright rather than degrade it — which is what AC-3's whole
+      // design is against. The uploader retries the session itself.
+      setRecordingId(null);
+    }
+    await start();
+  }, [sessionId, start]);
+
+  const end = useCallback(async () => {
+    elapsedAtStop.current = elapsedSeconds;
+    await stop();
+    await uploader.finalise();
+    if (recordingId) {
+      try {
+        await finaliseRecording(recordingId, elapsedAtStop.current);
+      } catch {
+        // Retried by the operator pressing stop again, and idempotent when
+        // they do. Throwing here would leave the UI stuck mid-stop.
+      }
+    }
+  }, [elapsedSeconds, stop, uploader, recordingId]);
 
   if (!consentGranted) {
     return (
@@ -87,7 +143,7 @@ export default function RecorderControl({
     <div className="space-y-2">
       <button
         type="button"
-        onClick={recording ? stop : start}
+        onClick={recording ? end : begin}
         disabled={busy}
         className={`flex w-full items-center gap-2 rounded border px-3 py-2 text-sm disabled:opacity-60 ${
           recording
@@ -124,6 +180,29 @@ export default function RecorderControl({
           </span>
         </div>
       )}
+
+      {/*
+        AC-2: "the operator sees a transient 'Saving delayed' indicator, not an
+        error". Distinct from the degraded state below, which is the breaker's
+        message and means uploads have been failing for a while.
+      */}
+      {uploader.status === 'delayed' && (
+        <p role="status" className="flex items-center gap-2 text-xs text-brand-silver">
+          <UploadCloud aria-hidden="true" className="h-3 w-3 shrink-0" />
+          Saving delayed
+        </p>
+      )}
+
+      {(uploader.status === 'degraded' || uploader.status === 'stopped') &&
+        uploader.message && (
+          <p
+            role="alert"
+            className="flex items-start gap-2 text-xs text-amber-300"
+          >
+            <CloudOff aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0" />
+            {uploader.message}
+          </p>
+        )}
 
       {error && (
         <p role="alert" className="text-xs text-amber-300">

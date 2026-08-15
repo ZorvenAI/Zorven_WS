@@ -32,12 +32,17 @@ from django.http import Http404
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 
-from onboarding.models import Company
+from onboarding.models import BrandAsset, Company
 from tenants.models import Tenant
 
 from apps.onboarding import errors
 from apps.onboarding.commands import publish_consent_revoked
 from apps.onboarding.field_map import all_mapped_fields, label_for, page_for
+from apps.onboarding.uploads import (
+    UploadSessionError,
+    create_resumable_session,
+    degraded_message,
+)
 from apps.onboarding.events import (
     ACTION_CONFIRM,
     ACTION_EDIT,
@@ -461,6 +466,48 @@ class MeetingRecordingViewSet(
             tenant_scope_q(tenant)
         )
 
+    @action(detail=True, methods=["post"], url_path="upload-session")
+    @db_transaction.atomic
+    def upload_session(self, request, pk=None):
+        """``POST /recordings/{id}/upload-session/`` — mint or resume (AC-1).
+
+        Idempotent by construction: a row that already has a session URL gets
+        the same one back. AC-1 wants a process restart to "resume rather than
+        restart", and minting a second session for a recording that already
+        has one would strand every byte already accepted by the first — the
+        operator would re-upload a meeting they had already given us.
+        """
+        recording = self.get_queryset().select_for_update(of=("self",)).get(pk=pk)
+
+        if not recording.upload_session_url:
+            try:
+                url, path = create_resumable_session(
+                    recording, origin=request.headers.get("Origin", "")
+                )
+            except UploadSessionError as exc:
+                # 503, not 500: the recording is fine and the operator can
+                # retry. A 500 tells the browser to give up on a meeting that
+                # is still running.
+                return Response(
+                    {"error": "upload_unavailable", "detail": str(exc)},
+                    status=http.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            recording.upload_session_url = url
+            recording.upload_gcs_path = path
+            recording.save(update_fields=["upload_session_url", "upload_gcs_path"])
+
+        return Response(
+            {
+                "session_url": recording.upload_session_url,
+                "gcs_path": recording.upload_gcs_path,
+                # AC-3: the browser shows this when uploads are failing, and
+                # it comes from configuration rather than being hardcoded in a
+                # component. §18.2: "these strings are the entire user
+                # experience of a failure".
+                "degraded_message": degraded_message(),
+            }
+        )
+
     @action(detail=True, methods=["post"])
     @db_transaction.atomic
     def stop(self, request, pk=None):
@@ -493,6 +540,12 @@ class MeetingRecordingViewSet(
             # Idempotent: a second stop must not move the duration. An
             # operator double-clicking should not change what the library
             # reports about their meeting.
+            #
+            # F-03 AC-4 strengthens this: "replaying the same finalisation
+            # with the same Idempotency-Key produces no second asset". The
+            # early return already prevents that for a retry of a *completed*
+            # stop, and _register_asset below is keyed as well, so the
+            # protection does not depend on which of the two fires first.
             return Response(MeetingRecordingSerializer(recording).data)
 
         payload = RecordingStopSerializer(data=request.data)
@@ -503,13 +556,77 @@ class MeetingRecordingViewSet(
         # Only when the client reported one. Wall-clock is never computed —
         # see RecordingStopSerializer for why.
         duration = payload.validated_data.get("duration_s")
-        fields = ["stopped_at", "status", "updated_at"]
+        fields = ["stopped_at", "status", "updated_at", "finalise_key"]
         if duration is not None:
             recording.duration_s = duration
             fields.append("duration_s")
 
+        # AC-4: the recording row reflects reality. B-08 left `audio_asset`
+        # null because there was no upload to point at; there is now.
+        asset = self._register_asset(recording, request)
+        if asset is not None:
+            recording.audio_asset = asset
+            fields.append("audio_asset")
+
         recording.save(update_fields=fields)
         return Response(MeetingRecordingSerializer(recording).data)
+
+    def _register_asset(self, recording, request):
+        """Point a BrandAsset at the uploaded object, once (AC-4).
+
+        Once is the whole requirement. The browser retries finalisation after
+        a network drop — that is the same drop AC-2 is about — so this runs
+        more than once in the ordinary course of a bad connection, and a
+        second BrandAsset would put the same meeting through ingestion twice
+        and into RAG twice.
+
+        The key comes from the caller's `Idempotency-Key` header, falling back
+        to the upload path, which is itself unique per recording. Falling back
+        rather than requiring the header keeps an older client from creating
+        duplicates simply by not knowing about it.
+        """
+        if recording.audio_asset_id:
+            return recording.audio_asset
+        if not recording.upload_gcs_path:
+            # Nothing was uploaded — a recording that never started, or one
+            # whose session could not be minted. Finalising is still correct;
+            # inventing an asset for absent bytes is not.
+            return None
+
+        # Header first, then the body.
+        #
+        # The header is the convention and other clients should use it. The
+        # body is there because this project's apiClient takes no custom
+        # headers and forbids raw fetch — widening shared HTTP infrastructure
+        # so one endpoint can read one header is a larger change than the
+        # requirement justifies. Both are the same key; neither is preferred
+        # by the logic below.
+        key = (
+            request.headers.get("Idempotency-Key", "").strip()
+            or str(request.data.get("idempotency_key") or "").strip()
+            or recording.upload_gcs_path
+        )[:128]
+
+        existing = MeetingRecording.objects.filter(
+            pk=recording.pk, finalise_key=key, audio_asset__isnull=False
+        ).first()
+        if existing is not None:
+            return existing.audio_asset
+
+        company = recording.session.company
+        asset = BrandAsset.objects.create(
+            tenant=recording.tenant,
+            company=company,
+            file_name=recording.upload_gcs_path.rsplit("/", 1)[-1],
+            # "other", not "video": §10.1 calls this audio, and the curation
+            # pipeline branches on this value. Miscalling it video would send
+            # a meeting recording down a frame-extraction path.
+            file_type="other",
+            file_size=0,
+            gcs_path=recording.upload_gcs_path,
+        )
+        recording.finalise_key = key
+        return asset
 
 
 class FieldProvenanceViewSet(
