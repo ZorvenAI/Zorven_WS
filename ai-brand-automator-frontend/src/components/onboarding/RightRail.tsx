@@ -24,6 +24,8 @@ export interface RightRailProps {
   recordingCount?: number;
   /** Whether an active ConsentRecord exists for this session (F-01). */
   consentGranted?: boolean;
+  /** F-03: passed to the recorder so it can open a MeetingRecording. */
+  sessionId?: string | null;
   /** Opens the consent modal. AC-1: the disabled control still does this. */
   onRecordConsent?: () => void;
 }
@@ -36,6 +38,7 @@ const CAPTURE_CONTROLS = [
 export default function RightRail({
   recordingCount = 0,
   consentGranted = false,
+  sessionId,
   onRecordConsent,
 }: RightRailProps) {
   return (
@@ -57,6 +60,7 @@ export default function RightRail({
         */}
         <RecorderControl
           consentGranted={consentGranted}
+          sessionId={sessionId}
           onRecordConsent={onRecordConsent}
         />
 

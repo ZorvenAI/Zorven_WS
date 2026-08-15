@@ -48,6 +48,8 @@ export interface MeetingViewProps {
   backHref?: string;
   /** F-01: null while it is still being read. */
   consent?: ConsentState | null;
+  /** F-03: the recorder opens a MeetingRecording against this session. */
+  sessionId?: string | null;
   onGrantConsent?: (draft: ConsentDraft) => Promise<void>;
 }
 
@@ -58,6 +60,7 @@ export default function MeetingView({
   companyName,
   backHref,
   consent = null,
+  sessionId,
   onGrantConsent,
 }: MeetingViewProps) {
   const [consentOpen, setConsentOpen] = useState(false);
@@ -201,6 +204,7 @@ export default function MeetingView({
         <div className="min-h-0 min-w-0">
           <RightRail
             consentGranted={granted}
+            sessionId={sessionId}
             onRecordConsent={() => setConsentOpen(true)}
           />
         </div>

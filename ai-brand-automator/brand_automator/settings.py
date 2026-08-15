@@ -662,6 +662,16 @@ GOOGLE_BUSINESS_REDIRECT_URI = config(
 # Frontend URL for OAuth redirects
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
 
+# F-03 AC-3. Mirrors `gcs.user_message` in the agent's
+# config/circuit_breakers.yaml, which §18.2 makes the source of truth: "these
+# strings are the entire user experience of a failure". That file ships in the
+# agent's image and this process cannot read it, so the value is duplicated —
+# and apps/onboarding/tests/test_uploads.py reads both and fails if they drift.
+OIA_GCS_DEGRADED_MESSAGE = config(
+    "OIA_GCS_DEGRADED_MESSAGE",
+    default="Upload delayed — recording continues locally.",
+)
+
 # =============================================================================
 # Kafka Configuration
 # =============================================================================
