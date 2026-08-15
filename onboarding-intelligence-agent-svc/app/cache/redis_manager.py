@@ -115,6 +115,29 @@ class TenantKeys:
         """Hash · 4 h · WF1/WF2/WF3 fractions plus updated_at."""
         return f"{self._scope}live:{session_id}:coverage"
 
+    def live_frames(self, session_id: str) -> str:
+        """List · 4 h · the replay buffer behind a reconnect (F-04 AC-3).
+
+        Capped by count, not by bytes. AC-3 is about how far back a client can
+        resume, and "the last N frames" is a resume window an operator can
+        reason about where "the last N kilobytes" is not.
+
+        In Redis because it has to be: spike A-02 finding 3 puts sockets for
+        one tenant on different Cloud Run instances, so a reconnect usually
+        lands somewhere that never saw the frames it is asking to replay.
+        """
+        return f"{self._scope}live:{session_id}:frames"
+
+    def live_seq(self, session_id: str) -> str:
+        """String · 4 h · the monotonic counter behind AC-4.
+
+        Separate from the buffer so the series survives the buffer being
+        trimmed: seq must be "strictly increasing for the life of the session
+        across all frame types", and a counter derived from the buffer's length
+        would restart every time the cap evicted a frame.
+        """
+        return f"{self._scope}live:{session_id}:seq"
+
     def live_lock(self, company_id: str) -> str:
         """String · 2 h · one live meeting per company (OD-5).
 
