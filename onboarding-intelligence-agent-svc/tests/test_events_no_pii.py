@@ -226,3 +226,32 @@ def test_emitter_joins_a_real_span_when_the_sdk_is_configured():
         )
 
     assert event.trace_id == expected
+
+
+# ── F-01 · EVT-101 ───────────────────────────────────────────────────
+
+
+def test_evt101_carries_hash_not_name():
+    """The card's named case, on the agent's side of the contract.
+
+    Django builds and emits EVT-101 (the consent endpoint is §10.2's), and its
+    own test asserts the payload it produces. This asserts the other half: that
+    the catalogue would *refuse* the name if a future caller attached it here.
+    Two teams, one contract, and the structural guard is what keeps them from
+    drifting apart quietly.
+    """
+    with pytest.raises(PIILeakError):
+        assert_no_pii(EventType.CONSENT_VERIFIED, {"subject_name": "Asha Kalyani"})
+
+
+def test_evt101_accepts_the_hashed_shape():
+    """The control. A guard that rejected everything would pass the test above
+    and block the event it exists to permit."""
+    assert_no_pii(
+        EventType.CONSENT_VERIFIED,
+        {
+            "consent_id": "c-1",
+            "method": "VERBAL_RECORDED",
+            "subject_name_hash": "9f" * 32,
+        },
+    )

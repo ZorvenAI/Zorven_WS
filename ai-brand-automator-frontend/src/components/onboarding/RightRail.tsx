@@ -20,15 +20,22 @@ import { Camera, Mic, Video } from 'lucide-react';
 export interface RightRailProps {
   /** Placeholder count until I-01 lists real recordings. */
   recordingCount?: number;
+  /** Whether an active ConsentRecord exists for this session (F-01). */
+  consentGranted?: boolean;
+  /** Opens the consent modal. AC-1: the disabled control still does this. */
+  onRecordConsent?: () => void;
 }
 
-const CONTROLS = [
-  { icon: Mic, label: 'Start recording', owner: 'F-02' },
+const CAPTURE_CONTROLS = [
   { icon: Camera, label: 'Capture photo', owner: 'H-01' },
   { icon: Video, label: 'Capture video', owner: 'H-02' },
 ] as const;
 
-export default function RightRail({ recordingCount = 0 }: RightRailProps) {
+export default function RightRail({
+  recordingCount = 0,
+  consentGranted = false,
+  onRecordConsent,
+}: RightRailProps) {
   return (
     <aside
       aria-labelledby="rail-heading"
@@ -39,7 +46,45 @@ export default function RightRail({ recordingCount = 0 }: RightRailProps) {
       </h2>
 
       <div className="mt-3 space-y-2">
-        {CONTROLS.map(({ icon: Icon, label }) => (
+        {/*
+          AC-1: "the record control is visible but disabled, with the reason
+          stated inline — 'Record consent to enable recording' — rather than as
+          an unexplained grey button. And clicking it opens the consent modal
+          rather than doing nothing."
+          
+          So it is not `disabled`. A disabled button cannot be clicked, cannot
+          be focused and is skipped by a screen reader's button list, which
+          would make the second half of that criterion impossible. `aria-disabled`
+          says "this will not do what it says yet" while leaving it reachable —
+          the same distinction QuestionChecklist landed on in #566.
+        */}
+        <button
+          type="button"
+          aria-disabled={!consentGranted}
+          onClick={consentGranted ? undefined : onRecordConsent}
+          className={`flex w-full items-center gap-2 rounded border px-3 py-2 text-sm ${
+            consentGranted
+              ? 'border-white/10 text-brand-silver opacity-60'
+              : 'border-brand-electric/40 text-white'
+          }`}
+          title={
+            consentGranted
+              ? 'Available once live capture ships'
+              : 'Record consent to enable recording'
+          }
+        >
+          <Mic aria-hidden="true" className="h-4 w-4 shrink-0" />
+          Start recording
+        </button>
+        {!consentGranted && (
+          // Inline, not a tooltip. AC-1 asks for the reason *stated*, and a
+          // title attribute is invisible to touch and to most screen readers.
+          <p className="text-xs text-amber-300">
+            Record consent to enable recording
+          </p>
+        )}
+
+        {CAPTURE_CONTROLS.map(({ icon: Icon, label }) => (
           <button
             key={label}
             type="button"

@@ -346,3 +346,152 @@ describe('AC-3 · nothing steals focus', () => {
     );
   });
 });
+
+// ── F-01 · consent gates the microphone ──────────────────────────────
+
+const NO_CONSENT = {
+  granted: false,
+  granted_at: null,
+  method: null,
+  scope: null,
+} as const;
+
+const GRANTED = {
+  granted: true,
+  granted_at: '2026-08-14T10:00:00Z',
+  method: 'VERBAL_RECORDED',
+  scope: { audio: true, transcript: true, captured_media: true },
+} as const;
+
+describe('F-01 · consent before the microphone', () => {
+  it('shows the record control disabled, with the reason stated inline', () => {
+    /**
+     * AC-1 is specific that this must not be "an unexplained grey button".
+     * The reason is asserted as visible text, not as a title attribute — a
+     * tooltip is invisible to touch and to most screen readers, so it is not
+     * a stated reason.
+     */
+    render(<MeetingView questions={QUESTIONS} consent={NO_CONSENT} />);
+
+    const record = screen.getByRole('button', { name: /start recording/i });
+    expect(record).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText('Record consent to enable recording')).toBeInTheDocument();
+  });
+
+  it('opens the consent modal when the disabled control is clicked', async () => {
+    /**
+     * AC-1's second half: "clicking it opens the consent modal rather than
+     * doing nothing". This is why the control carries aria-disabled instead of
+     * `disabled` — a truly disabled button cannot be clicked at all, so the
+     * criterion would be unsatisfiable.
+     */
+    const user = userEvent.setup();
+    render(<MeetingView questions={QUESTIONS} consent={NO_CONSENT} />);
+
+    await user.click(screen.getByRole('button', { name: /start recording/i }));
+
+    expect(screen.getByRole('dialog', { name: /record consent/i })).toBeInTheDocument();
+  });
+
+  it('blocks the view with a notice while consent is missing', () => {
+    render(<MeetingView questions={QUESTIONS} consent={NO_CONSENT} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/no active consent/i);
+  });
+
+  it('shows no notice and no reason once consent is granted', () => {
+    /** The control. A banner that never cleared would make AC-4's revocation
+     *  notice meaningless — an always-on warning is wallpaper. */
+    render(<MeetingView questions={QUESTIONS} consent={GRANTED} />);
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(
+      screen.queryByText('Record consent to enable recording'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('says nothing at all while consent is still being read', () => {
+    /**
+     * `null` is "not yet known", not "absent". Flashing a compliance warning
+     * during a page load is how operators learn to dismiss them unread.
+     */
+    render(<MeetingView questions={QUESTIONS} consent={null} />);
+
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('sends the name, method and full scope, and closes on success', async () => {
+    const user = userEvent.setup();
+    const granted: unknown[] = [];
+    render(
+      <MeetingView
+        questions={QUESTIONS}
+        consent={NO_CONSENT}
+        onGrantConsent={async (draft) => {
+          granted.push(draft);
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /start recording/i }));
+    await user.type(screen.getByLabelText(/who is consenting/i), 'Asha Kalyani');
+    await user.click(screen.getByRole('button', { name: /^record consent$/i }));
+
+    expect(granted).toEqual([
+      {
+        subject_name: 'Asha Kalyani',
+        method: 'VERBAL_RECORDED',
+        // The scope the sentence above the button describes. If these drift,
+        // the operator has confirmed something other than what was recorded.
+        scope: { audio: true, transcript: true, captured_media: true },
+      },
+    ]);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('keeps the modal open, with the reason, when recording consent fails', async () => {
+    /** Closing on failure would look like success, and the operator would
+     *  reach for a microphone that is still shut. */
+    const user = userEvent.setup();
+    render(
+      <MeetingView
+        questions={QUESTIONS}
+        consent={NO_CONSENT}
+        onGrantConsent={async () => {
+          throw new Error('API 502: upstream unavailable');
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /start recording/i }));
+    await user.type(screen.getByLabelText(/who is consenting/i), 'Asha Kalyani');
+    await user.click(screen.getByRole('button', { name: /^record consent$/i }));
+
+    // Scoped to the dialog: the blocking banner behind it is also an alert,
+    // so an unscoped query is ambiguous — and would pass on the banner even
+    // if the modal showed no reason at all.
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/502/);
+  });
+
+  it('AC-4 · a revocation puts the notice back and disables the control', () => {
+    /**
+     * Driven as a prop change, which is what the page's poll produces when
+     * someone revokes from the session detail page. The card calls the
+     * revocation path "the part teams skip".
+     */
+    const { rerender } = render(
+      <MeetingView questions={QUESTIONS} consent={GRANTED} />,
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    rerender(<MeetingView questions={QUESTIONS} consent={NO_CONSENT} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/no active consent/i);
+    expect(screen.getByRole('button', { name: /start recording/i })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+});
