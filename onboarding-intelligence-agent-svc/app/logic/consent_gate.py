@@ -123,7 +123,9 @@ def as_rule(state: ConsentState) -> Callable[[Any, Any], Verdict]:
     return _evaluate
 
 
-async def fetch_consent_state(backend: Any, *, tenant_id: str, session_id: str):
+async def fetch_consent_state(
+    backend: Any, *, tenant_id: str, session_id: str
+) -> ConsentState:
     """Read consent from Django's live-precheck.
 
     The same endpoint IG-10 uses, extended by this story rather than joined by
