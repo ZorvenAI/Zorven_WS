@@ -246,12 +246,23 @@ def test_evt101_carries_hash_not_name():
 
 def test_evt101_accepts_the_hashed_shape():
     """The control. A guard that rejected everything would pass the test above
-    and block the event it exists to permit."""
-    assert_no_pii(
-        EventType.CONSENT_VERIFIED,
-        {
-            "consent_id": "c-1",
-            "method": "VERBAL_RECORDED",
-            "subject_name_hash": "9f" * 32,
-        },
+    and block the event it exists to permit.
+
+    Built into a real envelope rather than stopping at "assert_no_pii did not
+    raise", following test_evt_103's shape in this file. Not raising is a
+    claim about the guard; surviving into an AgentEvent with the hash intact
+    and no name anywhere is the claim that matters.
+    """
+    payload = {
+        "consent_id": "c-1",
+        "method": "VERBAL_RECORDED",
+        "subject_name_hash": "9f" * 32,
+    }
+    assert_no_pii(EventType.CONSENT_VERIFIED, payload)
+
+    event = AgentEvent(
+        **envelope(event_type=EventType.CONSENT_VERIFIED, payload=payload)
     )
+
+    assert event.payload["subject_name_hash"] == "9f" * 32
+    assert "subject_name" not in event.payload
