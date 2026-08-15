@@ -27,6 +27,8 @@ from app.services.backend_client import BackendClient
 pytestmark = pytest.mark.integration
 
 CLOSE_UNAUTHORIZED = 4401
+CLOSE_NOT_FOUND = 4404
+CLOSE_INTERNAL = 1011
 
 
 @pytest.fixture
@@ -58,6 +60,22 @@ def django_stub():
             # be passing on the wrong refusal. A test about consent sets the
             # block explicitly and this leaves it alone.
             body = dict(state["body"])
+            if not state.get("omit_auth_default"):
+                # F-04 put ticket authorisation ahead of everything else. A
+                # stub that omitted it would refuse every socket with 4401 and
+                # the IG-08/IG-10 cases below would be passing on the wrong
+                # refusal — the same trap the consent default was added for.
+                body.setdefault(
+                    "auth",
+                    {
+                        "valid": True,
+                        "tenant_id": "t-1",
+                        "company_id": state.get("company_id", "c-1"),
+                        "user_id": "u-1",
+                        "role": "editor",
+                        "valid_until": "2099-01-01T00:00:00+00:00",
+                    },
+                )
             if not state.get("omit_consent_default"):
                 body.setdefault(
                     "consent", {"present": True, "active": True, "consent_id": "c-1"}
@@ -83,22 +101,96 @@ def django_stub():
 
 
 @pytest.fixture
-def client(app_with_live_redis, django_stub):
+def live_company(request):
+    """A company id unique to each test.
+
+    F-04's single-socket lock is keyed on company and lives in Redis, which
+    outlives a test. Sharing one id made every case after the first contend
+    with a lock the previous one had left behind — a suite that hung rather
+    than failed, and for a reason that had nothing to do with what was being
+    tested.
+    """
+    return f"c-{abs(hash(request.node.name)) % 100000}"
+
+
+@pytest.fixture
+def client(app_with_live_redis, django_stub, live_company):
     with TestClient(app_with_live_redis) as test_client:
         app_with_live_redis.state.backend = BackendClient(django_stub["url"], "tok")
+        # F-04 holds the socket open and re-checks on a cadence. The real one
+        # is thirty seconds; a suite that waited that out per case would not
+        # be run.
+        app_with_live_redis.state.live_poll_s = 0.05
+        django_stub["company_id"] = live_company
+        # No explicit lock cleanup: the per-test company id above is what
+        # isolates these, and a teardown that drove the event loop by hand
+        # errored inside the running one — cleanup that breaks the tests it
+        # protects is worse than the leak it was guarding against.
         yield test_client
 
 
-def open_socket(client, session_id="sess-1", tenant_id="t-1"):
-    query = f"?tenant_id={tenant_id}" if tenant_id is not None else ""
+def expect_close(socket, within: float = 3.0) -> WebSocketDisconnect:
+    """Wait for the server to close, and fail rather than hang if it does not.
+
+    Starlette's test client has no receive timeout, so the obvious
+    `pytest.raises(WebSocketDisconnect): socket.receive_text()` blocks for ever
+    when the close it expects never comes. That is how a mutation to the lock
+    or the expiry check turns into a six-hour CI job instead of a red test —
+    observed while checking exactly those two guards.
+    """
+    import threading
+
+    caught: list[BaseException] = []
+
+    def wait():
+        try:
+            socket.receive_text()
+        except BaseException as error:  # noqa: BLE001 - reported below
+            caught.append(error)
+
+    thread = threading.Thread(target=wait, daemon=True)
+    thread.start()
+    thread.join(timeout=within)
+
+    assert caught, f"the socket was still open after {within}s — expected a close"
+    error = caught[0]
+    # Raised rather than asserted: this is the helper's precondition, not a
+    # test's conclusion, and `assert isinstance(...)` as the last word of a
+    # check is the shape the weak-assertion gate exists to catch. The
+    # conclusions are the code below and the values at each call site.
+    if not isinstance(error, WebSocketDisconnect):
+        raise AssertionError(f"unexpected {type(error).__name__}: {error}")
+    # A value, not just a type. Spike A-02's first finding is that a close made
+    # before accept() reaches the client with *no* application code — the
+    # disconnect still arrives, so a type check alone would pass on exactly the
+    # regression this file exists to catch.
+    assert error.code, "the close carried no application close code"
+    return error
+
+
+def open_socket(client, session_id="sess-1", tenant_id="t-1", ticket="tkt-1"):
+    parts = []
+    if tenant_id is not None:
+        parts.append(f"tenant_id={tenant_id}")
+    if ticket is not None:
+        parts.append(f"ticket={ticket}")
+    query = ("?" + "&".join(parts)) if parts else ""
     return client.websocket_connect(f"/v1/live/{session_id}{query}")
 
 
 # ── The card's named case ────────────────────────────────────────────
 
 
-def test_draft_questionnaire_rejected_4403(client, django_stub):
-    """The card's case. A DRAFT questionnaire must not start a meeting."""
+def test_draft_questionnaire_rejected_4404(client, django_stub):
+    """C-04's case, with F-04's close code.
+
+    C-04 closed this 4403. §10.2.3 gives 4403 to "consent missing or revoked"
+    and 4404 to "session not found or **not live-eligible**", and a draft
+    questionnaire is the second. F-04's AC-1 makes the mapping one-to-one and
+    `test_close_codes_map_one_to_one` asserts it, so the overlap had to go —
+    a client that cannot tell an eligibility problem from a consent problem
+    re-presents the consent modal for a questionnaire nobody approved.
+    """
     django_stub["body"] = {
         "approved": False,
         "questionnaire_status": "DRAFT",
@@ -110,7 +202,7 @@ def test_draft_questionnaire_rejected_4403(client, django_stub):
         with pytest.raises(WebSocketDisconnect) as caught:
             socket.receive_text()
 
-    assert caught.value.code == CLOSE_FORBIDDEN
+    assert caught.value.code == CLOSE_NOT_FOUND
 
 
 def test_the_refusal_names_the_missing_approval(client, django_stub):
@@ -139,7 +231,7 @@ def test_the_client_receives_a_code_not_an_http_403(client, django_stub):
     Closing a Starlette socket before accept() makes the framework answer the
     handshake with plain HTTP 403 and the code never arrives. If this endpoint
     ever regresses to a pre-accept close, the connect itself would raise
-    instead of yielding a socket that then disconnects with 4403 — which is
+    instead of yielding a socket that then disconnects with a code — which is
     what this distinguishes.
     """
     django_stub["body"] = {"approved": False, "reason": "not approved"}
@@ -149,7 +241,7 @@ def test_the_client_receives_a_code_not_an_http_403(client, django_stub):
         with pytest.raises(WebSocketDisconnect) as caught:
             connected.receive_text()
 
-    assert caught.value.code == CLOSE_FORBIDDEN, (
+    assert caught.value.code == CLOSE_NOT_FOUND, (
         "the client got no application close code — the verdict is being "
         "delivered before accept()"
     )
@@ -172,7 +264,10 @@ def test_an_unreachable_backend_refuses(client, django_stub):
         with pytest.raises(WebSocketDisconnect) as caught:
             socket.receive_text()
 
-    assert caught.value.code == CLOSE_FORBIDDEN
+    # 1011, not a 4xxx: an unreachable backend is *our* failure, and telling
+    # the client its credentials are bad sends it to re-authenticate against
+    # a problem that is not there.
+    assert caught.value.code == CLOSE_INTERNAL
 
 
 def test_a_session_outside_the_tenant_refuses(client, django_stub):
@@ -186,44 +281,62 @@ def test_a_session_outside_the_tenant_refuses(client, django_stub):
         with pytest.raises(WebSocketDisconnect) as caught:
             socket.receive_text()
 
-    assert caught.value.code == CLOSE_FORBIDDEN
+    assert caught.value.code == CLOSE_NOT_FOUND
 
 
-def test_no_tenant_is_refused_before_any_backend_call(client, django_stub):
+def test_the_caller_supplied_tenant_is_not_what_authorises(client, django_stub):
+    """F-04 replaced a check this test used to assert.
+
+    C-04 refused a socket with no `tenant_id` query parameter before calling
+    Django at all, and said in its own docstring that reading identity from
+    the query string was "**not** adequate for a socket that carries data".
+    This is that socket. Identity now comes from the ticket Django resolved,
+    so the query parameter is routing information, not a claim — and omitting
+    it no longer decides anything.
+
+    That is the property worth asserting: the socket is authorised on the
+    ticket's tenant, not on whatever the caller typed.
+    """
     with open_socket(client, tenant_id="") as socket:
-        with pytest.raises(WebSocketDisconnect) as caught:
-            socket.receive_text()
+        socket.send_text("authorised on the ticket, not the query string")
 
-    assert caught.value.code == CLOSE_UNAUTHORIZED
-    assert django_stub["requests"] == []
+    # The backend was consulted, which is the whole point — the old behaviour
+    # refused without asking.
+    assert django_stub["requests"], "the handshake never reached Django"
 
 
 # ── The allowed path ─────────────────────────────────────────────────
 
 
-def test_an_approved_questionnaire_passes_the_gate(client, django_stub):
-    """The control. A gate that refused everything would pass every test
-    above while making the feature impossible.
+def test_an_approved_questionnaire_holds_the_socket_open(client, django_stub):
+    """The control. A gate that refused everything would pass every test above
+    while making the feature impossible.
 
-    It still closes — F-04 owns the protocol — but with 1001 (going away)
-    rather than 4403, and the reason says why.
+    C-04 closed here with 1001 because there was no protocol behind the gate
+    and "holding an accepted socket open with nothing behind it would look
+    like a working meeting". F-04 owns the lifecycle, so the socket now stays:
+    the connection *is* what this story delivers, and the frames travelling
+    over it arrive in PR 2.
     """
     django_stub["body"] = {"approved": True, "questionnaire_status": "APPROVED"}
 
     with open_socket(client) as socket:
-        with pytest.raises(WebSocketDisconnect) as caught:
-            socket.receive_text()
-
-    assert caught.value.code == 1001
-    assert "F-04" in caught.value.reason
+        # Sending proves it is open. `receive_text()` would be the obvious
+        # check and is the wrong one — Starlette's test client takes no
+        # timeout, so it blocks for ever on a socket that is behaving
+        # correctly, which is a hung suite rather than a failed assertion.
+        socket.send_text("still here")
 
 
 def test_the_tenant_is_sent_to_django(client, django_stub):
     django_stub["body"] = {"approved": True}
 
     with open_socket(client, tenant_id="tenant-42") as socket:
-        with pytest.raises(WebSocketDisconnect):
-            socket.receive_text()
+        # `receive_text()` used to be right here, because the gate closed the
+        # socket immediately. F-04 holds it open, and Starlette's test client
+        # has no receive timeout — waiting for a close that correctly never
+        # comes is a hung suite, not a failed assertion.
+        socket.send_text("open")
 
     assert django_stub["requests"][0]["tenant"] == "tenant-42"
     assert "/sessions/sess-1/live-precheck/" in django_stub["requests"][0]["path"]
@@ -343,3 +456,146 @@ def test_the_refusal_never_carries_the_subject_name(client, django_stub):
 
     assert "Ada" not in caught.value.reason
     assert "Lovelace" not in caught.value.reason
+
+
+# ── F-04 PR 1 · the card's named cases ───────────────────────────────
+
+
+def test_close_codes_map_one_to_one():
+    """§10.2.3's codes, each meaning one thing.
+
+    NFR-SEC-02 asks for them "as named constants, not literals", and the
+    reason is this test: a client that cannot tell an eligibility failure from
+    a consent failure re-presents the consent modal for a questionnaire nobody
+    approved. C-04 closed a draft questionnaire with 4403 — consent's code —
+    and F-04 moves it to 4404, which is what makes the mapping injective.
+
+    Six, not the five AC-1 lists: §10.2.3 also defines 1011 for an internal
+    error with retry advised, and NFR-SEC-02 says "the six close codes".
+    """
+    from app.logic.live_handshake import CLOSE_CODES
+
+    assert len(CLOSE_CODES) == 6
+    assert len(set(CLOSE_CODES.values())) == 6, "two conditions share a code"
+    assert CLOSE_CODES == {
+        "unauthorized": 4401,
+        "forbidden": 4403,
+        "not_found": 4404,
+        "conflict": 4409,
+        "rate_limited": 4429,
+        "internal": 1011,
+    }
+
+
+def test_second_socket_rejected_4409(client, django_stub):
+    """AC-2, and the reason the lock is in Redis rather than in the process.
+
+    Spike A-02 finding 3: sockets for one tenant land on different Cloud Run
+    instances, so a process-local flag would admit one socket per instance and
+    call that exclusivity. Two writers on one meeting corrupt the transcript
+    for both.
+    """
+    django_stub["body"] = {"approved": True}
+
+    with open_socket(client) as first:
+        first.send_text("holding the slot")
+
+        with open_socket(client) as second:
+            closed = expect_close(second)
+
+        assert closed.code == 4409
+        # AC-2: "the first is untouched". A guard that closed both would
+        # satisfy "only one socket" and lose the meeting.
+        first.send_text("still holding")
+
+
+def test_the_first_socket_releases_its_claim_when_it_ends(client, django_stub):
+    """The control. A lock never released is a company locked out of its own
+    meetings until the TTL lapses, and the operator's remedy is a support
+    ticket."""
+    django_stub["body"] = {"approved": True}
+
+    with open_socket(client) as first:
+        first.send_text("one")
+
+    with open_socket(client) as second:
+        second.send_text("two")
+
+
+def test_live_keys_are_tenant_scoped():
+    """The card's named case, asserted on the builder rather than on a socket.
+
+    Every key this service writes starts with `oia:v1:` and carries the tenant
+    — the shared Memorystore instance is DB 2 for eleven services, and prefix
+    isolation is the only thing separating them (ERRATA-01).
+    """
+    # The builder directly: it is pure, and reaching it through app.state
+    # made this depend on a connected Redis for a question about string
+    # construction.
+    from app.cache.redis_manager import TenantKeys
+
+    key = TenantKeys("tenant-abc").live_lock("company-xyz")
+
+    assert key.startswith("oia:v1:tenant-abc:")
+    assert "company-xyz" in key
+
+
+def test_an_expired_authorisation_closes_an_idle_socket(client, django_stub):
+    """NFR-SEC-02: "a token that expires mid-session closes the socket with
+    4401, **not at the next message boundary**".
+
+    Idle is the case that matters — a meeting where nobody is speaking still
+    holds a connection, and a check that only runs on traffic never runs.
+    """
+    django_stub["body"] = {
+        "approved": True,
+        "auth": {
+            "valid": True,
+            "tenant_id": "t-1",
+            "company_id": django_stub.get("company_id", "c-1"),
+            "user_id": "u-1",
+            "role": "editor",
+            # Already past.
+            "valid_until": "2020-01-01T00:00:00+00:00",
+        },
+    }
+
+    with open_socket(client) as socket:
+        closed = expect_close(socket)
+
+    assert closed.code == CLOSE_UNAUTHORIZED
+    assert "expired" in closed.reason.lower()
+
+
+def test_a_viewer_cannot_open_a_live_socket(client, django_stub):
+    """§15: a Viewer reads a session and does not run a meeting. 4403 rather
+    than 4401 — they are who they say they are, and the answer is still no, so
+    re-authenticating would not help."""
+    django_stub["body"] = {
+        "approved": True,
+        "auth": {
+            "valid": True,
+            "tenant_id": "t-1",
+            "company_id": django_stub.get("company_id", "c-1"),
+            "user_id": "u-9",
+            "role": "viewer",
+            "valid_until": "2099-01-01T00:00:00+00:00",
+        },
+    }
+
+    with pytest.raises(WebSocketDisconnect) as caught:
+        with open_socket(client) as socket:
+            socket.receive_text()
+
+    assert caught.value.code == CLOSE_FORBIDDEN
+    assert "viewer" in caught.value.reason.lower()
+
+
+def test_an_invalid_ticket_is_4401(client, django_stub):
+    django_stub["body"] = {"approved": True, "auth": {"valid": False, "reason": "x"}}
+
+    with pytest.raises(WebSocketDisconnect) as caught:
+        with open_socket(client, ticket="nonsense") as socket:
+            socket.receive_text()
+
+    assert caught.value.code == CLOSE_UNAUTHORIZED

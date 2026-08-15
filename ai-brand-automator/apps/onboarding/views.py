@@ -38,6 +38,7 @@ from tenants.models import Tenant
 from apps.onboarding import errors
 from apps.onboarding.commands import publish_consent_revoked
 from apps.onboarding.field_map import all_mapped_fields, label_for, page_for
+from apps.onboarding.live_tickets import USABLE_SECONDS, mint, resolve
 from apps.onboarding.uploads import (
     UploadSessionError,
     create_resumable_session,
@@ -124,6 +125,11 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         # falls through to DEFAULT_PERMISSION_CLASSES, which is bare
         # IsAuthenticated. That was the hole review caught on B-06.
         "consent": [IsAuthenticated, IsTenantEditor],
+        # F-04: a ticket is permission to open the live socket, so it is
+        # gated exactly as running the meeting is. Listed explicitly —
+        # an action missing from this dict falls back to bare
+        # IsAuthenticated, which is the hole review caught on B-06.
+        "live_ticket": [IsAuthenticated, IsTenantEditor],
         # GET lists the library and POST opens a recording, so the method
         # decides the role rather than the action name. Editor+ is enforced
         # inside for the write; the entry keeps Viewer out of neither.
@@ -386,6 +392,33 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             )
         )
         return Response(ConsentRecordSerializer(record).data, status=http.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="live-ticket")
+    def live_ticket(self, request, pk=None):
+        """``POST /sessions/{id}/live-ticket/`` — a ticket to open the socket.
+
+        A-02 finding 2: the token travels as `?jwt=` because browsers cannot
+        set headers on a WebSocket handshake, so it lands in gateway logs and
+        browser history. A session JWT there is an hour of full API access in
+        a log file. This is seconds of permission to open one socket.
+        """
+        session = self.get_object()
+        # `user_role` is what KongAuthenticationMiddleware sets and what every
+        # permission class in tenants/permissions.py reads. Naming a different
+        # attribute here would mint tickets whose role disagrees with the one
+        # that authorised the request.
+        role = getattr(request, "user_role", "") or ""
+        ticket, claims = mint(session=session, user=request.user, role=role)
+        return Response(
+            {
+                "ticket": ticket,
+                # Echoed so the client knows when to stop trying rather than
+                # discovering it from a 4401.
+                "usable_seconds": USABLE_SECONDS,
+                "valid_until": claims.valid_until,
+            },
+            status=http.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=["get", "post"])
     @db_transaction.atomic
@@ -1552,6 +1585,40 @@ def _consent_block(session) -> dict:
     }
 
 
+def _ticket_block(request, session) -> dict:
+    """Resolve the socket ticket the agent presented (F-04 AC-1).
+
+    Returns a uniform shape on every path — valid or not, present or not — so
+    the agent never has to distinguish "this deploy does not send auth" from
+    "this ticket is bad". The first would be a reason to fail open, and
+    failing open on authentication is how a gate becomes decorative.
+
+    `role` is the role the ticket was minted with, not one re-derived here:
+    the ticket is a record of a decision Django already made, and re-deriving
+    it would let a role change mid-meeting silently widen what an open socket
+    may do.
+    """
+    claims = resolve(request.query_params.get("ticket", ""))
+    if claims is None:
+        return {"valid": False, "reason": "invalid_or_expired_ticket"}
+
+    if claims.session_id != str(session.pk):
+        # A ticket for another session. Refused rather than honoured for the
+        # session it names, because the caller asked about *this* one.
+        return {"valid": False, "reason": "ticket_session_mismatch"}
+
+    return {
+        "valid": True,
+        "tenant_id": claims.tenant_id,
+        "company_id": claims.company_id,
+        "user_id": claims.user_id,
+        "role": claims.role,
+        # NFR-SEC-02: the socket closes 4401 when this passes, whether or not
+        # a message is in flight.
+        "valid_until": claims.valid_until,
+    }
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def live_precheck(request, pk):
@@ -1592,6 +1659,13 @@ def live_precheck(request, pk):
         # not confirm the row exists.
         return Response({"error": "session not found"}, status=http.HTTP_404_NOT_FOUND)
 
+    # F-04 AC-1: the handshake authenticates, resolves the tenant, checks the
+    # role and confirms consent — "all before accept()". The agent already
+    # calls this endpoint at that moment, so the answer to all of it travels
+    # in one response. Two reads to decide one thing is two chances to decide
+    # it on a stale half, which is the argument this endpoint was built on.
+    auth = _ticket_block(request, session)
+
     questionnaire = session.questionnaire
     if questionnaire is None:
         return Response(
@@ -1600,6 +1674,7 @@ def live_precheck(request, pk):
                 "session_status": session.status,
                 "questionnaire_status": None,
                 "consent": _consent_block(session),
+                "auth": auth,
                 "reason": (
                     "This session has no questionnaire yet. Prepare and approve "
                     "one before starting the meeting."
