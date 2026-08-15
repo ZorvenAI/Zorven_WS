@@ -17,7 +17,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
-  testMatch: ['**/meeting-view.spec.ts'],
+  testMatch: ['**/meeting-view.spec.ts', '**/recorder.spec.ts'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -33,11 +33,24 @@ export default defineConfig({
       name: 'laptop-13in',
       use: {
         ...devices['Desktop Chrome'],
+        // The full Chromium, not the headless shell Playwright prefers by
+        // default. The shell build ships without media capture, so
+        // getUserMedia answers NotSupportedError there however the
+        // permissions are set — which reads as "this browser cannot record"
+        // when what it means is "this binary cannot".
+        channel: 'chromium',
         // AC-2's "real laptop". 1280×800 is the 13-inch MacBook's default
         // logical resolution, and the browser chrome eats the rest — which is
         // the point of naming a size rather than testing at 1920 and calling
         // it responsive.
         viewport: { width: 1280, height: 800 },
+        // F-02: a synthetic capture device, so MediaRecorder encodes real
+        // audio without a microphone or a human. `--use-fake-ui-for-media-stream`
+        // is deliberately *not* set — it would auto-accept the permission
+        // prompt and make the denial test unable to fail.
+        launchOptions: {
+          args: ['--use-fake-device-for-media-stream'],
+        },
       },
     },
   ],
