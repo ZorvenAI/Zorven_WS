@@ -183,6 +183,7 @@ def test_skills_yaml_declares_all_sixteen_skills():
 IMPLEMENTED_BODIES = {
     "app.skills.research_business",  # C-02
     "app.skills.generate_questionnaire",  # C-03
+    "app.skills.redact_pii",  # F-05: PII redaction (SKL-OIA-16)
 }
 
 
