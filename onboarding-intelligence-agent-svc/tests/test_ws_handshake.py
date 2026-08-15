@@ -599,3 +599,79 @@ def test_an_invalid_ticket_is_4401(client, django_stub):
             socket.receive_text()
 
     assert caught.value.code == CLOSE_UNAUTHORIZED
+
+
+# ── F-04 PR 2 · resume over a real socket ────────────────────────────
+
+
+def test_a_resume_replays_the_frames_the_client_missed(client, django_stub):
+    """AC-3 end to end, over a real handshake.
+
+    The unit tests cover the buffer's arithmetic; this covers the thing a
+    client experiences — that sending `{"type": "resume", "last_seq": N}`
+    brings back exactly what it missed, in order.
+    """
+    import uuid
+
+    import redis as sync_redis
+
+    from app.api.schemas import TranscriptPartial
+    from app.cache.redis_manager import TenantKeys
+    from tests.conftest import REDIS_URL
+
+    session_id = f"sess-replay-{uuid.uuid4().hex[:8]}"
+    django_stub["body"] = {"approved": True}
+
+    r = sync_redis.Redis.from_url(REDIS_URL)
+    keys = TenantKeys("t-1")
+    seq_key = keys.live_seq(session_id)
+    frames_key = keys.live_frames(session_id)
+    try:
+        for index in range(1, 5):
+            seq = r.incr(seq_key)
+            frame = TranscriptPartial(seq=seq, text=f"chunk {index}", speaker=2)
+            r.rpush(frames_key, json.dumps(frame.model_dump(mode="json")))
+    finally:
+        r.close()
+
+    with open_socket(client, session_id=session_id) as socket:
+        socket.send_json({"type": "resume", "last_seq": 2})
+
+        first = socket.receive_json()
+        second = socket.receive_json()
+
+    assert first["seq"] < second["seq"], "frames replayed out of order"
+    assert first["text"] == "chunk 3"
+    assert second["text"] == "chunk 4"
+
+
+def test_a_resume_beyond_the_buffer_gets_a_resync_frame(client, django_stub):
+    """AC-3: "not a silent gap in seq". The client is told the record moved on
+    rather than left to infer it from frames that never arrive."""
+    import uuid
+
+    session_id = f"sess-resync-{uuid.uuid4().hex[:8]}"
+    django_stub["body"] = {"approved": True}
+
+    with open_socket(client, session_id=session_id) as socket:
+        socket.send_json({"type": "resume", "last_seq": 900})
+        answer = socket.receive_json()
+
+    assert answer["type"] == "resync"
+    assert "from_seq" in answer
+
+
+def test_a_malformed_control_frame_does_not_end_the_meeting(client, django_stub):
+    """A client bug must not close a socket that is otherwise recording
+    fine — the audio path does not depend on the control channel being
+    well-formed."""
+    import uuid
+
+    session_id = f"sess-malform-{uuid.uuid4().hex[:8]}"
+    django_stub["body"] = {"approved": True}
+
+    with open_socket(client, session_id=session_id) as socket:
+        socket.send_text("{not json")
+        socket.send_json({"type": "resume"})  # missing last_seq
+        # Still open: sending again would raise if the server had closed.
+        socket.send_text("still here")

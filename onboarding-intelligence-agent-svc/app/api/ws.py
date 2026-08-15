@@ -34,12 +34,15 @@ socket that carries data — see the note on ``_tenant_of``.
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, WebSocket
+from pydantic import ValidationError
 from starlette.websockets import WebSocketDisconnect
 
+from app.api.schemas import ClientFrameType, ResumeFrame
 from app.core.logging import get_logger
 from app.logic.consent_gate import (
     ConsentState,
@@ -57,6 +60,7 @@ from app.logic.live_handshake import (
     expired,
 )
 from app.logic.live_lock import REFRESH_S, LiveLock, acquire
+from app.logic.live_session import LiveSessionManager
 
 logger = get_logger(__name__)
 
@@ -140,6 +144,50 @@ async def live_websocket(websocket: WebSocket, session_id: str) -> None:
             await lock.release()
 
 
+async def _handle_control(websocket: WebSocket, session: Any, message: Any) -> None:
+    """Act on one client control frame (§10.2.3).
+
+    Only `resume` does anything in PR 2. `start`, `mark_question` and `stop`
+    are parsed and acknowledged by silence rather than rejected — F-05 and
+    G-03 give them behaviour, and refusing a frame the protocol defines would
+    make this socket wrong for the client rather than merely incomplete.
+
+    Malformed input is ignored, never fatal. A client bug must not end a
+    meeting that is otherwise recording fine.
+    """
+    if session is None:
+        return
+    raw = message.get("text")
+    if not raw:
+        # Binary audio carries no envelope (§10.2.3). F-05 consumes it.
+        return
+
+    try:
+        frame = json.loads(raw)
+    except (TypeError, ValueError):
+        logger.info("live_control_unparseable")
+        return
+
+    if not isinstance(frame, dict) or frame.get("type") != ClientFrameType.RESUME.value:
+        return
+
+    try:
+        resume = ResumeFrame(**frame)
+    except ValidationError:
+        logger.info("live_resume_malformed")
+        return
+
+    frames, resync = await session.replay_after(resume.last_seq)
+    if resync is not None:
+        # AC-3: an explicit frame, never a silent gap. The client is told
+        # where the record now starts rather than left to infer it.
+        await websocket.send_json(resync.model_dump(mode="json"))
+        return
+
+    for replayed in frames:
+        await websocket.send_json(replayed)
+
+
 async def _hold(
     websocket: WebSocket,
     verdict: Handshake,
@@ -164,6 +212,17 @@ async def _hold(
     # to wait a real thirty seconds per iteration is a test nobody runs, and
     # patching the module constant would leave the production path untested.
     poll_s = float(getattr(websocket.app.state, "live_poll_s", REFRESH_S))
+
+    redis_manager = getattr(websocket.app.state, "redis", None)
+    session = (
+        LiveSessionManager(
+            redis=redis_manager,
+            tenant_id=verdict.tenant_id,
+            session_id=session_id,
+        )
+        if redis_manager is not None
+        else None
+    )
 
     while True:
         if expired(verdict.valid_until):
@@ -207,3 +266,5 @@ async def _hold(
         # up as a test suite that hung rather than failed.
         if message.get("type") == "websocket.disconnect":
             return
+
+        await _handle_control(websocket, session, message)
