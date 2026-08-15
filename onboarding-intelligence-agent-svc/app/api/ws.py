@@ -33,90 +33,177 @@ socket that carries data — see the note on ``_tenant_of``.
 
 from __future__ import annotations
 
+import asyncio
+import uuid
+from typing import Any
+
 from fastapi import APIRouter, WebSocket
+from starlette.websockets import WebSocketDisconnect
 
 from app.core.logging import get_logger
 from app.logic.consent_gate import (
-    CLOSE_FORBIDDEN,
+    ConsentState,
     consent_verdict,
     emit_refusal,
     fetch_consent_state,
 )
-from app.logic.live_gate import evaluate
+from app.logic.live_handshake import (
+    CLOSE_CONFLICT,
+    CLOSE_FORBIDDEN,
+    CLOSE_INTERNAL,
+    CLOSE_UNAUTHORIZED,
+    Handshake,
+    evaluate,
+    expired,
+)
+from app.logic.live_lock import REFRESH_S, LiveLock, acquire
 
 logger = get_logger(__name__)
 
 router = APIRouter()
 
-#: §10.2.3. Sent when the socket is refused for want of a tenant to check.
-CLOSE_UNAUTHORIZED = 4401
-
-
-def _tenant_of(websocket: WebSocket) -> str:
-    """The tenant this socket claims.
-
-    Read from the query string, and that is a deliberate limitation of a
-    gate-only endpoint rather than a decision about authentication. §15 is
-    clear that a role and a tenant come from a verified claim; F-04 must
-    resolve this from the ``?jwt=`` token before any data flows.
-
-    It is safe *here* because the only thing this endpoint does with it is
-    decide whether to refuse. A caller who names another tenant's session gets
-    the same refusal as one who names nothing — the precheck is tenant-scoped
-    in Django and answers 404 for a session outside it, which this turns into
-    a refusal without confirming the session exists.
-    """
-    return str(websocket.query_params.get("tenant_id") or "").strip()
-
 
 @router.websocket("/v1/live/{session_id}")
 async def live_websocket(websocket: WebSocket, session_id: str) -> None:
-    """Refuse a live session without consent (IG-08) or approval (IG-10)."""
-    tenant_id = _tenant_of(websocket)
+    """Authenticate, authorise, admit one socket, and hold it (F-04 PR 1).
+
+    Everything AC-1 lists happens before ``accept()`` — spike A-02's first
+    finding is that a close made any earlier reaches the client as plain HTTP
+    403 with no code at all, so the decision is made first and only the
+    *verdict* is delivered after accepting.
+
+    The socket is then held open. C-04 closed it immediately on the grounds
+    that "holding an accepted socket open with nothing behind it would look
+    like a working meeting" — true when this file was only a gate. Holding the
+    connection *is* the lifecycle, which is what this story owns; the frames
+    that travel over it arrive in PR 2.
+    """
+    ticket = str(websocket.query_params.get("ticket") or "").strip()
     backend = getattr(websocket.app.state, "backend", None)
     events = getattr(websocket.app.state, "events", None)
+    redis_manager = getattr(websocket.app.state, "redis", None)
 
-    if not tenant_id:
-        # Decided before accept, delivered after — finding 1.
+    # The tenant now comes from the ticket Django resolved, not from a query
+    # parameter the caller chose. C-04 flagged that as adequate for a refusal
+    # and "**not** adequate for a socket that carries data" — this is that
+    # socket, so it is fixed here.
+    precheck = None
+    if backend is not None:
+        try:
+            precheck = await backend.live_precheck(
+                # Tenant is unknown until the ticket resolves, and the header
+                # is what routes the request in Django. The ticket names the
+                # tenant it belongs to, so a caller cannot widen its own scope
+                # by naming another here — the auth block is authoritative.
+                tenant_id=str(websocket.query_params.get("tenant_id") or ""),
+                session_id=session_id,
+                ticket=ticket,
+            )
+        except Exception:  # noqa: BLE001 - any failure is a refusal
+            precheck = None
+
+    verdict = evaluate(precheck)
+
+    lock = None
+    if not verdict.refused:
+        lock = await acquire(
+            redis_manager,
+            tenant_id=verdict.tenant_id,
+            company_id=verdict.company_id,
+            token=uuid.uuid4().hex,
+        )
+        if lock is None:
+            verdict = Handshake(
+                code=CLOSE_CONFLICT,
+                reason="Another socket is already live for this session.",
+            )
+
+    if verdict.refused:
+        if verdict.code == CLOSE_FORBIDDEN and "consent" in verdict.reason:
+            await emit_refusal(
+                events,
+                consent_verdict(ConsentState(present=False, active=False)),
+                tenant_id=verdict.tenant_id or "unknown",
+                session_id=session_id,
+            )
         await websocket.accept()
         await websocket.close(
-            code=CLOSE_UNAUTHORIZED, reason="A tenant is required to open a session."
+            code=verdict.code or CLOSE_INTERNAL, reason=verdict.reason
         )
         return
-
-    # IG-08 before IG-10, matching §5's own numbering — and the more
-    # fundamental question first. Whether we may record this person at all is
-    # not contingent on whether somebody approved a questionnaire.
-    #
-    # AC-3: this holds against a socket opened directly at /v1/live/{id},
-    # bypassing the UI entirely. The browser's disabled record button is a
-    # courtesy; this is the gate.
-    consent = await fetch_consent_state(
-        backend, tenant_id=tenant_id, session_id=session_id
-    )
-    consent_refusal = consent_verdict(consent)
-    if consent_refusal.blocked:
-        await emit_refusal(
-            events, consent_refusal, tenant_id=tenant_id, session_id=session_id
-        )
-        await websocket.accept()
-        await websocket.close(code=CLOSE_FORBIDDEN, reason=consent_refusal.detail[:120])
-        return
-
-    verdict = await evaluate(backend, tenant_id=tenant_id, session_id=session_id)
 
     await websocket.accept()
-    if verdict.refused:
-        # close() reason is capped at 123 bytes by the protocol; a longer one
-        # is silently dropped by some clients, which would turn a helpful
-        # refusal into a bare code.
-        await websocket.close(code=verdict.close_code, reason=verdict.reason[:120])
-        return
+    try:
+        await _hold(websocket, verdict, lock, backend, session_id, ticket)
+    finally:
+        if lock is not None:
+            await lock.release()
 
-    # The gate passed. F-04 takes over from here; until it lands there is no
-    # protocol to run, and holding an accepted socket open with nothing behind
-    # it would look like a working meeting.
-    await websocket.close(
-        code=1001,
-        reason="Live streaming is not available yet (F-04).",
-    )
+
+async def _hold(
+    websocket: WebSocket,
+    verdict: Handshake,
+    lock: LiveLock | None,
+    backend: Any,
+    session_id: str,
+    ticket: str,
+) -> None:
+    """Keep the socket open while it remains authorised.
+
+    Two things can end a live meeting from the server side, and NFR-SEC-02
+    insists neither waits for traffic: the authorisation expiring, and consent
+    being revoked. "A token that expires mid-session closes the socket with
+    4401, **not at the next message boundary**" — an idle socket is exactly
+    the case that matters, because a meeting where nobody is speaking still
+    holds a connection.
+
+    One poll covers both, and refreshes the lock on the same tick. Three
+    timers would be three things to get wrong.
+    """
+    # Injected through app.state, like `backend` and `redis`. A test that had
+    # to wait a real thirty seconds per iteration is a test nobody runs, and
+    # patching the module constant would leave the production path untested.
+    poll_s = float(getattr(websocket.app.state, "live_poll_s", REFRESH_S))
+
+    while True:
+        if expired(verdict.valid_until):
+            await websocket.close(
+                code=CLOSE_UNAUTHORIZED, reason="Session authorisation expired."
+            )
+            return
+
+        if lock is not None and not await lock.refresh():
+            # The claim lapsed and somebody else has it. Ours is the socket
+            # that must go: two writers on one meeting is the state AC-2
+            # exists to prevent.
+            await websocket.close(
+                code=CLOSE_CONFLICT, reason="Another socket took over this session."
+            )
+            return
+
+        state = await fetch_consent_state(
+            backend, tenant_id=verdict.tenant_id, session_id=session_id
+        )
+        refusal = consent_verdict(state)
+        if refusal.blocked:
+            # F-01 AC-4, finally reachable end to end: a revocation closes an
+            # open socket rather than being noticed at the next message.
+            await websocket.close(code=CLOSE_FORBIDDEN, reason=refusal.detail[:120])
+            return
+
+        try:
+            message = await asyncio.wait_for(websocket.receive(), timeout=poll_s)
+        except asyncio.TimeoutError:
+            # Idle. Looping is the point — the checks above are what an idle
+            # socket exists to keep running.
+            continue
+        except (WebSocketDisconnect, RuntimeError):
+            return
+
+        # `receive()` *returns* the disconnect rather than raising it, which is
+        # easy to miss and expensive to get wrong: without this the loop spins
+        # for the life of the process after the client has gone, holding the
+        # company's live lock and polling Django every few seconds. It showed
+        # up as a test suite that hung rather than failed.
+        if message.get("type") == "websocket.disconnect":
+            return

@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from urllib.parse import quote
+
 import httpx
 
 from app.circuit_breaker.breaker import (
@@ -199,6 +201,17 @@ class BackendClient:
                 },
                 timeout=TIMEOUT_S,
             )
+            if response.status_code == 404:
+                # Not a failure of ours, and not a breaker event. Django
+                # answers 404 for a session outside the caller's tenant —
+                # FR-PREP-06 is explicit that a cross-tenant read must not
+                # confirm the row exists — so this is a *fact about the
+                # request*, and collapsing it into None makes it
+                # indistinguishable from Django being down. The caller then
+                # cannot tell "no such session" (4404) from "we are broken"
+                # (1011), and tells the operator the wrong one.
+                self._breaker.record_success()
+                return {"__status__": 404}
             response.raise_for_status()
             body = response.json()
         except Exception as exc:
@@ -215,7 +228,7 @@ class BackendClient:
         return body if isinstance(body, dict) else None
 
     async def live_precheck(
-        self, *, tenant_id: str, session_id: str
+        self, *, tenant_id: str, session_id: str, ticket: str = ""
     ) -> dict[str, Any] | None:
         """IG-10's data: may this session open a live socket?
 
@@ -224,6 +237,11 @@ class BackendClient:
         a backend problem costs a stored copy, and here it would put a meeting
         on air against a questionnaire nobody approved.
         """
-        return await self._get(
-            PRECHECK_PATH.format(session_id=session_id), tenant_id=tenant_id
-        )
+        path = PRECHECK_PATH.format(session_id=session_id)
+        if ticket:
+            # F-04: the ticket travels on the same call that already asks
+            # about approval and consent, so one read decides the whole
+            # handshake. Query rather than header because this endpoint is a
+            # GET and the value is opaque and short-lived.
+            path = f"{path}?ticket={quote(ticket, safe='')}"
+        return await self._get(path, tenant_id=tenant_id)
