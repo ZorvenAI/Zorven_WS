@@ -41,6 +41,7 @@ from apps.onboarding.field_map import all_mapped_fields, label_for, page_for
 from apps.onboarding.events import (
     ACTION_CONFIRM,
     ACTION_EDIT,
+    emit_consent_verified,
     emit_provenance_reviewed,
 )
 from apps.onboarding.models import (
@@ -322,6 +323,18 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             session=session,
             tenant=session.tenant,
             granted_by=request.user if request.user.is_authenticated else None,
+        )
+
+        # F-01 AC-2. Emitted after the row exists, so the event can never
+        # describe a consent that failed to save — and never raises, so a
+        # broker problem cannot turn a lawful, captured consent into a failed
+        # request the operator retries against an idempotent endpoint.
+        emit_consent_verified(
+            tenant_id=session.tenant_id,
+            session_id=session.pk,
+            consent_id=record.pk,
+            method=record.method,
+            subject_name=record.subject_name,
         )
         return Response(
             ConsentRecordSerializer(record).data, status=http.HTTP_201_CREATED
@@ -1397,6 +1410,31 @@ def field_vocabulary(request):
     return Response({"fields": sorted(all_mapped_fields())}, status=http.HTTP_200_OK)
 
 
+def _consent_block(session) -> dict:
+    """One session's consent state, for IG-08 (F-01).
+
+    Reported on *every* branch of live-precheck, including the ones that refuse
+    for other reasons. A caller that finds `consent` present on one response
+    and absent on another has to guess, and the agent's safe guess — refuse —
+    would turn an unapproved questionnaire into a consent error on the
+    operator's screen.
+
+    The subject's name is deliberately absent. §19 and FR-GDPR-01 put it in the
+    tenant-scoped database, which is the subject-access-request surface; the
+    agent needs to know *whether* there is consent, never whose.
+    """
+    latest = (
+        ConsentRecord.objects.filter(session=session).order_by("-granted_at").first()
+    )
+    if latest is None:
+        return {"present": False, "active": False, "consent_id": None}
+    return {
+        "present": True,
+        "active": latest.is_active,
+        "consent_id": str(latest.pk),
+    }
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def live_precheck(request, pk):
@@ -1444,6 +1482,7 @@ def live_precheck(request, pk):
                 "approved": False,
                 "session_status": session.status,
                 "questionnaire_status": None,
+                "consent": _consent_block(session),
                 "reason": (
                     "This session has no questionnaire yet. Prepare and approve "
                     "one before starting the meeting."
@@ -1458,6 +1497,7 @@ def live_precheck(request, pk):
             "session_status": session.status,
             "questionnaire_status": questionnaire.status,
             "questionnaire_id": questionnaire.pk,
+            "consent": _consent_block(session),
             "reason": (
                 ""
                 if approved

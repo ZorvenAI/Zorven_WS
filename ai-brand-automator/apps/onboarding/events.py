@@ -29,6 +29,7 @@ from __future__ import annotations
 import logging
 
 from django.conf import settings
+from django.utils.crypto import salted_hmac
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,92 @@ def emit_provenance_reviewed(
             "EVT-109 not queued (event_ref=%s field=%s) — review still applied",
             EVENT_REF,
             field_name,
+            exc_info=True,
+        )
+
+    return payload
+
+
+# ── EVT-101 · onboarding.consent.verified (F-01, AC-2) ───────────────
+
+#: Matches EventType.CONSENT_VERIFIED in the agent's catalogue.
+CONSENT_EVENT_TYPE = "onboarding.consent.verified"
+CONSENT_EVENT_REF = "EVT-101"
+
+#: Namespaces the HMAC so a subject hash cannot be compared against a hash of
+#: the same string produced for any other purpose in this codebase.
+CONSENT_HASH_SALT = "apps.onboarding.events.consent_subject"
+
+
+def subject_name_hash(name: str) -> str:
+    """A hash of the subject's name that cannot be turned back into it.
+
+    Keyed, not bare. §12 lets the event stream carry ``subject_name_hash`` and
+    never the name, and a plain SHA-256 of a personal name defeats that in an
+    afternoon: the input space is small enough to enumerate, so an unkeyed
+    digest of "Ada Lovelace" is "Ada Lovelace" to anyone with a name list.
+
+    ``salted_hmac`` keys it off SECRET_KEY, which is the same root of trust the
+    project already uses for OAuth token encryption. No new secret to
+    provision, rotate or leave unset in one environment — and being unset is
+    the failure mode that would quietly turn this back into a bare digest.
+
+    Normalised first so the same person recorded twice hashes the same way,
+    which is the only property that makes the hash useful for correlation at
+    all. Case and surrounding whitespace are not identity.
+    """
+    normalised = " ".join(str(name or "").split()).casefold()
+    return salted_hmac(CONSENT_HASH_SALT, normalised).hexdigest()
+
+
+def build_consent_payload(*, consent_id, method: str, subject_name: str) -> dict:
+    """The EVT-101 body, and nothing else.
+
+    Built by a named function so a test can assert the exact key set. AC-2 says
+    the event carries "consent_id, method and subject_name_hash — never the
+    subject's name", and the way a name reaches an event stream is that someone
+    adds a field here for a good reason. It should have to get past an
+    assertion first.
+    """
+    return {
+        "event_ref": CONSENT_EVENT_REF,
+        "consent_id": str(consent_id),
+        "method": method,
+        "subject_name_hash": subject_name_hash(subject_name),
+    }
+
+
+def emit_consent_verified(
+    *, tenant_id, session_id, consent_id, method: str, subject_name: str
+) -> dict:
+    """Publish EVT-101. Returns the payload so callers can assert on it.
+
+    Never raises. Consent has already been recorded in the database by the time
+    this runs; a broker problem must not turn a lawful, captured consent into a
+    failed request the operator retries.
+    """
+    payload = build_consent_payload(
+        consent_id=consent_id, method=method, subject_name=subject_name
+    )
+
+    if not emission_enabled():
+        logger.debug("EVT-101 suppressed: Kafka disabled (consent=%s)", consent_id)
+        return payload
+
+    try:
+        from kafka_service.tasks import publish_event_to_kafka
+
+        publish_event_to_kafka.delay(
+            topic=f"agent.events.{tenant_id}" if tenant_id else "agent.events",
+            event_type=CONSENT_EVENT_TYPE,
+            data={**payload, "session_id": str(session_id)},
+            key=str(session_id),
+        )
+    except Exception:  # noqa: BLE001 - see the module docstring
+        logger.warning(
+            "EVT-101 not queued (event_ref=%s consent=%s) — consent still recorded",
+            CONSENT_EVENT_REF,
+            consent_id,
             exc_info=True,
         )
 

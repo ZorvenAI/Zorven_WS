@@ -15,6 +15,8 @@ a product problem.
 
 from __future__ import annotations
 
+import json
+import logging
 from datetime import timedelta
 
 import pytest
@@ -27,7 +29,7 @@ from apps.onboarding.commands import (
     build_consent_revoked,
     commands_enabled,
 )
-from apps.onboarding.models import ConsentMethod, SessionStatus
+from apps.onboarding.models import ConsentMethod, ConsentRecord, SessionStatus
 from apps.onboarding.tests.factories import make_company, make_consent, make_session
 from tenants.models import Membership, Tenant
 
@@ -64,6 +66,26 @@ def viewer(public_tenant):
 
 def consent_url(session) -> str:
     return f"{SESSIONS}{session.pk}/consent/"
+
+
+def precheck(session, settings) -> dict:
+    """What the agent sees. Service-token authenticated, like the agent's call.
+
+    Driven through the real endpoint rather than by calling `_consent_block`,
+    because the thing worth proving is that the agent's *response* carries it —
+    a helper that returns the right dict into a response nobody assembles is
+    the failure this is meant to catch.
+    """
+    settings.OIA_SERVICE_TOKEN = "test-service-token"
+    client = APIClient()
+    client.defaults["SERVER_NAME"] = "localhost"
+    response = client.get(
+        f"{SESSIONS}{session.pk}/live-precheck/",
+        HTTP_X_SERVICE_TOKEN="test-service-token",
+        HTTP_X_TENANT_ID=str(session.tenant_id),
+    )
+    assert response.status_code == 200, response.data
+    return response.data
 
 
 VALID_BODY = {
@@ -480,3 +502,178 @@ def test_the_revocation_command_is_published_after_the_commit():
     source = inspect.getsource(OnboardingSessionViewSet._revoke_consent)
     assert "on_commit(" in source
     assert "\n        publish_consent_revoked(" not in source
+
+
+# ── F-01 AC-2 · EVT-101, and the precheck the agent reads ────────────
+
+
+def test_evt101_carries_hash_not_name(public_tenant, editor):
+    """AC-2: the event carries "consent_id, method and subject_name_hash —
+    never the subject's name".
+
+    The exact key set is asserted, not just the absence of one field. A name
+    reaches an event stream because somebody adds a key here for a good
+    reason, and it should have to get past an assertion first.
+    """
+    from apps.onboarding.events import build_consent_payload
+
+    payload = build_consent_payload(
+        consent_id=42, method=ConsentMethod.VERBAL_RECORDED, subject_name="Asha Kalyani"
+    )
+
+    assert set(payload) == {
+        "event_ref",
+        "consent_id",
+        "method",
+        "subject_name_hash",
+    }
+    assert payload["event_ref"] == "EVT-101"
+    serialised = json.dumps(payload)
+    assert "Asha" not in serialised
+    assert "Kalyani" not in serialised
+
+
+def test_the_subject_hash_is_keyed_not_a_bare_digest(public_tenant):
+    """A plain SHA-256 of a personal name is reversible with a name list.
+
+    The whole promise of `subject_name_hash` is that the event stream cannot
+    identify the subject, and an unkeyed digest of "Asha Kalyani" *is* "Asha
+    Kalyani" to anyone who thinks to try. Asserted against the bare digest
+    rather than by reading the implementation.
+    """
+    import hashlib
+
+    from apps.onboarding.events import subject_name_hash
+
+    bare = hashlib.sha256("asha kalyani".encode()).hexdigest()
+
+    assert subject_name_hash("Asha Kalyani") != bare
+
+
+def test_the_same_person_hashes_the_same_way(public_tenant):
+    """Correlation is the only reason to carry a hash at all, so casing and
+    stray whitespace must not produce two different subjects."""
+    from apps.onboarding.events import subject_name_hash
+
+    assert subject_name_hash("Asha Kalyani") == subject_name_hash("  asha   kalyani ")
+    assert subject_name_hash("Asha Kalyani") != subject_name_hash("Ada Lovelace")
+
+
+def test_granting_consent_emits_evt101(public_tenant, editor, settings):
+    """The emission is wired to the endpoint, not merely available.
+
+    Asserted through the real POST: a helper nobody calls is the commonest way
+    an event goes missing, and the payload builder passing its own unit test
+    would not notice.
+
+    A handler is attached to the emitter's own logger rather than using
+    `caplog`, because this project configures `apps.onboarding` with
+    propagation off — caplog's root handler never sees the record, so the
+    assertion would fail whether or not the emitter ran, which is the least
+    useful shape a test can have.
+    """
+    # Pinned, not inherited. This environment has ONBOARDING_KAFKA_ENABLED
+    # true, so the emitter took the publish branch and the suppression line
+    # never appeared — the first version of this test failed for a reason that
+    # had nothing to do with the wiring it was checking.
+    settings.ONBOARDING_KAFKA_ENABLED = False
+    session = make_session(tenant=public_tenant, status=SessionStatus.READY)
+
+    records: list[logging.LogRecord] = []
+
+    class Capture(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+
+    emitter_log = logging.getLogger("apps.onboarding.events")
+    handler = Capture()
+    previous = emitter_log.level
+    emitter_log.addHandler(handler)
+    emitter_log.setLevel(logging.DEBUG)
+    try:
+        response = client_for(editor, public_tenant).post(
+            consent_url(session), VALID_BODY, format="json"
+        )
+    finally:
+        emitter_log.removeHandler(handler)
+        emitter_log.setLevel(previous)
+
+    assert response.status_code == 201, response.data
+    # Kafka is disabled in tests, so the suppression line is the observable
+    # trace that the emitter ran at all.
+    assert any(
+        "EVT-101" in record.getMessage() for record in records
+    ), "the consent endpoint did not reach the EVT-101 emitter"
+
+
+def test_a_broker_failure_does_not_fail_the_consent(public_tenant, editor, settings):
+    """Consent is already committed by the time EVT-101 is attempted. A broker
+    problem must not turn a lawful, captured consent into a 500 the operator
+    retries."""
+    settings.ONBOARDING_KAFKA_ENABLED = True  # forces the publish path
+
+    response = client_for(editor, public_tenant).post(
+        consent_url(make_session(tenant=public_tenant, status=SessionStatus.READY)),
+        VALID_BODY,
+        format="json",
+    )
+
+    assert response.status_code == 201, response.data
+    assert ConsentRecord.objects.count() == 1
+
+
+# ── F-01 AC-3 · what the agent reads ─────────────────────────────────
+
+
+def test_live_precheck_reports_no_consent(public_tenant, editor, settings):
+    session = make_session(tenant=public_tenant, status=SessionStatus.READY)
+
+    body = precheck(session, settings)
+
+    assert body["consent"] == {"present": False, "active": False, "consent_id": None}
+
+
+def test_live_precheck_reports_active_consent(public_tenant, editor, settings):
+    session = make_session(tenant=public_tenant, status=SessionStatus.READY)
+    client_for(editor, public_tenant).post(
+        consent_url(session), VALID_BODY, format="json"
+    )
+
+    body = precheck(session, settings)
+
+    assert body["consent"]["present"] is True
+    assert body["consent"]["active"] is True
+    # The name stays in the database, which is the subject-access-request
+    # surface. The agent needs to know whether there is consent, never whose.
+    assert "Asha" not in json.dumps(body)
+
+
+def test_live_precheck_reports_revoked_consent(public_tenant, editor, settings):
+    """The state IG-08 must refuse. A precheck that reported `present: true`
+    and stopped would let a revoked meeting back on air."""
+    session = make_session(tenant=public_tenant, status=SessionStatus.READY)
+    api = client_for(editor, public_tenant)
+    api.post(consent_url(session), VALID_BODY, format="json")
+    api.delete(consent_url(session))
+
+    body = precheck(session, settings)
+
+    assert body["consent"]["present"] is True
+    assert body["consent"]["active"] is False
+
+
+def test_consent_is_reported_even_when_the_questionnaire_refuses(
+    public_tenant, editor, settings
+):
+    """Every branch carries the block.
+
+    A caller that finds `consent` on one response and absent on another has to
+    guess, and the agent's safe guess — refuse — would show an unapproved
+    questionnaire to the operator as a consent error.
+    """
+    session = make_session(tenant=public_tenant, status=SessionStatus.READY)
+
+    body = precheck(session, settings)
+
+    assert body["approved"] is False, "fixture should have no approved questionnaire"
+    assert "consent" in body

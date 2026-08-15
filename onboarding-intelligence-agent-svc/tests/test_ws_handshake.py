@@ -32,14 +32,37 @@ CLOSE_UNAUTHORIZED = 4401
 @pytest.fixture
 def django_stub():
     """A local stand-in for Django's live-precheck endpoint."""
-    state = {"status": 200, "body": {"approved": True}, "requests": []}
+    # Consent present and active by default, so the IG-10 cases below keep
+    # testing IG-10. F-01 put IG-08 ahead of it in the same handler, and a
+    # stub that omitted consent would refuse every socket before the
+    # questionnaire was ever considered — turning this file green for the
+    # wrong reason on the approved-questionnaire case and red on the rest.
+    state = {
+        "status": 200,
+        "body": {
+            "approved": True,
+            "consent": {"present": True, "active": True, "consent_id": "c-1"},
+        },
+        "requests": [],
+    }
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             state["requests"].append(
                 {"path": self.path, "tenant": self.headers.get("X-Tenant-ID")}
             )
-            payload = json.dumps(state["body"]).encode()
+            # Consent defaults to present-and-active unless a test says
+            # otherwise. F-01 put IG-08 ahead of IG-10 in the same handler, so
+            # without this every test here would be refused for consent before
+            # its questionnaire was ever looked at — and the IG-10 cases would
+            # be passing on the wrong refusal. A test about consent sets the
+            # block explicitly and this leaves it alone.
+            body = dict(state["body"])
+            if not state.get("omit_consent_default"):
+                body.setdefault(
+                    "consent", {"present": True, "active": True, "consent_id": "c-1"}
+                )
+            payload = json.dumps(body).encode()
             self.send_response(state["status"])
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
@@ -218,3 +241,105 @@ async def test_a_missing_backend_fails_closed():
     assert verdict.refused is True
     assert verdict.reason == UNREACHABLE_REASON
     assert verdict.close_code == CLOSE_FORBIDDEN
+
+
+# ── F-01 AC-3 · the consent gate, ahead of IG-10 ─────────────────────
+
+
+def test_close_4403_on_missing_consent(client, django_stub):
+    """The card's named case.
+
+    AC-3: a socket opened directly at /v1/live/{id}, bypassing the UI, is
+    refused server-side. The browser's disabled record button is a courtesy;
+    this is the gate — and this test is the only thing that proves the two are
+    not the same claim.
+    """
+    django_stub["body"] = {
+        "approved": True,
+        "consent": {"present": False, "active": False},
+    }
+
+    with pytest.raises(WebSocketDisconnect) as caught:
+        with open_socket(client) as socket:
+            socket.receive_text()
+
+    assert caught.value.code == 4403
+    assert "consent_required" in caught.value.reason
+
+
+def test_close_4403_on_revoked_consent(client, django_stub):
+    """A record that exists is not consent. `revoked_at` being set means the
+    brand owner withdrew it, and a gate that only checked existence would keep
+    a meeting on air for someone who asked us to stop."""
+    django_stub["body"] = {
+        "approved": True,
+        "consent": {"present": True, "active": False, "consent_id": "c-9"},
+    }
+
+    with pytest.raises(WebSocketDisconnect) as caught:
+        with open_socket(client) as socket:
+            socket.receive_text()
+
+    assert caught.value.code == 4403
+    assert "revoked" in caught.value.reason
+
+
+def test_consent_is_checked_before_the_questionnaire(client, django_stub):
+    """Ordering is observable, so it is asserted.
+
+    §5 numbers IG-08 before IG-10, and the question "may we record this
+    person at all" does not depend on whether somebody approved a
+    questionnaire. With both failing, the operator should be told the one that
+    matters first.
+    """
+    django_stub["body"] = {
+        "approved": False,
+        "reason": "Questionnaire 12 is still DRAFT.",
+        "consent": {"present": False, "active": False},
+    }
+
+    with pytest.raises(WebSocketDisconnect) as caught:
+        with open_socket(client) as socket:
+            socket.receive_text()
+
+    assert caught.value.code == 4403
+    assert "consent_required" in caught.value.reason
+    assert "Questionnaire" not in caught.value.reason
+
+
+def test_a_backend_that_omits_consent_is_refused(client, django_stub):
+    """A Django too old to report consent must not be read as consent given.
+
+    The deploy order is agent-then-backend as often as not, and a gate that
+    treated a missing block as "fine" would be switched off by a version skew
+    that nobody chose and nothing reports.
+    """
+    django_stub["body"] = {"approved": True}  # no consent key at all
+    django_stub["omit_consent_default"] = True
+
+    with pytest.raises(WebSocketDisconnect) as caught:
+        with open_socket(client) as socket:
+            socket.receive_text()
+
+    assert caught.value.code == 4403
+
+
+def test_the_refusal_never_carries_the_subject_name(client, django_stub):
+    """A close reason reaches browser consoles and gateway logs. The subject's
+    name belongs in the ConsentRecord and nowhere else."""
+    django_stub["body"] = {
+        "approved": True,
+        "consent": {
+            "present": True,
+            "active": False,
+            "consent_id": "c-9",
+            "subject_name": "Ada Lovelace",
+        },
+    }
+
+    with pytest.raises(WebSocketDisconnect) as caught:
+        with open_socket(client) as socket:
+            socket.receive_text()
+
+    assert "Ada" not in caught.value.reason
+    assert "Lovelace" not in caught.value.reason

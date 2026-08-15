@@ -273,3 +273,78 @@ export function viewerTimezone(): string {
     return 'UTC';
   }
 }
+
+// ── Consent (F-01) ───────────────────────────────────────────────────
+
+/** §10.1's ConsentMethod, as B-07 shipped it. */
+export type ConsentMethod = 'VERBAL_RECORDED' | 'CHECKBOX';
+
+/**
+ * What the session endpoint reports about consent.
+ *
+ * `granted` is false both when no consent was ever recorded and when it has
+ * been revoked — B-07 reports only the *active* record, so a revoked one reads
+ * as absent here. That is the right shape for this screen: both states mean
+ * "the microphone stays shut", and the difference belongs in the audit trail
+ * rather than in a banner.
+ */
+export interface ConsentState {
+  granted: boolean;
+  granted_at: string | null;
+  method: ConsentMethod | null;
+  scope: Record<string, boolean> | null;
+}
+
+export interface ConsentDraft {
+  subject_name: string;
+  method: ConsentMethod;
+  scope: Record<string, boolean>;
+}
+
+/**
+ * The scope every onboarding recording needs, and no more.
+ *
+ * Named here rather than assembled in the modal so the three things the
+ * operator is asked to confirm are the three things actually sent. A scope
+ * that drifts from the sentence above the button is consent for something
+ * nobody agreed to.
+ */
+export const ONBOARDING_CONSENT_SCOPE: Record<string, boolean> = {
+  audio: true,
+  transcript: true,
+  captured_media: true,
+};
+
+export async function getSessionConsent(sessionId: string): Promise<ConsentState> {
+  const response = await apiClient.get(`${BASE}/sessions/${sessionId}/`);
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  const session = await response.json();
+  return (
+    session?.consent ?? {
+      granted: false,
+      granted_at: null,
+      method: null,
+      scope: null,
+    }
+  );
+}
+
+export async function grantConsent(
+  sessionId: string,
+  draft: ConsentDraft,
+): Promise<ConsentState> {
+  const response = await apiClient.post(
+    `${BASE}/sessions/${sessionId}/consent/`,
+    draft,
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  await response.json();
+  // Re-read rather than trusting the write's echo: the session endpoint is
+  // what the rest of this screen polls, and two sources for one fact is how
+  // a banner and a button end up disagreeing.
+  return getSessionConsent(sessionId);
+}

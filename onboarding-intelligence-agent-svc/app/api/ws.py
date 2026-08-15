@@ -36,6 +36,12 @@ from __future__ import annotations
 from fastapi import APIRouter, WebSocket
 
 from app.core.logging import get_logger
+from app.logic.consent_gate import (
+    CLOSE_FORBIDDEN,
+    consent_verdict,
+    emit_refusal,
+    fetch_consent_state,
+)
 from app.logic.live_gate import evaluate
 
 logger = get_logger(__name__)
@@ -65,9 +71,10 @@ def _tenant_of(websocket: WebSocket) -> str:
 
 @router.websocket("/v1/live/{session_id}")
 async def live_websocket(websocket: WebSocket, session_id: str) -> None:
-    """Refuse a live session whose questionnaire is not approved (IG-10)."""
+    """Refuse a live session without consent (IG-08) or approval (IG-10)."""
     tenant_id = _tenant_of(websocket)
     backend = getattr(websocket.app.state, "backend", None)
+    events = getattr(websocket.app.state, "events", None)
 
     if not tenant_id:
         # Decided before accept, delivered after — finding 1.
@@ -75,6 +82,25 @@ async def live_websocket(websocket: WebSocket, session_id: str) -> None:
         await websocket.close(
             code=CLOSE_UNAUTHORIZED, reason="A tenant is required to open a session."
         )
+        return
+
+    # IG-08 before IG-10, matching §5's own numbering — and the more
+    # fundamental question first. Whether we may record this person at all is
+    # not contingent on whether somebody approved a questionnaire.
+    #
+    # AC-3: this holds against a socket opened directly at /v1/live/{id},
+    # bypassing the UI entirely. The browser's disabled record button is a
+    # courtesy; this is the gate.
+    consent = await fetch_consent_state(
+        backend, tenant_id=tenant_id, session_id=session_id
+    )
+    consent_refusal = consent_verdict(consent)
+    if consent_refusal.blocked:
+        await emit_refusal(
+            events, consent_refusal, tenant_id=tenant_id, session_id=session_id
+        )
+        await websocket.accept()
+        await websocket.close(code=CLOSE_FORBIDDEN, reason=consent_refusal.detail[:120])
         return
 
     verdict = await evaluate(backend, tenant_id=tenant_id, session_id=session_id)

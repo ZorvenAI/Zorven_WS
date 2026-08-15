@@ -35,7 +35,8 @@ import AgentFeedbackStream, {
 } from '@/components/onboarding/AgentFeedbackStream';
 import QuestionChecklist from '@/components/onboarding/QuestionChecklist';
 import RightRail from '@/components/onboarding/RightRail';
-import type { PreparedQuestion } from '@/lib/onboarding-sessions';
+import ConsentModal from '@/components/onboarding/ConsentModal';
+import type { ConsentDraft, ConsentState, PreparedQuestion } from '@/lib/onboarding-sessions';
 
 export interface MeetingViewProps {
   questions: PreparedQuestion[];
@@ -45,6 +46,9 @@ export interface MeetingViewProps {
   companyName?: string | null;
   /** Where "back" goes. Rendered inside this header — see the note below. */
   backHref?: string;
+  /** F-01: null while it is still being read. */
+  consent?: ConsentState | null;
+  onGrantConsent?: (draft: ConsentDraft) => Promise<void>;
 }
 
 export default function MeetingView({
@@ -53,7 +57,36 @@ export default function MeetingView({
   feedback = [],
   companyName,
   backHref,
+  consent = null,
+  onGrantConsent,
 }: MeetingViewProps) {
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [consentSaving, setConsentSaving] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
+
+  const granted = consent?.granted === true;
+
+  const confirmConsent = useCallback(
+    async (draft: ConsentDraft) => {
+      if (!onGrantConsent) return;
+      setConsentSaving(true);
+      setConsentError(null);
+      try {
+        await onGrantConsent(draft);
+        setConsentOpen(false);
+      } catch (error) {
+        // Left open with the reason. Closing on failure would look like
+        // success, and the operator would reach for a microphone that is
+        // still shut.
+        setConsentError(
+          error instanceof Error ? error.message : 'Could not record consent.',
+        );
+      } finally {
+        setConsentSaving(false);
+      }
+    },
+    [onGrantConsent],
+  );
   /**
    * Local only, and only for this story.
    *
@@ -90,6 +123,30 @@ export default function MeetingView({
      * children stay at content height and the page scrolls instead.
      */
     <div className="flex h-[calc(100vh-4rem)] min-h-0 flex-col gap-4 p-4">
+      {/*
+        AC-4: a revoked or absent consent is a blocking notice, not a subtle
+        one. `consent === null` means "still reading" and shows nothing —
+        flashing a compliance warning during a page load would train operators
+        to dismiss it without reading.
+      */}
+      {consent !== null && !granted && (
+        <div
+          role="alert"
+          className="shrink-0 rounded border border-amber-400/40 bg-amber-400/10 px-4 py-2 text-sm text-amber-200"
+        >
+          Recording is off: this meeting has no active consent. Record consent
+          before opening the microphone.
+        </div>
+      )}
+
+      <ConsentModal
+        open={consentOpen}
+        onCancel={() => setConsentOpen(false)}
+        onConfirm={confirmConsent}
+        saving={consentSaving}
+        error={consentError}
+      />
+
       {/*
         The back link lives here, not above this component.
         
@@ -142,7 +199,10 @@ export default function MeetingView({
         </div>
 
         <div className="min-h-0 min-w-0">
-          <RightRail />
+          <RightRail
+            consentGranted={granted}
+            onRecordConsent={() => setConsentOpen(true)}
+          />
         </div>
       </div>
     </div>
