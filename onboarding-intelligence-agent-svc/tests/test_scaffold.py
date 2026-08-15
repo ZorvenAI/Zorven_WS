@@ -117,6 +117,7 @@ IMPLEMENTED |= {"app.api.deps", "app.api.schemas"}
 IMPLEMENTED |= {
     "app.circuit_breaker.breaker",
     "app.providers.llm",
+    "app.providers.stt",  # F-05: STT v2 streaming adapter
     "app.logic.prep_executor",
     "app.services.backend_client",
     "app.api.ws",  # C-04: the IG-10 gate only; F-04 owns the protocol

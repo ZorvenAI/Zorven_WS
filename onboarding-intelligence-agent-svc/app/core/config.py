@@ -82,6 +82,13 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_LIVE_PER_COMPANY: int = 1
     PROCESS_TIMEOUT_S: int = 300
 
+    # ── STT v2 (F-05) ───────────────────────────────────────
+    STT_PROJECT: str = ""
+    STT_LOCATION: str = "global"
+    STT_RECOGNIZER: str = "_"
+    STT_STREAM_LIMIT_S: int = 280
+    PII_ENTITIES: str = ""
+
     # ── Secret references (never inline; Design §19) ─────────
     STT_CREDENTIALS: str = ""
     GEMINI_KEY: str = ""
