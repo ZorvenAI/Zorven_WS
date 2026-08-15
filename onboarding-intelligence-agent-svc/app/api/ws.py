@@ -193,44 +193,47 @@ async def _stt_loop(
                 await _emit_partial(websocket, session, result)
     except STTUnavailable as exc:
         logger.warning("stt_unavailable", reason=exc.reason, mode=exc.degraded_mode)
-        seq = await session.next_seq()
-        err = ErrorFrame(
-            seq=seq,
-            code="ERR-07",
-            message=exc.reason,
-            recoverable=True,
-        )
-        payload = await session.emit(err)
-        try:
-            await websocket.send_json(payload)
-        except Exception:  # noqa: BLE001
-            pass
+        await _send_error_frame(websocket, session, exc.reason)
     except WebSocketDisconnect:
         pass
     except Exception as exc:  # noqa: BLE001
         logger.error("stt_loop_failed", error=f"{type(exc).__name__}: {exc}")
+        await _send_error_frame(
+            websocket, session, "Transcription temporarily unavailable."
+        )
+
+
+async def _send_error_frame(
+    websocket: WebSocket, session: LiveSessionManager, message: str
+) -> None:
+    """Best-effort ERR-07 delivery; swallows failures (Redis may be down)."""
+    try:
         seq = await session.next_seq()
         err = ErrorFrame(
             seq=seq,
             code="ERR-07",
-            message="Transcription temporarily unavailable.",
+            message=message,
             recoverable=True,
         )
         payload = await session.emit(err)
-        try:
-            await websocket.send_json(payload)
-        except Exception:  # noqa: BLE001
-            pass
+        await websocket.send_json(payload)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 async def _emit_partial(
     websocket: WebSocket, session: LiveSessionManager, result: STTResult
 ) -> None:
     """AC-1: partials within 2 s, no LLM/redaction pass."""
-    seq = await session.next_seq()
-    frame = TranscriptPartial(seq=seq, text=result.text, speaker=0)
-    payload = await session.emit(frame)
-    await websocket.send_json(payload)
+    try:
+        seq = await session.next_seq()
+        frame = TranscriptPartial(seq=seq, text=result.text, speaker=0)
+        payload = await session.emit(frame)
+        await websocket.send_json(payload)
+    except WebSocketDisconnect:
+        raise
+    except Exception:  # noqa: BLE001
+        logger.warning("emit_partial_failed")
 
 
 async def _emit_final(
@@ -243,7 +246,11 @@ async def _emit_final(
     the text), and the unredacted one goes to the client who is hearing the
     words live and does not benefit from seeing ``<PHONE_NUMBER>`` on screen.
     """
-    seq = await session.next_seq()
+    try:
+        seq = await session.next_seq()
+    except Exception:  # noqa: BLE001
+        logger.warning("emit_final_seq_failed")
+        return
 
     try:
         redacted = redact_text(result.text)
@@ -259,7 +266,10 @@ async def _emit_final(
         t_end=result.t_end,
         redaction_applied=redacted != result.text,
     )
-    await session.emit(buffered)
+    try:
+        await session.emit(buffered)
+    except Exception:  # noqa: BLE001
+        logger.warning("emit_final_buffer_failed", seq=seq)
 
     displayed = TranscriptFinal(
         seq=seq,

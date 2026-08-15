@@ -36,11 +36,14 @@ _ready = False
 
 
 def _ensure_engines() -> bool:
-    """Create the Presidio engines once. Returns True when available."""
+    """Create the Presidio engines once. Returns True when available.
+
+    Only latches ``_ready`` on success so a transient import failure
+    during a rolling deploy retries on the next call.
+    """
     global _analyzer, _anonymizer, _ready
     if _ready:
         return _analyzer is not None
-    _ready = True
 
     try:
         from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
@@ -84,6 +87,7 @@ def _ensure_engines() -> bool:
             supported_languages=["en"],
         )
         _anonymizer = AnonymizerEngine()
+        _ready = True
         logger.info("presidio_initialized")
         return True
     except Exception as exc:
