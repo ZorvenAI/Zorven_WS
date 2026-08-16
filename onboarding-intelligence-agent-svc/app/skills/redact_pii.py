@@ -50,6 +50,8 @@ def _ensure_engines() -> bool:
         from presidio_analyzer.nlp_engine import NlpArtifacts, NlpEngine
         from presidio_anonymizer import AnonymizerEngine
 
+        from collections.abc import Iterable, Iterator
+
         class _PatternNlpEngine(NlpEngine):
             """Satisfies the Presidio interface without spaCy.
 
@@ -61,22 +63,46 @@ def _ensure_engines() -> bool:
 
             engine_name = "pattern"
 
-            def process_text(self, text: str, language: str) -> NlpArtifacts:
+            def process_text(
+                self, text: str, language: str, **kwargs: Any
+            ) -> NlpArtifacts:
                 return NlpArtifacts(
                     entities=[],
-                    tokens=[],
+                    tokens=[],  # type: ignore[arg-type]
+                    tokens_indices=[],
                     lemmas=[],
-                    nlp_engine_name=self.engine_name,
+                    nlp_engine=self,
                     language=language,
                 )
 
             def process_batch(
-                self, texts: Any, language: str, **kwargs: Any
-            ) -> list[NlpArtifacts]:
-                return [self.process_text(t, language) for t in texts]
+                self,
+                texts: Iterable[str],
+                language: str,
+                batch_size: int = 1,
+                n_process: int = 1,
+                **kwargs: Any,
+            ) -> Iterator[tuple[str, NlpArtifacts]]:
+                for t in texts:
+                    yield t, self.process_text(t, language)
 
             def is_loaded(self) -> bool:
                 return True
+
+            def load(self) -> None:
+                pass
+
+            def get_supported_languages(self) -> list[str]:
+                return ["en"]
+
+            def get_supported_entities(self) -> list[str]:
+                return []
+
+            def is_punct(self, word: str, language: str) -> bool:
+                return False
+
+            def is_stopword(self, word: str, language: str) -> bool:
+                return False
 
         engine = _PatternNlpEngine()
         registry = RecognizerRegistry()
@@ -86,7 +112,7 @@ def _ensure_engines() -> bool:
             registry=registry,
             supported_languages=["en"],
         )
-        _anonymizer = AnonymizerEngine()
+        _anonymizer = AnonymizerEngine()  # type: ignore[no-untyped-call]
         _ready = True
         logger.info("presidio_initialized")
         return True
@@ -118,7 +144,10 @@ def redact_text(
     if not results:
         return text
 
-    return _anonymizer.anonymize(text=text, analyzer_results=results).text
+    return _anonymizer.anonymize(  # type: ignore[no-any-return]
+        text=text,
+        analyzer_results=results,
+    ).text
 
 
 def _configured_entities() -> list[str]:

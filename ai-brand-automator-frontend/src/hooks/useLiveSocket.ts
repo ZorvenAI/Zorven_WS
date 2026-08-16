@@ -83,7 +83,6 @@ export function useLiveSocket({
 
   useEffect(() => {
     if (!sessionId || !enabled) {
-      setStatus('idle');
       return;
     }
 

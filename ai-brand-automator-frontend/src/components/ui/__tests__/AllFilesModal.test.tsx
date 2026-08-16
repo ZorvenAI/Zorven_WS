@@ -9,7 +9,7 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AllFilesModal } from '../AllFilesModal';
 
 // Mock apiClient — the component imports it directly, not assetsApi

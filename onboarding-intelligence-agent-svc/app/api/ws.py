@@ -497,18 +497,18 @@ async def _handle_control(
 
     if frame_type == ClientFrameType.STOP.value:
         await _cancel_recovery(stt_state)
-        audio_q = stt_state.get("audio_q")
-        if audio_q is not None:
-            audio_q.put_nowait(None)
+        pending_q = stt_state.get("audio_q")
+        if pending_q is not None:
+            pending_q.put_nowait(None)
             stt_state["audio_q"] = None
-            task = stt_state.get("stt_task")
-            if task is not None and not task.done():
+            pending_task = stt_state.get("stt_task")
+            if pending_task is not None and not pending_task.done():
                 try:
-                    await asyncio.wait_for(task, timeout=5.0)
+                    await asyncio.wait_for(pending_task, timeout=5.0)
                 except (asyncio.TimeoutError, asyncio.CancelledError):
-                    task.cancel()
+                    pending_task.cancel()
                     try:
-                        await task
+                        await pending_task
                     except (asyncio.CancelledError, Exception):  # noqa: BLE001
                         pass
             stt_state["stt_task"] = None
