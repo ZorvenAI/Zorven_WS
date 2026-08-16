@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -96,6 +97,13 @@ class CircuitBreaker:
     _opened_at: float = 0.0
     _half_open_calls: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _on_state_change: Callable[[str, State, State], None] | None = field(
+        default=None, repr=False
+    )
+
+    def set_on_state_change(self, cb: Callable[[str, State, State], None]) -> None:
+        """Register ``cb(dependency_name, old_state, new_state)``."""
+        self._on_state_change = cb
 
     # ── State, with the timeout applied lazily ───────────────────────
 
@@ -201,17 +209,29 @@ class CircuitBreaker:
     # ── Internals (call with the lock held) ──────────────────────────
 
     def _open_locked(self, now: float) -> None:
+        prev = self._state
         self._state = State.OPEN
         self._opened_at = now
         self._failures.clear()
         self._successes = 0
         self._half_open_calls = 0
+        if self._on_state_change and prev is not State.OPEN:
+            try:
+                self._on_state_change(self.config.name, prev, State.OPEN)
+            except Exception:  # noqa: BLE001
+                pass
 
     def _reset_locked(self) -> None:
+        prev = self._state
         self._state = State.CLOSED
         self._failures.clear()
         self._successes = 0
         self._half_open_calls = 0
+        if self._on_state_change and prev is not State.CLOSED:
+            try:
+                self._on_state_change(self.config.name, prev, State.CLOSED)
+            except Exception:  # noqa: BLE001
+                pass
 
     def reset(self) -> None:
         """Force back to CLOSED. For tests and operator intervention only."""

@@ -47,11 +47,15 @@ from starlette.websockets import WebSocketDisconnect
 from app.api.schemas import (
     ClientFrameType,
     ErrorFrame,
+    MarkQuestionFrame,
+    RecoveryFrame,
     ResumeFrame,
     StartFrame,
     TranscriptFinal,
     TranscriptPartial,
 )
+from app.circuit_breaker.breaker import BreakerRegistry, State
+from app.events.catalog import EventType
 from app.core.logging import get_logger
 from app.logic.consent_gate import (
     ConsentState,
@@ -174,12 +178,17 @@ async def _stt_loop(
     *,
     codec: str,
     sample_rate: int,
+    stt_state: dict[str, Any],
 ) -> None:
     """Background task: feed audio to STT, emit frames.
 
     Partials go to the client as-is — no LLM, no redaction (§4.3).
     Finals are redacted before buffering (IG-04/SKL-OIA-16) but sent
     unredacted to the client who is hearing the conversation live.
+
+    When STT becomes unavailable (circuit breaker opens), this task sets
+    the session mode to RECORD_ONLY, sends ERR-07, and spawns a recovery
+    task that periodically probes STT (F-06 §18.2).
     """
     try:
         async for result in stt.stream(
@@ -193,14 +202,38 @@ async def _stt_loop(
                 await _emit_partial(websocket, session, result)
     except STTUnavailable as exc:
         logger.warning("stt_unavailable", reason=exc.reason, mode=exc.degraded_mode)
+        await session.set_mode(LiveSessionManager.MODE_RECORD_ONLY)
         await _send_error_frame(websocket, session, exc.reason)
+        recovery = asyncio.create_task(
+            _stt_recovery_task(
+                websocket,
+                session,
+                stt,
+                codec=codec,
+                sample_rate=sample_rate,
+                stt_state=stt_state,
+            )
+        )
+        stt_state["recovery_task"] = recovery
     except WebSocketDisconnect:
         pass
     except Exception as exc:  # noqa: BLE001
         logger.error("stt_loop_failed", error=f"{type(exc).__name__}: {exc}")
+        await session.set_mode(LiveSessionManager.MODE_RECORD_ONLY)
         await _send_error_frame(
             websocket, session, "Transcription temporarily unavailable."
         )
+        recovery = asyncio.create_task(
+            _stt_recovery_task(
+                websocket,
+                session,
+                stt,
+                codec=codec,
+                sample_rate=sample_rate,
+                stt_state=stt_state,
+            )
+        )
+        stt_state["recovery_task"] = recovery
 
 
 async def _send_error_frame(
@@ -218,6 +251,98 @@ async def _send_error_frame(
         payload = await session.emit(err)
         await websocket.send_json(payload)
     except Exception:  # noqa: BLE001
+        pass
+
+
+async def _send_recovery_frame(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    dependency: str,
+    message: str,
+) -> None:
+    """Best-effort recovery notification; swallows failures."""
+    try:
+        seq = await session.next_seq()
+        frame = RecoveryFrame(
+            seq=seq,
+            dependency=dependency,
+            message=message,
+        )
+        payload = await session.emit(frame)
+        await websocket.send_json(payload)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def _stt_recovery_task(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    stt: STTAdapter,
+    *,
+    codec: str,
+    sample_rate: int,
+    stt_state: dict[str, Any],
+) -> None:
+    """Periodically probe STT until the breaker closes (F-06 §18.2).
+
+    After ``reset_timeout_seconds`` (60 s by default), the breaker moves to
+    HALF_OPEN and allows a trial call. If the probe succeeds, the breaker
+    closes, mode returns to NORMAL, a recovery frame is sent, and a new
+    STT loop is spawned with a fresh audio queue.
+    """
+    registry: BreakerRegistry | None = getattr(websocket.app.state, "breakers", None)
+    breaker = registry.get("stt") if registry else None
+    poll_s = float(breaker.config.reset_timeout_seconds if breaker else 60)
+
+    try:
+        while True:
+            await asyncio.sleep(poll_s)
+
+            if breaker and breaker.state is State.OPEN:
+                continue
+
+            async def _probe_audio() -> AsyncIterator[bytes]:
+                yield b"\x00" * 320
+                return
+
+            try:
+                async for _ in stt.stream(
+                    _probe_audio(), sample_rate=sample_rate, codec=codec
+                ):
+                    break
+            except STTUnavailable:
+                logger.info("stt_recovery_probe_failed")
+                continue
+            except Exception:  # noqa: BLE001
+                logger.info("stt_recovery_probe_error")
+                continue
+
+            await session.set_mode(LiveSessionManager.MODE_NORMAL)
+            await _send_recovery_frame(
+                websocket,
+                session,
+                "stt",
+                "Live transcription resumed.",
+            )
+            logger.info("stt_recovered")
+
+            audio_q: asyncio.Queue[bytes | None] = asyncio.Queue()
+            task = asyncio.create_task(
+                _stt_loop(
+                    websocket,
+                    session,
+                    stt,
+                    audio_q,
+                    codec=codec,
+                    sample_rate=sample_rate,
+                    stt_state=stt_state,
+                )
+            )
+            stt_state["audio_q"] = audio_q
+            stt_state["stt_task"] = task
+            task.add_done_callback(lambda _: stt_state.update(audio_q=None))
+            return
+    except asyncio.CancelledError:
         pass
 
 
@@ -346,6 +471,7 @@ async def _handle_control(
                 audio_q,
                 codec=start.codec,
                 sample_rate=start.sample_rate,
+                stt_state=stt_state,
             )
         )
         stt_state["audio_q"] = audio_q
@@ -376,6 +502,20 @@ async def _handle_control(
                         pass
             stt_state["stt_task"] = None
         logger.info("stt_stopped")
+        return
+
+    if frame_type == ClientFrameType.MARK_QUESTION.value:
+        try:
+            mark = MarkQuestionFrame(**frame)
+        except ValidationError:
+            logger.info("live_mark_question_malformed")
+            return
+        await session.mark_question(mark.question_id, mark.action)
+        logger.info(
+            "mark_question_stored",
+            question_id=mark.question_id,
+            action=mark.action,
+        )
         return
 
     if frame_type == ClientFrameType.RESUME.value:
@@ -431,7 +571,46 @@ async def _hold(
         else None
     )
 
-    stt_state: dict[str, Any] = {"audio_q": None, "stt_task": None}
+    stt_state: dict[str, Any] = {
+        "audio_q": None,
+        "stt_task": None,
+        "recovery_task": None,
+    }
+
+    events = getattr(websocket.app.state, "events", None)
+    breaker_registry: BreakerRegistry | None = getattr(
+        websocket.app.state, "breakers", None
+    )
+    if breaker_registry and events:
+        stt_breaker = breaker_registry.get("stt")
+
+        def _on_breaker_change(dep: str, old: State, new: State) -> None:
+            if new is State.OPEN:
+                event_type = EventType.AGENT_CIRCUIT_OPENED
+            elif new is State.CLOSED:
+                event_type = EventType.AGENT_CIRCUIT_CLOSED
+            else:
+                return
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(
+                    events.emit(
+                        event_type,
+                        tenant_id=verdict.tenant_id,
+                        correlation_id=session_id,
+                        session_id=session_id,
+                        payload={
+                            "dependency": dep,
+                            "from_state": old.value,
+                            "to_state": new.value,
+                        },
+                        outcome="DEGRADED" if new is State.OPEN else "SUCCESS",
+                    )
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+        stt_breaker.set_on_state_change(_on_breaker_change)
 
     try:
         while True:
@@ -479,10 +658,11 @@ async def _hold(
         audio_q = stt_state.get("audio_q")
         if audio_q is not None:
             audio_q.put_nowait(None)
-        task = stt_state.get("stt_task")
-        if task is not None and not task.done():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+        for key in ("stt_task", "recovery_task"):
+            task = stt_state.get(key)
+            if task is not None and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass

@@ -28,7 +28,9 @@
 
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { AlertTriangle, ArrowLeft } from 'lucide-react';
+
+import { useLiveSocket } from '@/hooks/useLiveSocket';
 
 import AgentFeedbackStream, {
   type FeedbackItem,
@@ -114,6 +116,11 @@ export default function MeetingView({
     });
   }, []);
 
+  const socket = useLiveSocket({
+    sessionId: sessionId ?? null,
+    enabled: granted,
+  });
+
   return (
     /*
      * A fixed-height grid rather than a page that grows.
@@ -139,6 +146,17 @@ export default function MeetingView({
         >
           Recording is off: this meeting has no active consent. Record consent
           before opening the microphone.
+        </div>
+      )}
+
+      {socket.status === 'degraded' && socket.error && (
+        <div
+          role="status"
+          data-testid="degraded-banner"
+          className="shrink-0 flex items-center gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-200"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+          {socket.error.message}
         </div>
       )}
 

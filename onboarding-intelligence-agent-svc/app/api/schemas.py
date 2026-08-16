@@ -122,6 +122,8 @@ class ServerFrameType(str, Enum):
     NOTABLE_FACT = "notable_fact"
     COVERAGE = "coverage"
     ERROR = "error"
+    #: F-06 §18.2: sent when a circuit breaker closes and STT resumes.
+    RECOVERY = "recovery"
     #: Not in §10.2.3's list, and required by AC-3: "a resume attempt beyond
     #: the window is answered with an explicit resync frame, not a silent gap
     #: in seq". A client that cannot tell "nothing happened" from "we dropped
@@ -205,6 +207,12 @@ class ErrorFrame(ServerFrame):
     code: str
     message: str
     recoverable: bool
+
+
+class RecoveryFrame(ServerFrame):
+    type: Literal[ServerFrameType.RECOVERY] = ServerFrameType.RECOVERY
+    dependency: str
+    message: str
 
 
 class Resync(BaseModel):
