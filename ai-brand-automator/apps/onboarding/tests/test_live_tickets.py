@@ -120,7 +120,7 @@ def test_the_ticket_is_not_the_session_jwt(editor, session):
     api = APIClient()
     api.defaults["SERVER_NAME"] = "localhost"
     api.credentials(HTTP_AUTHORIZATION=f"Bearer {ticket}")
-    # weak-assert: ok — 401 through Kong (invalid JWT), 403 through DRF (no valid auth); both reject the ticket
+    # weak-assert: ok — 401 (Kong) or 403 (DRF); both reject
     assert api.get(SESSIONS).status_code in (401, 403)
 
 

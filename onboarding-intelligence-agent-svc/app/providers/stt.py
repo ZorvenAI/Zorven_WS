@@ -134,7 +134,8 @@ class GoogleSTTAdapter(STTAdapter):
             if self._credentials_path:
                 from google.oauth2 import service_account
 
-                kwargs["credentials"] = service_account.Credentials.from_service_account_file(  # type: ignore[no-untyped-call]
+                _load = service_account.Credentials.from_service_account_file
+                kwargs["credentials"] = _load(  # type: ignore[no-untyped-call]
                     self._credentials_path
                 )
             self._client = SpeechAsyncClient(**kwargs)
