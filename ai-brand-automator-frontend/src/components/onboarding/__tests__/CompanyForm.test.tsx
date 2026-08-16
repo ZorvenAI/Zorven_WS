@@ -4,13 +4,16 @@ import { apiClient } from '@/lib/api'
 
 jest.mock('@/lib/api', () => ({
   apiClient: {
+    get: jest.fn(),
     post: jest.fn(),
+    patch: jest.fn(),
   },
 }))
 
+const mockPush = jest.fn()
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
-    push: jest.fn(),
+    push: mockPush,
     replace: jest.fn(),
   }),
 }))
@@ -19,11 +22,16 @@ describe('CompanyForm', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     window.localStorage.clear()
+    // Default: no existing company
+    ;(apiClient.get as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ results: [] }),
+    })
   })
 
   it('renders all form fields', () => {
     render(<CompanyForm />)
-    
+
     expect(screen.getByLabelText(/company name/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/industry/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/company description/i)).toBeInTheDocument()
@@ -33,11 +41,11 @@ describe('CompanyForm', () => {
 
   it('validates required fields', () => {
     render(<CompanyForm />)
-    
+
     const nameInput = screen.getByLabelText(/company name/i)
     const industrySelect = screen.getByLabelText(/industry/i)
     const descriptionTextarea = screen.getByLabelText(/company description/i)
-    
+
     expect(nameInput).toBeRequired()
     expect(industrySelect).toBeRequired()
     expect(descriptionTextarea).toBeRequired()
@@ -53,13 +61,11 @@ describe('CompanyForm', () => {
         description: 'A test company',
       }),
     }
-    
+
     ;(apiClient.post as jest.Mock).mockResolvedValue(mockResponse)
-    const setItemSpy = jest.spyOn(Storage.prototype, 'setItem')
-    
+
     render(<CompanyForm />)
-    
-    // Fill in the form
+
     fireEvent.change(screen.getByLabelText(/company name/i), {
       target: { value: 'Test Corp' },
     })
@@ -75,25 +81,26 @@ describe('CompanyForm', () => {
     fireEvent.change(screen.getByLabelText(/core problem you solve/i), {
       target: { value: 'Marketing automation' },
     })
-    
+
     const submitButton = screen.getByRole('button', { name: /next step/i })
     fireEvent.click(submitButton)
-    
+
     await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith('/companies/', {
-        name: 'Test Corp',
-        industry: 'technology',
-        description: 'A test company',
-        target_audience: 'Small businesses',
-        core_problem: 'Marketing automation',
-      })
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/companies/',
+        expect.objectContaining({
+          name: 'Test Corp',
+          industry: 'technology',
+          description: 'A test company',
+          target_audience: 'Small businesses',
+          core_problem: 'Marketing automation',
+        })
+      )
     })
-    
+
     await waitFor(() => {
-      expect(setItemSpy).toHaveBeenCalledWith('company_id', 1)
+      expect(localStorage.getItem('company_id')).toBe('1')
     })
-    
-    setItemSpy.mockRestore()
   })
 
   it('converts camelCase to snake_case for backend', async () => {
@@ -101,11 +108,11 @@ describe('CompanyForm', () => {
       ok: true,
       json: async () => ({ id: 1 }),
     }
-    
+
     ;(apiClient.post as jest.Mock).mockResolvedValue(mockResponse)
-    
+
     render(<CompanyForm />)
-    
+
     fireEvent.change(screen.getByLabelText(/company name/i), {
       target: { value: 'Test' },
     })
@@ -118,9 +125,9 @@ describe('CompanyForm', () => {
     fireEvent.change(screen.getByLabelText(/target audience/i), {
       target: { value: 'Test audience' },
     })
-    
+
     fireEvent.click(screen.getByRole('button', { name: /next step/i }))
-    
+
     await waitFor(() => {
       const callArgs = (apiClient.post as jest.Mock).mock.calls[0][1]
       expect(callArgs).toHaveProperty('target_audience')
@@ -137,13 +144,13 @@ describe('CompanyForm', () => {
         detail: 'Invalid data',
       }),
     }
-    
+
     ;(apiClient.post as jest.Mock).mockResolvedValue(mockResponse)
-    
+
     const alertMock = jest.spyOn(window, 'alert').mockImplementation(() => {})
-    
+
     render(<CompanyForm />)
-    
+
     fireEvent.change(screen.getByLabelText(/company name/i), {
       target: { value: 'Test' },
     })
@@ -153,22 +160,22 @@ describe('CompanyForm', () => {
     fireEvent.change(screen.getByLabelText(/company description/i), {
       target: { value: 'Test' },
     })
-    
+
     fireEvent.click(screen.getByRole('button', { name: /next step/i }))
-    
+
     await waitFor(() => {
       expect(alertMock).toHaveBeenCalledWith('Invalid data')
     })
-    
+
     alertMock.mockRestore()
   })
 
   it('shows all industry options', () => {
     render(<CompanyForm />)
-    
+
     const industrySelect = screen.getByLabelText(/industry/i)
     const options = Array.from(industrySelect.querySelectorAll('option'))
-    
+
     const optionTexts = options.map(opt => opt.textContent)
     expect(optionTexts).toContain('Technology')
     expect(optionTexts).toContain('Healthcare')

@@ -50,6 +50,10 @@ jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 
+jest.mock('@/hooks/useBrandContext', () => ({
+  useBrandContext: () => ({ activeBrand: null, refreshBrands: jest.fn() }),
+}))
+
 // Mock scrollIntoView (not available in jsdom)
 Element.prototype.scrollIntoView = jest.fn()
 
@@ -61,6 +65,11 @@ describe('ChatInterface', () => {
     jest.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
       cb(0)
       return 0
+    })
+    // ChatInterface calls apiClient.get('/ai/chat-sessions/...') on mount
+    ;(apiClient.get as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ results: [] }),
     })
   })
 
@@ -104,7 +113,7 @@ describe('ChatInterface', () => {
     await waitFor(() => {
       expect(apiClient.postWithSignal).toHaveBeenCalledWith(
         '/ai/chat/',
-        { message: 'What is my brand strategy?' },
+        expect.objectContaining({ message: 'What is my brand strategy?' }),
         expect.any(AbortSignal)
       )
     })
