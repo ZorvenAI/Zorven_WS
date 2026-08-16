@@ -15,14 +15,14 @@ coverage checklist, I-03 playback deep-linking) can cite the exact moment.
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any, AsyncIterator
 
+from app.core.logging import get_logger
 from app.providers.llm import LLMProvider, LLMUnavailable
 from app.skills.base import StreamingSkill
 from app.skills.models import SkillContext
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _SYSTEM_PROMPT = """\
 You are an onboarding meeting analyst. You receive a batch of redacted \
@@ -87,9 +87,7 @@ class AnalyzeTranscriptStream(StreamingSkill):
         super().__init__(meta)
         self._llm = llm
 
-    async def stream(  # type: ignore[override]
-        self, context: SkillContext
-    ) -> AsyncIterator[dict[str, Any]]:
+    async def stream(self, context: SkillContext) -> AsyncIterator[dict[str, Any]]:
         segments = context.input_context.get("segments", [])
         questions = context.input_context.get("question_states", [])
         recording_id = context.input_context.get("recording_id", "")
@@ -160,10 +158,7 @@ class AnalyzeTranscriptStream(StreamingSkill):
         try:
             parsed = json.loads(cleaned)
         except (json.JSONDecodeError, ValueError):
-            logger.warning(
-                "skl_oia_04_bad_json",
-                response_len=len(response),
-            )
+            logger.warning("skl_oia_04_bad_json", extra_len=len(response))
             return {"attachments": [], "adhoc_questions": [], "notable_facts": []}
 
         if not isinstance(parsed, dict):

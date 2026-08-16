@@ -548,12 +548,10 @@ async def _run_analysis(
     )
 
     try:
-        chunks: list[dict[str, Any]] = []
-        async for chunk in asyncio.wait_for(
-            _consume_skill_stream(registry, context),
+        chunks = await asyncio.wait_for(
+            _collect_skill_stream(registry, context),
             timeout=5.0,
-        ):
-            chunks.append(chunk)
+        )
     except asyncio.TimeoutError:
         logger.warning(
             "analysis_timeout",
@@ -599,12 +597,14 @@ async def _run_analysis(
         await session.store_unmapped_batch(batch.segments)
 
 
-async def _consume_skill_stream(
+async def _collect_skill_stream(
     registry: SkillRegistry, context: SkillContext
-) -> AsyncIterator[dict[str, Any]]:
-    """Thin wrapper so asyncio.wait_for can timeout the skill stream."""
+) -> list[dict[str, Any]]:
+    """Collect the skill stream into a list so wait_for can timeout it."""
+    chunks: list[dict[str, Any]] = []
     async for chunk in registry.execute_stream("SKL-OIA-04", context):
-        yield chunk
+        chunks.append(chunk)
+    return chunks
 
 
 async def _send_degraded_frame(
