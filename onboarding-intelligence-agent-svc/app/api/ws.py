@@ -77,9 +77,11 @@ from app.logic.live_handshake import (
     expired,
 )
 from app.logic.live_lock import REFRESH_S, LiveLock, acquire
-from app.logic.live_session import LiveSessionManager
+from app.logic.live_session import LiveSessionManager, SegmentBatcher, SegmentBatch
 from app.providers.stt import STTAdapter, STTResult, STTUnavailable
+from app.skills.models import SkillContext, TenantContext, Origin
 from app.skills.redact_pii import redact_text, RedactionResult
+from app.skills.registry import SkillRegistry
 
 logger = get_logger(__name__)
 
@@ -157,7 +159,7 @@ async def live_websocket(websocket: WebSocket, session_id: str) -> None:
 
     await websocket.accept()
     try:
-        await _hold(websocket, verdict, lock, backend, session_id, ticket)
+        await _hold(websocket, verdict, lock, backend, session_id, ticket, precheck)
     finally:
         if lock is not None:
             await lock.release()
@@ -196,6 +198,8 @@ async def _stt_loop(
     """
     recording_id = str(stt_state.get("recording_id") or "")
     allowlist = stt_state.get("allowlist") or []
+    batcher = stt_state.get("batcher")
+    analysis_state = stt_state.get("analysis_state")
     try:
         async for result in stt.stream(
             _audio_from_queue(audio_q),
@@ -209,6 +213,8 @@ async def _stt_loop(
                     result,
                     recording_id=recording_id,
                     allowlist=allowlist,
+                    batcher=batcher,
+                    analysis_state=analysis_state,
                 )
             else:
                 await _emit_partial(websocket, session, result)
@@ -372,6 +378,8 @@ async def _emit_final(
     *,
     recording_id: str = "",
     allowlist: list[str] | None = None,
+    batcher: SegmentBatcher | None = None,
+    analysis_state: dict[str, Any] | None = None,
 ) -> None:
     """AC-4: persisted redacted, displayed unredacted.
 
@@ -381,6 +389,7 @@ async def _emit_final(
     words live and does not benefit from seeing ``<PHONE_NUMBER>`` on screen.
 
     G-01: emits EVT-103 with entity types (never text or values).
+    G-02: feeds finalized segments to the batcher for analysis.
     """
     try:
         seq = await session.next_seq()
@@ -431,6 +440,17 @@ async def _emit_final(
         entity_types=redaction.entity_types,
     )
 
+    if batcher is not None:
+        segment = {
+            "text": redaction.text,
+            "speaker": 0,
+            "t_start": result.t_start,
+            "t_end": result.t_end,
+        }
+        batch = batcher.add(segment)
+        if batch is not None:
+            _spawn_analysis(websocket, session, batch, analysis_state)
+
 
 async def _emit_evt103(
     websocket: WebSocket,
@@ -461,6 +481,148 @@ async def _emit_evt103(
         )
     except Exception:  # noqa: BLE001
         logger.warning("evt103_emission_failed", seq=seq)
+
+
+def _spawn_analysis(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    batch: SegmentBatch,
+    analysis_state: dict[str, Any] | None,
+) -> None:
+    """Fire-and-forget analysis task for a batch (G-02 AC-2).
+
+    Runs in a separate asyncio task so the STT pipeline is never blocked.
+    Only one analysis runs at a time — a new batch cancels any in-flight
+    task so orphaned tasks cannot accumulate.
+    """
+    if analysis_state is None:
+        return
+    prev = analysis_state.get("task")
+    if prev is not None and not prev.done():
+        prev.cancel()
+    task = asyncio.create_task(_run_analysis(websocket, session, batch, analysis_state))
+    analysis_state["task"] = task
+
+
+async def _run_analysis(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    batch: SegmentBatch,
+    analysis_state: dict[str, Any],
+) -> None:
+    """Map a transcript batch onto prepared questions (G-02 AC-2).
+
+    AC-3: 5-second timeout — late results are discarded, not delayed.
+    AC-4: when the LLM breaker is open, analysis is skipped entirely;
+    transcription continues unaffected.
+    """
+    registry: SkillRegistry | None = analysis_state.get("skill_registry")
+    events = analysis_state.get("events")
+    breaker_registry: BreakerRegistry | None = analysis_state.get("breakers")
+
+    if registry is None:
+        return
+
+    llm_breaker = breaker_registry.get("llm") if breaker_registry else None
+    if llm_breaker and llm_breaker.state is State.OPEN:
+        if not analysis_state.get("degraded_sent"):
+            msg = llm_breaker.config.user_message or (
+                "Suggestions paused. Check questions off manually."
+            )
+            await _send_degraded_frame(websocket, session, msg)
+            analysis_state["degraded_sent"] = True
+        return
+
+    if analysis_state.get("degraded_sent"):
+        analysis_state["degraded_sent"] = False
+
+    context = SkillContext(
+        input_prompt="Map transcript to questions",
+        input_context={
+            "segments": batch.segments,
+            "question_states": await session.get_questions(),
+            "recording_id": batch.recording_id,
+        },
+        tenant_context=TenantContext(tenant_id=session.tenant_id, role="ADMIN"),
+        origin=Origin.INTERNAL,
+    )
+
+    try:
+        chunks = await asyncio.wait_for(
+            _collect_skill_stream(registry, context),
+            timeout=5.0,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "analysis_timeout",
+            session=session.session_id,
+            batch_first_t=batch.first_t,
+        )
+        if events:
+            try:
+                await events.emit(
+                    EventType.AGENT_FAILED,
+                    tenant_id=session.tenant_id,
+                    correlation_id=session.session_id,
+                    session_id=session.session_id,
+                    payload={
+                        "skill": "SKL-OIA-04",
+                        "reason": "timeout",
+                        "batch_first_t": batch.first_t,
+                        "batch_last_t": batch.last_t,
+                    },
+                    outcome="TIMEOUT",
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        return
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("analysis_failed", error=f"{type(exc).__name__}: {exc}")
+        return
+
+    has_attachment = False
+    for chunk in chunks:
+        chunk_type = chunk.get("type", "")
+        if chunk_type == "attachment":
+            has_attachment = True
+            qid = chunk.get("question_id", "")
+            evidence = chunk.get("evidence", [])
+            relevance = chunk.get("relevance", 0.0)
+            if qid and evidence:
+                await session.store_analysis_result(qid, evidence, relevance)
+        elif chunk_type == "notable_fact":
+            pass
+
+    if not has_attachment:
+        await session.store_unmapped_batch(batch.segments)
+
+
+async def _collect_skill_stream(
+    registry: SkillRegistry, context: SkillContext
+) -> list[dict[str, Any]]:
+    """Collect the skill stream into a list so wait_for can timeout it."""
+    chunks: list[dict[str, Any]] = []
+    async for chunk in registry.execute_stream("SKL-OIA-04", context):
+        chunks.append(chunk)
+    return chunks
+
+
+async def _send_degraded_frame(
+    websocket: WebSocket, session: LiveSessionManager, message: str
+) -> None:
+    """Send the LLM degraded-mode message once (AC-4)."""
+    try:
+        seq = await session.next_seq()
+        err = ErrorFrame(
+            seq=seq,
+            code="ERR-08",
+            message=message,
+            recoverable=True,
+        )
+        payload = await session.emit(err)
+        await websocket.send_json(payload)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 async def _cancel_recovery(stt_state: dict[str, Any]) -> None:
@@ -528,6 +690,10 @@ async def _handle_control(
             return
 
         stt_state["recording_id"] = start.recording_id
+
+        batcher_obj = stt_state.get("batcher")
+        if batcher_obj is not None:
+            batcher_obj.recording_id = start.recording_id
 
         audio_q: asyncio.Queue[bytes | None] = asyncio.Queue()
         task = asyncio.create_task(
@@ -610,6 +776,7 @@ async def _hold(
     backend: Any,
     session_id: str,
     ticket: str,
+    precheck_data: dict[str, Any] | None = None,
 ) -> None:
     """Keep the socket open while it remains authorised.
 
@@ -646,17 +813,49 @@ async def _hold(
         except Exception:  # noqa: BLE001
             logger.warning("set_allowlist_failed")
 
+    # G-02: store approved questions from precheck for analysis mapping
+    questions = []
+    if precheck_data and precheck_data.get("questions"):
+        questions = precheck_data["questions"]
+    if session is not None and questions:
+        try:
+            await session.set_questions(questions)
+        except Exception:  # noqa: BLE001
+            logger.warning("set_questions_failed")
+
+    # G-02: batcher and analysis state
+    from app.core.config import get_settings
+
+    cfg = get_settings()
+    batcher = SegmentBatcher(
+        window_s=cfg.BATCH_WINDOW_S,
+        min_duration_s=cfg.BATCH_MIN_DURATION_S,
+    )
+
+    skill_registry: SkillRegistry | None = getattr(
+        websocket.app.state, "skill_registry", None
+    )
+    events = getattr(websocket.app.state, "events", None)
+    breaker_registry: BreakerRegistry | None = getattr(
+        websocket.app.state, "breakers", None
+    )
+
+    analysis_state: dict[str, Any] = {
+        "skill_registry": skill_registry,
+        "events": events,
+        "breakers": breaker_registry,
+        "task": None,
+        "degraded_sent": False,
+    }
+
     stt_state: dict[str, Any] = {
         "audio_q": None,
         "stt_task": None,
         "recovery_task": None,
         "allowlist": allowlist,
+        "batcher": batcher,
+        "analysis_state": analysis_state,
     }
-
-    events = getattr(websocket.app.state, "events", None)
-    breaker_registry: BreakerRegistry | None = getattr(
-        websocket.app.state, "breakers", None
-    )
     _breaker_cb = None
     _breaker_ref = None
     if breaker_registry and events:
@@ -717,6 +916,11 @@ async def _hold(
                 await websocket.close(code=CLOSE_FORBIDDEN, reason=refusal.detail[:120])
                 return
 
+            # G-02: check batcher timer on each poll cycle
+            timer_batch = batcher.check_timer()
+            if timer_batch is not None and session is not None:
+                _spawn_analysis(websocket, session, timer_batch, analysis_state)
+
             try:
                 message = await asyncio.wait_for(websocket.receive(), timeout=poll_s)
             except asyncio.TimeoutError:
@@ -736,6 +940,27 @@ async def _hold(
     finally:
         if _breaker_ref is not None and _breaker_cb is not None:
             _breaker_ref.remove_on_state_change(_breaker_cb)
+
+        # G-02: flush remaining segments; let the final analysis finish
+        final_batch = batcher.flush()
+        if final_batch is not None and session is not None:
+            _spawn_analysis(websocket, session, final_batch, analysis_state)
+
+        analysis_task = analysis_state.get("task")
+        if analysis_task is not None and not analysis_task.done():
+            try:
+                await asyncio.wait_for(asyncio.shield(analysis_task), timeout=5.0)
+            except (
+                asyncio.TimeoutError,
+                asyncio.CancelledError,
+                Exception,
+            ):  # noqa: BLE001
+                analysis_task.cancel()
+                try:
+                    await analysis_task
+                except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                    pass
+
         audio_q = stt_state.get("audio_q")
         if audio_q is not None:
             audio_q.put_nowait(None)

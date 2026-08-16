@@ -22,7 +22,11 @@ from app.api.schemas import (
     TranscriptFinal,
     TranscriptPartial,
 )
-from app.logic.live_session import BUFFER_FRAMES, LiveSessionManager
+from app.logic.live_session import (
+    BUFFER_FRAMES,
+    LiveSessionManager,
+    SegmentBatcher,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -253,3 +257,165 @@ async def test_concurrent_emits_replay_in_seq_order(manager):
     replayed = [f["seq"] for f in frames]
     assert replayed == sorted(replayed), "concurrent emit broke replay order"
     assert replayed == list(range(1, 11))
+
+
+# ── G-02 · SegmentBatcher ────────────────────────────────────────────
+
+
+def _seg(text="hello", speaker=0, t_start=0.0, t_end=1.0):
+    return {"text": text, "speaker": speaker, "t_start": t_start, "t_end": t_end}
+
+
+def test_batch_fires_on_speaker_change():
+    """AC-1: a speaker change flushes the previous speaker's segments."""
+    batcher = SegmentBatcher(window_s=10.0, min_duration_s=0.4)
+
+    assert batcher.add(_seg(speaker=1, t_start=0.0, t_end=1.0)) is None
+    assert batcher.add(_seg(speaker=1, t_start=1.0, t_end=2.0)) is None
+
+    batch = batcher.add(_seg(speaker=2, t_start=2.5, t_end=3.5))
+    assert batch is not None
+    assert len(batch.segments) == 2
+    assert all(s["speaker"] == 1 for s in batch.segments)
+
+
+def test_fragment_not_dispatched_alone():
+    """AC-1: a batch shorter than 400 ms is never dispatched alone."""
+    batcher = SegmentBatcher(window_s=10.0, min_duration_s=0.4)
+
+    assert batcher.add(_seg(speaker=1, t_start=0.0, t_end=0.3)) is None
+    batch = batcher.add(_seg(speaker=2, t_start=0.5, t_end=1.0))
+    assert batch is None, "a 300 ms batch must not be dispatched"
+
+
+def test_batch_carries_evidence_spans():
+    """Batch segments carry t_start/t_end for evidence."""
+    batcher = SegmentBatcher(recording_id="rec-42", window_s=10.0, min_duration_s=0.1)
+    batcher.add(_seg(t_start=10.0, t_end=11.0))
+    batcher.add(_seg(t_start=11.0, t_end=12.5))
+    batch = batcher.flush()
+
+    assert batch is not None
+    assert batch.recording_id == "rec-42"
+    assert batch.first_t == 10.0
+    assert batch.last_t == 12.5
+
+
+def test_batch_flush_on_session_end():
+    """Remaining segments are not lost when the session ends."""
+    batcher = SegmentBatcher(window_s=10.0, min_duration_s=0.1)
+    batcher.add(_seg(t_start=5.0, t_end=6.0))
+    batcher.add(_seg(t_start=6.0, t_end=7.0))
+
+    batch = batcher.flush()
+    assert batch is not None
+    assert len(batch.segments) == 2
+
+    assert batcher.flush() is None
+
+
+def test_check_timer_fires_when_window_expired(monkeypatch):
+    """check_timer() fires the batch when the window has elapsed."""
+    import time as time_mod
+
+    fake_time = [100.0]
+    monkeypatch.setattr(time_mod, "monotonic", lambda: fake_time[0])
+
+    batcher = SegmentBatcher(window_s=3.0, min_duration_s=0.1)
+    batcher.add(_seg(t_start=0.0, t_end=1.0))
+
+    assert batcher.check_timer() is None
+
+    fake_time[0] = 104.0
+    batch = batcher.check_timer()
+    assert batch is not None
+    assert len(batch.segments) == 1
+
+
+def test_recording_id_setter():
+    """The batcher's recording_id can be updated after construction."""
+    batcher = SegmentBatcher()
+    assert batcher.recording_id == ""
+    batcher.recording_id = "rec-99"
+    batcher.add(_seg(t_start=0.0, t_end=1.0))
+    batch = batcher.flush()
+    assert batch.recording_id == "rec-99"
+
+
+# ── G-02 · Question state in Redis ───────────────────────────────────
+
+
+async def test_set_and_get_questions(manager):
+    """Redis round-trip for question state."""
+    questions = [
+        {
+            "id": 10,
+            "text": "What is your company name?",
+            "target_field": "name",
+            "workflow_target": "WF1",
+            "status": "OPEN",
+        },
+        {
+            "id": 20,
+            "text": "What is your founding year?",
+            "target_field": "founded_year",
+            "workflow_target": "WF1",
+            "status": "OPEN",
+        },
+    ]
+    await manager.set_questions(questions)
+    result = await manager.get_questions()
+
+    assert len(result) == 2
+    ids = {q["id"] for q in result}
+    assert ids == {"10", "20"}
+    texts = {q["text"] for q in result}
+    assert "What is your company name?" in texts
+    assert "What is your founding year?" in texts
+
+
+async def test_store_analysis_result_updates_evidence(manager):
+    """Evidence is written to the question hash by analysis."""
+    await manager.set_questions(
+        [
+            {"id": 10, "text": "What is your company name?", "target_field": "name"},
+        ]
+    )
+
+    evidence = [{"recording_id": "r-1", "t_start": 10.0, "t_end": 12.0}]
+    await manager.store_analysis_result("10", evidence, 0.85)
+
+    questions = await manager.get_questions()
+    q = questions[0]
+    assert q["source"] == "analysis"
+    assert q["relevance"] == 0.85
+    assert len(q["evidence"]) == 1
+    assert q["evidence"][0]["recording_id"] == "r-1"
+
+
+async def test_question_state_survives_reconnect(manager):
+    """Questions stored in Redis survive a socket drop (new manager instance)."""
+    await manager.set_questions(
+        [
+            {"id": 5, "text": "Target audience?", "target_field": "audience"},
+        ]
+    )
+
+    manager2 = LiveSessionManager(
+        redis=manager.redis,
+        tenant_id=manager.tenant_id,
+        session_id=manager.session_id,
+    )
+    questions = await manager2.get_questions()
+    assert len(questions) == 1
+    assert questions[0]["text"] == "Target audience?"
+
+
+async def test_store_unmapped_batch(manager):
+    """Unmapped batch stored for G-05."""
+    segments = [{"text": "We also sell online.", "t_start": 5.0, "t_end": 6.0}]
+    await manager.store_unmapped_batch(segments)
+
+    key = manager._keys().unmapped(manager.session_id)
+    length = await manager.redis.client.llen(key)
+    assert length == 1

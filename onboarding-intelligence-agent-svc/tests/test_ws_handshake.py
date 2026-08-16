@@ -301,6 +301,13 @@ def test_the_caller_supplied_tenant_is_not_what_authorises(client, django_stub):
     with open_socket(client, tenant_id="") as socket:
         socket.send_text("authorised on the ticket, not the query string")
 
+        django_stub["body"]["consent"] = {
+            "present": True,
+            "active": False,
+            "consent_id": "c-1",
+        }
+        expect_close(socket)
+
     # The backend was consulted, which is the whole point — the old behaviour
     # refused without asking.
     assert django_stub["requests"], "the handshake never reached Django"
@@ -328,16 +335,28 @@ def test_an_approved_questionnaire_holds_the_socket_open(client, django_stub):
         # correctly, which is a hung suite rather than a failed assertion.
         socket.send_text("still here")
 
+        django_stub["body"]["consent"] = {
+            "present": True,
+            "active": False,
+            "consent_id": "c-1",
+        }
+        expect_close(socket)
+
 
 def test_the_tenant_is_sent_to_django(client, django_stub):
     django_stub["body"] = {"approved": True}
 
     with open_socket(client, tenant_id="tenant-42") as socket:
-        # `receive_text()` used to be right here, because the gate closed the
-        # socket immediately. F-04 holds it open, and Starlette's test client
-        # has no receive timeout — waiting for a close that correctly never
-        # comes is a hung suite, not a failed assertion.
         socket.send_text("open")
+
+        # Trigger server-side close via consent revocation so _hold exits
+        # cleanly (see test_second_socket_rejected_4409 for the rationale).
+        django_stub["body"]["consent"] = {
+            "present": True,
+            "active": False,
+            "consent_id": "c-1",
+        }
+        expect_close(socket)
 
     assert django_stub["requests"][0]["tenant"] == "tenant-42"
     assert "/sessions/sess-1/live-precheck/" in django_stub["requests"][0]["path"]
@@ -652,6 +671,13 @@ def test_a_resume_replays_the_frames_the_client_missed(client, django_stub):
         first = socket.receive_json()
         second = socket.receive_json()
 
+        django_stub["body"]["consent"] = {
+            "present": True,
+            "active": False,
+            "consent_id": "c-1",
+        }
+        expect_close(socket)
+
     assert first["seq"] < second["seq"], "frames replayed out of order"
     assert first["text"] == "chunk 3"
     assert second["text"] == "chunk 4"
@@ -668,6 +694,13 @@ def test_a_resume_beyond_the_buffer_gets_a_resync_frame(client, django_stub):
     with open_socket(client, session_id=session_id) as socket:
         socket.send_json({"type": "resume", "last_seq": 900})
         answer = socket.receive_json()
+
+        django_stub["body"]["consent"] = {
+            "present": True,
+            "active": False,
+            "consent_id": "c-1",
+        }
+        expect_close(socket)
 
     assert answer["type"] == "resync"
     assert "from_seq" in answer

@@ -1648,6 +1648,7 @@ def live_precheck(request, pk):
     try:
         session = (
             OnboardingSession.objects.select_related("questionnaire", "company")
+            .prefetch_related("questionnaire__questions")
             .filter(tenant=tenant, pk=pk)
             .first()
         )
@@ -1688,6 +1689,21 @@ def live_precheck(request, pk):
         )
 
     approved = questionnaire.status == QuestionnaireStatus.APPROVED
+
+    questions = []
+    if approved:
+        questions = [
+            {
+                "id": q.pk,
+                "text": q.text,
+                "order": q.order,
+                "target_field": q.target_field,
+                "workflow_target": q.workflow_target,
+                "status": q.status,
+            }
+            for q in questionnaire.questions.order_by("order", "id")
+        ]
+
     return Response(
         {
             "approved": approved,
@@ -1696,6 +1712,8 @@ def live_precheck(request, pk):
             "questionnaire_id": questionnaire.pk,
             "company_name": company_name,
             "consent": _consent_block(session),
+            "auth": auth,
+            "questions": questions,
             "reason": (
                 ""
                 if approved

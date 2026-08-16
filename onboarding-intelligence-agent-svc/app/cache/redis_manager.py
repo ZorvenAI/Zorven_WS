@@ -128,6 +128,10 @@ class TenantKeys:
         """
         return f"{self._scope}live:{session_id}:frames"
 
+    def unmapped(self, session_id: str) -> str:
+        """List · 4 h · transcript batches that mapped to no question (G-05)."""
+        return f"{self._scope}live:{session_id}:unmapped"
+
     def live_seq(self, session_id: str) -> str:
         """String · 4 h · the monotonic counter behind AC-4.
 

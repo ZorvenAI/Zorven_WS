@@ -184,6 +184,7 @@ IMPLEMENTED_BODIES = {
     "app.skills.research_business",  # C-02
     "app.skills.generate_questionnaire",  # C-03
     "app.skills.redact_pii",  # F-05: PII redaction (SKL-OIA-16)
+    "app.skills.analyze_transcript_stream",  # G-02: SKL-OIA-04
 }
 
 
@@ -283,6 +284,7 @@ def test_the_implemented_body_list_stays_honest():
     import asyncio
     import importlib
 
+    from app.skills.base import StreamingSkill
     from app.skills.models import SkillContext, SkillMeta, TenantContext
 
     for dotted in IMPLEMENTED_BODIES:
@@ -296,6 +298,21 @@ def test_the_implemented_body_list_stays_honest():
             tenant_context=TenantContext(tenant_id="t-1", role="ADMIN"),
             input_context={"company_name": "Acme"},
         )
-        result = asyncio.run(skill.run(context))
 
-        assert result is not None, f"{dotted} is listed as implemented but returns None"
+        if isinstance(skill, StreamingSkill):
+
+            async def _drain():
+                chunks = []
+                async for chunk in skill.stream(context):
+                    chunks.append(chunk)
+                return chunks
+
+            result = asyncio.run(_drain())
+            assert (
+                result is not None
+            ), f"{dotted} is listed as implemented but returns None"
+        else:
+            result = asyncio.run(skill.run(context))
+            assert (
+                result is not None
+            ), f"{dotted} is listed as implemented but returns None"

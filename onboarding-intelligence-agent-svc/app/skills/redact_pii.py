@@ -158,7 +158,7 @@ def redact_text(
 
     entity_types = sorted(set(r.entity_type for r in results))
 
-    redacted = _anonymizer.anonymize(  # type: ignore[no-any-return]
+    redacted = _anonymizer.anonymize(
         text=text,
         analyzer_results=results,
     ).text
