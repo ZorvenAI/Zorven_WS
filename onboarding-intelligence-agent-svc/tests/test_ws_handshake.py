@@ -13,6 +13,7 @@ decision, so controlling it is controlling the test.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -110,7 +111,7 @@ def live_company(request):
     than failed, and for a reason that had nothing to do with what was being
     tested.
     """
-    return f"c-{abs(hash(request.node.name)) % 100000}"
+    return f"c-{hashlib.md5(request.node.name.encode()).hexdigest()[:8]}"
 
 
 @pytest.fixture
@@ -508,6 +509,17 @@ def test_second_socket_rejected_4409(client, django_stub):
         # satisfy "only one socket" and lose the meeting.
         first.send_text("still holding")
 
+        # _hold re-checks consent every poll tick. Revoking it here makes
+        # the handler close the socket itself, preventing a deadlock
+        # between Starlette's TestClient cleanup and the in-flight HTTP
+        # calls _hold makes during its consent loop.
+        django_stub["body"]["consent"] = {
+            "present": True,
+            "active": False,
+            "consent_id": "c-1",
+        }
+        expect_close(first)
+
 
 def test_the_first_socket_releases_its_claim_when_it_ends(client, django_stub):
     """The control. A lock never released is a company locked out of its own
@@ -675,3 +687,12 @@ def test_a_malformed_control_frame_does_not_end_the_meeting(client, django_stub)
         socket.send_json({"type": "resume"})  # missing last_seq
         # Still open: sending again would raise if the server had closed.
         socket.send_text("still here")
+
+        # Trigger server-side close via consent revocation so _hold exits
+        # cleanly (see test_second_socket_rejected_4409 for the rationale).
+        django_stub["body"]["consent"] = {
+            "present": True,
+            "active": False,
+            "consent_id": "c-1",
+        }
+        expect_close(socket)
