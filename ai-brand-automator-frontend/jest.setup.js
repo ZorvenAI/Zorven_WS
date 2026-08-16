@@ -5,6 +5,7 @@ import '@testing-library/jest-dom'
 // pipeline. Mock it globally so any test importing a component that
 // transitively depends on it (ChatInterface → MarkdownMessage) can run.
 jest.mock('react-markdown', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require('react')
   return {
     __esModule: true,
