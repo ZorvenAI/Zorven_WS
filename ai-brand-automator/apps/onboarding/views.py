@@ -1647,7 +1647,7 @@ def live_precheck(request, pk):
 
     try:
         session = (
-            OnboardingSession.objects.select_related("questionnaire")
+            OnboardingSession.objects.select_related("questionnaire", "company")
             .filter(tenant=tenant, pk=pk)
             .first()
         )
@@ -1666,6 +1666,10 @@ def live_precheck(request, pk):
     # it on a stale half, which is the argument this endpoint was built on.
     auth = _ticket_block(request, session)
 
+    company_name = ""
+    if session.company is not None:
+        company_name = getattr(session.company, "name", "") or ""
+
     questionnaire = session.questionnaire
     if questionnaire is None:
         return Response(
@@ -1673,6 +1677,7 @@ def live_precheck(request, pk):
                 "approved": False,
                 "session_status": session.status,
                 "questionnaire_status": None,
+                "company_name": company_name,
                 "consent": _consent_block(session),
                 "auth": auth,
                 "reason": (
@@ -1689,6 +1694,7 @@ def live_precheck(request, pk):
             "session_status": session.status,
             "questionnaire_status": questionnaire.status,
             "questionnaire_id": questionnaire.pk,
+            "company_name": company_name,
             "consent": _consent_block(session),
             "reason": (
                 ""

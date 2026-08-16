@@ -231,6 +231,108 @@ def test_emitter_joins_a_real_span_when_the_sdk_is_configured():
 # ── F-01 · EVT-101 ───────────────────────────────────────────────────
 
 
+# ── G-01 · EVT-103 emission tests ─────────────────────────────────
+
+
+def test_evt103_with_person_redaction_accepted():
+    """G-01 AC-4: entity types are carried, never entity values."""
+    payload = {
+        "recording_id": "r_meeting_01",
+        "seq": 42,
+        "redaction_applied": True,
+        "entity_types": ["PERSON"],
+    }
+    assert_no_pii(EventType.TRANSCRIPT_SEGMENT_FINALIZED, payload)
+    event = AgentEvent(
+        **envelope(event_type=EventType.TRANSCRIPT_SEGMENT_FINALIZED, payload=payload)
+    )
+    assert event.payload["entity_types"] == ["PERSON"]
+    assert event.payload["redaction_applied"] is True
+    assert "text" not in event.payload
+
+
+def test_evt103_with_multiple_entity_types():
+    payload = {
+        "recording_id": "r_02",
+        "seq": 100,
+        "redaction_applied": True,
+        "entity_types": ["EMAIL_ADDRESS", "PERSON", "PHONE_NUMBER"],
+    }
+    assert_no_pii(EventType.TRANSCRIPT_SEGMENT_FINALIZED, payload)
+    event = AgentEvent(
+        **envelope(event_type=EventType.TRANSCRIPT_SEGMENT_FINALIZED, payload=payload)
+    )
+    assert len(event.payload["entity_types"]) == 3
+
+
+def test_evt103_no_redaction_applied():
+    """When no PII found, redaction_applied is False and entity_types is empty."""
+    payload = {
+        "recording_id": "r_03",
+        "seq": 7,
+        "redaction_applied": False,
+        "entity_types": [],
+    }
+    assert_no_pii(EventType.TRANSCRIPT_SEGMENT_FINALIZED, payload)
+    event = AgentEvent(
+        **envelope(event_type=EventType.TRANSCRIPT_SEGMENT_FINALIZED, payload=payload)
+    )
+    assert event.payload["redaction_applied"] is False
+    assert event.payload["entity_types"] == []
+
+
+def test_evt103_rejects_text_in_payload():
+    """The segment text must never appear in the event stream."""
+    with pytest.raises(PIILeakError):
+        assert_no_pii(
+            EventType.TRANSCRIPT_SEGMENT_FINALIZED,
+            {
+                "recording_id": "r_04",
+                "seq": 5,
+                "text": "Sarah mentioned the merger.",
+            },
+        )
+
+
+def test_evt103_rejects_entity_values_in_payload():
+    """Entity values (the actual PII text) must never appear."""
+    with pytest.raises(PIILeakError):
+        assert_no_pii(
+            EventType.TRANSCRIPT_SEGMENT_FINALIZED,
+            {
+                "recording_id": "r_05",
+                "seq": 5,
+                "entity_values": ["Sarah", "555-867-5309"],
+            },
+        )
+
+
+def test_evt103_serialises_for_kafka():
+    """The event round-trips through JSON without losing entity_types."""
+    import json
+
+    payload = {
+        "recording_id": "r_06",
+        "seq": 814,
+        "redaction_applied": True,
+        "entity_types": ["LOCATION", "PERSON"],
+    }
+    event = AgentEvent(
+        **envelope(
+            event_type=EventType.TRANSCRIPT_SEGMENT_FINALIZED,
+            payload=payload,
+            session_id=uuid.uuid4(),
+        )
+    )
+    body = json.loads(json.dumps(event.model_dump(mode="json")))
+    assert body["payload"]["entity_types"] == ["LOCATION", "PERSON"]
+    assert body["payload"]["redaction_applied"] is True
+    assert "text" not in body["payload"]
+
+
+# ── F-01 · EVT-101 ───────────────────────────────────────────────────
+
+
 def test_evt101_carries_hash_not_name():
     """The card's named case, on the agent's side of the contract.
 
