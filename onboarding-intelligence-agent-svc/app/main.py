@@ -24,6 +24,7 @@ from app.messaging.consumer import CommandConsumer
 from app.logic.prep_executor import PrepExecutor
 from app.messaging.producer import KafkaProducer
 from app.providers.llm import LLMProvider
+from app.circuit_breaker.breaker import BreakerRegistry
 from app.providers.stt import GoogleSTTAdapter
 from app.providers.tavily import TavilyProvider
 from app.services.backend_client import BackendClient
@@ -96,6 +97,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             detail="research will degrade to operator-provided information only",
         )
 
+    # F-06: shared registry so ws.py can wire the on_state_change callback.
+    app.state.breakers = BreakerRegistry()
+
     # F-05: STT adapter and IG-04 registration.
     app.state.stt = GoogleSTTAdapter(
         project=settings.STT_PROJECT,
@@ -103,6 +107,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         recognizer=settings.STT_RECOGNIZER,
         credentials_path=settings.STT_CREDENTIALS,
         stream_limit_s=settings.STT_STREAM_LIMIT_S,
+        breaker=app.state.breakers.get("stt"),
     )
     if not app.state.stt.configured:
         logger.warning(

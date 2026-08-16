@@ -1,6 +1,28 @@
 // Learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom'
 
+// react-markdown is ESM-only and cannot be transformed by Jest's default
+// pipeline. Mock it globally so any test importing a component that
+// transitively depends on it (ChatInterface → MarkdownMessage) can run.
+jest.mock('react-markdown', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const React = require('react')
+  return {
+    __esModule: true,
+    default: ({ children }) => React.createElement('div', { 'data-testid': 'markdown' }, children),
+  }
+})
+
+jest.mock('remark-gfm', () => ({
+  __esModule: true,
+  default: () => {},
+}))
+
+jest.mock('rehype-highlight', () => ({
+  __esModule: true,
+  default: () => {},
+}))
+
 // Create a proper localStorage mock with actual storage
 let store = {}
 

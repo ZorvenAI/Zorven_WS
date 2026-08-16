@@ -7,6 +7,7 @@ jest.mock('@/lib/api', () => ({
   apiClient: {
     put: jest.fn(),
     post: jest.fn(),
+    patch: jest.fn(),
   },
 }))
 

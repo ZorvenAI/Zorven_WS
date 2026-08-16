@@ -1,6 +1,7 @@
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+timeout = 300
 markers = [
     "unit: pure unit tests, no network",
     "property: hypothesis property tests",

@@ -26,6 +26,19 @@ import AgentFeedbackStream, {
 } from '@/components/onboarding/AgentFeedbackStream';
 import MeetingView from '@/components/onboarding/MeetingView';
 import type { PreparedQuestion } from '@/lib/onboarding-sessions';
+import type { LiveSocketStatus, LiveSocketError } from '@/hooks/useLiveSocket';
+
+let mockSocketStatus: LiveSocketStatus = 'idle';
+let mockSocketError: LiveSocketError | null = null;
+
+jest.mock('@/hooks/useLiveSocket', () => ({
+  useLiveSocket: () => ({
+    status: mockSocketStatus,
+    error: mockSocketError,
+    sendBinary: jest.fn(),
+    sendControl: jest.fn(),
+  }),
+}));
 
 function aQuestion(n: number): PreparedQuestion {
   // Every field the type declares, not a cast past the ones that were
@@ -493,5 +506,76 @@ describe('F-01 · consent before the microphone', () => {
       'aria-disabled',
       'true',
     );
+  });
+});
+
+// ── F-06 · degraded mode banner ────────────────────────────────────
+
+describe('F-06 · degraded mode banner', () => {
+  beforeEach(() => {
+    mockSocketStatus = 'idle';
+    mockSocketError = null;
+  });
+
+  it('shows the degraded banner when socket status is degraded', () => {
+    mockSocketStatus = 'degraded';
+    mockSocketError = {
+      code: 'ERR-07',
+      message: 'Live assist paused — recording continues.',
+      recoverable: true,
+    };
+
+    render(<MeetingView questions={QUESTIONS} consent={GRANTED} />);
+
+    const banner = screen.getByTestId('degraded-banner');
+    expect(banner).toBeInTheDocument();
+    expect(banner).toHaveTextContent(/Live assist paused/);
+  });
+
+  it('does not show the banner when socket is live', () => {
+    mockSocketStatus = 'live';
+    mockSocketError = null;
+
+    render(<MeetingView questions={QUESTIONS} consent={GRANTED} />);
+
+    expect(screen.queryByTestId('degraded-banner')).toBeNull();
+  });
+
+  it('clears the banner when status returns to live (recovery)', () => {
+    mockSocketStatus = 'degraded';
+    mockSocketError = {
+      code: 'ERR-07',
+      message: 'Live assist paused.',
+      recoverable: true,
+    };
+
+    const { rerender } = render(
+      <MeetingView questions={QUESTIONS} consent={GRANTED} />,
+    );
+    expect(screen.getByTestId('degraded-banner')).toBeInTheDocument();
+
+    mockSocketStatus = 'live';
+    mockSocketError = null;
+    rerender(<MeetingView questions={QUESTIONS} consent={GRANTED} />);
+
+    expect(screen.queryByTestId('degraded-banner')).toBeNull();
+  });
+
+  it('checkboxes remain interactive during degraded mode', async () => {
+    mockSocketStatus = 'degraded';
+    mockSocketError = {
+      code: 'ERR-07',
+      message: 'Live assist paused.',
+      recoverable: true,
+    };
+    const user = userEvent.setup();
+
+    render(<MeetingView questions={QUESTIONS.slice(0, 3)} consent={GRANTED} />);
+
+    const box = screen.getByRole('checkbox', { name: QUESTIONS[0].text });
+    expect(box).not.toBeChecked();
+
+    await user.click(box);
+    expect(box).toBeChecked();
   });
 });

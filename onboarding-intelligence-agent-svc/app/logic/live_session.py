@@ -1,6 +1,7 @@
-"""LiveSessionManager — seq, the replay buffer, and resume (F-04 PR 2).
+"""LiveSessionManager — seq, replay buffer, resume, and session mode.
 
-Design §4.3, §9.2, §10.2.3 · AC-3 and AC-4.
+Design §4.3, §9.2, §10.2.3 · AC-3 and AC-4 (F-04 PR 2).
+Session mode and question marks added by F-06 (§18.2 degraded mode).
 
 Both pieces of state live in Redis and neither can live in the process. Spike
 A-02 finding 3: sockets for one tenant land on different Cloud Run instances,
@@ -186,3 +187,52 @@ class LiveSessionManager:
                 logger.warning("live_frame_unreadable", session=self.session_id)
         frames.sort(key=lambda f: f["seq"])
         return frames, None
+
+    # ── Session mode (F-06) ─────────────────────────────────────────
+
+    MODE_NORMAL = "NORMAL"
+    MODE_RECORD_ONLY = "RECORD_ONLY"
+
+    async def set_mode(self, mode: str) -> None:
+        """Write the session mode to the Redis session hash."""
+        keys = self._keys()
+        key = keys.session(self.session_id)
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.hset(key, "mode", mode)
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
+
+    async def get_mode(self) -> str:
+        """Read the session mode; defaults to NORMAL if unset."""
+        keys = self._keys()
+        key = keys.session(self.session_id)
+        val = await self.redis.client.hget(key, "mode")
+        if val is None:
+            return self.MODE_NORMAL
+        return val if isinstance(val, str) else val.decode()
+
+    # ── Manual question marks (F-06 minimal, G-03 extends) ──────────
+
+    async def mark_question(self, question_id: str, action: str) -> None:
+        """Store a manual checkmark with no evidence."""
+        keys = self._keys()
+        key = keys.questions(self.session_id)
+        entry = json.dumps({"action": action, "source": "manual", "evidence": []})
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.hset(key, question_id, entry)
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
+
+    async def get_question_marks(self) -> dict[str, Any]:
+        """Read all question marks for this session."""
+        keys = self._keys()
+        key = keys.questions(self.session_id)
+        raw = await self.redis.client.hgetall(key)
+        result: dict[str, Any] = {}
+        for k, v in raw.items():
+            field = k if isinstance(k, str) else k.decode()
+            try:
+                result[field] = json.loads(v)
+            except (TypeError, ValueError):
+                pass
+        return result

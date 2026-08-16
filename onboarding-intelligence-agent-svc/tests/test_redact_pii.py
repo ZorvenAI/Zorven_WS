@@ -39,9 +39,9 @@ def test_redact_email():
 
 
 def test_redact_ssn():
-    text = "My SSN is 123-45-6789 on file."
+    text = "My SSN is 456-78-9012 on file."
     result = redact_text(text)
-    assert "123-45-6789" not in result
+    assert "456-78-9012" not in result
     assert "US_SSN" in result
 
 
