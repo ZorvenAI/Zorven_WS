@@ -20,6 +20,7 @@ runs in <5 ms.
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -43,6 +44,7 @@ _DEFAULT_ENTITIES = [
 _analyzer: Any = None
 _anonymizer: Any = None
 _ready = False
+_init_lock = threading.Lock()
 
 
 @dataclass
@@ -67,18 +69,22 @@ def _ensure_engines() -> bool:
     if _ready:
         return _analyzer is not None
 
-    try:
-        from presidio_analyzer import AnalyzerEngine
-        from presidio_anonymizer import AnonymizerEngine
+    with _init_lock:
+        if _ready:
+            return _analyzer is not None
+        try:
+            from presidio_analyzer import AnalyzerEngine
+            from presidio_anonymizer import AnonymizerEngine
 
-        _analyzer = AnalyzerEngine()
-        _anonymizer = AnonymizerEngine()  # type: ignore[no-untyped-call]
-        _ready = True
-        logger.info("presidio_initialized", ner_available=True)
-        return True
-    except Exception as exc:
-        logger.warning("presidio_init_failed", error=str(exc))
-        return False
+            _analyzer = AnalyzerEngine()
+            _anonymizer = AnonymizerEngine()  # type: ignore[no-untyped-call]
+            _ready = True
+            logger.info("presidio_initialized", ner_available=True)
+            return True
+        except Exception as exc:
+            _ready = True
+            logger.warning("presidio_init_failed", error=str(exc))
+            return False
 
 
 def _is_allowlisted(matched_text: str, allowlist: list[str]) -> bool:
