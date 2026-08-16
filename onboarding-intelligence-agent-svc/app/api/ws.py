@@ -279,7 +279,12 @@ async def _emit_final(
         t_end=result.t_end,
         redaction_applied=False,
     )
-    await websocket.send_json(displayed.model_dump(mode="json"))
+    try:
+        await websocket.send_json(displayed.model_dump(mode="json"))
+    except WebSocketDisconnect:
+        raise
+    except Exception:  # noqa: BLE001
+        logger.warning("emit_final_send_failed", seq=seq)
 
 
 async def _handle_control(
