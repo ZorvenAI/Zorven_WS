@@ -97,13 +97,22 @@ class CircuitBreaker:
     _opened_at: float = 0.0
     _half_open_calls: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
-    _on_state_change: Callable[[str, State, State], None] | None = field(
-        default=None, repr=False
+    _on_state_change_cbs: list[Callable[[str, State, State], None]] = field(
+        default_factory=list, repr=False
     )
 
-    def set_on_state_change(self, cb: Callable[[str, State, State], None]) -> None:
-        """Register ``cb(dependency_name, old_state, new_state)``."""
-        self._on_state_change = cb
+    def add_on_state_change(self, cb: Callable[[str, State, State], None]) -> None:
+        """Append ``cb(dependency_name, old_state, new_state)``."""
+        with self._lock:
+            self._on_state_change_cbs.append(cb)
+
+    def remove_on_state_change(self, cb: Callable[[str, State, State], None]) -> None:
+        """Remove a previously added callback (no-op if absent)."""
+        with self._lock:
+            try:
+                self._on_state_change_cbs.remove(cb)
+            except ValueError:
+                pass
 
     # ── State, with the timeout applied lazily ───────────────────────
 
@@ -215,11 +224,12 @@ class CircuitBreaker:
         self._failures.clear()
         self._successes = 0
         self._half_open_calls = 0
-        if self._on_state_change and prev is not State.OPEN:
-            try:
-                self._on_state_change(self.config.name, prev, State.OPEN)
-            except Exception:  # noqa: BLE001
-                pass
+        if prev is not State.OPEN:
+            for cb in list(self._on_state_change_cbs):
+                try:
+                    cb(self.config.name, prev, State.OPEN)
+                except Exception:  # noqa: BLE001
+                    pass
 
     def _reset_locked(self) -> None:
         prev = self._state
@@ -227,11 +237,12 @@ class CircuitBreaker:
         self._failures.clear()
         self._successes = 0
         self._half_open_calls = 0
-        if self._on_state_change and prev is not State.CLOSED:
-            try:
-                self._on_state_change(self.config.name, prev, State.CLOSED)
-            except Exception:  # noqa: BLE001
-                pass
+        if prev is not State.CLOSED:
+            for cb in list(self._on_state_change_cbs):
+                try:
+                    cb(self.config.name, prev, State.CLOSED)
+                except Exception:  # noqa: BLE001
+                    pass
 
     def reset(self) -> None:
         """Force back to CLOSED. For tests and operator intervention only."""

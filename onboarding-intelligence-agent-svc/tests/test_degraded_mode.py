@@ -170,7 +170,7 @@ async def test_recovery_sets_mode_normal(session):
 def test_breaker_callback_fires_on_open(stt_breaker):
     """Breaker opens → callback invoked with OPEN."""
     changes: list[tuple[str, State, State]] = []
-    stt_breaker.set_on_state_change(
+    stt_breaker.add_on_state_change(
         lambda dep, old, new: changes.append((dep, old, new))
     )
 
@@ -187,7 +187,7 @@ def test_breaker_callback_fires_on_open(stt_breaker):
 def test_breaker_callback_fires_on_close(stt_breaker):
     """Breaker closes → callback invoked with CLOSED."""
     changes: list[tuple[str, State, State]] = []
-    stt_breaker.set_on_state_change(
+    stt_breaker.add_on_state_change(
         lambda dep, old, new: changes.append((dep, old, new))
     )
 
@@ -208,12 +208,39 @@ def test_breaker_callback_exception_does_not_propagate(stt_breaker):
     def _bomb(dep, old, new):
         raise RuntimeError("boom")
 
-    stt_breaker.set_on_state_change(_bomb)
+    stt_breaker.add_on_state_change(_bomb)
 
     for _ in range(5):
         stt_breaker.record_failure()
 
     assert stt_breaker.state is State.OPEN
+
+
+def test_breaker_multiple_callbacks(stt_breaker):
+    """Multiple callbacks all fire; concurrent sessions each get events."""
+    log_a: list[tuple[str, State, State]] = []
+    log_b: list[tuple[str, State, State]] = []
+    stt_breaker.add_on_state_change(lambda dep, old, new: log_a.append((dep, old, new)))
+    stt_breaker.add_on_state_change(lambda dep, old, new: log_b.append((dep, old, new)))
+
+    for _ in range(5):
+        stt_breaker.record_failure()
+
+    assert len(log_a) == 1
+    assert len(log_b) == 1
+
+
+def test_breaker_remove_callback(stt_breaker):
+    """remove_on_state_change prevents stale callbacks from firing."""
+    log: list[tuple[str, State, State]] = []
+    cb = lambda dep, old, new: log.append((dep, old, new))  # noqa: E731
+    stt_breaker.add_on_state_change(cb)
+    stt_breaker.remove_on_state_change(cb)
+
+    for _ in range(5):
+        stt_breaker.record_failure()
+
+    assert len(log) == 0
 
 
 # ── Binary audio dropped in RECORD_ONLY ─────────────────────────────

@@ -137,9 +137,7 @@ export function useLiveSocket({
               message: (frame.message as string) || 'Transcription unavailable.',
               recoverable: (frame.recoverable as boolean) ?? false,
             });
-            if (frame.recoverable) {
-              setStatus('degraded');
-            }
+            setStatus('degraded');
           } else if (frame.type === 'recovery') {
             setError(null);
             setStatus('live');
@@ -157,6 +155,7 @@ export function useLiveSocket({
         }
         if (retriesRef.current < MAX_RECONNECT_ATTEMPTS) {
           retriesRef.current += 1;
+          setStatus('connecting');
           reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
         } else {
           setStatus('closed');

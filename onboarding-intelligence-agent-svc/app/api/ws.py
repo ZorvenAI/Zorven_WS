@@ -54,7 +54,11 @@ from app.api.schemas import (
     TranscriptFinal,
     TranscriptPartial,
 )
-from app.circuit_breaker.breaker import BreakerRegistry, State
+from app.circuit_breaker.breaker import (
+    BreakerRegistry,
+    CircuitBreakerOpen,
+    State,
+)
 from app.events.catalog import EventType
 from app.core.logging import get_logger
 from app.logic.consent_gate import (
@@ -223,17 +227,6 @@ async def _stt_loop(
         await _send_error_frame(
             websocket, session, "Transcription temporarily unavailable."
         )
-        recovery = asyncio.create_task(
-            _stt_recovery_task(
-                websocket,
-                session,
-                stt,
-                codec=codec,
-                sample_rate=sample_rate,
-                stt_state=stt_state,
-            )
-        )
-        stt_state["recovery_task"] = recovery
 
 
 async def _send_error_frame(
@@ -298,8 +291,11 @@ async def _stt_recovery_task(
         while True:
             await asyncio.sleep(poll_s)
 
-            if breaker and breaker.state is State.OPEN:
-                continue
+            if breaker:
+                try:
+                    breaker.before_call()
+                except CircuitBreakerOpen:
+                    continue
 
             async def _probe_audio() -> AsyncIterator[bytes]:
                 yield b"\x00" * 320
@@ -412,6 +408,18 @@ async def _emit_final(
         logger.warning("emit_final_send_failed", seq=seq)
 
 
+async def _cancel_recovery(stt_state: dict[str, Any]) -> None:
+    """Cancel a pending recovery task and clear its slot."""
+    recovery = stt_state.get("recovery_task")
+    if recovery is not None and not recovery.done():
+        recovery.cancel()
+        try:
+            await recovery
+        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            pass
+    stt_state["recovery_task"] = None
+
+
 async def _handle_control(
     websocket: WebSocket,
     session: Any,
@@ -457,6 +465,8 @@ async def _handle_control(
         if stt_state.get("audio_q") is not None:
             return
 
+        await _cancel_recovery(stt_state)
+
         stt: STTAdapter | None = getattr(websocket.app.state, "stt", None)
         if stt is None:
             logger.warning("stt_not_configured")
@@ -486,6 +496,7 @@ async def _handle_control(
         return
 
     if frame_type == ClientFrameType.STOP.value:
+        await _cancel_recovery(stt_state)
         audio_q = stt_state.get("audio_q")
         if audio_q is not None:
             audio_q.put_nowait(None)
@@ -581,8 +592,10 @@ async def _hold(
     breaker_registry: BreakerRegistry | None = getattr(
         websocket.app.state, "breakers", None
     )
+    _breaker_cb = None
+    _breaker_ref = None
     if breaker_registry and events:
-        stt_breaker = breaker_registry.get("stt")
+        _breaker_ref = breaker_registry.get("stt")
 
         def _on_breaker_change(dep: str, old: State, new: State) -> None:
             if new is State.OPEN:
@@ -610,7 +623,8 @@ async def _hold(
             except Exception:  # noqa: BLE001
                 pass
 
-        stt_breaker.set_on_state_change(_on_breaker_change)
+        _breaker_cb = _on_breaker_change
+        _breaker_ref.add_on_state_change(_breaker_cb)
 
     try:
         while True:
@@ -655,6 +669,8 @@ async def _hold(
 
             await _handle_control(websocket, session, message, stt_state=stt_state)
     finally:
+        if _breaker_ref is not None and _breaker_cb is not None:
+            _breaker_ref.remove_on_state_change(_breaker_cb)
         audio_q = stt_state.get("audio_q")
         if audio_q is not None:
             audio_q.put_nowait(None)
