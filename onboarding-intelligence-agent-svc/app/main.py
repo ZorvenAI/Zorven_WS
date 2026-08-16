@@ -24,6 +24,7 @@ from app.messaging.consumer import CommandConsumer
 from app.logic.prep_executor import PrepExecutor
 from app.messaging.producer import KafkaProducer
 from app.providers.llm import LLMProvider
+from app.providers.stt import GoogleSTTAdapter
 from app.providers.tavily import TavilyProvider
 from app.services.backend_client import BackendClient
 from app.messaging.provision import provision, verify
@@ -94,6 +95,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "tavily_not_configured",
             detail="research will degrade to operator-provided information only",
         )
+
+    # F-05: STT adapter and IG-04 registration.
+    app.state.stt = GoogleSTTAdapter(
+        project=settings.STT_PROJECT,
+        location=settings.STT_LOCATION,
+        recognizer=settings.STT_RECOGNIZER,
+        credentials_path=settings.STT_CREDENTIALS,
+        stream_limit_s=settings.STT_STREAM_LIMIT_S,
+    )
+    if not app.state.stt.configured:
+        logger.warning(
+            "stt_not_configured",
+            detail="live transcription unavailable — set OIA_STT_PROJECT",
+        )
+
+    from app.logic.guardrails import Layer
+    from app.skills.redact_pii import _ensure_engines, ig04_redact
+
+    _ensure_engines()
+    app.state.prep.registry.chain.register(Layer.INPUT, "IG-04", ig04_redact)
 
     app.state.events = EventEmitter(app.state.kafka)
     await app.state.events.start()

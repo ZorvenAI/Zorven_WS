@@ -29,6 +29,8 @@ F-04 owns everything past the gate, including reading the tenant from a
 verified claim. This endpoint takes the tenant from the query string, which is
 adequate for a refusal that reveals nothing and is **not** adequate for a
 socket that carries data — see the note on ``_tenant_of``.
+
+F-05 adds the audio pipeline: binary audio → STT → partial/final frames.
 """
 
 from __future__ import annotations
@@ -36,13 +38,20 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from typing import Any
+from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, WebSocket
 from pydantic import ValidationError
 from starlette.websockets import WebSocketDisconnect
 
-from app.api.schemas import ClientFrameType, ResumeFrame
+from app.api.schemas import (
+    ClientFrameType,
+    ErrorFrame,
+    ResumeFrame,
+    StartFrame,
+    TranscriptFinal,
+    TranscriptPartial,
+)
 from app.core.logging import get_logger
 from app.logic.consent_gate import (
     ConsentState,
@@ -61,6 +70,8 @@ from app.logic.live_handshake import (
 )
 from app.logic.live_lock import REFRESH_S, LiveLock, acquire
 from app.logic.live_session import LiveSessionManager
+from app.providers.stt import STTAdapter, STTResult, STTUnavailable
+from app.skills.redact_pii import redact_text
 
 logger = get_logger(__name__)
 
@@ -144,13 +155,152 @@ async def live_websocket(websocket: WebSocket, session_id: str) -> None:
             await lock.release()
 
 
-async def _handle_control(websocket: WebSocket, session: Any, message: Any) -> None:
+async def _audio_from_queue(
+    audio_q: asyncio.Queue[bytes | None],
+) -> AsyncIterator[bytes]:
+    """Adapt a Queue to the async iterator the STT adapter expects."""
+    while True:
+        chunk = await audio_q.get()
+        if chunk is None:
+            return
+        yield chunk
+
+
+async def _stt_loop(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    stt: STTAdapter,
+    audio_q: asyncio.Queue[bytes | None],
+    *,
+    codec: str,
+    sample_rate: int,
+) -> None:
+    """Background task: feed audio to STT, emit frames.
+
+    Partials go to the client as-is — no LLM, no redaction (§4.3).
+    Finals are redacted before buffering (IG-04/SKL-OIA-16) but sent
+    unredacted to the client who is hearing the conversation live.
+    """
+    try:
+        async for result in stt.stream(
+            _audio_from_queue(audio_q),
+            sample_rate=sample_rate,
+            codec=codec,
+        ):
+            if result.is_final:
+                await _emit_final(websocket, session, result)
+            else:
+                await _emit_partial(websocket, session, result)
+    except STTUnavailable as exc:
+        logger.warning("stt_unavailable", reason=exc.reason, mode=exc.degraded_mode)
+        await _send_error_frame(websocket, session, exc.reason)
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.error("stt_loop_failed", error=f"{type(exc).__name__}: {exc}")
+        await _send_error_frame(
+            websocket, session, "Transcription temporarily unavailable."
+        )
+
+
+async def _send_error_frame(
+    websocket: WebSocket, session: LiveSessionManager, message: str
+) -> None:
+    """Best-effort ERR-07 delivery; swallows failures (Redis may be down)."""
+    try:
+        seq = await session.next_seq()
+        err = ErrorFrame(
+            seq=seq,
+            code="ERR-07",
+            message=message,
+            recoverable=True,
+        )
+        payload = await session.emit(err)
+        await websocket.send_json(payload)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def _emit_partial(
+    websocket: WebSocket, session: LiveSessionManager, result: STTResult
+) -> None:
+    """AC-1: partials within 2 s, no LLM/redaction pass."""
+    try:
+        seq = await session.next_seq()
+        frame = TranscriptPartial(seq=seq, text=result.text, speaker=0)
+        payload = await session.emit(frame)
+        await websocket.send_json(payload)
+    except WebSocketDisconnect:
+        raise
+    except Exception:  # noqa: BLE001
+        logger.warning("emit_partial_failed")
+
+
+async def _emit_final(
+    websocket: WebSocket, session: LiveSessionManager, result: STTResult
+) -> None:
+    """AC-4: persisted redacted, displayed unredacted.
+
+    Two frames from one STT result: the redacted one goes to Redis (the
+    replay buffer, the analysis loop, anything that stores or reasons about
+    the text), and the unredacted one goes to the client who is hearing the
+    words live and does not benefit from seeing ``<PHONE_NUMBER>`` on screen.
+    """
+    try:
+        seq = await session.next_seq()
+    except Exception:  # noqa: BLE001
+        logger.warning("emit_final_seq_failed")
+        return
+
+    try:
+        redacted = redact_text(result.text)
+    except Exception:  # noqa: BLE001
+        logger.warning("redact_text_failed", text_len=len(result.text))
+        redacted = result.text
+
+    buffered = TranscriptFinal(
+        seq=seq,
+        text=redacted,
+        speaker=0,
+        t_start=result.t_start,
+        t_end=result.t_end,
+        redaction_applied=redacted != result.text,
+    )
+    try:
+        await session.emit(buffered)
+    except Exception:  # noqa: BLE001
+        logger.warning("emit_final_buffer_failed", seq=seq)
+
+    displayed = TranscriptFinal(
+        seq=seq,
+        text=result.text,
+        speaker=0,
+        t_start=result.t_start,
+        t_end=result.t_end,
+        redaction_applied=False,
+    )
+    try:
+        await websocket.send_json(displayed.model_dump(mode="json"))
+    except WebSocketDisconnect:
+        raise
+    except Exception:  # noqa: BLE001
+        logger.warning("emit_final_send_failed", seq=seq)
+
+
+async def _handle_control(
+    websocket: WebSocket,
+    session: Any,
+    message: Any,
+    *,
+    stt_state: dict[str, Any],
+) -> None:
     """Act on one client control frame (§10.2.3).
 
-    Only `resume` does anything in PR 2. `start`, `mark_question` and `stop`
-    are parsed and acknowledged by silence rather than rejected — F-05 and
-    G-03 give them behaviour, and refusing a frame the protocol defines would
-    make this socket wrong for the client rather than merely incomplete.
+    ``start`` creates the audio queue and spawns the STT loop.
+    ``stop`` sends the sentinel that drains and closes the STT stream.
+    ``resume`` replays buffered frames.
+    ``mark_question`` is parsed and acknowledged by silence — G-03 gives it
+    behaviour.
 
     Malformed input is ignored, never fatal. A client bug must not end a
     meeting that is otherwise recording fine.
@@ -159,7 +309,6 @@ async def _handle_control(websocket: WebSocket, session: Any, message: Any) -> N
         return
     raw = message.get("text")
     if not raw:
-        # Binary audio carries no envelope (§10.2.3). F-05 consumes it.
         return
 
     try:
@@ -168,24 +317,82 @@ async def _handle_control(websocket: WebSocket, session: Any, message: Any) -> N
         logger.info("live_control_unparseable")
         return
 
-    if not isinstance(frame, dict) or frame.get("type") != ClientFrameType.RESUME.value:
+    if not isinstance(frame, dict):
         return
 
-    try:
-        resume = ResumeFrame(**frame)
-    except ValidationError:
-        logger.info("live_resume_malformed")
+    frame_type = frame.get("type")
+
+    if frame_type == ClientFrameType.START.value:
+        try:
+            start = StartFrame(**frame)
+        except ValidationError:
+            logger.info("live_start_malformed")
+            return
+
+        if stt_state.get("audio_q") is not None:
+            return
+
+        stt: STTAdapter | None = getattr(websocket.app.state, "stt", None)
+        if stt is None:
+            logger.warning("stt_not_configured")
+            return
+
+        audio_q: asyncio.Queue[bytes | None] = asyncio.Queue()
+        task = asyncio.create_task(
+            _stt_loop(
+                websocket,
+                session,
+                stt,
+                audio_q,
+                codec=start.codec,
+                sample_rate=start.sample_rate,
+            )
+        )
+        stt_state["audio_q"] = audio_q
+        stt_state["stt_task"] = task
+        task.add_done_callback(lambda _: stt_state.update(audio_q=None))
+        logger.info(
+            "stt_started",
+            codec=start.codec,
+            sample_rate=start.sample_rate,
+            recording_id=start.recording_id,
+        )
         return
 
-    frames, resync = await session.replay_after(resume.last_seq)
-    if resync is not None:
-        # AC-3: an explicit frame, never a silent gap. The client is told
-        # where the record now starts rather than left to infer it.
-        await websocket.send_json(resync.model_dump(mode="json"))
+    if frame_type == ClientFrameType.STOP.value:
+        audio_q = stt_state.get("audio_q")
+        if audio_q is not None:
+            audio_q.put_nowait(None)
+            stt_state["audio_q"] = None
+            task = stt_state.get("stt_task")
+            if task is not None and not task.done():
+                try:
+                    await asyncio.wait_for(task, timeout=5.0)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    task.cancel()
+                    try:
+                        await task
+                    except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                        pass
+            stt_state["stt_task"] = None
+        logger.info("stt_stopped")
         return
 
-    for replayed in frames:
-        await websocket.send_json(replayed)
+    if frame_type == ClientFrameType.RESUME.value:
+        try:
+            resume = ResumeFrame(**frame)
+        except ValidationError:
+            logger.info("live_resume_malformed")
+            return
+
+        frames, resync = await session.replay_after(resume.last_seq)
+        if resync is not None:
+            await websocket.send_json(resync.model_dump(mode="json"))
+            return
+
+        for replayed in frames:
+            await websocket.send_json(replayed)
+        return
 
 
 async def _hold(
@@ -224,47 +431,58 @@ async def _hold(
         else None
     )
 
-    while True:
-        if expired(verdict.valid_until):
-            await websocket.close(
-                code=CLOSE_UNAUTHORIZED, reason="Session authorisation expired."
+    stt_state: dict[str, Any] = {"audio_q": None, "stt_task": None}
+
+    try:
+        while True:
+            if expired(verdict.valid_until):
+                await websocket.close(
+                    code=CLOSE_UNAUTHORIZED,
+                    reason="Session authorisation expired.",
+                )
+                return
+
+            if lock is not None and not await lock.refresh():
+                await websocket.close(
+                    code=CLOSE_CONFLICT,
+                    reason="Another socket took over this session.",
+                )
+                return
+
+            state = await fetch_consent_state(
+                backend,
+                tenant_id=verdict.tenant_id,
+                session_id=session_id,
             )
-            return
+            refusal = consent_verdict(state)
+            if refusal.blocked:
+                await websocket.close(code=CLOSE_FORBIDDEN, reason=refusal.detail[:120])
+                return
 
-        if lock is not None and not await lock.refresh():
-            # The claim lapsed and somebody else has it. Ours is the socket
-            # that must go: two writers on one meeting is the state AC-2
-            # exists to prevent.
-            await websocket.close(
-                code=CLOSE_CONFLICT, reason="Another socket took over this session."
-            )
-            return
+            try:
+                message = await asyncio.wait_for(websocket.receive(), timeout=poll_s)
+            except asyncio.TimeoutError:
+                continue
+            except (WebSocketDisconnect, RuntimeError):
+                return
 
-        state = await fetch_consent_state(
-            backend, tenant_id=verdict.tenant_id, session_id=session_id
-        )
-        refusal = consent_verdict(state)
-        if refusal.blocked:
-            # F-01 AC-4, finally reachable end to end: a revocation closes an
-            # open socket rather than being noticed at the next message.
-            await websocket.close(code=CLOSE_FORBIDDEN, reason=refusal.detail[:120])
-            return
+            if message.get("type") == "websocket.disconnect":
+                return
 
-        try:
-            message = await asyncio.wait_for(websocket.receive(), timeout=poll_s)
-        except asyncio.TimeoutError:
-            # Idle. Looping is the point — the checks above are what an idle
-            # socket exists to keep running.
-            continue
-        except (WebSocketDisconnect, RuntimeError):
-            return
+            # Binary audio → STT queue (F-05)
+            if message.get("bytes") and stt_state.get("audio_q") is not None:
+                stt_state["audio_q"].put_nowait(message["bytes"])
+                continue
 
-        # `receive()` *returns* the disconnect rather than raising it, which is
-        # easy to miss and expensive to get wrong: without this the loop spins
-        # for the life of the process after the client has gone, holding the
-        # company's live lock and polling Django every few seconds. It showed
-        # up as a test suite that hung rather than failed.
-        if message.get("type") == "websocket.disconnect":
-            return
-
-        await _handle_control(websocket, session, message)
+            await _handle_control(websocket, session, message, stt_state=stt_state)
+    finally:
+        audio_q = stt_state.get("audio_q")
+        if audio_q is not None:
+            audio_q.put_nowait(None)
+        task = stt_state.get("stt_task")
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass

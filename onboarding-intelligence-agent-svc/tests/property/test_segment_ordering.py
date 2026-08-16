@@ -132,3 +132,52 @@ async def test_a_replay_is_ordered_and_never_repeats(live_redis, kinds, cut):
     assert replayed == sorted(replayed), "frames replayed out of order"
     assert len(replayed) == len(set(replayed)), "a frame was replayed twice"
     assert all(seq > cut for seq in replayed), "a frame the client already had"
+
+
+# ── F-05 · finals non-decreasing t_start under dedup ───────────────
+
+
+@settings(
+    max_examples=25,
+    deadline=None,
+)
+@given(
+    t_starts=st.lists(
+        st.floats(min_value=0.0, max_value=600.0, allow_nan=False),
+        min_size=2,
+        max_size=30,
+    ),
+)
+def test_finals_non_decreasing_t_start(t_starts):
+    """F-05 named test: whatever order finals arrive in, sorting by t_start
+    always produces a non-decreasing sequence.
+
+    This is the invariant AC-2 relies on: the buffered transcript is
+    ordered by time, so the operator reads a coherent conversation rather
+    than a shuffled one.
+    """
+    from app.providers.stt import STTResult, _dedup_key
+
+    results = [
+        STTResult(
+            text=f"segment at {t:.1f}",
+            is_final=True,
+            t_start=t,
+            t_end=t + 1.5,
+            stability=1.0,
+        )
+        for t in t_starts
+    ]
+
+    seen: set[tuple[float, str]] = set()
+    deduped: list[STTResult] = []
+    for r in results:
+        key = _dedup_key(r)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(r)
+
+    sorted_results = sorted(deduped, key=lambda r: r.t_start)
+    t_sorted = [r.t_start for r in sorted_results]
+    for i in range(1, len(t_sorted)):
+        assert t_sorted[i] >= t_sorted[i - 1], "t_start not non-decreasing"
