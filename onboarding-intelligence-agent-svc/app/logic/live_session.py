@@ -211,6 +211,30 @@ class LiveSessionManager:
             return self.MODE_NORMAL
         return val if isinstance(val, str) else val.decode()
 
+    # ── PII allowlist (G-01) ──────────────────────────────────────────
+
+    async def set_allowlist(self, terms: list[str]) -> None:
+        """Store company names that must not be redacted (AC-3)."""
+        keys = self._keys()
+        key = keys.session(self.session_id)
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.hset(key, "allowlist", json.dumps(terms))
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
+
+    async def get_allowlist(self) -> list[str]:
+        """Read the PII allowlist; empty if unset."""
+        keys = self._keys()
+        key = keys.session(self.session_id)
+        raw = await self.redis.client.hget(key, "allowlist")
+        if raw is None:
+            return []
+        try:
+            val = json.loads(raw)
+            return val if isinstance(val, list) else []
+        except (TypeError, ValueError):
+            return []
+
     # ── Manual question marks (F-06 minimal, G-03 extends) ──────────
 
     async def mark_question(self, question_id: str, action: str) -> None:

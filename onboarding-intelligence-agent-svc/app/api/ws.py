@@ -79,7 +79,7 @@ from app.logic.live_handshake import (
 from app.logic.live_lock import REFRESH_S, LiveLock, acquire
 from app.logic.live_session import LiveSessionManager
 from app.providers.stt import STTAdapter, STTResult, STTUnavailable
-from app.skills.redact_pii import redact_text
+from app.skills.redact_pii import redact_text, RedactionResult
 
 logger = get_logger(__name__)
 
@@ -194,6 +194,8 @@ async def _stt_loop(
     the session mode to RECORD_ONLY, sends ERR-07, and spawns a recovery
     task that periodically probes STT (F-06 §18.2).
     """
+    recording_id = str(stt_state.get("recording_id") or "")
+    allowlist = stt_state.get("allowlist") or []
     try:
         async for result in stt.stream(
             _audio_from_queue(audio_q),
@@ -201,7 +203,13 @@ async def _stt_loop(
             codec=codec,
         ):
             if result.is_final:
-                await _emit_final(websocket, session, result)
+                await _emit_final(
+                    websocket,
+                    session,
+                    result,
+                    recording_id=recording_id,
+                    allowlist=allowlist,
+                )
             else:
                 await _emit_partial(websocket, session, result)
     except STTUnavailable as exc:
@@ -358,7 +366,12 @@ async def _emit_partial(
 
 
 async def _emit_final(
-    websocket: WebSocket, session: LiveSessionManager, result: STTResult
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    result: STTResult,
+    *,
+    recording_id: str = "",
+    allowlist: list[str] | None = None,
 ) -> None:
     """AC-4: persisted redacted, displayed unredacted.
 
@@ -366,6 +379,8 @@ async def _emit_final(
     replay buffer, the analysis loop, anything that stores or reasons about
     the text), and the unredacted one goes to the client who is hearing the
     words live and does not benefit from seeing ``<PHONE_NUMBER>`` on screen.
+
+    G-01: emits EVT-103 with entity types (never text or values).
     """
     try:
         seq = await session.next_seq()
@@ -374,18 +389,18 @@ async def _emit_final(
         return
 
     try:
-        redacted = redact_text(result.text)
+        redaction = redact_text(result.text, allowlist=allowlist)
     except Exception:  # noqa: BLE001
         logger.warning("redact_text_failed", text_len=len(result.text))
-        redacted = result.text
+        redaction = RedactionResult(text=result.text, applied=False)
 
     buffered = TranscriptFinal(
         seq=seq,
-        text=redacted,
+        text=redaction.text,
         speaker=0,
         t_start=result.t_start,
         t_end=result.t_end,
-        redaction_applied=redacted != result.text,
+        redaction_applied=redaction.applied,
     )
     try:
         await session.emit(buffered)
@@ -406,6 +421,46 @@ async def _emit_final(
         raise
     except Exception:  # noqa: BLE001
         logger.warning("emit_final_send_failed", seq=seq)
+
+    await _emit_evt103(
+        websocket,
+        session,
+        recording_id=recording_id,
+        seq=seq,
+        redaction_applied=redaction.applied,
+        entity_types=redaction.entity_types,
+    )
+
+
+async def _emit_evt103(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    *,
+    recording_id: str,
+    seq: int,
+    redaction_applied: bool,
+    entity_types: list[str],
+) -> None:
+    """EVT-103: segment finalised — entity types only, never text or values."""
+    events = getattr(websocket.app.state, "events", None)
+    if events is None:
+        return
+    try:
+        await events.emit(
+            EventType.TRANSCRIPT_SEGMENT_FINALIZED,
+            tenant_id=session.tenant_id,
+            correlation_id=session.session_id,
+            session_id=session.session_id,
+            payload={
+                "recording_id": recording_id,
+                "seq": seq,
+                "redaction_applied": redaction_applied,
+                "entity_types": entity_types,
+            },
+            outcome="SUCCESS",
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("evt103_emission_failed", seq=seq)
 
 
 async def _cancel_recovery(stt_state: dict[str, Any]) -> None:
@@ -471,6 +526,8 @@ async def _handle_control(
         if stt is None:
             logger.warning("stt_not_configured")
             return
+
+        stt_state["recording_id"] = start.recording_id
 
         audio_q: asyncio.Queue[bytes | None] = asyncio.Queue()
         task = asyncio.create_task(
@@ -582,10 +639,18 @@ async def _hold(
         else None
     )
 
+    allowlist = [t for t in [verdict.company_name] if t]
+    if session is not None and allowlist:
+        try:
+            await session.set_allowlist(allowlist)
+        except Exception:  # noqa: BLE001
+            logger.warning("set_allowlist_failed")
+
     stt_state: dict[str, Any] = {
         "audio_q": None,
         "stt_task": None,
         "recovery_task": None,
+        "allowlist": allowlist,
     }
 
     events = getattr(websocket.app.state, "events", None)

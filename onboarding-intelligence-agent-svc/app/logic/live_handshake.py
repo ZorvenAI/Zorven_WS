@@ -60,6 +60,7 @@ class Handshake:
     reason: str = ""
     tenant_id: str = ""
     company_id: str = ""
+    company_name: str = ""
     user_id: str = ""
     role: str = ""
     valid_until: str = ""
@@ -135,6 +136,7 @@ def evaluate(precheck: Any) -> Handshake:
         code=None,
         tenant_id=str(auth.get("tenant_id") or ""),
         company_id=str(auth.get("company_id") or ""),
+        company_name=str(precheck.get("company_name") or ""),
         user_id=str(auth.get("user_id") or ""),
         role=role,
         valid_until=str(auth.get("valid_until") or ""),

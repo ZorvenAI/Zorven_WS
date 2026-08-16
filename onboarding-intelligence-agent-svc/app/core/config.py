@@ -87,7 +87,10 @@ class Settings(BaseSettings):
     STT_LOCATION: str = "global"
     STT_RECOGNIZER: str = "_"
     STT_STREAM_LIMIT_S: int = 280
-    PII_ENTITIES: str = ""
+    PII_ENTITIES: str = (
+        "PERSON,PHONE_NUMBER,EMAIL_ADDRESS,CREDIT_CARD,"
+        "IBAN_CODE,US_SSN,US_ITIN,LOCATION"
+    )
 
     # ── Secret references (never inline; Design §19) ─────────
     STT_CREDENTIALS: str = ""

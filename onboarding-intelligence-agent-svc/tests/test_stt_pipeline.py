@@ -58,14 +58,14 @@ async def _run_pipeline(
     async for result in adapter.stream(_silent()):
         if result.is_final:
             seq = await session.next_seq()
-            redacted = redact_text(result.text)
+            redaction = redact_text(result.text)
             buffered = TranscriptFinal(
                 seq=seq,
-                text=redacted,
+                text=redaction.text,
                 speaker=0,
                 t_start=result.t_start,
                 t_end=result.t_end,
-                redaction_applied=redacted != result.text,
+                redaction_applied=redaction.applied,
             )
             await session.emit(buffered)
             displayed = TranscriptFinal(

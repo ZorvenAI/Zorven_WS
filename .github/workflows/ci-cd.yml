@@ -418,6 +418,10 @@ jobs:
         working-directory: onboarding-intelligence-agent-svc
         run: pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Download spaCy model
+        run: python -m spacy download en_core_web_sm
+        working-directory: onboarding-intelligence-agent-svc
+
       - name: Lint
         working-directory: onboarding-intelligence-agent-svc
         run: |
