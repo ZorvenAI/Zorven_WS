@@ -419,3 +419,201 @@ async def test_store_unmapped_batch(manager):
     key = manager._keys().unmapped(manager.session_id)
     length = await manager.redis.client.llen(key)
     assert length == 1
+
+
+# ── G-03 · Version-based question state ─────────────────────────────
+
+
+async def test_set_questions_initializes_version(manager):
+    """set_questions creates entries with version 0."""
+    await manager.set_questions(
+        [{"id": 1, "text": "Company name?", "target_field": "name"}]
+    )
+    entry = await manager.get_question_entry("1")
+    assert entry is not None
+    assert entry["version"] == 0
+    assert entry["missing_aspects"] == []
+
+
+async def test_mark_question_bumps_version(manager):
+    """Manual override increments the version counter."""
+    await manager.set_questions(
+        [{"id": 1, "text": "Company name?", "target_field": "name"}]
+    )
+
+    new_version = await manager.mark_question("1", "manual_green")
+    assert new_version == 1
+
+    entry = await manager.get_question_entry("1")
+    assert entry["version"] == 1
+    assert entry["source"] == "manual"
+    assert entry["status"] == "GREEN"
+
+
+async def test_mark_question_ungreen(manager):
+    """manual_ungreen sets status back to OPEN."""
+    await manager.set_questions(
+        [{"id": 1, "text": "Company name?", "target_field": "name"}]
+    )
+    await manager.mark_question("1", "manual_green")
+    await manager.mark_question("1", "manual_ungreen")
+
+    entry = await manager.get_question_entry("1")
+    assert entry["status"] == "OPEN"
+    assert entry["version"] == 2
+
+
+async def test_apply_green_signal_bumps_version(manager):
+    """Successful apply increments version."""
+    await manager.set_questions(
+        [{"id": 1, "text": "Company name?", "target_field": "name"}]
+    )
+    evidence = [{"recording_id": "r-1", "t_start": 10.0, "t_end": 12.0}]
+
+    applied = await manager.apply_green_signal("1", 0.85, evidence, 0)
+    assert applied is True
+
+    entry = await manager.get_question_entry("1")
+    assert entry["status"] == "GREEN"
+    assert entry["score"] == 0.85
+    assert entry["source"] == "analysis"
+    assert entry["version"] == 1
+    assert len(entry["evidence"]) == 1
+
+
+async def test_apply_green_signal_rejected_on_version_mismatch(manager):
+    """Stale signal discarded when version doesn't match."""
+    await manager.set_questions(
+        [{"id": 1, "text": "Company name?", "target_field": "name"}]
+    )
+    evidence = [{"recording_id": "r-1", "t_start": 10.0, "t_end": 12.0}]
+
+    applied = await manager.apply_green_signal("1", 0.85, evidence, 999)
+    assert applied is False
+
+    entry = await manager.get_question_entry("1")
+    assert entry["status"] == "OPEN"
+    assert entry["version"] == 0
+
+
+async def test_manual_override_survives_stale_signal(manager):
+    """AC-3: manual uncheck followed by in-flight green signal.
+
+    The ordering hazard from the G-03 tech notes: a manual uncheck at
+    version N, then an apply_green_signal with expected_version=N-1.
+    The signal must be discarded.
+    """
+    await manager.set_questions(
+        [{"id": 7, "text": "Founding year?", "target_field": "founded_year"}]
+    )
+
+    # Analysis reads version 0
+    expected_version = 0
+
+    # Operator manually overrides (bumps to version 1)
+    await manager.mark_question("7", "manual_ungreen")
+
+    # In-flight green signal arrives with stale version 0
+    evidence = [{"recording_id": "r-1", "t_start": 5.0, "t_end": 8.0}]
+    applied = await manager.apply_green_signal("7", 0.88, evidence, expected_version)
+
+    assert applied is False
+    entry = await manager.get_question_entry("7")
+    assert entry["status"] == "OPEN"
+    assert entry["source"] == "manual"
+    assert entry["version"] == 1
+
+
+async def test_refresh_restores_server_state(manager):
+    """AC-2: page refresh mid-meeting restores exact same state.
+
+    get_questions returns the server-authoritative state including
+    GREEN status, score, and evidence.
+    """
+    await manager.set_questions(
+        [
+            {"id": 1, "text": "Company name?", "target_field": "name"},
+            {"id": 2, "text": "Founding year?", "target_field": "founded_year"},
+        ]
+    )
+
+    evidence = [{"recording_id": "r-1", "t_start": 10.0, "t_end": 12.0}]
+    await manager.apply_green_signal("1", 0.9, evidence, 0)
+
+    # Simulate page refresh: new manager instance, same session
+    manager2 = LiveSessionManager(
+        redis=manager.redis,
+        tenant_id=manager.tenant_id,
+        session_id=manager.session_id,
+    )
+    questions = await manager2.get_questions()
+    by_id = {q["id"]: q for q in questions}
+
+    assert by_id["1"]["status"] == "GREEN"
+    assert by_id["1"]["score"] == 0.9
+    assert by_id["2"]["status"] == "OPEN"
+
+
+async def test_score_below_threshold_stores_missing_aspects(manager):
+    """Sub-threshold score stores data for G-04."""
+    await manager.set_questions(
+        [{"id": 1, "text": "Company name?", "target_field": "name"}]
+    )
+
+    await manager.update_sufficiency("1", 0.45, ["name not mentioned"])
+
+    entry = await manager.get_question_entry("1")
+    assert entry["score"] == 0.45
+    assert entry["missing_aspects"] == ["name not mentioned"]
+    assert entry["status"] == "OPEN"  # Not promoted to GREEN
+
+
+async def test_green_signal_requires_evidence():
+    """OG-06: GreenSignal model rejects empty evidence at construction time."""
+    from pydantic import ValidationError
+    from app.api.schemas import GreenSignal
+
+    with pytest.raises(ValidationError, match="OG-06"):
+        GreenSignal(seq=1, question_id="q-1", score=0.9, evidence=[])
+
+
+async def test_green_signal_roundtrip_redis(manager):
+    """apply_green_signal writes + get_questions reads GREEN status."""
+    await manager.set_questions(
+        [{"id": 42, "text": "Brand values?", "target_field": "values"}]
+    )
+    evidence = [{"recording_id": "r-2", "t_start": 20.0, "t_end": 25.0}]
+    await manager.apply_green_signal("42", 0.78, evidence, 0)
+
+    questions = await manager.get_questions()
+    q = [q for q in questions if q["id"] == "42"][0]
+    assert q["status"] == "GREEN"
+    assert q["score"] == 0.78
+    assert q["evidence"][0]["recording_id"] == "r-2"
+
+
+async def test_concurrent_mark_and_signal(manager):
+    """Lua atomicity: concurrent mark_question and apply_green_signal.
+
+    Only one should win; the state must be consistent.
+    """
+    await manager.set_questions(
+        [{"id": 1, "text": "Company name?", "target_field": "name"}]
+    )
+
+    evidence = [{"recording_id": "r-1", "t_start": 1.0, "t_end": 2.0}]
+
+    # Run both concurrently — one will win, one will lose
+    await asyncio.gather(
+        manager.mark_question("1", "manual_green"),
+        manager.apply_green_signal("1", 0.85, evidence, 0),
+    )
+
+    entry = await manager.get_question_entry("1")
+    # Whichever won, the entry must be consistent
+    assert entry["version"] >= 1
+    if entry["source"] == "manual":
+        assert entry["status"] == "GREEN"
+    elif entry["source"] == "analysis":
+        assert entry["status"] == "GREEN"
+        assert entry["score"] == 0.85

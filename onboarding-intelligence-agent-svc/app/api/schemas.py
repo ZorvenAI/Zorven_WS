@@ -14,7 +14,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class TenantContext(BaseModel):
@@ -178,6 +178,13 @@ class GreenSignal(ServerFrame):
     #: FR-LIVE-04: "every mapping carries a resolvable {recording_id, t_start,
     #: t_end}; a mapping whose span does not resolve is dropped, not shown".
     evidence: list[EvidenceSpan]
+
+    @field_validator("evidence")
+    @classmethod
+    def evidence_must_not_be_empty(cls, v: list[EvidenceSpan]) -> list[EvidenceSpan]:
+        if not v:
+            raise ValueError("OG-06: green signal requires at least one evidence span")
+        return v
 
 
 class Followups(ServerFrame):

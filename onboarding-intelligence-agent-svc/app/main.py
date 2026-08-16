@@ -117,9 +117,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     from app.logic.guardrails import Layer
     from app.skills.redact_pii import _ensure_engines, ig04_redact
+    from app.logic.green_signal_integrity import og06_green_signal_integrity
 
     _ensure_engines()
     app.state.prep.registry.chain.register(Layer.INPUT, "IG-04", ig04_redact)
+    app.state.prep.registry.chain.register(
+        Layer.OUTPUT, "OG-06", og06_green_signal_integrity
+    )
 
     app.state.events = EventEmitter(app.state.kafka)
     await app.state.events.start()

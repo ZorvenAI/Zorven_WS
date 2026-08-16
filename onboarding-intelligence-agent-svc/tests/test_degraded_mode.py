@@ -122,6 +122,9 @@ def test_recovery_frame_shape():
 
 async def test_mark_question_stores_manual(session):
     """mark_question frame → Redis hash with source=manual, evidence=[]."""
+    await session.set_questions(
+        [{"id": "q_07", "text": "Test?", "target_field": "test"}]
+    )
     await session.mark_question("q_07", "manual_green")
 
     marks = await session.get_question_marks()
@@ -133,6 +136,13 @@ async def test_mark_question_stores_manual(session):
 
 async def test_mark_question_multiple_questions(session):
     """Multiple questions can be marked independently."""
+    await session.set_questions(
+        [
+            {"id": "q_01", "text": "Q1?", "target_field": "f1"},
+            {"id": "q_02", "text": "Q2?", "target_field": "f2"},
+            {"id": "q_03", "text": "Q3?", "target_field": "f3"},
+        ]
+    )
     await session.mark_question("q_01", "manual_green")
     await session.mark_question("q_02", "manual_green")
     await session.mark_question("q_03", "manual_red")
@@ -145,6 +155,9 @@ async def test_mark_question_multiple_questions(session):
 
 async def test_mark_question_overwrites_previous(session):
     """Re-marking the same question replaces the entry."""
+    await session.set_questions(
+        [{"id": "q_07", "text": "Test?", "target_field": "test"}]
+    )
     await session.mark_question("q_07", "manual_green")
     await session.mark_question("q_07", "manual_red")
 
