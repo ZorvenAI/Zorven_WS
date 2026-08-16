@@ -25,7 +25,6 @@ from app.api.schemas import (
 from app.logic.live_session import (
     BUFFER_FRAMES,
     LiveSessionManager,
-    SegmentBatch,
     SegmentBatcher,
 )
 
