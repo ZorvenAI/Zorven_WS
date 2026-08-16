@@ -26,10 +26,9 @@ pytestmark = pytest.mark.unit
 
 def test_redact_person_name():
     result = redact_text("Please contact Sarah about the order.")
-    assert isinstance(result, RedactionResult)  # weak-assert: ok — proves return type changed from str
+    assert result.applied is True  # also proves it's a RedactionResult, not str
     assert "Sarah" not in result.text
     assert "PERSON" in result.text
-    assert result.applied is True
     assert "PERSON" in result.entity_types
 
 
@@ -59,7 +58,7 @@ def test_redact_ssn():
 
 def test_redact_location():
     result = redact_text("Our office is in San Francisco.")
-    assert isinstance(result, RedactionResult)  # weak-assert: ok — proves return type changed from str
+    assert result.applied is not None  # proves it's a RedactionResult, not str
     if result.applied:
         assert "LOCATION" in result.entity_types
 
@@ -112,8 +111,8 @@ def test_result_applied_flag_false():
 def test_entity_types_returned_in_result():
     result = redact_text("Sarah called 555-867-5309.")
     assert result.applied is True
-    assert isinstance(result.entity_types, list)  # weak-assert: ok — field could be None without the dataclass default
-    assert all(isinstance(t, str) for t in result.entity_types)  # weak-assert: ok — Presidio could yield non-str
+    assert len(result.entity_types) >= 1
+    assert all(t in ("PERSON", "PHONE_NUMBER") for t in result.entity_types)
     assert len(result.entity_types) == len(set(result.entity_types))
 
 
@@ -268,8 +267,8 @@ async def test_skill_run_redacts():
     result = await skill.run(ctx)
     assert result.output["redaction_applied"] is True
     assert "555-867-5309" not in result.output["redacted_text"]
-    assert isinstance(result.output["entity_types"], list)  # weak-assert: ok — skill output could omit the key
     assert len(result.output["entity_types"]) >= 1
+    assert "PHONE_NUMBER" in result.output["entity_types"]
 
 
 async def test_skill_run_detects_person():
