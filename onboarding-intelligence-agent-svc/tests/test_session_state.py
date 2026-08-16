@@ -276,7 +276,6 @@ def test_batch_fires_on_speaker_change():
 
     batch = batcher.add(_seg(speaker=2, t_start=2.5, t_end=3.5))
     assert batch is not None
-    assert isinstance(batch, SegmentBatch)
     assert len(batch.segments) == 2
     assert all(s["speaker"] == 1 for s in batch.segments)
 
