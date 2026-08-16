@@ -29,7 +29,7 @@ from app.api.schemas import (
     TranscriptFinal,
     TranscriptPartial,
 )
-from app.logic.live_session import LiveSessionManager
+from app.logic.live_session import LiveSessionManager, SegmentBatcher
 
 pytestmark = [pytest.mark.property, pytest.mark.integration]
 
@@ -181,3 +181,88 @@ def test_finals_non_decreasing_t_start(t_starts):
     t_sorted = [r.t_start for r in sorted_results]
     for i in range(1, len(t_sorted)):
         assert t_sorted[i] >= t_sorted[i - 1], "t_start not non-decreasing"
+
+
+# ── G-02 · Batcher ordering invariants ────────────────────────────────
+
+
+@settings(
+    max_examples=30,
+    deadline=None,
+)
+@given(
+    t_starts=st.lists(
+        st.floats(min_value=0.0, max_value=300.0, allow_nan=False),
+        min_size=2,
+        max_size=40,
+    ),
+    speakers=st.lists(
+        st.integers(min_value=0, max_value=3),
+        min_size=2,
+        max_size=40,
+    ),
+)
+def test_batcher_preserves_segment_order(t_starts, speakers):
+    """Segments in a batch are ordered by their insertion order (which matches
+    t_start order since finals arrive in time order from STT)."""
+    n = min(len(t_starts), len(speakers))
+    t_starts = sorted(t_starts[:n])
+    speakers = speakers[:n]
+
+    batcher = SegmentBatcher(window_s=3.0, min_duration_s=0.0)
+    all_batched: list[dict] = []
+
+    for i in range(n):
+        seg = {
+            "text": f"seg {i}",
+            "speaker": speakers[i],
+            "t_start": t_starts[i],
+            "t_end": t_starts[i] + 0.5,
+        }
+        batch = batcher.add(seg)
+        if batch is not None:
+            all_batched.extend(batch.segments)
+
+    final = batcher.flush()
+    if final is not None:
+        all_batched.extend(final.segments)
+
+    batch_t_starts = [s["t_start"] for s in all_batched]
+    assert batch_t_starts == sorted(batch_t_starts), "batcher broke segment order"
+
+
+@settings(
+    max_examples=30,
+    deadline=None,
+)
+@given(
+    n=st.integers(min_value=1, max_value=50),
+    speakers=st.lists(
+        st.integers(min_value=0, max_value=3),
+        min_size=1,
+        max_size=50,
+    ),
+)
+def test_batcher_no_segment_lost_or_duplicated(n, speakers):
+    """Every segment appears in exactly one batch."""
+    n = min(n, len(speakers))
+    batcher = SegmentBatcher(window_s=3.0, min_duration_s=0.0)
+    collected: list[str] = []
+
+    for i in range(n):
+        seg = {
+            "text": f"seg-{i}",
+            "speaker": speakers[i],
+            "t_start": float(i),
+            "t_end": float(i) + 0.5,
+        }
+        batch = batcher.add(seg)
+        if batch is not None:
+            collected.extend(s["text"] for s in batch.segments)
+
+    final = batcher.flush()
+    if final is not None:
+        collected.extend(s["text"] for s in final.segments)
+
+    expected = [f"seg-{i}" for i in range(n)]
+    assert sorted(collected) == sorted(expected), "segment lost or duplicated"

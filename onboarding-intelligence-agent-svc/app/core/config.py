@@ -82,6 +82,10 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_LIVE_PER_COMPANY: int = 1
     PROCESS_TIMEOUT_S: int = 300
 
+    # ── Batcher (G-02, Design §4.3) ────────────────────────
+    BATCH_WINDOW_S: float = 3.0
+    BATCH_MIN_DURATION_S: float = 0.4
+
     # ── STT v2 (F-05) ───────────────────────────────────────
     STT_PROJECT: str = ""
     STT_LOCATION: str = "global"

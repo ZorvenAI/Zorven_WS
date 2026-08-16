@@ -1,21 +1,24 @@
-"""LiveSessionManager — seq, replay buffer, resume, and session mode.
+"""LiveSessionManager — seq, replay buffer, resume, session mode, and batcher.
 
 Design §4.3, §9.2, §10.2.3 · AC-3 and AC-4 (F-04 PR 2).
 Session mode and question marks added by F-06 (§18.2 degraded mode).
+Speaker-turn batcher and question state added by G-02.
 
 Both pieces of state live in Redis and neither can live in the process. Spike
 A-02 finding 3: sockets for one tenant land on different Cloud Run instances,
 so a reconnect usually arrives somewhere that never saw the frames it is asking
 to replay, and a counter held in memory would restart from one.
 
-The speaker-turn batcher the scaffold's docstring also mentions is G-02's — it
-batches *analysis*, not frames, and nothing here needs it to deliver a socket
-that survives a reconnect.
+The batcher is the one exception: it is in-process because it accumulates a few
+seconds of segments between LLM calls, and losing that on a reconnect is
+cheaper than a Redis round-trip per finalized segment. A reconnect replays
+buffered frames and resumes batching from scratch.
 """
 
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -36,6 +39,130 @@ logger = get_logger(__name__)
 #: another service's data, which the eviction note in this service's CLAUDE.md
 #: makes non-negotiable.
 BUFFER_FRAMES = 2000
+
+
+# ── Segment batcher (G-02, Design §4.3) ─────────────────────────────
+
+
+@dataclass
+class SegmentBatch:
+    """A window of finalized segments ready for analysis."""
+
+    segments: list[dict[str, Any]]
+    recording_id: str
+    first_t: float
+    last_t: float
+
+
+class SegmentBatcher:
+    """Accumulates finalized segments and fires on speaker change or timer.
+
+    Design §4.3: "analysis fires on a 3-second window or a speaker change,
+    whichever comes first, so a short brand-owner answer is analysed as a
+    unit rather than split across two calls."
+
+    AC-1: "a 400-millisecond mid-sentence fragment is never dispatched to the
+    model on its own."
+
+    Plain Python, not async. One instance per live session, created in _hold().
+    """
+
+    def __init__(
+        self,
+        *,
+        recording_id: str = "",
+        window_s: float = 3.0,
+        min_duration_s: float = 0.4,
+    ) -> None:
+        self._recording_id = recording_id
+        self._window_s = window_s
+        self._min_duration_s = min_duration_s
+        self._pending: list[dict[str, Any]] = []
+        self._first_added: float | None = None
+        self._last_speaker: int | None = None
+
+    @property
+    def recording_id(self) -> str:
+        return self._recording_id
+
+    @recording_id.setter
+    def recording_id(self, value: str) -> None:
+        self._recording_id = value
+
+    def add(self, segment: dict[str, Any]) -> SegmentBatch | None:
+        """Add a finalized segment. Returns a batch when a trigger fires.
+
+        Trigger conditions (whichever comes first):
+        1. The speaker changed from the previous segment.
+        2. Wall-clock time since the first segment in the batch >= window_s.
+
+        A batch whose total audio duration < min_duration_s is held until the
+        next segment joins it — never dispatched alone.
+        """
+        speaker = segment.get("speaker", 0)
+        speaker_changed = (
+            self._last_speaker is not None and speaker != self._last_speaker
+        )
+        self._last_speaker = speaker
+
+        batch: SegmentBatch | None = None
+        if speaker_changed and self._pending:
+            batch = self._try_fire()
+
+        self._pending.append(segment)
+        if self._first_added is None:
+            self._first_added = time.monotonic()
+
+        if batch is not None:
+            return batch
+
+        elapsed = time.monotonic() - self._first_added
+        if elapsed >= self._window_s:
+            return self._try_fire()
+
+        return None
+
+    def check_timer(self) -> SegmentBatch | None:
+        """Check whether the window timer has expired without a new segment.
+
+        Called periodically from the event loop so a batch that filled early
+        in the window is not held until the next segment arrives.
+        """
+        if not self._pending or self._first_added is None:
+            return None
+        if time.monotonic() - self._first_added >= self._window_s:
+            return self._try_fire()
+        return None
+
+    def flush(self) -> SegmentBatch | None:
+        """Force-fire whatever is accumulated (session end)."""
+        if not self._pending:
+            return None
+        return self._build_batch()
+
+    def _try_fire(self) -> SegmentBatch | None:
+        """Fire if the batch meets the minimum duration threshold."""
+        if not self._pending:
+            return None
+        first_t = self._pending[0].get("t_start", 0.0)
+        last_t = self._pending[-1].get("t_end", 0.0)
+        duration = last_t - first_t
+        if duration < self._min_duration_s:
+            return None
+        return self._build_batch()
+
+    def _build_batch(self) -> SegmentBatch:
+        segments = list(self._pending)
+        self._pending.clear()
+        self._first_added = None
+        first_t = segments[0].get("t_start", 0.0)
+        last_t = segments[-1].get("t_end", 0.0)
+        return SegmentBatch(
+            segments=segments,
+            recording_id=self._recording_id,
+            first_t=first_t,
+            last_t=last_t,
+        )
 
 
 def _parse_seq(raw: str | bytes | None) -> int | None:
@@ -254,9 +381,93 @@ class LiveSessionManager:
         raw = await self.redis.client.hgetall(key)
         result: dict[str, Any] = {}
         for k, v in raw.items():
-            field = k if isinstance(k, str) else k.decode()
+            fld = k if isinstance(k, str) else k.decode()
             try:
-                result[field] = json.loads(v)
+                result[fld] = json.loads(v)
             except (TypeError, ValueError):
                 pass
         return result
+
+    # ── Approved questions (G-02) ──────────────────────────────────
+
+    async def set_questions(self, questions: list[dict[str, Any]]) -> None:
+        """Store the approved question list for analysis mapping.
+
+        Called once during _hold() after a successful handshake. Each question
+        is stored as a hash field keyed by its Django pk (as a string), so
+        analysis results and manual marks write to the same namespace.
+        """
+        keys = self._keys()
+        key = keys.questions(self.session_id)
+        pipe = self.redis.client.pipeline(transaction=False)
+        for q in questions:
+            qid = str(q.get("id", ""))
+            if not qid:
+                continue
+            entry = {
+                "text": q.get("text", ""),
+                "target_field": q.get("target_field", ""),
+                "workflow_target": q.get("workflow_target", "WF1"),
+                "status": q.get("status", "OPEN"),
+                "evidence": [],
+                "score": None,
+                "source": "prepared",
+            }
+            pipe.hset(key, qid, json.dumps(entry))
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
+
+    async def get_questions(self) -> list[dict[str, Any]]:
+        """Read the question list with current state for SKL-OIA-04."""
+        keys = self._keys()
+        key = keys.questions(self.session_id)
+        raw = await self.redis.client.hgetall(key)
+        result: list[dict[str, Any]] = []
+        for k, v in raw.items():
+            qid = k if isinstance(k, str) else k.decode()
+            try:
+                entry = json.loads(v)
+                entry["id"] = qid
+                result.append(entry)
+            except (TypeError, ValueError):
+                pass
+        result.sort(key=lambda q: q.get("text", ""))
+        return result
+
+    async def store_analysis_result(
+        self,
+        question_id: str,
+        evidence: list[dict[str, Any]],
+        relevance: float,
+    ) -> None:
+        """Update a question with evidence from analysis (G-02 AC-2)."""
+        keys = self._keys()
+        key = keys.questions(self.session_id)
+        raw = await self.redis.client.hget(key, question_id)
+        if raw is None:
+            return
+        try:
+            entry = json.loads(raw)
+        except (TypeError, ValueError):
+            return
+        existing = entry.get("evidence") or []
+        existing.extend(evidence)
+        entry["evidence"] = existing
+        entry["source"] = "analysis"
+        entry["relevance"] = relevance
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.hset(key, question_id, json.dumps(entry))
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
+
+    # ── Unmapped batches (G-02 AC-2, consumed by G-05) ──────────────
+
+    async def store_unmapped_batch(self, batch_segments: list[dict[str, Any]]) -> None:
+        """Retain a batch that mapped to no prepared question for G-05."""
+        keys = self._keys()
+        key = f"{keys.session(self.session_id)}:unmapped"
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.rpush(key, json.dumps(batch_segments))
+        pipe.ltrim(key, -500, -1)
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
