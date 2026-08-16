@@ -47,6 +47,8 @@ from starlette.websockets import WebSocketDisconnect
 from app.api.schemas import (
     ClientFrameType,
     ErrorFrame,
+    EvidenceSpan,
+    GreenSignal,
     MarkQuestionFrame,
     RecoveryFrame,
     ResumeFrame,
@@ -510,11 +512,14 @@ async def _run_analysis(
     batch: SegmentBatch,
     analysis_state: dict[str, Any],
 ) -> None:
-    """Map a transcript batch onto prepared questions (G-02 AC-2).
+    """Map a transcript batch onto prepared questions and score sufficiency.
 
-    AC-3: 5-second timeout — late results are discarded, not delayed.
-    AC-4: when the LLM breaker is open, analysis is skipped entirely;
-    transcription continues unaffected.
+    G-02: SKL-OIA-04 maps batch → question attachments.
+    G-03: SKL-OIA-05 scores sufficiency for each question that received new
+    evidence; emits GreenSignal frames when the threshold is met.
+
+    AC-3 (timeout): late results are discarded, not delayed.
+    AC-4 (breaker): when the LLM breaker is open, analysis is skipped entirely.
     """
     registry: SkillRegistry | None = analysis_state.get("skill_registry")
     events = analysis_state.get("events")
@@ -581,6 +586,7 @@ async def _run_analysis(
         return
 
     has_attachment = False
+    updated_questions: list[str] = []
     for chunk in chunks:
         chunk_type = chunk.get("type", "")
         if chunk_type == "attachment":
@@ -590,11 +596,23 @@ async def _run_analysis(
             relevance = chunk.get("relevance", 0.0)
             if qid and evidence:
                 await session.store_analysis_result(qid, evidence, relevance)
+                updated_questions.append(qid)
         elif chunk_type == "notable_fact":
             pass
 
     if not has_attachment:
         await session.store_unmapped_batch(batch.segments)
+
+    # G-03: score sufficiency for each question that received new evidence.
+    if updated_questions:
+        await _evaluate_sufficiency(
+            websocket,
+            session,
+            registry,
+            events,
+            updated_questions,
+            context.tenant_context,
+        )
 
 
 async def _collect_skill_stream(
@@ -605,6 +623,162 @@ async def _collect_skill_stream(
     async for chunk in registry.execute_stream("SKL-OIA-04", context):
         chunks.append(chunk)
     return chunks
+
+
+async def _evaluate_sufficiency(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    registry: SkillRegistry,
+    events: Any,
+    question_ids: list[str],
+    tenant_context: TenantContext,
+) -> None:
+    """Score sufficiency for each question that received new evidence (G-03).
+
+    Skips questions that are already GREEN (sticky) or manually overridden.
+    Captures the question version before scoring; applies the green signal
+    only if the version hasn't changed (AC-3 ordering hazard).
+    """
+    from app.core.config import get_settings
+
+    cfg = get_settings()
+    threshold = cfg.SUFFICIENCY_GREEN_THRESHOLD
+
+    for qid in question_ids:
+        entry = await session.get_question_entry(qid)
+        if entry is None:
+            continue
+
+        if entry.get("status") == "GREEN":
+            continue
+        if entry.get("source") == "manual":
+            continue
+
+        expected_version = entry.get("version", 0)
+        evidence_spans = entry.get("evidence", [])
+
+        if not evidence_spans:
+            continue
+
+        suf_context = SkillContext(
+            input_prompt="Score answer sufficiency",
+            input_context={
+                "question": entry.get("text", ""),
+                "attached_spans": evidence_spans,
+                "target_field": entry.get("target_field", ""),
+            },
+            tenant_context=tenant_context,
+            origin=Origin.INTERNAL,
+            config={"sufficiency_green_threshold": threshold},
+        )
+
+        try:
+            chunks: list[dict[str, Any]] = []
+            async for chunk in asyncio.wait_for(
+                _collect_sufficiency_stream(registry, suf_context),
+                timeout=5.0,
+            ):
+                chunks.append(chunk)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "sufficiency_timeout",
+                session=session.session_id,
+                question_id=qid,
+            )
+            continue
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "sufficiency_failed",
+                question_id=qid,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            continue
+
+        for chunk in chunks:
+            if chunk.get("type") != "sufficiency_result":
+                continue
+
+            score = chunk.get("sufficiency_score", 0.0)
+            is_green = chunk.get("green", False)
+            missing = chunk.get("missing_aspects", [])
+            ev_spans = chunk.get("evidence", [])
+
+            if is_green and ev_spans:
+                applied = await session.apply_green_signal(
+                    qid,
+                    score,
+                    ev_spans,
+                    expected_version,
+                )
+                if applied:
+                    await _send_green_signal(
+                        websocket,
+                        session,
+                        events,
+                        qid,
+                        score,
+                        ev_spans,
+                    )
+            else:
+                await session.update_sufficiency(qid, score, missing)
+
+
+async def _collect_sufficiency_stream(
+    registry: SkillRegistry, context: SkillContext
+) -> AsyncIterator[dict[str, Any]]:
+    """Yield SKL-OIA-05 chunks for async iteration inside wait_for."""
+    async for chunk in registry.execute_stream("SKL-OIA-05", context):
+        yield chunk
+
+
+async def _send_green_signal(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    events: Any,
+    question_id: str,
+    score: float,
+    evidence_spans: list[dict[str, Any]],
+) -> None:
+    """Emit a GreenSignal frame and EVT-104."""
+    try:
+        seq = await session.next_seq()
+        frame = GreenSignal(
+            seq=seq,
+            question_id=question_id,
+            score=score,
+            evidence=[
+                EvidenceSpan(
+                    recording_id=s.get("recording_id", ""),
+                    t_start=s.get("t_start", 0.0),
+                    t_end=s.get("t_end", 0.0),
+                )
+                for s in evidence_spans
+                if s.get("recording_id")
+            ],
+        )
+        payload = await session.emit(frame)
+        await websocket.send_json(payload)
+    except Exception:  # noqa: BLE001
+        logger.warning("green_signal_send_failed", question_id=question_id)
+        return
+
+    if events:
+        try:
+            await events.emit(
+                EventType.SUFFICIENCY_SIGNAL,
+                tenant_id=session.tenant_id,
+                correlation_id=session.session_id,
+                session_id=session.session_id,
+                payload={
+                    "question_id": question_id,
+                    "score": score,
+                    "green": True,
+                    "evidence_span_count": len(evidence_spans),
+                },
+                outcome="SUCCESS",
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("evt104_emission_failed", question_id=question_id)
 
 
 async def _send_degraded_frame(
