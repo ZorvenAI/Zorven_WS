@@ -47,8 +47,10 @@ def _parse_seq(raw: str | bytes | None) -> int | None:
         return None
     try:
         frame = json.loads(raw)
+        if not isinstance(frame, dict):
+            return None
         seq = frame.get("seq")
-        return int(seq) if isinstance(seq, (int, float)) and seq > 0 else None
+        return int(seq) if isinstance(seq, int) and seq > 0 else None
     except (TypeError, ValueError):
         return None
 

@@ -1,0 +1,21 @@
+{"text": "hello", "is_final": false, "t_start": 0.0, "t_end": 0.5, "stability": 0.6, "delay_ms": 50}
+{"text": "hello welcome to the", "is_final": false, "t_start": 0.0, "t_end": 1.2, "stability": 0.7, "delay_ms": 100}
+{"text": "Hello, welcome to the onboarding session.", "is_final": true, "t_start": 0.0, "t_end": 2.8, "stability": 1.0, "delay_ms": 150}
+{"text": "thank you", "is_final": false, "t_start": 3.5, "t_end": 4.0, "stability": 0.6, "delay_ms": 80}
+{"text": "Thank you for having me today.", "is_final": true, "t_start": 3.5, "t_end": 5.2, "stability": 1.0, "delay_ms": 150}
+{"text": "so tell me", "is_final": false, "t_start": 6.0, "t_end": 6.5, "stability": 0.5, "delay_ms": 80}
+{"text": "so tell me about your", "is_final": false, "t_start": 6.0, "t_end": 7.0, "stability": 0.7, "delay_ms": 100}
+{"text": "So tell me about your company.", "is_final": true, "t_start": 6.0, "t_end": 8.3, "stability": 1.0, "delay_ms": 150}
+{"text": "we started", "is_final": false, "t_start": 9.0, "t_end": 9.5, "stability": 0.6, "delay_ms": 80}
+{"text": "we started roasting in twenty", "is_final": false, "t_start": 9.0, "t_end": 10.5, "stability": 0.7, "delay_ms": 100}
+{"text": "We started roasting in 2016.", "is_final": true, "t_start": 9.0, "t_end": 11.8, "stability": 1.0, "delay_ms": 150}
+{"text": "it began as a", "is_final": false, "t_start": 12.5, "t_end": 13.0, "stability": 0.6, "delay_ms": 80}
+{"text": "It began as a hobby and grew into a full business.", "is_final": true, "t_start": 12.5, "t_end": 16.2, "stability": 1.0, "delay_ms": 200}
+{"text": "our phone number is", "is_final": false, "t_start": 17.0, "t_end": 17.8, "stability": 0.6, "delay_ms": 80}
+{"text": "Our phone number is 555-867-5309.", "is_final": true, "t_start": 17.0, "t_end": 20.5, "stability": 1.0, "delay_ms": 200}
+{"text": "and my email", "is_final": false, "t_start": 21.0, "t_end": 22.0, "stability": 0.7, "delay_ms": 100}
+{"text": "And my email is john@example.com.", "is_final": true, "t_start": 21.0, "t_end": 24.5, "stability": 1.0, "delay_ms": 200}
+{"text": "we have two", "is_final": false, "t_start": 25.5, "t_end": 26.0, "stability": 0.6, "delay_ms": 80}
+{"text": "We have two retail locations in Portland.", "is_final": true, "t_start": 25.5, "t_end": 29.0, "stability": 1.0, "delay_ms": 200}
+{"text": "our target audience", "is_final": false, "t_start": 30.0, "t_end": 31.0, "stability": 0.6, "delay_ms": 80}
+{"text": "Our target audience is coffee enthusiasts aged 25 to 45.", "is_final": true, "t_start": 30.0, "t_end": 35.5, "stability": 1.0, "delay_ms": 250}
