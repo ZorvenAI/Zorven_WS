@@ -492,11 +492,14 @@ def _spawn_analysis(
     """Fire-and-forget analysis task for a batch (G-02 AC-2).
 
     Runs in a separate asyncio task so the STT pipeline is never blocked.
-    Only one analysis runs at a time — a new batch while one is running
-    is queued via the batcher's next fire, not by stacking tasks.
+    Only one analysis runs at a time — a new batch cancels any in-flight
+    task so orphaned tasks cannot accumulate.
     """
     if analysis_state is None:
         return
+    prev = analysis_state.get("task")
+    if prev is not None and not prev.done():
+        prev.cancel()
     task = asyncio.create_task(_run_analysis(websocket, session, batch, analysis_state))
     analysis_state["task"] = task
 
@@ -938,18 +941,25 @@ async def _hold(
         if _breaker_ref is not None and _breaker_cb is not None:
             _breaker_ref.remove_on_state_change(_breaker_cb)
 
-        # G-02: flush remaining segments and cancel analysis
+        # G-02: flush remaining segments; let the final analysis finish
         final_batch = batcher.flush()
         if final_batch is not None and session is not None:
             _spawn_analysis(websocket, session, final_batch, analysis_state)
 
         analysis_task = analysis_state.get("task")
         if analysis_task is not None and not analysis_task.done():
-            analysis_task.cancel()
             try:
-                await analysis_task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                pass
+                await asyncio.wait_for(asyncio.shield(analysis_task), timeout=5.0)
+            except (
+                asyncio.TimeoutError,
+                asyncio.CancelledError,
+                Exception,
+            ):  # noqa: BLE001
+                analysis_task.cancel()
+                try:
+                    await analysis_task
+                except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                    pass
 
         audio_q = stt_state.get("audio_q")
         if audio_q is not None:

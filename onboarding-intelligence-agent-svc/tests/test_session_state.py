@@ -418,6 +418,6 @@ async def test_store_unmapped_batch(manager):
     segments = [{"text": "We also sell online.", "t_start": 5.0, "t_end": 6.0}]
     await manager.store_unmapped_batch(segments)
 
-    key = f"{manager._keys().session(manager.session_id)}:unmapped"
+    key = manager._keys().unmapped(manager.session_id)
     length = await manager.redis.client.llen(key)
     assert length == 1

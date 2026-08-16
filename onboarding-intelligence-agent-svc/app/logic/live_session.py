@@ -103,12 +103,12 @@ class SegmentBatcher:
         speaker_changed = (
             self._last_speaker is not None and speaker != self._last_speaker
         )
-        self._last_speaker = speaker
 
         batch: SegmentBatch | None = None
         if speaker_changed and self._pending:
             batch = self._try_fire()
 
+        self._last_speaker = speaker
         self._pending.append(segment)
         if self._first_added is None:
             self._first_added = time.monotonic()
@@ -465,7 +465,7 @@ class LiveSessionManager:
     async def store_unmapped_batch(self, batch_segments: list[dict[str, Any]]) -> None:
         """Retain a batch that mapped to no prepared question for G-05."""
         keys = self._keys()
-        key = f"{keys.session(self.session_id)}:unmapped"
+        key = keys.unmapped(self.session_id)
         pipe = self.redis.client.pipeline(transaction=False)
         pipe.rpush(key, json.dumps(batch_segments))
         pipe.ltrim(key, -500, -1)
