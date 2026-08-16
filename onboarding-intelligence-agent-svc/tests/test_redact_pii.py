@@ -12,7 +12,6 @@ import pytest
 
 from app.skills.redact_pii import (
     RedactPii,
-    RedactionResult,
     _regex_fallback,
     ig04_redact,
     redact_text,

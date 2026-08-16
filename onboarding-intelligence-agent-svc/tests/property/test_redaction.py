@@ -15,7 +15,7 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from app.skills.redact_pii import RedactionResult, redact_text
+from app.skills.redact_pii import redact_text
 
 pytestmark = [pytest.mark.property, pytest.mark.unit]
 
