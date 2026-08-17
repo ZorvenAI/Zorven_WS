@@ -3,6 +3,7 @@
 Design §4.3, §9.2, §10.2.3 · AC-3 and AC-4 (F-04 PR 2).
 Session mode and question marks added by F-06 (§18.2 degraded mode).
 Speaker-turn batcher and question state added by G-02.
+Version-based green signals added by G-03.
 
 Both pieces of state live in Redis and neither can live in the process. Spike
 A-02 finding 3: sockets for one tenant land on different Cloud Run instances,
@@ -27,6 +28,17 @@ from app.cache.redis_manager import TTL_LIVE
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+_ARRAY_FIELDS = ("evidence", "missing_aspects")
+
+
+def _normalize_array_fields(entry: dict[str, Any]) -> None:
+    """Lua cjson encodes empty arrays as {} — normalize back to []."""
+    for field in _ARRAY_FIELDS:
+        val = entry.get(field)
+        if isinstance(val, dict) and not val:
+            entry[field] = []
+
 
 #: How many frames a reconnect can replay.
 #:
@@ -364,15 +376,43 @@ class LiveSessionManager:
 
     # ── Manual question marks (F-06 minimal, G-03 extends) ──────────
 
-    async def mark_question(self, question_id: str, action: str) -> None:
-        """Store a manual checkmark with no evidence."""
+    _LUA_MARK_QUESTION = """\
+local raw = redis.call('HGET', KEYS[1], ARGV[1])
+if not raw then return 0 end
+local entry = cjson.decode(raw)
+local v = entry['version']
+if v == nil then v = 0 end
+entry['action'] = ARGV[2]
+entry['source'] = 'manual'
+entry['version'] = v + 1
+if ARGV[2] == 'manual_ungreen' then
+    entry['status'] = 'OPEN'
+elseif ARGV[2] == 'manual_green' then
+    entry['status'] = 'GREEN'
+end
+redis.call('HSET', KEYS[1], ARGV[1], cjson.encode(entry))
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]))
+return v + 1
+"""
+
+    async def mark_question(self, question_id: str, action: str) -> int:
+        """Store a manual checkmark, bumping version (AC-3).
+
+        Returns the new version. A concurrent apply_green_signal reading an
+        older version will fail its CAS check and be discarded — the ordering
+        hazard from the G-03 tech notes.
+        """
         keys = self._keys()
         key = keys.questions(self.session_id)
-        entry = json.dumps({"action": action, "source": "manual", "evidence": []})
-        pipe = self.redis.client.pipeline(transaction=False)
-        pipe.hset(key, question_id, entry)
-        pipe.expire(key, TTL_LIVE)
-        await pipe.execute()
+        result = await self.redis.client.eval(
+            self._LUA_MARK_QUESTION,
+            1,
+            key,
+            question_id,
+            action,
+            str(TTL_LIVE),
+        )
+        return int(result)
 
     async def get_question_marks(self) -> dict[str, Any]:
         """Read all question marks for this session."""
@@ -383,7 +423,9 @@ class LiveSessionManager:
         for k, v in raw.items():
             fld = k if isinstance(k, str) else k.decode()
             try:
-                result[fld] = json.loads(v)
+                entry = json.loads(v)
+                _normalize_array_fields(entry)
+                result[fld] = entry
             except (TypeError, ValueError):
                 pass
         return result
@@ -412,6 +454,8 @@ class LiveSessionManager:
                 "evidence": [],
                 "score": None,
                 "source": "prepared",
+                "version": 0,
+                "missing_aspects": [],
             }
             pipe.hset(key, qid, json.dumps(entry))
         pipe.expire(key, TTL_LIVE)
@@ -427,6 +471,7 @@ class LiveSessionManager:
             qid = k if isinstance(k, str) else k.decode()
             try:
                 entry = json.loads(v)
+                _normalize_array_fields(entry)
                 entry["id"] = qid
                 result.append(entry)
             except (TypeError, ValueError):
@@ -459,6 +504,94 @@ class LiveSessionManager:
         pipe.hset(key, question_id, json.dumps(entry))
         pipe.expire(key, TTL_LIVE)
         await pipe.execute()
+
+    # ── Green signals (G-03) ──────────────────────────────────────────
+
+    _LUA_APPLY_GREEN = """\
+local raw = redis.call('HGET', KEYS[1], ARGV[1])
+if not raw then return 0 end
+local entry = cjson.decode(raw)
+local v = entry['version']
+if v == nil then v = 0 end
+if v ~= tonumber(ARGV[3]) then return 0 end
+entry['status'] = 'GREEN'
+entry['score'] = tonumber(ARGV[4])
+entry['evidence'] = cjson.decode(ARGV[5])
+entry['source'] = 'analysis'
+entry['version'] = v + 1
+entry['missing_aspects'] = {}
+redis.call('HSET', KEYS[1], ARGV[1], cjson.encode(entry))
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+return 1
+"""
+
+    async def apply_green_signal(
+        self,
+        question_id: str,
+        score: float,
+        evidence: list[dict[str, Any]],
+        expected_version: int,
+    ) -> bool:
+        """Apply a green signal only if the question version matches.
+
+        Returns True if applied, False if stale (version mismatch — a manual
+        override happened between the analysis read and this write).
+        """
+        keys = self._keys()
+        key = keys.questions(self.session_id)
+        result = await self.redis.client.eval(
+            self._LUA_APPLY_GREEN,
+            1,
+            key,
+            question_id,
+            str(TTL_LIVE),
+            str(expected_version),
+            str(score),
+            json.dumps(evidence),
+        )
+        return int(result) == 1
+
+    async def update_sufficiency(
+        self,
+        question_id: str,
+        score: float,
+        missing_aspects: list[str],
+    ) -> None:
+        """Store a sub-threshold sufficiency score for G-04 consumption.
+
+        Does not change status or bump version — this is informational, not
+        a state transition.
+        """
+        keys = self._keys()
+        key = keys.questions(self.session_id)
+        raw = await self.redis.client.hget(key, question_id)
+        if raw is None:
+            return
+        try:
+            entry = json.loads(raw)
+        except (TypeError, ValueError):
+            return
+        entry["score"] = score
+        entry["missing_aspects"] = missing_aspects
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.hset(key, question_id, json.dumps(entry))
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
+
+    async def get_question_entry(self, question_id: str) -> dict[str, Any] | None:
+        """Read a single question entry from the hash."""
+        keys = self._keys()
+        key = keys.questions(self.session_id)
+        raw = await self.redis.client.hget(key, question_id)
+        if raw is None:
+            return None
+        try:
+            entry: dict[str, Any] = json.loads(raw)
+            _normalize_array_fields(entry)
+            entry["id"] = question_id
+            return entry
+        except (TypeError, ValueError):
+            return None
 
     # ── Unmapped batches (G-02 AC-2, consumed by G-05) ──────────────
 

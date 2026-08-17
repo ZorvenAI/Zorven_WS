@@ -1,4 +1,5 @@
 """F-04 AC-4 · seq is strictly increasing, whatever the traffic looks like.
+G-03 · question version is monotonically increasing across any operation mix.
 
 The card names `test_seq_strictly_increasing` here, and NFR-REL-01 says why
 this file is property-based rather than a handful of cases: "the interleavings"
@@ -23,6 +24,7 @@ from hypothesis import strategies as st
 from app.api.schemas import (
     Coverage,
     ErrorFrame,
+    EvidenceSpan,
     Followups,
     GreenSignal,
     NotableFact,
@@ -47,7 +49,12 @@ def build(kind: str, seq: int):
             t_end=2.0,
         )
     if kind == "green":
-        return GreenSignal(seq=seq, question_id="q-7", score=0.86, evidence=[])
+        return GreenSignal(
+            seq=seq,
+            question_id="q-7",
+            score=0.86,
+            evidence=[EvidenceSpan(recording_id="r-1", t_start=1.0, t_end=2.0)],
+        )
     if kind == "followups":
         return Followups(seq=seq, question_id="q-9", suggestions=["Which origin?"])
     if kind == "fact":
@@ -266,3 +273,82 @@ def test_batcher_no_segment_lost_or_duplicated(n, speakers):
 
     expected = [f"seg-{i}" for i in range(n)]
     assert sorted(collected) == sorted(expected), "segment lost or duplicated"
+
+
+# ── G-03 · Version monotonicity ──────────────────────────────────────
+
+
+@settings(
+    max_examples=20,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@given(
+    ops=st.lists(
+        st.sampled_from(["mark_green", "mark_ungreen", "apply", "sufficiency"]),
+        min_size=2,
+        max_size=20,
+    ),
+)
+async def test_version_is_monotonically_increasing(live_redis, ops):
+    """Version never decreases across any sequence of mark/apply operations."""
+    manager = LiveSessionManager(
+        redis=live_redis,
+        tenant_id="t-prop",
+        session_id=f"s-ver-{uuid.uuid4().hex[:10]}",
+    )
+    await manager.set_questions([{"id": 1, "text": "Test?", "target_field": "test"}])
+
+    versions: list[int] = [0]
+    for op in ops:
+        if op == "mark_green":
+            v = await manager.mark_question("1", "manual_green")
+            versions.append(v)
+        elif op == "mark_ungreen":
+            v = await manager.mark_question("1", "manual_ungreen")
+            versions.append(v)
+        elif op == "apply":
+            entry = await manager.get_question_entry("1")
+            ev = [{"recording_id": "r-1", "t_start": 1.0, "t_end": 2.0}]
+            applied = await manager.apply_green_signal("1", 0.85, ev, entry["version"])
+            if applied:
+                entry = await manager.get_question_entry("1")
+                versions.append(entry["version"])
+        elif op == "sufficiency":
+            await manager.update_sufficiency("1", 0.4, ["missing"])
+
+    for i in range(1, len(versions)):
+        assert (
+            versions[i] >= versions[i - 1]
+        ), f"version decreased: {versions[i - 1]} -> {versions[i]}"
+
+
+@settings(
+    max_examples=20,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@given(
+    n_signals=st.integers(min_value=1, max_value=5),
+)
+async def test_manual_override_always_wins(live_redis, n_signals):
+    """A manual override followed by any number of stale signals wins."""
+    manager = LiveSessionManager(
+        redis=live_redis,
+        tenant_id="t-prop",
+        session_id=f"s-ow-{uuid.uuid4().hex[:10]}",
+    )
+    await manager.set_questions([{"id": 1, "text": "Test?", "target_field": "test"}])
+
+    # Manual override at version 0 → bumps to 1
+    await manager.mark_question("1", "manual_ungreen")
+
+    # N stale signals all try expected_version=0
+    ev = [{"recording_id": "r-1", "t_start": 1.0, "t_end": 2.0}]
+    for _ in range(n_signals):
+        applied = await manager.apply_green_signal("1", 0.95, ev, 0)
+        assert applied is False
+
+    entry = await manager.get_question_entry("1")
+    assert entry["source"] == "manual"
+    assert entry["status"] == "OPEN"

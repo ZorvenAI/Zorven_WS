@@ -69,6 +69,11 @@ async def test_mark_question_last_write_wins(live_redis, marks):
         session_id=f"s-{uuid.uuid4().hex[:8]}",
     )
 
+    all_qids = {qid for qid, _ in marks}
+    await session.set_questions(
+        [{"id": qid, "text": "Q?", "target_field": "f"} for qid in all_qids]
+    )
+
     expected: dict[str, str] = {}
     for qid, action in marks:
         await session.mark_question(qid, action)

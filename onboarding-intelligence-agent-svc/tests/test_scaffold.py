@@ -185,6 +185,7 @@ IMPLEMENTED_BODIES = {
     "app.skills.generate_questionnaire",  # C-03
     "app.skills.redact_pii",  # F-05: PII redaction (SKL-OIA-16)
     "app.skills.analyze_transcript_stream",  # G-02: SKL-OIA-04
+    "app.skills.evaluate_answer_sufficiency",  # G-03: SKL-OIA-05
 }
 
 
