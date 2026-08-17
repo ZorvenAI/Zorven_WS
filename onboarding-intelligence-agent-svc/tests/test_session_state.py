@@ -617,3 +617,140 @@ async def test_concurrent_mark_and_signal(manager):
     elif entry["source"] == "analysis":
         assert entry["status"] == "GREEN"
         assert entry["score"] == 0.85
+
+
+# ── G-04 · Follow-up suggestions ──────────────────────────────────────
+
+
+async def test_store_and_retrieve_followups(manager):
+    """Follow-ups round-trip through Redis."""
+    await manager.set_questions(
+        [{"id": 9, "text": "Who is your target audience?", "target_field": "audience"}]
+    )
+
+    suggestions = [
+        {"text": "What age group?", "addresses_aspect": "demographics", "priority": 1},
+        {"text": "B2B or B2C?", "addresses_aspect": "market type", "priority": 2},
+    ]
+    await manager.store_followups("9", suggestions)
+
+    entry = await manager.get_question_entry("9")
+    assert len(entry["suggestions"]) == 2
+    assert entry["suggestions"][0]["text"] == "What age group?"
+    assert entry["suggestion_accepted"] == [False, False]
+
+
+async def test_no_followups_for_unasked_question(manager):
+    """AC-1: a question with no evidence has no follow-ups.
+
+    This is the integration-level proof that the flow skips score==0.0.
+    The question entry has no suggestions because store_followups is never
+    called for a question with no evidence.
+    """
+    await manager.set_questions(
+        [{"id": 1, "text": "Company name?", "target_field": "name"}]
+    )
+
+    entry = await manager.get_question_entry("1")
+    assert entry.get("suggestions", []) == []
+
+
+async def test_superseded_followups_cleared_on_green(manager):
+    """AC-4: apply_green_signal clears suggestions and suggestion_accepted."""
+    await manager.set_questions(
+        [{"id": 3, "text": "Founding year?", "target_field": "founded_year"}]
+    )
+
+    suggestions = [
+        {"text": "What year exactly?", "addresses_aspect": "year", "priority": 1},
+    ]
+    await manager.store_followups("3", suggestions)
+
+    entry = await manager.get_question_entry("3")
+    assert len(entry["suggestions"]) == 1
+
+    evidence = [{"recording_id": "r-1", "t_start": 5.0, "t_end": 8.0}]
+    applied = await manager.apply_green_signal("3", 0.9, evidence, 0)
+    assert applied is True
+
+    entry = await manager.get_question_entry("3")
+    assert entry["status"] == "GREEN"
+    assert entry["suggestions"] == []
+    assert entry["suggestion_accepted"] == []
+
+
+async def test_mark_followup_accepted(manager):
+    """AC-3: acceptance backfill sets suggestion_accepted[i]=true."""
+    await manager.set_questions(
+        [{"id": 7, "text": "Brand values?", "target_field": "values"}]
+    )
+
+    suggestions = [
+        {
+            "text": "What matters most?",
+            "addresses_aspect": "core values",
+            "priority": 1,
+        },
+        {
+            "text": "Any brand role models?",
+            "addresses_aspect": "aspirational",
+            "priority": 2,
+        },
+    ]
+    await manager.store_followups("7", suggestions)
+
+    ok = await manager.mark_followup_asked("7", 0)
+    assert ok is True
+
+    entry = await manager.get_question_entry("7")
+    assert entry["suggestion_accepted"][0] is True
+    assert entry["suggestion_accepted"][1] is False
+
+
+async def test_mark_followup_invalid_index(manager):
+    """Out-of-range index returns False and changes nothing."""
+    await manager.set_questions(
+        [{"id": 7, "text": "Brand values?", "target_field": "values"}]
+    )
+
+    suggestions = [
+        {
+            "text": "What matters most?",
+            "addresses_aspect": "core values",
+            "priority": 1,
+        },
+    ]
+    await manager.store_followups("7", suggestions)
+
+    ok = await manager.mark_followup_asked("7", 5)
+    assert ok is False
+
+    entry = await manager.get_question_entry("7")
+    assert entry["suggestion_accepted"] == [False]
+
+
+async def test_mark_followup_nonexistent_question(manager):
+    """Marking on a nonexistent question returns False."""
+    ok = await manager.mark_followup_asked("nonexistent", 0)
+    assert ok is False
+
+
+async def test_followups_survive_reconnect(manager):
+    """Stored follow-ups are readable after manager re-creation."""
+    await manager.set_questions(
+        [{"id": 4, "text": "Revenue?", "target_field": "revenue"}]
+    )
+
+    suggestions = [
+        {"text": "Annual or monthly?", "addresses_aspect": "period", "priority": 1},
+    ]
+    await manager.store_followups("4", suggestions)
+
+    manager2 = LiveSessionManager(
+        redis=manager.redis,
+        tenant_id=manager.tenant_id,
+        session_id=manager.session_id,
+    )
+    entry = await manager2.get_question_entry("4")
+    assert len(entry["suggestions"]) == 1
+    assert entry["suggestions"][0]["text"] == "Annual or monthly?"

@@ -48,7 +48,9 @@ from app.api.schemas import (
     ClientFrameType,
     ErrorFrame,
     EvidenceSpan,
+    Followups,
     GreenSignal,
+    MarkFollowupAskedFrame,
     MarkQuestionFrame,
     RecoveryFrame,
     ResumeFrame,
@@ -719,6 +721,133 @@ async def _evaluate_sufficiency(
                     )
             else:
                 await session.update_sufficiency(qid, score, missing)
+                if score > 0.0 and missing:
+                    await _generate_followups(
+                        websocket,
+                        session,
+                        registry,
+                        events,
+                        qid,
+                        entry,
+                        missing,
+                        tenant_context,
+                    )
+
+
+async def _generate_followups(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    registry: SkillRegistry,
+    events: Any,
+    question_id: str,
+    entry: dict[str, Any],
+    missing_aspects: list[str],
+    tenant_context: TenantContext,
+) -> None:
+    """Invoke SKL-OIA-06 to generate follow-up suggestions (G-04)."""
+    already_asked = [
+        s["text"] if isinstance(s, dict) else str(s)
+        for s in entry.get("suggestions", [])
+    ]
+
+    fup_context = SkillContext(
+        input_prompt="Generate follow-up questions",
+        input_context={
+            "question": entry.get("text", ""),
+            "missing_aspects": missing_aspects,
+            "conversation_tone": "professional",
+            "already_asked": already_asked,
+        },
+        tenant_context=tenant_context,
+        origin=Origin.INTERNAL,
+        config={},
+    )
+
+    try:
+        chunks: list[dict[str, Any]] = await asyncio.wait_for(
+            _collect_followup_chunks(registry, fup_context),
+            timeout=5.0,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "followup_timeout",
+            session=session.session_id,
+            question_id=question_id,
+        )
+        return
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "followup_failed",
+            question_id=question_id,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+        return
+
+    for chunk in chunks:
+        if chunk.get("type") != "followup_suggestions":
+            continue
+        suggestions = chunk.get("suggestions", [])
+        if not suggestions:
+            continue
+
+        await session.store_followups(question_id, suggestions)
+
+        texts = [s["text"] if isinstance(s, dict) else str(s) for s in suggestions[:3]]
+        await _send_followups(
+            websocket,
+            session,
+            events,
+            question_id,
+            texts,
+        )
+
+
+async def _collect_followup_chunks(
+    registry: SkillRegistry, context: SkillContext
+) -> list[dict[str, Any]]:
+    """Collect all SKL-OIA-06 chunks into a list (awaitable for wait_for)."""
+    chunks: list[dict[str, Any]] = []
+    async for chunk in registry.execute_stream("SKL-OIA-06", context):
+        chunks.append(chunk)
+    return chunks
+
+
+async def _send_followups(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    events: Any,
+    question_id: str,
+    suggestions: list[str],
+) -> None:
+    """Emit a Followups frame and EVT-105."""
+    try:
+        seq = await session.next_seq()
+        frame = Followups(
+            seq=seq,
+            question_id=question_id,
+            suggestions=suggestions,
+        )
+        payload = await session.emit(frame)
+        await websocket.send_json(payload)
+    except Exception:
+        logger.warning("followup_send_failed", question_id=question_id)
+        return
+
+    if events:
+        try:
+            await events.emit(
+                EventType.FOLLOWUP_SUGGESTED,
+                tenant_id=session.tenant_id,
+                correlation_id=session.session_id,
+                session_id=session.session_id,
+                payload={
+                    "question_id": question_id,
+                    "suggestion_count": len(suggestions),
+                },
+                outcome="SUCCESS",
+            )
+        except Exception:
+            logger.warning("evt105_emission_failed", question_id=question_id)
 
 
 async def _collect_sufficiency_chunks(
@@ -924,6 +1053,41 @@ async def _handle_control(
             question_id=mark.question_id,
             action=mark.action,
         )
+        return
+
+    if frame_type == ClientFrameType.MARK_FOLLOWUP_ASKED.value:
+        try:
+            mfa = MarkFollowupAskedFrame(**frame)
+        except ValidationError:
+            logger.info("live_mark_followup_malformed")
+            return
+        ok = await session.mark_followup_asked(mfa.question_id, mfa.suggestion_index)
+        if ok:
+            logger.info(
+                "followup_accepted",
+                question_id=mfa.question_id,
+                suggestion_index=mfa.suggestion_index,
+            )
+            events = getattr(websocket.app.state, "events", None)
+            if events:
+                try:
+                    await events.emit(
+                        EventType.FOLLOWUP_SUGGESTED,
+                        tenant_id=session.tenant_id,
+                        correlation_id=session.session_id,
+                        session_id=session.session_id,
+                        payload={
+                            "question_id": mfa.question_id,
+                            "suggestion_index": mfa.suggestion_index,
+                            "accepted": True,
+                        },
+                        outcome="SUCCESS",
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "evt105_acceptance_failed",
+                        question_id=mfa.question_id,
+                    )
         return
 
     if frame_type == ClientFrameType.RESUME.value:
