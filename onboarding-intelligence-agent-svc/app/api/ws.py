@@ -673,12 +673,10 @@ async def _evaluate_sufficiency(
         )
 
         try:
-            chunks: list[dict[str, Any]] = []
-            async for chunk in asyncio.wait_for(
-                _collect_sufficiency_stream(registry, suf_context),
+            chunks: list[dict[str, Any]] = await asyncio.wait_for(
+                _collect_sufficiency_chunks(registry, suf_context),
                 timeout=5.0,
-            ):
-                chunks.append(chunk)
+            )
         except asyncio.TimeoutError:
             logger.warning(
                 "sufficiency_timeout",
@@ -723,12 +721,14 @@ async def _evaluate_sufficiency(
                 await session.update_sufficiency(qid, score, missing)
 
 
-async def _collect_sufficiency_stream(
+async def _collect_sufficiency_chunks(
     registry: SkillRegistry, context: SkillContext
-) -> AsyncIterator[dict[str, Any]]:
-    """Yield SKL-OIA-05 chunks for async iteration inside wait_for."""
+) -> list[dict[str, Any]]:
+    """Collect all SKL-OIA-05 chunks into a list (awaitable for wait_for)."""
+    chunks: list[dict[str, Any]] = []
     async for chunk in registry.execute_stream("SKL-OIA-05", context):
-        yield chunk
+        chunks.append(chunk)
+    return chunks
 
 
 async def _send_green_signal(

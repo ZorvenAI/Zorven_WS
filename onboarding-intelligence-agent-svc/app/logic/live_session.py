@@ -586,7 +586,7 @@ return 1
         if raw is None:
             return None
         try:
-            entry = json.loads(raw)
+            entry: dict[str, Any] = json.loads(raw)
             _normalize_array_fields(entry)
             entry["id"] = question_id
             return entry
