@@ -143,11 +143,15 @@ class GenerateFollowups(StreamingSkill):
             text = item.get("text", "")
             if not text or not isinstance(text, str):
                 continue
+            try:
+                priority = int(item.get("priority", len(result) + 1))
+            except (ValueError, TypeError):
+                priority = len(result) + 1
             result.append(
                 {
                     "text": str(text).strip(),
                     "addresses_aspect": str(item.get("addresses_aspect", "")).strip(),
-                    "priority": int(item.get("priority", len(result) + 1)),
+                    "priority": priority,
                 }
             )
 

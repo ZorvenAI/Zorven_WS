@@ -556,7 +556,7 @@ async def _run_analysis(
 
     try:
         chunks = await asyncio.wait_for(
-            _collect_skill_stream(registry, context),
+            _collect_stream(registry, "SKL-OIA-04", context),
             timeout=5.0,
         )
     except asyncio.TimeoutError:
@@ -617,12 +617,12 @@ async def _run_analysis(
         )
 
 
-async def _collect_skill_stream(
-    registry: SkillRegistry, context: SkillContext
+async def _collect_stream(
+    registry: SkillRegistry, skill_id: str, context: SkillContext
 ) -> list[dict[str, Any]]:
-    """Collect the skill stream into a list so wait_for can timeout it."""
+    """Collect a skill's streaming output into a list (awaitable for wait_for)."""
     chunks: list[dict[str, Any]] = []
-    async for chunk in registry.execute_stream("SKL-OIA-04", context):
+    async for chunk in registry.execute_stream(skill_id, context):
         chunks.append(chunk)
     return chunks
 
@@ -676,7 +676,7 @@ async def _evaluate_sufficiency(
 
         try:
             chunks: list[dict[str, Any]] = await asyncio.wait_for(
-                _collect_sufficiency_chunks(registry, suf_context),
+                _collect_stream(registry, "SKL-OIA-05", suf_context),
                 timeout=5.0,
             )
         except asyncio.TimeoutError:
@@ -765,7 +765,7 @@ async def _generate_followups(
 
     try:
         chunks: list[dict[str, Any]] = await asyncio.wait_for(
-            _collect_followup_chunks(registry, fup_context),
+            _collect_stream(registry, "SKL-OIA-06", fup_context),
             timeout=5.0,
         )
     except asyncio.TimeoutError:
@@ -800,16 +800,6 @@ async def _generate_followups(
             question_id,
             texts,
         )
-
-
-async def _collect_followup_chunks(
-    registry: SkillRegistry, context: SkillContext
-) -> list[dict[str, Any]]:
-    """Collect all SKL-OIA-06 chunks into a list (awaitable for wait_for)."""
-    chunks: list[dict[str, Any]] = []
-    async for chunk in registry.execute_stream("SKL-OIA-06", context):
-        chunks.append(chunk)
-    return chunks
 
 
 async def _send_followups(
@@ -848,16 +838,6 @@ async def _send_followups(
             )
         except Exception:
             logger.warning("evt105_emission_failed", question_id=question_id)
-
-
-async def _collect_sufficiency_chunks(
-    registry: SkillRegistry, context: SkillContext
-) -> list[dict[str, Any]]:
-    """Collect all SKL-OIA-05 chunks into a list (awaitable for wait_for)."""
-    chunks: list[dict[str, Any]] = []
-    async for chunk in registry.execute_stream("SKL-OIA-05", context):
-        chunks.append(chunk)
-    return chunks
 
 
 async def _send_green_signal(
