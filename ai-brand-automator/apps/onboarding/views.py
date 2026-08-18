@@ -8,6 +8,7 @@ validated here rather than in the client.
 from __future__ import annotations
 
 import json
+import uuid
 
 from django.db import IntegrityError
 from django.db.models import Prefetch
@@ -32,7 +33,11 @@ from django.http import Http404
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 
+from brand_automator.validators import sanitize_filename
+from files.services import gcs_service
 from onboarding.models import BrandAsset, Company
+from onboarding.serializers import BrandAssetSerializer
+from onboarding.services import get_pipeline_service
 from tenants.models import Tenant
 
 from apps.onboarding import errors
@@ -75,6 +80,7 @@ from apps.onboarding.models import (
 from apps.onboarding.serializers import (
     ConsentRecordSerializer,
     FieldProvenanceSerializer,
+    MediaCaptureSerializer,
     MeetingRecordingSerializer,
     OnboardingSessionSerializer,
     ProvenanceEditSerializer,
@@ -134,6 +140,7 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         # decides the role rather than the action name. Editor+ is enforced
         # inside for the write; the entry keeps Viewer out of neither.
         "recordings": [IsAuthenticated, IsTenantViewer],
+        "media": [IsAuthenticated, IsTenantEditor],
     }
 
     def get_queryset(self):
@@ -478,6 +485,87 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         return Response(
             MeetingRecordingSerializer(recording).data, status=http.HTTP_201_CREATED
         )
+
+    @action(detail=True, methods=["post"])
+    @db_transaction.atomic
+    def media(self, request, pk=None):
+        """``POST /sessions/{id}/media/`` — photo capture with usage tag (H-01).
+
+        Follows the recordings action pattern: consent-gated, session from
+        URL (server-authoritative), and the asset FK set server-side rather
+        than accepted from the body (see BrandAssetSerializer.onboarding_session).
+        """
+        session = self.get_object()
+
+        has_consent = session.consent_records.filter(revoked_at__isnull=True).exists()
+        if not has_consent:
+            return Response(
+                {
+                    "code": errors.CONSENT_MISSING,
+                    "detail": (
+                        "This session has no active consent. Record consent "
+                        "before capturing media."
+                    ),
+                },
+                status=http.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = MediaCaptureSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=http.HTTP_400_BAD_REQUEST)
+
+        file = serializer.validated_data["file"]
+        usage_tag = serializer.validated_data["usage_tag"]
+
+        safe_filename = sanitize_filename(file.name)
+        tenant = session.tenant
+        company = session.company
+
+        existing = BrandAsset.objects.filter(
+            tenant=tenant, company=company, file_name=safe_filename
+        ).first()
+        if existing is not None:
+            return Response(
+                BrandAssetSerializer(existing).data, status=http.HTTP_200_OK
+            )
+
+        unique_id = uuid.uuid4().hex[:8]
+        landing_path = f"_landing/{tenant.id}/{unique_id}_{safe_filename}"
+        raw_bucket = tenant.get_raw_bucket() if tenant else gcs_service.bucket_name
+
+        gcs_uploaded = False
+        try:
+            target_bucket = gcs_service.get_bucket(raw_bucket)
+            if target_bucket:
+                gcs_service.upload_file(
+                    file, landing_path, file.content_type, bucket_name=raw_bucket
+                )
+                gcs_uploaded = True
+        except Exception:
+            pass
+
+        asset = BrandAsset.objects.create(
+            tenant=tenant,
+            company=company,
+            file_name=safe_filename,
+            file_type="image",
+            file_size=file.size,
+            gcs_path=landing_path,
+            gcs_bucket=raw_bucket,
+            processed=False,
+            pipeline_status="pending" if gcs_uploaded else "failed",
+            pipeline_error=(
+                "" if gcs_uploaded else "GCS not configured - file not stored"
+            ),
+            usage_tag=usage_tag,
+            onboarding_session=session,
+        )
+
+        if gcs_uploaded:
+            pipeline_service = get_pipeline_service()
+            pipeline_service.publish_asset_event(asset)
+
+        return Response(BrandAssetSerializer(asset).data, status=http.HTTP_201_CREATED)
 
 
 class MeetingRecordingViewSet(

@@ -563,3 +563,28 @@ class ScheduledMeetingSerializer(serializers.ModelSerializer):
                     }
                 )
         return attrs
+
+
+class MediaCaptureSerializer(serializers.Serializer):
+    """Validates photo captures submitted via ``POST /sessions/{id}/media/``.
+
+    ``usage_tag`` has no default — the data-protection concern from §11 is
+    that an untagged ``identity_document`` would bypass PG-08 downstream.
+    """
+
+    USAGE_TAGS = [
+        "business_photo",
+        "previous_ad",
+        "brand_asset",
+        "identity_document",
+        "other",
+    ]
+
+    file = serializers.FileField()
+    usage_tag = serializers.ChoiceField(choices=USAGE_TAGS)
+
+    def validate_file(self, value):
+        max_size = 50 * 1024 * 1024
+        if value.size > max_size:
+            raise serializers.ValidationError("File size cannot exceed 50MB")
+        return value
