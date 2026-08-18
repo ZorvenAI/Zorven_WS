@@ -109,6 +109,7 @@ class ClientFrameType(str, Enum):
     START = "start"
     RESUME = "resume"
     MARK_QUESTION = "mark_question"
+    MARK_FOLLOWUP_ASKED = "mark_followup_asked"
     STOP = "stop"
 
 
@@ -262,6 +263,16 @@ class MarkQuestionFrame(BaseModel):
     type: Literal[ClientFrameType.MARK_QUESTION] = ClientFrameType.MARK_QUESTION
     question_id: str
     action: str
+
+
+class MarkFollowupAskedFrame(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal[ClientFrameType.MARK_FOLLOWUP_ASKED] = (
+        ClientFrameType.MARK_FOLLOWUP_ASKED
+    )
+    question_id: str
+    suggestion_index: int = Field(ge=0, le=2)
 
 
 class StopFrame(BaseModel):

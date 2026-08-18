@@ -352,3 +352,47 @@ async def test_manual_override_always_wins(live_redis, n_signals):
     entry = await manager.get_question_entry("1")
     assert entry["source"] == "manual"
     assert entry["status"] == "OPEN"
+
+
+# ── G-04 · Follow-ups cleared on green ────────────────────────────────
+
+
+@settings(
+    max_examples=20,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@given(
+    n_followups=st.integers(min_value=1, max_value=3),
+    n_sufficiency=st.integers(min_value=0, max_value=3),
+)
+async def test_followups_cleared_on_green(live_redis, n_followups, n_sufficiency):
+    """For any sequence of sufficiency + green operations, a green question
+    never has stale follow-ups."""
+    manager = LiveSessionManager(
+        redis=live_redis,
+        tenant_id="t-prop",
+        session_id=f"s-fup-{uuid.uuid4().hex[:10]}",
+    )
+    await manager.set_questions([{"id": 1, "text": "Test?", "target_field": "test"}])
+
+    suggestions = [
+        {"text": f"Follow-up {i}?", "addresses_aspect": f"a{i}", "priority": i}
+        for i in range(n_followups)
+    ]
+    await manager.store_followups("1", suggestions)
+
+    for _ in range(n_sufficiency):
+        await manager.update_sufficiency("1", 0.4, ["still missing"])
+
+    entry = await manager.get_question_entry("1")
+    assert len(entry["suggestions"]) == n_followups
+
+    evidence = [{"recording_id": "r-1", "t_start": 1.0, "t_end": 2.0}]
+    applied = await manager.apply_green_signal("1", 0.9, evidence, entry["version"])
+    assert applied is True
+
+    entry = await manager.get_question_entry("1")
+    assert entry["status"] == "GREEN"
+    assert entry["suggestions"] == [], "stale follow-ups survived green signal"
+    assert entry["suggestion_accepted"] == [], "stale acceptance survived green"

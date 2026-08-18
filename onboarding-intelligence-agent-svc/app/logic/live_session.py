@@ -29,7 +29,7 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-_ARRAY_FIELDS = ("evidence", "missing_aspects")
+_ARRAY_FIELDS = ("evidence", "missing_aspects", "suggestions", "suggestion_accepted")
 
 
 def _normalize_array_fields(entry: dict[str, Any]) -> None:
@@ -520,6 +520,8 @@ entry['evidence'] = cjson.decode(ARGV[5])
 entry['source'] = 'analysis'
 entry['version'] = v + 1
 entry['missing_aspects'] = {}
+entry['suggestions'] = {}
+entry['suggestion_accepted'] = {}
 redis.call('HSET', KEYS[1], ARGV[1], cjson.encode(entry))
 redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
 return 1
@@ -592,6 +594,70 @@ return 1
             return entry
         except (TypeError, ValueError):
             return None
+
+    # ── Follow-up suggestions (G-04) ─────────────────────────────────
+
+    async def store_followups(
+        self,
+        question_id: str,
+        suggestions: list[dict[str, Any]],
+    ) -> None:
+        """Store follow-up suggestions on a question entry.
+
+        Each suggestion is ``{text, addresses_aspect, priority}``.
+        Initialises ``suggestion_accepted`` as a parallel boolean array.
+        """
+        keys = self._keys()
+        key = keys.questions(self.session_id)
+        raw = await self.redis.client.hget(key, question_id)
+        if raw is None:
+            return
+        try:
+            entry = json.loads(raw)
+        except (TypeError, ValueError):
+            return
+        entry["suggestions"] = suggestions
+        entry["suggestion_accepted"] = [False] * len(suggestions)
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.hset(key, question_id, json.dumps(entry))
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
+
+    _LUA_MARK_FOLLOWUP_ASKED = """\
+local raw = redis.call('HGET', KEYS[1], ARGV[1])
+if not raw then return 0 end
+local entry = cjson.decode(raw)
+local acc = entry['suggestion_accepted']
+if acc == nil then return 0 end
+local idx = tonumber(ARGV[2]) + 1
+if idx < 1 or idx > #acc then return 0 end
+acc[idx] = true
+entry['suggestion_accepted'] = acc
+redis.call('HSET', KEYS[1], ARGV[1], cjson.encode(entry))
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]))
+return 1
+"""
+
+    async def mark_followup_asked(
+        self,
+        question_id: str,
+        suggestion_index: int,
+    ) -> bool:
+        """Mark a follow-up suggestion as asked by the operator (AC-3).
+
+        Returns True if the index was valid and updated, False otherwise.
+        """
+        keys = self._keys()
+        key = keys.questions(self.session_id)
+        result = await self.redis.client.eval(
+            self._LUA_MARK_FOLLOWUP_ASKED,
+            1,
+            key,
+            question_id,
+            str(suggestion_index),
+            str(TTL_LIVE),
+        )
+        return int(result) == 1
 
     # ── Unmapped batches (G-02 AC-2, consumed by G-05) ──────────────
 
