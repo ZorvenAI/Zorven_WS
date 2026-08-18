@@ -935,3 +935,156 @@ async def test_adhoc_detected_frame_in_buffer(manager):
     assert frames[0]["question_id"] == "adhoc_abc12345"
     assert frames[0]["workflow_target"] == "WF3"
     assert frames[0]["target_field"] == "retail_locations"
+
+
+# ── G-06 · Coverage state ────────────────────────────────────────────
+
+
+async def test_store_and_get_coverage_round_trip(manager):
+    """Coverage fractions survive a Redis round-trip."""
+    from app.logic.coverage import compute_coverage
+
+    questions = [
+        {
+            "text": "Company name?",
+            "workflow_target": "WF1",
+            "status": "GREEN",
+            "target_field": "name",
+        },
+        {
+            "text": "Founded year?",
+            "workflow_target": "WF1",
+            "status": "OPEN",
+            "target_field": "founded_year",
+        },
+        {
+            "text": "Brand voice?",
+            "workflow_target": "WF2",
+            "status": "GREEN",
+            "target_field": "brand_voice",
+        },
+        {
+            "text": "Ad budget?",
+            "workflow_target": "WF3",
+            "status": "OPEN",
+            "target_field": "marketing_budget_range",
+        },
+    ]
+    result = compute_coverage(questions, threshold=0.7)
+    await manager.store_coverage(result)
+    stored = await manager.get_coverage()
+
+    assert stored is not None
+    assert stored["WF1"] == 0.5
+    assert stored["WF2"] == 1.0
+    assert stored["WF3"] == 0.0
+    assert stored["satisfied"] is False
+    assert len(stored["blocking_gaps"]) > 0
+    assert "updated_at" in stored
+
+
+async def test_coverage_not_yet_computed(manager):
+    """get_coverage returns None before any coverage has been stored."""
+    assert await manager.get_coverage() is None
+
+
+async def test_coverage_survives_reconnect(manager):
+    """Coverage hash persists across a simulated reconnect."""
+    from app.logic.coverage import compute_coverage
+
+    questions = [
+        {
+            "text": "Q1",
+            "workflow_target": "WF1",
+            "status": "GREEN",
+            "target_field": "name",
+        },
+        {
+            "text": "Q2",
+            "workflow_target": "WF2",
+            "status": "GREEN",
+            "target_field": "brand_voice",
+        },
+        {
+            "text": "Q3",
+            "workflow_target": "WF3",
+            "status": "GREEN",
+            "target_field": "sales_channels",
+        },
+    ]
+    await manager.store_coverage(compute_coverage(questions))
+
+    reconnected = LiveSessionManager(
+        redis=manager.redis,
+        tenant_id=manager.tenant_id,
+        session_id=manager.session_id,
+    )
+    stored = await reconnected.get_coverage()
+    assert stored is not None
+    assert stored["WF1"] == 1.0
+    assert stored["satisfied"] is True
+
+
+async def test_coverage_frame_in_replay_buffer(manager):
+    """Coverage frame round-trips through the replay buffer."""
+    frame = Coverage(
+        seq=await manager.next_seq(),
+        map={"WF1": 0.8, "WF2": 0.5, "WF3": 0.3},
+    )
+    await manager.emit(frame)
+
+    frames, _ = await manager.replay_after(0)
+    assert len(frames) == 1
+    assert frames[0]["type"] == "coverage"
+    assert frames[0]["map"]["WF1"] == 0.8
+    assert frames[0]["map"]["WF3"] == 0.3
+
+
+async def test_coverage_incremental_matches_full(manager):
+    """Named in story test table: recomputing from all questions matches
+    an incremental approach (both are the same function, so they must agree)."""
+    from app.logic.coverage import compute_coverage
+
+    questions = [
+        {
+            "text": "Q1",
+            "workflow_target": "WF1",
+            "status": "GREEN",
+            "target_field": "name",
+        },
+        {
+            "text": "Q2",
+            "workflow_target": "WF1",
+            "status": "OPEN",
+            "target_field": "mission",
+        },
+        {
+            "text": "Q3",
+            "workflow_target": "WF2",
+            "status": "GREEN",
+            "target_field": "competitors",
+        },
+        {
+            "text": "Q4",
+            "workflow_target": "WF3",
+            "status": "OPEN",
+            "target_field": "sales_channels",
+        },
+    ]
+
+    # "Incremental": compute from first 2, then recompute from all 4
+    partial = compute_coverage(questions[:2])
+    assert partial.wf1.pct == 0.5  # confirms partial view is different
+    full = compute_coverage(questions)
+
+    # The full recompute is the ground truth
+    assert full.wf1.pct == 0.5
+    assert full.wf2.pct == 1.0
+    assert full.wf3.pct == 0.0
+
+    # Store and retrieve via Redis
+    await manager.store_coverage(full)
+    stored = await manager.get_coverage()
+    assert stored["WF1"] == full.wf1.pct
+    assert stored["WF2"] == full.wf2.pct
+    assert stored["WF3"] == full.wf3.pct

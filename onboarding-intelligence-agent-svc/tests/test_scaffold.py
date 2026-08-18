@@ -187,6 +187,7 @@ IMPLEMENTED_BODIES = {
     "app.skills.analyze_transcript_stream",  # G-02: SKL-OIA-04
     "app.skills.evaluate_answer_sufficiency",  # G-03: SKL-OIA-05
     "app.skills.generate_followups",  # G-04: SKL-OIA-06
+    "app.skills.check_workflow_coverage",  # G-06: SKL-OIA-09
 }
 
 
