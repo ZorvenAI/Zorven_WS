@@ -30,6 +30,7 @@ import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ArrowLeft } from 'lucide-react';
 
+import { useCaptureQueue } from '@/hooks/useCaptureQueue';
 import { useLiveSocket } from '@/hooks/useLiveSocket';
 
 import AgentFeedbackStream, {
@@ -120,6 +121,8 @@ export default function MeetingView({
     sessionId: sessionId ?? null,
     enabled: granted,
   });
+
+  const captureQueue = useCaptureQueue(sessionId ?? null);
 
   return (
     /*
@@ -224,6 +227,8 @@ export default function MeetingView({
             consentGranted={granted}
             sessionId={sessionId}
             onRecordConsent={() => setConsentOpen(true)}
+            onCapture={captureQueue.enqueue}
+            captures={captureQueue.captures}
           />
         </div>
       </div>
