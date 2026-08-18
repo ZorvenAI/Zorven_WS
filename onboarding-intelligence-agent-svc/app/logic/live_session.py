@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -454,6 +455,7 @@ return v + 1
                 "evidence": [],
                 "score": None,
                 "source": "prepared",
+                "origin": "PREPARED",
                 "version": 0,
                 "missing_aspects": [],
             }
@@ -670,3 +672,56 @@ return 1
         pipe.ltrim(key, -500, -1)
         pipe.expire(key, TTL_LIVE)
         await pipe.execute()
+
+    # ── Ad-hoc questions (G-05) ───────────────────────────────────────
+
+    async def add_adhoc_question(
+        self,
+        text: str,
+        target_field: str,
+        workflow_target: str,
+        evidence: list[dict[str, Any]],
+    ) -> str:
+        """Create an ad-hoc question in the questions hash. Returns the ID."""
+        qid = f"adhoc_{uuid.uuid4().hex[:8]}"
+        entry = {
+            "text": text,
+            "target_field": target_field,
+            "workflow_target": workflow_target,
+            "status": "OPEN",
+            "evidence": evidence,
+            "score": None,
+            "source": "analysis",
+            "origin": "ADHOC",
+            "version": 0,
+            "missing_aspects": [],
+        }
+        keys = self._keys()
+        key = keys.questions(self.session_id)
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.hset(key, qid, json.dumps(entry))
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
+        return qid
+
+    # ── Operator speaker (G-05 AC-2) ─────────────────────────────────
+
+    async def set_operator_speaker(self, speaker: int) -> None:
+        """Store the operator's speaker tag for AC-2 gating."""
+        keys = self._keys()
+        key = keys.session(self.session_id)
+        await self.redis.client.hset(key, "operator_speaker", str(speaker))
+        await self.redis.client.expire(key, TTL_LIVE)
+
+    async def get_operator_speaker(self) -> int | None:
+        """Read the operator speaker tag. None means 'trust the LLM'."""
+        keys = self._keys()
+        key = keys.session(self.session_id)
+        raw = await self.redis.client.hget(key, "operator_speaker")
+        if raw is None:
+            return None
+        val = raw if isinstance(raw, str) else raw.decode()
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            return None
