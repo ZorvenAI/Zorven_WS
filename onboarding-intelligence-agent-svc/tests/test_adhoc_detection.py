@@ -81,6 +81,13 @@ def test_resolve_field_empty_string():
     assert wf == "WF1"
 
 
+def test_resolve_field_whitespace_only():
+    """Whitespace-only input returns stripped empty string, not raw whitespace."""
+    field, wf = resolve_field("   ")
+    assert field == ""
+    assert wf == "WF1"
+
+
 def test_resolve_workflow_target_for_notable():
     """suggested_field maps to workflow_target for notable facts."""
     assert resolve_workflow_target("retail_locations") == "WF3"

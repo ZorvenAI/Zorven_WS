@@ -90,7 +90,7 @@ def resolve_field(inferred_field: str) -> tuple[str, WorkflowTarget]:
     """
     normalised = _normalise(inferred_field)
     wf = FIELD_MAP.get(normalised, DEFAULT_WORKFLOW_TARGET)
-    return normalised or inferred_field, wf
+    return normalised or inferred_field.strip(), wf
 
 
 def resolve_workflow_target(suggested_field: str) -> WorkflowTarget:

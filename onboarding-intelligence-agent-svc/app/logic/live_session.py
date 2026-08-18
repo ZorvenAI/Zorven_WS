@@ -710,8 +710,10 @@ return 1
         """Store the operator's speaker tag for AC-2 gating."""
         keys = self._keys()
         key = keys.session(self.session_id)
-        await self.redis.client.hset(key, "operator_speaker", str(speaker))
-        await self.redis.client.expire(key, TTL_LIVE)
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.hset(key, "operator_speaker", str(speaker))
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
 
     async def get_operator_speaker(self) -> int | None:
         """Read the operator speaker tag. None means 'trust the LLM'."""

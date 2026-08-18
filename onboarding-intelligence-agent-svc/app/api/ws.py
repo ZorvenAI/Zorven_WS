@@ -592,7 +592,8 @@ async def _run_analysis(
 
     has_result = False
     updated_questions: list[str] = []
-    batch_speaker = batch.segments[0].get("speaker") if batch.segments else None
+    raw_speaker = batch.segments[0].get("speaker") if batch.segments else None
+    batch_speaker = int(raw_speaker) if raw_speaker is not None else None
     op_speaker = await session.get_operator_speaker()
 
     for chunk in chunks:
@@ -646,10 +647,10 @@ async def _run_analysis(
             )
 
         elif chunk_type == "notable_fact":
-            has_result = True
             fact_text = chunk.get("text", "")
             suggested = chunk.get("suggested_field", "")
             if fact_text:
+                has_result = True
                 wf = resolve_workflow_target(suggested)
                 await _send_notable_fact(websocket, session, fact_text, wf)
 
