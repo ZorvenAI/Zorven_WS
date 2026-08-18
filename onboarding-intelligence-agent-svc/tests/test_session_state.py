@@ -16,6 +16,7 @@ import uuid
 import pytest
 
 from app.api.schemas import (
+    AdhocDetected,
     Coverage,
     NotableFact,
     ServerFrameType,
@@ -754,3 +755,183 @@ async def test_followups_survive_reconnect(manager):
     entry = await manager2.get_question_entry("4")
     assert len(entry["suggestions"]) == 1
     assert entry["suggestions"][0]["text"] == "Annual or monthly?"
+
+
+# ── G-05 · Ad-hoc questions ─────────────────────────────────────────
+
+
+async def test_add_adhoc_question_round_trip(manager):
+    """Ad-hoc question created, readable via get_questions, has origin ADHOC."""
+    qid = await manager.add_adhoc_question(
+        text="How many retail locations do you have?",
+        target_field="retail_locations",
+        workflow_target="WF3",
+        evidence=[{"recording_id": "r-1", "t_start": 45.0, "t_end": 48.0}],
+    )
+
+    questions = await manager.get_questions()
+    adhoc = [q for q in questions if q["id"] == qid]
+    assert len(adhoc) == 1
+
+    q = adhoc[0]
+    assert q["text"] == "How many retail locations do you have?"
+    assert q["origin"] == "ADHOC"
+    assert q["target_field"] == "retail_locations"
+    assert q["workflow_target"] == "WF3"
+    assert q["status"] == "OPEN"
+    assert q["source"] == "analysis"
+    assert q["version"] == 0
+
+
+async def test_adhoc_question_id_prefix(manager):
+    """ID starts with 'adhoc_'."""
+    qid = await manager.add_adhoc_question(
+        text="What is your pricing model?",
+        target_field="pricing",
+        workflow_target="WF3",
+        evidence=[],
+    )
+    assert qid.startswith("adhoc_")
+    assert len(qid) > len("adhoc_")
+
+
+async def test_adhoc_question_has_evidence(manager):
+    """Evidence spans attached at creation time."""
+    evidence = [
+        {"recording_id": "r-2", "t_start": 100.0, "t_end": 105.0},
+        {"recording_id": "r-2", "t_start": 106.0, "t_end": 110.0},
+    ]
+    qid = await manager.add_adhoc_question(
+        text="Who are your main competitors?",
+        target_field="competitors",
+        workflow_target="WF2",
+        evidence=evidence,
+    )
+
+    entry = await manager.get_question_entry(qid)
+    assert len(entry["evidence"]) == 2
+    assert entry["evidence"][0]["recording_id"] == "r-2"
+    assert entry["evidence"][1]["t_start"] == 106.0
+
+
+async def test_set_questions_has_origin_prepared(manager):
+    """Prepared questions have origin 'PREPARED'."""
+    await manager.set_questions(
+        [{"id": 1, "text": "Company name?", "target_field": "name"}]
+    )
+
+    entry = await manager.get_question_entry("1")
+    assert entry["origin"] == "PREPARED"
+
+
+async def test_adhoc_and_prepared_coexist(manager):
+    """Prepared and ad-hoc questions live in the same hash."""
+    await manager.set_questions(
+        [
+            {"id": 1, "text": "Company name?", "target_field": "name"},
+            {"id": 2, "text": "Founded year?", "target_field": "founded_year"},
+        ]
+    )
+
+    qid = await manager.add_adhoc_question(
+        text="What about trademarks?",
+        target_field="trademark_status",
+        workflow_target="WF2",
+        evidence=[],
+    )
+
+    questions = await manager.get_questions()
+    assert len(questions) == 3
+
+    origins = {q["origin"] for q in questions}
+    assert origins == {"PREPARED", "ADHOC"}
+
+    adhoc = [q for q in questions if q["id"] == qid]
+    assert adhoc[0]["origin"] == "ADHOC"
+
+
+async def test_adhoc_question_survives_reconnect(manager):
+    """Ad-hoc question readable after manager re-creation."""
+    qid = await manager.add_adhoc_question(
+        text="Distribution channels?",
+        target_field="distribution",
+        workflow_target="WF3",
+        evidence=[{"recording_id": "r-1", "t_start": 50.0, "t_end": 55.0}],
+    )
+
+    manager2 = LiveSessionManager(
+        redis=manager.redis,
+        tenant_id=manager.tenant_id,
+        session_id=manager.session_id,
+    )
+    entry = await manager2.get_question_entry(qid)
+    assert entry is not None
+    assert entry["origin"] == "ADHOC"
+    assert entry["text"] == "Distribution channels?"
+
+
+# ── G-05 · Operator speaker ─────────────────────────────────────────
+
+
+async def test_operator_speaker_round_trip(manager):
+    """set/get operator_speaker survives reconnect."""
+    await manager.set_operator_speaker(0)
+
+    manager2 = LiveSessionManager(
+        redis=manager.redis,
+        tenant_id=manager.tenant_id,
+        session_id=manager.session_id,
+    )
+    result = await manager2.get_operator_speaker()
+    assert result == 0
+
+
+async def test_operator_speaker_defaults_none(manager):
+    """Returns None when not set."""
+    result = await manager.get_operator_speaker()
+    assert result is None
+
+
+async def test_operator_speaker_nonzero(manager):
+    """Operator can be any speaker number, not just 0."""
+    await manager.set_operator_speaker(2)
+    result = await manager.get_operator_speaker()
+    assert result == 2
+
+
+# ── G-05 · Notable fact frame ───────────────────────────────────────
+
+
+async def test_notable_fact_frame_in_buffer(manager):
+    """NotableFact frame is in the replay buffer after emission."""
+    frame = NotableFact(
+        seq=await manager.next_seq(),
+        text="Owns a second retail location opening in October.",
+        workflow_target="WF3",
+    )
+    await manager.emit(frame)
+
+    frames, _ = await manager.replay_after(0)
+    assert len(frames) == 1
+    assert frames[0]["type"] == "notable_fact"
+    assert frames[0]["workflow_target"] == "WF3"
+    assert "October" in frames[0]["text"]
+
+
+async def test_adhoc_detected_frame_in_buffer(manager):
+    """AdhocDetected frame round-trips through the replay buffer."""
+    frame = AdhocDetected(
+        seq=await manager.next_seq(),
+        question_id="adhoc_abc12345",
+        text="How many retail locations do you have?",
+        workflow_target="WF3",
+        target_field="retail_locations",
+    )
+    await manager.emit(frame)
+
+    frames, _ = await manager.replay_after(0)
+    assert len(frames) == 1
+    assert frames[0]["type"] == "adhoc_detected"
+    assert frames[0]["question_id"] == "adhoc_abc12345"
+    assert frames[0]["workflow_target"] == "WF3"
+    assert frames[0]["target_field"] == "retail_locations"

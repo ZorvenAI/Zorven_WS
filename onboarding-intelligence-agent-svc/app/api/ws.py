@@ -45,6 +45,7 @@ from pydantic import ValidationError
 from starlette.websockets import WebSocketDisconnect
 
 from app.api.schemas import (
+    AdhocDetected,
     ClientFrameType,
     ErrorFrame,
     EvidenceSpan,
@@ -52,6 +53,7 @@ from app.api.schemas import (
     GreenSignal,
     MarkFollowupAskedFrame,
     MarkQuestionFrame,
+    NotableFact,
     RecoveryFrame,
     ResumeFrame,
     StartFrame,
@@ -81,6 +83,7 @@ from app.logic.live_handshake import (
     expired,
 )
 from app.logic.live_lock import REFRESH_S, LiveLock, acquire
+from app.logic.field_map import WorkflowTarget, resolve_field, resolve_workflow_target
 from app.logic.live_session import LiveSessionManager, SegmentBatcher, SegmentBatch
 from app.providers.stt import STTAdapter, STTResult, STTUnavailable
 from app.skills.models import SkillContext, TenantContext, Origin
@@ -587,22 +590,71 @@ async def _run_analysis(
         logger.warning("analysis_failed", error=f"{type(exc).__name__}: {exc}")
         return
 
-    has_attachment = False
+    has_result = False
     updated_questions: list[str] = []
+    raw_speaker = batch.segments[0].get("speaker") if batch.segments else None
+    batch_speaker = int(raw_speaker) if raw_speaker is not None else None
+    op_speaker = await session.get_operator_speaker()
+
     for chunk in chunks:
         chunk_type = chunk.get("type", "")
         if chunk_type == "attachment":
-            has_attachment = True
+            has_result = True
             qid = chunk.get("question_id", "")
             evidence = chunk.get("evidence", [])
             relevance = chunk.get("relevance", 0.0)
             if qid and evidence:
                 await session.store_analysis_result(qid, evidence, relevance)
                 updated_questions.append(qid)
-        elif chunk_type == "notable_fact":
-            pass
 
-    if not has_attachment:
+        elif chunk_type == "adhoc_question":
+            adhoc_text = chunk.get("text", "")
+            inferred = chunk.get("inferred_target_field", "")
+            t_start = chunk.get("t_start", batch.first_t)
+            if not adhoc_text:
+                continue
+
+            if op_speaker is not None and batch_speaker != op_speaker:
+                wf = resolve_workflow_target(inferred)
+                await _send_notable_fact(websocket, session, adhoc_text, wf)
+                has_result = True
+                continue
+
+            has_result = True
+            target_field, workflow_target = resolve_field(inferred)
+            evidence = [
+                {
+                    "recording_id": batch.recording_id,
+                    "t_start": t_start,
+                    "t_end": batch.last_t,
+                }
+            ]
+            qid = await session.add_adhoc_question(
+                text=adhoc_text,
+                target_field=target_field,
+                workflow_target=workflow_target,
+                evidence=evidence,
+            )
+            updated_questions.append(qid)
+            await _send_adhoc_detected(
+                websocket,
+                session,
+                events,
+                qid,
+                adhoc_text,
+                workflow_target,
+                target_field,
+            )
+
+        elif chunk_type == "notable_fact":
+            fact_text = chunk.get("text", "")
+            suggested = chunk.get("suggested_field", "")
+            if fact_text:
+                has_result = True
+                wf = resolve_workflow_target(suggested)
+                await _send_notable_fact(websocket, session, fact_text, wf)
+
+    if not has_result:
         await session.store_unmapped_batch(batch.segments)
 
     # G-03: score sufficiency for each question that received new evidence.
@@ -890,6 +942,70 @@ async def _send_green_signal(
             logger.warning("evt104_emission_failed", question_id=question_id)
 
 
+async def _send_adhoc_detected(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    events: Any,
+    question_id: str,
+    text: str,
+    workflow_target: WorkflowTarget,
+    target_field: str,
+) -> None:
+    """Emit an AdhocDetected frame and EVT-106."""
+    try:
+        seq = await session.next_seq()
+        frame = AdhocDetected(
+            seq=seq,
+            question_id=question_id,
+            text=text,
+            workflow_target=workflow_target,
+            target_field=target_field,
+        )
+        payload = await session.emit(frame)
+        await websocket.send_json(payload)
+    except Exception:  # noqa: BLE001
+        logger.warning("adhoc_detected_send_failed", question_id=question_id)
+        return
+
+    if events:
+        try:
+            await events.emit(
+                EventType.MEDIA_CAPTURED_ANALYZED,
+                tenant_id=session.tenant_id,
+                correlation_id=session.session_id,
+                session_id=session.session_id,
+                payload={
+                    "question_id": question_id,
+                    "origin": "ADHOC",
+                    "workflow_target": workflow_target,
+                    "target_field": target_field,
+                },
+                outcome="SUCCESS",
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("evt106_adhoc_emission_failed", question_id=question_id)
+
+
+async def _send_notable_fact(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    text: str,
+    workflow_target: WorkflowTarget,
+) -> None:
+    """Emit a NotableFact frame and buffer it for replay."""
+    try:
+        seq = await session.next_seq()
+        frame = NotableFact(
+            seq=seq,
+            text=text,
+            workflow_target=workflow_target,
+        )
+        payload = await session.emit(frame)
+        await websocket.send_json(payload)
+    except Exception:  # noqa: BLE001
+        logger.warning("notable_fact_send_failed")
+
+
 async def _send_degraded_frame(
     websocket: WebSocket, session: LiveSessionManager, message: str
 ) -> None:
@@ -973,6 +1089,9 @@ async def _handle_control(
             return
 
         stt_state["recording_id"] = start.recording_id
+
+        if start.operator_speaker is not None:
+            await session.set_operator_speaker(start.operator_speaker)
 
         batcher_obj = stt_state.get("batcher")
         if batcher_obj is not None:

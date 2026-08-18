@@ -22,6 +22,7 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from app.api.schemas import (
+    AdhocDetected,
     Coverage,
     ErrorFrame,
     EvidenceSpan,
@@ -59,12 +60,20 @@ def build(kind: str, seq: int):
         return Followups(seq=seq, question_id="q-9", suggestions=["Which origin?"])
     if kind == "fact":
         return NotableFact(seq=seq, text="A second location.", workflow_target="WF3")
+    if kind == "adhoc":
+        return AdhocDetected(
+            seq=seq,
+            question_id="adhoc_a1b2c3d4",
+            text="How many stores?",
+            workflow_target="WF3",
+            target_field="retail_locations",
+        )
     if kind == "coverage":
         return Coverage(seq=seq, map={"WF1": 0.7, "WF2": 0.4, "WF3": 0.3})
     return ErrorFrame(seq=seq, code="ERR-07", message="degraded", recoverable=True)
 
 
-KINDS = ["partial", "final", "green", "followups", "fact", "coverage", "error"]
+KINDS = ["partial", "final", "green", "followups", "fact", "adhoc", "coverage", "error"]
 
 
 @settings(

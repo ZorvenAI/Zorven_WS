@@ -121,6 +121,7 @@ class ServerFrameType(str, Enum):
     GREEN_SIGNAL = "green_signal"
     FOLLOWUPS = "followups"
     NOTABLE_FACT = "notable_fact"
+    ADHOC_DETECTED = "adhoc_detected"
     COVERAGE = "coverage"
     ERROR = "error"
     #: F-06 §18.2: sent when a circuit breaker closes and STT resumes.
@@ -202,6 +203,14 @@ class NotableFact(ServerFrame):
     workflow_target: Literal["WF1", "WF2", "WF3"]
 
 
+class AdhocDetected(ServerFrame):
+    type: Literal[ServerFrameType.ADHOC_DETECTED] = ServerFrameType.ADHOC_DETECTED
+    question_id: str
+    text: str
+    workflow_target: Literal["WF1", "WF2", "WF3"]
+    target_field: str
+
+
 class Coverage(ServerFrame):
     type: Literal[ServerFrameType.COVERAGE] = ServerFrameType.COVERAGE
     #: FR-LIVE-09: three fractions, "never blended into one percentage
@@ -248,6 +257,7 @@ class StartFrame(BaseModel):
     recording_id: str
     codec: str
     sample_rate: int
+    operator_speaker: int | None = None
 
 
 class ResumeFrame(BaseModel):
