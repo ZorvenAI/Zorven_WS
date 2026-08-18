@@ -727,3 +727,50 @@ return 1
             return int(val)
         except (ValueError, TypeError):
             return None
+
+    # ── Coverage state (G-06) ────────────────────────────────────────
+
+    async def store_coverage(self, coverage: Any) -> None:
+        """Store coverage fractions and metadata in the Redis coverage hash.
+
+        ``coverage`` is a ``CoverageResult`` from ``app.logic.coverage``.
+        The type is ``Any`` to avoid a circular import; the dataclass fields
+        are accessed by name.
+        """
+        keys = self._keys()
+        key = keys.coverage(self.session_id)
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.hset(
+            key,
+            mapping={
+                "WF1": str(coverage.wf1.pct),
+                "WF2": str(coverage.wf2.pct),
+                "WF3": str(coverage.wf3.pct),
+                "satisfied": "1" if coverage.satisfied else "0",
+                "blocking_gaps": json.dumps(coverage.blocking_gaps),
+                "updated_at": str(time.time()),
+            },
+        )
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
+
+    async def get_coverage(self) -> dict[str, Any] | None:
+        """Read stored coverage. Returns None if not yet computed."""
+        keys = self._keys()
+        key = keys.coverage(self.session_id)
+        raw = await self.redis.client.hgetall(key)
+        if not raw:
+            return None
+        result: dict[str, Any] = {}
+        for k, v in raw.items():
+            field = k if isinstance(k, str) else k.decode()
+            val = v if isinstance(v, str) else v.decode()
+            if field in ("WF1", "WF2", "WF3"):
+                result[field] = float(val)
+            elif field == "satisfied":
+                result[field] = val == "1"
+            elif field == "blocking_gaps":
+                result[field] = json.loads(val)
+            elif field == "updated_at":
+                result[field] = float(val)
+        return result

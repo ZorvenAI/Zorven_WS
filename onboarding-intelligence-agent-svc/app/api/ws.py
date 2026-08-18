@@ -47,6 +47,7 @@ from starlette.websockets import WebSocketDisconnect
 from app.api.schemas import (
     AdhocDetected,
     ClientFrameType,
+    Coverage,
     ErrorFrame,
     EvidenceSpan,
     Followups,
@@ -83,6 +84,7 @@ from app.logic.live_handshake import (
     expired,
 )
 from app.logic.live_lock import REFRESH_S, LiveLock, acquire
+from app.logic.coverage import compute_coverage
 from app.logic.field_map import WorkflowTarget, resolve_field, resolve_workflow_target
 from app.logic.live_session import LiveSessionManager, SegmentBatcher, SegmentBatch
 from app.providers.stt import STTAdapter, STTResult, STTUnavailable
@@ -668,6 +670,31 @@ async def _run_analysis(
             context.tenant_context,
         )
 
+    # G-06: recompute coverage after any evidence change.
+    if updated_questions:
+        await _update_coverage(
+            websocket, session, events, analysis_state, updated_questions
+        )
+
+
+async def _update_coverage(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    events: Any,
+    analysis_state: dict[str, Any],
+    updated_question_ids: list[str],
+) -> None:
+    """Recompute and emit WF1/WF2/WF3 coverage fractions."""
+    try:
+        settings = analysis_state.get("settings")
+        threshold = settings.COVERAGE_GREEN_THRESHOLD if settings else 0.7
+        questions = await session.get_questions()
+        result = compute_coverage(questions, threshold)
+        await session.store_coverage(result)
+        await _send_coverage(websocket, session, events, result, updated_question_ids)
+    except Exception:  # noqa: BLE001
+        logger.warning("coverage_update_failed", session_id=session.session_id)
+
 
 async def _collect_stream(
     registry: SkillRegistry, skill_id: str, context: SkillContext
@@ -1004,6 +1031,41 @@ async def _send_notable_fact(
         await websocket.send_json(payload)
     except Exception:  # noqa: BLE001
         logger.warning("notable_fact_send_failed")
+
+
+async def _send_coverage(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    events: Any,
+    result: Any,
+    updated_question_ids: list[str],
+) -> None:
+    """Emit a Coverage frame and EVT-107."""
+    try:
+        seq = await session.next_seq()
+        frame = Coverage(seq=seq, map=result.as_map())
+        payload = await session.emit(frame)
+        await websocket.send_json(payload)
+    except Exception:  # noqa: BLE001
+        logger.warning("coverage_send_failed", session_id=session.session_id)
+        return
+
+    if events:
+        try:
+            await events.emit(
+                EventType.COVERAGE_UPDATED,
+                tenant_id=session.tenant_id,
+                correlation_id=session.session_id,
+                session_id=session.session_id,
+                payload={
+                    "map": result.as_map(),
+                    "satisfied": result.satisfied,
+                    "delta_question_ids": updated_question_ids,
+                },
+                outcome="SUCCESS",
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("evt107_emission_failed")
 
 
 async def _send_degraded_frame(
