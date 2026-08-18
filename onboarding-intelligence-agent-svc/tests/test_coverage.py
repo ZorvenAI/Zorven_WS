@@ -91,6 +91,10 @@ def test_empty_questions_zero_coverage():
     assert result.wf1.pct == 0.0
     assert result.wf2.pct == 0.0
     assert result.wf3.pct == 0.0
+    assert not result.satisfied
+    assert len(result.blocking_gaps) == 3
+    gap_wfs = {g["workflow"] for g in result.blocking_gaps}
+    assert gap_wfs == {"WF1", "WF2", "WF3"}
 
 
 def test_adhoc_questions_count():

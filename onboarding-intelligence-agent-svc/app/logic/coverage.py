@@ -84,15 +84,24 @@ def compute_coverage(
         for wf in WORKFLOWS:
             wc = wf_coverages[wf]
             if wc.pct < threshold:
-                for q in buckets[wf]:
-                    if q.get("status") != "GREEN":
-                        blocking_gaps.append(
-                            {
-                                "workflow": wf,
-                                "question_text": q.get("text", ""),
-                                "target_field": q.get("target_field", ""),
-                            }
-                        )
+                if not buckets[wf]:
+                    blocking_gaps.append(
+                        {
+                            "workflow": wf,
+                            "question_text": "",
+                            "target_field": "",
+                        }
+                    )
+                else:
+                    for q in buckets[wf]:
+                        if q.get("status") != "GREEN":
+                            blocking_gaps.append(
+                                {
+                                    "workflow": wf,
+                                    "question_text": q.get("text", ""),
+                                    "target_field": q.get("target_field", ""),
+                                }
+                            )
 
     return CoverageResult(
         wf1=wf_coverages["WF1"],

@@ -681,13 +681,17 @@ async def _update_coverage(
     websocket: WebSocket,
     session: LiveSessionManager,
     events: Any,
-    analysis_state: dict[str, Any],
+    analysis_state: dict[str, Any] | None,
     updated_question_ids: list[str],
 ) -> None:
     """Recompute and emit WF1/WF2/WF3 coverage fractions."""
     try:
-        settings = analysis_state.get("settings")
-        threshold = settings.COVERAGE_GREEN_THRESHOLD if settings else 0.7
+        settings = analysis_state.get("settings") if analysis_state else None
+        if settings is None:
+            from app.core.config import get_settings
+
+            settings = get_settings()
+        threshold = settings.COVERAGE_GREEN_THRESHOLD
         questions = await session.get_questions()
         result = compute_coverage(questions, threshold)
         await session.store_coverage(result)
@@ -1214,6 +1218,8 @@ async def _handle_control(
             question_id=mark.question_id,
             action=mark.action,
         )
+        events = getattr(websocket.app.state, "events", None)
+        await _update_coverage(websocket, session, events, None, [mark.question_id])
         return
 
     if frame_type == ClientFrameType.MARK_FOLLOWUP_ASKED.value:
