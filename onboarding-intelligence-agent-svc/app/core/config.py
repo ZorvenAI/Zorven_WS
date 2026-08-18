@@ -74,6 +74,7 @@ class Settings(BaseSettings):
 
     # ── Behavioural settings (Design §19) ────────────────────
     SUFFICIENCY_GREEN_THRESHOLD: float = 0.7
+    COVERAGE_GREEN_THRESHOLD: float = 0.7
     LIVE_ANALYSIS_SILENCE_MS: int = 4000
     TRANSCRIPT_BUFFER_MAX: int = 4000
     CONTEXT_SUMMARIZE_AT: float = 0.75
@@ -110,7 +111,11 @@ class Settings(BaseSettings):
     # ── Observability ────────────────────────────────────────
     OTEL_EXPORTER_ENDPOINT: str = ""
 
-    @field_validator("SUFFICIENCY_GREEN_THRESHOLD", "CONTEXT_SUMMARIZE_AT")
+    @field_validator(
+        "SUFFICIENCY_GREEN_THRESHOLD",
+        "COVERAGE_GREEN_THRESHOLD",
+        "CONTEXT_SUMMARIZE_AT",
+    )
     @classmethod
     def _must_be_a_fraction(cls, v: float) -> float:
         if not 0.0 <= v <= 1.0:
