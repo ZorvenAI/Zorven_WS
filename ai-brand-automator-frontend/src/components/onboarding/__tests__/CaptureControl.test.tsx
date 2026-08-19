@@ -34,9 +34,10 @@ beforeEach(() => {
   jest.spyOn(document, 'createElement').mockImplementation((tag: string) => {
     const el = origCreateElement(tag);
     if (tag === 'canvas') {
+      const canvas = el as HTMLCanvasElement;
       const fakeCtx = { drawImage: jest.fn() };
-      el.getContext = () => fakeCtx;
-      el.toBlob = (cb: BlobCallback) => {
+      canvas.getContext = (() => fakeCtx) as unknown as typeof canvas.getContext;
+      canvas.toBlob = (cb: BlobCallback) => {
         cb(new Blob(['fake-jpeg'], { type: 'image/jpeg' }));
       };
     }

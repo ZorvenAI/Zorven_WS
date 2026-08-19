@@ -11,8 +11,6 @@ import logging
 import json
 import uuid
 
-logger = logging.getLogger(__name__)
-
 from django.db import IntegrityError
 from django.db.models import Prefetch
 from django.db import transaction as db_transaction
@@ -100,6 +98,8 @@ from tenants.permissions import (
     IsTenantViewer,
     RoleBasedPermissionMixin,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
