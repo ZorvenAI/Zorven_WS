@@ -284,3 +284,80 @@ def test_cross_tenant_returns_404(public_tenant, editor, consented_session):
         format="multipart",
     )
     assert resp.status_code == 404
+
+
+# ── Content-type validation ──────────────────────────────────────────
+
+
+def test_non_image_content_type_rejected(public_tenant, editor, consented_session):
+    client = client_for(editor, public_tenant)
+    bad_file = SimpleUploadedFile(
+        "malware.exe", b"\x00" * 100, content_type="application/x-msdownload"
+    )
+    resp = client.post(
+        media_url(consented_session.pk),
+        {"file": bad_file, "usage_tag": "other"},
+        format="multipart",
+    )
+    assert resp.status_code == 400
+    assert "file" in resp.data
+
+
+# ── Race condition (IntegrityError) ──────────────────────────────────
+
+
+@patch("apps.onboarding.views.gcs_service")
+@patch("apps.onboarding.views.get_pipeline_service")
+def test_concurrent_duplicate_returns_200_not_500(
+    mock_pipeline, mock_gcs, public_tenant, editor, consented_session
+):
+    """Two concurrent uploads of the same filename should not 500."""
+    from django.db.utils import IntegrityError
+
+    mock_gcs.get_bucket.return_value = MagicMock()
+    mock_gcs.bucket_name = "test-bucket"
+    client = client_for(editor, public_tenant)
+
+    # Pre-create the asset so the recovery filter inside the except block
+    # can find it after IntegrityError.
+    BrandAsset.objects.create(
+        tenant=public_tenant,
+        company=consented_session.company,
+        file_name="race.jpg",
+        file_type="image",
+        file_size=100,
+        gcs_path="_landing/x/race.jpg",
+    )
+
+    # Simulate the TOCTOU window: the first filter (dedup check) misses,
+    # create() hits the unique constraint, the second filter (recovery)
+    # finds the existing row.
+    original_filter = BrandAsset.objects.filter
+    call_count = {"n": 0}
+
+    def race_filter(*args, **kwargs):
+        qs = original_filter(*args, **kwargs)
+        if kwargs.get("file_name") == "race.jpg":
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return qs.none()
+        return qs
+
+    original_create = BrandAsset.objects.create
+
+    def race_create(**kwargs):
+        if kwargs.get("file_name") == "race.jpg":
+            raise IntegrityError("duplicate key")
+        return original_create(**kwargs)
+
+    with (
+        patch.object(BrandAsset.objects, "filter", side_effect=race_filter),
+        patch.object(BrandAsset.objects, "create", side_effect=race_create),
+    ):
+        resp = client.post(
+            media_url(consented_session.pk),
+            {"file": make_photo(name="race.jpg"), "usage_tag": "business_photo"},
+            format="multipart",
+        )
+
+    assert resp.status_code in (200, 409)

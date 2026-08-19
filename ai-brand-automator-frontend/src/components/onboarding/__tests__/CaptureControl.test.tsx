@@ -1,23 +1,78 @@
 /**
  * H-01 · photo capture with usage tagging.
  *
- * jsdom has no getUserMedia, so the camera preview phase is tested by mocking
- * navigator.mediaDevices. The canvas snapshot is simulated by directly
- * invoking onCapture.
+ * jsdom has no getUserMedia or canvas rendering, so reaching the tagging phase
+ * requires mocking the camera stream, canvas getContext, and toBlob. The
+ * camera preview and snapshot are faked; the tag picker and submit run real.
  */
 
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import CaptureControl from '@/components/onboarding/CaptureControl';
+import CaptureControl, {
+  USAGE_TAGS,
+} from '@/components/onboarding/CaptureControl';
 
-const TAGS = [
-  'business_photo',
-  'previous_ad',
-  'brand_asset',
-  'identity_document',
-  'other',
-] as const;
+const fakeStop = jest.fn();
+const fakeStream = { getTracks: () => [{ stop: fakeStop }] };
+
+beforeEach(() => {
+  fakeStop.mockClear();
+  Object.defineProperty(navigator, 'mediaDevices', {
+    value: { getUserMedia: jest.fn().mockResolvedValue(fakeStream) },
+    writable: true,
+    configurable: true,
+  });
+
+  // jsdom lacks URL.createObjectURL / revokeObjectURL
+  global.URL.createObjectURL = jest.fn(() => 'blob:fake-url');
+  global.URL.revokeObjectURL = jest.fn();
+
+  // jsdom has no canvas 2d context — mock createElement to return one
+  // that drawImage is callable on and toBlob produces a blob.
+  const origCreateElement = document.createElement.bind(document);
+  jest.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+    const el = origCreateElement(tag);
+    if (tag === 'canvas') {
+      const fakeCtx = { drawImage: jest.fn() };
+      el.getContext = () => fakeCtx;
+      el.toBlob = (cb: BlobCallback) => {
+        cb(new Blob(['fake-jpeg'], { type: 'image/jpeg' }));
+      };
+    }
+    return el;
+  });
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+/**
+ * Navigate through camera → take photo → confirm → tagging.
+ */
+async function reachTaggingPhase(onCapture?: jest.Mock) {
+  render(
+    <CaptureControl consentGranted={true} onCapture={onCapture} />,
+  );
+
+  // Open camera → preview phase
+  await userEvent.click(screen.getByRole('button', { name: /capture photo/i }));
+  await screen.findByTestId('capture-overlay');
+
+  // Video element needs dimensions for takePhoto
+  const video = screen.getByTestId('camera-preview') as HTMLVideoElement;
+  Object.defineProperty(video, 'videoWidth', { value: 640 });
+  Object.defineProperty(video, 'videoHeight', { value: 480 });
+
+  // Take photo → confirm phase
+  await userEvent.click(screen.getByRole('button', { name: /take photo/i }));
+  await screen.findByTestId('capture-preview');
+
+  // Confirm → tagging phase
+  await userEvent.click(screen.getByRole('button', { name: /use this photo/i }));
+  await screen.findByTestId('tag-picker');
+}
 
 // ── AC-1 · consent gate ─────────────────────────────────────────────
 
@@ -43,16 +98,9 @@ it('shows a live capture button when consent is granted', () => {
   expect(btn).not.toBeDisabled();
 });
 
-// ── AC-1 · overlay opens (camera preview) ───────────────────────────
+// ── AC-1 · overlay opens and dismisses ──────────────────────────────
 
 it('opens camera preview overlay on click', async () => {
-  const fakeStream = { getTracks: () => [{ stop: jest.fn() }] };
-  Object.defineProperty(navigator, 'mediaDevices', {
-    value: { getUserMedia: jest.fn().mockResolvedValue(fakeStream) },
-    writable: true,
-    configurable: true,
-  });
-
   render(<CaptureControl consentGranted={true} />);
   await userEvent.click(screen.getByRole('button', { name: /capture photo/i }));
 
@@ -61,13 +109,6 @@ it('opens camera preview overlay on click', async () => {
 });
 
 it('dismiss returns to idle (no overlay)', async () => {
-  const fakeStream = { getTracks: () => [{ stop: jest.fn() }] };
-  Object.defineProperty(navigator, 'mediaDevices', {
-    value: { getUserMedia: jest.fn().mockResolvedValue(fakeStream) },
-    writable: true,
-    configurable: true,
-  });
-
   render(<CaptureControl consentGranted={true} />);
   await userEvent.click(screen.getByRole('button', { name: /capture photo/i }));
   await screen.findByTestId('capture-overlay');
@@ -76,40 +117,64 @@ it('dismiss returns to idle (no overlay)', async () => {
   expect(screen.queryByTestId('capture-overlay')).not.toBeInTheDocument();
 });
 
-// ── AC-2 · tag picker ───────────────────────────────────────────────
+// ── AC-2 · tag picker (rendered) ────────────────────────────────────
 
-it('all five tags are available', () => {
-  const { container } = render(
-    <CaptureControl consentGranted={true} />,
+it('all five tags are rendered in the tag picker', async () => {
+  await reachTaggingPhase();
+
+  const picker = screen.getByTestId('tag-picker');
+  const radios = picker.querySelectorAll('input[type="radio"]');
+  expect(radios).toHaveLength(5);
+
+  for (const { label } of USAGE_TAGS) {
+    expect(screen.getByText(label)).toBeInTheDocument();
+  }
+});
+
+it('identity_document is not first or last in the rendered tag list', () => {
+  const idx = USAGE_TAGS.findIndex((t) => t.value === 'identity_document');
+  expect(idx).toBeGreaterThan(0);
+  expect(idx).toBeLessThan(USAGE_TAGS.length - 1);
+});
+
+it('no default tag is selected', async () => {
+  await reachTaggingPhase();
+
+  const radios = screen.getByTestId('tag-picker').querySelectorAll('input[type="radio"]');
+  for (const radio of radios) {
+    expect(radio).not.toBeChecked();
+  }
+});
+
+it('upload button is disabled without a tag selected', async () => {
+  await reachTaggingPhase();
+
+  const uploadBtn = screen.getByTestId('upload-btn');
+  expect(uploadBtn).toBeDisabled();
+});
+
+// ── AC-3 · onCapture fires through the full rendered flow ───────────
+
+it('onCapture is called with blob and selected tag after submit', async () => {
+  const onCapture = jest.fn();
+  await reachTaggingPhase(onCapture);
+
+  // Select a tag
+  await userEvent.click(screen.getByText('Previous ad'));
+
+  // Upload button should now be enabled
+  const uploadBtn = screen.getByTestId('upload-btn');
+  expect(uploadBtn).not.toBeDisabled();
+
+  // Submit
+  await userEvent.click(uploadBtn);
+
+  expect(onCapture).toHaveBeenCalledTimes(1);
+  expect(onCapture).toHaveBeenCalledWith(
+    expect.any(Blob),
+    'previous_ad',
   );
 
-  // Force into tagging phase by rendering the component with a specific state
-  // Since we can't easily get to tagging phase without camera, we'll verify
-  // the tag list is defined in the component by checking the idle render
-  // and the tag constant via a direct import
-  expect(TAGS).toHaveLength(5);
-  expect(TAGS).toContain('business_photo');
-  expect(TAGS).toContain('previous_ad');
-  expect(TAGS).toContain('brand_asset');
-  expect(TAGS).toContain('identity_document');
-  expect(TAGS).toContain('other');
-});
-
-it('identity_document is not first or last in the tag list', () => {
-  const idx = TAGS.indexOf('identity_document');
-  expect(idx).toBeGreaterThan(0);
-  expect(idx).toBeLessThan(TAGS.length - 1);
-});
-
-// ── AC-3 · onCapture callback ───────────────────────────────────────
-
-it('onCapture is called with blob and tag', () => {
-  const onCapture = jest.fn();
-  // Directly verify the callback contract: CaptureControl calls
-  // onCapture(blob, tag) when the user completes the flow.
-  const blob = new Blob(['test'], { type: 'image/jpeg' });
-  onCapture(blob, 'business_photo');
-
-  expect(onCapture).toHaveBeenCalledWith(blob, 'business_photo');
-  expect(onCapture).toHaveBeenCalledTimes(1);
+  // Should return to idle
+  expect(screen.queryByTestId('capture-overlay')).not.toBeInTheDocument();
 });

@@ -7,8 +7,11 @@ validated here rather than in the client.
 
 from __future__ import annotations
 
+import logging
 import json
 import uuid
+
+logger = logging.getLogger(__name__)
 
 from django.db import IntegrityError
 from django.db.models import Prefetch
@@ -487,7 +490,6 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=["post"])
-    @db_transaction.atomic
     def media(self, request, pk=None):
         """``POST /sessions/{id}/media/`` — photo capture with usage tag (H-01).
 
@@ -517,6 +519,22 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         file = serializer.validated_data["file"]
         usage_tag = serializer.validated_data["usage_tag"]
 
+        from brand_automator.validators import ALLOWED_IMAGE_TYPES
+
+        content_type = file.content_type
+        if content_type in ("application/octet-stream", "", None):
+            import mimetypes
+
+            guessed, _ = mimetypes.guess_type(file.name)
+            if guessed:
+                content_type = guessed
+
+        if content_type not in ALLOWED_IMAGE_TYPES:
+            return Response(
+                {"file": [f"Invalid image type: {content_type}"]},
+                status=http.HTTP_400_BAD_REQUEST,
+            )
+
         safe_filename = sanitize_filename(file.name)
         tenant = session.tenant
         company = session.company
@@ -529,8 +547,9 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 BrandAssetSerializer(existing).data, status=http.HTTP_200_OK
             )
 
+        tenant_id = tenant.id if tenant else "unknown"
         unique_id = uuid.uuid4().hex[:8]
-        landing_path = f"_landing/{tenant.id}/{unique_id}_{safe_filename}"
+        landing_path = f"_landing/{tenant_id}/{unique_id}_{safe_filename}"
         raw_bucket = tenant.get_raw_bucket() if tenant else gcs_service.bucket_name
 
         gcs_uploaded = False
@@ -538,28 +557,46 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             target_bucket = gcs_service.get_bucket(raw_bucket)
             if target_bucket:
                 gcs_service.upload_file(
-                    file, landing_path, file.content_type, bucket_name=raw_bucket
+                    file, landing_path, content_type, bucket_name=raw_bucket
                 )
                 gcs_uploaded = True
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.exception(
+                "GCS upload failed for %s (bucket=%s): %s",
+                safe_filename,
+                raw_bucket,
+                exc,
+            )
 
-        asset = BrandAsset.objects.create(
-            tenant=tenant,
-            company=company,
-            file_name=safe_filename,
-            file_type="image",
-            file_size=file.size,
-            gcs_path=landing_path,
-            gcs_bucket=raw_bucket,
-            processed=False,
-            pipeline_status="pending" if gcs_uploaded else "failed",
-            pipeline_error=(
-                "" if gcs_uploaded else "GCS not configured - file not stored"
-            ),
-            usage_tag=usage_tag,
-            onboarding_session=session,
-        )
+        try:
+            asset = BrandAsset.objects.create(
+                tenant=tenant,
+                company=company,
+                file_name=safe_filename,
+                file_type="image",
+                file_size=file.size,
+                gcs_path=landing_path,
+                gcs_bucket=raw_bucket,
+                processed=False,
+                pipeline_status="pending" if gcs_uploaded else "failed",
+                pipeline_error=(
+                    "" if gcs_uploaded else "GCS not configured - file not stored"
+                ),
+                usage_tag=usage_tag,
+                onboarding_session=session,
+            )
+        except IntegrityError:
+            existing = BrandAsset.objects.filter(
+                tenant=tenant, company=company, file_name=safe_filename
+            ).first()
+            if existing is not None:
+                return Response(
+                    BrandAssetSerializer(existing).data, status=http.HTTP_200_OK
+                )
+            return Response(
+                {"error": "duplicate_file", "message": "Concurrent upload."},
+                status=http.HTTP_409_CONFLICT,
+            )
 
         if gcs_uploaded:
             pipeline_service = get_pipeline_service()

@@ -19,7 +19,7 @@ import type { UsageTag } from '@/lib/onboarding-sessions';
 
 type Phase = 'idle' | 'preview' | 'confirm' | 'tagging';
 
-const USAGE_TAGS: { value: UsageTag; label: string }[] = [
+export const USAGE_TAGS: { value: UsageTag; label: string }[] = [
   { value: 'business_photo', label: 'Business photo' },
   { value: 'previous_ad', label: 'Previous ad' },
   { value: 'brand_asset', label: 'Brand asset' },
