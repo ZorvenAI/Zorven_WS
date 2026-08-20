@@ -360,4 +360,4 @@ def test_concurrent_duplicate_returns_200_not_500(
             format="multipart",
         )
 
-    assert resp.status_code in (200, 409)
+    assert resp.status_code == 200
