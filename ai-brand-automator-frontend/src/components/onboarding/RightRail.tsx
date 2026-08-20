@@ -25,7 +25,7 @@ export interface RightRailProps {
   /** Opens the consent modal. AC-1: the disabled control still does this. */
   onRecordConsent?: () => void;
   /** H-01: called when a photo is captured and tagged. */
-  onCapture?: (blob: Blob, tag: UsageTag) => void;
+  onCapture?: (blob: Blob, tag: UsageTag, fileName?: string) => void;
   /** H-01: completed captures to display in the scroller. */
   captures?: CapturedMedia[];
 }

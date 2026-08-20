@@ -392,6 +392,32 @@ def test_video_webm_accepted_201(
 
 @patch("apps.onboarding.views.gcs_service")
 @patch("apps.onboarding.views.get_pipeline_service")
+def test_video_webm_with_codec_params_accepted(
+    mock_pipeline, mock_gcs, public_tenant, editor, consented_session
+):
+    """Chrome sends 'video/webm;codecs=vp8' — the codec param must not
+    cause a 400."""
+    mock_gcs.get_bucket.return_value = MagicMock()
+    mock_gcs.bucket_name = "test-bucket"
+    client = client_for(editor, public_tenant)
+
+    codec_video = SimpleUploadedFile(
+        "chrome.webm",
+        b"\x1a\x45\xdf\xa3" + b"\x00" * 2048,
+        content_type="video/webm;codecs=vp8",
+    )
+    resp = client.post(
+        media_url(consented_session.pk),
+        {"file": codec_video, "usage_tag": "brand_asset"},
+        format="multipart",
+    )
+    assert resp.status_code == 201, resp.data
+    asset = BrandAsset.objects.get(pk=resp.data["id"])
+    assert asset.file_type == "video"
+
+
+@patch("apps.onboarding.views.gcs_service")
+@patch("apps.onboarding.views.get_pipeline_service")
 def test_video_mp4_accepted_201(
     mock_pipeline, mock_gcs, public_tenant, editor, consented_session
 ):

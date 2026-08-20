@@ -47,7 +47,7 @@ export interface UseSnippetRecorder {
   secondsRemaining: number | null;
   videoBlob: Blob | null;
   stream: MediaStream | null;
-  start: () => Promise<void>;
+  start: () => Promise<boolean>;
   stop: () => void;
   reset: () => void;
 }
@@ -106,16 +106,19 @@ export function useSnippetRecorder(options?: SnippetRecorderOptions): UseSnippet
     media.stop();
   }, [teardown]);
 
-  const start = useCallback(async () => {
+  const stoppedGuard = useRef(false);
+
+  const start = useCallback(async (): Promise<boolean> => {
     setError(null);
     setVideoBlob(null);
     chunks.current = [];
+    stoppedGuard.current = false;
 
     const type = supportedVideoMimeType();
     if (!type) {
       setState('unsupported');
       setError(UNSUPPORTED_MESSAGE);
-      return;
+      return false;
     }
     mimeRef.current = type;
 
@@ -129,13 +132,21 @@ export function useSnippetRecorder(options?: SnippetRecorderOptions): UseSnippet
     } catch {
       setState('idle');
       setError(BLOCKED_MESSAGE);
-      return;
+      return false;
     }
 
     streamRef.current = granted;
     setStreamState(granted);
 
-    const media = new MediaRecorder(granted, { mimeType: type });
+    let media: MediaRecorder;
+    try {
+      media = new MediaRecorder(granted, { mimeType: type });
+    } catch {
+      teardown();
+      setState('idle');
+      setError(UNSUPPORTED_MESSAGE);
+      return false;
+    }
     recorder.current = media;
 
     media.ondataavailable = (event: BlobEvent) => {
@@ -145,11 +156,19 @@ export function useSnippetRecorder(options?: SnippetRecorderOptions): UseSnippet
     };
 
     media.onstop = () => {
+      if (stoppedGuard.current) return;
+      stoppedGuard.current = true;
       const blob = new Blob(chunks.current, { type: mimeRef.current ?? type });
       setVideoBlob(blob);
       setState('stopped');
       teardown();
       onStoppedRef.current?.(blob);
+    };
+
+    media.onerror = () => {
+      teardown();
+      setState('idle');
+      setError('Recording failed unexpectedly. Please try again.');
     };
 
     media.start();
@@ -172,9 +191,12 @@ export function useSnippetRecorder(options?: SnippetRecorderOptions): UseSnippet
     autoStop.current = setTimeout(() => {
       stop();
     }, SNIPPET_MAX_SECONDS * 1000);
+
+    return true;
   }, [stop, teardown]);
 
   const reset = useCallback(() => {
+    stoppedGuard.current = true;
     teardown();
     setState('idle');
     setError(null);

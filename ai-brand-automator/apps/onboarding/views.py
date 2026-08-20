@@ -534,7 +534,10 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             if guessed:
                 content_type = guessed
 
-        if content_type not in ALLOWED_MEDIA_TYPES:
+        # Strip codec parameters (e.g. "video/webm;codecs=vp8" -> "video/webm")
+        base_type = content_type.split(";")[0].strip() if content_type else ""
+
+        if base_type not in ALLOWED_MEDIA_TYPES:
             return Response(
                 {"file": [f"Unsupported media type: {content_type}"]},
                 status=http.HTTP_400_BAD_REQUEST,
@@ -578,7 +581,7 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 tenant=tenant,
                 company=company,
                 file_name=safe_filename,
-                file_type="video" if content_type in ALLOWED_VIDEO_TYPES else "image",
+                file_type="video" if base_type in ALLOWED_VIDEO_TYPES else "image",
                 file_size=file.size,
                 gcs_path=landing_path,
                 gcs_bucket=raw_bucket,

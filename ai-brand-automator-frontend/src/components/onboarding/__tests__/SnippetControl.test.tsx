@@ -221,6 +221,7 @@ it('onCapture called with video blob and tag after submit', async () => {
   expect(onCapture).toHaveBeenCalledWith(
     expect.any(Blob),
     'brand_asset',
+    expect.stringMatching(/^snippet-\d+\.webm$/),
   );
 
   // Should return to idle

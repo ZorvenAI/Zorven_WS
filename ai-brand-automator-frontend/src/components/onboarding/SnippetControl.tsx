@@ -28,7 +28,7 @@ type Phase = 'idle' | 'recording' | 'confirm' | 'tagging';
 export interface SnippetControlProps {
   consentGranted: boolean;
   onRecordConsent?: () => void;
-  onCapture?: (blob: Blob, tag: UsageTag) => void;
+  onCapture?: (blob: Blob, tag: UsageTag, fileName?: string) => void;
 }
 
 export default function SnippetControl({
@@ -40,7 +40,6 @@ export default function SnippetControl({
   const [selectedTag, setSelectedTag] = useState<UsageTag | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const playbackRef = useRef<HTMLVideoElement>(null);
 
   const handleStopped = useCallback(
     (blob: Blob) => {
@@ -84,8 +83,10 @@ export default function SnippetControl({
       if (prev) URL.revokeObjectURL(prev);
       return null;
     });
-    await snippet.start();
-    setPhase('recording');
+    const started = await snippet.start();
+    if (started) {
+      setPhase('recording');
+    }
   }, [snippet]);
 
   const stopRecording = useCallback(() => {
@@ -106,7 +107,8 @@ export default function SnippetControl({
 
   const submitCapture = useCallback(() => {
     if (!snippet.videoBlob || !selectedTag || !onCapture) return;
-    onCapture(snippet.videoBlob, selectedTag);
+    const fileName = `snippet-${Date.now()}.webm`;
+    onCapture(snippet.videoBlob, selectedTag, fileName);
     dismiss();
   }, [snippet.videoBlob, selectedTag, onCapture, dismiss]);
 
@@ -204,7 +206,6 @@ export default function SnippetControl({
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-white">Review video</h3>
             <video
-              ref={playbackRef}
               src={previewUrl}
               controls
               playsInline
