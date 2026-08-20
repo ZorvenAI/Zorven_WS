@@ -58,7 +58,11 @@ export function supportedVideoMimeType(): string | null {
   return VIDEO_MIME_TYPES.find((t) => MediaRecorder.isTypeSupported(t)) ?? null;
 }
 
-export function useSnippetRecorder(): UseSnippetRecorder {
+export interface SnippetRecorderOptions {
+  onStopped?: (blob: Blob) => void;
+}
+
+export function useSnippetRecorder(options?: SnippetRecorderOptions): UseSnippetRecorder {
   const [state, setState] = useState<SnippetState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [elapsedSeconds, setElapsed] = useState(0);
@@ -73,6 +77,10 @@ export function useSnippetRecorder(): UseSnippetRecorder {
   const autoStop = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startTime = useRef(0);
   const mimeRef = useRef<string | null>(null);
+  const onStoppedRef = useRef(options?.onStopped);
+  useEffect(() => {
+    onStoppedRef.current = options?.onStopped;
+  });
 
   const teardown = useCallback(() => {
     if (ticker.current) {
@@ -141,6 +149,7 @@ export function useSnippetRecorder(): UseSnippetRecorder {
       setVideoBlob(blob);
       setState('stopped');
       teardown();
+      onStoppedRef.current?.(blob);
     };
 
     media.start();

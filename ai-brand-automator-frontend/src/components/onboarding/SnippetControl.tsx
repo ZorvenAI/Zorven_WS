@@ -42,15 +42,29 @@ export default function SnippetControl({
   const videoRef = useRef<HTMLVideoElement>(null);
   const playbackRef = useRef<HTMLVideoElement>(null);
 
-  const snippet = useSnippetRecorder();
+  const handleStopped = useCallback(
+    (blob: Blob) => {
+      const url = URL.createObjectURL(blob);
+      setPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return url;
+      });
+      setPhase('confirm');
+    },
+    [],
+  );
+
+  const snippet = useSnippetRecorder({ onStopped: handleStopped });
 
   const dismiss = useCallback(() => {
     snippet.reset();
     setPhase('idle');
     setSelectedTag(null);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(null);
-  }, [snippet, previewUrl]);
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+  }, [snippet]);
 
   useEffect(() => {
     return () => {
@@ -64,22 +78,15 @@ export default function SnippetControl({
     }
   }, [snippet.state, snippet.stream]);
 
-  useEffect(() => {
-    if (snippet.state === 'stopped' && snippet.videoBlob && phase === 'recording') {
-      const url = URL.createObjectURL(snippet.videoBlob);
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(url);
-      setPhase('confirm');
-    }
-  }, [snippet.state, snippet.videoBlob, phase, previewUrl]);
-
   const startRecording = useCallback(async () => {
     setSelectedTag(null);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(null);
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     await snippet.start();
     setPhase('recording');
-  }, [snippet, previewUrl]);
+  }, [snippet]);
 
   const stopRecording = useCallback(() => {
     snippet.stop();
