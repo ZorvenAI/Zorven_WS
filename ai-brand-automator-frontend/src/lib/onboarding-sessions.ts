@@ -405,3 +405,39 @@ export async function finaliseRecording(
     throw new Error(`API ${response.status}: ${await response.text()}`);
   }
 }
+
+// ── Media capture (H-01) ─────────────────────────────────────────────
+
+export type UsageTag =
+  | 'business_photo'
+  | 'previous_ad'
+  | 'brand_asset'
+  | 'identity_document'
+  | 'other';
+
+export interface CapturedMedia {
+  id: string;
+  file_name: string;
+  usage_tag: UsageTag;
+  file_size: number;
+  uploaded_at: string;
+}
+
+export async function uploadCapture(
+  sessionId: string,
+  file: File | Blob,
+  usageTag: UsageTag,
+): Promise<CapturedMedia> {
+  const form = new FormData();
+  form.append('file', file, file instanceof File ? file.name : 'capture.jpg');
+  form.append('usage_tag', usageTag);
+
+  const response = await apiClient.upload(
+    `${BASE}/sessions/${sessionId}/media/`,
+    form,
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as CapturedMedia;
+}

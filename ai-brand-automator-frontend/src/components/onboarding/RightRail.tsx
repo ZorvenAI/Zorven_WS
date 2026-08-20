@@ -3,21 +3,16 @@
 /**
  * The meeting view's right rail (E-02, Design §11).
  *
- * Shells only. §11 gives the rail to RecorderControl, CaptureControl and
- * RecordingsLibrary, and each of those is its own story — F-02, H-01 and
- * I-01 respectively. What E-02 owes them is a place to attach that is already
- * the right shape and already scrolls independently.
- *
- * The controls are rendered disabled rather than omitted, following the
- * precedent E-01 set and for the same reason: a greyed control tells the
- * operator the capability exists and is not ready, where an absent one reads
- * as a missing feature. They carry an explicit reason so the state is legible
- * rather than mysterious.
+ * RecorderControl, CaptureControl (H-01) and RecordingsLibrary (I-01) live
+ * here. The rail scrolls independently so a long media list cannot push the
+ * capture controls off screen (FR-LIVE-02).
  */
 
-import { Camera, Video } from 'lucide-react';
+import { Video } from 'lucide-react';
 
 import RecorderControl from '@/components/onboarding/RecorderControl';
+import CaptureControl from '@/components/onboarding/CaptureControl';
+import type { CapturedMedia, UsageTag } from '@/lib/onboarding-sessions';
 
 export interface RightRailProps {
   /** Placeholder count until I-01 lists real recordings. */
@@ -28,19 +23,22 @@ export interface RightRailProps {
   sessionId?: string | null;
   /** Opens the consent modal. AC-1: the disabled control still does this. */
   onRecordConsent?: () => void;
+  /** H-01: called when a photo is captured and tagged. */
+  onCapture?: (blob: Blob, tag: UsageTag) => void;
+  /** H-01: completed captures to display in the scroller. */
+  captures?: CapturedMedia[];
 }
-
-const CAPTURE_CONTROLS = [
-  { icon: Camera, label: 'Capture photo', owner: 'H-01' },
-  { icon: Video, label: 'Capture video', owner: 'H-02' },
-] as const;
 
 export default function RightRail({
   recordingCount = 0,
   consentGranted = false,
   sessionId,
   onRecordConsent,
+  onCapture,
+  captures = [],
 }: RightRailProps) {
+  const itemCount = recordingCount + captures.length;
+
   return (
     <aside
       aria-labelledby="rail-heading"
@@ -51,49 +49,59 @@ export default function RightRail({
       </h2>
 
       <div className="mt-3 space-y-2">
-        {/*
-          F-02 owns the record control now. It was inline here through E-02
-          (a disabled shell) and F-01 (inert, with the consent reason), and it
-          has outgrown that: permission, codec refusal, the elapsed timer and
-          the recording indicator are a component's worth of behaviour, not a
-          button's.
-        */}
         <RecorderControl
           consentGranted={consentGranted}
           sessionId={sessionId}
           onRecordConsent={onRecordConsent}
         />
 
-        {CAPTURE_CONTROLS.map(({ icon: Icon, label }) => (
-          <button
-            key={label}
-            type="button"
-            disabled
-            // The reason travels with the control. "Not available yet" on its
-            // own invites a support ticket asking when.
-            title="Available once live capture ships"
-            className="flex w-full items-center gap-2 rounded border border-white/10 px-3 py-2 text-sm text-brand-silver opacity-60"
-          >
-            <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
-            {label}
-          </button>
-        ))}
+        <CaptureControl
+          consentGranted={consentGranted}
+          onRecordConsent={onRecordConsent}
+          onCapture={onCapture}
+        />
+
+        {/* H-02: video capture — disabled until that story ships. */}
+        <button
+          type="button"
+          disabled
+          title="Available once live video capture ships"
+          className="flex w-full items-center gap-2 rounded border border-white/10 px-3 py-2 text-sm text-brand-silver opacity-60"
+        >
+          <Video aria-hidden="true" className="h-4 w-4 shrink-0" />
+          Capture video
+        </button>
       </div>
 
       <div
         data-testid="rail-scroller"
-        // AC-1: the rail scrolls on its own. A long recordings list must not
-        // push the capture controls off the top — they are the reason the rail
-        // is "always reachable" in FR-LIVE-02.
         className="mt-4 min-h-0 flex-1 overflow-y-auto"
       >
-        {recordingCount === 0 ? (
+        {captures.length > 0 && (
+          <ul className="space-y-2" data-testid="captured-media-list">
+            {captures.map((c) => (
+              <li
+                key={c.id}
+                className="flex items-center gap-2 rounded border border-white/10 px-3 py-2 text-sm"
+              >
+                <span className="truncate text-white">{c.file_name}</span>
+                <span className="shrink-0 rounded bg-brand-electric/20 px-1.5 py-0.5 text-xs text-brand-electric">
+                  {c.usage_tag.replace(/_/g, ' ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {itemCount === 0 && (
           <p className="text-sm text-brand-silver">
             Recordings and captured media appear here during the meeting.
           </p>
-        ) : (
+        )}
+
+        {recordingCount > 0 && (
           <p className="text-sm text-brand-silver">
-            {recordingCount} item{recordingCount === 1 ? '' : 's'}
+            {recordingCount} recording{recordingCount === 1 ? '' : 's'}
           </p>
         )}
       </div>
