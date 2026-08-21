@@ -7,7 +7,7 @@ from .views import (
     pipeline_status_webhook,
     pipeline_batch_status_webhook,
 )
-from .internal_views import InternalAssetRegisterView
+from .internal_views import InternalAssetRegisterView, InternalAssetOCRUpdateView
 
 router = DefaultRouter()
 router.register(r"companies", CompanyViewSet)
@@ -31,5 +31,10 @@ urlpatterns = [
         "internal/assets/register/",
         InternalAssetRegisterView.as_view(),
         name="internal-asset-register",
+    ),
+    path(
+        "internal/assets/<int:pk>/ocr/",
+        InternalAssetOCRUpdateView.as_view(),
+        name="internal-asset-ocr-update",
     ),
 ] + router.urls

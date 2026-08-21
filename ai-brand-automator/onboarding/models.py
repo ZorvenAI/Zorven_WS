@@ -351,6 +351,24 @@ class BrandAsset(models.Model):
         blank=True,
         help_text="Confidence of the OCR pass that produced ocr_text (H-03)",
     )
+    sensitivity_class = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        choices=[
+            ("GENERAL", "General"),
+            ("IDENTITY", "Identity"),
+            ("FINANCIAL", "Financial"),
+        ],
+        help_text="Sensitivity classification from OCR analysis (H-03)",
+    )
+    rag_excluded = models.BooleanField(
+        default=False,
+        help_text=(
+            "True when PG-08 excludes this asset from RAG due to "
+            "sensitivity that cannot be redacted."
+        ),
+    )
 
     class Meta:
         verbose_name = "Brand Asset"

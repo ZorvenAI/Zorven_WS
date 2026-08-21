@@ -296,6 +296,8 @@ class BrandAssetSerializer(serializers.ModelSerializer):
             "onboarding_session",
             "ocr_text",
             "ocr_confidence",
+            "sensitivity_class",
+            "rag_excluded",
         ]
         read_only_fields = [
             "id",
@@ -311,6 +313,8 @@ class BrandAssetSerializer(serializers.ModelSerializer):
             # whole contract is that it holds redacted text only (PG-08).
             "ocr_text",
             "ocr_confidence",
+            "sensitivity_class",
+            "rag_excluded",
             # Read-only until an endpoint validates ownership. As a writable
             # PrimaryKeyRelatedField this accepts any session id a caller can
             # guess, including another tenant's, which would attach their
