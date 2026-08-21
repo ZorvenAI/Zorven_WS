@@ -30,6 +30,7 @@ ALLOWED_VIDEO_TYPES = [
     "video/mp4",
     "video/quicktime",
     "video/x-msvideo",
+    "video/webm",
 ]
 
 ALLOWED_DOCUMENT_TYPES = [
@@ -55,6 +56,7 @@ EXPECTED_EXTENSIONS = {
     "video/mp4": ["mp4"],
     "video/quicktime": ["mov"],
     "video/x-msvideo": ["avi"],
+    "video/webm": ["webm"],
     "application/pdf": ["pdf"],
     "application/msword": ["doc"],
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["docx"],

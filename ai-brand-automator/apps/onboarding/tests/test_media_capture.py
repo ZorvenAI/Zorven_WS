@@ -48,6 +48,12 @@ def make_photo(name="storefront.jpg", size=2048):
     )
 
 
+def make_video(name="snippet.webm", size=4096, content_type="video/webm"):
+    return SimpleUploadedFile(
+        name, b"\x1a\x45\xdf\xa3" + b"\x00" * size, content_type=content_type
+    )
+
+
 @pytest.fixture
 def editor(public_tenant):
     return member(public_tenant, Membership.Role.EDITOR, "h01_editor")
@@ -361,3 +367,168 @@ def test_concurrent_duplicate_returns_200_not_500(
         )
 
     assert resp.status_code == 200
+
+
+# ── H-02 · video snippet capture ───────────────────────────────────
+
+
+@patch("apps.onboarding.views.gcs_service")
+@patch("apps.onboarding.views.get_pipeline_service")
+def test_video_webm_accepted_201(
+    mock_pipeline, mock_gcs, public_tenant, editor, consented_session
+):
+    mock_gcs.get_bucket.return_value = MagicMock()
+    mock_gcs.bucket_name = "test-bucket"
+    client = client_for(editor, public_tenant)
+
+    resp = client.post(
+        media_url(consented_session.pk),
+        {"file": make_video(), "usage_tag": "business_photo"},
+        format="multipart",
+    )
+    assert resp.status_code == 201, resp.data
+    assert resp.data["file_name"] == "snippet.webm"
+
+
+@patch("apps.onboarding.views.gcs_service")
+@patch("apps.onboarding.views.get_pipeline_service")
+def test_video_webm_with_codec_params_accepted(
+    mock_pipeline, mock_gcs, public_tenant, editor, consented_session
+):
+    """Chrome sends 'video/webm;codecs=vp8' — the codec param must not
+    cause a 400."""
+    mock_gcs.get_bucket.return_value = MagicMock()
+    mock_gcs.bucket_name = "test-bucket"
+    client = client_for(editor, public_tenant)
+
+    codec_video = SimpleUploadedFile(
+        "chrome.webm",
+        b"\x1a\x45\xdf\xa3" + b"\x00" * 2048,
+        content_type="video/webm;codecs=vp8",
+    )
+    resp = client.post(
+        media_url(consented_session.pk),
+        {"file": codec_video, "usage_tag": "brand_asset"},
+        format="multipart",
+    )
+    assert resp.status_code == 201, resp.data
+    asset = BrandAsset.objects.get(pk=resp.data["id"])
+    assert asset.file_type == "video"
+
+
+@patch("apps.onboarding.views.gcs_service")
+@patch("apps.onboarding.views.get_pipeline_service")
+def test_video_mp4_accepted_201(
+    mock_pipeline, mock_gcs, public_tenant, editor, consented_session
+):
+    mock_gcs.get_bucket.return_value = MagicMock()
+    mock_gcs.bucket_name = "test-bucket"
+    client = client_for(editor, public_tenant)
+
+    resp = client.post(
+        media_url(consented_session.pk),
+        {
+            "file": make_video(name="clip.mp4", content_type="video/mp4"),
+            "usage_tag": "brand_asset",
+        },
+        format="multipart",
+    )
+    assert resp.status_code == 201, resp.data
+
+
+@patch("apps.onboarding.views.gcs_service")
+@patch("apps.onboarding.views.get_pipeline_service")
+def test_video_asset_has_file_type_video(
+    mock_pipeline, mock_gcs, public_tenant, editor, consented_session
+):
+    mock_gcs.get_bucket.return_value = MagicMock()
+    mock_gcs.bucket_name = "test-bucket"
+    client = client_for(editor, public_tenant)
+
+    resp = client.post(
+        media_url(consented_session.pk),
+        {"file": make_video(name="demo.webm"), "usage_tag": "other"},
+        format="multipart",
+    )
+    assert resp.status_code == 201
+    asset = BrandAsset.objects.get(pk=resp.data["id"])
+    assert asset.file_type == "video"
+
+
+@patch("apps.onboarding.views.gcs_service")
+@patch("apps.onboarding.views.get_pipeline_service")
+def test_video_asset_registered_with_session(
+    mock_pipeline, mock_gcs, public_tenant, editor, consented_session
+):
+    mock_gcs.get_bucket.return_value = MagicMock()
+    mock_gcs.bucket_name = "test-bucket"
+    client = client_for(editor, public_tenant)
+
+    resp = client.post(
+        media_url(consented_session.pk),
+        {"file": make_video(name="session-vid.webm"), "usage_tag": "brand_asset"},
+        format="multipart",
+    )
+    assert resp.status_code == 201
+    asset = BrandAsset.objects.get(pk=resp.data["id"])
+    assert asset.onboarding_session_id == consented_session.pk
+
+
+@patch("apps.onboarding.views.gcs_service")
+@patch("apps.onboarding.views.get_pipeline_service")
+def test_video_duplicate_idempotent(
+    mock_pipeline, mock_gcs, public_tenant, editor, consented_session
+):
+    mock_gcs.get_bucket.return_value = MagicMock()
+    mock_gcs.bucket_name = "test-bucket"
+    client = client_for(editor, public_tenant)
+
+    first = client.post(
+        media_url(consented_session.pk),
+        {"file": make_video(name="dup.webm"), "usage_tag": "business_photo"},
+        format="multipart",
+    )
+    assert first.status_code == 201
+
+    second = client.post(
+        media_url(consented_session.pk),
+        {"file": make_video(name="dup.webm"), "usage_tag": "business_photo"},
+        format="multipart",
+    )
+    assert second.status_code == 200
+    assert BrandAsset.objects.filter(file_name="dup.webm").count() == 1
+
+
+@patch("apps.onboarding.views.gcs_service")
+@patch("apps.onboarding.views.get_pipeline_service")
+def test_image_still_accepted_after_video_support(
+    mock_pipeline, mock_gcs, public_tenant, editor, consented_session
+):
+    """Regression: image/jpeg still works after widening to accept video."""
+    mock_gcs.get_bucket.return_value = MagicMock()
+    mock_gcs.bucket_name = "test-bucket"
+    client = client_for(editor, public_tenant)
+
+    resp = client.post(
+        media_url(consented_session.pk),
+        {"file": make_photo(name="regression.jpg"), "usage_tag": "business_photo"},
+        format="multipart",
+    )
+    assert resp.status_code == 201
+    asset = BrandAsset.objects.get(pk=resp.data["id"])
+    assert asset.file_type == "image"
+
+
+def test_unsupported_type_still_rejected(public_tenant, editor, consented_session):
+    """application/x-msdownload still rejected after widening."""
+    client = client_for(editor, public_tenant)
+    bad_file = SimpleUploadedFile(
+        "payload.exe", b"\x00" * 100, content_type="application/x-msdownload"
+    )
+    resp = client.post(
+        media_url(consented_session.pk),
+        {"file": bad_file, "usage_tag": "other"},
+        format="multipart",
+    )
+    assert resp.status_code == 400
+    assert "file" in resp.data

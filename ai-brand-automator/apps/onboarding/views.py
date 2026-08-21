@@ -491,7 +491,7 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def media(self, request, pk=None):
-        """``POST /sessions/{id}/media/`` — photo capture with usage tag (H-01).
+        """``POST /sessions/{id}/media/`` — media capture with usage tag (H-01/H-02).
 
         Follows the recordings action pattern: consent-gated, session from
         URL (server-authoritative), and the asset FK set server-side rather
@@ -519,7 +519,12 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         file = serializer.validated_data["file"]
         usage_tag = serializer.validated_data["usage_tag"]
 
-        from brand_automator.validators import ALLOWED_IMAGE_TYPES
+        from brand_automator.validators import (
+            ALLOWED_IMAGE_TYPES,
+            ALLOWED_VIDEO_TYPES,
+        )
+
+        ALLOWED_MEDIA_TYPES = ALLOWED_IMAGE_TYPES + ALLOWED_VIDEO_TYPES
 
         content_type = file.content_type
         if content_type in ("application/octet-stream", "", None):
@@ -529,9 +534,12 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             if guessed:
                 content_type = guessed
 
-        if content_type not in ALLOWED_IMAGE_TYPES:
+        # Strip codec parameters (e.g. "video/webm;codecs=vp8" -> "video/webm")
+        base_type = content_type.split(";")[0].strip() if content_type else ""
+
+        if base_type not in ALLOWED_MEDIA_TYPES:
             return Response(
-                {"file": [f"Invalid image type: {content_type}"]},
+                {"file": [f"Unsupported media type: {content_type}"]},
                 status=http.HTTP_400_BAD_REQUEST,
             )
 
@@ -573,7 +581,7 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 tenant=tenant,
                 company=company,
                 file_name=safe_filename,
-                file_type="image",
+                file_type="video" if base_type in ALLOWED_VIDEO_TYPES else "image",
                 file_size=file.size,
                 gcs_path=landing_path,
                 gcs_bucket=raw_bucket,

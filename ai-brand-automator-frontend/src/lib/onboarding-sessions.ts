@@ -421,6 +421,7 @@ export interface CapturedMedia {
   usage_tag: UsageTag;
   file_size: number;
   uploaded_at: string;
+  file_type?: 'image' | 'video';
 }
 
 export async function uploadCapture(

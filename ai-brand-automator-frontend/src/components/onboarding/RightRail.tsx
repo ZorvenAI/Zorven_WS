@@ -8,10 +8,11 @@
  * capture controls off screen (FR-LIVE-02).
  */
 
-import { Video } from 'lucide-react';
+import { Camera, Video } from 'lucide-react';
 
 import RecorderControl from '@/components/onboarding/RecorderControl';
 import CaptureControl from '@/components/onboarding/CaptureControl';
+import SnippetControl from '@/components/onboarding/SnippetControl';
 import type { CapturedMedia, UsageTag } from '@/lib/onboarding-sessions';
 
 export interface RightRailProps {
@@ -24,7 +25,7 @@ export interface RightRailProps {
   /** Opens the consent modal. AC-1: the disabled control still does this. */
   onRecordConsent?: () => void;
   /** H-01: called when a photo is captured and tagged. */
-  onCapture?: (blob: Blob, tag: UsageTag) => void;
+  onCapture?: (blob: Blob, tag: UsageTag, fileName?: string) => void;
   /** H-01: completed captures to display in the scroller. */
   captures?: CapturedMedia[];
 }
@@ -61,16 +62,11 @@ export default function RightRail({
           onCapture={onCapture}
         />
 
-        {/* H-02: video capture — disabled until that story ships. */}
-        <button
-          type="button"
-          disabled
-          title="Available once live video capture ships"
-          className="flex w-full items-center gap-2 rounded border border-white/10 px-3 py-2 text-sm text-brand-silver opacity-60"
-        >
-          <Video aria-hidden="true" className="h-4 w-4 shrink-0" />
-          Capture video
-        </button>
+        <SnippetControl
+          consentGranted={consentGranted}
+          onRecordConsent={onRecordConsent}
+          onCapture={onCapture}
+        />
       </div>
 
       <div
@@ -84,6 +80,11 @@ export default function RightRail({
                 key={c.id}
                 className="flex items-center gap-2 rounded border border-white/10 px-3 py-2 text-sm"
               >
+                {c.file_type === 'video' ? (
+                  <Video aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-brand-silver" />
+                ) : (
+                  <Camera aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-brand-silver" />
+                )}
                 <span className="truncate text-white">{c.file_name}</span>
                 <span className="shrink-0 rounded bg-brand-electric/20 px-1.5 py-0.5 text-xs text-brand-electric">
                   {c.usage_tag.replace(/_/g, ' ')}
