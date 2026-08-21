@@ -99,7 +99,7 @@ class TestPipelineStageOrder:
         )
         skill._download_image = AsyncMock(return_value=b"fake-image")
 
-        result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+        result = asyncio.run(skill.run(_context()))
 
         assert ocr.detect_text.called
         assert vision.analyze.called
@@ -122,7 +122,7 @@ class TestPipelineStageOrder:
         )
         skill._download_image = AsyncMock(return_value=b"fake-image")
 
-        result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+        result = asyncio.run(skill.run(_context()))
 
         assert "test@example.com" not in result.output["ocr_text"]
         assert result.output["redaction_applied"] is True
@@ -142,7 +142,7 @@ class TestRetakeSuggested:
         )
         skill._download_image = AsyncMock(return_value=b"fake")
 
-        result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+        result = asyncio.run(skill.run(_context()))
 
         assert result.output["retake_suggested"] is True
         assert result.output["ocr_confidence"] < RETAKE_THRESHOLD
@@ -159,7 +159,7 @@ class TestRetakeSuggested:
         )
         skill._download_image = AsyncMock(return_value=b"fake")
 
-        result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+        result = asyncio.run(skill.run(_context()))
 
         assert result.output["retake_suggested"] is False
 
@@ -178,7 +178,7 @@ class TestPG08:
         )
         skill._download_image = AsyncMock(return_value=b"fake")
 
-        result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+        result = asyncio.run(skill.run(_context()))
 
         assert result.output["rag_excluded"] is True
 
@@ -194,7 +194,7 @@ class TestPG08:
         )
         skill._download_image = AsyncMock(return_value=b"fake")
 
-        result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+        result = asyncio.run(skill.run(_context()))
 
         assert result.output["rag_excluded"] is True
 
@@ -210,7 +210,7 @@ class TestPG08:
         )
         skill._download_image = AsyncMock(return_value=b"fake")
 
-        result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+        result = asyncio.run(skill.run(_context()))
 
         assert result.output["rag_excluded"] is False
 
@@ -227,7 +227,7 @@ class TestPG08:
         )
         skill._download_image = AsyncMock(return_value=b"fake")
 
-        result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+        result = asyncio.run(skill.run(_context()))
 
         assert result.output["rag_excluded"] is False
         assert result.output["redaction_applied"] is True
@@ -252,7 +252,7 @@ class TestDegradation:
         )
         skill._download_image = AsyncMock(return_value=b"fake")
 
-        result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+        result = asyncio.run(skill.run(_context()))
 
         assert result.output["status"] == "queued_for_retry"
         assert result.output["degraded"] is True
@@ -272,7 +272,7 @@ class TestBackendWrite:
         )
         skill._download_image = AsyncMock(return_value=b"fake")
 
-        asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+        asyncio.run(skill.run(_context()))
 
         backend.update_asset_ocr.assert_called_once()
         call_kwargs = backend.update_asset_ocr.call_args.kwargs

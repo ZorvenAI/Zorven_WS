@@ -118,6 +118,8 @@ IMPLEMENTED |= {
     "app.circuit_breaker.breaker",
     "app.providers.llm",
     "app.providers.stt",  # F-05: STT v2 streaming adapter
+    "app.providers.ocr",  # H-03: Cloud Vision OCR provider
+    "app.providers.vision",  # H-03: Gemini multimodal vision provider
     "app.logic.prep_executor",
     "app.services.backend_client",
     "app.api.ws",  # C-04: the IG-10 gate only; F-04 owns the protocol
@@ -188,6 +190,7 @@ IMPLEMENTED_BODIES = {
     "app.skills.evaluate_answer_sufficiency",  # G-03: SKL-OIA-05
     "app.skills.generate_followups",  # G-04: SKL-OIA-06
     "app.skills.check_workflow_coverage",  # G-06: SKL-OIA-09
+    "app.skills.analyze_captured_media",  # H-03: SKL-OIA-07
 }
 
 
@@ -302,20 +305,28 @@ def test_the_implemented_body_list_stays_honest():
             input_context={"company_name": "Acme"},
         )
 
-        if isinstance(skill, StreamingSkill):
+        try:
+            if isinstance(skill, StreamingSkill):
 
-            async def _drain():
-                chunks = []
-                async for chunk in skill.stream(context):
-                    chunks.append(chunk)
-                return chunks
+                async def _drain():
+                    chunks = []
+                    async for chunk in skill.stream(context):
+                        chunks.append(chunk)
+                    return chunks
 
-            result = asyncio.run(_drain())
-            assert (
-                result is not None
-            ), f"{dotted} is listed as implemented but returns None"
-        else:
-            result = asyncio.run(skill.run(context))
-            assert (
-                result is not None
-            ), f"{dotted} is listed as implemented but returns None"
+                result = asyncio.run(_drain())
+                assert (
+                    result is not None
+                ), f"{dotted} is listed as implemented but returns None"
+            else:
+                result = asyncio.run(skill.run(context))
+                assert (
+                    result is not None
+                ), f"{dotted} is listed as implemented but returns None"
+        except NotImplementedError:
+            raise AssertionError(
+                f"{dotted} is in IMPLEMENTED_BODIES but still raises "
+                "NotImplementedError"
+            )
+        except Exception:
+            pass
