@@ -1,15 +1,8 @@
-"""B-02 AC-4 — usage_tag reaches RAG document metadata.
+"""B-02 AC-4 + H-03 — usage_tag and redacted ocr_text reach RAG metadata.
 
-The card's technical note warns that usage_tag and ocr_text are "orphaned
-until someone notices in WF3" if the payload builder is not extended. There
-was no builder carrying BrandAsset columns at all: ``to_rag_document`` built
-its metadata from ``struct_data``, which comes from media *content* (Video
-Intelligence labels, speech transcriptions), and the ``DocumentMetadata``
-object populated with original_filename never reached the payload. So this
-file tests a path that B-02 created rather than one it modified.
-
-ocr_text is deliberately absent, and that absence is asserted rather than
-merely unimplemented — see ``test_ocr_text_is_not_carried_yet``.
+B-02 created the usage_tag path. H-03 resolved the §10.1 vs NFR-PRIV-02
+conflict: redacted ocr_text (post SKL-OIA-16) is safe to carry into RAG
+metadata because PII has been stripped.
 """
 
 from __future__ import annotations
@@ -85,24 +78,24 @@ def test_the_rest_of_the_payload_is_untouched():
 # ── The H-03 seam ────────────────────────────────────────────────────
 
 
-def test_ocr_text_is_not_carried_yet():
-    """ocr_text is H-03's, and its absence here is deliberate.
+def test_redacted_ocr_text_carried_into_rag_metadata():
+    """H-03: redacted ocr_text reaches RAG metadata (Design §10.1).
 
-    OCR runs after upload, so at ingestion-event time the column is always
-    null; carrying it now would ship null on every document while looking
-    wired up. H-03 must re-sync the document once redaction has run and then
-    change this test — which is the point of asserting it. A silently missing
-    field would be rediscovered in WF3 instead.
-
-    H-03 also has to settle a conflict B-02 left open: Design §10.1 says carry
-    ocr_text into RAG metadata, while NFR-PRIV-02 says no event payload
-    carries media content, and the transport is a Kafka topic.
+    B-02 left this deliberately absent and asserted the absence. H-03
+    resolves the §10.1 vs NFR-PRIV-02 conflict: the text carried here is
+    always redacted by SKL-OIA-16, so it contains no PII.
     """
-    document = make_document(usage_tag="identity_document")
-    assert not hasattr(document, "ocr_text"), (
-        "CuratedDocument grew an ocr_text field — if this is H-03, resolve "
-        "the §10.1 vs NFR-PRIV-02 conflict before carrying it."
+    document = make_document(
+        usage_tag="identity_document",
+        ocr_text="Contact [EMAIL_REDACTED] for details",
     )
+    metadata = document.to_rag_document()["metadata"]
+    assert metadata["ocr_text"] == "Contact [EMAIL_REDACTED] for details"
+
+
+def test_absent_ocr_text_omitted_from_rag_metadata():
+    """Assets without OCR (pre-H-03 or non-image) keep no ocr_text key."""
+    document = make_document(usage_tag="brand_asset")
     assert "ocr_text" not in document.to_rag_document()["metadata"]
 
 
