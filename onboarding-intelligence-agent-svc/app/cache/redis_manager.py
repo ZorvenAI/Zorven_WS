@@ -164,6 +164,10 @@ class TenantKeys:
         """Counter · 1 min · PREP 10/min per user, WS control-frame throttle."""
         return f"{self._scope}ratelimit:{user_id}"
 
+    def retry_queue(self, queue_name: str) -> str:
+        """Sorted set · OCR retry queue, scored by next-attempt timestamp."""
+        return f"{self._scope}retry:{queue_name}"
+
     def config(self) -> str:
         """Hash · tenant overrides.
 

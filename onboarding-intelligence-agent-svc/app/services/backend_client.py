@@ -32,6 +32,7 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 DEPENDENCY = "backend"
+OCR_UPDATE_PATH = "/api/v1/internal/assets/{asset_id}/ocr/"
 UPSERT_PATH = "/api/v1/onboarding/research-briefs/upsert/"
 QUESTIONNAIRE_PATH = "/api/v1/onboarding/questionnaires/generate/"
 VOCABULARY_PATH = "/api/v1/onboarding/field-vocabulary/"
@@ -245,3 +246,76 @@ class BackendClient:
             # GET and the value is opaque and short-lived.
             path = f"{path}?ticket={quote(ticket, safe='')}"
         return await self._get(path, tenant_id=tenant_id)
+
+    async def _patch(
+        self,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        tenant_id: str,
+    ) -> dict[str, Any] | None:
+        if not self.configured:
+            logger.warning(
+                "backend_not_configured",
+                base_url=self._base_url or "(unset)",
+            )
+            return None
+
+        try:
+            self._breaker.before_call()
+        except CircuitBreakerOpen:
+            logger.warning("backend_breaker_open", path=path)
+            return None
+
+        client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
+        owns_client = self._client is None
+        try:
+            response = await client.patch(
+                f"{self._base_url}{path}",
+                json=payload,
+                headers={
+                    "X-Service-Token": self._token,
+                    "X-Tenant-ID": tenant_id,
+                },
+                timeout=TIMEOUT_S,
+            )
+            response.raise_for_status()
+            body = response.json()
+        except Exception as exc:
+            self._breaker.record_failure()
+            logger.warning(
+                "backend_write_failed",
+                path=path,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            return None
+        finally:
+            if owns_client:
+                await client.aclose()
+
+        self._breaker.record_success()
+        return body if isinstance(body, dict) else None
+
+    async def update_asset_ocr(
+        self,
+        *,
+        tenant_id: str,
+        asset_id: int,
+        ocr_text: str,
+        ocr_confidence: float,
+        sensitivity_class: str,
+        rag_excluded: bool,
+    ) -> bool:
+        """Write OCR results back to a BrandAsset (H-03)."""
+        path = OCR_UPDATE_PATH.format(asset_id=asset_id)
+        body = await self._patch(
+            path,
+            {
+                "ocr_text": ocr_text,
+                "ocr_confidence": ocr_confidence,
+                "sensitivity_class": sensitivity_class,
+                "rag_excluded": rag_excluded,
+            },
+            tenant_id=tenant_id,
+        )
+        return body is not None
