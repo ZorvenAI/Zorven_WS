@@ -46,6 +46,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.api.schemas import (
     AdhocDetected,
+    CaptureMediaFrame,
     ClientFrameType,
     Coverage,
     ErrorFrame,
@@ -54,6 +55,7 @@ from app.api.schemas import (
     GreenSignal,
     MarkFollowupAskedFrame,
     MarkQuestionFrame,
+    MediaAnalyzed,
     NotableFact,
     RecoveryFrame,
     ResumeFrame,
@@ -1272,6 +1274,81 @@ async def _handle_control(
         for replayed in frames:
             await websocket.send_json(replayed)
         return
+
+    if frame_type == ClientFrameType.CAPTURE_MEDIA.value:
+        try:
+            capture = CaptureMediaFrame(**frame)
+        except ValidationError:
+            logger.info("live_capture_media_malformed")
+            return
+
+        asyncio.create_task(
+            _process_captured_media(websocket, session, capture, stt_state)
+        )
+        return
+
+
+async def _process_captured_media(
+    websocket: WebSocket,
+    session: Any,
+    capture: CaptureMediaFrame,
+    stt_state: dict[str, Any],
+) -> None:
+    """Run SKL-OIA-07 and send MEDIA_ANALYZED to the client."""
+    from app.skills.models import (
+        Origin,
+        SkillContext,
+        TenantContext as SkillTenantContext,
+    )
+
+    registry = getattr(websocket.app.state, "skill_registry", None)
+    if registry is None:
+        logger.warning("skill_registry_not_available")
+        return
+
+    redis = getattr(websocket.app.state, "redis", None)
+    redis_pool = redis.pool if redis else None
+    events = getattr(websocket.app.state, "events", None)
+
+    tenant_id = session.tenant_id
+    asset_id = capture.media_id
+
+    context = SkillContext(
+        input_prompt="",
+        tenant_context=SkillTenantContext(
+            tenant_id=tenant_id,
+            session_id=session.session_id,
+            role="OWNER",
+        ),
+        input_context={
+            "media_id": capture.media_id,
+            "gcs_uri": capture.gcs_uri,
+            "usage_tag": capture.usage_tag,
+            "asset_id": asset_id,
+            "redis": redis_pool,
+            "events": events,
+        },
+        origin=Origin.INTERNAL,
+    )
+
+    try:
+        result = await registry.execute("SKL-OIA-07", context)
+        output = result.output
+
+        seq = await session.next_seq()
+        frame = MediaAnalyzed(
+            seq=seq,
+            media_id=output.get("media_id", capture.media_id),
+            ocr_confidence=output.get("ocr_confidence", 0.0),
+            retake_suggested=output.get("retake_suggested", True),
+            doc_type=output.get("doc_type", "other"),
+            sensitivity_class=output.get("sensitivity_class", "GENERAL"),
+        )
+        await websocket.send_json(frame.model_dump(mode="json"))
+        await session.buffer_frame(frame.model_dump(mode="json"))
+
+    except Exception:
+        logger.exception("captured_media_processing_failed")
 
 
 async def _hold(

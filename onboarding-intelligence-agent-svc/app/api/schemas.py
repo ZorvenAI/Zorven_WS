@@ -111,6 +111,7 @@ class ClientFrameType(str, Enum):
     MARK_QUESTION = "mark_question"
     MARK_FOLLOWUP_ASKED = "mark_followup_asked"
     STOP = "stop"
+    CAPTURE_MEDIA = "capture_media"
 
 
 class ServerFrameType(str, Enum):
@@ -126,6 +127,7 @@ class ServerFrameType(str, Enum):
     ERROR = "error"
     #: F-06 §18.2: sent when a circuit breaker closes and STT resumes.
     RECOVERY = "recovery"
+    MEDIA_ANALYZED = "media_analyzed"
     #: Not in §10.2.3's list, and required by AC-3: "a resume attempt beyond
     #: the window is answered with an explicit resync frame, not a silent gap
     #: in seq". A client that cannot tell "nothing happened" from "we dropped
@@ -149,9 +151,9 @@ class ServerFrame(BaseModel):
 
 
 class TranscriptPartial(ServerFrame):
-    type: Literal[ServerFrameType.TRANSCRIPT_PARTIAL] = (
+    type: Literal[
         ServerFrameType.TRANSCRIPT_PARTIAL
-    )
+    ] = ServerFrameType.TRANSCRIPT_PARTIAL
     text: str
     speaker: int
 
@@ -278,9 +280,9 @@ class MarkQuestionFrame(BaseModel):
 class MarkFollowupAskedFrame(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal[ClientFrameType.MARK_FOLLOWUP_ASKED] = (
+    type: Literal[
         ClientFrameType.MARK_FOLLOWUP_ASKED
-    )
+    ] = ClientFrameType.MARK_FOLLOWUP_ASKED
     question_id: str
     suggestion_index: int = Field(ge=0, le=2)
 
@@ -289,3 +291,21 @@ class StopFrame(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal[ClientFrameType.STOP] = ClientFrameType.STOP
+
+
+class CaptureMediaFrame(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal[ClientFrameType.CAPTURE_MEDIA] = ClientFrameType.CAPTURE_MEDIA
+    media_id: str
+    gcs_uri: str
+    usage_tag: str = "other"
+
+
+class MediaAnalyzed(ServerFrame):
+    type: Literal[ServerFrameType.MEDIA_ANALYZED] = ServerFrameType.MEDIA_ANALYZED
+    media_id: str
+    ocr_confidence: float
+    retake_suggested: bool
+    doc_type: str
+    sensitivity_class: str

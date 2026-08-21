@@ -24,10 +24,13 @@ from app.messaging.consumer import CommandConsumer
 from app.logic.prep_executor import PrepExecutor
 from app.messaging.producer import KafkaProducer
 from app.providers.llm import LLMProvider
+from app.providers.ocr import OCRProvider
+from app.providers.vision import VisionProvider
 from app.circuit_breaker.breaker import BreakerRegistry
 from app.providers.stt import GoogleSTTAdapter
 from app.providers.tavily import TavilyProvider
 from app.services.backend_client import BackendClient
+from app.skills.registry import SkillRegistry
 from app.messaging.provision import provision, verify
 
 settings = get_settings()
@@ -123,6 +126,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.prep.registry.chain.register(Layer.INPUT, "IG-04", ig04_redact)
     app.state.prep.registry.chain.register(
         Layer.OUTPUT, "OG-06", og06_green_signal_integrity
+    )
+
+    # H-03: LIVE skill registry with OCR/Vision providers.
+    ocr_provider = OCRProvider(breaker=app.state.breakers.get("vision"))
+    vision_provider = VisionProvider(
+        settings.GEMINI_KEY, breaker=app.state.breakers.get("vision")
+    )
+    app.state.skill_registry = SkillRegistry(
+        providers={
+            "ocr": ocr_provider,
+            "vision": vision_provider,
+            "backend": app.state.backend,
+        }
+    )
+    app.state.skill_registry.load()
+    app.state.skill_registry.chain.register(Layer.INPUT, "IG-04", ig04_redact)
+
+    from app.logic.pg08 import pg08_sensitive_media
+
+    app.state.skill_registry.chain.register(
+        Layer.PROCESS, "PG-08", pg08_sensitive_media
     )
 
     app.state.events = EventEmitter(app.state.kafka)
