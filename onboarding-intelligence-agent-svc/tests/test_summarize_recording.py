@@ -27,9 +27,15 @@ class TestExtractTranscriptSegments:
 
     def _frame(self, type_: str, t_start: float, t_end: float, **kw):
         return json.dumps(
-            {"type": type_, "text": kw.get("text", "hello"), "speaker": 0,
-             "t_start": t_start, "t_end": t_end, "seq": 1,
-             "redaction_applied": kw.get("redaction_applied", False)}
+            {
+                "type": type_,
+                "text": kw.get("text", "hello"),
+                "speaker": 0,
+                "t_start": t_start,
+                "t_end": t_end,
+                "seq": 1,
+                "redaction_applied": kw.get("redaction_applied", False),
+            }
         ).encode()
 
     def test_filters_by_type(self):
@@ -67,8 +73,13 @@ class TestExtractTranscriptSegments:
 
     def test_preserves_redaction_flag(self):
         frames = [
-            self._frame("transcript.final", 1.0, 2.0,
-                        text="[PHONE_NUMBER]", redaction_applied=True),
+            self._frame(
+                "transcript.final",
+                1.0,
+                2.0,
+                text="[PHONE_NUMBER]",
+                redaction_applied=True,
+            ),
         ]
         result = extract_transcript_segments(frames, 0.0, 10.0)
         assert result[0]["redaction_applied"] is True
@@ -114,19 +125,28 @@ class TestParseResponse:
     ]
 
     def test_valid_json(self):
-        raw = json.dumps({
-            "text": "Summary text.",
-            "key_moments": [{"t": 1.0, "label": "intro"}],
-        })
+        raw = json.dumps(
+            {
+                "text": "Summary text.",
+                "key_moments": [{"t": 1.0, "label": "intro"}],
+            }
+        )
         result = SummarizeRecording._parse_response(raw, self.segments)
         assert result["text"] == "Summary text."
         assert len(result["key_moments"]) == 1
         assert result["key_moments"][0]["label"] == "intro"
 
     def test_markdown_fenced_json(self):
-        raw = "```json\n" + json.dumps({
-            "text": "Fenced.", "key_moments": [],
-        }) + "\n```"
+        raw = (
+            "```json\n"
+            + json.dumps(
+                {
+                    "text": "Fenced.",
+                    "key_moments": [],
+                }
+            )
+            + "\n```"
+        )
         result = SummarizeRecording._parse_response(raw, self.segments)
         assert result["text"] == "Fenced."
 
@@ -138,19 +158,23 @@ class TestParseResponse:
         assert result["key_moments"] == []
 
     def test_key_moment_without_label_skipped(self):
-        raw = json.dumps({
-            "text": "Ok",
-            "key_moments": [{"t": 1.0}, {"t": 3.0, "label": "good"}],
-        })
+        raw = json.dumps(
+            {
+                "text": "Ok",
+                "key_moments": [{"t": 1.0}, {"t": 3.0, "label": "good"}],
+            }
+        )
         result = SummarizeRecording._parse_response(raw, self.segments)
         assert len(result["key_moments"]) == 1
         assert result["key_moments"][0]["label"] == "good"
 
     def test_key_moment_snapped_to_segment_boundary(self):
-        raw = json.dumps({
-            "text": "Ok",
-            "key_moments": [{"t": 2.5, "label": "between"}],
-        })
+        raw = json.dumps(
+            {
+                "text": "Ok",
+                "key_moments": [{"t": 2.5, "label": "between"}],
+            }
+        )
         result = SummarizeRecording._parse_response(raw, self.segments)
         assert result["key_moments"][0]["t"] == 3.0
 
@@ -170,8 +194,12 @@ class TestFormatTranscript:
 
     def test_redaction_marker(self):
         segments = [
-            {"text": "[PHONE]", "t_start": 1.0, "t_end": 2.0,
-             "redaction_applied": True},
+            {
+                "text": "[PHONE]",
+                "t_start": 1.0,
+                "t_end": 2.0,
+                "redaction_applied": True,
+            },
         ]
         result = SummarizeRecording._format_transcript(segments)
         assert "[REDACTED]" in result
