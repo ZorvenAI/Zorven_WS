@@ -318,6 +318,20 @@ class MeetingRecordingSerializer(serializers.ModelSerializer):
         return bool(obj.transcript_gcs_path)
 
 
+class MeetingRecordingDetailSerializer(MeetingRecordingSerializer):
+    """Single-recording detail (I-02).
+
+    Adds the summary blob that the list serializer deliberately omits.
+    Used by retrieve when the caller needs the full payload.
+    """
+
+    summary = serializers.JSONField(read_only=True)
+
+    class Meta(MeetingRecordingSerializer.Meta):
+        fields = MeetingRecordingSerializer.Meta.fields + ["summary"]
+        read_only_fields = fields
+
+
 class RecordingStopSerializer(serializers.Serializer):
     """The body of ``POST /recordings/{id}/stop/``.
 

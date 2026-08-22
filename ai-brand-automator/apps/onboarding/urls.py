@@ -20,6 +20,7 @@ from apps.onboarding.views import (
     create_questionnaire,
     field_vocabulary,
     live_precheck,
+    update_recording_summary,
     upsert_research_brief,
 )
 
@@ -61,6 +62,12 @@ urlpatterns = [
         "sessions/<pk>/live-precheck/",
         live_precheck,
         name="onboarding-live-precheck",
+    ),
+    # I-02: OIA writes summary results back via X-Service-Token auth.
+    path(
+        "internal/recordings/<pk>/summary/",
+        update_recording_summary,
+        name="onboarding-recording-summary-update",
     ),
     path("", include(router.urls)),
 ]
