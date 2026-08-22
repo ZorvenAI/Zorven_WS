@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import io
-import logging
 import os
 import shutil
 import tempfile
@@ -20,7 +19,9 @@ from pathlib import Path
 import imagehash
 from PIL import Image
 
-logger = logging.getLogger(__name__)
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 SCENE_CHANGE_THRESHOLD = 0.3
 
@@ -70,9 +71,9 @@ async def extract_keyframes(
         duration = await _probe_duration(video_path)
         if duration is not None and duration > max_duration_s:
             logger.warning(
-                "video_too_long duration_s=%s max_s=%s",
-                duration,
-                max_duration_s,
+                "video_too_long",
+                duration_s=duration,
+                max_s=max_duration_s,
             )
             duration = float(max_duration_s)
 
@@ -155,10 +156,10 @@ async def extract_keyframes(
             frames = sorted(combined[:max_frames], key=lambda f: f.timestamp_s)
 
         logger.info(
-            "keyframes_extracted total=%d fps_count=%d scene_count=%d",
-            len(frames),
-            sum(1 for f in frames if f.source == "fps"),
-            sum(1 for f in frames if f.source == "scene"),
+            "keyframes_extracted",
+            total=len(frames),
+            fps_count=sum(1 for f in frames if f.source == "fps"),
+            scene_count=sum(1 for f in frames if f.source == "scene"),
         )
 
         return frames
@@ -225,7 +226,7 @@ def dedup_frames(
             img = Image.open(io.BytesIO(frame.frame_bytes))
             h = imagehash.average_hash(img)
         except Exception:
-            logger.warning("frame_hash_failed timestamp_s=%s", frame.timestamp_s)
+            logger.warning("frame_hash_failed", timestamp_s=frame.timestamp_s)
             kept.append((frame, imagehash.hex_to_hash("0" * 16)))
             continue
 
@@ -243,10 +244,10 @@ def dedup_frames(
     ratio = 1.0 - (len(unique) / total) if total > 0 else 0.0
 
     logger.info(
-        "frames_deduped total=%d unique=%d reduction_ratio=%.3f",
-        total,
-        len(unique),
-        ratio,
+        "frames_deduped",
+        total=total,
+        unique=len(unique),
+        reduction_ratio=round(ratio, 3),
     )
 
     return unique, ratio

@@ -10,7 +10,6 @@ same treatment of a missing key as degradation rather than a crash.
 from __future__ import annotations
 
 import json
-import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,8 +18,9 @@ from app.circuit_breaker.breaker import (
     CircuitBreaker,
     CircuitBreakerOpen,
 )
+from app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 DEPENDENCY = "vision"
 DEFAULT_MODEL = "gemini-3.5-flash"
@@ -191,7 +191,9 @@ class VisionProvider:
             raise
         except Exception as exc:
             self._breaker.record_failure()
-            logger.warning("vision analysis failed: %s: %s", type(exc).__name__, exc)
+            logger.warning(
+                "vision_analysis_failed", error_type=type(exc).__name__, error=str(exc)
+            )
             raise VisionUnavailable(f"analysis failed: {type(exc).__name__}") from exc
 
         self._breaker.record_success()
@@ -244,9 +246,9 @@ class VisionProvider:
         except Exception as exc:
             self._breaker.record_failure()
             logger.warning(
-                "vision multi-frame analysis failed: %s: %s",
-                type(exc).__name__,
-                exc,
+                "vision_multi_frame_analysis_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
             )
             raise VisionUnavailable(
                 f"multi-frame analysis failed: {type(exc).__name__}"
