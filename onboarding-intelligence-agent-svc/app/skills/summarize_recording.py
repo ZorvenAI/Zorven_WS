@@ -177,7 +177,8 @@ class SummarizeRecording(BaseSkill):
         if raw is None:
             return None
         try:
-            return json.loads(raw)
+            parsed: dict[str, Any] = json.loads(raw)
+            return parsed
         except (json.JSONDecodeError, TypeError):
             return None
 
