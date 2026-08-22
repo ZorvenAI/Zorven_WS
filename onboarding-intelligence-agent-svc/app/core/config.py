@@ -97,6 +97,12 @@ class Settings(BaseSettings):
         "IBAN_CODE,US_SSN,US_ITIN,LOCATION"
     )
 
+    # ── Video OCR (H-04, Design §8.4) ─────────────────────────
+    VIDEO_MAX_FRAMES: int = 30
+    VIDEO_FPS: float = 1.0
+    VIDEO_DEDUP_THRESHOLD: int = 8
+    VIDEO_MAX_DURATION_S: int = 120
+
     # ── Secret references (never inline; Design §19) ─────────
     STT_CREDENTIALS: str = ""
     GEMINI_KEY: str = ""
