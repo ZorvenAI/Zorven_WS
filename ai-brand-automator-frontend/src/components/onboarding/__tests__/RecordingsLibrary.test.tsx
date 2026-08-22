@@ -28,13 +28,11 @@ function recording(overrides: Partial<RecordingItem> = {}): RecordingItem {
 function capture(overrides: Partial<CapturedMedia> = {}): CapturedMedia {
   return {
     id: 'cap-1',
-    company: 'comp-1',
     file_name: 'whiteboard.jpg',
     file_type: 'image',
     file_size: 2048,
     uploaded_at: '2026-08-15T10:00:00Z',
     usage_tag: 'business_photo',
-    onboarding_session: 'sess-1',
     ...overrides,
   };
 }
