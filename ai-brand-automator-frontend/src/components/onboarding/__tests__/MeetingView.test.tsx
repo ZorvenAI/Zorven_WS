@@ -40,6 +40,35 @@ jest.mock('@/hooks/useLiveSocket', () => ({
   }),
 }));
 
+jest.mock('@/hooks/useLibraryPolling', () => ({
+  useLibraryPolling: () => ({
+    recordings: [],
+    captures: [],
+    loading: false,
+    refresh: jest.fn(),
+  }),
+}));
+
+jest.mock('@/hooks/useCaptureQueue', () => ({
+  useCaptureQueue: () => ({
+    enqueue: jest.fn(),
+    captures: [],
+    pending: 0,
+    status: 'idle',
+  }),
+}));
+
+jest.mock('@/hooks/useTenantRole', () => ({
+  useTenantRole: () => ({
+    role: 'editor',
+    isOwner: false,
+    isAdmin: false,
+    canEdit: true,
+    canManageTeam: false,
+    canManageBilling: false,
+  }),
+}));
+
 function aQuestion(n: number): PreparedQuestion {
   // Every field the type declares, not a cast past the ones that were
   // inconvenient. `as PreparedQuestion` over a partial object compiles until
