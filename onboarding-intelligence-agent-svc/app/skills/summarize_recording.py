@@ -6,8 +6,9 @@ Design §8.1 · implemented by story I-02.
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
+
+from app.core.logging import get_logger
 
 from app.cache.redis_manager import RedisManager, TTL_IDEMPOTENCY
 from app.providers.llm import LLMProvider
@@ -15,7 +16,7 @@ from app.services.backend_client import BackendClient
 from app.skills.base import BaseSkill
 from app.skills.models import SkillContext, SkillResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 PROMPT_TEMPLATE = """\
 You are summarising an onboarding meeting recording for a brand-building \
