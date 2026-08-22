@@ -64,13 +64,10 @@ async function openMeeting(page: Page) {
     // A bare array for everything else. Tenant context calls `.find` on its
     // response, so an object shaped like a paginated page throws inside the
     // provider and the error boundary swallows the whole page.
-    const body: unknown = url.includes('/onboarding/')
-      // A *list*: getApprovedQuestionnaire fetches approved questionnaires and
-      // picks the highest version, so a single object yields zero questions —
-      // and a layout test with nothing to lay out passes the horizontal-scroll
-      // check while proving nothing.
-      ? [{ id: 'qn-1', version: 3, questions: QUESTIONS }]
-      : [];
+    const body: unknown =
+      url.includes('/questionnaires/')
+        ? [{ id: 'qn-1', version: 3, questions: QUESTIONS }]
+        : [];
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

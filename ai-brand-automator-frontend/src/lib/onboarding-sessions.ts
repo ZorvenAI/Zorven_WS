@@ -117,6 +117,27 @@ export interface MeetingRecordingSummary {
   created_at: string;
 }
 
+/** Full recording row as returned by the library endpoint (I-01). */
+export type RecordingStatus =
+  | 'RECORDING'
+  | 'UPLOADED'
+  | 'TRANSCRIBED'
+  | 'SUMMARIZED'
+  | 'FAILED';
+
+export interface RecordingItem {
+  id: string;
+  session: string;
+  modality: string;
+  status: RecordingStatus;
+  duration_s: number | null;
+  audio_asset: string | null;
+  has_transcript: boolean;
+  has_summary: boolean;
+  started_at: string;
+  stopped_at: string | null;
+}
+
 /**
  * Paths are relative to `/api/v1`, which `env.getApiUrl()` already prepends.
  *
@@ -441,4 +462,42 @@ export async function uploadCapture(
     throw new Error(`API ${response.status}: ${await response.text()}`);
   }
   return (await response.json()) as CapturedMedia;
+}
+
+// ── Recordings library (I-01) ─────────────────────────────────────────
+
+/** List recordings for a session, newest first. */
+export async function listSessionRecordings(
+  sessionId: string,
+): Promise<RecordingItem[]> {
+  return getList<RecordingItem>(`${BASE}/sessions/${sessionId}/recordings/`);
+}
+
+/** List captured media for a session, newest first. */
+export async function listSessionCaptures(
+  sessionId: string,
+): Promise<CapturedMedia[]> {
+  return getList<CapturedMedia>(`${BASE}/sessions/${sessionId}/media/`);
+}
+
+/** Mint a short-lived signed URL for audio playback (§10.2). */
+export async function getRecordingPlaybackUrl(
+  recordingId: string,
+): Promise<string | null> {
+  const response = await apiClient.get(
+    `${BASE}/recordings/${recordingId}/?include=signed_urls`,
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  const data = await response.json();
+  return data.playback_url ?? null;
+}
+
+/** Delete a recording (Admin+ only, §15). */
+export async function deleteRecording(recordingId: string): Promise<void> {
+  const response = await apiClient.delete(`${BASE}/recordings/${recordingId}/`);
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
 }
