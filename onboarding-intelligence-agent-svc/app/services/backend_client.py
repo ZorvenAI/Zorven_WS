@@ -33,6 +33,9 @@ logger = get_logger(__name__)
 
 DEPENDENCY = "backend"
 OCR_UPDATE_PATH = "/api/v1/internal/assets/{asset_id}/ocr/"
+RECORDING_SUMMARY_PATH = (
+    "/api/v1/onboarding/internal/recordings/{recording_id}/summary/"
+)
 UPSERT_PATH = "/api/v1/onboarding/research-briefs/upsert/"
 QUESTIONNAIRE_PATH = "/api/v1/onboarding/questionnaires/generate/"
 VOCABULARY_PATH = "/api/v1/onboarding/field-vocabulary/"
@@ -316,6 +319,22 @@ class BackendClient:
                 "sensitivity_class": sensitivity_class,
                 "rag_excluded": rag_excluded,
             },
+            tenant_id=tenant_id,
+        )
+        return body is not None
+
+    async def update_recording_summary(
+        self,
+        *,
+        tenant_id: str,
+        recording_id: str,
+        summary: dict[str, Any],
+    ) -> bool:
+        """Write summary results back to a MeetingRecording (I-02)."""
+        path = RECORDING_SUMMARY_PATH.format(recording_id=recording_id)
+        body = await self._patch(
+            path,
+            {"summary": summary},
             tenant_id=tenant_id,
         )
         return body is not None

@@ -138,6 +138,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "ocr": ocr_provider,
             "vision": vision_provider,
             "backend": app.state.backend,
+            "llm": LLMProvider(settings.GEMINI_KEY),
+            "redis": app.state.redis,
         }
     )
     app.state.skill_registry.load()

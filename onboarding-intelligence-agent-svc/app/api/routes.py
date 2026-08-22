@@ -18,11 +18,12 @@ from app.api.schemas import (
     ExecuteRequest,
     ExecuteResponse,
     GuardrailReport,
+    SkillExecuteRequest,
     UsageReport,
 )
 from app.cache.conversation import ConversationStore
 from app.logic.prep_executor import QUESTIONNAIRE_SKILL, RESEARCH_SKILL
-from app.skills.models import TenantContext
+from app.skills.models import Origin, SkillContext, TenantContext
 from app.skills.questionnaire_models import GeneratedQuestionnaire
 from app.skills.research_brief import BusinessResearchBrief
 
@@ -292,4 +293,64 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
             output="PASS",
         ),
         usage=UsageReport(duration_ms=int((time.monotonic() - started) * 1000)),
+    )
+
+
+@router.post(
+    "/v1/execute/skill",
+    response_model=ExecuteResponse,
+    dependencies=[Depends(verify_service_token)],
+)
+async def execute_skill(
+    request: Request, payload: SkillExecuteRequest
+) -> ExecuteResponse:
+    """Direct skill invocation for backend-triggered skills (I-02).
+
+    Unlike ``/v1/execute`` this does not carry conversation state or run the
+    PREP orchestrator. It dispatches a single skill through the registry's
+    full guardrail chain (IG → RBAC → PG → skill → OG) and returns the
+    result. Used by Django's Celery task to trigger SKL-OIA-08 after a
+    recording stops.
+    """
+    started = time.monotonic()
+
+    tenant = TenantContext(
+        tenant_id=payload.tenant_context.tenant_id,
+        user_id=payload.tenant_context.user_id,
+        role=payload.tenant_context.role,
+    )
+    context = SkillContext(
+        input_prompt="",
+        tenant_context=tenant,
+        input_context=payload.input_context,
+        config=payload.config,
+        correlation_id=payload.tenant_context.correlation_id or "",
+        origin=Origin.INTERNAL,
+    )
+
+    registry = request.app.state.skill_registry
+    try:
+        result = await registry.execute(payload.skill_id, context)
+    except NotImplementedError:
+        return ExecuteResponse(
+            status="FAILED",
+            skill_id=payload.skill_id,
+            output={"error": f"Skill {payload.skill_id} is not yet implemented"},
+            usage=UsageReport(duration_ms=int((time.monotonic() - started) * 1000)),
+        )
+    except Exception as exc:
+        return ExecuteResponse(
+            status="FAILED",
+            skill_id=payload.skill_id,
+            output={"error": str(exc)},
+            usage=UsageReport(duration_ms=int((time.monotonic() - started) * 1000)),
+        )
+
+    return ExecuteResponse(
+        status="SUCCEEDED",
+        skill_id=result.skill_id,
+        output=result.output,
+        usage=UsageReport(
+            duration_ms=result.duration_ms or int((time.monotonic() - started) * 1000)
+        ),
     )
