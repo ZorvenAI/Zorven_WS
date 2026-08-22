@@ -101,7 +101,7 @@ class SummarizeRecording(BaseSkill):
                 summary=summary,
             )
 
-        await self._store_idempotency(tenant_id, recording_id, summary)
+            await self._store_idempotency(tenant_id, recording_id, summary)
 
         return SkillResult(skill_id=self.meta.skill_id, output=summary)
 

@@ -805,12 +805,13 @@ class MeetingRecordingViewSet(
         # I-02: trigger async summary generation via the OIA service.
         from apps.onboarding.tasks import trigger_recording_summary
 
+        duration = (recording.stopped_at - recording.started_at).total_seconds()
         trigger_recording_summary.delay(
             tenant_id=str(recording.tenant_id),
             recording_id=str(recording.pk),
             session_id=str(recording.session_id),
-            started_at=recording.started_at.timestamp(),
-            stopped_at=recording.stopped_at.timestamp(),
+            started_at=0.0,
+            stopped_at=duration,
         )
 
         return Response(MeetingRecordingSerializer(recording).data)
@@ -2132,6 +2133,12 @@ def update_recording_summary(request, pk):
             return Response(
                 {"error": "Recording not found"},
                 status=http.HTTP_404_NOT_FOUND,
+            )
+
+        if recording.status == RecordingStatus.FAILED:
+            return Response(
+                {"error": "Cannot summarise a failed recording"},
+                status=http.HTTP_409_CONFLICT,
             )
 
         recording.summary = summary

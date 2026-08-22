@@ -10,6 +10,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from app.core.logging import get_logger
+
 from fastapi import APIRouter, Depends, Request, Response, status
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
@@ -26,6 +28,8 @@ from app.logic.prep_executor import QUESTIONNAIRE_SKILL, RESEARCH_SKILL
 from app.skills.models import Origin, SkillContext, TenantContext
 from app.skills.questionnaire_models import GeneratedQuestionnaire
 from app.skills.research_brief import BusinessResearchBrief
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -339,10 +343,11 @@ async def execute_skill(
             usage=UsageReport(duration_ms=int((time.monotonic() - started) * 1000)),
         )
     except Exception as exc:
+        logger.error("skill_execute_failed", skill_id=payload.skill_id, error=str(exc))
         return ExecuteResponse(
             status="FAILED",
             skill_id=payload.skill_id,
-            output={"error": str(exc)},
+            output={"error": f"{type(exc).__name__}: skill execution failed"},
             usage=UsageReport(duration_ms=int((time.monotonic() - started) * 1000)),
         )
 

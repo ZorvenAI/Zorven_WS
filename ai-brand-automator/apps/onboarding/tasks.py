@@ -60,4 +60,19 @@ def trigger_recording_summary(
         )
         return
 
+    try:
+        body = resp.json()
+    except ValueError:
+        body = {}
+
+    if body.get("status") == "FAILED":
+        output = body.get("output", {})
+        detail = output.get("error", "unknown") if isinstance(output, dict) else ""
+        logger.error(
+            "OIA skill failed for recording %s: %s",
+            recording_id,
+            str(detail)[:500],
+        )
+        raise self.retry(exc=Exception("OIA skill returned FAILED"))
+
     logger.info("Summary triggered for recording %s", recording_id)
