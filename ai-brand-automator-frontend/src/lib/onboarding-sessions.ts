@@ -138,6 +138,24 @@ export interface RecordingItem {
   stopped_at: string | null;
 }
 
+/** A clickable timestamp in a recording summary (I-02). */
+export interface KeyMoment {
+  t: number;
+  label: string;
+}
+
+/** The LLM-generated summary for a recording (I-02). */
+export interface RecordingSummary {
+  text: string;
+  key_moments: KeyMoment[];
+}
+
+/** Detail view of a single recording, including summary blob (I-02). */
+export interface RecordingDetail extends RecordingItem {
+  summary: RecordingSummary | null;
+  playback_url?: string;
+}
+
 /**
  * Paths are relative to `/api/v1`, which `env.getApiUrl()` already prepends.
  *
@@ -492,6 +510,27 @@ export async function getRecordingPlaybackUrl(
   }
   const data = await response.json();
   return data.playback_url ?? null;
+}
+
+/** Fetch a single recording with its summary and signed playback URL (I-02). */
+export async function getRecordingDetail(
+  recordingId: string,
+): Promise<RecordingDetail> {
+  const response = await apiClient.get(
+    `${BASE}/recordings/${recordingId}/?include=signed_urls`,
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  const data = (await response.json()) as RecordingDetail;
+  if (
+    data.summary &&
+    typeof data.summary === 'object' &&
+    Object.keys(data.summary).length === 0
+  ) {
+    data.summary = null;
+  }
+  return data;
 }
 
 /** Delete a recording (Admin+ only, §15). */
