@@ -231,7 +231,8 @@ class TestMergeOcrTexts:
         ]
         merged, _ = merge_ocr_texts(results)
         lines_text = [
-            l.split("] ", 1)[1] if "] " in l else l for l in merged.split("\n")
+            line.split("] ", 1)[1] if "] " in line else line
+            for line in merged.split("\n")
         ]
         assert len(lines_text) == len(set(lines_text))
 
