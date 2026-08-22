@@ -76,19 +76,23 @@ async def extract_keyframes(
             )
             duration = float(max_duration_s)
 
-        t_limit = (
-            ["-t", str(max_duration_s)] if max_duration_s else []
-        )
+        t_limit = ["-t", str(max_duration_s)] if max_duration_s else []
 
         fps_proc = await asyncio.create_subprocess_exec(
             "ffmpeg",
-            "-i", video_path,
+            "-i",
+            video_path,
             *t_limit,
-            "-vf", f"fps={fps}",
-            "-vsync", "vfr",
-            "-frame_pts", "1",
+            "-vf",
+            f"fps={fps}",
+            "-vsync",
+            "vfr",
+            "-frame_pts",
+            "1",
             os.path.join(fps_dir, "frame_%06d.png"),
-            "-y", "-loglevel", "error",
+            "-y",
+            "-loglevel",
+            "error",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -96,12 +100,17 @@ async def extract_keyframes(
 
         scene_proc = await asyncio.create_subprocess_exec(
             "ffmpeg",
-            "-i", video_path,
+            "-i",
+            video_path,
             *t_limit,
-            "-vf", f"select='gt(scene,{SCENE_CHANGE_THRESHOLD})',showinfo",
-            "-vsync", "vfr",
+            "-vf",
+            f"select='gt(scene,{SCENE_CHANGE_THRESHOLD})',showinfo",
+            "-vsync",
+            "vfr",
             os.path.join(scene_dir, "frame_%06d.png"),
-            "-y", "-loglevel", "error",
+            "-y",
+            "-loglevel",
+            "error",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -116,22 +125,26 @@ async def extract_keyframes(
         fps_files = sorted(Path(fps_dir).glob("frame_*.png"))
         for i, fp in enumerate(fps_files):
             ts = i / fps if fps > 0 else 0.0
-            frames.append(KeyFrame(
-                frame_bytes=fp.read_bytes(),
-                timestamp_s=ts,
-                source="fps",
-            ))
+            frames.append(
+                KeyFrame(
+                    frame_bytes=fp.read_bytes(),
+                    timestamp_s=ts,
+                    source="fps",
+                )
+            )
 
         scene_files = sorted(Path(scene_dir).glob("frame_*.png"))
         for i, fp in enumerate(scene_files):
             ts = scene_timestamps[i] if i < len(scene_timestamps) else 0.0
             existing_ts = {f.timestamp_s for f in frames}
             if not any(abs(ts - et) < 0.5 for et in existing_ts):
-                frames.append(KeyFrame(
-                    frame_bytes=fp.read_bytes(),
-                    timestamp_s=ts,
-                    source="scene",
-                ))
+                frames.append(
+                    KeyFrame(
+                        frame_bytes=fp.read_bytes(),
+                        timestamp_s=ts,
+                        source="scene",
+                    )
+                )
 
         frames.sort(key=lambda f: f.timestamp_s)
 
@@ -157,9 +170,12 @@ async def _probe_duration(video_path: str) -> float | None:
     """Get video duration in seconds via ffprobe."""
     proc = await asyncio.create_subprocess_exec(
         "ffprobe",
-        "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
         video_path,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -209,9 +225,7 @@ def dedup_frames(
             img = Image.open(io.BytesIO(frame.frame_bytes))
             h = imagehash.average_hash(img)
         except Exception:
-            logger.warning(
-                "frame_hash_failed timestamp_s=%s", frame.timestamp_s
-            )
+            logger.warning("frame_hash_failed timestamp_s=%s", frame.timestamp_s)
             kept.append((frame, imagehash.hex_to_hash("0" * 16)))
             continue
 
@@ -284,8 +298,6 @@ def merge_ocr_texts(
     merged = "\n".join(lines)
 
     confidences = [r.confidence for r in frame_results if r.text.strip()]
-    avg_confidence = (
-        sum(confidences) / len(confidences) if confidences else 0.0
-    )
+    avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
 
     return merged, avg_confidence

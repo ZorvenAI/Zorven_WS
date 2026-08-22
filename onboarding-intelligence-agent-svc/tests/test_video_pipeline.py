@@ -90,11 +90,16 @@ def _make_video(duration_s: float = 3.0, fps: int = 10) -> bytes:
         result = subprocess.run(
             [
                 "ffmpeg",
-                "-f", "lavfi",
-                "-i", f"color=c=red:s=64x64:d={duration_s}:r={fps}",
-                "-c:v", "libx264",
-                "-pix_fmt", "yuv420p",
-                "-t", str(duration_s),
+                "-f",
+                "lavfi",
+                "-i",
+                f"color=c=red:s=64x64:d={duration_s}:r={fps}",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-t",
+                str(duration_s),
                 "-y",
                 tmp_path,
             ],
@@ -102,8 +107,7 @@ def _make_video(duration_s: float = 3.0, fps: int = 10) -> bytes:
         )
         if result.returncode != 0:
             pytest.skip(
-                f"ffmpeg video generation failed: "
-                f"{result.stderr.decode()[:200]}"
+                f"ffmpeg video generation failed: " f"{result.stderr.decode()[:200]}"
             )
         with open(tmp_path, "rb") as f:
             return f.read()
@@ -118,9 +122,7 @@ def _make_video(duration_s: float = 3.0, fps: int = 10) -> bytes:
 class TestExtractKeyframes:
     def test_extracts_frames_from_video(self) -> None:
         video = _make_video(duration_s=3.0)
-        frames = asyncio.run(
-            extract_keyframes(video, fps=1.0, max_frames=30)
-        )
+        frames = asyncio.run(extract_keyframes(video, fps=1.0, max_frames=30))
         assert len(frames) >= 1
         for f in frames:
             assert f.frame_bytes
@@ -129,15 +131,11 @@ class TestExtractKeyframes:
 
     def test_frame_cap_enforced(self) -> None:
         video = _make_video(duration_s=5.0)
-        frames = asyncio.run(
-            extract_keyframes(video, fps=1.0, max_frames=3)
-        )
+        frames = asyncio.run(extract_keyframes(video, fps=1.0, max_frames=3))
         assert len(frames) <= 3
 
     def test_empty_video_returns_empty(self) -> None:
-        frames = asyncio.run(
-            extract_keyframes(b"", fps=1.0, max_frames=30)
-        )
+        frames = asyncio.run(extract_keyframes(b"", fps=1.0, max_frames=30))
         assert frames == []
 
     def test_max_duration_respected(self) -> None:
@@ -150,9 +148,7 @@ class TestExtractKeyframes:
 
     def test_timestamps_are_sorted(self) -> None:
         video = _make_video(duration_s=4.0)
-        frames = asyncio.run(
-            extract_keyframes(video, fps=1.0, max_frames=30)
-        )
+        frames = asyncio.run(extract_keyframes(video, fps=1.0, max_frames=30))
         timestamps = [f.timestamp_s for f in frames]
         assert timestamps == sorted(timestamps)
 
@@ -234,7 +230,9 @@ class TestMergeOcrTexts:
             FrameOCRResult(1.0, "Line two\nLine three", 0.8, b""),
         ]
         merged, _ = merge_ocr_texts(results)
-        lines_text = [l.split("] ", 1)[1] if "] " in l else l for l in merged.split("\n")]
+        lines_text = [
+            l.split("] ", 1)[1] if "] " in l else l for l in merged.split("\n")
+        ]
         assert len(lines_text) == len(set(lines_text))
 
     def test_preserves_all_unique_lines(self) -> None:

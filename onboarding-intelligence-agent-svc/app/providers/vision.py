@@ -197,9 +197,7 @@ class VisionProvider:
         self._breaker.record_success()
         return result
 
-    async def analyze_multi(
-        self, frames: list[bytes], ocr_text: str
-    ) -> VisionResult:
+    async def analyze_multi(self, frames: list[bytes], ocr_text: str) -> VisionResult:
         """Send multiple video frames + merged OCR text to Gemini.
 
         Used by the video snippet path (H-04 AC-4): one doc_type and one
@@ -225,9 +223,7 @@ class VisionProvider:
             contents: list[Any] = []
             for frame_bytes in frames[:MAX_MULTI_FRAMES]:
                 contents.append(
-                    types.Part.from_bytes(
-                        data=frame_bytes, mime_type="image/png"
-                    )
+                    types.Part.from_bytes(data=frame_bytes, mime_type="image/png")
                 )
             contents.append(prompt)
 

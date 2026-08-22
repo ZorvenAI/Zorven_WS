@@ -176,20 +176,23 @@ class TestAnalyzeMulti:
         assert result.doc_type == "contract"
         assert result.caption == "Multi-page contract"
         call_args = client.generate_content.call_args
-        contents = call_args.kwargs.get("contents", call_args.args[0] if call_args.args else [])
+        contents = call_args.kwargs.get(
+            "contents", call_args.args[0] if call_args.args else []
+        )
         assert len(contents) == 4  # 3 frames + 1 prompt
 
     def test_multi_frame_caps_at_max(self):
         b = breaker()
         client = _fake_client(
-            '{"caption": "doc", "doc_type": "other", '
-            '"sensitivity_class": "GENERAL"}'
+            '{"caption": "doc", "doc_type": "other", ' '"sensitivity_class": "GENERAL"}'
         )
         provider = VisionProvider("key", breaker=b, client=client)
         frames = [b"f1", b"f2", b"f3", b"f4", b"f5", b"f6"]
         asyncio.run(provider.analyze_multi(frames, "text"))
         call_args = client.generate_content.call_args
-        contents = call_args.kwargs.get("contents", call_args.args[0] if call_args.args else [])
+        contents = call_args.kwargs.get(
+            "contents", call_args.args[0] if call_args.args else []
+        )
         assert len(contents) == 5  # MAX_MULTI_FRAMES (4) + 1 prompt
 
     def test_multi_frame_no_key_raises(self):

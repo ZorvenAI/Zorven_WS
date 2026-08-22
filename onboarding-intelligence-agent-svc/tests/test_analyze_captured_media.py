@@ -336,9 +336,7 @@ class TestVideoPath:
         vision = _vision_multi_provider()
         backend = _backend()
 
-        skill = AnalyzeCapturedMedia(
-            _meta(), ocr=ocr, vision=vision, backend=backend
-        )
+        skill = AnalyzeCapturedMedia(_meta(), ocr=ocr, vision=vision, backend=backend)
         skill._download_media = AM(return_value=b"fake-video")
 
         with patch(
@@ -358,9 +356,7 @@ class TestVideoPath:
                 KeyFrame(frame_bytes=frame_bytes, timestamp_s=1.0, source="fps"),
             ]
 
-            with patch(
-                "app.skills.analyze_captured_media.dedup_frames"
-            ) as mock_dedup:
+            with patch("app.skills.analyze_captured_media.dedup_frames") as mock_dedup:
                 mock_dedup.return_value = (
                     [KeyFrame(frame_bytes=frame_bytes, timestamp_s=0.0, source="fps")],
                     0.5,
@@ -396,9 +392,7 @@ class TestVideoPath:
         vision = _vision_multi_provider()
         backend = _backend()
 
-        skill = AnalyzeCapturedMedia(
-            _meta(), ocr=ocr, vision=vision, backend=backend
-        )
+        skill = AnalyzeCapturedMedia(_meta(), ocr=ocr, vision=vision, backend=backend)
         skill._download_media = AM(return_value=b"fake-video")
 
         with patch(
@@ -417,9 +411,7 @@ class TestVideoPath:
                 KeyFrame(frame_bytes=frame_bytes, timestamp_s=0.0, source="fps"),
             ]
 
-            with patch(
-                "app.skills.analyze_captured_media.dedup_frames"
-            ) as mock_dedup:
+            with patch("app.skills.analyze_captured_media.dedup_frames") as mock_dedup:
                 mock_dedup.return_value = (
                     [KeyFrame(frame_bytes=frame_bytes, timestamp_s=0.0, source="fps")],
                     0.0,
@@ -437,9 +429,7 @@ class TestVideoPath:
         vision = _vision_multi_provider()
         backend = _backend()
 
-        skill = AnalyzeCapturedMedia(
-            _meta(), ocr=ocr, vision=vision, backend=backend
-        )
+        skill = AnalyzeCapturedMedia(_meta(), ocr=ocr, vision=vision, backend=backend)
         skill._download_media = AM(return_value=b"fake-video")
 
         with patch(
@@ -459,13 +449,15 @@ class TestVideoPath:
                 KeyFrame(frame_bytes=frame_bytes, timestamp_s=1.0, source="fps"),
             ]
 
-            with patch(
-                "app.skills.analyze_captured_media.dedup_frames"
-            ) as mock_dedup:
+            with patch("app.skills.analyze_captured_media.dedup_frames") as mock_dedup:
                 mock_dedup.return_value = (
                     [
-                        KeyFrame(frame_bytes=frame_bytes, timestamp_s=0.0, source="fps"),
-                        KeyFrame(frame_bytes=frame_bytes, timestamp_s=1.0, source="fps"),
+                        KeyFrame(
+                            frame_bytes=frame_bytes, timestamp_s=0.0, source="fps"
+                        ),
+                        KeyFrame(
+                            frame_bytes=frame_bytes, timestamp_s=1.0, source="fps"
+                        ),
                     ],
                     0.0,
                 )
