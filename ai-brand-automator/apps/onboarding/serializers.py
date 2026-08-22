@@ -565,6 +565,29 @@ class ScheduledMeetingSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class CaptureListSerializer(serializers.ModelSerializer):
+    """Read-only projection for the library rail (I-01).
+
+    FR-LIB-01: no raw GCS paths. PG-08: no unredacted OCR text.
+    Only the fields the frontend actually renders.
+    """
+
+    class Meta:
+        from onboarding.models import BrandAsset
+
+        model = BrandAsset
+        fields = [
+            "id",
+            "file_name",
+            "file_type",
+            "file_size",
+            "usage_tag",
+            "uploaded_at",
+            "onboarding_session",
+        ]
+        read_only_fields = fields
+
+
 class MediaCaptureSerializer(serializers.Serializer):
     """Validates photo captures submitted via ``POST /sessions/{id}/media/``.
 

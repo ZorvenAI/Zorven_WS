@@ -110,6 +110,7 @@ export default function SessionPage() {
             recordings={library.recordings}
             captures={library.captures}
             canDelete={isAdmin}
+            onDeleted={library.refresh}
           />
         </div>
       )}

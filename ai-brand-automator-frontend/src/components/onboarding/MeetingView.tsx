@@ -245,6 +245,7 @@ export default function MeetingView({
             recordings={library.recordings}
             captures={mergeCaptures(captureQueue.captures, library.captures)}
             canDelete={isAdmin}
+            onRecordingDeleted={library.refresh}
           />
         </div>
       </div>

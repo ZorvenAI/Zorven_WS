@@ -20,6 +20,7 @@ interface UseLibraryPollingReturn {
   recordings: RecordingItem[];
   captures: CapturedMedia[];
   loading: boolean;
+  refresh: () => void;
 }
 
 export function useLibraryPolling(
@@ -85,5 +86,5 @@ export function useLibraryPolling(
     };
   }, [sessionId, intervalMs, fetchOnce]);
 
-  return { recordings, captures, loading };
+  return { recordings, captures, loading, refresh: fetchOnce };
 }

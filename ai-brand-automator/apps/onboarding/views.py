@@ -79,6 +79,7 @@ from apps.onboarding.models import (
     tenant_scope_q,
 )
 from apps.onboarding.serializers import (
+    CaptureListSerializer,
     ConsentRecordSerializer,
     FieldProvenanceSerializer,
     MediaCaptureSerializer,
@@ -453,11 +454,16 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         return Response(MeetingRecordingSerializer(rows, many=True).data)
 
     def _list_captures(self, session):
-        """Newest first, matching the recordings list (I-01 AC-1)."""
+        """Newest first, matching the recordings list (I-01 AC-1).
+
+        Uses ``CaptureListSerializer`` — not the full ``BrandAssetSerializer``
+        — so ``gcs_path``, ``ocr_text``, and pipeline internals never reach
+        the client (FR-LIB-01, PG-08).
+        """
         rows = BrandAsset.objects.filter(onboarding_session=session).order_by(
             "-uploaded_at"
         )
-        return Response(BrandAssetSerializer(rows, many=True).data)
+        return Response(CaptureListSerializer(rows, many=True).data)
 
     def _open_recording(self, request, session):
         """Refuse without consent, server-side (AC-1, IG-08).
@@ -670,7 +676,7 @@ class MeetingRecordingViewSet(
         """
         instance = self.get_object()
         data = self.get_serializer(instance).data
-        include = request.query_params.get("include", "")
+        include = request.query_params.get("include", "").split(",")
         if "signed_urls" in include:
             data["playback_url"] = self._mint_playback_url(instance)
         return Response(data)

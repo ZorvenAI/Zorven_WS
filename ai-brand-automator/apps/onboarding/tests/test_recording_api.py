@@ -592,3 +592,57 @@ def test_media_post_still_works(consented_session, public_tenant, editor):
     # POST requires consent + blob data; without them it fails on validation
     # not on routing — proving the POST path is still reachable.
     assert response.status_code != 405, "POST method was removed"
+
+
+# ── I-01 review fixes ──────────────────────────────────────────────
+
+
+def test_captures_list_does_not_expose_gcs_path(
+    consented_session, public_tenant, editor
+):
+    """FR-LIB-01: captures list must not leak storage paths or OCR text."""
+    from onboarding.models import BrandAsset
+
+    BrandAsset.objects.create(
+        company=consented_session.company,
+        tenant=public_tenant,
+        onboarding_session=consented_session,
+        file_name="doc.jpg",
+        file_type="image",
+        file_size=2048,
+        gcs_path="_raw/t-1/doc.jpg",
+        gcs_bucket="zorven-raw-assets",
+        usage_tag="identity_document",
+        ocr_text="Sensitive PII content here",
+    )
+
+    response = client_for(editor, public_tenant).get(
+        f"{SESSIONS}{consented_session.pk}/media/"
+    )
+    assert response.status_code == 200
+    row = response.data[0]
+    assert "gcs_path" not in row, "raw GCS path leaked to client"
+    assert "gcs_bucket" not in row, "bucket name leaked to client"
+    assert "ocr_text" not in row, "unredacted OCR text leaked to client"
+    assert "pipeline_status" not in row, "pipeline internals leaked"
+    assert "gs://" not in str(row), "a storage URI reached the response"
+
+
+def test_empty_recordings_list_returns_empty_array(
+    consented_session, public_tenant, viewer
+):
+    """A session with no recordings returns [] not 404."""
+    response = client_for(viewer, public_tenant).get(recordings_url(consented_session))
+    assert response.status_code == 200
+    assert response.data == []
+
+
+def test_empty_captures_list_returns_empty_array(
+    consented_session, public_tenant, viewer
+):
+    """A session with no captures returns [] not 404."""
+    response = client_for(viewer, public_tenant).get(
+        f"{SESSIONS}{consented_session.pk}/media/"
+    )
+    assert response.status_code == 200
+    assert response.data == []
