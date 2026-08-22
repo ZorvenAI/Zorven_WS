@@ -1,8 +1,9 @@
-"""H-03 · Gemini multimodal vision provider.
+"""H-03 / H-04 · Gemini multimodal vision provider.
 
 Tests the provider's response parsing, breaker discipline, and input
 validation. The real Gemini call needs an API key, so we inject a test
-double through the ``client`` parameter.
+double through the ``client`` parameter. H-04 adds ``analyze_multi``
+for multi-frame video snippets.
 """
 
 from __future__ import annotations
@@ -158,3 +159,60 @@ class TestVisionResultShape:
                 f'"sensitivity_class": "{sc}"}}'
             )
             assert result.sensitivity_class == sc
+
+
+class TestAnalyzeMulti:
+    """H-04 AC-4: Gemini receives merged text + best frames."""
+
+    def test_multi_frame_sends_all_frames(self):
+        b = breaker()
+        client = _fake_client(
+            '{"caption": "Multi-page contract", "doc_type": "contract", '
+            '"sensitivity_class": "GENERAL"}'
+        )
+        provider = VisionProvider("key", breaker=b, client=client)
+        frames = [b"frame1", b"frame2", b"frame3"]
+        result = asyncio.run(provider.analyze_multi(frames, "merged text"))
+        assert result.doc_type == "contract"
+        assert result.caption == "Multi-page contract"
+        call_args = client.generate_content.call_args
+        contents = call_args.kwargs.get(
+            "contents", call_args.args[0] if call_args.args else []
+        )
+        assert len(contents) == 4  # 3 frames + 1 prompt
+
+    def test_multi_frame_caps_at_max(self):
+        b = breaker()
+        client = _fake_client(
+            '{"caption": "doc", "doc_type": "other", ' '"sensitivity_class": "GENERAL"}'
+        )
+        provider = VisionProvider("key", breaker=b, client=client)
+        frames = [b"f1", b"f2", b"f3", b"f4", b"f5", b"f6"]
+        asyncio.run(provider.analyze_multi(frames, "text"))
+        call_args = client.generate_content.call_args
+        contents = call_args.kwargs.get(
+            "contents", call_args.args[0] if call_args.args else []
+        )
+        assert len(contents) == 5  # MAX_MULTI_FRAMES (4) + 1 prompt
+
+    def test_multi_frame_no_key_raises(self):
+        b = breaker()
+        provider = VisionProvider("", breaker=b)
+        with pytest.raises(VisionUnavailable, match="no Gemini API key"):
+            asyncio.run(provider.analyze_multi([b"f1"], "text"))
+
+    def test_multi_frame_open_breaker_raises(self):
+        b = breaker(failure_threshold=1)
+        b.record_failure()
+        provider = VisionProvider("key", breaker=b)
+        with pytest.raises(VisionUnavailable):
+            asyncio.run(provider.analyze_multi([b"f1"], "text"))
+
+    def test_multi_frame_failure_records_on_breaker(self):
+        b = breaker(failure_threshold=2)
+        client = AsyncMock()
+        client.generate_content.side_effect = RuntimeError("boom")
+        provider = VisionProvider("key", breaker=b, client=client)
+        with pytest.raises(VisionUnavailable):
+            asyncio.run(provider.analyze_multi([b"f1"], "text"))
+        assert len(b._failures) == 1

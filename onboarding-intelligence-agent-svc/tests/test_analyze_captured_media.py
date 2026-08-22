@@ -1,6 +1,6 @@
-"""H-03 · SKL-OIA-07 analyze_captured_media skill tests.
+"""H-03 / H-04 · SKL-OIA-07 analyze_captured_media skill tests.
 
-Tests the skill pipeline: OCR → Vision → Redaction → PG-08.
+Tests the skill pipeline for both image (H-03) and video (H-04) paths.
 Providers are injected directly (no mocks on the skill itself — only
 the providers are test doubles, which the skill accepts by design).
 """
@@ -97,7 +97,7 @@ class TestPipelineStageOrder:
             vision=vision,
             backend=backend,
         )
-        skill._download_image = AsyncMock(return_value=b"fake-image")
+        skill._download_media = AsyncMock(return_value=b"fake-image")
 
         result = asyncio.run(skill.run(_context()))
 
@@ -120,7 +120,7 @@ class TestPipelineStageOrder:
             vision=vision,
             backend=backend,
         )
-        skill._download_image = AsyncMock(return_value=b"fake-image")
+        skill._download_media = AsyncMock(return_value=b"fake-image")
 
         result = asyncio.run(skill.run(_context()))
 
@@ -140,7 +140,7 @@ class TestRetakeSuggested:
             vision=vision,
             backend=_backend(),
         )
-        skill._download_image = AsyncMock(return_value=b"fake")
+        skill._download_media = AsyncMock(return_value=b"fake")
 
         result = asyncio.run(skill.run(_context()))
 
@@ -157,7 +157,7 @@ class TestRetakeSuggested:
             vision=vision,
             backend=_backend(),
         )
-        skill._download_image = AsyncMock(return_value=b"fake")
+        skill._download_media = AsyncMock(return_value=b"fake")
 
         result = asyncio.run(skill.run(_context()))
 
@@ -176,7 +176,7 @@ class TestPG08:
             vision=vision,
             backend=_backend(),
         )
-        skill._download_image = AsyncMock(return_value=b"fake")
+        skill._download_media = AsyncMock(return_value=b"fake")
 
         result = asyncio.run(skill.run(_context()))
 
@@ -192,7 +192,7 @@ class TestPG08:
             vision=vision,
             backend=_backend(),
         )
-        skill._download_image = AsyncMock(return_value=b"fake")
+        skill._download_media = AsyncMock(return_value=b"fake")
 
         result = asyncio.run(skill.run(_context()))
 
@@ -208,7 +208,7 @@ class TestPG08:
             vision=vision,
             backend=_backend(),
         )
-        skill._download_image = AsyncMock(return_value=b"fake")
+        skill._download_media = AsyncMock(return_value=b"fake")
 
         result = asyncio.run(skill.run(_context()))
 
@@ -225,7 +225,7 @@ class TestPG08:
             vision=vision,
             backend=_backend(),
         )
-        skill._download_image = AsyncMock(return_value=b"fake")
+        skill._download_media = AsyncMock(return_value=b"fake")
 
         result = asyncio.run(skill.run(_context()))
 
@@ -250,7 +250,7 @@ class TestDegradation:
             vision=vision,
             backend=_backend(),
         )
-        skill._download_image = AsyncMock(return_value=b"fake")
+        skill._download_media = AsyncMock(return_value=b"fake")
 
         result = asyncio.run(skill.run(_context()))
 
@@ -270,7 +270,7 @@ class TestBackendWrite:
             vision=vision,
             backend=backend,
         )
-        skill._download_image = AsyncMock(return_value=b"fake")
+        skill._download_media = AsyncMock(return_value=b"fake")
 
         asyncio.run(skill.run(_context()))
 
@@ -279,3 +279,213 @@ class TestBackendWrite:
         assert call_kwargs["tenant_id"] == "t-1"
         assert call_kwargs["asset_id"] == 42
         assert call_kwargs["sensitivity_class"] == "GENERAL"
+
+
+def _video_context(**overrides) -> SkillContext:
+    """Context with video mime_type to trigger the video pipeline."""
+    base = dict(
+        input_prompt="",
+        tenant_context=TenantContext(
+            tenant_id="t-1",
+            session_id="s-1",
+            role="OWNER",
+        ),
+        input_context={
+            "media_id": "v-001",
+            "gcs_uri": "gs://bucket/test.mp4",
+            "usage_tag": "business_photo",
+            "mime_type": "video/mp4",
+            "asset_id": "42",
+            "redis": None,
+            "events": None,
+        },
+        origin=Origin.INTERNAL,
+    )
+    base.update(overrides)
+    return SkillContext(**base)
+
+
+def _vision_multi_provider(
+    caption="A multi-page document",
+    doc_type="report",
+    sensitivity_class="GENERAL",
+):
+    """Vision provider with analyze_multi configured."""
+    provider = AsyncMock()
+    provider.analyze.return_value = VisionResult(
+        caption=caption,
+        doc_type=doc_type,
+        sensitivity_class=sensitivity_class,
+    )
+    provider.analyze_multi.return_value = VisionResult(
+        caption=caption,
+        doc_type=doc_type,
+        sensitivity_class=sensitivity_class,
+    )
+    return provider
+
+
+class TestVideoPath:
+    """H-04: video snippet OCR pipeline tests."""
+
+    def test_video_mime_triggers_video_pipeline(self):
+        """AC-1: video/* mime_type triggers the video path."""
+        from unittest.mock import patch, AsyncMock as AM
+
+        ocr = _ocr_provider(text="Invoice line 1")
+        vision = _vision_multi_provider()
+        backend = _backend()
+
+        skill = AnalyzeCapturedMedia(_meta(), ocr=ocr, vision=vision, backend=backend)
+        skill._download_media = AM(return_value=b"fake-video")
+
+        with patch(
+            "app.skills.analyze_captured_media.extract_keyframes"
+        ) as mock_extract:
+            from app.logic.video_pipeline import KeyFrame
+            import io
+            from PIL import Image
+
+            img = Image.new("RGB", (10, 10), (255, 0, 0))
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            frame_bytes = buf.getvalue()
+
+            mock_extract.return_value = [
+                KeyFrame(frame_bytes=frame_bytes, timestamp_s=0.0, source="fps"),
+                KeyFrame(frame_bytes=frame_bytes, timestamp_s=1.0, source="fps"),
+            ]
+
+            with patch("app.skills.analyze_captured_media.dedup_frames") as mock_dedup:
+                mock_dedup.return_value = (
+                    [KeyFrame(frame_bytes=frame_bytes, timestamp_s=0.0, source="fps")],
+                    0.5,
+                )
+
+                result = asyncio.run(skill.run(_video_context()))
+
+                mock_extract.assert_called_once()
+                mock_dedup.assert_called_once()
+                assert result.output["media_id"] == "v-001"
+                assert "ocr_text" in result.output
+
+    def test_image_mime_uses_image_path(self):
+        """Image mime_type must NOT trigger the video pipeline."""
+        ocr = _ocr_provider()
+        vision = _vision_provider(sensitivity_class="GENERAL")
+
+        skill = AnalyzeCapturedMedia(
+            _meta(), ocr=ocr, vision=vision, backend=_backend()
+        )
+        skill._download_media = AsyncMock(return_value=b"fake")
+
+        result = asyncio.run(skill.run(_context()))
+
+        assert result.output["media_id"] == "m-001"
+        vision.analyze.assert_called_once()
+
+    def test_video_merged_text_stored(self):
+        """AC-3: merged text with timestamps is stored."""
+        from unittest.mock import patch, AsyncMock as AM
+
+        ocr = _ocr_provider(text="Page one content")
+        vision = _vision_multi_provider()
+        backend = _backend()
+
+        skill = AnalyzeCapturedMedia(_meta(), ocr=ocr, vision=vision, backend=backend)
+        skill._download_media = AM(return_value=b"fake-video")
+
+        with patch(
+            "app.skills.analyze_captured_media.extract_keyframes"
+        ) as mock_extract:
+            import io
+            from PIL import Image
+            from app.logic.video_pipeline import KeyFrame
+
+            img = Image.new("RGB", (10, 10), (255, 0, 0))
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            frame_bytes = buf.getvalue()
+
+            mock_extract.return_value = [
+                KeyFrame(frame_bytes=frame_bytes, timestamp_s=0.0, source="fps"),
+            ]
+
+            with patch("app.skills.analyze_captured_media.dedup_frames") as mock_dedup:
+                mock_dedup.return_value = (
+                    [KeyFrame(frame_bytes=frame_bytes, timestamp_s=0.0, source="fps")],
+                    0.0,
+                )
+
+                result = asyncio.run(skill.run(_video_context()))
+
+                assert result.output["ocr_text"]
+
+    def test_video_gemini_receives_multiple_frames(self):
+        """AC-4: analyze_multi is called, not analyze."""
+        from unittest.mock import patch, AsyncMock as AM
+
+        ocr = _ocr_provider(text="Frame text")
+        vision = _vision_multi_provider()
+        backend = _backend()
+
+        skill = AnalyzeCapturedMedia(_meta(), ocr=ocr, vision=vision, backend=backend)
+        skill._download_media = AM(return_value=b"fake-video")
+
+        with patch(
+            "app.skills.analyze_captured_media.extract_keyframes"
+        ) as mock_extract:
+            import io
+            from PIL import Image
+            from app.logic.video_pipeline import KeyFrame
+
+            img = Image.new("RGB", (10, 10), (255, 0, 0))
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            frame_bytes = buf.getvalue()
+
+            mock_extract.return_value = [
+                KeyFrame(frame_bytes=frame_bytes, timestamp_s=0.0, source="fps"),
+                KeyFrame(frame_bytes=frame_bytes, timestamp_s=1.0, source="fps"),
+            ]
+
+            with patch("app.skills.analyze_captured_media.dedup_frames") as mock_dedup:
+                mock_dedup.return_value = (
+                    [
+                        KeyFrame(
+                            frame_bytes=frame_bytes, timestamp_s=0.0, source="fps"
+                        ),
+                        KeyFrame(
+                            frame_bytes=frame_bytes, timestamp_s=1.0, source="fps"
+                        ),
+                    ],
+                    0.0,
+                )
+
+                result = asyncio.run(skill.run(_video_context()))
+
+                vision.analyze_multi.assert_called_once()
+                vision.analyze.assert_not_called()
+                assert result.output["doc_type"] == "report"
+
+    def test_video_no_frames_suggests_retake(self):
+        """Empty extraction → retake_suggested."""
+        from unittest.mock import patch, AsyncMock as AM
+
+        ocr = _ocr_provider()
+        vision = _vision_multi_provider()
+
+        skill = AnalyzeCapturedMedia(
+            _meta(), ocr=ocr, vision=vision, backend=_backend()
+        )
+        skill._download_media = AM(return_value=b"fake-video")
+
+        with patch(
+            "app.skills.analyze_captured_media.extract_keyframes"
+        ) as mock_extract:
+            mock_extract.return_value = []
+
+            result = asyncio.run(skill.run(_video_context()))
+
+            assert result.output["retake_suggested"] is True
+            assert result.output["ocr_confidence"] == 0.0
