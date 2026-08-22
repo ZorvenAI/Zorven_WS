@@ -25,7 +25,7 @@ def preprocess_image(image_bytes: bytes) -> bytes:
     try:
         from PIL import Image, ImageOps
 
-        img = Image.open(io.BytesIO(image_bytes))
+        img: Image.Image = Image.open(io.BytesIO(image_bytes))
         img = ImageOps.exif_transpose(img) or img
 
         if img.mode == "RGBA":

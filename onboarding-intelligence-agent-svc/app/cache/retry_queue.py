@@ -13,6 +13,7 @@ import json
 import logging
 import time
 from dataclasses import asdict, dataclass
+from typing import Any
 
 from app.cache.redis_manager import TenantKeys
 
@@ -42,7 +43,7 @@ class OCRRetryItem:
         return cls(**json.loads(raw))
 
 
-async def enqueue_retry(redis, keys: TenantKeys, item: OCRRetryItem) -> bool:
+async def enqueue_retry(redis: Any, keys: TenantKeys, item: OCRRetryItem) -> bool:
     """Add an item to the retry queue with exponential backoff.
 
     Returns False if max attempts exceeded (item is dropped).
@@ -65,7 +66,7 @@ async def enqueue_retry(redis, keys: TenantKeys, item: OCRRetryItem) -> bool:
     return True
 
 
-async def dequeue_due(redis, keys: TenantKeys) -> list[OCRRetryItem]:
+async def dequeue_due(redis: Any, keys: TenantKeys) -> list[OCRRetryItem]:
     """Return items whose backoff has elapsed (score <= now)."""
     key = keys.retry_queue(QUEUE_NAME)
     now = time.time()
@@ -89,7 +90,7 @@ async def dequeue_due(redis, keys: TenantKeys) -> list[OCRRetryItem]:
     return items
 
 
-async def queue_size(redis, keys: TenantKeys) -> int:
+async def queue_size(redis: Any, keys: TenantKeys) -> int:
     """Total items in the queue (for monitoring / J-02)."""
     key = keys.retry_queue(QUEUE_NAME)
-    return await redis.zcard(key)
+    return int(await redis.zcard(key))

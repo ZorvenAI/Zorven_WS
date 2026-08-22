@@ -81,6 +81,9 @@ class AnalyzeCapturedMedia(BaseSkill):
         vision_result: VisionResult | None = None
         degraded = False
 
+        assert self._ocr is not None
+        assert self._vision is not None
+
         try:
             ocr_result = await self._ocr.detect_text(preprocessed)
         except (OCRUnavailable, Exception) as exc:
@@ -201,7 +204,7 @@ class AnalyzeCapturedMedia(BaseSkill):
         client = Client()
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
-        return blob.download_as_bytes()
+        return bytes(blob.download_as_bytes())
 
     async def _enqueue_and_degrade(
         self,
