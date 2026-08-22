@@ -180,7 +180,12 @@ skills:
   - skill_id: SKL-OIA-07
     name: analyze_captured_media
     description: >-
-      Describe and classify media captured during the meeting, including OCR. input_context carries {media_id, gcs_uri, usage_tag}.
+      Read a photo or short video snippet captured during the meeting.
+      Two-engine hybrid: Cloud Vision DOCUMENT_TEXT_DETECTION for OCR text
+      with per-word confidence, Gemini multimodal for caption, document-type
+      classification and usage_tag suggestion. Video path extracts keyframes
+      at 1 fps plus scene changes, OCRs each and de-duplicates by hashing.
+      input_context carries {media_id, gcs_uri, usage_tag, mime_type}.
     input_schema:
       - field: input_prompt
         type: string

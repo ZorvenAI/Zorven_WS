@@ -300,6 +300,7 @@ class CaptureMediaFrame(BaseModel):
     media_id: str
     gcs_uri: str
     usage_tag: str = "other"
+    mime_type: str = "image/jpeg"
 
 
 class MediaAnalyzed(ServerFrame):

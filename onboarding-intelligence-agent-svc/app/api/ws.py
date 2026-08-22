@@ -1324,6 +1324,7 @@ async def _process_captured_media(
             "media_id": capture.media_id,
             "gcs_uri": capture.gcs_uri,
             "usage_tag": capture.usage_tag,
+            "mime_type": capture.mime_type,
             "asset_id": asset_id,
             "redis": redis_pool,
             "events": events,
