@@ -57,6 +57,9 @@ async def extract_keyframes(
     configured rate and on scene changes, then reads the output PNGs.
     Capped at max_frames; scene-change frames are prioritised.
     """
+    if not video_bytes:
+        return []
+
     tmp_dir = tempfile.mkdtemp(prefix="oia_video_")
     try:
         video_path = os.path.join(tmp_dir, "input.mp4")
