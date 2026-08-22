@@ -219,12 +219,12 @@ class CuratedDocument(BaseModel):
     # What the uploader said this asset *is* (B-02, Design §10.1). Carried
     # from the ingestion event rather than read from the database: this is a
     # hexagonal app and must not import the Django ORM.
-    #
-    # ocr_text is deliberately NOT carried. OCR runs after upload, so at event
-    # time the column is always null — threading it now would ship null on
-    # every document while looking wired. H-03 owns it, and re-syncs the
-    # document once redaction has actually run (Design §5.2 PG-08).
     usage_tag: Optional[str] = None
+
+    # H-03: redacted OCR text from SKL-OIA-16. Carried into RAG metadata so
+    # downstream skills can search document content. Always redacted — PII
+    # has been stripped before this field is set (Design §5.2 PG-08).
+    ocr_text: Optional[str] = None
 
     # Legacy fields for backward compatibility
     event_id: Optional[UUID] = None
@@ -287,6 +287,8 @@ class CuratedDocument(BaseModel):
         # asset that carries no tag — keep exactly the payload they had.
         if self.usage_tag:
             metadata["usage_tag"] = self.usage_tag
+        if self.ocr_text:
+            metadata["ocr_text"] = self.ocr_text
 
         return {
             "id": str(self.document_id),
