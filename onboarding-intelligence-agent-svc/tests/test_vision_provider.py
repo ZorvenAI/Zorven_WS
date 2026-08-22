@@ -93,9 +93,7 @@ class TestVisionProviderBreakerDiscipline:
         b.record_failure()
         provider = VisionProvider("key", breaker=b)
         with pytest.raises(VisionUnavailable):
-            asyncio.get_event_loop().run_until_complete(
-                provider.analyze(b"img", "text")
-            )
+            asyncio.run(provider.analyze(b"img", "text"))
 
     def test_success_records_on_breaker(self):
         b = breaker()
@@ -104,9 +102,7 @@ class TestVisionProviderBreakerDiscipline:
             '"sensitivity_class": "GENERAL"}'
         )
         provider = VisionProvider("key", breaker=b, client=client)
-        result = asyncio.get_event_loop().run_until_complete(
-            provider.analyze(b"img", "hello")
-        )
+        result = asyncio.run(provider.analyze(b"img", "hello"))
         assert result.doc_type == "letter"
         assert b.state == State.CLOSED
 
@@ -116,9 +112,7 @@ class TestVisionProviderBreakerDiscipline:
         client.generate_content.side_effect = RuntimeError("boom")
         provider = VisionProvider("key", breaker=b, client=client)
         with pytest.raises(VisionUnavailable):
-            asyncio.get_event_loop().run_until_complete(
-                provider.analyze(b"img", "text")
-            )
+            asyncio.run(provider.analyze(b"img", "text"))
         assert len(b._failures) == 1
 
 
@@ -127,9 +121,7 @@ class TestVisionProviderConfig:
         b = breaker()
         provider = VisionProvider("", breaker=b)
         with pytest.raises(VisionUnavailable, match="no Gemini API key"):
-            asyncio.get_event_loop().run_until_complete(
-                provider.analyze(b"img", "text")
-            )
+            asyncio.run(provider.analyze(b"img", "text"))
 
     def test_configured_property(self):
         assert VisionProvider("key", breaker=breaker()).configured is True
@@ -140,9 +132,7 @@ class TestVisionProviderConfig:
         client = _fake_client("")
         provider = VisionProvider("key", breaker=b, client=client)
         with pytest.raises(VisionUnavailable, match="analysis failed"):
-            asyncio.get_event_loop().run_until_complete(
-                provider.analyze(b"img", "text")
-            )
+            asyncio.run(provider.analyze(b"img", "text"))
 
 
 class TestVisionResultShape:

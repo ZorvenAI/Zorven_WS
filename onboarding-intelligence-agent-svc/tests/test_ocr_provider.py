@@ -111,7 +111,7 @@ class TestOCRProviderBreakerDiscipline:
         b.record_failure()
         provider = OCRProvider(breaker=b)
         with pytest.raises(OCRUnavailable) as exc_info:
-            asyncio.get_event_loop().run_until_complete(provider.detect_text(b"fake"))
+            asyncio.run(provider.detect_text(b"fake"))
         assert exc_info.value.degraded_mode == "GEMINI_ONLY_OCR"
 
     def test_success_records_on_breaker(self):
@@ -122,9 +122,7 @@ class TestOCRProviderBreakerDiscipline:
         )
         client = _fake_client(annotation)
         provider = OCRProvider(breaker=b, client=client)
-        result = asyncio.get_event_loop().run_until_complete(
-            provider.detect_text(b"image")
-        )
+        result = asyncio.run(provider.detect_text(b"image"))
         assert result.text == "Invoice total: $100"
         assert b.state == State.CLOSED
 
@@ -134,7 +132,7 @@ class TestOCRProviderBreakerDiscipline:
         client.batch_annotate_images.side_effect = RuntimeError("boom")
         provider = OCRProvider(breaker=b, client=client)
         with pytest.raises(OCRUnavailable):
-            asyncio.get_event_loop().run_until_complete(provider.detect_text(b"image"))
+            asyncio.run(provider.detect_text(b"image"))
         assert len(b._failures) == 1
 
 
@@ -145,9 +143,7 @@ class TestOCRProviderParsing:
         client = _fake_client(annotation)
         b = breaker()
         provider = OCRProvider(breaker=b, client=client)
-        result = asyncio.get_event_loop().run_until_complete(
-            provider.detect_text(b"image")
-        )
+        result = asyncio.run(provider.detect_text(b"image"))
         assert result.text == ""
         assert result.confidence == 0.0
         assert result.pages == 0
@@ -161,9 +157,7 @@ class TestOCRProviderParsing:
         client = _fake_client(annotation)
         b = breaker()
         provider = OCRProvider(breaker=b, client=client)
-        result = asyncio.get_event_loop().run_until_complete(
-            provider.detect_text(b"image")
-        )
+        result = asyncio.run(provider.detect_text(b"image"))
         expected = round((0.9 + 0.8 + 1.0) / 3, 4)
         assert result.confidence == expected
         assert result.pages == 2
@@ -174,9 +168,7 @@ class TestOCRProviderParsing:
         client = _fake_client(annotation)
         b = breaker()
         provider = OCRProvider(breaker=b, client=client)
-        result = asyncio.get_event_loop().run_until_complete(
-            provider.detect_text(b"image")
-        )
+        result = asyncio.run(provider.detect_text(b"image"))
         assert result.confidence <= 1.0
 
     def test_error_in_annotation_raises_unavailable(self):
@@ -185,4 +177,4 @@ class TestOCRProviderParsing:
         b = breaker()
         provider = OCRProvider(breaker=b, client=client)
         with pytest.raises(OCRUnavailable, match="OCR failed"):
-            asyncio.get_event_loop().run_until_complete(provider.detect_text(b"image"))
+            asyncio.run(provider.detect_text(b"image"))
