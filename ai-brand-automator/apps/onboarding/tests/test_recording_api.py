@@ -12,6 +12,8 @@ server never computes elapsed time between open and stop.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from django.contrib.auth.models import User
 from rest_framework.test import APIClient
@@ -366,3 +368,227 @@ def test_has_transcript_is_false_before_one_arrives(
     rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
 
     assert rows[0]["has_transcript"] is False
+
+
+# ── I-01 · recordings-and-captures rail ────────────────────────────
+
+# Fixtures for I-01 — Admin role and a second tenant for cross-tenant tests.
+
+
+@pytest.fixture
+def admin(public_tenant):
+    return member(public_tenant, Membership.Role.ADMIN, "i01_admin")
+
+
+@pytest.fixture
+def other_tenant():
+    return Tenant.objects.create(name="Other I01", schema_name="other_i01")
+
+
+# ── I-01 AC-1 · ordering ───────────────────────────────────────────
+
+
+def test_list_recordings_newest_first(consented_session, public_tenant, editor):
+    """I-01 AC-1: recordings are returned newest first."""
+    for _ in range(3):
+        client_for(editor, public_tenant).post(recordings_url(consented_session))
+
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+    started = [row["started_at"] for row in rows]
+    assert started == sorted(started, reverse=True), "recordings not newest-first"
+
+
+def test_list_captures_newest_first(consented_session, public_tenant, editor):
+    """I-01 AC-1: captures (BrandAssets) returned newest first from GET media."""
+    from onboarding.models import BrandAsset
+
+    for i in range(3):
+        BrandAsset.objects.create(
+            company=consented_session.company,
+            tenant=public_tenant,
+            onboarding_session=consented_session,
+            file_name=f"cap_{i}.jpg",
+            file_type="image",
+            file_size=1024,
+            gcs_path=f"_raw/t-1/cap_{i}.jpg",
+            usage_tag="business_photo",
+        )
+
+    response = client_for(editor, public_tenant).get(
+        f"{SESSIONS}{consented_session.pk}/media/"
+    )
+    assert response.status_code == 200
+    dates = [row["uploaded_at"] for row in response.data]
+    assert dates == sorted(dates, reverse=True), "captures not newest-first"
+
+
+# ── I-01 · signed URL retrieve ─────────────────────────────────────
+
+
+@patch("files.services.gcs_service.generate_signed_url")
+def test_retrieve_with_signed_url(
+    mock_signed, consented_session, public_tenant, editor
+):
+    """?include=signed_urls adds playback_url to the response."""
+    mock_signed.return_value = {
+        "url": "https://storage.example.com/signed/meeting.webm?token=abc",
+        "expires_at": "2026-01-01T00:00:00Z",
+    }
+
+    from onboarding.models import BrandAsset
+
+    asset = BrandAsset.objects.create(
+        company=consented_session.company,
+        tenant=public_tenant,
+        file_name="meeting.webm",
+        file_type="audio",
+        file_size=4096,
+        gcs_path="_raw/t-1/meeting.webm",
+    )
+    rec = make_recording(
+        session=consented_session,
+        status=RecordingStatus.UPLOADED,
+        audio_asset=asset,
+    )
+
+    response = client_for(editor, public_tenant).get(
+        f"{RECORDINGS}{rec.pk}/?include=signed_urls"
+    )
+    assert response.status_code == 200
+    assert response.data["playback_url"] is not None
+    assert "meeting.webm" in response.data["playback_url"]
+    mock_signed.assert_called_once()
+
+
+def test_retrieve_without_signed_url_flag(consented_session, public_tenant, editor):
+    """Default retrieve has no playback_url key."""
+    rec = make_recording(session=consented_session, status=RecordingStatus.UPLOADED)
+
+    response = client_for(editor, public_tenant).get(f"{RECORDINGS}{rec.pk}/")
+    assert response.status_code == 200
+    assert "playback_url" not in response.data
+
+
+def test_retrieve_signed_url_no_asset(consented_session, public_tenant, editor):
+    """?include=signed_urls returns null when there is no audio_asset."""
+    rec = make_recording(session=consented_session, status=RecordingStatus.UPLOADED)
+
+    response = client_for(editor, public_tenant).get(
+        f"{RECORDINGS}{rec.pk}/?include=signed_urls"
+    )
+    assert response.status_code == 200
+    assert response.data["playback_url"] is None
+
+
+# ── I-01 · destroy RBAC ────────────────────────────────────────────
+
+
+def test_viewer_cannot_delete_recording(consented_session, public_tenant, viewer):
+    """I-01 AC-3 / §15: Viewer cannot delete."""
+    rec = make_recording(session=consented_session)
+
+    response = client_for(viewer, public_tenant).delete(f"{RECORDINGS}{rec.pk}/")
+    assert response.status_code == 403
+    assert MeetingRecording.objects.filter(pk=rec.pk).exists()
+
+
+def test_editor_cannot_delete_recording(consented_session, public_tenant, editor):
+    """§15: Editor cannot delete recordings either."""
+    rec = make_recording(session=consented_session)
+
+    response = client_for(editor, public_tenant).delete(f"{RECORDINGS}{rec.pk}/")
+    assert response.status_code == 403
+    assert MeetingRecording.objects.filter(pk=rec.pk).exists()
+
+
+def test_admin_can_delete_recording(consented_session, public_tenant, admin):
+    """§15: Admin can delete. 204 No Content returned."""
+    rec = make_recording(session=consented_session)
+
+    response = client_for(admin, public_tenant).delete(f"{RECORDINGS}{rec.pk}/")
+    assert response.status_code == 204
+    assert not MeetingRecording.objects.filter(pk=rec.pk).exists()
+
+
+# ── I-01 · cross-tenant isolation ──────────────────────────────────
+
+
+def test_cross_tenant_recording_404(public_tenant, editor, other_tenant):
+    """I-01 AC-3: accessing another tenant's recording is 404, not 403."""
+    other_session = make_session(
+        company=make_company(tenant=other_tenant, name="OtherCo I01")
+    )
+    rec = make_recording(session=other_session)
+
+    response = client_for(editor, public_tenant).get(
+        f"{RECORDINGS}{rec.pk}/?include=signed_urls"
+    )
+    assert response.status_code == 404
+
+
+def test_cross_tenant_capture_404(public_tenant, editor, other_tenant):
+    """I-01 AC-3: listing captures for another tenant's session is 404."""
+    other_session = make_session(
+        company=make_company(tenant=other_tenant, name="OtherCo I01 cap")
+    )
+
+    response = client_for(editor, public_tenant).get(
+        f"{SESSIONS}{other_session.pk}/media/"
+    )
+    assert response.status_code == 404
+
+
+def test_cross_tenant_delete_404(public_tenant, admin, other_tenant):
+    """Deleting another tenant's recording is 404, not 403."""
+    other_session = make_session(
+        company=make_company(tenant=other_tenant, name="OtherCo I01 del")
+    )
+    rec = make_recording(session=other_session)
+
+    response = client_for(admin, public_tenant).delete(f"{RECORDINGS}{rec.pk}/")
+    assert response.status_code == 404
+    assert MeetingRecording.objects.filter(pk=rec.pk).exists()
+
+
+# ── I-01 · captures GET listing ────────────────────────────────────
+
+
+def test_list_captures_get(consented_session, public_tenant, viewer):
+    """GET /sessions/{id}/media/ returns captures for Viewer+ (I-01)."""
+    from onboarding.models import BrandAsset
+
+    BrandAsset.objects.create(
+        company=consented_session.company,
+        tenant=public_tenant,
+        onboarding_session=consented_session,
+        file_name="whiteboard.jpg",
+        file_type="image",
+        file_size=2048,
+        gcs_path="_raw/t-1/whiteboard.jpg",
+        usage_tag="business_photo",
+    )
+
+    response = client_for(viewer, public_tenant).get(
+        f"{SESSIONS}{consented_session.pk}/media/"
+    )
+    assert response.status_code == 200
+    assert len(response.data) == 1
+    assert response.data[0]["file_name"] == "whiteboard.jpg"
+    assert response.data[0]["usage_tag"] == "business_photo"
+
+
+def test_media_post_still_works(consented_session, public_tenant, editor):
+    """Existing upload POST path is unbroken by the GET addition."""
+    response = client_for(editor, public_tenant).post(
+        f"{SESSIONS}{consented_session.pk}/media/",
+        {
+            "file_name": "logo.png",
+            "file_type": "image",
+            "file_size": 512,
+            "usage_tag": "brand_asset",
+        },
+        format="json",
+    )
+    # POST requires consent + blob data; without them it fails on validation
+    # not on routing — proving the POST path is still reachable.
+    assert response.status_code != 405, "POST method was removed"

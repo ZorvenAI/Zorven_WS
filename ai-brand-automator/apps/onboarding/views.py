@@ -143,7 +143,10 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         # decides the role rather than the action name. Editor+ is enforced
         # inside for the write; the entry keeps Viewer out of neither.
         "recordings": [IsAuthenticated, IsTenantViewer],
-        "media": [IsAuthenticated, IsTenantEditor],
+        # I-01: GET lists captures (Viewer+), POST uploads (Editor+). The
+        # action-level entry admits Viewer so GET works; POST re-checks
+        # Editor inside the handler.
+        "media": [IsAuthenticated, IsTenantViewer],
     }
 
     def get_queryset(self):
@@ -449,6 +452,13 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         rows = MeetingRecording.objects.filter(session=session).order_by("-started_at")
         return Response(MeetingRecordingSerializer(rows, many=True).data)
 
+    def _list_captures(self, session):
+        """Newest first, matching the recordings list (I-01 AC-1)."""
+        rows = BrandAsset.objects.filter(onboarding_session=session).order_by(
+            "-uploaded_at"
+        )
+        return Response(BrandAssetSerializer(rows, many=True).data)
+
     def _open_recording(self, request, session):
         """Refuse without consent, server-side (AC-1, IG-08).
 
@@ -489,15 +499,26 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             MeetingRecordingSerializer(recording).data, status=http.HTTP_201_CREATED
         )
 
-    @action(detail=True, methods=["post"])
+    @action(detail=True, methods=["get", "post"])
     def media(self, request, pk=None):
-        """``POST /sessions/{id}/media/`` — media capture with usage tag (H-01/H-02).
+        """``GET/POST /sessions/{id}/media/`` — list or upload captures.
 
-        Follows the recordings action pattern: consent-gated, session from
-        URL (server-authoritative), and the asset FK set server-side rather
-        than accepted from the body (see BrandAssetSerializer.onboarding_session).
+        GET (I-01): Viewer+ lists captured media for the library rail.
+        POST (H-01/H-02): Editor+ uploads a new capture, consent-gated.
         """
         session = self.get_object()
+
+        if request.method == "GET":
+            return self._list_captures(session)
+
+        if not IsTenantEditor().has_permission(request, self):
+            return Response(
+                {
+                    "code": errors.ROLE_DENIED,
+                    "detail": "Uploading a capture requires Editor or above.",
+                },
+                status=http.HTTP_403_FORBIDDEN,
+            )
 
         has_consent = session.consent_records.filter(revoked_at__isnull=True).exists()
         if not has_consent:
@@ -614,9 +635,16 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
 
 class MeetingRecordingViewSet(
-    RoleBasedPermissionMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+    RoleBasedPermissionMixin,
+    mixins.RetrieveModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
 ):
-    """``/api/v1/onboarding/recordings/{id}/`` — finalising a cycle (§10.2)."""
+    """``/api/v1/onboarding/recordings/{id}/`` — finalising a cycle (§10.2).
+
+    I-01 adds ``retrieve`` with ``?include=signed_urls`` for playback and
+    ``destroy`` for Admin+ deletion (§15 RBAC matrix).
+    """
 
     serializer_class = MeetingRecordingSerializer
     queryset = MeetingRecording.objects.all()
@@ -624,6 +652,7 @@ class MeetingRecordingViewSet(
     role_permissions = {
         "retrieve": [IsAuthenticated, IsTenantViewer],
         "stop": [IsAuthenticated, IsTenantEditor],
+        "destroy": [IsAuthenticated, IsTenantAdmin],
     }
 
     def get_queryset(self):
@@ -631,6 +660,31 @@ class MeetingRecordingViewSet(
         return MeetingRecording.objects.select_related("session").filter(
             tenant_scope_q(tenant)
         )
+
+    def retrieve(self, request, *args, **kwargs):
+        """``GET /recordings/{id}/`` with optional ``?include=signed_urls``.
+
+        Design §10.2: the library pane requests a playback URL on demand
+        rather than receiving one in every list response. Signed URLs are
+        short-lived (15 min) and minted per request (FR-LIB-01).
+        """
+        instance = self.get_object()
+        data = self.get_serializer(instance).data
+        include = request.query_params.get("include", "")
+        if "signed_urls" in include:
+            data["playback_url"] = self._mint_playback_url(instance)
+        return Response(data)
+
+    def _mint_playback_url(self, recording):
+        asset = recording.audio_asset
+        if not asset or not asset.gcs_path:
+            return None
+        result = gcs_service.generate_signed_url(
+            asset.gcs_path,
+            expiration_minutes=15,
+            bucket_name=asset.gcs_bucket,
+        )
+        return result.get("url") if isinstance(result, dict) else None
 
     @action(detail=True, methods=["post"], url_path="upload-session")
     @db_transaction.atomic

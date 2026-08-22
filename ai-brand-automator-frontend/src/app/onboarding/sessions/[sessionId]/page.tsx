@@ -15,7 +15,10 @@ import Link from 'next/link';
 import { ArrowLeft, Radio } from 'lucide-react';
 
 import { useAuth } from '@/hooks/useAuth';
+import { useLibraryPolling } from '@/hooks/useLibraryPolling';
+import { useTenantRole } from '@/hooks/useTenantRole';
 import QuestionChecklist from '@/components/onboarding/QuestionChecklist';
+import RecordingsLibrary from '@/components/onboarding/RecordingsLibrary';
 import {
   getApprovedQuestionnaire,
   type QuestionnaireDetail,
@@ -28,6 +31,9 @@ export default function SessionPage() {
 
   const [questionnaire, setQuestionnaire] = useState<QuestionnaireDetail | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const library = useLibraryPolling(sessionId ?? null);
+  const { isAdmin } = useTenantRole();
 
   const load = useCallback(async () => {
     if (!sessionId) {
@@ -93,6 +99,19 @@ export default function SessionPage() {
           questions={questionnaire?.questions ?? []}
           version={questionnaire?.version ?? null}
         />
+      )}
+
+      {(library.recordings.length > 0 || library.captures.length > 0) && (
+        <div className="glass-card p-5">
+          <h2 className="mb-3 text-sm font-semibold text-white">
+            Recordings and captures
+          </h2>
+          <RecordingsLibrary
+            recordings={library.recordings}
+            captures={library.captures}
+            canDelete={isAdmin}
+          />
+        </div>
       )}
     </div>
   );

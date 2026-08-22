@@ -31,7 +31,9 @@ import Link from 'next/link';
 import { AlertTriangle, ArrowLeft } from 'lucide-react';
 
 import { useCaptureQueue } from '@/hooks/useCaptureQueue';
+import { useLibraryPolling } from '@/hooks/useLibraryPolling';
 import { useLiveSocket } from '@/hooks/useLiveSocket';
+import { useTenantRole } from '@/hooks/useTenantRole';
 
 import AgentFeedbackStream, {
   type FeedbackItem,
@@ -39,7 +41,16 @@ import AgentFeedbackStream, {
 import QuestionChecklist from '@/components/onboarding/QuestionChecklist';
 import RightRail from '@/components/onboarding/RightRail';
 import ConsentModal from '@/components/onboarding/ConsentModal';
-import type { ConsentDraft, ConsentState, PreparedQuestion } from '@/lib/onboarding-sessions';
+import type { CapturedMedia, ConsentDraft, ConsentState, PreparedQuestion } from '@/lib/onboarding-sessions';
+
+function mergeCaptures(
+  local: CapturedMedia[],
+  server: CapturedMedia[],
+): CapturedMedia[] {
+  const seen = new Set(server.map((c) => c.id));
+  const localOnly = local.filter((c) => !seen.has(c.id));
+  return [...localOnly, ...server];
+}
 
 export interface MeetingViewProps {
   questions: PreparedQuestion[];
@@ -123,6 +134,9 @@ export default function MeetingView({
   });
 
   const captureQueue = useCaptureQueue(sessionId ?? null);
+
+  const library = useLibraryPolling(sessionId ?? null);
+  const { isAdmin } = useTenantRole();
 
   return (
     /*
@@ -228,7 +242,9 @@ export default function MeetingView({
             sessionId={sessionId}
             onRecordConsent={() => setConsentOpen(true)}
             onCapture={captureQueue.enqueue}
-            captures={captureQueue.captures}
+            recordings={library.recordings}
+            captures={mergeCaptures(captureQueue.captures, library.captures)}
+            canDelete={isAdmin}
           />
         </div>
       </div>
