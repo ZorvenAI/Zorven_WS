@@ -43,9 +43,11 @@ const STATUS_STYLES: Record<SessionStatus, string> = {
   PREPARING: 'bg-amber-500/15 text-amber-300',
   READY: 'bg-emerald-500/15 text-emerald-300',
   MEETING_LIVE: 'bg-brand-electric/20 text-brand-electric',
+  GATHERED: 'bg-teal-500/15 text-teal-300',
   PROCESSING: 'bg-sky-500/15 text-sky-300',
-  REVIEW: 'bg-violet-500/15 text-violet-300',
-  COMPLETE: 'bg-emerald-600/15 text-emerald-400',
+  REVIEW_PENDING: 'bg-violet-500/15 text-violet-300',
+  CONFIRMED: 'bg-emerald-500/15 text-emerald-400',
+  COMPLETED: 'bg-emerald-600/15 text-emerald-400',
   ESCALATED: 'bg-rose-500/15 text-rose-300',
   ARCHIVED: 'bg-slate-800/60 text-slate-400',
 };

@@ -549,8 +549,24 @@ def test_the_first_socket_releases_its_claim_when_it_ends(client, django_stub):
     with open_socket(client) as first:
         first.send_text("one")
 
+        django_stub["body"]["consent"] = {
+            "present": True,
+            "active": False,
+            "consent_id": "c-1",
+        }
+        expect_close(first)
+
+    django_stub["body"] = {"approved": True}
+
     with open_socket(client) as second:
         second.send_text("two")
+
+        django_stub["body"]["consent"] = {
+            "present": True,
+            "active": False,
+            "consent_id": "c-1",
+        }
+        expect_close(second)
 
 
 def test_live_keys_are_tenant_scoped():

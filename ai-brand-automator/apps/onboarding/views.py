@@ -7,6 +7,7 @@ validated here rather than in the client.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import json
 import uuid
@@ -149,6 +150,9 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         # action-level entry admits Viewer so GET works; POST re-checks
         # Editor inside the handler.
         "media": [IsAuthenticated, IsTenantViewer],
+        # J-01: dispatching PROCESS requires Editor+ (the operator running
+        # the session). Listed explicitly — see the B-06 comment above.
+        "process": [IsAuthenticated, IsTenantEditor],
     }
 
     def get_queryset(self):
@@ -434,6 +438,104 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             },
             status=http.HTTP_201_CREATED,
         )
+
+    @action(detail=True, methods=["post"])
+    @db_transaction.atomic
+    def process(self, request, pk=None):
+        """``POST /sessions/{id}/process/`` — dispatch PROCESS to OIA (J-01).
+
+        Builds the evidence manifest, computes its hash, and fires a Celery
+        task that POSTs to OIA's ``/v1/process``. AC-4: if the manifest hash
+        is unchanged and a job already exists, the existing job_id is returned
+        without re-dispatching.
+        """
+        session = (
+            self.get_queryset()
+            .prefetch_related(None)
+            .select_for_update(of=("self",))
+            .get(pk=pk)
+        )
+
+        allowed_states = {"GATHERED", "REVIEW_PENDING", "CONFIRMED"}
+        if session.status not in allowed_states:
+            return Response(
+                {
+                    "code": errors.INVALID_TRANSITION,
+                    "detail": (
+                        f"Cannot process from {session.status}. "
+                        f"Session must be in GATHERED (or re-run from "
+                        f"REVIEW_PENDING / CONFIRMED)."
+                    ),
+                    "current_state": session.status,
+                },
+                status=http.HTTP_409_CONFLICT,
+            )
+
+        manifest = self._build_evidence_manifest(session)
+        manifest_hash = hashlib.sha256(
+            json.dumps(manifest, sort_keys=True).encode()
+        ).hexdigest()
+
+        if manifest_hash == session.evidence_manifest_hash and session.process_job_id:
+            return Response(
+                {
+                    "job_id": session.process_job_id,
+                    "status": session.status,
+                    "idempotent": True,
+                },
+                status=http.HTTP_200_OK,
+            )
+
+        session.evidence_manifest_hash = manifest_hash
+        transition(session, "PROCESSING", save=False)
+        session.save(
+            update_fields=[
+                "status",
+                "evidence_manifest_hash",
+                "updated_at",
+            ]
+        )
+
+        from apps.onboarding.tasks import dispatch_process
+
+        dispatch_process.delay(
+            session_id=str(session.pk),
+            tenant_id=str(session.tenant_id),
+            manifest=manifest,
+            manifest_hash=manifest_hash,
+        )
+
+        return Response(
+            {
+                "job_id": "",
+                "status": "PROCESSING",
+                "detail": "Process dispatched.",
+            },
+            status=http.HTTP_202_ACCEPTED,
+        )
+
+    def _build_evidence_manifest(self, session):
+        """Assemble the evidence manifest per §10.2.2."""
+        summarized = list(
+            MeetingRecording.objects.filter(
+                session=session,
+                status=RecordingStatus.SUMMARIZED,
+            ).values_list("pk", "transcript")
+        )
+        recordings = [pk for pk, _ in summarized]
+        has_transcript = any(t is not None and t != [] for _, t in summarized)
+        media = list(
+            BrandAsset.objects.filter(
+                onboarding_session=session,
+            ).values_list("pk", flat=True)
+        )
+        has_questionnaire = session.questionnaire_id is not None
+        return {
+            "recordings": [str(r) for r in sorted(recordings)],
+            "media": [str(m) for m in sorted(media)],
+            "has_questionnaire": has_questionnaire,
+            "has_transcript": has_transcript,
+        }
 
     @action(detail=True, methods=["get", "post"])
     @db_transaction.atomic
@@ -826,13 +928,16 @@ class MeetingRecordingViewSet(
         from apps.onboarding.tasks import trigger_recording_summary
 
         duration = (recording.stopped_at - recording.started_at).total_seconds()
-        trigger_recording_summary.delay(
-            tenant_id=str(recording.tenant_id),
-            recording_id=str(recording.pk),
-            session_id=str(recording.session_id),
-            started_at=0.0,
-            stopped_at=duration,
-        )
+        try:
+            trigger_recording_summary.delay(
+                tenant_id=str(recording.tenant_id),
+                recording_id=str(recording.pk),
+                session_id=str(recording.session_id),
+                started_at=0.0,
+                stopped_at=duration,
+            )
+        except Exception:
+            logger.warning("Could not enqueue summary for recording %s", recording.pk)
 
         return Response(MeetingRecordingSerializer(recording).data)
 
@@ -2180,6 +2285,104 @@ def update_recording_summary(request, pk):
         {
             "recording_id": recording.pk,
             "status": recording.status,
+        },
+        status=http.HTTP_200_OK,
+    )
+
+
+# ── Internal service-to-service endpoint (J-01) ─────────────────────
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def process_callback(request, pk):
+    """``POST /api/v1/onboarding/internal/sessions/<pk>/process/callback/``
+
+    OIA calls back when PROCESS completes. X-Service-Token auth (same
+    pattern as ``update_recording_summary``).
+
+    On ``SUCCEEDED``: transitions session → REVIEW_PENDING, stores summary.
+    On ``FAILED``: transitions session → GATHERED (§9.4).
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "") or decouple_config(
+        "OIA_SERVICE_TOKEN", default=""
+    )
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    tenant, error = _service_tenant(request)
+    if error is not None:
+        return error
+
+    cb_status = request.data.get("status", "").upper()
+    if cb_status not in ("SUCCEEDED", "FAILED"):
+        return Response(
+            {"error": "status must be SUCCEEDED or FAILED"},
+            status=http.HTTP_400_BAD_REQUEST,
+        )
+
+    with db_transaction.atomic():
+        session = (
+            OnboardingSession.objects.filter(pk=pk, tenant=tenant)
+            .select_for_update(of=("self",))
+            .first()
+        )
+        if session is None:
+            return Response(
+                {"error": "Session not found"},
+                status=http.HTTP_404_NOT_FOUND,
+            )
+
+        if session.status != "PROCESSING":
+            return Response(
+                {
+                    "error": (f"Session is {session.status}, expected PROCESSING"),
+                },
+                status=http.HTTP_409_CONFLICT,
+            )
+
+        job_id = request.data.get("job_id", "")
+        if job_id:
+            session.process_job_id = str(job_id)[:64]
+
+        if cb_status == "SUCCEEDED":
+            summary = request.data.get("summary", {})
+            if isinstance(summary, dict):
+                raw = json.dumps(summary)
+                if len(raw) > 1_000_000:
+                    return Response(
+                        {"error": "summary exceeds 1 MB limit"},
+                        status=http.HTTP_400_BAD_REQUEST,
+                    )
+                session.process_summary = summary
+            target = "REVIEW_PENDING"
+        else:
+            target = "GATHERED"
+
+        try:
+            transition(session, target, save=False)
+        except InvalidTransition:
+            return Response(
+                {"error": f"Cannot transition to {target}"},
+                status=http.HTTP_409_CONFLICT,
+            )
+
+        update_fields = [
+            "status",
+            "process_job_id",
+            "process_summary",
+            "updated_at",
+        ]
+        session.save(update_fields=update_fields)
+
+    return Response(
+        {
+            "session_id": session.pk,
+            "status": session.status,
         },
         status=http.HTTP_200_OK,
     )

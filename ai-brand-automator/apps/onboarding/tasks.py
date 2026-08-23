@@ -1,5 +1,6 @@
-"""Celery tasks for onboarding session recordings (I-02)."""
+"""Celery tasks for onboarding session recordings (I-02, J-01)."""
 
+import hashlib
 import logging
 
 import requests
@@ -76,3 +77,96 @@ def trigger_recording_summary(
         raise self.retry(exc=Exception("OIA skill returned FAILED"))
 
     logger.info("Summary triggered for recording %s", recording_id)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=30)
+def dispatch_process(self, *, session_id, tenant_id, manifest, manifest_hash):
+    """Ask the OIA service to process session evidence (J-01, §10.2.2).
+
+    Fire-and-forget from the process action. On 202 stores the job_id on
+    the session. Retries on 5xx / connection errors; 4xx is non-retryable.
+    """
+    from apps.onboarding.models import OnboardingSession
+
+    idempotency_key = hashlib.sha256(
+        f"{session_id}:{manifest_hash}".encode()
+    ).hexdigest()
+
+    url = f"{settings.OIA_SERVICE_URL.rstrip('/')}/v1/process"
+    callback_url = (
+        f"{settings.BACKEND_URL.rstrip('/')}"
+        f"/api/v1/onboarding/internal/sessions/{session_id}/process/callback/"
+    )
+    payload = {
+        "tenant_context": {
+            "tenant_id": str(tenant_id),
+            "user_id": "system",
+            "role": "ADMIN",
+            "trace_id": f"celery:{self.request.id or 'unknown'}",
+        },
+        "session_id": str(session_id),
+        "evidence_manifest": manifest,
+        "options": {},
+        "callback_url": callback_url,
+    }
+    headers = {
+        "X-Service-Token": settings.OIA_SERVICE_TOKEN,
+        "Idempotency-Key": idempotency_key,
+    }
+
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=(5, 30))
+    except requests.ConnectionError as exc:
+        logger.warning("OIA unreachable for process %s: %s", session_id, exc)
+        try:
+            raise self.retry(exc=exc)
+        except self.MaxRetriesExceededError:
+            _revert_to_gathered(session_id)
+            return
+    except requests.Timeout as exc:
+        logger.warning("OIA timed out for process %s: %s", session_id, exc)
+        try:
+            raise self.retry(exc=exc)
+        except self.MaxRetriesExceededError:
+            _revert_to_gathered(session_id)
+            return
+
+    if resp.status_code >= 500:
+        logger.warning("OIA returned %s for process %s", resp.status_code, session_id)
+        try:
+            raise self.retry(exc=Exception(f"OIA {resp.status_code}"))
+        except self.MaxRetriesExceededError:
+            _revert_to_gathered(session_id)
+            return
+
+    if resp.status_code >= 400:
+        logger.error(
+            "OIA rejected process %s with %s: %s",
+            session_id,
+            resp.status_code,
+            resp.text[:500],
+        )
+        _revert_to_gathered(session_id)
+        return
+
+    try:
+        body = resp.json()
+    except ValueError:
+        body = {}
+
+    job_id = body.get("job_id", "")
+    if job_id:
+        OnboardingSession.objects.filter(pk=session_id).update(
+            process_job_id=str(job_id)[:64]
+        )
+
+    logger.info("Process dispatched for session %s, job_id=%s", session_id, job_id)
+
+
+def _revert_to_gathered(session_id):
+    """Revert a session from PROCESSING → GATHERED so it is not stuck."""
+    from apps.onboarding.models import OnboardingSession, SessionStatus
+
+    OnboardingSession.objects.filter(
+        pk=session_id, status=SessionStatus.PROCESSING
+    ).update(status=SessionStatus.GATHERED)

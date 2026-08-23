@@ -20,6 +20,7 @@ from apps.onboarding.views import (
     create_questionnaire,
     field_vocabulary,
     live_precheck,
+    process_callback,
     update_recording_summary,
     upsert_research_brief,
 )
@@ -68,6 +69,12 @@ urlpatterns = [
         "internal/recordings/<pk>/summary/",
         update_recording_summary,
         name="onboarding-recording-summary-update",
+    ),
+    # J-01: OIA calls back when PROCESS completes.
+    path(
+        "internal/sessions/<pk>/process/callback/",
+        process_callback,
+        name="onboarding-process-callback",
     ),
     path("", include(router.urls)),
 ]

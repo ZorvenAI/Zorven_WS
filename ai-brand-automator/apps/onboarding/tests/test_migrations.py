@@ -194,9 +194,9 @@ def test_a_row_written_the_old_way_still_inserts():
             "INSERT INTO onboarding_brandasset "
             "(company_id, file_name, file_type, file_size, gcs_path, "
             " gcs_bucket, uploaded_at, processed, pipeline_status, "
-            " pipeline_error, summary) "
+            " pipeline_error, summary, rag_excluded) "
             "VALUES (%s, 'legacy.jpg', 'image', 512, '_raw/legacy.jpg', "
-            "'zorven-raw-assets', NOW(), false, 'pending', '', '') "
+            "'zorven-raw-assets', NOW(), false, 'pending', '', '', false) "
             "RETURNING usage_tag, onboarding_session_id, ocr_text, "
             "ocr_confidence",
             [company.pk],
