@@ -928,13 +928,18 @@ class MeetingRecordingViewSet(
         from apps.onboarding.tasks import trigger_recording_summary
 
         duration = (recording.stopped_at - recording.started_at).total_seconds()
-        trigger_recording_summary.delay(
-            tenant_id=str(recording.tenant_id),
-            recording_id=str(recording.pk),
-            session_id=str(recording.session_id),
-            started_at=0.0,
-            stopped_at=duration,
-        )
+        try:
+            trigger_recording_summary.delay(
+                tenant_id=str(recording.tenant_id),
+                recording_id=str(recording.pk),
+                session_id=str(recording.session_id),
+                started_at=0.0,
+                stopped_at=duration,
+            )
+        except Exception:
+            logger.warning(
+                "Could not enqueue summary for recording %s", recording.pk
+            )
 
         return Response(MeetingRecordingSerializer(recording).data)
 
