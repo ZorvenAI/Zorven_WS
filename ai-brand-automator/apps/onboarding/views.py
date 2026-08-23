@@ -937,9 +937,7 @@ class MeetingRecordingViewSet(
                 stopped_at=duration,
             )
         except Exception:
-            logger.warning(
-                "Could not enqueue summary for recording %s", recording.pk
-            )
+            logger.warning("Could not enqueue summary for recording %s", recording.pk)
 
         return Response(MeetingRecordingSerializer(recording).data)
 
