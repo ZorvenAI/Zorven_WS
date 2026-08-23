@@ -20,6 +20,7 @@ import {
   type CapturedMedia,
   type RecordingItem,
 } from '@/lib/onboarding-sessions';
+import RecordingPlayer from '@/components/onboarding/RecordingPlayer';
 
 // ── Status rendering ──
 
@@ -96,6 +97,7 @@ export default function RecordingsLibrary({
   canDelete,
   onDeleted,
 }: RecordingsLibraryProps) {
+  const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [loadingPlay, setLoadingPlay] = useState(false);
@@ -137,6 +139,15 @@ export default function RecordingsLibrary({
 
   const hasItems = recordings.length > 0 || captures.length > 0;
 
+  if (selectedRecordingId) {
+    return (
+      <RecordingPlayer
+        recordingId={selectedRecordingId}
+        onClose={() => setSelectedRecordingId(null)}
+      />
+    );
+  }
+
   if (!hasItems) {
     return (
       <p className="text-sm text-brand-silver">
@@ -161,7 +172,8 @@ export default function RecordingsLibrary({
               return (
                 <li
                   key={r.id}
-                  className="rounded border border-white/10 px-3 py-2"
+                  className={`rounded border border-white/10 px-3 py-2${r.has_summary ? ' cursor-pointer hover:border-brand-electric/30' : ''}`}
+                  onClick={r.has_summary ? () => setSelectedRecordingId(r.id) : undefined}
                 >
                   <div className="flex items-center gap-2 text-sm">
                     <Mic

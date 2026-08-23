@@ -95,6 +95,17 @@ class ExecuteResponse(BaseModel):
     usage: UsageReport = Field(default_factory=UsageReport)
 
 
+class SkillExecuteRequest(BaseModel):
+    """``POST /v1/execute/skill`` — direct skill invocation (I-02)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    skill_id: str
+    tenant_context: TenantContext
+    input_context: dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
 # ── Live frames (F-04 PR 2, Design §10.2.3) ──────────────────────────
 #
 # Pydantic models rather than hand-built dicts, which AC-4 asks for by name:

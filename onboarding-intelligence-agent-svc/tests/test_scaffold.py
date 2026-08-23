@@ -191,6 +191,7 @@ IMPLEMENTED_BODIES = {
     "app.skills.generate_followups",  # G-04: SKL-OIA-06
     "app.skills.check_workflow_coverage",  # G-06: SKL-OIA-09
     "app.skills.analyze_captured_media",  # H-03: SKL-OIA-07
+    "app.skills.summarize_recording",  # I-02: SKL-OIA-08
 }
 
 

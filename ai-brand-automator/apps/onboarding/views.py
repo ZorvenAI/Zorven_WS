@@ -83,6 +83,7 @@ from apps.onboarding.serializers import (
     ConsentRecordSerializer,
     FieldProvenanceSerializer,
     MediaCaptureSerializer,
+    MeetingRecordingDetailSerializer,
     MeetingRecordingSerializer,
     OnboardingSessionSerializer,
     ProvenanceEditSerializer,
@@ -661,6 +662,11 @@ class MeetingRecordingViewSet(
         "destroy": [IsAuthenticated, IsTenantAdmin],
     }
 
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return MeetingRecordingDetailSerializer
+        return MeetingRecordingSerializer
+
     def get_queryset(self):
         tenant = getattr(self.request, "tenant", None)
         return MeetingRecording.objects.select_related("session").filter(
@@ -795,6 +801,19 @@ class MeetingRecordingViewSet(
             fields.append("audio_asset")
 
         recording.save(update_fields=fields)
+
+        # I-02: trigger async summary generation via the OIA service.
+        from apps.onboarding.tasks import trigger_recording_summary
+
+        duration = (recording.stopped_at - recording.started_at).total_seconds()
+        trigger_recording_summary.delay(
+            tenant_id=str(recording.tenant_id),
+            recording_id=str(recording.pk),
+            session_id=str(recording.session_id),
+            started_at=0.0,
+            stopped_at=duration,
+        )
+
         return Response(MeetingRecordingSerializer(recording).data)
 
     def _register_asset(self, recording, request):
@@ -2069,3 +2088,67 @@ class ScheduledMeetingViewSet(
             meeting.save(update_fields=["status", "updated_at"])
 
         return Response(ScheduledMeetingSerializer(meeting).data)
+
+
+# ── Internal service-to-service endpoint (I-02) ─────────────────────
+
+
+@api_view(["PATCH"])
+@permission_classes([AllowAny])
+def update_recording_summary(request, pk):
+    """``PATCH /api/v1/onboarding/internal/recordings/<pk>/summary/``
+
+    OIA writes the generated summary back to MeetingRecording and transitions
+    status to SUMMARIZED. X-Service-Token auth (same pattern as
+    upsert_research_brief).
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "") or decouple_config(
+        "OIA_SERVICE_TOKEN", default=""
+    )
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    tenant, error = _service_tenant(request)
+    if error is not None:
+        return error
+
+    summary = request.data.get("summary")
+    if not isinstance(summary, dict):
+        return Response(
+            {"error": "summary object is required"},
+            status=http.HTTP_400_BAD_REQUEST,
+        )
+
+    with db_transaction.atomic():
+        recording = (
+            MeetingRecording.objects.filter(pk=pk, tenant=tenant)
+            .select_for_update(of=("self",))
+            .first()
+        )
+        if recording is None:
+            return Response(
+                {"error": "Recording not found"},
+                status=http.HTTP_404_NOT_FOUND,
+            )
+
+        if recording.status == RecordingStatus.FAILED:
+            return Response(
+                {"error": "Cannot summarise a failed recording"},
+                status=http.HTTP_409_CONFLICT,
+            )
+
+        recording.summary = summary
+        recording.status = RecordingStatus.SUMMARIZED
+        recording.save(update_fields=["summary", "status", "updated_at"])
+
+    return Response(
+        {
+            "recording_id": recording.pk,
+            "status": recording.status,
+        },
+        status=http.HTTP_200_OK,
+    )
