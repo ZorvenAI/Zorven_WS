@@ -124,6 +124,7 @@ IMPLEMENTED |= {
     "app.services.backend_client",
     "app.api.ws",  # C-04: the IG-10 gate only; F-04 owns the protocol
     "app.logic.live_session",  # F-04 PR 2: seq, replay buffer, resume
+    "app.logic.process_executor",  # J-01: PROCESS dispatch + lifecycle
 }
 
 #: A-06 turned the sixteen skill modules into registry-resolvable classes.
