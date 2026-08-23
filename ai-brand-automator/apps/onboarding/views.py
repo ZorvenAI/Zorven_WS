@@ -658,6 +658,7 @@ class MeetingRecordingViewSet(
 
     role_permissions = {
         "retrieve": [IsAuthenticated, IsTenantViewer],
+        "transcript": [IsAuthenticated, IsTenantViewer],
         "stop": [IsAuthenticated, IsTenantEditor],
         "destroy": [IsAuthenticated, IsTenantAdmin],
     }
@@ -697,6 +698,25 @@ class MeetingRecordingViewSet(
             bucket_name=asset.gcs_bucket,
         )
         return result.get("url") if isinstance(result, dict) else None
+
+    @action(detail=True, methods=["get"])
+    def transcript(self, request, pk=None):
+        """``GET /recordings/{id}/transcript/`` — post-redaction segments (I-03).
+
+        FR-LIB-03: the complete transcript for reading, searching and seeking.
+        No role can read pre-redaction text — the stored segments are already
+        redacted by F-05's pipeline before they enter Redis and are persisted
+        here as-is.
+        """
+        recording = self.get_object()
+        segments = recording.transcript or []
+        return Response(
+            {
+                "recording_id": str(recording.pk),
+                "duration_s": recording.duration_s,
+                "segments": segments,
+            }
+        )
 
     @action(detail=True, methods=["post"], url_path="upload-session")
     @db_transaction.atomic
@@ -2142,8 +2162,13 @@ def update_recording_summary(request, pk):
             )
 
         recording.summary = summary
+        transcript = request.data.get("transcript")
+        update_fields = ["summary", "status", "updated_at"]
+        if isinstance(transcript, list):
+            recording.transcript = transcript
+            update_fields.append("transcript")
         recording.status = RecordingStatus.SUMMARIZED
-        recording.save(update_fields=["summary", "status", "updated_at"])
+        recording.save(update_fields=update_fields)
 
     return Response(
         {
