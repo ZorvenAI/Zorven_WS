@@ -12,7 +12,7 @@ import asyncio
 import json
 import time
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from app.api.schemas import EvidenceManifest, ProcessResponse
 from app.cache.redis_manager import RedisManager, TTL_IDEMPOTENCY
@@ -23,10 +23,11 @@ from app.skills.models import TenantContext
 logger = get_logger(__name__)
 
 JOB_TTL = 3600
-JOB_STATUS_ACCEPTED = "ACCEPTED"
-JOB_STATUS_RUNNING = "RUNNING"
-JOB_STATUS_SUCCEEDED = "SUCCEEDED"
-JOB_STATUS_FAILED = "FAILED"
+JobStatus = Literal["ACCEPTED", "RUNNING", "SUCCEEDED", "FAILED"]
+JOB_STATUS_ACCEPTED: JobStatus = "ACCEPTED"
+JOB_STATUS_RUNNING: JobStatus = "RUNNING"
+JOB_STATUS_SUCCEEDED: JobStatus = "SUCCEEDED"
+JOB_STATUS_FAILED: JobStatus = "FAILED"
 
 
 class ProcessExecutor:
@@ -41,7 +42,7 @@ class ProcessExecutor:
         self._redis = redis
         self._backend = backend
         self._settings = settings
-        self._running_tasks: set[asyncio.Task] = set()
+        self._running_tasks: set[asyncio.Task[None]] = set()
 
     async def accept(
         self,
@@ -115,7 +116,8 @@ class ProcessExecutor:
         if raw is None:
             return None
         try:
-            return json.loads(raw)
+            data: dict[str, Any] = json.loads(raw)
+            return data
         except (json.JSONDecodeError, TypeError):
             return None
 
@@ -186,6 +188,10 @@ class ProcessExecutor:
         summary: dict[str, Any],
     ) -> None:
         """POST the terminal result back to Django via BackendClient."""
+        if self._backend is None:
+            logger.error("process_callback_no_backend", job_id=job_id)
+            return
+
         from urllib.parse import urlparse
 
         parsed = urlparse(callback_url)
@@ -211,7 +217,8 @@ class ProcessExecutor:
         if raw is None:
             return None
         try:
-            return json.loads(raw)
+            data: dict[str, Any] = json.loads(raw)
+            return data
         except (json.JSONDecodeError, TypeError):
             return None
 

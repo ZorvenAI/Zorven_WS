@@ -8,7 +8,10 @@ envelope from §10.2.1 that C-02 through C-04 all ride. ``/v1/onboarding``,
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from app.logic.process_executor import ProcessExecutor
 
 from app.core.logging import get_logger
 
@@ -386,7 +389,7 @@ async def process(
             detail="Idempotency-Key header is required",
         )
 
-    executor = request.app.state.process_executor
+    executor: ProcessExecutor = request.app.state.process_executor
 
     tenant_ctx = TenantContext(
         tenant_id=payload.tenant_context.tenant_id,
