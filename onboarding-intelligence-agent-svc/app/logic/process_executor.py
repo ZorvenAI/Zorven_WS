@@ -41,6 +41,7 @@ class ProcessExecutor:
         self._redis = redis
         self._backend = backend
         self._settings = settings
+        self._running_tasks: set[asyncio.Task] = set()
 
     async def accept(
         self,
@@ -91,7 +92,7 @@ class ProcessExecutor:
             tenant.tenant_id, idempotency_key, response.model_dump()
         )
 
-        asyncio.create_task(
+        task = asyncio.create_task(
             self._run_job(
                 job_id=job_id,
                 tenant=tenant,
@@ -101,6 +102,8 @@ class ProcessExecutor:
                 callback_url=callback_url,
             )
         )
+        self._running_tasks.add(task)
+        task.add_done_callback(self._running_tasks.discard)
 
         return response
 
@@ -182,35 +185,21 @@ class ProcessExecutor:
         status: str,
         summary: dict[str, Any],
     ) -> None:
-        """POST the terminal result back to Django."""
-        try:
-            import httpx
+        """POST the terminal result back to Django via BackendClient."""
+        from urllib.parse import urlparse
 
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.post(
-                    callback_url,
-                    json={
-                        "job_id": job_id,
-                        "status": status,
-                        "summary": summary,
-                    },
-                    headers={
-                        "X-Service-Token": self._backend._token,
-                        "X-Tenant-ID": str(tenant_id),
-                    },
-                )
-                if resp.status_code >= 400:
-                    logger.error(
-                        "process_callback_failed",
-                        job_id=job_id,
-                        status_code=resp.status_code,
-                        body=resp.text[:500],
-                    )
-        except Exception as exc:
+        parsed = urlparse(callback_url)
+        path = parsed.path
+        result = await self._backend._post(
+            path,
+            {"job_id": job_id, "status": status, "summary": summary},
+            tenant_id=tenant_id,
+        )
+        if result is None:
             logger.error(
-                "process_callback_error",
+                "process_callback_failed",
                 job_id=job_id,
-                error=str(exc),
+                callback_url=callback_url,
             )
 
     async def _check_idempotency(

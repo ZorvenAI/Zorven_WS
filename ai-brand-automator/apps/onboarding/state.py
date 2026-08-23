@@ -37,8 +37,10 @@ TRANSITIONS: dict[str, frozenset[str]] = {
     # DRAFT would strand a meeting's worth of evidence behind a session that
     # looks unstarted.
     "PROCESSING": frozenset({"REVIEW_PENDING", "GATHERED", "ESCALATED"}),
-    "REVIEW_PENDING": frozenset({"CONFIRMED", "ESCALATED"}),
-    "CONFIRMED": frozenset({"COMPLETED", "ESCALATED"}),
+    # PROCESSING is the re-run edge (J-01 AC-4): operator re-processes after
+    # reviewing or confirming, e.g. after adding more evidence.
+    "REVIEW_PENDING": frozenset({"CONFIRMED", "PROCESSING", "ESCALATED"}),
+    "CONFIRMED": frozenset({"COMPLETED", "PROCESSING", "ESCALATED"}),
     "COMPLETED": frozenset({"ARCHIVED"}),
     # ESCALATED has no static targets: resolution restores escalated_from,
     # so its legal move depends on the row rather than the table. See

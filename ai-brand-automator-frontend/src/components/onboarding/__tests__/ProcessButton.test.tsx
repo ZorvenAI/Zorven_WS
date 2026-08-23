@@ -83,15 +83,17 @@ it('shows processing indicator when status is PROCESSING', () => {
   expect(screen.getByText(/Processing onboarding data…/)).toBeInTheDocument();
 });
 
-it('shows review complete when REVIEW_PENDING', () => {
+it('shows review complete and re-run button when REVIEW_PENDING', () => {
   render(
     <ProcessButton
       sessionId="sess-1"
       status="REVIEW_PENDING"
-      coverage={null}
+      coverage={goodCoverage}
     />,
   );
   expect(screen.getByText(/Processing complete/)).toBeInTheDocument();
+  const btn = screen.getByRole('button', { name: /Re-process onboarding data/i });
+  expect(btn).not.toBeDisabled();
 });
 
 it('dispatches without modal when coverage is good', async () => {

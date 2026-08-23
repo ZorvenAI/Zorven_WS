@@ -118,14 +118,26 @@ def dispatch_process(self, *, session_id, tenant_id, manifest, manifest_hash):
         resp = requests.post(url, json=payload, headers=headers, timeout=(5, 30))
     except requests.ConnectionError as exc:
         logger.warning("OIA unreachable for process %s: %s", session_id, exc)
-        raise self.retry(exc=exc)
+        try:
+            raise self.retry(exc=exc)
+        except self.MaxRetriesExceededError:
+            _revert_to_gathered(session_id)
+            return
     except requests.Timeout as exc:
         logger.warning("OIA timed out for process %s: %s", session_id, exc)
-        raise self.retry(exc=exc)
+        try:
+            raise self.retry(exc=exc)
+        except self.MaxRetriesExceededError:
+            _revert_to_gathered(session_id)
+            return
 
     if resp.status_code >= 500:
         logger.warning("OIA returned %s for process %s", resp.status_code, session_id)
-        raise self.retry(exc=Exception(f"OIA {resp.status_code}"))
+        try:
+            raise self.retry(exc=Exception(f"OIA {resp.status_code}"))
+        except self.MaxRetriesExceededError:
+            _revert_to_gathered(session_id)
+            return
 
     if resp.status_code >= 400:
         logger.error(
@@ -134,6 +146,7 @@ def dispatch_process(self, *, session_id, tenant_id, manifest, manifest_hash):
             resp.status_code,
             resp.text[:500],
         )
+        _revert_to_gathered(session_id)
         return
 
     try:
@@ -148,3 +161,12 @@ def dispatch_process(self, *, session_id, tenant_id, manifest, manifest_hash):
         )
 
     logger.info("Process dispatched for session %s, job_id=%s", session_id, job_id)
+
+
+def _revert_to_gathered(session_id):
+    """Revert a session from PROCESSING → GATHERED so it is not stuck."""
+    from apps.onboarding.models import OnboardingSession, SessionStatus
+
+    OnboardingSession.objects.filter(
+        pk=session_id, status=SessionStatus.PROCESSING
+    ).update(status=SessionStatus.GATHERED)

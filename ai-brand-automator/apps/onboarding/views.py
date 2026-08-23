@@ -516,12 +516,14 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
     def _build_evidence_manifest(self, session):
         """Assemble the evidence manifest per §10.2.2."""
-        recordings = list(
+        summarized = list(
             MeetingRecording.objects.filter(
                 session=session,
                 status=RecordingStatus.SUMMARIZED,
-            ).values_list("pk", flat=True)
+            ).values_list("pk", "transcript")
         )
+        recordings = [pk for pk, _ in summarized]
+        has_transcript = any(t is not None and t != [] for _, t in summarized)
         media = list(
             BrandAsset.objects.filter(
                 onboarding_session=session,
@@ -532,15 +534,7 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             "recordings": [str(r) for r in sorted(recordings)],
             "media": [str(m) for m in sorted(media)],
             "has_questionnaire": has_questionnaire,
-            "has_transcript": any(
-                MeetingRecording.objects.filter(
-                    session=session,
-                    status=RecordingStatus.SUMMARIZED,
-                    transcript__isnull=False,
-                )
-                .exclude(transcript=[])
-                .values_list("pk", flat=True)
-            ),
+            "has_transcript": has_transcript,
         }
 
     @action(detail=True, methods=["get", "post"])
@@ -2355,6 +2349,12 @@ def process_callback(request, pk):
         if cb_status == "SUCCEEDED":
             summary = request.data.get("summary", {})
             if isinstance(summary, dict):
+                raw = json.dumps(summary)
+                if len(raw) > 1_000_000:
+                    return Response(
+                        {"error": "summary exceeds 1 MB limit"},
+                        status=http.HTTP_400_BAD_REQUEST,
+                    )
                 session.process_summary = summary
             target = "REVIEW_PENDING"
         else:

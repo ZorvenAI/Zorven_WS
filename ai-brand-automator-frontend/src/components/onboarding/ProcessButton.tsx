@@ -99,17 +99,14 @@ export default function ProcessButton({
     );
   }
 
-  if (status === 'REVIEW_PENDING') {
-    return (
-      <div className="flex items-center gap-2 text-sm text-green-400">
-        <CheckCircle className="h-4 w-4" aria-hidden />
-        Processing complete — ready for review
-      </div>
-    );
-  }
-
   return (
     <>
+      {status === 'REVIEW_PENDING' && (
+        <div className="mb-3 flex items-center gap-2 text-sm text-green-400">
+          <CheckCircle className="h-4 w-4" aria-hidden />
+          Processing complete — ready for review
+        </div>
+      )}
       <div className="flex items-center gap-3">
         <button
           onClick={handleClick}
@@ -122,7 +119,9 @@ export default function ProcessButton({
           ) : (
             <Play className="h-4 w-4" aria-hidden />
           )}
-          Process onboarding data
+          {status === 'REVIEW_PENDING' || status === 'CONFIRMED'
+            ? 'Re-process onboarding data'
+            : 'Process onboarding data'}
         </button>
         {reason && (
           <span className="text-xs text-brand-silver">{reason}</span>
