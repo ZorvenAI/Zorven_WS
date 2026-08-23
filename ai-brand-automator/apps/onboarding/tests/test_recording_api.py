@@ -351,6 +351,7 @@ def test_the_storage_path_is_not_exposed(consented_session, public_tenant, edito
     make_recording(
         session=consented_session,
         transcript_gcs_path="gs://zorven-raw-assets/_raw/t-1/transcript.json",
+        transcript=[{"text": "hello", "speaker": 0, "t_start": 0.0, "t_end": 1.0}],
     )
 
     rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
@@ -646,3 +647,146 @@ def test_empty_captures_list_returns_empty_array(
     )
     assert response.status_code == 200
     assert response.data == []
+
+
+# ── I-03 · transcript storage and endpoint ──────────────────────────
+
+
+SAMPLE_SEGMENTS = [
+    {
+        "text": "Welcome to the onboarding.",
+        "speaker": 0,
+        "t_start": 0.0,
+        "t_end": 2.5,
+        "redaction_applied": False,
+    },
+    {
+        "text": "Call me at [PHONE_NUMBER].",
+        "speaker": 1,
+        "t_start": 3.0,
+        "t_end": 5.0,
+        "redaction_applied": True,
+    },
+]
+
+
+def transcript_url(recording):
+    return f"/api/v1/onboarding/recordings/{recording.pk}/transcript/"
+
+
+def summary_callback_url(recording):
+    return f"/api/v1/onboarding/internal/recordings/{recording.pk}/summary/"
+
+
+def test_transcript_callback_stores_segments(
+    consented_session, public_tenant, settings
+):
+    """PATCH with transcript list stores it alongside the summary."""
+    settings.OIA_SERVICE_TOKEN = "test-token"
+    recording = make_recording(
+        session=consented_session,
+        status=RecordingStatus.UPLOADED,
+    )
+    client = APIClient()
+    client.defaults["SERVER_NAME"] = "localhost"
+    response = client.patch(
+        summary_callback_url(recording),
+        data={
+            "summary": {"text": "A summary.", "key_moments": []},
+            "transcript": SAMPLE_SEGMENTS,
+        },
+        format="json",
+        HTTP_X_SERVICE_TOKEN="test-token",
+        HTTP_X_TENANT_ID=str(public_tenant.pk),
+    )
+    assert response.status_code == 200
+    recording.refresh_from_db()
+    assert recording.transcript == SAMPLE_SEGMENTS
+    assert recording.status == RecordingStatus.SUMMARIZED
+
+
+def test_transcript_endpoint_returns_segments(consented_session, public_tenant, viewer):
+    """GET /recordings/{id}/transcript/ returns stored segments."""
+    recording = make_recording(
+        session=consented_session,
+        transcript=SAMPLE_SEGMENTS,
+        status=RecordingStatus.SUMMARIZED,
+    )
+    response = client_for(viewer, public_tenant).get(transcript_url(recording))
+    assert response.status_code == 200
+    assert response.data["recording_id"] == str(recording.pk)
+    assert len(response.data["segments"]) == 2
+    assert response.data["segments"][0]["speaker"] == 0
+    assert response.data["segments"][1]["redaction_applied"] is True
+
+
+def test_transcript_endpoint_empty_when_no_transcript(
+    consented_session, public_tenant, viewer
+):
+    """A recording with no transcript returns an empty segments list."""
+    recording = make_recording(session=consented_session)
+    response = client_for(viewer, public_tenant).get(transcript_url(recording))
+    assert response.status_code == 200
+    assert response.data["segments"] == []
+
+
+def test_has_transcript_reflects_transcript_field(
+    consented_session, public_tenant, editor
+):
+    """has_transcript is True when the transcript JSONField has data."""
+    make_recording(
+        session=consented_session,
+        transcript=SAMPLE_SEGMENTS,
+    )
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+    assert rows[0]["has_transcript"] is True
+
+
+def test_has_transcript_false_with_empty_list(consented_session, public_tenant, editor):
+    """has_transcript is False when transcript is []."""
+    make_recording(session=consented_session, transcript=[])
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+    assert rows[0]["has_transcript"] is False
+
+
+def test_transcript_no_unredacted_text_exposed(
+    consented_session, public_tenant, viewer
+):
+    """AC-4: no path reveals pre-redaction text.
+
+    The stored segments contain only redacted text. The endpoint returns
+    exactly what is stored — there is no mechanism to request or receive
+    pre-redaction content.
+    """
+    recording = make_recording(
+        session=consented_session,
+        transcript=[
+            {
+                "text": "My number is [PHONE_NUMBER].",
+                "speaker": 1,
+                "t_start": 1.0,
+                "t_end": 3.0,
+                "redaction_applied": True,
+            },
+        ],
+        status=RecordingStatus.SUMMARIZED,
+    )
+    response = client_for(viewer, public_tenant).get(transcript_url(recording))
+    seg = response.data["segments"][0]
+    assert "[PHONE_NUMBER]" in seg["text"]
+    assert seg["redaction_applied"] is True
+
+
+def test_transcript_endpoint_cross_tenant_404(consented_session, public_tenant):
+    """A recording from another tenant returns 404, not someone else's transcript."""
+    other_tenant = Tenant.objects.create(name="other-co", schema_name="other_co")
+    other_user = User.objects.create_user("other_user", password="pw")
+    Membership.objects.create(user=other_user, tenant=other_tenant, role="ADMIN")
+
+    recording = make_recording(
+        session=consented_session,
+        transcript=SAMPLE_SEGMENTS,
+        status=RecordingStatus.SUMMARIZED,
+    )
+    response = client_for(other_user, other_tenant).get(transcript_url(recording))
+    assert response.status_code == 404

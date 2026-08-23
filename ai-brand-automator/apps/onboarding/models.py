@@ -501,6 +501,11 @@ class MeetingRecording(models.Model):
         blank=True,
         help_text="{text, key_moments: [{t, label}]} — written by a later story",
     )
+    transcript = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="[{text, speaker, t_start, t_end, redaction_applied}]",
+    )
     started_at = models.DateTimeField(auto_now_add=True)
     stopped_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

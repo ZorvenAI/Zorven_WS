@@ -15,6 +15,12 @@
 
 import { apiClient } from '@/lib/api';
 
+export function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 /** §9.4's session states. */
 export type SessionStatus =
   | 'DRAFT'
@@ -154,6 +160,22 @@ export interface RecordingSummary {
 export interface RecordingDetail extends RecordingItem {
   summary: RecordingSummary | null;
   playback_url?: string;
+}
+
+/** A single transcript segment (I-03). */
+export interface TranscriptSegment {
+  text: string;
+  speaker: number;
+  t_start: number;
+  t_end: number;
+  redaction_applied: boolean;
+}
+
+/** Response from GET /recordings/{id}/transcript/ (I-03). */
+export interface TranscriptResponse {
+  recording_id: string;
+  duration_s: number | null;
+  segments: TranscriptSegment[];
 }
 
 /**
@@ -539,4 +561,18 @@ export async function deleteRecording(recordingId: string): Promise<void> {
   if (!response.ok) {
     throw new Error(`API ${response.status}: ${await response.text()}`);
   }
+}
+
+/** Fetch transcript segments for a recording (I-03). */
+export async function getRecordingTranscript(
+  recordingId: string,
+): Promise<TranscriptSegment[]> {
+  const response = await apiClient.get(
+    `${BASE}/recordings/${recordingId}/transcript/`,
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  const data = (await response.json()) as TranscriptResponse;
+  return data.segments;
 }

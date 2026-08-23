@@ -315,7 +315,7 @@ class MeetingRecordingSerializer(serializers.ModelSerializer):
         return bool(obj.summary)
 
     def get_has_transcript(self, obj) -> bool:
-        return bool(obj.transcript_gcs_path)
+        return bool(obj.transcript)
 
 
 class MeetingRecordingDetailSerializer(MeetingRecordingSerializer):

@@ -1,28 +1,39 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Clock, FileText, Loader2, Pause, Play, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  Clock,
+  FileText,
+  List,
+  Loader2,
+  Pause,
+  Play,
+  X,
+} from 'lucide-react';
 
 import {
+  formatTime,
   getRecordingDetail,
-  type RecordingDetail,
+  getRecordingTranscript,
   type KeyMoment,
+  type RecordingDetail,
+  type TranscriptSegment,
 } from '@/lib/onboarding-sessions';
+import TranscriptView from '@/components/onboarding/TranscriptView';
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
+type Tab = 'summary' | 'transcript';
 
 export interface RecordingPlayerProps {
   recordingId: string;
   onClose: () => void;
+  initialTime?: number;
 }
 
 export default function RecordingPlayer({
   recordingId,
   onClose,
+  initialTime,
 }: RecordingPlayerProps) {
   const [detail, setDetail] = useState<RecordingDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,20 +44,59 @@ export default function RecordingPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  const [activeTab, setActiveTab] = useState<Tab>('summary');
+  const [transcriptSegments, setTranscriptSegments] = useState<
+    TranscriptSegment[] | null
+  >(null);
+  const transcriptLoading =
+    activeTab === 'transcript' && transcriptSegments === null;
+
   useEffect(() => {
     let cancelled = false;
     getRecordingDetail(recordingId)
       .then((data) => {
-        if (!cancelled) setDetail(data);
+        if (!cancelled) {
+          setDetail(data);
+          if (initialTime != null && data.has_transcript) {
+            setActiveTab('transcript');
+          }
+        }
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load');
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : 'Failed to load');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
-  }, [recordingId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [recordingId, initialTime]);
+
+  useEffect(() => {
+    if (activeTab !== 'transcript' || transcriptSegments !== null) return;
+    let cancelled = false;
+    getRecordingTranscript(recordingId)
+      .then((segs) => {
+        if (!cancelled) setTranscriptSegments(segs);
+      })
+      .catch(() => {
+        if (!cancelled) setTranscriptSegments([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, recordingId, transcriptSegments]);
+
+  useEffect(() => {
+    if (initialTime != null && detail?.playback_url) {
+      const audio = audioRef.current;
+      if (audio) {
+        audio.currentTime = initialTime;
+      }
+    }
+  }, [initialTime, detail?.playback_url]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
@@ -67,6 +117,12 @@ export default function RecordingPlayer({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement &&
+        e.target.type === 'text'
+      ) {
+        return;
+      }
       const audio = audioRef.current;
       if (!audio) return;
       if (e.key === ' ') {
@@ -77,7 +133,10 @@ export default function RecordingPlayer({
         audio.currentTime = Math.max(0, audio.currentTime - 5);
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 5);
+        audio.currentTime = Math.min(
+          audio.duration || 0,
+          audio.currentTime + 5,
+        );
       }
     },
     [togglePlay],
@@ -111,7 +170,7 @@ export default function RecordingPlayer({
 
   return (
     <div
-      className="space-y-4"
+      className="flex h-full flex-col space-y-4"
       onKeyDown={handleKeyDown}
       tabIndex={0}
       role="region"
@@ -188,53 +247,110 @@ export default function RecordingPlayer({
         </div>
       )}
 
-      {/* Summary */}
-      {summary && (
-        <div className="space-y-3">
-          <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-brand-silver">
+      {/* Tabs */}
+      {detail.has_transcript && (
+        <div className="flex gap-1 border-b border-white/10">
+          <button
+            type="button"
+            onClick={() => setActiveTab('summary')}
+            className={`flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-xs font-medium transition-colors ${
+              activeTab === 'summary'
+                ? 'border-brand-electric text-brand-electric'
+                : 'border-transparent text-brand-silver hover:text-white'
+            }`}
+            data-testid="tab-summary"
+          >
             <FileText className="h-3.5 w-3.5" />
             Summary
-          </h3>
-          <div className="text-sm leading-relaxed text-white/90">
-            {summary.text.split('\n\n').map((paragraph, i) => (
-              <p key={i} className={i > 0 ? 'mt-2' : ''}>
-                {paragraph}
-              </p>
-            ))}
-          </div>
-
-          {/* Key moments */}
-          {summary.key_moments.length > 0 && (
-            <div>
-              <h4 className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-brand-silver">
-                <Clock className="h-3.5 w-3.5" />
-                Key Moments
-              </h4>
-              <div className="flex flex-wrap gap-1.5">
-                {summary.key_moments.map((km: KeyMoment, i: number) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => seekTo(km.t)}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-brand-electric/30 bg-brand-electric/10 px-2.5 py-1 text-xs text-brand-electric transition-colors hover:bg-brand-electric/20"
-                  >
-                    <span className="tabular-nums text-brand-electric/70">
-                      {formatTime(km.t)}
-                    </span>
-                    {km.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('transcript')}
+            className={`flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-xs font-medium transition-colors ${
+              activeTab === 'transcript'
+                ? 'border-brand-electric text-brand-electric'
+                : 'border-transparent text-brand-silver hover:text-white'
+            }`}
+            data-testid="tab-transcript"
+          >
+            <List className="h-3.5 w-3.5" />
+            Transcript
+          </button>
         </div>
       )}
 
-      {!summary && !detail.playback_url && (
-        <p className="text-sm text-brand-silver">
-          No summary or playback available yet.
-        </p>
-      )}
+      {/* Tab content */}
+      <div className="min-h-0 flex-1">
+        {activeTab === 'summary' && (
+          <>
+            {summary && (
+              <div className="space-y-3">
+                {!detail.has_transcript && (
+                  <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-brand-silver">
+                    <FileText className="h-3.5 w-3.5" />
+                    Summary
+                  </h3>
+                )}
+                <div className="text-sm leading-relaxed text-white/90">
+                  {summary.text.split('\n\n').map((paragraph, i) => (
+                    <p key={i} className={i > 0 ? 'mt-2' : ''}>
+                      {paragraph}
+                    </p>
+                  ))}
+                </div>
+
+                {summary.key_moments.length > 0 && (
+                  <div>
+                    <h4 className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-brand-silver">
+                      <Clock className="h-3.5 w-3.5" />
+                      Key Moments
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {summary.key_moments.map((km: KeyMoment, i: number) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => seekTo(km.t)}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-brand-electric/30 bg-brand-electric/10 px-2.5 py-1 text-xs text-brand-electric transition-colors hover:bg-brand-electric/20"
+                        >
+                          <span className="tabular-nums text-brand-electric/70">
+                            {formatTime(km.t)}
+                          </span>
+                          {km.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!summary && !detail.playback_url && (
+              <p className="text-sm text-brand-silver">
+                No summary or playback available yet.
+              </p>
+            )}
+          </>
+        )}
+
+        {activeTab === 'transcript' && (
+          <>
+            {transcriptLoading && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-brand-silver" />
+              </div>
+            )}
+            {!transcriptLoading && transcriptSegments !== null && (
+              <TranscriptView
+                segments={transcriptSegments}
+                currentTime={currentTime}
+                onSeek={seekTo}
+                initialTime={initialTime}
+              />
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

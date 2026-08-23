@@ -1,7 +1,8 @@
-"""Tests for SKL-OIA-08 — SummarizeRecording skill (I-02).
+"""Tests for SKL-OIA-08 — SummarizeRecording skill (I-02, I-03).
 
 Covers transcript extraction, LLM response parsing, timestamp snapping,
-idempotency, redaction awareness, and edge cases.
+idempotency, redaction awareness, transcript segment persistence, and
+edge cases.
 """
 
 from __future__ import annotations
@@ -203,3 +204,79 @@ class TestFormatTranscript:
         ]
         result = SummarizeRecording._format_transcript(segments)
         assert "[REDACTED]" in result
+
+
+# ── Transcript segment output contract (I-03) ──────────────────────
+
+
+class TestTranscriptSegmentOutput:
+    """Verify that extracted segments carry the fields I-03's frontend needs."""
+
+    def test_segment_has_required_fields(self):
+        raw = [
+            json.dumps(
+                {
+                    "type": "transcript.final",
+                    "text": "hello world",
+                    "speaker": 1,
+                    "t_start": 2.0,
+                    "t_end": 3.5,
+                    "seq": 1,
+                    "redaction_applied": False,
+                }
+            ).encode()
+        ]
+        segments = extract_transcript_segments(raw, 0.0, 10.0)
+        seg = segments[0]
+        assert set(seg.keys()) == {
+            "text",
+            "speaker",
+            "t_start",
+            "t_end",
+            "redaction_applied",
+        }
+
+    def test_segments_are_post_redaction(self):
+        raw = [
+            json.dumps(
+                {
+                    "type": "transcript.final",
+                    "text": "Call me at [PHONE_NUMBER]",
+                    "speaker": 0,
+                    "t_start": 1.0,
+                    "t_end": 2.0,
+                    "seq": 1,
+                    "redaction_applied": True,
+                }
+            ).encode()
+        ]
+        segments = extract_transcript_segments(raw, 0.0, 10.0)
+        assert segments[0]["redaction_applied"] is True
+        assert "[PHONE_NUMBER]" in segments[0]["text"]
+
+    def test_speaker_field_preserved(self):
+        raw = [
+            json.dumps(
+                {
+                    "type": "transcript.final",
+                    "text": "speaker zero",
+                    "speaker": 0,
+                    "t_start": 1.0,
+                    "t_end": 2.0,
+                    "seq": 1,
+                }
+            ).encode(),
+            json.dumps(
+                {
+                    "type": "transcript.final",
+                    "text": "speaker one",
+                    "speaker": 1,
+                    "t_start": 3.0,
+                    "t_end": 4.0,
+                    "seq": 2,
+                }
+            ).encode(),
+        ]
+        segments = extract_transcript_segments(raw, 0.0, 10.0)
+        assert segments[0]["speaker"] == 0
+        assert segments[1]["speaker"] == 1
