@@ -55,7 +55,12 @@ export default function RecordingPlayer({
     let cancelled = false;
     getRecordingDetail(recordingId)
       .then((data) => {
-        if (!cancelled) setDetail(data);
+        if (!cancelled) {
+          setDetail(data);
+          if (initialTime != null && data.has_transcript) {
+            setActiveTab('transcript');
+          }
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled)
@@ -67,7 +72,7 @@ export default function RecordingPlayer({
     return () => {
       cancelled = true;
     };
-  }, [recordingId]);
+  }, [recordingId, initialTime]);
 
   useEffect(() => {
     if (activeTab !== 'transcript' || transcriptSegments !== null) return;
@@ -83,12 +88,6 @@ export default function RecordingPlayer({
       cancelled = true;
     };
   }, [activeTab, recordingId, transcriptSegments]);
-
-  useEffect(() => {
-    if (initialTime != null && detail?.has_transcript) {
-      setActiveTab('transcript');
-    }
-  }, [initialTime, detail?.has_transcript]);
 
   useEffect(() => {
     if (initialTime != null && detail?.playback_url) {
