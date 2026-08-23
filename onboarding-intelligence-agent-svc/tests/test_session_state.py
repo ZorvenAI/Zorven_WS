@@ -1088,3 +1088,24 @@ async def test_coverage_incremental_matches_full(manager):
     assert stored["WF1"] == full.wf1.pct
     assert stored["WF2"] == full.wf2.pct
     assert stored["WF3"] == full.wf3.pct
+
+    # J-02: cross-validate full vs incremental with the crosscheck module
+    from app.logic.coverage_crosscheck import crosscheck_coverage
+
+    diffs = crosscheck_coverage(full, stored, tolerance=0.05)
+    assert diffs == [], "full and stored should agree exactly"
+
+    # Simulate a stale incremental by adding an ad-hoc question
+    questions.append(
+        {
+            "text": "Q5-adhoc",
+            "workflow_target": "WF1",
+            "status": "GREEN",
+            "target_field": "founding_year",
+        }
+    )
+    updated = compute_coverage(questions)
+    diffs_after = crosscheck_coverage(updated, stored, tolerance=0.05)
+    wf1_diffs = [d for d in diffs_after if d.workflow == "WF1"]
+    assert len(wf1_diffs) == 1, "ad-hoc question should cause WF1 divergence"
+    assert wf1_diffs[0].full_pct > wf1_diffs[0].incremental_pct

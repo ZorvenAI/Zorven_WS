@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     STT_LANGUAGE_DEFAULT: str = "en-US"
     MAX_CONCURRENT_LIVE_PER_COMPANY: int = 1
     PROCESS_TIMEOUT_S: int = 300
+    CONTEXT_WINDOW_TOKENS: int = 1_000_000
+    OCR_AWAIT_TIMEOUT_S: int = 30
+    COVERAGE_CROSSCHECK_TOLERANCE: float = 0.05
 
     # ── Batcher (G-02, Design §4.3) ────────────────────────
     BATCH_WINDOW_S: float = 3.0

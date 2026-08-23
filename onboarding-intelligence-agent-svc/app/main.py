@@ -96,6 +96,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.redis,
         backend=app.state.backend,
         settings=settings,
+        llm=LLMProvider(settings.GEMINI_KEY),
     )
 
     app.state.prep = PrepExecutor(

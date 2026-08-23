@@ -2386,3 +2386,111 @@ def process_callback(request, pk):
         },
         status=http.HTTP_200_OK,
     )
+
+
+# ── Internal service-to-service endpoint (J-02) ─────────────────────
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def session_evidence(request, pk):
+    """``GET /api/v1/onboarding/internal/sessions/<pk>/evidence/``
+
+    OIA fetches the full evidence bundle for a session. X-Service-Token auth.
+    Returns recordings (with transcripts), media OCR, and questions.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "") or decouple_config(
+        "OIA_SERVICE_TOKEN", default=""
+    )
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    tenant, error = _service_tenant(request)
+    if error is not None:
+        return error
+
+    session = (
+        OnboardingSession.objects.filter(pk=pk, tenant=tenant)
+        .select_related("questionnaire")
+        .first()
+    )
+    if session is None:
+        return Response(
+            {"error": "Session not found"},
+            status=http.HTTP_404_NOT_FOUND,
+        )
+
+    recordings_qs = MeetingRecording.objects.filter(session=session).select_related(
+        "audio_asset"
+    )
+
+    recordings_data = []
+    for rec in recordings_qs:
+        recordings_data.append(
+            {
+                "id": str(rec.pk),
+                "transcript": rec.transcript or [],
+                "summary": rec.summary or {},
+                "started_at": (rec.started_at.isoformat() if rec.started_at else None),
+                "stopped_at": (rec.stopped_at.isoformat() if rec.stopped_at else None),
+            }
+        )
+
+    media_qs = BrandAsset.objects.filter(onboarding_session=session)
+    media_data = []
+    for asset in media_qs:
+        media_data.append(
+            {
+                "id": asset.pk,
+                "media_id": str(asset.pk),
+                "ocr_text": asset.ocr_text or "",
+                "ocr_confidence": asset.ocr_confidence,
+                "sensitivity_class": asset.sensitivity_class or "",
+                "usage_tag": asset.usage_tag or "",
+                "rag_excluded": asset.rag_excluded,
+            }
+        )
+
+    ocr_pending_count = (
+        BrandAsset.objects.filter(
+            onboarding_session=session,
+            ocr_text__isnull=True,
+            ocr_confidence__isnull=True,
+        )
+        .exclude(
+            file_type="document",
+        )
+        .count()
+    )
+
+    questions_data = []
+    if session.questionnaire:
+        for q in session.questionnaire.questions.all().order_by("order"):
+            questions_data.append(
+                {
+                    "id": str(q.pk),
+                    "text": q.text,
+                    "target_field": q.target_field,
+                    "workflow_target": q.workflow_target,
+                    "status": q.status,
+                    "origin": q.origin,
+                    "evidence": q.evidence or [],
+                    "sufficiency_score": q.sufficiency_score,
+                    "answer_summary": q.answer_summary or "",
+                }
+            )
+
+    return Response(
+        {
+            "recordings": recordings_data,
+            "media": media_data,
+            "questions": questions_data,
+            "has_questionnaire": session.questionnaire is not None,
+            "ocr_pending_count": ocr_pending_count,
+        },
+        status=http.HTTP_200_OK,
+    )

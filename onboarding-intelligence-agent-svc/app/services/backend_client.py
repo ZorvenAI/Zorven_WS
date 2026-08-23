@@ -36,6 +36,7 @@ OCR_UPDATE_PATH = "/api/v1/internal/assets/{asset_id}/ocr/"
 RECORDING_SUMMARY_PATH = (
     "/api/v1/onboarding/internal/recordings/{recording_id}/summary/"
 )
+SESSION_EVIDENCE_PATH = "/api/v1/onboarding/internal/sessions/{session_id}/evidence/"
 UPSERT_PATH = "/api/v1/onboarding/research-briefs/upsert/"
 QUESTIONNAIRE_PATH = "/api/v1/onboarding/questionnaires/generate/"
 VOCABULARY_PATH = "/api/v1/onboarding/field-vocabulary/"
@@ -230,6 +231,13 @@ class BackendClient:
 
         self._breaker.record_success()
         return body if isinstance(body, dict) else None
+
+    async def get_session_evidence(
+        self, *, tenant_id: str, session_id: str
+    ) -> dict[str, Any] | None:
+        """Fetch the full evidence bundle for a session (J-02)."""
+        path = SESSION_EVIDENCE_PATH.format(session_id=session_id)
+        return await self._get(path, tenant_id=tenant_id)
 
     async def live_precheck(
         self, *, tenant_id: str, session_id: str, ticket: str = ""

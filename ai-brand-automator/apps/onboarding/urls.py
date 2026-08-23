@@ -21,6 +21,7 @@ from apps.onboarding.views import (
     field_vocabulary,
     live_precheck,
     process_callback,
+    session_evidence,
     update_recording_summary,
     upsert_research_brief,
 )
@@ -75,6 +76,12 @@ urlpatterns = [
         "internal/sessions/<pk>/process/callback/",
         process_callback,
         name="onboarding-process-callback",
+    ),
+    # J-02: OIA fetches the evidence bundle for a session.
+    path(
+        "internal/sessions/<pk>/evidence/",
+        session_evidence,
+        name="onboarding-session-evidence",
     ),
     path("", include(router.urls)),
 ]
