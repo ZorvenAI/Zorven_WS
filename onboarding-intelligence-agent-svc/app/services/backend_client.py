@@ -329,12 +329,16 @@ class BackendClient:
         tenant_id: str,
         recording_id: str,
         summary: dict[str, Any],
+        transcript_segments: list[dict[str, Any]] | None = None,
     ) -> bool:
-        """Write summary results back to a MeetingRecording (I-02)."""
+        """Write summary and transcript back to a MeetingRecording (I-02, I-03)."""
         path = RECORDING_SUMMARY_PATH.format(recording_id=recording_id)
+        payload: dict[str, Any] = {"summary": summary}
+        if transcript_segments is not None:
+            payload["transcript"] = transcript_segments
         body = await self._patch(
             path,
-            {"summary": summary},
+            payload,
             tenant_id=tenant_id,
         )
         return body is not None

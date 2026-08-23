@@ -94,16 +94,22 @@ class SummarizeRecording(BaseSkill):
             raw = await self._llm.generate(prompt, temperature=0.2)
             summary = self._parse_response(raw, segments)
 
+        output: dict[str, Any] = {
+            **summary,
+            "transcript_segments": segments,
+        }
+
         if self._backend is not None:
             await self._backend.update_recording_summary(
                 tenant_id=tenant_id,
                 recording_id=recording_id,
                 summary=summary,
+                transcript_segments=segments,
             )
 
-            await self._store_idempotency(tenant_id, recording_id, summary)
+            await self._store_idempotency(tenant_id, recording_id, output)
 
-        return SkillResult(skill_id=self.meta.skill_id, output=summary)
+        return SkillResult(skill_id=self.meta.skill_id, output=output)
 
     # -- transcript assembly --------------------------------------------------
 
