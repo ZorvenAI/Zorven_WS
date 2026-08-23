@@ -12,7 +12,7 @@ from typing import Any
 
 from app.core.logging import get_logger
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api.deps import verify_service_token
@@ -20,6 +20,8 @@ from app.api.schemas import (
     ExecuteRequest,
     ExecuteResponse,
     GuardrailReport,
+    ProcessRequest,
+    ProcessResponse,
     SkillExecuteRequest,
     UsageReport,
 )
@@ -358,4 +360,46 @@ async def execute_skill(
         usage=UsageReport(
             duration_ms=result.duration_ms or int((time.monotonic() - started) * 1000)
         ),
+    )
+
+
+@router.post(
+    "/v1/process",
+    response_model=ProcessResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(verify_service_token)],
+)
+async def process(
+    request: Request,
+    payload: ProcessRequest,
+) -> ProcessResponse:
+    """Accept a PROCESS job (J-01, §10.2.2).
+
+    Validates the manifest, checks idempotency, spawns a background task
+    and returns 202 immediately. The actual extraction logic (J-02)
+    runs asynchronously and calls back to Django on completion.
+    """
+    idempotency_key = request.headers.get("idempotency-key", "")
+    if not idempotency_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Idempotency-Key header is required",
+        )
+
+    executor = request.app.state.process_executor
+
+    tenant_ctx = TenantContext(
+        tenant_id=payload.tenant_context.tenant_id,
+        user_id=payload.tenant_context.user_id,
+        role=payload.tenant_context.role,
+        session_id=payload.session_id,
+    )
+
+    return await executor.accept(
+        tenant=tenant_ctx,
+        session_id=payload.session_id,
+        manifest=payload.evidence_manifest,
+        options=payload.options,
+        callback_url=payload.callback_url,
+        idempotency_key=idempotency_key,
     )

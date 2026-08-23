@@ -321,3 +321,38 @@ class MediaAnalyzed(ServerFrame):
     retake_suggested: bool
     doc_type: str
     sensitivity_class: str
+
+
+# ── PROCESS mode (J-01, Design §10.2.2) ────────────────────────────
+
+
+class EvidenceManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recordings: list[str] = Field(default_factory=list)
+    media: list[str] = Field(default_factory=list)
+    has_questionnaire: bool = False
+    has_transcript: bool = False
+
+
+class ProcessRequest(BaseModel):
+    """``POST /v1/process`` — dispatch a PROCESS job (§10.2.2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_context: TenantContext
+    session_id: str
+    evidence_manifest: EvidenceManifest
+    options: dict[str, Any] = Field(default_factory=dict)
+    callback_url: str = ""
+
+
+class ProcessResponse(BaseModel):
+    """202 response from ``POST /v1/process``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str
+    status: Literal["ACCEPTED", "RUNNING", "SUCCEEDED", "FAILED"]
+    estimated_duration_s: int = 300
+    callback_url: str = ""

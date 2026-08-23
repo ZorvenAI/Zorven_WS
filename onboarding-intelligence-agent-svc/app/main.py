@@ -88,6 +88,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # while PREP had already given up. The comment here used to claim they
     # shared one while the code created two.
     app.state.backend = BackendClient(settings.BACKEND_BASE_URL, settings.SERVICE_TOKEN)
+
+    # J-01: PROCESS mode executor. Shares the BackendClient and Redis.
+    from app.logic.process_executor import ProcessExecutor
+
+    app.state.process_executor = ProcessExecutor(
+        app.state.redis,
+        backend=app.state.backend,
+        settings=settings,
+    )
+
     app.state.prep = PrepExecutor(
         app.state.redis,
         tavily=TavilyProvider(settings.TAVILY_API_KEY),
