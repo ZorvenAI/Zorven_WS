@@ -57,6 +57,8 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
             "created_by",
             "prompt_versions",
             "evidence_manifest_hash",
+            "process_job_id",
+            "process_summary",
             "legal_next_states",
             "consent",
             "created_at",
@@ -73,6 +75,8 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
             "escalated_from",
             # L-03's, not a client's (§17.2).
             "prompt_versions",
+            "process_job_id",
+            "process_summary",
             "legal_next_states",
             "consent",
         ]

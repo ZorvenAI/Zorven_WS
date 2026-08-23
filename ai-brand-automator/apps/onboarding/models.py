@@ -158,6 +158,17 @@ class OnboardingSession(models.Model):
         default="",
         help_text="Half of the PROCESS idempotency key (§9.3)",
     )
+    process_job_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="OIA job id from the most recent PROCESS dispatch",
+    )
+    process_summary = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Terminal callback summary from OIA (§10.2.2)",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
