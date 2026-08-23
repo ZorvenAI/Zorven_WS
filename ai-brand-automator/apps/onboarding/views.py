@@ -2164,7 +2164,13 @@ def update_recording_summary(request, pk):
         recording.summary = summary
         transcript = request.data.get("transcript")
         update_fields = ["summary", "status", "updated_at"]
-        if isinstance(transcript, list):
+        if isinstance(transcript, list) and all(
+            isinstance(seg, dict)
+            and isinstance(seg.get("text"), str)
+            and isinstance(seg.get("t_start"), (int, float))
+            and isinstance(seg.get("t_end"), (int, float))
+            for seg in transcript
+        ):
             recording.transcript = transcript
             update_fields.append("transcript")
         recording.status = RecordingStatus.SUMMARIZED

@@ -75,7 +75,7 @@ class SummarizeRecording(BaseSkill):
             raise RuntimeError("SummarizeRecording requires llm and redis providers")
 
         cached = await self._check_idempotency(tenant_id, recording_id)
-        if cached is not None:
+        if cached is not None and "transcript_segments" in cached:
             logger.info("summary_idempotent_hit", recording_id=recording_id)
             return SkillResult(skill_id=self.meta.skill_id, output=cached)
 

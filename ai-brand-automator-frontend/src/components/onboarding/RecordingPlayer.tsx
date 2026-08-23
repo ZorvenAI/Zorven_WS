@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 
 import {
+  formatTime,
   getRecordingDetail,
   getRecordingTranscript,
   type KeyMoment,
@@ -20,12 +21,6 @@ import {
   type TranscriptSegment,
 } from '@/lib/onboarding-sessions';
 import TranscriptView from '@/components/onboarding/TranscriptView';
-
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 type Tab = 'summary' | 'transcript';
 
@@ -49,9 +44,7 @@ export default function RecordingPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  const [activeTab, setActiveTab] = useState<Tab>(
-    initialTime != null ? 'transcript' : 'summary',
-  );
+  const [activeTab, setActiveTab] = useState<Tab>('summary');
   const [transcriptSegments, setTranscriptSegments] = useState<
     TranscriptSegment[] | null
   >(null);
@@ -90,6 +83,12 @@ export default function RecordingPlayer({
       cancelled = true;
     };
   }, [activeTab, recordingId, transcriptSegments]);
+
+  useEffect(() => {
+    if (initialTime != null && detail?.has_transcript) {
+      setActiveTab('transcript');
+    }
+  }, [initialTime, detail?.has_transcript]);
 
   useEffect(() => {
     if (initialTime != null && detail?.playback_url) {

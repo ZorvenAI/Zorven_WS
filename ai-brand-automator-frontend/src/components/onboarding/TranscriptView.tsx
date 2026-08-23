@@ -8,13 +8,7 @@ import {
   useState,
 } from 'react';
 import { ArrowDown, ArrowUp, ChevronDown, Search, Shield } from 'lucide-react';
-import type { TranscriptSegment } from '@/lib/onboarding-sessions';
-
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
+import { formatTime, type TranscriptSegment } from '@/lib/onboarding-sessions';
 
 const SPEAKER_COLORS: Record<number, string> = {
   0: 'text-brand-electric',
@@ -116,12 +110,14 @@ export default function TranscriptView({
   const segmentRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [autoFollow, setAutoFollow] = useState(true);
   const programmaticScroll = useRef(false);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [hasRedactions] = useState(() =>
-    segments.some((s) => s.redaction_applied),
+  const hasRedactions = useMemo(
+    () => segments.some((s) => s.redaction_applied),
+    [segments],
   );
   const prevQueryRef = useRef(searchQuery);
 
@@ -142,12 +138,19 @@ export default function TranscriptView({
     const el = segmentRefs.current.get(currentSegmentIndex);
     if (!el || !containerRef.current) return;
 
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
     programmaticScroll.current = true;
     el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    const timer = setTimeout(() => {
+    scrollTimerRef.current = setTimeout(() => {
       programmaticScroll.current = false;
+      scrollTimerRef.current = null;
     }, 300);
-    return () => clearTimeout(timer);
+    return () => {
+      if (scrollTimerRef.current) {
+        clearTimeout(scrollTimerRef.current);
+        scrollTimerRef.current = null;
+      }
+    };
   }, [currentSegmentIndex, autoFollow]);
 
   useEffect(() => {
@@ -180,10 +183,12 @@ export default function TranscriptView({
       onSeek(segments[match.segmentIndex].t_start);
       const el = segmentRefs.current.get(match.segmentIndex);
       if (el) {
+        if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
         programmaticScroll.current = true;
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => {
+        scrollTimerRef.current = setTimeout(() => {
           programmaticScroll.current = false;
+          scrollTimerRef.current = null;
         }, 300);
       }
     },
@@ -299,7 +304,7 @@ export default function TranscriptView({
           const isCurrent = i === currentSegmentIndex;
           return (
             <div
-              key={`${seg.t_start}-${seg.t_end}`}
+              key={`${i}-${seg.t_start}-${seg.t_end}`}
               ref={(el) => {
                 if (el) segmentRefs.current.set(i, el);
                 else segmentRefs.current.delete(i);

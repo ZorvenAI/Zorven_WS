@@ -36,6 +36,11 @@ function detail(overrides: Partial<RecordingDetail> = {}): RecordingDetail {
 
 jest.mock('@/lib/onboarding-sessions', () => ({
   getRecordingDetail: jest.fn(),
+  formatTime: (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  },
 }));
 
 const mockGetDetail = jest.requireMock('@/lib/onboarding-sessions')
