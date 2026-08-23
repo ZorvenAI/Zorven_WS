@@ -27,9 +27,11 @@ export type SessionStatus =
   | 'PREPARING'
   | 'READY'
   | 'MEETING_LIVE'
+  | 'GATHERED'
   | 'PROCESSING'
-  | 'REVIEW'
-  | 'COMPLETE'
+  | 'REVIEW_PENDING'
+  | 'CONFIRMED'
+  | 'COMPLETED'
   | 'ESCALATED'
   | 'ARCHIVED';
 
@@ -40,6 +42,23 @@ export interface OnboardingSessionSummary {
   questionnaire: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Full session detail including process state (J-01). */
+export interface SessionDetail extends OnboardingSessionSummary {
+  legal_next_states: string[];
+  evidence_manifest_hash: string;
+  process_job_id: string;
+  process_summary: Record<string, unknown>;
+  consent: ConsentState;
+}
+
+/** Response from POST /sessions/{id}/process/ (J-01). */
+export interface ProcessDispatchResponse {
+  job_id: string;
+  status: string;
+  idempotent?: boolean;
+  detail?: string;
 }
 
 /** §9.4's three workflows, as tagged on a question. */
@@ -575,4 +594,31 @@ export async function getRecordingTranscript(
   }
   const data = (await response.json()) as TranscriptResponse;
   return data.segments;
+}
+
+// ── Process dispatch (J-01) ──────────────────────────────────────────
+
+/** Fetch full session detail including process state. */
+export async function getSessionDetail(
+  sessionId: string,
+): Promise<SessionDetail> {
+  const response = await apiClient.get(`${BASE}/sessions/${sessionId}/`);
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as SessionDetail;
+}
+
+/** Dispatch PROCESS for a session (J-01, §10.2.2). */
+export async function triggerProcess(
+  sessionId: string,
+): Promise<ProcessDispatchResponse> {
+  const response = await apiClient.post(
+    `${BASE}/sessions/${sessionId}/process/`,
+    {},
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as ProcessDispatchResponse;
 }

@@ -19,9 +19,12 @@ import { useLibraryPolling } from '@/hooks/useLibraryPolling';
 import { useTenantRole } from '@/hooks/useTenantRole';
 import QuestionChecklist from '@/components/onboarding/QuestionChecklist';
 import RecordingsLibrary from '@/components/onboarding/RecordingsLibrary';
+import ProcessButton from '@/components/onboarding/ProcessButton';
 import {
   getApprovedQuestionnaire,
+  getSessionDetail,
   type QuestionnaireDetail,
+  type SessionDetail,
 } from '@/lib/onboarding-sessions';
 
 export default function SessionPage() {
@@ -30,6 +33,7 @@ export default function SessionPage() {
   const sessionId = params?.sessionId;
 
   const [questionnaire, setQuestionnaire] = useState<QuestionnaireDetail | null>(null);
+  const [session, setSession] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
   const library = useLibraryPolling(sessionId ?? null);
@@ -37,23 +41,23 @@ export default function SessionPage() {
 
   const load = useCallback(async () => {
     if (!sessionId) {
-      // Not `return` on its own: that leaves loading true forever, so a
-      // moment without params — or a mis-mounted route — shows "Loading
-      // questions…" and never anything else. The empty state is the honest
-      // answer when there is no session to load.
       setQuestionnaire(null);
+      setSession(null);
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      setQuestionnaire(await getApprovedQuestionnaire(sessionId));
+      const [q, s] = await Promise.all([
+        getApprovedQuestionnaire(sessionId),
+        getSessionDetail(sessionId),
+      ]);
+      setQuestionnaire(q);
+      setSession(s);
     } catch (error) {
-      // Cleared, not left stale. AC-3 wants a re-approved version to replace
-      // what is on screen; showing the previous set after a failed refresh
-      // would be the same defect with a slower fuse.
       setQuestionnaire(null);
-      console.error('Failed to load the approved questionnaire:', error);
+      setSession(null);
+      console.error('Failed to load session:', error);
     } finally {
       setLoading(false);
     }
@@ -62,6 +66,25 @@ export default function SessionPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Poll session status while PROCESSING (J-01, AC-5).
+  useEffect(() => {
+    if (!sessionId || session?.status !== 'PROCESSING') return;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const updated = await getSessionDetail(sessionId);
+        setSession(updated);
+        if (updated.status === 'PROCESSING') {
+          timer = setTimeout(poll, 3000);
+        }
+      } catch {
+        timer = setTimeout(poll, 5000);
+      }
+    };
+    timer = setTimeout(poll, 3000);
+    return () => clearTimeout(timer);
+  }, [sessionId, session?.status]);
 
   return (
     <div className="space-y-6">
@@ -75,12 +98,6 @@ export default function SessionPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-white">Session</h1>
-        {/*
-          §11 gives OnboardingHome an "entry point to the meeting view" and
-          E-01 shipped without one. It sits here rather than on the home list
-          so the link is next to the questions it opens with, and so it is
-          never rendered for a session id that does not resolve.
-        */}
         {sessionId && (
           <Link
             href={`/onboarding/sessions/${sessionId}/meeting`}
@@ -91,6 +108,17 @@ export default function SessionPage() {
           </Link>
         )}
       </div>
+
+      {sessionId && session && (
+        <div className="glass-card p-5">
+          <ProcessButton
+            sessionId={sessionId}
+            status={session.status}
+            coverage={questionnaire?.coverage ?? null}
+            onDispatch={load}
+          />
+        </div>
+      )}
 
       {loading ? (
         <p className="text-sm text-brand-silver">Loading questions…</p>
