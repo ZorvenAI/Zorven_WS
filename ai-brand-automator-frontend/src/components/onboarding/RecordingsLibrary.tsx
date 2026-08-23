@@ -11,7 +11,7 @@
  * top (newest first) but do not auto-scroll.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Camera, Check, FileText, Mic, Play, Square, Trash2, Video } from 'lucide-react';
 
 import {
@@ -98,10 +98,22 @@ export default function RecordingsLibrary({
   onDeleted,
 }: RecordingsLibraryProps) {
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
+  const [initialTime, setInitialTime] = useState<number | undefined>(undefined);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [loadingPlay, setLoadingPlay] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const recId = params.get('recording');
+    const t = params.get('t');
+    if (recId) {
+      setSelectedRecordingId(recId);
+      if (t) setInitialTime(parseFloat(t));
+    }
+  }, []);
 
   const handlePlay = useCallback(async (recordingId: string) => {
     if (playingId === recordingId) {
@@ -143,7 +155,11 @@ export default function RecordingsLibrary({
     return (
       <RecordingPlayer
         recordingId={selectedRecordingId}
-        onClose={() => setSelectedRecordingId(null)}
+        onClose={() => {
+          setSelectedRecordingId(null);
+          setInitialTime(undefined);
+        }}
+        initialTime={initialTime}
       />
     );
   }
