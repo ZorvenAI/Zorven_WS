@@ -237,7 +237,9 @@ class ProcessExecutor:
         keys = self._redis.keys_for(tenant_id)
         cov_key = keys.coverage(session_id)
         try:
-            raw = await self._redis.client.hgetall(cov_key)  # type: ignore[misc]
+            raw = await self._redis.client.hgetall(  # type: ignore[misc,unused-ignore]
+                cov_key
+            )
         except Exception:
             logger.warning(
                 "process_incremental_coverage_failed",
@@ -246,7 +248,7 @@ class ProcessExecutor:
             return None
         if not raw:
             return None
-        return dict(raw)
+        return {str(k): v for k, v in raw.items()}
 
     async def _callback(
         self,

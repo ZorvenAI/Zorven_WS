@@ -168,7 +168,9 @@ class EvidenceAssembler:
         q_key = keys.questions(session_id)
 
         try:
-            raw = await self._redis.client.hgetall(q_key)  # type: ignore[misc]
+            raw = await self._redis.client.hgetall(  # type: ignore[misc,unused-ignore]
+                q_key
+            )
         except Exception:
             logger.warning("evidence_redis_questions_failed", session_id=session_id)
             return {}
@@ -177,9 +179,11 @@ class EvidenceAssembler:
             return {}
 
         result: dict[str, dict[str, Any]] = {}
-        for qid, val in raw.items():
+        for raw_qid, raw_val in raw.items():
+            qid = str(raw_qid)
+            val = str(raw_val) if not isinstance(raw_val, str) else raw_val
             try:
-                result[qid] = json.loads(val) if isinstance(val, str) else val
+                result[qid] = json.loads(val)
             except (json.JSONDecodeError, TypeError):
                 continue
 
@@ -289,7 +293,7 @@ class EvidenceAssembler:
                 raw_items = await self._redis.client.zrange(key, 0, -1)
                 return [
                     OCRRetryItem.from_json(
-                        r.decode() if isinstance(r, bytes) else r
+                        r.decode() if isinstance(r, bytes) else str(r)
                     ).media_id
                     for r in raw_items
                 ]
