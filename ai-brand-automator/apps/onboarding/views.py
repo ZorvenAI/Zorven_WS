@@ -13,7 +13,7 @@ import json
 import uuid
 
 from django.db import IntegrityError
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.db import transaction as db_transaction
 from django.utils import timezone
 from rest_framework import mixins
@@ -2414,7 +2414,9 @@ def session_evidence(request, pk):
         return error
 
     session = (
-        OnboardingSession.objects.filter(pk=pk, tenant=tenant)
+        OnboardingSession.objects.filter(
+            Q(tenant=tenant) | Q(tenant__isnull=True), pk=pk
+        )
         .select_related("questionnaire")
         .first()
     )
@@ -2440,8 +2442,9 @@ def session_evidence(request, pk):
             }
         )
 
-    media_qs = BrandAsset.objects.filter(onboarding_session=session)
+    media_qs = list(BrandAsset.objects.filter(onboarding_session=session))
     media_data = []
+    ocr_pending_count = 0
     for asset in media_qs:
         media_data.append(
             {
@@ -2454,18 +2457,12 @@ def session_evidence(request, pk):
                 "rag_excluded": asset.rag_excluded,
             }
         )
-
-    ocr_pending_count = (
-        BrandAsset.objects.filter(
-            onboarding_session=session,
-            ocr_text__isnull=True,
-            ocr_confidence__isnull=True,
-        )
-        .exclude(
-            file_type="document",
-        )
-        .count()
-    )
+        if (
+            asset.ocr_text is None
+            and asset.ocr_confidence is None
+            and getattr(asset, "file_type", None) != "document"
+        ):
+            ocr_pending_count += 1
 
     questions_data = []
     if session.questionnaire:

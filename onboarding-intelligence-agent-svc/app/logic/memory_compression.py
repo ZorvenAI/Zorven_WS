@@ -80,21 +80,30 @@ async def _hierarchical_summarize(
         return blocks
 
     latest_time = _latest_timestamp(blocks)
-    cutoff_time = latest_time - cutoff_age_s if latest_time > 0 else 0
 
     recent: list[EvidenceBlock] = []
     older: list[EvidenceBlock] = []
 
-    for block in blocks:
-        if block.source_type != "transcript":
-            recent.append(block)
-            continue
-
-        block_time = _block_latest_time(block)
-        if block_time >= cutoff_time or block_time == 0:
-            recent.append(block)
+    if latest_time > 0:
+        cutoff_time = latest_time - cutoff_age_s
+        for block in blocks:
+            if block.source_type != "transcript":
+                recent.append(block)
+                continue
+            block_time = _block_latest_time(block)
+            if block_time >= cutoff_time:
+                recent.append(block)
+            else:
+                older.append(block)
+    else:
+        # No timestamps — keep last block as recent, compress the rest
+        transcripts = [b for b in blocks if b.source_type == "transcript"]
+        non_transcripts = [b for b in blocks if b.source_type != "transcript"]
+        if len(transcripts) > 1:
+            older = transcripts[:-1]
+            recent = non_transcripts + transcripts[-1:]
         else:
-            older.append(block)
+            recent = blocks
 
     if not older:
         return blocks

@@ -94,10 +94,9 @@ class EvidenceAssembler:
         token_estimate = self._estimate_tokens(blocks)
 
         if not self.rag_chunks:
-            logger.info(
+            logger.debug(
                 "rag_retrieval_not_implemented",
                 session_id=session_id,
-                detail="RAG chunks not included in evidence assembly",
             )
 
         evidence = AssembledEvidence(
@@ -256,27 +255,20 @@ class EvidenceAssembler:
         """Wait up to timeout_s for pending OCR items to complete.
 
         Returns media_ids of items still pending after the timeout.
+        Only polls queue_size — never dequeues, since the OCR retry
+        pipeline owns item lifecycle.
         """
-        from app.cache.retry_queue import dequeue_due
-
         keys = self._redis.keys_for(tenant_id)
-        deadline = asyncio.get_event_loop().time() + timeout_s
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_s
         poll_interval = 5.0
 
-        while asyncio.get_event_loop().time() < deadline:
+        while loop.time() < deadline:
             pending = await queue_size(self._redis.client, keys)
             if pending == 0:
                 return []
 
-            due = await dequeue_due(self._redis.client, keys)
-            if due:
-                logger.info(
-                    "evidence_ocr_dequeued",
-                    session_id=session_id,
-                    count=len(due),
-                )
-
-            remaining = deadline - asyncio.get_event_loop().time()
+            remaining = deadline - loop.time()
             if remaining <= 0:
                 break
             await asyncio.sleep(min(poll_interval, remaining))
@@ -317,7 +309,8 @@ class EvidenceAssembler:
         if django_data:
             blocks.extend(self._blocks_from_recordings(django_data))
             blocks.extend(self._blocks_from_media(django_data))
-            blocks.extend(self._blocks_from_questions(django_data, redis_questions))
+
+        blocks.extend(self._blocks_from_merged_questions())
 
         return blocks
 
@@ -407,27 +400,20 @@ class EvidenceAssembler:
 
         return blocks
 
-    def _blocks_from_questions(
-        self,
-        django_data: dict[str, Any],
-        redis_questions: dict[str, dict[str, Any]],
-    ) -> list[EvidenceBlock]:
-        """Build evidence blocks from answered questions."""
+    def _blocks_from_merged_questions(self) -> list[EvidenceBlock]:
+        """Build evidence blocks from the authoritative merged question list."""
         blocks: list[EvidenceBlock] = []
 
-        for q in django_data.get("questions", []):
+        for q in self._questions:
             status = q.get("status", "OPEN")
             if status != "GREEN":
                 continue
 
-            qid = str(q.get("id", ""))
-            rq = redis_questions.get(qid, {})
-
-            answer = rq.get("answer_summary") or q.get("answer_summary", "")
+            answer = q.get("answer_summary", "")
             if not answer:
                 continue
 
-            evidence_raw = rq.get("evidence") or q.get("evidence", [])
+            evidence_raw = q.get("evidence", [])
             spans: list[EvidenceSpan] = []
             if isinstance(evidence_raw, list):
                 for e in evidence_raw:
