@@ -201,7 +201,7 @@ class ProcessExecutor:
             from app.logic.field_types import WIZARD_PAGES
 
             extraction = ExtractionResult()
-            company_id: int | None = None
+            company_id = evidence.company_id
 
             if self._llm is not None and self._backend is not None:
                 # PG-01: emit plan before any tool call
@@ -214,14 +214,6 @@ class ProcessExecutor:
                     ),
                     step_budget=getattr(self._settings, "EXTRACTION_MAX_STEPS", 40),
                 )
-
-                # Fetch company_id from evidence endpoint response
-                django_evidence = await self._backend.get_session_evidence(
-                    tenant_id=tenant.tenant_id,
-                    session_id=session_id,
-                )
-                if django_evidence and isinstance(django_evidence, dict):
-                    company_id = django_evidence.get("company_id")
 
                 existing_provenance = await self._backend.get_existing_provenance(
                     tenant_id=tenant.tenant_id,

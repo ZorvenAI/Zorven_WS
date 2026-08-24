@@ -2482,8 +2482,6 @@ def session_evidence(request, pk):
                 }
             )
 
-    company = Company.objects.filter(Q(tenant=tenant) | Q(tenant__isnull=True)).first()
-
     return Response(
         {
             "recordings": recordings_data,
@@ -2491,7 +2489,7 @@ def session_evidence(request, pk):
             "questions": questions_data,
             "has_questionnaire": session.questionnaire is not None,
             "ocr_pending_count": ocr_pending_count,
-            "company_id": company.pk if company else None,
+            "company_id": session.company_id,
         },
         status=http.HTTP_200_OK,
     )
