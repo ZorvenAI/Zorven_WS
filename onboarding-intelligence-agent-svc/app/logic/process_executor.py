@@ -1,6 +1,6 @@
 """PROCESS mode job orchestration.
 
-Design §9.3 · implemented by story J-01.
+Design §9.3 · implemented by story J-01, evidence assembly by J-02.
 
 J-01 delivers the dispatch envelope, idempotency and lifecycle callback.
 J-02 fills in the actual extraction logic inside ``_run_job``.
@@ -17,6 +17,7 @@ from typing import Any, Literal
 from app.api.schemas import EvidenceManifest, ProcessResponse
 from app.cache.redis_manager import RedisManager, TTL_IDEMPOTENCY
 from app.core.logging import get_logger
+from app.providers.llm import LLMProvider
 from app.services.backend_client import BackendClient
 from app.skills.models import TenantContext
 
@@ -38,10 +39,12 @@ class ProcessExecutor:
         redis: RedisManager,
         backend: BackendClient | None = None,
         settings: Any = None,
+        llm: LLMProvider | None = None,
     ) -> None:
         self._redis = redis
         self._backend = backend
         self._settings = settings
+        self._llm = llm
         self._running_tasks: set[asyncio.Task[None]] = set()
 
     async def accept(
@@ -131,11 +134,7 @@ class ProcessExecutor:
         options: dict[str, Any],
         callback_url: str,
     ) -> None:
-        """Execute the PROCESS job and call back to Django.
-
-        J-01 delivers a stub that immediately succeeds. J-02 replaces the
-        body with real extraction logic.
-        """
+        """Execute the PROCESS job and call back to Django."""
         keys = self._redis.keys_for(tenant.tenant_id)
         job_key = keys.idempotency(f"process:job:{job_id}")
 
@@ -146,10 +145,63 @@ class ProcessExecutor:
                 ex=JOB_TTL,
             )
 
-            # J-02 replaces this with real extraction.
+            from app.logic.evidence_assembler import EvidenceAssembler
+            from app.logic.memory_compression import compress_if_needed
+            from app.logic.coverage import compute_coverage
+            from app.logic.coverage_crosscheck import crosscheck_coverage
+
+            assembler = EvidenceAssembler(
+                redis=self._redis,
+                backend=self._backend,
+                settings=self._settings,
+            )
+            evidence = await assembler.assemble(
+                tenant_id=tenant.tenant_id,
+                session_id=session_id,
+                manifest=manifest,
+            )
+
+            if self._llm is not None:
+                evidence.blocks, evidence.compressed = await compress_if_needed(
+                    evidence.blocks, self._llm, self._settings
+                )
+                if evidence.compressed:
+                    evidence.token_estimate = sum(
+                        len(b.text) // 4 for b in evidence.blocks
+                    )
+
+            question_states = assembler.question_states_for_coverage()
+            threshold = getattr(self._settings, "COVERAGE_GREEN_THRESHOLD", 0.7)
+            full_coverage = compute_coverage(question_states, threshold)
+
+            incremental = await self._load_incremental_coverage(
+                tenant.tenant_id, session_id
+            )
+            tolerance = getattr(self._settings, "COVERAGE_CROSSCHECK_TOLERANCE", 0.05)
+            differences = crosscheck_coverage(
+                full_coverage, incremental, tolerance=tolerance
+            )
+            for diff in differences:
+                logger.warning(
+                    "process_coverage_difference",
+                    job_id=job_id,
+                    workflow=diff.workflow,
+                    full_pct=diff.full_pct,
+                    incremental_pct=diff.incremental_pct,
+                    delta=diff.delta,
+                    cause=diff.cause,
+                )
+
             summary: dict[str, Any] = {
-                "extraction_complete": False,
-                "detail": "Stub: J-02 implements actual field extraction.",
+                "extraction_complete": True,
+                "evidence_blocks": len(evidence.blocks),
+                "compressed": evidence.compressed,
+                "token_estimate": evidence.token_estimate,
+                "missing_media": evidence.missing_media,
+                "coverage": full_coverage.as_map(),
+                "coverage_satisfied": full_coverage.satisfied,
+                "blocking_gaps": full_coverage.blocking_gaps,
+                "degraded_questions": evidence.degraded_question_ids,
             }
             cb_status = JOB_STATUS_SUCCEEDED
 
@@ -177,6 +229,26 @@ class ProcessExecutor:
                 status=cb_status,
                 summary=summary,
             )
+
+    async def _load_incremental_coverage(
+        self, tenant_id: str, session_id: str
+    ) -> dict[str, Any] | None:
+        """Load incremental coverage values stored by G-06 during LIVE."""
+        keys = self._redis.keys_for(tenant_id)
+        cov_key = keys.coverage(session_id)
+        try:
+            raw = await self._redis.client.hgetall(  # type: ignore[misc,unused-ignore]
+                cov_key
+            )
+        except Exception:
+            logger.warning(
+                "process_incremental_coverage_failed",
+                session_id=session_id,
+            )
+            return None
+        if not raw:
+            return None
+        return {str(k): v for k, v in raw.items()}
 
     async def _callback(
         self,
