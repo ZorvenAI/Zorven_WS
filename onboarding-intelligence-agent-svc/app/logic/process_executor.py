@@ -192,6 +192,89 @@ class ProcessExecutor:
                     cause=diff.cause,
                 )
 
+            # ── J-03: field extraction ────────────────────────────
+            from app.logic.field_extractor import (
+                ExtractionResult,
+                FieldExtractor,
+                StepBudgetExceeded,
+            )
+            from app.logic.field_types import WIZARD_PAGES
+
+            extraction = ExtractionResult()
+            company_id: int | None = None
+
+            if self._llm is not None and self._backend is not None:
+                # PG-01: emit plan before any tool call
+                logger.info(
+                    "pg01_plan_emitted",
+                    job_id=job_id,
+                    pages=sorted(WIZARD_PAGES.keys()),
+                    field_count=sum(
+                        len(fields) for _label, fields in WIZARD_PAGES.values()
+                    ),
+                    step_budget=getattr(self._settings, "EXTRACTION_MAX_STEPS", 40),
+                )
+
+                # Fetch company_id from evidence endpoint response
+                django_evidence = await self._backend.get_session_evidence(
+                    tenant_id=tenant.tenant_id,
+                    session_id=session_id,
+                )
+                if django_evidence and isinstance(django_evidence, dict):
+                    company_id = django_evidence.get("company_id")
+
+                existing_provenance = await self._backend.get_existing_provenance(
+                    tenant_id=tenant.tenant_id,
+                    session_id=session_id,
+                )
+
+                try:
+                    extractor = FieldExtractor(
+                        llm=self._llm,
+                        settings=self._settings,
+                    )
+                    extraction = await extractor.extract_all(
+                        evidence_blocks=evidence.blocks,
+                        existing_provenance=existing_provenance,
+                    )
+                except StepBudgetExceeded as exc:
+                    logger.error(
+                        "process_step_budget_exceeded",
+                        job_id=job_id,
+                        error=str(exc),
+                    )
+                    extraction = ExtractionResult()
+
+                # Write back to Django
+                if extraction.fields_written and company_id is not None:
+                    field_values = {
+                        f["field_name"]: f["value"] for f in extraction.fields_written
+                    }
+                    await self._backend.patch_company_fields(
+                        tenant_id=tenant.tenant_id,
+                        company_id=company_id,
+                        fields=field_values,
+                    )
+
+                    provenance_records = [
+                        {
+                            "model_name": f["model_name"],
+                            "field_name": f["field_name"],
+                            "extracted_value": f["value"],
+                            "confidence": f["confidence"],
+                            "classification": f["classification"],
+                            "source_span": (
+                                f["evidence"][0] if f["evidence"] else None
+                            ),
+                        }
+                        for f in extraction.fields_written
+                    ]
+                    await self._backend.create_provenance_bulk(
+                        tenant_id=tenant.tenant_id,
+                        session_id=session_id,
+                        records=provenance_records,
+                    )
+
             summary: dict[str, Any] = {
                 "extraction_complete": True,
                 "evidence_blocks": len(evidence.blocks),
@@ -202,6 +285,11 @@ class ProcessExecutor:
                 "coverage_satisfied": full_coverage.satisfied,
                 "blocking_gaps": full_coverage.blocking_gaps,
                 "degraded_questions": evidence.degraded_question_ids,
+                "fields_written": len(extraction.fields_written),
+                "fields_skipped": len(extraction.fields_skipped),
+                "conflicts": len(extraction.conflicts),
+                "dropped_ungrounded": extraction.dropped_ungrounded_total,
+                "steps_used": extraction.steps_used,
             }
             cb_status = JOB_STATUS_SUCCEEDED
 

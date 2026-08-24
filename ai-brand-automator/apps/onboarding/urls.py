@@ -17,9 +17,12 @@ from apps.onboarding.views import (
     QuestionnaireViewSet,
     ScheduledMeetingViewSet,
     ResearchBriefViewSet,
+    create_provenance_bulk,
     create_questionnaire,
     field_vocabulary,
+    get_session_provenance,
     live_precheck,
+    patch_company_fields,
     process_callback,
     session_evidence,
     update_recording_summary,
@@ -82,6 +85,24 @@ urlpatterns = [
         "internal/sessions/<pk>/evidence/",
         session_evidence,
         name="onboarding-session-evidence",
+    ),
+    # J-03: OIA writes extracted Company fields back.
+    path(
+        "internal/companies/<pk>/fields/",
+        patch_company_fields,
+        name="onboarding-company-fields-patch",
+    ),
+    # J-03: OIA bulk-creates FieldProvenance records.
+    path(
+        "internal/sessions/<pk>/provenance/bulk/",
+        create_provenance_bulk,
+        name="onboarding-provenance-bulk-create",
+    ),
+    # J-03: OIA reads existing FieldProvenance for PG-06 checks.
+    path(
+        "internal/sessions/<pk>/provenance/",
+        get_session_provenance,
+        name="onboarding-session-provenance",
     ),
     path("", include(router.urls)),
 ]

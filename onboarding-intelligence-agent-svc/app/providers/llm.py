@@ -120,12 +120,22 @@ class LLMProvider:
             self._client = self._owner.aio.models
         return self._client
 
-    async def generate(self, prompt: str, *, temperature: float = 0.2) -> str:
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        temperature: float = 0.2,
+        model: str | None = None,
+    ) -> str:
         """One completion.
 
         Temperature defaults low because every current caller is extracting or
         structuring facts, where invention is the failure mode. A caller that
         wants range should ask for it explicitly.
+
+        ``model`` overrides the instance default for this call only. J-03 uses
+        this to select gemini-2.0-flash for PROCESS extraction while the
+        fleet default stays gemini-3.5-flash.
         """
         if not self.configured:
             raise LLMUnavailable("no Gemini API key is configured")
@@ -138,9 +148,10 @@ class LLMProvider:
                 degraded_mode=exc.degraded_mode,
             ) from exc
 
+        effective_model = model or self._model_name
         try:
             response = await self._ensure_client().generate_content(
-                model=self._model_name,
+                model=effective_model,
                 contents=prompt,
                 config={"temperature": temperature},
             )

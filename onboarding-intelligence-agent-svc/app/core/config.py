@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     OCR_AWAIT_TIMEOUT_S: int = 30
     COVERAGE_CROSSCHECK_TOLERANCE: float = 0.05
 
+    # ── Extraction (J-03, Design §8.2 SKL-OIA-10) ──────────
+    PROCESS_MODEL: str = "gemini-2.0-flash"
+    EXTRACTION_MAX_STEPS: int = 40
+    EXTRACTION_TEMPERATURE: float = 0.1
+    EXTRACTION_RETRY_LIMIT: int = 1
+
     # ── Batcher (G-02, Design §4.3) ────────────────────────
     BATCH_WINDOW_S: float = 3.0
     BATCH_MIN_DURATION_S: float = 0.4
