@@ -31,6 +31,7 @@ class EvidenceBlock:
     spans: list[EvidenceSpan] = field(default_factory=list)
     source_type: str = "transcript"
     recording_id: str | None = None
+    media_id: str | None = None
     compressed: bool = False
     original_token_estimate: int = 0
 
@@ -48,6 +49,8 @@ class AssembledEvidence:
     compression_ratio: float = 1.0
     rag_chunks: list[EvidenceBlock] = field(default_factory=list)
     company_id: int | None = None
+    valid_recording_ids: set[str] = field(default_factory=set)
+    valid_media_ids: set[str] = field(default_factory=set)
 
 
 class EvidenceAssembler:
@@ -89,7 +92,9 @@ class EvidenceAssembler:
             )
             missing_media.extend(await_result)
 
-        blocks = self._build_blocks(django_data, redis_questions)
+        blocks, valid_rec_ids, valid_media_ids = self._build_blocks(
+            django_data, redis_questions
+        )
         degraded = self._mark_degraded_questions(questions)
 
         token_estimate = self._estimate_tokens(blocks)
@@ -112,6 +117,8 @@ class EvidenceAssembler:
             token_estimate=token_estimate,
             rag_chunks=[],
             company_id=company_id,
+            valid_recording_ids=valid_rec_ids,
+            valid_media_ids=valid_media_ids,
         )
 
         logger.info(
@@ -312,17 +319,29 @@ class EvidenceAssembler:
         self,
         django_data: dict[str, Any] | None,
         redis_questions: dict[str, dict[str, Any]],
-    ) -> list[EvidenceBlock]:
-        """Construct the evidence block list from all sources."""
+    ) -> tuple[list[EvidenceBlock], set[str], set[str]]:
+        """Construct the evidence block list and valid ID sets."""
         blocks: list[EvidenceBlock] = []
+        valid_recording_ids: set[str] = set()
+        valid_media_ids: set[str] = set()
 
         if django_data:
+            for rec in django_data.get("recordings", []):
+                rid = str(rec.get("id", ""))
+                if rid:
+                    valid_recording_ids.add(rid)
+
+            for media in django_data.get("media", []):
+                mid = str(media.get("id", ""))
+                if mid:
+                    valid_media_ids.add(mid)
+
             blocks.extend(self._blocks_from_recordings(django_data))
             blocks.extend(self._blocks_from_media(django_data))
 
         blocks.extend(self._blocks_from_merged_questions())
 
-        return blocks
+        return blocks, valid_recording_ids, valid_media_ids
 
     def _blocks_from_recordings(
         self, django_data: dict[str, Any]
@@ -398,12 +417,15 @@ class EvidenceAssembler:
             if media.get("rag_excluded", False):
                 continue
 
+            media_id = str(media.get("id", "")) or None
+
             blocks.append(
                 EvidenceBlock(
                     text=ocr_text.strip(),
                     spans=[],
                     source_type="media_ocr",
                     recording_id=None,
+                    media_id=media_id,
                     original_token_estimate=len(ocr_text) // 4,
                 )
             )

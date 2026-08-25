@@ -375,3 +375,85 @@ def test_og_01_is_registered_in_place_not_appended():
 
     assert chain.rules(Layer.OUTPUT) == before
     assert chain.rules(Layer.OUTPUT)[0] == "OG-01"
+
+
+# ── J-04: output guardrail enforcement ─────────────────────────────────
+
+
+def test_og01_resolves_not_just_presence():
+    """AC-1: a hallucinated recording_id with plausible timestamps is dropped."""
+    from app.logic.field_extractor import ExtractedField, FieldExtractor
+
+    candidates = [
+        ExtractedField(
+            field_name="name",
+            value="Chai Point",
+            confidence=0.95,
+            evidence=[{"recording_id": "fake-999", "t_start": 12.0, "t_end": 18.0}],
+            classification="KEY",
+        ),
+        ExtractedField(
+            field_name="industry",
+            value="Food & Beverage",
+            confidence=0.9,
+            evidence=[{"recording_id": "1", "t_start": 20.0, "t_end": 30.0}],
+            classification="KEY",
+        ),
+    ]
+
+    grounded, dropped = FieldExtractor._apply_grounding(
+        candidates,
+        valid_recording_ids={"1", "2", "3"},
+        valid_media_ids=set(),
+    )
+
+    assert "name" in dropped
+    assert len(grounded) == 1
+    assert grounded[0].field_name == "industry"
+
+
+def test_og03_forces_key_below_06():
+    """AC-3: confidence < 0.6 → forced to KEY regardless of field name."""
+    from app.logic.field_extractor import FieldExtractor
+
+    settings = type("S", (), {"OG03_KEY_CONFIDENCE_THRESHOLD": 0.6})()
+    extractor = FieldExtractor.__new__(FieldExtractor)
+    extractor._settings = settings
+
+    assert extractor._classify_field("founder_story", 0.55) == "KEY"
+    assert extractor._classify_field("founder_story", 0.60) == "SECONDARY"
+    assert extractor._classify_field("name", 0.55) == "KEY"
+    assert extractor._classify_field("name", 0.95) == "KEY"
+
+
+def test_og02_catches_reemitted_entity():
+    """AC-4: PII that was redacted on input re-emitted in output → caught."""
+    from app.logic.output_guardrails import og02_egress_redact
+
+    ctx = SkillContext(
+        input_prompt="hello",
+        tenant_context=TenantContext(tenant_id="t-1", role="ADMIN"),
+    )
+
+    verdict = og02_egress_redact("Contact jane@acme.com for details", ctx)
+
+    assert verdict.action is Action.REDACT
+    assert "jane@acme.com" not in verdict.payload
+
+
+def test_og05_cross_tenant_is_security_event():
+    """AC-5: a different tenant UUID in output → BLOCK verdict."""
+    from app.logic.output_guardrails import og05_tenant_isolation
+
+    own = "aaaaaaaa-1111-2222-3333-444444444444"
+    foreign = "bbbbbbbb-5555-6666-7777-888888888888"
+
+    ctx = SkillContext(
+        input_prompt="hello",
+        tenant_context=TenantContext(tenant_id=own, role="ADMIN"),
+    )
+
+    verdict = og05_tenant_isolation(f"Contact info: tenant {foreign}", ctx)
+
+    assert verdict.action is Action.BLOCK
+    assert foreign in verdict.detail

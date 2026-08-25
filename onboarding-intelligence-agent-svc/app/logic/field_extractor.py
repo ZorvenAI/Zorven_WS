@@ -11,6 +11,7 @@ one page does not lose the others (AC-5).
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,6 +23,31 @@ from app.logic.field_types import FIELD_TYPE_HINTS, KEY_FIELDS, WIZARD_PAGES
 from app.providers.llm import LLMProvider, LLMUnavailable
 
 logger = get_logger(__name__)
+
+_UUID_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+    re.IGNORECASE,
+)
+
+
+def _scan_for_foreign_tenant(value: Any, own_tenant_id: str) -> str | None:
+    """Recursively scan a value for UUID strings that aren't the own tenant."""
+    if isinstance(value, str):
+        for match in _UUID_RE.finditer(value):
+            found = match.group().lower()
+            if found != own_tenant_id.lower():
+                return found
+    elif isinstance(value, dict):
+        for v in value.values():
+            result = _scan_for_foreign_tenant(v, own_tenant_id)
+            if result is not None:
+                return result
+    elif isinstance(value, list):
+        for item in value:
+            result = _scan_for_foreign_tenant(item, own_tenant_id)
+            if result is not None:
+                return result
+    return None
 
 
 class StepBudgetExceeded(Exception):
@@ -82,6 +108,9 @@ class FieldExtractor:
         *,
         evidence_blocks: list[EvidenceBlock],
         existing_provenance: list[dict[str, Any]],
+        valid_recording_ids: set[str] | None = None,
+        valid_media_ids: set[str] | None = None,
+        tenant_id: str | None = None,
     ) -> ExtractionResult:
         """Run extraction across all wizard pages."""
         evidence_text = self._build_evidence_text(evidence_blocks)
@@ -103,7 +132,11 @@ class FieldExtractor:
                 evidence_text=evidence_text,
             )
 
-            grounded, dropped = self._apply_grounding(page_result.fields)
+            grounded, dropped = self._apply_grounding(
+                page_result.fields,
+                valid_recording_ids=valid_recording_ids,
+                valid_media_ids=valid_media_ids,
+            )
             page_result.fields = grounded
             page_result.dropped_ungrounded = dropped
             result.dropped_ungrounded_total += len(dropped)
@@ -128,6 +161,13 @@ class FieldExtractor:
                 )
 
             result.pages.append(page_result)
+
+        # OG-02: egress redaction — belt-and-braces with IG-04
+        self._apply_egress_redaction(result)
+
+        # OG-05: cross-tenant isolation check
+        if tenant_id:
+            self._check_tenant_isolation(result, tenant_id)
 
         result.steps_used = self._steps
         return result
@@ -287,7 +327,9 @@ class FieldExtractor:
                     value=candidate.value,
                     confidence=candidate.confidence,
                     evidence=evidence_dicts,
-                    classification=self._classify_field(candidate.field_name),
+                    classification=self._classify_field(
+                        candidate.field_name, candidate.confidence
+                    ),
                 )
             )
 
@@ -296,8 +338,15 @@ class FieldExtractor:
     @staticmethod
     def _apply_grounding(
         candidates: list[ExtractedField],
+        valid_recording_ids: set[str] | None = None,
+        valid_media_ids: set[str] | None = None,
     ) -> tuple[list[ExtractedField], list[str]]:
-        """OG-01: drop values without evidence references."""
+        """OG-01: drop values whose evidence does not resolve.
+
+        J-04 upgrade: when valid ID sets are provided, each evidence ref
+        is checked against them. A hallucinated recording_id with plausible
+        timestamps is dropped, not just an empty evidence list.
+        """
         grounded: list[ExtractedField] = []
         dropped: list[str] = []
 
@@ -310,6 +359,48 @@ class FieldExtractor:
                     detail="no evidence references",
                 )
                 continue
+
+            if valid_recording_ids is None and valid_media_ids is None:
+                grounded.append(f)
+                continue
+
+            resolved_refs: list[dict[str, Any]] = []
+            for ref in f.evidence:
+                rec_id = ref.get("recording_id")
+                med_id = ref.get("media_id")
+
+                if rec_id and valid_recording_ids is not None:
+                    if rec_id not in valid_recording_ids:
+                        logger.info(
+                            "og01_ref_unresolved",
+                            field=f.field_name,
+                            recording_id=rec_id,
+                            detail="recording_id not in session evidence",
+                        )
+                        continue
+
+                if med_id and valid_media_ids is not None:
+                    if med_id not in valid_media_ids:
+                        logger.info(
+                            "og01_ref_unresolved",
+                            field=f.field_name,
+                            media_id=med_id,
+                            detail="media_id not in session evidence",
+                        )
+                        continue
+
+                resolved_refs.append(ref)
+
+            if not resolved_refs:
+                dropped.append(f.field_name)
+                logger.info(
+                    "og01_grounding_drop",
+                    field=f.field_name,
+                    detail="all evidence refs failed resolution",
+                )
+                continue
+
+            f.evidence = resolved_refs
             grounded.append(f)
 
         return grounded, dropped
@@ -372,10 +463,65 @@ class FieldExtractor:
                 protected[key] = p
         return protected
 
-    @staticmethod
-    def _classify_field(field_name: str) -> str:
-        """OG-03: KEY fields gate review, SECONDARY do not."""
+    def _classify_field(self, field_name: str, confidence: float = 1.0) -> str:
+        """OG-03: KEY fields gate review, SECONDARY do not.
+
+        J-04: confidence below threshold forces KEY regardless of field name,
+        ensuring uncertain values go through mandatory review.
+        """
+        threshold = self._settings.OG03_KEY_CONFIDENCE_THRESHOLD
+        if confidence < threshold:
+            logger.info(
+                "og03_confidence_key_forcing",
+                field=field_name,
+                confidence=confidence,
+                threshold=threshold,
+            )
+            return "KEY"
         return "KEY" if field_name in KEY_FIELDS else "SECONDARY"
+
+    @staticmethod
+    def _apply_egress_redaction(result: "ExtractionResult") -> None:
+        """OG-02: re-apply PII redaction on egress values."""
+        from app.skills.redact_pii import redact_text
+
+        for entry in result.fields_written:
+            value = entry.get("value")
+            if isinstance(value, str):
+                redaction = redact_text(value)
+                if redaction.applied:
+                    logger.info(
+                        "og02_egress_redaction",
+                        field=entry.get("field_name"),
+                        entity_types=redaction.entity_types,
+                    )
+                    entry["value"] = redaction.text
+
+    @staticmethod
+    def _check_tenant_isolation(result: "ExtractionResult", tenant_id: str) -> None:
+        """OG-05: cross-tenant identifier in output → security BLOCK."""
+        from app.logic.guardrails import Action, GuardrailViolation, Verdict
+
+        for entry in result.fields_written:
+            value = entry.get("value")
+            foreign = _scan_for_foreign_tenant(value, tenant_id)
+            if foreign is not None:
+                logger.error(
+                    "og05_cross_tenant_block",
+                    field=entry.get("field_name"),
+                    foreign_tenant_id=foreign,
+                    detail="cross-tenant identifier in extraction output",
+                )
+                raise GuardrailViolation(
+                    Verdict(
+                        rule_id="OG-05",
+                        action=Action.BLOCK,
+                        detail=(
+                            f"cross-tenant identifier {foreign} found in "
+                            f"field {entry.get('field_name')}"
+                        ),
+                    )
+                )
 
     @staticmethod
     def _build_evidence_text(blocks: list[EvidenceBlock]) -> str:

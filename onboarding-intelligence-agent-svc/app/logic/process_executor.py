@@ -228,6 +228,9 @@ class ProcessExecutor:
                     extraction = await extractor.extract_all(
                         evidence_blocks=evidence.blocks,
                         existing_provenance=existing_provenance,
+                        valid_recording_ids=evidence.valid_recording_ids,
+                        valid_media_ids=evidence.valid_media_ids,
+                        tenant_id=tenant.tenant_id,
                     )
                 except StepBudgetExceeded as exc:
                     logger.error(

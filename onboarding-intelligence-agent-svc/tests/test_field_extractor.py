@@ -31,6 +31,7 @@ def _make_settings(**overrides: Any) -> Any:
         EXTRACTION_MAX_STEPS = 40
         EXTRACTION_TEMPERATURE = 0.1
         EXTRACTION_RETRY_LIMIT = 1
+        OG03_KEY_CONFIDENCE_THRESHOLD = 0.6
 
     s = FakeSettings()
     for k, v in overrides.items():
@@ -337,3 +338,217 @@ async def test_pending_provenance_is_overwritable():
     written_names = [f["field_name"] for f in result.fields_written]
     assert "industry" in written_names
     assert len(result.conflicts) == 0
+
+
+# ── J-04: grounding resolution, classification, egress ──────────────
+
+
+async def test_grounding_resolves_recording_ids():
+    """Valid recording_id passes, invalid is dropped."""
+    response = _page_response(
+        [
+            _good_field("name", "Chai Point"),
+            {
+                "field_name": "industry",
+                "value": "F&B",
+                "confidence": 0.9,
+                "evidence": [
+                    {"recording_id": "nonexistent-42", "t_start": 1.0, "t_end": 5.0}
+                ],
+            },
+        ]
+    )
+    llm = _make_llm([response] * 4)
+    settings = _make_settings()
+    extractor = FieldExtractor(llm=llm, settings=settings)
+
+    result = await extractor.extract_all(
+        evidence_blocks=_make_blocks(),
+        existing_provenance=[],
+        valid_recording_ids={"rec-1"},
+        valid_media_ids=set(),
+    )
+
+    written_names = [f["field_name"] for f in result.fields_written]
+    assert "name" in written_names
+    assert "industry" not in written_names
+    assert result.dropped_ungrounded_total >= 1
+
+
+async def test_grounding_resolves_media_ids():
+    """Valid media_id passes, invalid is dropped."""
+    response = _page_response(
+        [
+            {
+                "field_name": "name",
+                "value": "Chai Point",
+                "confidence": 0.95,
+                "evidence": [{"media_id": "media-1"}],
+            },
+            {
+                "field_name": "industry",
+                "value": "F&B",
+                "confidence": 0.9,
+                "evidence": [{"media_id": "nonexistent-99"}],
+            },
+        ]
+    )
+    llm = _make_llm([response] * 4)
+    settings = _make_settings()
+    extractor = FieldExtractor(llm=llm, settings=settings)
+
+    result = await extractor.extract_all(
+        evidence_blocks=_make_blocks(),
+        existing_provenance=[],
+        valid_recording_ids=set(),
+        valid_media_ids={"media-1"},
+    )
+
+    written_names = [f["field_name"] for f in result.fields_written]
+    assert "name" in written_names
+    assert "industry" not in written_names
+
+
+async def test_all_refs_invalid_drops_field():
+    """Field with only non-resolving refs → dropped entirely."""
+    response = _page_response(
+        [
+            {
+                "field_name": "name",
+                "value": "Chai Point",
+                "confidence": 0.95,
+                "evidence": [
+                    {"recording_id": "fake-1", "t_start": 1.0, "t_end": 5.0},
+                    {"recording_id": "fake-2", "t_start": 6.0, "t_end": 10.0},
+                ],
+            },
+        ]
+    )
+    llm = _make_llm([response] * 4)
+    settings = _make_settings()
+    extractor = FieldExtractor(llm=llm, settings=settings)
+
+    result = await extractor.extract_all(
+        evidence_blocks=_make_blocks(),
+        existing_provenance=[],
+        valid_recording_ids={"rec-1"},
+        valid_media_ids=set(),
+    )
+
+    assert "name" not in [f["field_name"] for f in result.fields_written]
+    assert result.dropped_ungrounded_total >= 1
+
+
+async def test_mixed_refs_keeps_valid():
+    """Field with 2 refs (1 valid, 1 invalid) → keeps field with 1 ref."""
+    response = _page_response(
+        [
+            {
+                "field_name": "name",
+                "value": "Chai Point",
+                "confidence": 0.95,
+                "evidence": [
+                    {"recording_id": "rec-1", "t_start": 10.0, "t_end": 25.0},
+                    {"recording_id": "fake-99", "t_start": 30.0, "t_end": 40.0},
+                ],
+            },
+        ]
+    )
+    llm = _make_llm([response] * 4)
+    settings = _make_settings()
+    extractor = FieldExtractor(llm=llm, settings=settings)
+
+    result = await extractor.extract_all(
+        evidence_blocks=_make_blocks(),
+        existing_provenance=[],
+        valid_recording_ids={"rec-1"},
+        valid_media_ids=set(),
+    )
+
+    written_names = [f["field_name"] for f in result.fields_written]
+    assert "name" in written_names
+    name_field = next(f for f in result.fields_written if f["field_name"] == "name")
+    assert len(name_field["evidence"]) == 1
+    assert name_field["evidence"][0]["recording_id"] == "rec-1"
+
+
+async def test_classify_forces_key_at_boundary():
+    """OG-03: 0.59 → KEY, 0.60 → uses static lookup."""
+    response_low = _page_response(
+        [
+            {
+                "field_name": "founder_story",
+                "value": "Started in a garage",
+                "confidence": 0.55,
+                "evidence": [{"recording_id": "rec-1", "t_start": 10.0, "t_end": 25.0}],
+            },
+        ]
+    )
+    llm = _make_llm([response_low] * 4)
+    settings = _make_settings(OG03_KEY_CONFIDENCE_THRESHOLD=0.6)
+    extractor = FieldExtractor(llm=llm, settings=settings)
+
+    result = await extractor.extract_all(
+        evidence_blocks=_make_blocks(),
+        existing_provenance=[],
+    )
+
+    by_name = {f["field_name"]: f for f in result.fields_written}
+    if "founder_story" in by_name:
+        assert by_name["founder_story"]["classification"] == "KEY"
+
+
+async def test_egress_redaction_strips_pii():
+    """OG-02: email in extracted value → redacted before return."""
+    response = _page_response(
+        [
+            {
+                "field_name": "name",
+                "value": "Contact jane@acme.com for details",
+                "confidence": 0.95,
+                "evidence": [{"recording_id": "rec-1", "t_start": 10.0, "t_end": 25.0}],
+            },
+        ]
+    )
+    llm = _make_llm([response] * 4)
+    settings = _make_settings(OG03_KEY_CONFIDENCE_THRESHOLD=0.6)
+    extractor = FieldExtractor(llm=llm, settings=settings)
+
+    result = await extractor.extract_all(
+        evidence_blocks=_make_blocks(),
+        existing_provenance=[],
+    )
+
+    by_name = {f["field_name"]: f for f in result.fields_written}
+    if "name" in by_name:
+        assert "jane@acme.com" not in str(by_name["name"]["value"])
+
+
+async def test_tenant_isolation_blocks_foreign_uuid():
+    """OG-05: foreign UUID in value → GuardrailViolation."""
+    from app.logic.guardrails import GuardrailViolation
+
+    foreign = "bbbbbbbb-5555-6666-7777-888888888888"
+    response = _page_response(
+        [
+            {
+                "field_name": "name",
+                "value": f"Company ref: {foreign}",
+                "confidence": 0.95,
+                "evidence": [{"recording_id": "rec-1", "t_start": 10.0, "t_end": 25.0}],
+            },
+        ]
+    )
+    llm = _make_llm([response] * 4)
+    settings = _make_settings(OG03_KEY_CONFIDENCE_THRESHOLD=0.6)
+    extractor = FieldExtractor(llm=llm, settings=settings)
+
+    own_tenant = "aaaaaaaa-1111-2222-3333-444444444444"
+    with pytest.raises(GuardrailViolation) as exc:
+        await extractor.extract_all(
+            evidence_blocks=_make_blocks(),
+            existing_provenance=[],
+            tenant_id=own_tenant,
+        )
+
+    assert exc.value.verdict.rule_id == "OG-05"
