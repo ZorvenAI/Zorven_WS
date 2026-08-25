@@ -327,14 +327,18 @@ class EvidenceAssembler:
 
         if django_data:
             for rec in django_data.get("recordings", []):
-                rid = str(rec.get("id", ""))
-                if rid:
-                    valid_recording_ids.add(rid)
+                raw_id = rec.get("id")
+                if raw_id is not None:
+                    rid = str(raw_id)
+                    if rid:
+                        valid_recording_ids.add(rid)
 
             for media in django_data.get("media", []):
-                mid = str(media.get("id", ""))
-                if mid:
-                    valid_media_ids.add(mid)
+                raw_id = media.get("id")
+                if raw_id is not None:
+                    mid = str(raw_id)
+                    if mid:
+                        valid_media_ids.add(mid)
 
             blocks.extend(self._blocks_from_recordings(django_data))
             blocks.extend(self._blocks_from_media(django_data))
@@ -417,7 +421,8 @@ class EvidenceAssembler:
             if media.get("rag_excluded", False):
                 continue
 
-            media_id = str(media.get("id", "")) or None
+            raw_mid = media.get("id")
+            media_id = str(raw_mid) if raw_mid is not None else None
 
             blocks.append(
                 EvidenceBlock(

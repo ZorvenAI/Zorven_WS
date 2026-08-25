@@ -11,7 +11,6 @@ one page does not lose the others (AC-5).
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -20,34 +19,10 @@ from app.core.config import Settings
 from app.core.logging import get_logger
 from app.logic.evidence_assembler import EvidenceBlock
 from app.logic.field_types import FIELD_TYPE_HINTS, KEY_FIELDS, WIZARD_PAGES
+from app.logic.output_guardrails import redact_value, scan_for_foreign_tenant
 from app.providers.llm import LLMProvider, LLMUnavailable
 
 logger = get_logger(__name__)
-
-_UUID_RE = re.compile(
-    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-    re.IGNORECASE,
-)
-
-
-def _scan_for_foreign_tenant(value: Any, own_tenant_id: str) -> str | None:
-    """Recursively scan a value for UUID strings that aren't the own tenant."""
-    if isinstance(value, str):
-        for match in _UUID_RE.finditer(value):
-            found = match.group().lower()
-            if found != own_tenant_id.lower():
-                return found
-    elif isinstance(value, dict):
-        for v in value.values():
-            result = _scan_for_foreign_tenant(v, own_tenant_id)
-            if result is not None:
-                return result
-    elif isinstance(value, list):
-        for item in value:
-            result = _scan_for_foreign_tenant(item, own_tenant_id)
-            if result is not None:
-                return result
-    return None
 
 
 class StepBudgetExceeded(Exception):
@@ -162,10 +137,11 @@ class FieldExtractor:
 
             result.pages.append(page_result)
 
-        # OG-02: egress redaction — belt-and-braces with IG-04
+        # OG-02: egress redaction — sole defense for PROCESS mode
+        # (IG-04 covers the PREP/LIVE chain path, not this one)
         self._apply_egress_redaction(result)
 
-        # OG-05: cross-tenant isolation check
+        # OG-05: cross-tenant isolation — sole defense for PROCESS mode
         if tenant_id:
             self._check_tenant_isolation(result, tenant_id)
 
@@ -369,25 +345,34 @@ class FieldExtractor:
                 rec_id = ref.get("recording_id")
                 med_id = ref.get("media_id")
 
-                if rec_id and valid_recording_ids is not None:
-                    if rec_id not in valid_recording_ids:
-                        logger.info(
-                            "og01_ref_unresolved",
-                            field=f.field_name,
-                            recording_id=rec_id,
-                            detail="recording_id not in session evidence",
-                        )
-                        continue
+                if not rec_id and not med_id:
+                    logger.info(
+                        "og01_ref_unresolved",
+                        field=f.field_name,
+                        detail="ref has no verifiable identifiers",
+                    )
+                    continue
 
-                if med_id and valid_media_ids is not None:
-                    if med_id not in valid_media_ids:
-                        logger.info(
-                            "og01_ref_unresolved",
-                            field=f.field_name,
-                            media_id=med_id,
-                            detail="media_id not in session evidence",
-                        )
-                        continue
+                rec_ok = (
+                    rec_id in valid_recording_ids
+                    if rec_id and valid_recording_ids is not None
+                    else bool(rec_id)
+                )
+                med_ok = (
+                    med_id in valid_media_ids
+                    if med_id and valid_media_ids is not None
+                    else bool(med_id)
+                )
+
+                if not rec_ok and not med_ok:
+                    logger.info(
+                        "og01_ref_unresolved",
+                        field=f.field_name,
+                        recording_id=rec_id,
+                        media_id=med_id,
+                        detail="no ID resolved against session evidence",
+                    )
+                    continue
 
                 resolved_refs.append(ref)
 
@@ -483,19 +468,15 @@ class FieldExtractor:
     @staticmethod
     def _apply_egress_redaction(result: "ExtractionResult") -> None:
         """OG-02: re-apply PII redaction on egress values."""
-        from app.skills.redact_pii import redact_text
-
         for entry in result.fields_written:
             value = entry.get("value")
-            if isinstance(value, str):
-                redaction = redact_text(value)
-                if redaction.applied:
-                    logger.info(
-                        "og02_egress_redaction",
-                        field=entry.get("field_name"),
-                        entity_types=redaction.entity_types,
-                    )
-                    entry["value"] = redaction.text
+            new_value, changed = redact_value(value)
+            if changed:
+                logger.info(
+                    "og02_egress_redaction",
+                    field=entry.get("field_name"),
+                )
+                entry["value"] = new_value
 
     @staticmethod
     def _check_tenant_isolation(result: "ExtractionResult", tenant_id: str) -> None:
@@ -504,7 +485,7 @@ class FieldExtractor:
 
         for entry in result.fields_written:
             value = entry.get("value")
-            foreign = _scan_for_foreign_tenant(value, tenant_id)
+            foreign = scan_for_foreign_tenant(value, tenant_id)
             if foreign is not None:
                 logger.error(
                     "og05_cross_tenant_block",
@@ -532,6 +513,8 @@ class FieldExtractor:
             header = f"[Evidence {i + 1} — {block.source_type}"
             if block.recording_id:
                 header += f", recording={block.recording_id}"
+            if block.media_id:
+                header += f", media={block.media_id}"
             header += "]"
 
             span_info = ""

@@ -524,6 +524,59 @@ async def test_egress_redaction_strips_pii():
         assert "jane@acme.com" not in str(by_name["name"]["value"])
 
 
+async def test_egress_redaction_handles_nested_json():
+    """OG-02: PII in nested JSON field values is also redacted."""
+    response = _page_response(
+        [
+            {
+                "field_name": "customer_proof",
+                "value": [{"text": "John at john@acme.com loved it"}],
+                "confidence": 0.9,
+                "evidence": [{"recording_id": "rec-1", "t_start": 10.0, "t_end": 25.0}],
+            },
+        ]
+    )
+    llm = _make_llm([response] * 4)
+    settings = _make_settings()
+    extractor = FieldExtractor(llm=llm, settings=settings)
+
+    result = await extractor.extract_all(
+        evidence_blocks=_make_blocks(),
+        existing_provenance=[],
+    )
+
+    by_name = {f["field_name"]: f for f in result.fields_written}
+    if "customer_proof" in by_name:
+        assert "john@acme.com" not in str(by_name["customer_proof"]["value"])
+
+
+async def test_grounding_rejects_ref_without_ids():
+    """Refs with only timestamps but no recording_id or media_id are dropped."""
+    response = _page_response(
+        [
+            {
+                "field_name": "name",
+                "value": "Chai Point",
+                "confidence": 0.95,
+                "evidence": [{"t_start": 1.0, "t_end": 5.0}],
+            },
+        ]
+    )
+    llm = _make_llm([response] * 4)
+    settings = _make_settings()
+    extractor = FieldExtractor(llm=llm, settings=settings)
+
+    result = await extractor.extract_all(
+        evidence_blocks=_make_blocks(),
+        existing_provenance=[],
+        valid_recording_ids={"rec-1"},
+        valid_media_ids=set(),
+    )
+
+    assert "name" not in [f["field_name"] for f in result.fields_written]
+    assert result.dropped_ungrounded_total >= 1
+
+
 async def test_tenant_isolation_blocks_foreign_uuid():
     """OG-05: foreign UUID in value → GuardrailViolation."""
     from app.logic.guardrails import GuardrailViolation

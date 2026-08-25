@@ -54,6 +54,19 @@ def test_og02_passes_clean_dict():
     assert verdict.action is Action.PASS
 
 
+def test_og02_redacts_nested_values():
+    """PII buried in nested dicts/lists is caught."""
+    payload = {
+        "testimonials": [
+            {"text": "Great service!", "contact": "jane@acme.com"},
+        ],
+    }
+    verdict = og02_egress_redact(payload, _ctx())
+
+    assert verdict.action is Action.REDACT
+    assert "jane@acme.com" not in str(verdict.payload)
+
+
 def test_og05_blocks_foreign_tenant():
     """Foreign UUID in output → BLOCK verdict with detail."""
     own = "aaaaaaaa-1111-2222-3333-444444444444"

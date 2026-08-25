@@ -412,6 +412,55 @@ def test_og01_resolves_not_just_presence():
     assert grounded[0].field_name == "industry"
 
 
+def test_og01_rejects_ref_without_any_id():
+    """A ref with only t_start/t_end but no recording_id or media_id is dropped."""
+    from app.logic.field_extractor import ExtractedField, FieldExtractor
+
+    candidates = [
+        ExtractedField(
+            field_name="name",
+            value="Chai Point",
+            confidence=0.95,
+            evidence=[{"t_start": 1.0, "t_end": 5.0}],
+            classification="KEY",
+        ),
+    ]
+
+    grounded, dropped = FieldExtractor._apply_grounding(
+        candidates,
+        valid_recording_ids={"1"},
+        valid_media_ids=set(),
+    )
+
+    assert "name" in dropped
+    assert len(grounded) == 0
+
+
+def test_og01_or_semantics_valid_rec_invalid_med():
+    """A ref with valid recording_id but invalid media_id still passes."""
+    from app.logic.field_extractor import ExtractedField, FieldExtractor
+
+    candidates = [
+        ExtractedField(
+            field_name="name",
+            value="Chai Point",
+            confidence=0.95,
+            evidence=[{"recording_id": "1", "media_id": "bad-99"}],
+            classification="KEY",
+        ),
+    ]
+
+    grounded, dropped = FieldExtractor._apply_grounding(
+        candidates,
+        valid_recording_ids={"1"},
+        valid_media_ids={"m-1"},
+    )
+
+    assert len(grounded) == 1
+    assert grounded[0].field_name == "name"
+    assert len(dropped) == 0
+
+
 def test_og03_forces_key_below_06():
     """AC-3: confidence < 0.6 → forced to KEY regardless of field name."""
     from app.logic.field_extractor import FieldExtractor
