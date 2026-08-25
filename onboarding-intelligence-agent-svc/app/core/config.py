@@ -92,6 +92,9 @@ class Settings(BaseSettings):
     EXTRACTION_TEMPERATURE: float = 0.1
     EXTRACTION_RETRY_LIMIT: int = 1
 
+    # ── Output guardrails (J-04, Design §5.3 OG-03) ──────
+    OG03_KEY_CONFIDENCE_THRESHOLD: float = 0.6
+
     # ── Batcher (G-02, Design §4.3) ────────────────────────
     BATCH_WINDOW_S: float = 3.0
     BATCH_MIN_DURATION_S: float = 0.4

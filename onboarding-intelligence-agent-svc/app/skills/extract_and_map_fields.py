@@ -40,9 +40,15 @@ class ExtractAndMapFields(BaseSkill):
         evidence_blocks = context.input_context.get("evidence_blocks", [])
         existing_provenance = context.input_context.get("existing_provenance", [])
 
+        raw_rec = context.input_context.get("valid_recording_ids")
+        raw_med = context.input_context.get("valid_media_ids")
+
         result: ExtractionResult = await extractor.extract_all(
             evidence_blocks=evidence_blocks,
             existing_provenance=existing_provenance,
+            valid_recording_ids=set(raw_rec) if raw_rec else None,
+            valid_media_ids=set(raw_med) if raw_med else None,
+            tenant_id=context.tenant_context.tenant_id,
         )
 
         key_count = sum(

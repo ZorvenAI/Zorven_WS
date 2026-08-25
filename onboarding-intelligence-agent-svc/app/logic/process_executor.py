@@ -17,6 +17,7 @@ from typing import Any, Literal
 from app.api.schemas import EvidenceManifest, ProcessResponse
 from app.cache.redis_manager import RedisManager, TTL_IDEMPOTENCY
 from app.core.logging import get_logger
+from app.logic.guardrails import GuardrailViolation
 from app.providers.llm import LLMProvider
 from app.services.backend_client import BackendClient
 from app.skills.models import TenantContext
@@ -228,6 +229,9 @@ class ProcessExecutor:
                     extraction = await extractor.extract_all(
                         evidence_blocks=evidence.blocks,
                         existing_provenance=existing_provenance,
+                        valid_recording_ids=evidence.valid_recording_ids,
+                        valid_media_ids=evidence.valid_media_ids,
+                        tenant_id=tenant.tenant_id,
                     )
                 except StepBudgetExceeded as exc:
                     logger.error(
@@ -236,6 +240,15 @@ class ProcessExecutor:
                         error=str(exc),
                     )
                     extraction = ExtractionResult()
+                except GuardrailViolation as exc:
+                    logger.error(
+                        "process_guardrail_violation",
+                        job_id=job_id,
+                        rule_id=exc.verdict.rule_id,
+                        action=exc.verdict.action.value,
+                        detail=exc.verdict.detail,
+                    )
+                    raise
 
                 # Write back to Django
                 if extraction.fields_written and company_id is not None:
@@ -284,6 +297,25 @@ class ProcessExecutor:
                 "steps_used": extraction.steps_used,
             }
             cb_status = JOB_STATUS_SUCCEEDED
+
+        except GuardrailViolation as exc:
+            logger.error(
+                "process_guardrail_block",
+                job_id=job_id,
+                session_id=session_id,
+                rule_id=exc.verdict.rule_id,
+                action=exc.verdict.action.value,
+                detail=exc.verdict.detail,
+            )
+            summary = {
+                "error": str(exc),
+                "guardrail_violation": {
+                    "rule_id": exc.verdict.rule_id,
+                    "action": exc.verdict.action.value,
+                    "detail": exc.verdict.detail,
+                },
+            }
+            cb_status = JOB_STATUS_FAILED
 
         except Exception as exc:
             logger.error(

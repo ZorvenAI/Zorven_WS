@@ -132,9 +132,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from app.logic.guardrails import Layer
     from app.skills.redact_pii import _ensure_engines, ig04_redact
     from app.logic.green_signal_integrity import og06_green_signal_integrity
+    from app.logic.output_guardrails import og02_egress_redact, og05_tenant_isolation
 
     _ensure_engines()
     app.state.prep.registry.chain.register(Layer.INPUT, "IG-04", ig04_redact)
+    app.state.prep.registry.chain.register(Layer.OUTPUT, "OG-02", og02_egress_redact)
+    app.state.prep.registry.chain.register(Layer.OUTPUT, "OG-05", og05_tenant_isolation)
     app.state.prep.registry.chain.register(
         Layer.OUTPUT, "OG-06", og06_green_signal_integrity
     )
@@ -155,6 +158,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.skill_registry.load()
     app.state.skill_registry.chain.register(Layer.INPUT, "IG-04", ig04_redact)
+    app.state.skill_registry.chain.register(Layer.OUTPUT, "OG-02", og02_egress_redact)
+    app.state.skill_registry.chain.register(
+        Layer.OUTPUT, "OG-05", og05_tenant_isolation
+    )
 
     from app.logic.pg08 import pg08_sensitive_media
 
