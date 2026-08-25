@@ -194,6 +194,7 @@ IMPLEMENTED_BODIES = {
     "app.skills.analyze_captured_media",  # H-03: SKL-OIA-07
     "app.skills.summarize_recording",  # I-02: SKL-OIA-08
     "app.skills.extract_and_map_fields",  # J-03: SKL-OIA-10
+    "app.skills.surface_conflicts_and_escalate",  # J-05: SKL-OIA-14
 }
 
 

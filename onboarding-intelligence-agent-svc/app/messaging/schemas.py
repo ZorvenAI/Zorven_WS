@@ -85,6 +85,20 @@ class ProcessResult(BaseModel):
     duration_ms: int = 0
 
 
+class ConflictCandidate(BaseModel):
+    """One side of a field conflict — existing or new.
+
+    ``evidence_ref`` is a formatted pointer (e.g. ``recording:rec-1:12.5-18.3``
+    or ``media:42``), never the actual extracted value. Values live in the
+    FieldProvenance rows in Django.
+    """
+
+    source: Literal["existing", "new"]
+    evidence_ref: str
+    confidence: float | None = None
+    classification: str | None = None
+
+
 class EscalationMessage(BaseModel):
     """SKL-OIA-14 output — a conflict or low-confidence case for a human."""
 
@@ -95,6 +109,8 @@ class EscalationMessage(BaseModel):
     field_name: str | None = None
     confidence: float | None = None
     requires_role: str = "Admin"
+    candidates: list[ConflictCandidate] = Field(default_factory=list)
+    context_ref: str | None = None
 
 
 class GoldenCandidate(BaseModel):
