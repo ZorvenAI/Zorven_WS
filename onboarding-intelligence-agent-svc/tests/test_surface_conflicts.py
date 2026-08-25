@@ -70,7 +70,7 @@ async def test_skill_returns_escalation_payload():
     assert first["field_name"] == "name"
     assert first["reason_code"] == "FIELD_CONFLICT"
     assert first["candidate_count"] == 2
-    assert "escalation_id" in first
+    assert "escalation_id" not in first
 
 
 async def test_skill_empty_conflicts():

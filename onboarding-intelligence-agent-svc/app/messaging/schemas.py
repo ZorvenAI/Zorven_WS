@@ -65,7 +65,7 @@ class ProcessSummary(BaseModel):
     key_count: int = 0
     secondary_count: int = 0
     dropped_ungrounded: int = 0
-    conflicts: int = 0
+    conflicts: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ErrorDetail(BaseModel):

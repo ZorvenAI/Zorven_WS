@@ -2601,6 +2601,24 @@ def create_provenance_bulk(request, pk):
             ).first()
 
             if existing and existing.status in PROTECTED_STATUSES:
+                incoming_status = record.get("status", "")
+                if incoming_status == ProvenanceStatus.CONFLICT:
+                    # J-05: OIA explicitly signals a conflict — mark the
+                    # existing record so K-02's review queue can find it.
+                    # Values stay untouched (AC-3).
+                    existing.status = ProvenanceStatus.CONFLICT
+                    existing.save(update_fields=["status", "updated_at"])
+                    conflicts.append(
+                        {
+                            "field_name": field_name,
+                            "existing_status": existing.status,
+                            "existing_value": existing.extracted_value,
+                            "new_value": record.get("extracted_value"),
+                            "marked": True,
+                        }
+                    )
+                    updated_count += 1
+                    continue
                 skipped.append(
                     {
                         "field_name": field_name,

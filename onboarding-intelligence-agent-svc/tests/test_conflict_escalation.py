@@ -15,7 +15,8 @@ import pytest
 
 from app.events.catalog import FORBIDDEN_PAYLOAD_KEYS
 from app.logic.field_extractor import ExtractedField, FieldExtractor
-from app.logic.process_executor import ProcessExecutor, _format_evidence_ref
+from app.logic.conflict_helpers import format_evidence_ref
+from app.logic.process_executor import ProcessExecutor
 from app.messaging.schemas import ConflictCandidate, EscalationMessage
 
 pytestmark = pytest.mark.unit
@@ -231,23 +232,21 @@ def test_escalation_message_serialises_without_values():
     assert "New Corp" not in flat
 
 
-# ── _format_evidence_ref ────────────────────────────────────────────────
+# ── format_evidence_ref ────────────────────────────────────────────────
 
 
-def test_format_evidence_ref_recording():
-    ref = _format_evidence_ref(
-        {"recording_id": "rec-1", "t_start": 12.5, "t_end": 18.3}
-    )
+def testformat_evidence_ref_recording():
+    ref = format_evidence_ref({"recording_id": "rec-1", "t_start": 12.5, "t_end": 18.3})
     assert ref == "recording:rec-1:12.5-18.3"
 
 
-def test_format_evidence_ref_media():
-    ref = _format_evidence_ref({"media_id": "42"})
+def testformat_evidence_ref_media():
+    ref = format_evidence_ref({"media_id": "42"})
     assert ref == "media:42"
 
 
-def test_format_evidence_ref_unknown():
-    ref = _format_evidence_ref({})
+def testformat_evidence_ref_unknown():
+    ref = format_evidence_ref({})
     assert ref == "unknown"
 
 

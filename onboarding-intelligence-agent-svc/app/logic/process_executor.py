@@ -21,6 +21,7 @@ from app.events.catalog import EventType
 from app.events.emitter import EventEmitter
 from app.logic.guardrails import GuardrailViolation
 from app.messaging.producer import KafkaProducer
+from app.logic.conflict_helpers import build_candidates, format_evidence_ref
 from app.messaging.schemas import ConflictCandidate, EscalationMessage
 from app.messaging.topics import ESCALATIONS, message_key
 from app.providers.llm import LLMProvider
@@ -29,18 +30,8 @@ from app.skills.models import TenantContext
 
 logger = get_logger(__name__)
 
-
-def _format_evidence_ref(span: dict[str, Any]) -> str:
-    """Format an evidence span as a reference pointer, never including text."""
-    rec_id = span.get("recording_id")
-    med_id = span.get("media_id")
-    if rec_id:
-        t_start = span.get("t_start", "")
-        t_end = span.get("t_end", "")
-        return f"recording:{rec_id}:{t_start}-{t_end}"
-    if med_id:
-        return f"media:{med_id}"
-    return "unknown"
+# Re-export for test compatibility
+_format_evidence_ref = format_evidence_ref
 
 
 JOB_TTL = 3600
@@ -386,6 +377,10 @@ class ProcessExecutor:
         job_id: str,
     ) -> None:
         """J-05: create CONFLICT provenance, publish escalations, emit EVT-007."""
+        # Fail-fast: parse UUIDs before any writes to avoid partial state
+        tenant_uuid = uuid.UUID(tenant.tenant_id)
+        session_uuid = uuid.UUID(session_id) if session_id else None
+
         # 1. Create CONFLICT provenance records
         if self._backend is not None:
             conflict_provenance = [
@@ -410,10 +405,10 @@ class ProcessExecutor:
 
         # 2. Build and publish EscalationMessages
         for c in conflicts:
-            candidates = self._build_candidates(c)
+            candidates = build_candidates(c)
             msg = EscalationMessage(
-                tenant_id=uuid.UUID(tenant.tenant_id),
-                session_id=uuid.UUID(session_id) if session_id else None,
+                tenant_id=tenant_uuid,
+                session_id=session_uuid,
                 reason_code="FIELD_CONFLICT",
                 field_name=c["field_name"],
                 confidence=c.get("new_confidence"),
@@ -463,38 +458,8 @@ class ProcessExecutor:
 
     @staticmethod
     def _build_candidates(conflict: dict[str, Any]) -> list[ConflictCandidate]:
-        """Build ConflictCandidate list from an enriched conflict dict."""
-        candidates: list[ConflictCandidate] = []
-
-        existing_span = conflict.get("existing_source_span")
-        if existing_span:
-            ref = _format_evidence_ref(existing_span)
-        else:
-            ref = f"provenance:{conflict['field_name']}"
-        candidates.append(
-            ConflictCandidate(
-                source="existing",
-                evidence_ref=ref,
-                confidence=conflict.get("existing_confidence"),
-            )
-        )
-
-        new_evidence = conflict.get("new_evidence", [])
-        new_ref = (
-            _format_evidence_ref(new_evidence[0])
-            if new_evidence
-            else f"extraction:{conflict['field_name']}"
-        )
-        candidates.append(
-            ConflictCandidate(
-                source="new",
-                evidence_ref=new_ref,
-                confidence=conflict.get("new_confidence"),
-                classification=conflict.get("new_classification"),
-            )
-        )
-
-        return candidates
+        """Delegate to shared helper. Kept as static method for test compat."""
+        return build_candidates(conflict)
 
     @staticmethod
     def _sanitise_conflicts(
