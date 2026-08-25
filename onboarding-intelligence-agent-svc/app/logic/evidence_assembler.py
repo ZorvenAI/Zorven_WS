@@ -47,6 +47,7 @@ class AssembledEvidence:
     compressed: bool = False
     compression_ratio: float = 1.0
     rag_chunks: list[EvidenceBlock] = field(default_factory=list)
+    company_id: int | None = None
 
 
 class EvidenceAssembler:
@@ -99,6 +100,10 @@ class EvidenceAssembler:
                 session_id=session_id,
             )
 
+        company_id = None
+        if django_data and isinstance(django_data, dict):
+            company_id = django_data.get("company_id")
+
         evidence = AssembledEvidence(
             blocks=blocks,
             questions=questions,
@@ -106,6 +111,7 @@ class EvidenceAssembler:
             degraded_question_ids=degraded,
             token_estimate=token_estimate,
             rag_chunks=[],
+            company_id=company_id,
         )
 
         logger.info(

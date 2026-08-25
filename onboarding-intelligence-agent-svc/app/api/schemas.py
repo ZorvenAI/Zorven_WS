@@ -356,3 +356,30 @@ class ProcessResponse(BaseModel):
     status: Literal["ACCEPTED", "RUNNING", "SUCCEEDED", "FAILED"]
     estimated_duration_s: int = 300
     callback_url: str = ""
+
+
+# ── Field extraction (J-03, Design §8.2 SKL-OIA-10) ─────────────────
+
+
+class EvidenceRef(BaseModel):
+    """A pointer to the evidence a field value was extracted from."""
+
+    recording_id: str | None = None
+    t_start: float | None = None
+    t_end: float | None = None
+    media_id: str | None = None
+
+
+class FieldCandidate(BaseModel):
+    """One field extracted by the LLM, before grounding and PG-06 checks."""
+
+    field_name: str
+    value: Any
+    confidence: float = Field(ge=0, le=1)
+    evidence: list[EvidenceRef]
+
+
+class PageExtractionResponse(BaseModel):
+    """The shape the LLM is instructed to return per wizard page."""
+
+    fields: list[FieldCandidate]

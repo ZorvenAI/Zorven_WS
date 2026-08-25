@@ -37,6 +37,13 @@ RECORDING_SUMMARY_PATH = (
     "/api/v1/onboarding/internal/recordings/{recording_id}/summary/"
 )
 SESSION_EVIDENCE_PATH = "/api/v1/onboarding/internal/sessions/{session_id}/evidence/"
+COMPANY_FIELDS_PATH = "/api/v1/onboarding/internal/companies/{company_id}/fields/"
+PROVENANCE_BULK_PATH = (
+    "/api/v1/onboarding/internal/sessions/{session_id}/provenance/bulk/"
+)
+EXISTING_PROVENANCE_PATH = (
+    "/api/v1/onboarding/internal/sessions/{session_id}/provenance/"
+)
 UPSERT_PATH = "/api/v1/onboarding/research-briefs/upsert/"
 QUESTIONNAIRE_PATH = "/api/v1/onboarding/questionnaires/generate/"
 VOCABULARY_PATH = "/api/v1/onboarding/field-vocabulary/"
@@ -350,3 +357,39 @@ class BackendClient:
             tenant_id=tenant_id,
         )
         return body is not None
+
+    async def patch_company_fields(
+        self,
+        *,
+        tenant_id: str,
+        company_id: int,
+        fields: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """PATCH Company fields back to Django (J-03)."""
+        path = COMPANY_FIELDS_PATH.format(company_id=company_id)
+        return await self._patch(path, fields, tenant_id=tenant_id)
+
+    async def create_provenance_bulk(
+        self,
+        *,
+        tenant_id: str,
+        session_id: str,
+        records: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        """Bulk-create FieldProvenance records (J-03)."""
+        path = PROVENANCE_BULK_PATH.format(session_id=session_id)
+        return await self._post(path, {"records": records}, tenant_id=tenant_id)
+
+    async def get_existing_provenance(
+        self,
+        *,
+        tenant_id: str,
+        session_id: str,
+    ) -> list[dict[str, Any]]:
+        """Fetch existing FieldProvenance for PG-06 checks (J-03)."""
+        path = EXISTING_PROVENANCE_PATH.format(session_id=session_id)
+        body = await self._get(path, tenant_id=tenant_id)
+        if body is None or body.get("__status__") == 404:
+            return []
+        records = body.get("records", [])
+        return records if isinstance(records, list) else []

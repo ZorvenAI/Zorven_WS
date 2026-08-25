@@ -58,6 +58,7 @@ from apps.onboarding.events import (
     emit_provenance_reviewed,
 )
 from apps.onboarding.models import (
+    PROTECTED_STATUSES,
     ConsentRecord,
     FieldClassification,
     FieldProvenance,
@@ -2488,6 +2489,240 @@ def session_evidence(request, pk):
             "questions": questions_data,
             "has_questionnaire": session.questionnaire is not None,
             "ocr_pending_count": ocr_pending_count,
+            "company_id": session.company_id,
         },
+        status=http.HTTP_200_OK,
+    )
+
+
+@api_view(["PATCH"])
+@permission_classes([AllowAny])
+def patch_company_fields(request, pk):
+    """``PATCH /api/v1/onboarding/internal/companies/<pk>/fields/``
+
+    OIA writes extracted Company fields back. X-Service-Token auth.
+    Only accepts fields in ``all_mapped_fields()``.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "") or decouple_config(
+        "OIA_SERVICE_TOKEN", default=""
+    )
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    tenant, error = _service_tenant(request)
+    if error is not None:
+        return error
+
+    company = Company.objects.filter(
+        Q(tenant=tenant) | Q(tenant__isnull=True), pk=pk
+    ).first()
+    if company is None:
+        return Response(
+            {"error": "Company not found"},
+            status=http.HTTP_404_NOT_FOUND,
+        )
+
+    from onboarding.serializers import CompanyUpdateSerializer
+
+    mapped = all_mapped_fields()
+    accepted_data = {k: v for k, v in request.data.items() if k in mapped}
+    rejected = [k for k in request.data if k not in mapped and k != "id"]
+    if rejected:
+        logger.warning("patch_company_fields_rejected_fields: %s", rejected)
+
+    serializer = CompanyUpdateSerializer(company, data=accepted_data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+
+    return Response(
+        {"fields_written": list(accepted_data.keys())},
+        status=http.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def create_provenance_bulk(request, pk):
+    """``POST /api/v1/onboarding/internal/sessions/<pk>/provenance/bulk/``
+
+    OIA bulk-creates FieldProvenance records. X-Service-Token auth.
+    Enforces PG-06: EDITED/CONFIRMED rows are never overwritten.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "") or decouple_config(
+        "OIA_SERVICE_TOKEN", default=""
+    )
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    tenant, error = _service_tenant(request)
+    if error is not None:
+        return error
+
+    session = OnboardingSession.objects.filter(
+        Q(tenant=tenant) | Q(tenant__isnull=True), pk=pk
+    ).first()
+    if session is None:
+        return Response(
+            {"error": "Session not found"},
+            status=http.HTTP_404_NOT_FOUND,
+        )
+
+    records = request.data.get("records", [])
+    if not isinstance(records, list):
+        return Response(
+            {"error": "'records' must be a list"},
+            status=http.HTTP_400_BAD_REQUEST,
+        )
+
+    created_count = 0
+    updated_count = 0
+    skipped = []
+    conflicts = []
+
+    with db_transaction.atomic():
+        for record in records:
+            model_name = record.get("model_name", "Company")
+            field_name = record.get("field_name", "")
+            if not field_name:
+                continue
+
+            existing = FieldProvenance.objects.filter(
+                session=session,
+                model_name=model_name,
+                field_name=field_name,
+            ).first()
+
+            if existing and existing.status in PROTECTED_STATUSES:
+                skipped.append(
+                    {
+                        "field_name": field_name,
+                        "reason": "protected",
+                        "status": existing.status,
+                    }
+                )
+                conflicts.append(
+                    {
+                        "field_name": field_name,
+                        "existing_status": existing.status,
+                        "existing_value": existing.extracted_value,
+                        "new_value": record.get("extracted_value"),
+                    }
+                )
+                continue
+
+            source_span = record.get("source_span")
+            source_recording_id = record.get("source_recording_id")
+            source_media_id = record.get("source_media_id")
+
+            source_recording = None
+            if source_recording_id:
+                source_recording = MeetingRecording.objects.filter(
+                    pk=source_recording_id
+                ).first()
+
+            source_media = None
+            if source_media_id:
+                source_media = BrandAsset.objects.filter(pk=source_media_id).first()
+
+            if existing:
+                existing.extracted_value = record.get("extracted_value")
+                existing.confidence = record.get("confidence")
+                existing.classification = record.get("classification", "SECONDARY")
+                existing.source_span = source_span
+                existing.source_recording = source_recording
+                existing.source_media = source_media
+                existing.status = ProvenanceStatus.PENDING
+                existing.save(
+                    update_fields=[
+                        "extracted_value",
+                        "confidence",
+                        "classification",
+                        "source_span",
+                        "source_recording",
+                        "source_media",
+                        "status",
+                        "updated_at",
+                    ]
+                )
+                updated_count += 1
+            else:
+                FieldProvenance.objects.create(
+                    tenant=tenant,
+                    session=session,
+                    model_name=model_name,
+                    field_name=field_name,
+                    extracted_value=record.get("extracted_value"),
+                    confidence=record.get("confidence"),
+                    classification=record.get("classification", "SECONDARY"),
+                    source_span=source_span,
+                    source_recording=source_recording,
+                    source_media=source_media,
+                    status=ProvenanceStatus.PENDING,
+                )
+                created_count += 1
+
+    return Response(
+        {
+            "created": created_count,
+            "updated": updated_count,
+            "skipped": skipped,
+            "conflicts": conflicts,
+        },
+        status=http.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_session_provenance(request, pk):
+    """``GET /api/v1/onboarding/internal/sessions/<pk>/provenance/``
+
+    OIA fetches existing FieldProvenance for PG-06 checks before writing.
+    X-Service-Token auth.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "") or decouple_config(
+        "OIA_SERVICE_TOKEN", default=""
+    )
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    tenant, error = _service_tenant(request)
+    if error is not None:
+        return error
+
+    session = OnboardingSession.objects.filter(
+        Q(tenant=tenant) | Q(tenant__isnull=True), pk=pk
+    ).first()
+    if session is None:
+        return Response(
+            {"error": "Session not found"},
+            status=http.HTTP_404_NOT_FOUND,
+        )
+
+    provenance_qs = FieldProvenance.objects.filter(session=session)
+    records = [
+        {
+            "field_name": p.field_name,
+            "model_name": p.model_name,
+            "status": p.status,
+            "extracted_value": p.extracted_value,
+        }
+        for p in provenance_qs
+    ]
+
+    return Response(
+        {"records": records},
         status=http.HTTP_200_OK,
     )
