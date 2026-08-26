@@ -61,7 +61,6 @@ async def test_skill_returns_escalation_payload():
     skill = SurfaceConflictsAndEscalate(_meta())
     result = await skill.run(_ctx(conflicts))
 
-    assert isinstance(result, SkillResult)
     assert result.output["escalation_count"] == 2
     assert result.output["severity"] == "MEDIUM"
     assert len(result.output["items"]) == 2

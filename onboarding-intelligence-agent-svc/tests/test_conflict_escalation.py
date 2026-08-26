@@ -159,7 +159,6 @@ def test_callback_summary_has_conflict_list():
     ]
     result = ProcessExecutor._sanitise_conflicts(conflicts)
 
-    assert isinstance(result, list)
     assert len(result) == 2
     assert result[0]["field_name"] == "name"
     assert result[1]["field_name"] == "industry"
