@@ -17,12 +17,22 @@ from typing import Any, Literal
 from app.api.schemas import EvidenceManifest, ProcessResponse
 from app.cache.redis_manager import RedisManager, TTL_IDEMPOTENCY
 from app.core.logging import get_logger
+from app.events.catalog import EventType
+from app.events.emitter import EventEmitter
 from app.logic.guardrails import GuardrailViolation
+from app.messaging.producer import KafkaProducer
+from app.logic.conflict_helpers import build_candidates, format_evidence_ref
+from app.messaging.schemas import ConflictCandidate, EscalationMessage
+from app.messaging.topics import ESCALATIONS, message_key
 from app.providers.llm import LLMProvider
 from app.services.backend_client import BackendClient
 from app.skills.models import TenantContext
 
 logger = get_logger(__name__)
+
+# Re-export for test compatibility
+_format_evidence_ref = format_evidence_ref
+
 
 JOB_TTL = 3600
 JobStatus = Literal["ACCEPTED", "RUNNING", "SUCCEEDED", "FAILED"]
@@ -41,11 +51,15 @@ class ProcessExecutor:
         backend: BackendClient | None = None,
         settings: Any = None,
         llm: LLMProvider | None = None,
+        kafka: KafkaProducer | None = None,
+        events: EventEmitter | None = None,
     ) -> None:
         self._redis = redis
         self._backend = backend
         self._settings = settings
         self._llm = llm
+        self._kafka = kafka
+        self._events = events
         self._running_tasks: set[asyncio.Task[None]] = set()
 
     async def accept(
@@ -280,6 +294,18 @@ class ProcessExecutor:
                         records=provenance_records,
                     )
 
+                # J-05: handle conflicts — create CONFLICT provenance,
+                # publish escalations, emit EVT-007
+                if extraction.conflicts:
+                    await self._handle_conflicts(
+                        conflicts=extraction.conflicts,
+                        tenant=tenant,
+                        session_id=session_id,
+                        job_id=job_id,
+                    )
+
+            conflict_summary = self._sanitise_conflicts(extraction.conflicts)
+
             summary: dict[str, Any] = {
                 "extraction_complete": True,
                 "evidence_blocks": len(evidence.blocks),
@@ -292,7 +318,7 @@ class ProcessExecutor:
                 "degraded_questions": evidence.degraded_question_ids,
                 "fields_written": len(extraction.fields_written),
                 "fields_skipped": len(extraction.fields_skipped),
-                "conflicts": len(extraction.conflicts),
+                "conflicts": conflict_summary,
                 "dropped_ungrounded": extraction.dropped_ungrounded_total,
                 "steps_used": extraction.steps_used,
             }
@@ -341,6 +367,114 @@ class ProcessExecutor:
                 status=cb_status,
                 summary=summary,
             )
+
+    async def _handle_conflicts(
+        self,
+        *,
+        conflicts: list[dict[str, Any]],
+        tenant: TenantContext,
+        session_id: str,
+        job_id: str,
+    ) -> None:
+        """J-05: create CONFLICT provenance, publish escalations, emit EVT-007."""
+        # Fail-fast: parse UUIDs before any writes to avoid partial state
+        tenant_uuid = uuid.UUID(tenant.tenant_id)
+        session_uuid = uuid.UUID(session_id) if session_id else None
+
+        # 1. Create CONFLICT provenance records
+        if self._backend is not None:
+            conflict_provenance = [
+                {
+                    "model_name": "Company",
+                    "field_name": c["field_name"],
+                    "extracted_value": c["new_value"],
+                    "confidence": c.get("new_confidence"),
+                    "classification": c.get("new_classification"),
+                    "source_span": (
+                        c["new_evidence"][0] if c.get("new_evidence") else None
+                    ),
+                    "status": "CONFLICT",
+                }
+                for c in conflicts
+            ]
+            await self._backend.create_provenance_bulk(
+                tenant_id=tenant.tenant_id,
+                session_id=session_id,
+                records=conflict_provenance,
+            )
+
+        # 2. Build and publish EscalationMessages
+        for c in conflicts:
+            candidates = build_candidates(c)
+            msg = EscalationMessage(
+                tenant_id=tenant_uuid,
+                session_id=session_uuid,
+                reason_code="FIELD_CONFLICT",
+                field_name=c["field_name"],
+                confidence=c.get("new_confidence"),
+                candidates=candidates,
+                context_ref=f"job:{job_id}",
+            )
+
+            if self._kafka is not None:
+                try:
+                    payload = msg.model_dump_json().encode()
+                    key = message_key(tenant.tenant_id, session_id)
+                    await self._kafka.send(ESCALATIONS.name, key=key, value=payload)
+                except Exception as exc:
+                    logger.warning(
+                        "escalation_publish_failed",
+                        field=c["field_name"],
+                        error=str(exc),
+                    )
+
+            # 3. Emit EVT-007
+            if self._events is not None:
+                try:
+                    await self._events.emit(
+                        EventType.AGENT_ESCALATED,
+                        tenant_id=tenant.tenant_id,
+                        correlation_id=job_id,
+                        session_id=session_id,
+                        payload={
+                            "escalation_id": str(msg.escalation_id),
+                            "reason_code": msg.reason_code,
+                            "field_name": c["field_name"],
+                            "candidate_count": len(candidates),
+                        },
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "evt007_emit_failed",
+                        field=c["field_name"],
+                        error=str(exc),
+                    )
+
+        logger.info(
+            "conflicts_escalated",
+            job_id=job_id,
+            count=len(conflicts),
+        )
+
+    @staticmethod
+    def _build_candidates(conflict: dict[str, Any]) -> list[ConflictCandidate]:
+        """Delegate to shared helper. Kept as static method for test compat."""
+        return build_candidates(conflict)
+
+    @staticmethod
+    def _sanitise_conflicts(
+        conflicts: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Strip values from conflict records for the callback summary."""
+        return [
+            {
+                "field_name": c["field_name"],
+                "existing_status": c["existing_status"],
+                "new_confidence": c.get("new_confidence"),
+                "new_classification": c.get("new_classification"),
+            }
+            for c in conflicts
+        ]
 
     async def _load_incremental_coverage(
         self, tenant_id: str, session_id: str

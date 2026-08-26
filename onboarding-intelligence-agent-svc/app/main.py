@@ -97,6 +97,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         backend=app.state.backend,
         settings=settings,
         llm=LLMProvider(settings.GEMINI_KEY),
+        kafka=app.state.kafka,
+        events=None,  # wired below after EventEmitter is created
     )
 
     app.state.prep = PrepExecutor(
@@ -171,6 +173,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.events = EventEmitter(app.state.kafka)
     await app.state.events.start()
+
+    # J-05: wire events into ProcessExecutor now that the emitter exists
+    app.state.process_executor._events = app.state.events
 
     app.state.commands = CommandConsumer(settings, app.state.kafka)
     try:

@@ -349,6 +349,47 @@ def test_provenance_read_empty(tenant, session):
     assert resp.json()["records"] == []
 
 
+def test_provenance_bulk_conflict_marks_existing(tenant, session):
+    """J-05: incoming status=CONFLICT marks the existing protected record."""
+    make_provenance(
+        session=session,
+        tenant=tenant,
+        field_name="name",
+        extracted_value="Confirmed Name",
+        status=ProvenanceStatus.CONFIRMED,
+    )
+
+    client = _service_client(tenant)
+    url = PROVENANCE_BULK_URL.format(pk=session.pk)
+    resp = client.post(
+        url,
+        {
+            "records": [
+                {
+                    "model_name": "Company",
+                    "field_name": "name",
+                    "extracted_value": "Different Name",
+                    "confidence": 0.92,
+                    "classification": "KEY",
+                    "source_span": {"recording_id": "r1", "t_start": 1, "t_end": 2},
+                    "status": "CONFLICT",
+                },
+            ]
+        },
+        format="json",
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["updated"] == 1
+    assert len(body["conflicts"]) == 1
+    assert body["conflicts"][0]["marked"] is True
+    assert len(body["skipped"]) == 0
+
+    prov = FieldProvenance.objects.get(session=session, field_name="name")
+    assert prov.status == ProvenanceStatus.CONFLICT
+    assert prov.extracted_value == "Confirmed Name"
+
+
 def test_provenance_read_403_without_token(tenant, session):
     client = APIClient()
     client.defaults["SERVER_NAME"] = "localhost"

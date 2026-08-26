@@ -418,6 +418,11 @@ class FieldExtractor:
                     "existing_status": existing["status"],
                     "existing_value": existing.get("extracted_value"),
                     "new_value": f.value,
+                    "new_evidence": f.evidence,
+                    "new_confidence": f.confidence,
+                    "new_classification": f.classification,
+                    "existing_source_span": existing.get("source_span"),
+                    "existing_confidence": existing.get("confidence"),
                 }
             )
             skipped.append(
