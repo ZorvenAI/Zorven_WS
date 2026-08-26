@@ -2,21 +2,29 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   ArrowLeft,
   Calendar,
+  CheckCircle,
   ChevronDown,
   FileWarning,
+  Loader2,
+  Send,
 } from 'lucide-react';
 
+import { useTenantRole } from '@/hooks/useTenantRole';
 import ProvenanceCard from '@/components/onboarding/ProvenanceCard';
 import ProvenanceDrawer from '@/components/onboarding/ProvenanceDrawer';
 import {
+  confirmProvenance,
+  editProvenance,
   getSessionDetail,
   getSessionProvenance,
   getRecordingDetail,
   listSessionRecordings,
+  submitReview,
   type FieldProvenanceRow,
   type ProcessSummary,
   type ProvenanceGroup,
@@ -43,6 +51,9 @@ interface KeyFindingsReviewProps {
 export default function KeyFindingsReview({
   sessionId,
 }: KeyFindingsReviewProps) {
+  const router = useRouter();
+  const { isAdmin, canEdit } = useTenantRole();
+
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [groups, setGroups] = useState<ProvenanceGroup[]>([]);
   const [recordings, setRecordings] = useState<RecordingDetail[]>([]);
@@ -50,6 +61,8 @@ export default function KeyFindingsReview({
   const [error, setError] = useState<string | null>(null);
   const [drawerRow, setDrawerRow] = useState<FieldProvenanceRow | null>(null);
   const [secondaryOpen, setSecondaryOpen] = useState<Record<number, boolean>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,6 +112,46 @@ export default function KeyFindingsReview({
   const toggleSecondary = useCallback((page: number) => {
     setSecondaryOpen((prev) => ({ ...prev, [page]: !prev[page] }));
   }, []);
+
+  const handleConfirm = useCallback(
+    async (row: FieldProvenanceRow) => {
+      await confirmProvenance(row.id);
+      await load();
+    },
+    [load],
+  );
+
+  const handleEdit = useCallback(
+    async (row: FieldProvenanceRow, finalValue: unknown) => {
+      await editProvenance(row.id, finalValue);
+      await load();
+    },
+    [load],
+  );
+
+  const handleSubmit = useCallback(async () => {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await submitReview(sessionId);
+      router.push(`/onboarding/sessions/${sessionId}`);
+    } catch (err) {
+      setSubmitError(String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }, [sessionId, router]);
+
+  const confirmCallbackForKey = isAdmin ? handleConfirm : undefined;
+  const editCallbackForKey = isAdmin ? handleEdit : undefined;
+  const confirmCallbackForSecondary = canEdit ? handleConfirm : undefined;
+  const editCallbackForSecondary = canEdit ? handleEdit : undefined;
+
+  const canSubmit =
+    session?.legal_next_states?.includes('CONFIRMED') &&
+    conflictRows.length === 0;
+
+  const showSubmit = session?.legal_next_states?.includes('CONFIRMED');
 
   if (loading) {
     return (
@@ -171,7 +224,7 @@ export default function KeyFindingsReview({
         </div>
       )}
 
-      {/* Conflicts — above field lists (AC-4) */}
+      {/* Conflicts — above field lists (K-01 AC-4) */}
       {conflictRows.length > 0 && (
         <section data-testid="conflicts-section" className="glass-card border border-amber-500/30 p-5">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-amber-400">
@@ -188,13 +241,23 @@ export default function KeyFindingsReview({
                 key={row.id}
                 row={row}
                 onViewSource={setDrawerRow}
+                onConfirm={
+                  row.classification === 'KEY'
+                    ? confirmCallbackForKey
+                    : confirmCallbackForSecondary
+                }
+                onEdit={
+                  row.classification === 'KEY'
+                    ? editCallbackForKey
+                    : editCallbackForSecondary
+                }
               />
             ))}
           </div>
         </section>
       )}
 
-      {/* Coverage shortfalls (AC-3) */}
+      {/* Coverage shortfalls (K-01 AC-3) */}
       {coverageShortfalls.length > 0 && (
         <section data-testid="coverage-section" className="glass-card border border-yellow-500/30 p-5">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-yellow-400">
@@ -288,6 +351,8 @@ export default function KeyFindingsReview({
                     key={row.id}
                     row={row}
                     onViewSource={setDrawerRow}
+                    onConfirm={confirmCallbackForKey}
+                    onEdit={editCallbackForKey}
                   />
                 ))}
               </div>
@@ -318,6 +383,8 @@ export default function KeyFindingsReview({
                         key={row.id}
                         row={row}
                         onViewSource={setDrawerRow}
+                        onConfirm={confirmCallbackForSecondary}
+                        onEdit={editCallbackForSecondary}
                       />
                     ))}
                   </div>
@@ -333,6 +400,45 @@ export default function KeyFindingsReview({
           <p className="text-sm text-brand-silver">
             No provenance data available yet.
           </p>
+        </div>
+      )}
+
+      {/* Submit review (AC-5) */}
+      {showSubmit && (
+        <div className="glass-card p-5" data-testid="submit-section">
+          {session.status === 'CONFIRMED' && (
+            <div className="flex items-center gap-2 text-sm text-emerald-400">
+              <CheckCircle className="h-4 w-4" aria-hidden />
+              Review submitted
+            </div>
+          )}
+          {session.status !== 'CONFIRMED' && (
+            <>
+              {conflictRows.length > 0 && (
+                <p className="mb-3 text-xs text-amber-400">
+                  Resolve all {conflictRows.length} conflict(s) before
+                  submitting.
+                </p>
+              )}
+              {submitError && (
+                <p className="mb-3 text-xs text-red-400">{submitError}</p>
+              )}
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={!canSubmit || submitting}
+                className="btn-primary inline-flex items-center gap-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="submit-button"
+              >
+                {submitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Send className="h-4 w-4" aria-hidden />
+                )}
+                Submit review
+              </button>
+            </>
+          )}
         </div>
       )}
 

@@ -59,6 +59,7 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
             "evidence_manifest_hash",
             "process_job_id",
             "process_summary",
+            "config",
             "legal_next_states",
             "consent",
             "created_at",

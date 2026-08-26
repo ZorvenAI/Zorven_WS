@@ -169,6 +169,11 @@ class OnboardingSession(models.Model):
         blank=True,
         help_text="Terminal callback summary from OIA (§10.2.2)",
     )
+    config = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Per-session config (e.g. key_confirm_delegate for AC-4)",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

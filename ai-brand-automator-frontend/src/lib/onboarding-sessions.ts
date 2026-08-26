@@ -671,6 +671,48 @@ export async function getSessionProvenance(
   return (await response.json()) as ProvenanceResponse;
 }
 
+// ── Provenance review actions (K-02) ─────────────────────────────────
+
+export async function confirmProvenance(
+  rowId: number,
+): Promise<FieldProvenanceRow> {
+  const response = await apiClient.post(
+    `${BASE}/provenance/${rowId}/confirm/`,
+    {},
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as FieldProvenanceRow;
+}
+
+export async function editProvenance(
+  rowId: number,
+  finalValue: unknown,
+): Promise<FieldProvenanceRow> {
+  const response = await apiClient.post(
+    `${BASE}/provenance/${rowId}/edit/`,
+    { final_value: finalValue },
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as FieldProvenanceRow;
+}
+
+export async function submitReview(
+  sessionId: string,
+): Promise<SessionDetail> {
+  const response = await apiClient.patch(
+    `${BASE}/sessions/${sessionId}/`,
+    { status: 'CONFIRMED' },
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as SessionDetail;
+}
+
 // ── Process dispatch (J-01) ──────────────────────────────────────────
 
 /** Fetch full session detail including process state. */

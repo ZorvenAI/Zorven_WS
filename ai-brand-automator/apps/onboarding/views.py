@@ -257,6 +257,26 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                     status=http.HTTP_409_CONFLICT,
                 )
 
+            if target == "CONFIRMED":
+                conflict_fields = list(
+                    FieldProvenance.objects.filter(
+                        session=session,
+                        status=ProvenanceStatus.CONFLICT,
+                    ).values_list("field_name", flat=True)
+                )
+                if conflict_fields:
+                    return Response(
+                        {
+                            "code": "UNRESOLVED_CONFLICTS",
+                            "detail": (
+                                "All conflicts must be resolved before "
+                                "submitting the review."
+                            ),
+                            "unresolved_fields": conflict_fields,
+                        },
+                        status=http.HTTP_409_CONFLICT,
+                    )
+
         serializer = self.get_serializer(session, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
@@ -1033,10 +1053,18 @@ class FieldProvenanceViewSet(
         field — §3 puts it plainly, "KEY fields require explicit ADMIN
         confirmation before final submit". Returns a response to send, or None
         to proceed.
+
+        AC-4 delegation: an Owner may name an Editor as ``key_confirm_delegate``
+        in the session config. That Editor can then confirm KEY fields for that
+        session only.
         """
         if row.classification != FieldClassification.KEY:
             return None
         if IsTenantAdmin().has_permission(self.request, self):
+            return None
+        session = row.session
+        delegate_id = (session.config or {}).get("key_confirm_delegate")
+        if delegate_id and self.request.user.pk == delegate_id:
             return None
         return Response(
             {
