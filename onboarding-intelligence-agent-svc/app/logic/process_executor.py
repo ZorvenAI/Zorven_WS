@@ -481,7 +481,15 @@ class ProcessExecutor:
     ) -> list[str]:
         """J-06: trigger brand strategy/identity generation after extraction."""
         generated: list[str] = []
-        opts = ProcessOptions(**options) if options else ProcessOptions()
+        try:
+            opts = ProcessOptions(**options) if options else ProcessOptions()
+        except Exception as exc:
+            logger.warning(
+                "autogen_options_invalid",
+                job_id=job_id,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            return generated
 
         if self._backend is None:
             return generated

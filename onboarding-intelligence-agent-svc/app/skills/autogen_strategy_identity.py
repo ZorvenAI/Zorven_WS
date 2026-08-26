@@ -12,9 +12,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.logging import get_logger
 from app.services.backend_client import BackendClient
 from app.skills.base import BaseSkill
 from app.skills.models import SkillContext, SkillResult
+
+logger = get_logger(__name__)
 
 
 class AutogenStrategyIdentity(BaseSkill):
@@ -57,8 +60,11 @@ class AutogenStrategyIdentity(BaseSkill):
                 )
                 if result is not None:
                     generated.append("brand_strategy")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "skl_oia_12_strategy_failed",
+                    error=f"{type(exc).__name__}: {exc}",
+                )
 
         if auto_identity:
             try:
@@ -67,8 +73,11 @@ class AutogenStrategyIdentity(BaseSkill):
                 )
                 if result is not None:
                     generated.append("brand_identity")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "skl_oia_12_identity_failed",
+                    error=f"{type(exc).__name__}: {exc}",
+                )
 
         return SkillResult(
             skill_id=self.meta.skill_id,

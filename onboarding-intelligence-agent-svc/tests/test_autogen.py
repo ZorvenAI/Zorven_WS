@@ -19,16 +19,22 @@ pytestmark = pytest.mark.unit
 class FakeBackend:
     """Minimal stand-in that records calls and returns configurable results."""
 
+    _DEFAULT_RESULT: dict[str, Any] = {"success": True}
+
     def __init__(
         self,
         *,
-        strategy_result: dict[str, Any] | None = {"success": True},
-        identity_result: dict[str, Any] | None = {"success": True},
+        strategy_result: dict[str, Any] | None = _DEFAULT_RESULT,
+        identity_result: dict[str, Any] | None = _DEFAULT_RESULT,
         strategy_error: Exception | None = None,
         identity_error: Exception | None = None,
     ) -> None:
-        self._strategy_result = strategy_result
-        self._identity_result = identity_result
+        self._strategy_result = (
+            dict(strategy_result) if strategy_result else strategy_result
+        )
+        self._identity_result = (
+            dict(identity_result) if identity_result else identity_result
+        )
         self._strategy_error = strategy_error
         self._identity_error = identity_error
         self.strategy_calls: list[dict[str, Any]] = []
