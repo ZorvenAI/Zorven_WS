@@ -6,10 +6,8 @@ import {
   AlertTriangle,
   ArrowLeft,
   Calendar,
-  CheckCircle,
   ChevronDown,
   FileWarning,
-  Sparkles,
 } from 'lucide-react';
 
 import ProvenanceCard from '@/components/onboarding/ProvenanceCard';
