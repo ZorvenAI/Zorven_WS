@@ -596,6 +596,74 @@ export async function getRecordingTranscript(
   return data.segments;
 }
 
+// ── Provenance (K-01) ───────────────────────────────────────────────
+
+export interface ProvenanceSourceSpan {
+  recording_id: string;
+  t_start: number;
+  t_end: number;
+}
+
+export type FieldClassification = 'KEY' | 'SECONDARY';
+
+export type ProvenanceStatus = 'PENDING' | 'CONFIRMED' | 'EDITED' | 'CONFLICT';
+
+export interface FieldProvenanceRow {
+  id: number;
+  session: number;
+  model_name: string;
+  field_name: string;
+  extracted_value: unknown;
+  final_value: unknown;
+  classification: FieldClassification;
+  confidence: number;
+  source_recording: number | null;
+  source_span: ProvenanceSourceSpan | null;
+  source_media: number | null;
+  status: ProvenanceStatus;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
+  wizard_page: number | null;
+  wizard_page_label: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProvenanceGroup {
+  page: number | null;
+  label: string;
+  fields: FieldProvenanceRow[];
+}
+
+export interface ProvenanceResponse {
+  session: number;
+  groups: ProvenanceGroup[];
+}
+
+export interface ProcessSummary {
+  fields_written: number;
+  key_count?: number;
+  secondary_count?: number;
+  conflicts: number;
+  dropped_ungrounded: number;
+  coverage: Record<string, number>;
+  coverage_satisfied?: boolean;
+  blocking_gaps?: string[];
+  generated: string[];
+}
+
+export async function getSessionProvenance(
+  sessionId: string,
+): Promise<ProvenanceResponse> {
+  const response = await apiClient.get(
+    `${BASE}/sessions/${sessionId}/provenance/`,
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as ProvenanceResponse;
+}
+
 // ── Process dispatch (J-01) ──────────────────────────────────────────
 
 /** Fetch full session detail including process state. */

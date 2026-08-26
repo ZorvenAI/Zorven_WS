@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Radio } from 'lucide-react';
+import { ArrowLeft, ClipboardCheck, Radio } from 'lucide-react';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useLibraryPolling } from '@/hooks/useLibraryPolling';
@@ -98,15 +98,30 @@ export default function SessionPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-white">Session</h1>
-        {sessionId && (
-          <Link
-            href={`/onboarding/sessions/${sessionId}/meeting`}
-            className="btn-primary inline-flex items-center gap-2 text-sm"
-          >
-            <Radio className="h-4 w-4" aria-hidden />
-            Open meeting view
-          </Link>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {sessionId && session && (
+            session.status === 'REVIEW_PENDING' ||
+            session.status === 'CONFIRMED' ||
+            session.status === 'COMPLETED'
+          ) && (
+            <Link
+              href={`/onboarding/sessions/${sessionId}/review`}
+              className="btn-primary inline-flex items-center gap-2 text-sm"
+            >
+              <ClipboardCheck className="h-4 w-4" aria-hidden />
+              Review findings
+            </Link>
+          )}
+          {sessionId && (
+            <Link
+              href={`/onboarding/sessions/${sessionId}/meeting`}
+              className="inline-flex items-center gap-2 rounded border border-white/10 px-3 py-1.5 text-sm text-brand-silver hover:bg-white/5 hover:text-white"
+            >
+              <Radio className="h-4 w-4" aria-hidden />
+              Open meeting view
+            </Link>
+          )}
+        </div>
       </div>
 
       {sessionId && session && (
