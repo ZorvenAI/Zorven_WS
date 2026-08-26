@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.skills.models import SkillContext, SkillMeta, SkillResult, TenantContext
+from app.skills.models import SkillContext, SkillMeta, TenantContext
 from app.skills.surface_conflicts_and_escalate import SurfaceConflictsAndEscalate
 
 pytestmark = pytest.mark.unit
