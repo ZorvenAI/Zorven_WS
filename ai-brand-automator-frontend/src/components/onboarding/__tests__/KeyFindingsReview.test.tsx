@@ -68,7 +68,7 @@ function makeRow(overrides: Partial<FieldProvenanceRow> = {}): FieldProvenanceRo
 
 const baseSummary: ProcessSummary = {
   fields_written: 34,
-  conflicts: 0,
+  conflicts: [],
   dropped_ungrounded: 6,
   coverage: { WF1: 0.94, WF2: 0.88, WF3: 1.0 },
   generated: ['brand_strategy', 'brand_identity'],
@@ -154,7 +154,10 @@ it('shows conflicts section above provenance groups (AC-4)', async () => {
     classification: 'KEY',
   });
   const normalRow = makeRow({ id: 100, field_name: 'company_name' });
-  setupMocks({ conflicts: 1 }, [conflictRow, normalRow]);
+  setupMocks(
+    { conflicts: [{ field_name: 'industry', existing_status: 'CONFIRMED' }] },
+    [conflictRow, normalRow],
+  );
 
   const { container } = render(<KeyFindingsReview sessionId="sess-1" />);
   await waitFor(() => {

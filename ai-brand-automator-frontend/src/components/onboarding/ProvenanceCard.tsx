@@ -46,7 +46,8 @@ export default function ProvenanceCard({
   onEdit,
 }: ProvenanceCardProps) {
   const hasSource = row.source_span !== null || row.source_media !== null;
-  const confidencePct = Math.round(row.confidence * 100);
+  const confidencePct =
+    row.confidence != null ? Math.round(Number(row.confidence) * 100) : null;
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 p-4">
@@ -71,15 +72,17 @@ export default function ProvenanceCard({
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1.5 text-xs text-brand-silver">
-          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full bg-brand-electric"
-              style={{ width: `${confidencePct}%` }}
-            />
+        {confidencePct != null && (
+          <div className="flex items-center gap-1.5 text-xs text-brand-silver">
+            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-brand-electric"
+                style={{ width: `${confidencePct}%` }}
+              />
+            </div>
+            <span>{confidencePct}%</span>
           </div>
-          <span>{confidencePct}%</span>
-        </div>
+        )}
 
         {hasSource && onViewSource && (
           <button

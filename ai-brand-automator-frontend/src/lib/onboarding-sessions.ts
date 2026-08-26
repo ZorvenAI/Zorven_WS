@@ -616,7 +616,7 @@ export interface FieldProvenanceRow {
   extracted_value: unknown;
   final_value: unknown;
   classification: FieldClassification;
-  confidence: number;
+  confidence: number | null;
   source_recording: number | null;
   source_span: ProvenanceSourceSpan | null;
   source_media: number | null;
@@ -640,11 +640,18 @@ export interface ProvenanceResponse {
   groups: ProvenanceGroup[];
 }
 
+export interface ConflictSummaryItem {
+  field_name: string;
+  existing_status: string;
+  new_confidence?: number;
+  new_classification?: string;
+}
+
 export interface ProcessSummary {
   fields_written: number;
   key_count?: number;
   secondary_count?: number;
-  conflicts: number;
+  conflicts: ConflictSummaryItem[];
   dropped_ungrounded: number;
   coverage: Record<string, number>;
   coverage_satisfied?: boolean;

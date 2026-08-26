@@ -93,7 +93,7 @@ export default function KeyFindingsReview({
     .filter((f) => f.status === 'CONFLICT');
 
   const coverageShortfalls = summary
-    ? Object.entries(summary.coverage).filter(([, v]) => v < 1.0)
+    ? Object.entries(summary.coverage ?? {}).filter(([, v]) => v < 1.0)
     : [];
 
   const toggleSecondary = useCallback((page: number) => {
@@ -149,7 +149,7 @@ export default function KeyFindingsReview({
           <div>
             <p className="text-xs text-brand-silver">Conflicts</p>
             <p className="text-lg font-semibold text-white">
-              {summary.conflicts}
+              {summary.conflicts.length}
             </p>
           </div>
           <div title="Values considered but rejected because they lacked evidence">
@@ -161,8 +161,8 @@ export default function KeyFindingsReview({
           <div>
             <p className="text-xs text-brand-silver">Generated</p>
             <p className="text-sm font-medium text-white" data-testid="generated-list">
-              {summary.generated.length > 0
-                ? summary.generated
+              {(summary.generated ?? []).length > 0
+                ? (summary.generated ?? [])
                     .map((g) => g.replace(/_/g, ' '))
                     .join(', ')
                 : 'None'}
