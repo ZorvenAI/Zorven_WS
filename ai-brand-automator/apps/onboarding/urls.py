@@ -21,6 +21,8 @@ from apps.onboarding.views import (
     create_questionnaire,
     field_vocabulary,
     get_session_provenance,
+    internal_generate_brand_identity,
+    internal_generate_brand_strategy,
     live_precheck,
     patch_company_fields,
     process_callback,
@@ -103,6 +105,18 @@ urlpatterns = [
         "internal/sessions/<pk>/provenance/",
         get_session_provenance,
         name="onboarding-session-provenance",
+    ),
+    # J-06: OIA triggers brand strategy generation (SKL-OIA-12).
+    path(
+        "internal/companies/<int:pk>/generate-strategy/",
+        internal_generate_brand_strategy,
+        name="onboarding-internal-generate-strategy",
+    ),
+    # J-06: OIA triggers brand identity generation (SKL-OIA-12).
+    path(
+        "internal/companies/<int:pk>/generate-identity/",
+        internal_generate_brand_identity,
+        name="onboarding-internal-generate-identity",
     ),
     path("", include(router.urls)),
 ]

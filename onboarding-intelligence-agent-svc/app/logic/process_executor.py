@@ -22,7 +22,11 @@ from app.events.emitter import EventEmitter
 from app.logic.guardrails import GuardrailViolation
 from app.messaging.producer import KafkaProducer
 from app.logic.conflict_helpers import build_candidates, format_evidence_ref
-from app.messaging.schemas import ConflictCandidate, EscalationMessage
+from app.messaging.schemas import (
+    ConflictCandidate,
+    EscalationMessage,
+    ProcessOptions,
+)
 from app.messaging.topics import ESCALATIONS, message_key
 from app.providers.llm import LLMProvider
 from app.services.backend_client import BackendClient
@@ -306,6 +310,16 @@ class ProcessExecutor:
 
             conflict_summary = self._sanitise_conflicts(extraction.conflicts)
 
+            # J-06: auto-generate brand strategy & identity
+            generated: list[str] = []
+            if company_id is not None:
+                generated = await self._auto_generate(
+                    tenant_id=tenant.tenant_id,
+                    company_id=company_id,
+                    options=options,
+                    job_id=job_id,
+                )
+
             summary: dict[str, Any] = {
                 "extraction_complete": True,
                 "evidence_blocks": len(evidence.blocks),
@@ -321,6 +335,7 @@ class ProcessExecutor:
                 "conflicts": conflict_summary,
                 "dropped_ungrounded": extraction.dropped_ungrounded_total,
                 "steps_used": extraction.steps_used,
+                "generated": generated,
             }
             cb_status = JOB_STATUS_SUCCEEDED
 
@@ -455,6 +470,74 @@ class ProcessExecutor:
             job_id=job_id,
             count=len(conflicts),
         )
+
+    async def _auto_generate(
+        self,
+        *,
+        tenant_id: str,
+        company_id: int,
+        options: dict[str, Any],
+        job_id: str,
+    ) -> list[str]:
+        """J-06: trigger brand strategy/identity generation after extraction."""
+        generated: list[str] = []
+        try:
+            opts = ProcessOptions(**options) if options else ProcessOptions()
+        except Exception as exc:
+            logger.warning(
+                "autogen_options_invalid",
+                job_id=job_id,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            return generated
+
+        if self._backend is None:
+            return generated
+
+        if opts.auto_generate_strategy:
+            try:
+                result = await self._backend.generate_brand_strategy(
+                    tenant_id=tenant_id, company_id=company_id
+                )
+                if result is not None:
+                    generated.append("brand_strategy")
+                else:
+                    logger.warning(
+                        "autogen_strategy_failed",
+                        job_id=job_id,
+                        reason="backend_returned_none",
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "autogen_strategy_failed",
+                    job_id=job_id,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+
+        if opts.auto_generate_identity:
+            try:
+                result = await self._backend.generate_brand_identity(
+                    tenant_id=tenant_id, company_id=company_id
+                )
+                if result is not None:
+                    generated.append("brand_identity")
+                else:
+                    logger.warning(
+                        "autogen_identity_failed",
+                        job_id=job_id,
+                        reason="backend_returned_none",
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "autogen_identity_failed",
+                    job_id=job_id,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+
+        if generated:
+            logger.info("autogen_completed", job_id=job_id, generated=generated)
+
+        return generated
 
     @staticmethod
     def _build_candidates(conflict: dict[str, Any]) -> list[ConflictCandidate]:

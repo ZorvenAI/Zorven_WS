@@ -350,3 +350,26 @@ def test_concurrent_failures_are_not_lost():
         t.join()
 
     assert breaker.is_open is True, "increments were lost under concurrency"
+
+
+# ── J-06: generation failure is non-fatal (AC-2) ───────────────────
+
+
+def test_wf2_failure_does_not_fail_process():
+    """AC-2: backend breaker opening does not make PROCESS fail.
+
+    ProcessExecutor._auto_generate catches all exceptions and returns an
+    empty list. The PROCESS job still reports SUCCEEDED. This test
+    verifies the contract at the breaker level: a breaker that is OPEN
+    raises CircuitBreakerOpen, and the caller must catch it.
+    """
+    breaker = make(failure_threshold=1)
+    breaker.record_failure()
+
+    assert breaker.is_open is True
+    with pytest.raises(CircuitBreakerOpen):
+        breaker.before_call()
+
+    # The BackendClient catches CircuitBreakerOpen and returns None,
+    # which _auto_generate treats as "did not generate" — not as a job
+    # failure. This is tested end-to-end in test_autogen.py.

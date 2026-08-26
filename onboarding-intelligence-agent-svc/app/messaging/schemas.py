@@ -50,6 +50,8 @@ class EvidenceManifest(BaseModel):
 class ProcessOptions(BaseModel):
     force_rerun: bool = False
     language: str | None = None
+    auto_generate_strategy: bool = True
+    auto_generate_identity: bool = True
 
 
 class ProcessCommand(BaseModel):
@@ -66,6 +68,7 @@ class ProcessSummary(BaseModel):
     secondary_count: int = 0
     dropped_ungrounded: int = 0
     conflicts: list[dict[str, Any]] = Field(default_factory=list)
+    generated: list[str] = Field(default_factory=list)
 
 
 class ErrorDetail(BaseModel):

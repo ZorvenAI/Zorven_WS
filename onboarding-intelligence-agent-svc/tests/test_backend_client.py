@@ -276,7 +276,60 @@ def test_two_clients_do_not_share_a_breaker():
     assert second._breaker.is_open is False
 
 
-@pytest.mark.unit
+# ── J-06: generate endpoints (AC-1) ─────────────────────────────────
+
+
+async def test_uses_existing_generate_strategy_endpoint(django_stub):
+    """AC-1: BackendClient calls the internal generate-strategy endpoint."""
+    django_stub["body"] = {"success": True, "data": {"vision_statement": "v"}}
+    client = BackendClient(django_stub["url"], "tok", breaker=breaker())
+
+    result = await client.generate_brand_strategy(tenant_id="t-1", company_id=42)
+
+    assert result is not None
+    assert result["success"] is True
+    sent = django_stub["requests"][0]
+    assert sent["path"] == (
+        "/api/v1/onboarding/internal/companies/42/generate-strategy/"
+    )
+    assert sent["token"] == "tok"
+    assert sent["tenant"] == "t-1"
+
+
+async def test_uses_existing_generate_identity_endpoint(django_stub):
+    """AC-1: BackendClient calls the internal generate-identity endpoint."""
+    django_stub["body"] = {"success": True, "data": {"color_palette_desc": "c"}}
+    client = BackendClient(django_stub["url"], "tok", breaker=breaker())
+
+    result = await client.generate_brand_identity(tenant_id="t-1", company_id=7)
+
+    assert result is not None
+    sent = django_stub["requests"][0]
+    assert sent["path"] == (
+        "/api/v1/onboarding/internal/companies/7/generate-identity/"
+    )
+
+
+async def test_generate_returns_none_on_server_error(django_stub):
+    """Generate call returns None when the backend errors."""
+    django_stub["status"] = 500
+    django_stub["body"] = {"error": "boom"}
+    client = BackendClient(django_stub["url"], "tok", breaker=breaker())
+
+    result = await client.generate_brand_strategy(tenant_id="t-1", company_id=1)
+
+    assert result is None
+
+
+async def test_generate_returns_none_when_not_configured():
+    """BackendClient.configured is false → returns None, no HTTP call."""
+    client = BackendClient("", "tok", breaker=breaker())
+
+    result = await client.generate_brand_strategy(tenant_id="t-1", company_id=1)
+
+    assert result is None
+
+
 def test_the_app_shares_one_backend_client_across_prep_and_the_gate():
     """Review finding, asserted on the wiring rather than trusted to a comment.
 

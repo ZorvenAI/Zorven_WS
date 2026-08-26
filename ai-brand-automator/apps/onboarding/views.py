@@ -2744,3 +2744,128 @@ def get_session_provenance(request, pk):
         {"records": records},
         status=http.HTTP_200_OK,
     )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def internal_generate_brand_strategy(request, pk):
+    """``POST /api/v1/onboarding/internal/companies/<pk>/generate-strategy/``
+
+    OIA triggers brand strategy generation (J-06, SKL-OIA-12).
+    X-Service-Token auth. Wraps the same ``ai_service.generate_brand_strategy``
+    that the user-facing endpoint calls.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "") or decouple_config(
+        "OIA_SERVICE_TOKEN", default=""
+    )
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    tenant, error = _service_tenant(request)
+    if error is not None:
+        return error
+
+    company = Company.objects.filter(
+        Q(tenant=tenant) | Q(tenant__isnull=True), pk=pk
+    ).first()
+    if company is None:
+        return Response(
+            {"error": "Company not found"},
+            status=http.HTTP_404_NOT_FOUND,
+        )
+
+    from ai_services.services import ai_service
+
+    company_data = {
+        "tenant": tenant,
+        "name": company.name,
+        "industry": company.industry,
+        "target_audience": company.target_audience,
+        "core_problem": company.core_problem,
+        "brand_voice": company.brand_voice,
+    }
+    result = ai_service.generate_brand_strategy(company_data)
+
+    company.vision_statement = result.get("vision_statement", "")
+    company.mission_statement = result.get("mission_statement", "")
+    company.values = result.get("values", "")
+    company.positioning_statement = result.get("positioning_statement", "")
+    company.save(
+        update_fields=[
+            "vision_statement",
+            "mission_statement",
+            "values",
+            "positioning_statement",
+            "updated_at",
+        ]
+    )
+
+    return Response(
+        {"success": True, "data": result},
+        status=http.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def internal_generate_brand_identity(request, pk):
+    """``POST /api/v1/onboarding/internal/companies/<pk>/generate-identity/``
+
+    OIA triggers brand identity generation (J-06, SKL-OIA-12).
+    X-Service-Token auth. Wraps the same ``ai_service.generate_brand_identity``
+    that the user-facing endpoint calls.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "") or decouple_config(
+        "OIA_SERVICE_TOKEN", default=""
+    )
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    tenant, error = _service_tenant(request)
+    if error is not None:
+        return error
+
+    company = Company.objects.filter(
+        Q(tenant=tenant) | Q(tenant__isnull=True), pk=pk
+    ).first()
+    if company is None:
+        return Response(
+            {"error": "Company not found"},
+            status=http.HTTP_404_NOT_FOUND,
+        )
+
+    from ai_services.services import ai_service
+
+    company_data = {
+        "tenant": tenant,
+        "name": company.name,
+        "industry": company.industry,
+        "brand_voice": company.brand_voice,
+        "target_audience": company.target_audience,
+    }
+    result = ai_service.generate_brand_identity(company_data)
+
+    company.color_palette_desc = result.get("color_palette_desc", "")
+    company.font_recommendations = result.get("font_recommendations", "")
+    company.messaging_guide = result.get("messaging_guide", "")
+    company.save(
+        update_fields=[
+            "color_palette_desc",
+            "font_recommendations",
+            "messaging_guide",
+            "updated_at",
+        ]
+    )
+
+    return Response(
+        {"success": True, "data": result},
+        status=http.HTTP_200_OK,
+    )
