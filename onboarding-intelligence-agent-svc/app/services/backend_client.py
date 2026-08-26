@@ -48,11 +48,20 @@ UPSERT_PATH = "/api/v1/onboarding/research-briefs/upsert/"
 QUESTIONNAIRE_PATH = "/api/v1/onboarding/questionnaires/generate/"
 VOCABULARY_PATH = "/api/v1/onboarding/field-vocabulary/"
 PRECHECK_PATH = "/api/v1/onboarding/sessions/{session_id}/live-precheck/"
+GENERATE_STRATEGY_PATH = (
+    "/api/v1/onboarding/internal/companies/{company_id}/generate-strategy/"
+)
+GENERATE_IDENTITY_PATH = (
+    "/api/v1/onboarding/internal/companies/{company_id}/generate-identity/"
+)
 
 #: Short. This is a fire-and-forget write on the tail of a turn the operator
 #: is waiting on, and §2.1 gives PREP a 60 s budget that research and synthesis
 #: have already spent most of.
 TIMEOUT_S = 5.0
+
+#: SKL-OIA-12 budget is 90 s for both calls. 45 s each leaves headroom.
+GENERATE_TIMEOUT_S = 45.0
 
 
 class BackendClient:
@@ -84,7 +93,12 @@ class BackendClient:
         return bool(self._base_url) and "PLACEHOLDER" not in self._base_url
 
     async def _post(
-        self, path: str, payload: dict[str, Any], *, tenant_id: str
+        self,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        tenant_id: str,
+        timeout: float = TIMEOUT_S,
     ) -> dict[str, Any] | None:
         if not self.configured:
             logger.warning(
@@ -98,7 +112,7 @@ class BackendClient:
             logger.warning("backend_breaker_open", path=path)
             return None
 
-        client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
+        client = self._client or httpx.AsyncClient(timeout=timeout)
         owns_client = self._client is None
         try:
             response = await client.post(
@@ -113,7 +127,7 @@ class BackendClient:
                     # agent is the only party that knows, so it says.
                     "X-Tenant-ID": tenant_id,
                 },
-                timeout=TIMEOUT_S,
+                timeout=timeout,
             )
             response.raise_for_status()
             body = response.json()
@@ -393,3 +407,21 @@ class BackendClient:
             return []
         records = body.get("records", [])
         return records if isinstance(records, list) else []
+
+    async def generate_brand_strategy(
+        self, *, tenant_id: str, company_id: int
+    ) -> dict[str, Any] | None:
+        """Trigger brand strategy generation (J-06, SKL-OIA-12)."""
+        path = GENERATE_STRATEGY_PATH.format(company_id=company_id)
+        return await self._post(
+            path, {}, tenant_id=tenant_id, timeout=GENERATE_TIMEOUT_S
+        )
+
+    async def generate_brand_identity(
+        self, *, tenant_id: str, company_id: int
+    ) -> dict[str, Any] | None:
+        """Trigger brand identity generation (J-06, SKL-OIA-12)."""
+        path = GENERATE_IDENTITY_PATH.format(company_id=company_id)
+        return await self._post(
+            path, {}, tenant_id=tenant_id, timeout=GENERATE_TIMEOUT_S
+        )
