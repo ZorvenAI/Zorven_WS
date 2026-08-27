@@ -479,3 +479,188 @@ def test_the_publish_is_queued_rather_than_run_inline():
     source = inspect.getsource(events.emit_provenance_reviewed)
     assert "publish_event_to_kafka.delay(" in source
     assert "\n        publish_event_to_kafka(" not in source
+
+
+# ── K-02 · submit guard, delegation, config ────────────────────────
+
+
+def test_submit_blocked_while_conflicts_exist(public_tenant, admin):
+    """AC-5: PATCH to CONFIRMED refused when CONFLICT rows remain."""
+    session = make_session(tenant=public_tenant, status="REVIEW_PENDING")
+    make_provenance(
+        session=session,
+        field_name="legal_name",
+        classification=FieldClassification.KEY,
+        status=ProvenanceStatus.CONFLICT,
+    )
+    make_provenance(
+        session=session,
+        field_name="tagline",
+        classification=FieldClassification.SECONDARY,
+        status=ProvenanceStatus.CONFIRMED,
+    )
+
+    response = client_for(admin, public_tenant).patch(
+        f"{SESSIONS}{session.pk}/",
+        {"status": "CONFIRMED"},
+        format="json",
+    )
+
+    assert response.status_code == 409
+    assert response.data["code"] == "UNRESOLVED_CONFLICTS"
+    assert "legal_name" in response.data["unresolved_fields"]
+
+    session.refresh_from_db()
+    assert session.status == "REVIEW_PENDING"
+
+
+def test_submit_succeeds_after_all_conflicts_resolved(public_tenant, admin):
+    """AC-5: once every CONFLICT is resolved, CONFIRMED transition works."""
+    session = make_session(tenant=public_tenant, status="REVIEW_PENDING")
+    make_provenance(
+        session=session,
+        field_name="legal_name",
+        classification=FieldClassification.KEY,
+        status=ProvenanceStatus.CONFIRMED,
+    )
+
+    response = client_for(admin, public_tenant).patch(
+        f"{SESSIONS}{session.pk}/",
+        {"status": "CONFIRMED"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    session.refresh_from_db()
+    assert session.status == "CONFIRMED"
+
+
+def test_delegate_can_confirm_key_field(public_tenant, editor):
+    """AC-4: an Editor named as key_confirm_delegate may confirm KEY."""
+    session = make_session(tenant=public_tenant)
+    session.config = {"key_confirm_delegate": editor.pk}
+    session.save(update_fields=["config"])
+
+    row = make_provenance(
+        session=session,
+        classification=FieldClassification.KEY,
+    )
+
+    response = client_for(editor, public_tenant).post(f"{PROVENANCE}{row.pk}/confirm/")
+
+    assert response.status_code == 200
+    row.refresh_from_db()
+    assert row.status == ProvenanceStatus.CONFIRMED
+    assert row.reviewed_by == editor
+
+
+def test_delegate_can_edit_key_field(public_tenant, editor):
+    """AC-4: delegation applies to edit as well as confirm."""
+    session = make_session(tenant=public_tenant)
+    session.config = {"key_confirm_delegate": editor.pk}
+    session.save(update_fields=["config"])
+
+    row = make_provenance(
+        session=session,
+        classification=FieldClassification.KEY,
+        extracted_value="Acme Ltd",
+    )
+
+    response = client_for(editor, public_tenant).post(
+        f"{PROVENANCE}{row.pk}/edit/",
+        {"final_value": "Acme Limited"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    row.refresh_from_db()
+    assert row.status == ProvenanceStatus.EDITED
+    assert row.final_value == "Acme Limited"
+
+
+def test_non_delegate_editor_still_refused_key(public_tenant):
+    """AC-4: delegation is per-session — a different Editor is still refused."""
+    delegate = member(public_tenant, Membership.Role.EDITOR, "delegate_ed")
+    outsider = member(public_tenant, Membership.Role.EDITOR, "outsider_ed")
+
+    session = make_session(tenant=public_tenant)
+    session.config = {"key_confirm_delegate": delegate.pk}
+    session.save(update_fields=["config"])
+
+    row = make_provenance(
+        session=session,
+        classification=FieldClassification.KEY,
+    )
+
+    response = client_for(outsider, public_tenant).post(
+        f"{PROVENANCE}{row.pk}/confirm/"
+    )
+
+    assert response.status_code == 403
+    assert response.data["code"] == "ERR-04"
+
+
+def test_config_field_persists_delegate(public_tenant, admin):
+    """AC-4: Owner/Admin can set key_confirm_delegate via session PATCH."""
+    session = make_session(tenant=public_tenant, status="REVIEW_PENDING")
+    target_user = member(public_tenant, Membership.Role.EDITOR, "delegate_target")
+
+    response = client_for(admin, public_tenant).patch(
+        f"{SESSIONS}{session.pk}/",
+        {"config": {"key_confirm_delegate": target_user.pk}},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    session.refresh_from_db()
+    assert session.config["key_confirm_delegate"] == target_user.pk
+
+
+def test_editor_cannot_set_delegate(public_tenant, editor):
+    """AC-4 hardening: an Editor must not self-delegate KEY access."""
+    session = make_session(tenant=public_tenant, status="REVIEW_PENDING")
+
+    response = client_for(editor, public_tenant).patch(
+        f"{SESSIONS}{session.pk}/",
+        {"config": {"key_confirm_delegate": editor.pk}},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    session.refresh_from_db()
+    assert session.config == {}
+
+
+def test_config_rejects_unknown_keys(public_tenant, admin):
+    """Config validation: only allowed keys accepted."""
+    session = make_session(tenant=public_tenant, status="REVIEW_PENDING")
+
+    response = client_for(admin, public_tenant).patch(
+        f"{SESSIONS}{session.pk}/",
+        {"config": {"arbitrary_key": "value"}},
+        format="json",
+    )
+
+    assert response.status_code == 400
+
+
+def test_is_key_delegate_in_session_response(public_tenant, editor):
+    """The session response includes is_key_delegate for delegation UI."""
+    session = make_session(tenant=public_tenant)
+    session.config = {"key_confirm_delegate": editor.pk}
+    session.save(update_fields=["config"])
+
+    response = client_for(editor, public_tenant).get(f"{SESSIONS}{session.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["is_key_delegate"] is True
+
+
+def test_is_key_delegate_false_for_non_delegate(public_tenant, admin):
+    """Non-delegates see is_key_delegate=False."""
+    session = make_session(tenant=public_tenant)
+
+    response = client_for(admin, public_tenant).get(f"{SESSIONS}{session.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["is_key_delegate"] is False

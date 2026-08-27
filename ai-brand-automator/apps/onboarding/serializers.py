@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections import Counter
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from apps.onboarding.models import (
@@ -44,6 +45,9 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
     consent = serializers.SerializerMethodField(
         help_text="Consent state for this session (AC-2); granted: false when none",
     )
+    is_key_delegate = serializers.SerializerMethodField(
+        help_text="True when the requesting user is the named KEY delegate (AC-4)",
+    )
 
     class Meta:
         model = OnboardingSession
@@ -59,6 +63,8 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
             "evidence_manifest_hash",
             "process_job_id",
             "process_summary",
+            "config",
+            "is_key_delegate",
             "legal_next_states",
             "consent",
             "created_at",
@@ -77,6 +83,7 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
             "prompt_versions",
             "process_job_id",
             "process_summary",
+            "is_key_delegate",
             "legal_next_states",
             "consent",
         ]
@@ -91,6 +98,17 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
         from apps.onboarding import state
 
         return sorted(state.legal_targets(obj.status, obj.escalated_from))
+
+    def get_is_key_delegate(self, obj) -> bool:
+        request = self.context.get("request")
+        if not request or not getattr(request.user, "is_authenticated", False):
+            return False
+        delegate_id = (obj.config or {}).get("key_confirm_delegate")
+        try:
+            delegate_id = int(delegate_id) if delegate_id is not None else None
+        except (TypeError, ValueError):
+            return False
+        return delegate_id is not None and request.user.pk == delegate_id
 
     def get_consent(self, obj) -> dict:
         """Consent state for this session, never inherited (AC-2, AC-4).
@@ -127,6 +145,37 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
             "method": record.method,
             "scope": record.scope,
         }
+
+    def validate_config(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("config must be a JSON object.")
+        allowed_keys = {"key_confirm_delegate"}
+        unknown = set(value) - allowed_keys
+        if unknown:
+            raise serializers.ValidationError(f"Unknown config keys: {sorted(unknown)}")
+        request = self.context.get("request")
+        if "key_confirm_delegate" in value:
+            from tenants.permissions import IsTenantAdmin
+
+            view = self.context.get("view")
+            if not (request and IsTenantAdmin().has_permission(request, view)):
+                raise serializers.ValidationError(
+                    "Only Admin can set key_confirm_delegate."
+                )
+            delegate_pk = value["key_confirm_delegate"]
+            if delegate_pk is not None:
+                try:
+                    delegate_pk = int(delegate_pk)
+                except (TypeError, ValueError):
+                    raise serializers.ValidationError(
+                        "key_confirm_delegate must be an integer user ID."
+                    )
+                value["key_confirm_delegate"] = delegate_pk
+                if not User.objects.filter(pk=delegate_pk).exists():
+                    raise serializers.ValidationError(
+                        "key_confirm_delegate references a nonexistent user."
+                    )
+        return value
 
 
 class FieldProvenanceSerializer(serializers.ModelSerializer):

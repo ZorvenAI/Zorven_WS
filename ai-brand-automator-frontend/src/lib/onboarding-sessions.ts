@@ -51,6 +51,8 @@ export interface SessionDetail extends OnboardingSessionSummary {
   process_job_id: string;
   process_summary: Record<string, unknown>;
   consent: ConsentState;
+  config?: Record<string, unknown>;
+  is_key_delegate?: boolean;
 }
 
 /** Response from POST /sessions/{id}/process/ (J-01). */
@@ -669,6 +671,48 @@ export async function getSessionProvenance(
     throw new Error(`API ${response.status}: ${await response.text()}`);
   }
   return (await response.json()) as ProvenanceResponse;
+}
+
+// ── Provenance review actions (K-02) ─────────────────────────────────
+
+export async function confirmProvenance(
+  rowId: number,
+): Promise<FieldProvenanceRow> {
+  const response = await apiClient.post(
+    `${BASE}/provenance/${rowId}/confirm/`,
+    {},
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as FieldProvenanceRow;
+}
+
+export async function editProvenance(
+  rowId: number,
+  finalValue: unknown,
+): Promise<FieldProvenanceRow> {
+  const response = await apiClient.post(
+    `${BASE}/provenance/${rowId}/edit/`,
+    { final_value: finalValue },
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as FieldProvenanceRow;
+}
+
+export async function submitReview(
+  sessionId: string,
+): Promise<SessionDetail> {
+  const response = await apiClient.patch(
+    `${BASE}/sessions/${sessionId}/`,
+    { status: 'CONFIRMED' },
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as SessionDetail;
 }
 
 // ── Process dispatch (J-01) ──────────────────────────────────────────

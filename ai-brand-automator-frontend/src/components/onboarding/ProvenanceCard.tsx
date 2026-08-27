@@ -1,6 +1,7 @@
 'use client';
 
-import { FileText, Image } from 'lucide-react';
+import { useState } from 'react';
+import { Check, FileText, Image, Loader2, X } from 'lucide-react';
 import type {
   FieldProvenanceRow,
   FieldClassification,
@@ -35,8 +36,8 @@ function displayValue(value: unknown): string {
 interface ProvenanceCardProps {
   row: FieldProvenanceRow;
   onViewSource?: (row: FieldProvenanceRow) => void;
-  onConfirm?: (row: FieldProvenanceRow) => void;
-  onEdit?: (row: FieldProvenanceRow) => void;
+  onConfirm?: (row: FieldProvenanceRow) => Promise<void>;
+  onEdit?: (row: FieldProvenanceRow, finalValue: unknown) => Promise<void>;
 }
 
 export default function ProvenanceCard({
@@ -45,9 +46,53 @@ export default function ProvenanceCard({
   onConfirm,
   onEdit,
 }: ProvenanceCardProps) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const [saving, setSaving] = useState(false);
+
   const hasSource = row.source_span !== null || row.source_media !== null;
   const confidencePct =
     row.confidence != null ? Math.round(Number(row.confidence) * 100) : null;
+
+  const handleConfirm = async () => {
+    if (!onConfirm) return;
+    setSaving(true);
+    try {
+      await onConfirm(row);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEdit = () => {
+    setEditValue(displayValue(row.extracted_value));
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setEditValue('');
+  };
+
+  const saveEdit = async () => {
+    if (!onEdit) return;
+    setSaving(true);
+    try {
+      await onEdit(row, editValue);
+      setEditing(false);
+      setEditValue('');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const canConfirm =
+    onConfirm && (row.status === 'PENDING' || row.status === 'CONFLICT');
+  const canEdit =
+    onEdit &&
+    (row.status === 'PENDING' ||
+      row.status === 'CONFIRMED' ||
+      row.status === 'CONFLICT');
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 p-4">
@@ -70,6 +115,42 @@ export default function ProvenanceCard({
       <p className="mb-3 whitespace-pre-wrap text-sm text-brand-silver">
         {displayValue(row.extracted_value)}
       </p>
+
+      {editing && (
+        <div className="mb-3 space-y-2">
+          <textarea
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            className="w-full rounded border border-white/20 bg-white/5 px-3 py-2 text-sm text-white placeholder-brand-silver focus:border-brand-electric focus:outline-none"
+            rows={3}
+            aria-label={`Edit value for ${humanFieldName(row.field_name)}`}
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={saveEdit}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded bg-purple-500/20 px-3 py-1 text-xs text-purple-400 hover:bg-purple-500/30 disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              ) : (
+                <Check className="h-3 w-3" aria-hidden />
+              )}
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={cancelEdit}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded px-3 py-1 text-xs text-brand-silver hover:bg-white/10 disabled:opacity-50"
+            >
+              <X className="h-3 w-3" aria-hidden />
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         {confidencePct != null && (
@@ -100,20 +181,24 @@ export default function ProvenanceCard({
           </button>
         )}
 
-        {onConfirm && row.status === 'PENDING' && (
+        {canConfirm && !editing && (
           <button
             type="button"
-            onClick={() => onConfirm(row)}
-            className="rounded px-2 py-1 text-xs text-emerald-400 hover:bg-emerald-500/10"
+            onClick={handleConfirm}
+            disabled={saving}
+            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50"
           >
+            {saving && (
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+            )}
             Confirm
           </button>
         )}
 
-        {onEdit && (row.status === 'PENDING' || row.status === 'CONFIRMED') && (
+        {canEdit && !editing && (
           <button
             type="button"
-            onClick={() => onEdit(row)}
+            onClick={startEdit}
             className="rounded px-2 py-1 text-xs text-purple-400 hover:bg-purple-500/10"
           >
             Edit

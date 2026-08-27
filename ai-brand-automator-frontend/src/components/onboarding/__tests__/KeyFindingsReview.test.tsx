@@ -1,5 +1,5 @@
 /**
- * K-01 — KeyFindingsReview component tests.
+ * K-01 + K-02 — KeyFindingsReview component tests.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -27,12 +27,20 @@ jest.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({}),
 }));
 
+let mockRole: { isAdmin: boolean; canEdit: boolean; isOwner: boolean; role: string; canManageTeam: boolean; canManageBilling: boolean } = { isAdmin: true, canEdit: true, isOwner: false, role: 'admin', canManageTeam: true, canManageBilling: false };
+jest.mock('@/hooks/useTenantRole', () => ({
+  useTenantRole: () => mockRole,
+}));
+
 jest.mock('@/lib/onboarding-sessions', () => ({
   getSessionDetail: jest.fn(),
   getSessionProvenance: jest.fn(),
   listSessionRecordings: jest.fn(),
   getRecordingDetail: jest.fn(),
   getRecordingTranscript: jest.fn(),
+  confirmProvenance: jest.fn(),
+  editProvenance: jest.fn(),
+  submitReview: jest.fn(),
   formatTime: (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
@@ -74,7 +82,7 @@ const baseSummary: ProcessSummary = {
   generated: ['brand_strategy', 'brand_identity'],
 };
 
-function makeSession(overrides: Partial<ProcessSummary> = {}): SessionDetail {
+function makeSession(overrides: Partial<ProcessSummary> = {}, extras: Partial<SessionDetail> = {}): SessionDetail {
   return {
     id: 'sess-1',
     company: 'comp-1',
@@ -87,6 +95,7 @@ function makeSession(overrides: Partial<ProcessSummary> = {}): SessionDetail {
     process_job_id: 'job-1',
     process_summary: { ...baseSummary, ...overrides } as Record<string, unknown>,
     consent: { granted: true, granted_at: null, method: null, scope: null },
+    ...extras,
   };
 }
 
@@ -130,11 +139,17 @@ function setupMocks(
   mockApi.getRecordingTranscript.mockResolvedValue([
     { text: 'Hello', speaker: 0, t_start: 0, t_end: 2, redaction_applied: false },
   ]);
+  mockApi.confirmProvenance.mockResolvedValue(makeRow({ status: 'CONFIRMED' }));
+  mockApi.editProvenance.mockResolvedValue(makeRow({ status: 'EDITED' }));
+  mockApi.submitReview.mockResolvedValue(makeSession());
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockRole = { isAdmin: true, canEdit: true, isOwner: false, role: 'admin', canManageTeam: true, canManageBilling: false };
 });
+
+// ── K-01 tests ───────────────────────────────────────────────────────
 
 it('renders summary bar with fields_written and dropped_ungrounded', async () => {
   setupMocks();
@@ -263,5 +278,144 @@ it('shows recording summaries when available', async () => {
   render(<KeyFindingsReview sessionId="sess-1" />);
   await waitFor(() => {
     expect(screen.getByText('Test summary')).toBeInTheDocument();
+  });
+});
+
+// ── K-02 tests ───────────────────────────────────────────────────────
+
+it('confirm button calls confirmProvenance API (K-02 AC-1)', async () => {
+  setupMocks();
+  render(<KeyFindingsReview sessionId="sess-1" />);
+  await waitFor(() => {
+    expect(screen.getByText('Company Name')).toBeInTheDocument();
+  });
+
+  const confirmBtn = screen.getByText('Confirm');
+  fireEvent.click(confirmBtn);
+
+  await waitFor(() => {
+    expect(mockApi.confirmProvenance).toHaveBeenCalledWith(1);
+  });
+});
+
+it('edit inline saves value via editProvenance API (K-02 AC-2)', async () => {
+  setupMocks();
+  render(<KeyFindingsReview sessionId="sess-1" />);
+  await waitFor(() => {
+    expect(screen.getByText('Company Name')).toBeInTheDocument();
+  });
+
+  const editBtn = screen.getByText('Edit');
+  fireEvent.click(editBtn);
+
+  const textarea = screen.getByLabelText(/Edit value for Company Name/);
+  fireEvent.change(textarea, { target: { value: 'Acme Inc' } });
+
+  const saveBtn = screen.getByText('Save');
+  fireEvent.click(saveBtn);
+
+  await waitFor(() => {
+    expect(mockApi.editProvenance).toHaveBeenCalledWith(1, 'Acme Inc');
+  });
+});
+
+it('KEY field has no confirm/edit for editor role (K-02 AC-3)', async () => {
+  mockRole = { isAdmin: false, canEdit: true, isOwner: false, role: 'editor', canManageTeam: false, canManageBilling: false };
+  setupMocks({}, [makeRow({ classification: 'KEY', field_name: 'company_name' })]);
+  render(<KeyFindingsReview sessionId="sess-1" />);
+  await waitFor(() => {
+    expect(screen.getByText('Company Name')).toBeInTheDocument();
+  });
+
+  expect(screen.queryByText('Confirm')).not.toBeInTheDocument();
+  expect(screen.queryByText('Edit')).not.toBeInTheDocument();
+});
+
+it('SECONDARY field has confirm/edit for editor role (K-02 AC-3)', async () => {
+  mockRole = { isAdmin: false, canEdit: true, isOwner: false, role: 'editor', canManageTeam: false, canManageBilling: false };
+  setupMocks({}, [makeRow({ classification: 'SECONDARY', field_name: 'phone_number' })]);
+  render(<KeyFindingsReview sessionId="sess-1" />);
+  await waitFor(() => {
+    expect(screen.getByText(/Auto-filled fields/)).toBeInTheDocument();
+  });
+
+  fireEvent.click(screen.getByText(/Auto-filled fields/));
+  expect(screen.getByText('Phone Number')).toBeInTheDocument();
+  expect(screen.getByText('Confirm')).toBeInTheDocument();
+  expect(screen.getByText('Edit')).toBeInTheDocument();
+});
+
+it('submit button disabled when conflicts exist (K-02 AC-5)', async () => {
+  const conflictRow = makeRow({
+    id: 99,
+    field_name: 'industry',
+    status: 'CONFLICT',
+    classification: 'KEY',
+  });
+  setupMocks(
+    { conflicts: [{ field_name: 'industry', existing_status: 'CONFIRMED' }] },
+    [conflictRow, makeRow()],
+  );
+  render(<KeyFindingsReview sessionId="sess-1" />);
+  await waitFor(() => {
+    expect(screen.getByTestId('submit-button')).toBeInTheDocument();
+  });
+
+  const submitBtn = screen.getByTestId('submit-button');
+  expect(submitBtn).toBeDisabled();
+  expect(screen.getByText(/Resolve all 1 conflict/)).toBeInTheDocument();
+});
+
+it('submit button enabled when no conflicts (K-02 AC-5)', async () => {
+  setupMocks();
+  render(<KeyFindingsReview sessionId="sess-1" />);
+  await waitFor(() => {
+    expect(screen.getByTestId('submit-button')).toBeInTheDocument();
+  });
+
+  const submitBtn = screen.getByTestId('submit-button');
+  expect(submitBtn).not.toBeDisabled();
+});
+
+it('delegated editor sees KEY confirm/edit buttons (K-02 AC-4)', async () => {
+  mockRole = { isAdmin: false, canEdit: true, isOwner: false, role: 'editor', canManageTeam: false, canManageBilling: false };
+  setupMocks({}, [makeRow({ classification: 'KEY', field_name: 'company_name' })]);
+  mockApi.getSessionDetail.mockResolvedValue(
+    makeSession({}, { is_key_delegate: true }),
+  );
+  render(<KeyFindingsReview sessionId="sess-1" />);
+  await waitFor(() => {
+    expect(screen.getByText('Company Name')).toBeInTheDocument();
+  });
+
+  expect(screen.getByText('Confirm')).toBeInTheDocument();
+  expect(screen.getByText('Edit')).toBeInTheDocument();
+});
+
+it('shows error banner when confirm fails (K-02 error handling)', async () => {
+  mockApi.confirmProvenance.mockRejectedValue(new Error('API 403: Forbidden'));
+  setupMocks();
+  mockApi.confirmProvenance.mockRejectedValue(new Error('API 403: Forbidden'));
+  render(<KeyFindingsReview sessionId="sess-1" />);
+  await waitFor(() => {
+    expect(screen.getByText('Company Name')).toBeInTheDocument();
+  });
+
+  const confirmBtn = screen.getByText('Confirm');
+  fireEvent.click(confirmBtn);
+
+  await waitFor(() => {
+    expect(screen.getByText(/API 403: Forbidden/)).toBeInTheDocument();
+  });
+});
+
+it('shows Review submitted when session status is CONFIRMED (K-02)', async () => {
+  setupMocks();
+  mockApi.getSessionDetail.mockResolvedValue(
+    makeSession({}, { status: 'CONFIRMED', legal_next_states: [] }),
+  );
+  render(<KeyFindingsReview sessionId="sess-1" />);
+  await waitFor(() => {
+    expect(screen.getByText('Review submitted')).toBeInTheDocument();
   });
 });
