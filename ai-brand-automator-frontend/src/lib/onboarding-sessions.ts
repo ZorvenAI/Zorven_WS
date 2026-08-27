@@ -51,6 +51,8 @@ export interface SessionDetail extends OnboardingSessionSummary {
   process_job_id: string;
   process_summary: Record<string, unknown>;
   consent: ConsentState;
+  config?: Record<string, unknown>;
+  is_key_delegate?: boolean;
 }
 
 /** Response from POST /sessions/{id}/process/ (J-01). */

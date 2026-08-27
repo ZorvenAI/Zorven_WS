@@ -1064,7 +1064,11 @@ class FieldProvenanceViewSet(
             return None
         session = row.session
         delegate_id = (session.config or {}).get("key_confirm_delegate")
-        if delegate_id and self.request.user.pk == delegate_id:
+        try:
+            delegate_id = int(delegate_id) if delegate_id is not None else None
+        except (TypeError, ValueError):
+            delegate_id = None
+        if delegate_id is not None and self.request.user.pk == delegate_id:
             return None
         return Response(
             {

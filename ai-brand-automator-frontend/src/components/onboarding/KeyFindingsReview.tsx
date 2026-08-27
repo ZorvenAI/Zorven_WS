@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -57,38 +57,62 @@ export default function KeyFindingsReview({
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [groups, setGroups] = useState<ProvenanceGroup[]>([]);
   const [recordings, setRecordings] = useState<RecordingDetail[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [drawerRow, setDrawerRow] = useState<FieldProvenanceRow | null>(null);
   const [secondaryOpen, setSecondaryOpen] = useState<Record<number, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const hasLoadedOnce = useRef(false);
+
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedOnce.current) {
+      setInitialLoading(true);
+    }
     setError(null);
     try {
       const [sess, prov, recs] = await Promise.all([
         getSessionDetail(sessionId),
         getSessionProvenance(sessionId),
-        listSessionRecordings(sessionId),
+        ...(hasLoadedOnce.current
+          ? []
+          : [listSessionRecordings(sessionId)]),
       ]);
       setSession(sess);
       setGroups(prov.groups);
 
-      const details = await Promise.all(
-        recs
-          .filter((r) => r.has_summary)
-          .map((r) => getRecordingDetail(r.id)),
-      );
-      setRecordings(details);
+      if (!hasLoadedOnce.current && recs) {
+        const details = await Promise.all(
+          (recs as Awaited<ReturnType<typeof listSessionRecordings>>)
+            .filter((r) => r.has_summary)
+            .map((r) => getRecordingDetail(r.id)),
+        );
+        setRecordings(details);
+      }
+      hasLoadedOnce.current = true;
     } catch (err) {
       setError(String(err));
       setSession(null);
       setGroups([]);
       setRecordings([]);
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
+    }
+  }, [sessionId]);
+
+  const refresh = useCallback(async () => {
+    setActionError(null);
+    try {
+      const [sess, prov] = await Promise.all([
+        getSessionDetail(sessionId),
+        getSessionProvenance(sessionId),
+      ]);
+      setSession(sess);
+      setGroups(prov.groups);
+    } catch (err) {
+      setActionError(String(err));
     }
   }, [sessionId]);
 
@@ -113,20 +137,33 @@ export default function KeyFindingsReview({
     setSecondaryOpen((prev) => ({ ...prev, [page]: !prev[page] }));
   }, []);
 
+  const isKeyDelegate = session?.is_key_delegate === true;
+  const canConfirmKey = isAdmin || isKeyDelegate;
+
   const handleConfirm = useCallback(
     async (row: FieldProvenanceRow) => {
-      await confirmProvenance(row.id);
-      await load();
+      setActionError(null);
+      try {
+        await confirmProvenance(row.id);
+        await refresh();
+      } catch (err) {
+        setActionError(String(err));
+      }
     },
-    [load],
+    [refresh],
   );
 
   const handleEdit = useCallback(
     async (row: FieldProvenanceRow, finalValue: unknown) => {
-      await editProvenance(row.id, finalValue);
-      await load();
+      setActionError(null);
+      try {
+        await editProvenance(row.id, finalValue);
+        await refresh();
+      } catch (err) {
+        setActionError(String(err));
+      }
     },
-    [load],
+    [refresh],
   );
 
   const handleSubmit = useCallback(async () => {
@@ -142,8 +179,8 @@ export default function KeyFindingsReview({
     }
   }, [sessionId, router]);
 
-  const confirmCallbackForKey = isAdmin ? handleConfirm : undefined;
-  const editCallbackForKey = isAdmin ? handleEdit : undefined;
+  const confirmCallbackForKey = canConfirmKey ? handleConfirm : undefined;
+  const editCallbackForKey = canConfirmKey ? handleEdit : undefined;
   const confirmCallbackForSecondary = canEdit ? handleConfirm : undefined;
   const editCallbackForSecondary = canEdit ? handleEdit : undefined;
 
@@ -151,9 +188,11 @@ export default function KeyFindingsReview({
     session?.legal_next_states?.includes('CONFIRMED') &&
     conflictRows.length === 0;
 
-  const showSubmit = session?.legal_next_states?.includes('CONFIRMED');
+  const showSubmit =
+    session?.legal_next_states?.includes('CONFIRMED') ||
+    session?.status === 'CONFIRMED';
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <div className="space-y-6">
         <p className="text-sm text-brand-silver">Loading review...</p>
@@ -189,6 +228,13 @@ export default function KeyFindingsReview({
           </span>
         </div>
       </div>
+
+      {/* Action error banner */}
+      {actionError && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          {actionError}
+        </div>
+      )}
 
       {/* Summary bar */}
       {summary && (
@@ -395,7 +441,7 @@ export default function KeyFindingsReview({
         );
       })}
 
-      {groups.length === 0 && !loading && (
+      {groups.length === 0 && !initialLoading && (
         <div className="glass-card p-5 text-center">
           <p className="text-sm text-brand-silver">
             No provenance data available yet.

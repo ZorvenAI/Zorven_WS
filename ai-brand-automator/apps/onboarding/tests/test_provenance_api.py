@@ -614,3 +614,53 @@ def test_config_field_persists_delegate(public_tenant, admin):
     assert response.status_code == 200
     session.refresh_from_db()
     assert session.config["key_confirm_delegate"] == target_user.pk
+
+
+def test_editor_cannot_set_delegate(public_tenant, editor):
+    """AC-4 hardening: an Editor must not self-delegate KEY access."""
+    session = make_session(tenant=public_tenant, status="REVIEW_PENDING")
+
+    response = client_for(editor, public_tenant).patch(
+        f"{SESSIONS}{session.pk}/",
+        {"config": {"key_confirm_delegate": editor.pk}},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    session.refresh_from_db()
+    assert session.config == {}
+
+
+def test_config_rejects_unknown_keys(public_tenant, admin):
+    """Config validation: only allowed keys accepted."""
+    session = make_session(tenant=public_tenant, status="REVIEW_PENDING")
+
+    response = client_for(admin, public_tenant).patch(
+        f"{SESSIONS}{session.pk}/",
+        {"config": {"arbitrary_key": "value"}},
+        format="json",
+    )
+
+    assert response.status_code == 400
+
+
+def test_is_key_delegate_in_session_response(public_tenant, editor):
+    """The session response includes is_key_delegate for delegation UI."""
+    session = make_session(tenant=public_tenant)
+    session.config = {"key_confirm_delegate": editor.pk}
+    session.save(update_fields=["config"])
+
+    response = client_for(editor, public_tenant).get(f"{SESSIONS}{session.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["is_key_delegate"] is True
+
+
+def test_is_key_delegate_false_for_non_delegate(public_tenant, admin):
+    """Non-delegates see is_key_delegate=False."""
+    session = make_session(tenant=public_tenant)
+
+    response = client_for(admin, public_tenant).get(f"{SESSIONS}{session.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["is_key_delegate"] is False
