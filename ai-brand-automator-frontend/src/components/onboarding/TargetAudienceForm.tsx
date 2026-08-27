@@ -1,11 +1,48 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api';
+import { useWizardProvenance } from '@/hooks/useWizardProvenance';
+import ProvenanceBadge from '@/components/onboarding/ProvenanceBadge';
+
+function parseLanguages(val: unknown): string {
+  if (Array.isArray(val)) return val.join(', ');
+  return '';
+}
+
+function serializeLanguages(text: string): string[] | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  return trimmed.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+function parseCustomerProof(val: unknown): string {
+  if (!Array.isArray(val)) return '';
+  return val
+    .map((item: Record<string, unknown>) =>
+      typeof item === 'object' && item !== null ? String(item.text || '') : String(item),
+    )
+    .filter(Boolean)
+    .join('\n');
+}
+
+function serializeCustomerProof(
+  text: string,
+): Array<{ type: string; text: string }> | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  return trimmed
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => ({ type: 'testimonial', text: line }));
+}
 
 export function TargetAudienceForm() {
   const router = useRouter();
+  const { provenanceMap, editField } = useWizardProvenance(3);
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -16,11 +53,13 @@ export function TargetAudienceForm() {
     psychographics: '',
     painPoints: '',
     desiredOutcomes: '',
+    audienceLanguages: '',
+    customerProof: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const initialValues = useRef<Record<string, string>>({});
 
-  // Load existing company data on mount
   useEffect(() => {
     const loadCompanyData = async () => {
       try {
@@ -30,11 +69,9 @@ export function TargetAudienceForm() {
           const companies = data.results || [];
           if (companies.length > 0) {
             const company = companies[0];
-            // Store company ID in localStorage
             localStorage.setItem('company_id', company.id.toString());
-            
-            // Populate form with existing data (convert snake_case to camelCase)
-            setFormData({
+
+            const loaded = {
               name: company.name || '',
               description: company.description || '',
               industry: company.industry || '',
@@ -44,7 +81,11 @@ export function TargetAudienceForm() {
               psychographics: company.psychographics || '',
               painPoints: company.pain_points || '',
               desiredOutcomes: company.desired_outcomes || '',
-            });
+              audienceLanguages: parseLanguages(company.audience_languages),
+              customerProof: parseCustomerProof(company.customer_proof),
+            };
+            setFormData(loaded);
+            initialValues.current = { ...loaded };
           }
         }
       } catch (error) {
@@ -68,8 +109,7 @@ export function TargetAudienceForm() {
         return;
       }
 
-      // Update company with all required fields
-      const apiData = {
+      const apiData: Record<string, unknown> = {
         name: formData.name,
         description: formData.description,
         industry: formData.industry,
@@ -79,15 +119,41 @@ export function TargetAudienceForm() {
         psychographics: formData.psychographics,
         pain_points: formData.painPoints,
         desired_outcomes: formData.desiredOutcomes,
+        audience_languages: serializeLanguages(formData.audienceLanguages),
+        customer_proof: serializeCustomerProof(formData.customerProof),
       };
 
       const response = await apiClient.patch(
         `/companies/${companyId}/`,
-        apiData
+        apiData,
       );
 
       if (response.ok) {
-        // Move to next step
+        const provenanceEdits: Promise<void>[] = [];
+        if (
+          provenanceMap.has('audience_languages') &&
+          formData.audienceLanguages !== initialValues.current.audienceLanguages
+        ) {
+          provenanceEdits.push(
+            editField(
+              'audience_languages',
+              serializeLanguages(formData.audienceLanguages),
+            ),
+          );
+        }
+        if (
+          provenanceMap.has('customer_proof') &&
+          formData.customerProof !== initialValues.current.customerProof
+        ) {
+          provenanceEdits.push(
+            editField(
+              'customer_proof',
+              serializeCustomerProof(formData.customerProof),
+            ),
+          );
+        }
+        await Promise.allSettled(provenanceEdits);
+
         router.push('/onboarding/step-4');
       } else {
         const errorData = await response.json();
@@ -194,6 +260,42 @@ export function TargetAudienceForm() {
         />
         <p className="mt-1 text-sm text-brand-silver/70">
           What do they want to achieve?
+        </p>
+      </div>
+
+      <div>
+        <label htmlFor="audienceLanguages" className="label-dark">
+          Audience Languages
+          <ProvenanceBadge row={provenanceMap.get('audience_languages')} />
+        </label>
+        <input
+          type="text"
+          id="audienceLanguages"
+          className="input-dark mt-1"
+          value={formData.audienceLanguages}
+          onChange={(e) => setFormData({ ...formData, audienceLanguages: e.target.value })}
+          placeholder="e.g., en-IN, kn-IN, hi-IN"
+        />
+        <p className="mt-1 text-sm text-brand-silver/70">
+          BCP-47 language tags, comma-separated
+        </p>
+      </div>
+
+      <div>
+        <label htmlFor="customerProof" className="label-dark">
+          Customer Proof
+          <ProvenanceBadge row={provenanceMap.get('customer_proof')} />
+        </label>
+        <textarea
+          id="customerProof"
+          rows={4}
+          className="input-dark mt-1"
+          value={formData.customerProof}
+          onChange={(e) => setFormData({ ...formData, customerProof: e.target.value })}
+          placeholder="One testimonial, review, or case study per line"
+        />
+        <p className="mt-1 text-sm text-brand-silver/70">
+          Testimonials, reviews, awards — one per line
         </p>
       </div>
 

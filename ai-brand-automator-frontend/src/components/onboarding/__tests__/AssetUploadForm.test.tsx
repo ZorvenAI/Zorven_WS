@@ -1,17 +1,8 @@
-/**
- * Phase 7.3: Frontend Unit Tests - AssetUploadForm Component
- *
- * Tests for src/components/onboarding/AssetUploadForm.tsx
- * Focusing on file browser integration, pagination, and signed URL features
- */
-
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AssetUploadForm } from '../AssetUploadForm';
 import { assetsApi, apiClient } from '@/lib/api';
 
-// Mock the api module — apiClient methods return Response-like objects;
-// assetsApi.getSignedUrl returns parsed data directly.
 jest.mock('@/lib/api', () => ({
   assetsApi: {
     getSignedUrl: jest.fn(),
@@ -19,24 +10,35 @@ jest.mock('@/lib/api', () => ({
   apiClient: {
     get: jest.fn(),
     post: jest.fn(),
+    patch: jest.fn(),
     delete: jest.fn(),
     upload: jest.fn(),
   },
 }));
 
-// Mock next/navigation
+let mockSessionId: string | null = null;
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
     push: jest.fn(),
     replace: jest.fn(),
     prefetch: jest.fn(),
   }),
+  useSearchParams: () => ({
+    get: (key: string) => (key === 'sessionId' ? mockSessionId : null),
+  }),
 }));
 
-// Mock AllFilesModal to keep tests focused on AssetUploadForm
 jest.mock('@/components/ui/AllFilesModal', () => ({
   AllFilesModal: ({ isOpen }: { isOpen: boolean }) =>
     isOpen ? <div role="dialog">All Files Modal</div> : null,
+}));
+
+const mockGetSessionProvenance = jest.fn();
+const mockEditProvenance = jest.fn();
+jest.mock('@/lib/onboarding-sessions', () => ({
+  getSessionProvenance: (...args: unknown[]) =>
+    mockGetSessionProvenance(...args),
+  editProvenance: (...args: unknown[]) => mockEditProvenance(...args),
 }));
 
 const mockFiles = [
@@ -63,7 +65,6 @@ const mockFiles = [
   },
 ];
 
-/** Helper to build a Response-like object for apiClient mocks. */
 function mockResponse(data: unknown, ok = true, status = 200) {
   return { ok, status, json: async () => data };
 }
@@ -73,22 +74,19 @@ describe('AssetUploadForm', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSessionId = null;
 
-    // localStorage — component reads company_id before uploading
     jest.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {
       if (key === 'company_id') return '123';
       return null;
     });
 
-    // window.confirm — component uses native confirm for delete
     window.confirm = jest.fn(() => true);
 
-    // Default: apiClient.get returns the three mock files
     (apiClient.get as jest.Mock).mockResolvedValue(
       mockResponse({ results: mockFiles, count: 3, has_more: false }),
     );
 
-    // Default: apiClient.upload returns a successful new file
     (apiClient.upload as jest.Mock).mockResolvedValue(
       mockResponse({
         id: '4',
@@ -99,14 +97,16 @@ describe('AssetUploadForm', () => {
       }),
     );
 
-    // Default: apiClient.delete returns success
     (apiClient.delete as jest.Mock).mockResolvedValue(mockResponse({}));
 
-    // Default: assetsApi.getSignedUrl returns view + download URLs
     (assetsApi.getSignedUrl as jest.Mock).mockResolvedValue({
       view_url: 'https://storage.googleapis.com/signed-view-url',
       download_url: 'https://storage.googleapis.com/signed-download-url',
     });
+
+    (apiClient.patch as jest.Mock).mockResolvedValue(
+      mockResponse({ id: 123 }),
+    );
   });
 
   afterEach(() => {
@@ -131,7 +131,6 @@ describe('AssetUploadForm', () => {
     });
 
     it('shows view all button when files exist', async () => {
-      // View All only shows when totalCount > displayLimit (default 6)
       (apiClient.get as jest.Mock).mockResolvedValue(
         mockResponse({ results: mockFiles, count: 10, has_more: true }),
       );
@@ -143,6 +142,18 @@ describe('AssetUploadForm', () => {
           screen.getByRole('button', { name: /View All/i }),
         ).toBeInTheDocument();
       });
+    });
+
+    it('renders Market & Business section with K-03 fields', () => {
+      render(<AssetUploadForm />);
+
+      expect(
+        screen.getByLabelText(/brand asset status/i),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/Market & Business/i)).toBeInTheDocument();
+      expect(screen.getByText(/Products & Services/i)).toBeInTheDocument();
+      expect(screen.getByText(/Digital Presence/i)).toBeInTheDocument();
+      expect(screen.getByText(/Marketing Budget/i)).toBeInTheDocument();
     });
   });
 
@@ -171,7 +182,6 @@ describe('AssetUploadForm', () => {
       render(<AssetUploadForm />);
 
       await waitFor(() => {
-        // Header shows "(3/25)" when has_more is true
         expect(screen.getByText(/\/25/)).toBeInTheDocument();
       });
     });
@@ -205,7 +215,6 @@ describe('AssetUploadForm', () => {
     });
 
     it('accepts file drop', async () => {
-      // Component uploads via the file input (not an onDrop handler)
       render(<AssetUploadForm />);
 
       const fileInput = document.querySelector('input[type="file"]');
@@ -242,7 +251,6 @@ describe('AssetUploadForm', () => {
     });
 
     it('shows upload progress', async () => {
-      // Never-resolving promise keeps uploading === true
       (apiClient.upload as jest.Mock).mockReturnValue(
         new Promise(() => {}),
       );
@@ -263,7 +271,6 @@ describe('AssetUploadForm', () => {
     });
 
     it('calls onUploadComplete after successful upload', async () => {
-      // Component adds the uploaded file directly to the rendered list
       render(<AssetUploadForm />);
 
       await waitFor(() => {
@@ -287,7 +294,7 @@ describe('AssetUploadForm', () => {
       render(<AssetUploadForm />);
 
       await waitFor(() => {
-        expect(apiClient.get).toHaveBeenCalledTimes(1);
+        expect(apiClient.get).toHaveBeenCalled();
       });
 
       const fileInput = document.querySelector('input[type="file"]');
@@ -298,7 +305,6 @@ describe('AssetUploadForm', () => {
       });
       fireEvent.change(fileInput!, { target: { files: [file] } });
 
-      // After upload the new file is appended to state (no second fetch)
       await waitFor(() => {
         expect(screen.getByText('new-upload.png')).toBeInTheDocument();
       });
@@ -340,7 +346,6 @@ describe('AssetUploadForm', () => {
         expect(screen.getByText('logo.png')).toBeInTheDocument();
       });
 
-      // Click the first "View file" button (title attribute)
       const viewButtons = screen.getAllByTitle('View file');
       fireEvent.click(viewButtons[0]);
 
@@ -362,11 +367,9 @@ describe('AssetUploadForm', () => {
         expect(screen.getByText('logo.png')).toBeInTheDocument();
       });
 
-      // Click the first "Delete file" button (title attribute)
       const deleteButtons = screen.getAllByTitle('Delete file');
       fireEvent.click(deleteButtons[0]);
 
-      // window.confirm is mocked to return true
       await waitFor(() => {
         expect(apiClient.delete).toHaveBeenCalledWith('/assets/1/');
       });
@@ -382,7 +385,6 @@ describe('AssetUploadForm', () => {
       const deleteButtons = screen.getAllByTitle('Delete file');
       fireEvent.click(deleteButtons[0]);
 
-      // After delete the file is removed from state directly
       await waitFor(() => {
         expect(screen.queryByText('logo.png')).not.toBeInTheDocument();
       });
@@ -422,7 +424,6 @@ describe('AssetUploadForm', () => {
     });
 
     it('rejects invalid file types', async () => {
-      // File type restriction is enforced by the accept attribute on the input
       render(<AssetUploadForm />);
 
       const fileInput = document.querySelector('input[type="file"]');
@@ -432,7 +433,6 @@ describe('AssetUploadForm', () => {
     });
 
     it('rejects files exceeding size limit', async () => {
-      // The component displays a file size limit in the UI
       render(<AssetUploadForm />);
       expect(screen.getByText(/50MB/i)).toBeInTheDocument();
     });
@@ -450,7 +450,6 @@ describe('AssetUploadForm', () => {
       render(<AssetUploadForm />);
 
       await waitFor(() => {
-        // Upload area is shown; file list heading is not
         expect(screen.getByText(/Upload files/i)).toBeInTheDocument();
         expect(
           screen.queryByText(/Uploaded Files/i),
@@ -483,7 +482,6 @@ describe('AssetUploadForm', () => {
       render(<AssetUploadForm />);
 
       await waitFor(() => {
-        // Per-file sizes shown in KB: 102400 / 1024 = 100.0
         expect(screen.getByText(/100\.0 KB/)).toBeInTheDocument();
       });
     });
@@ -492,7 +490,6 @@ describe('AssetUploadForm', () => {
       render(<AssetUploadForm />);
 
       await waitFor(() => {
-        // Header shows the count in parentheses: "(3)"
         expect(screen.getByText(/\(3\)/)).toBeInTheDocument();
       });
     });
@@ -526,10 +523,182 @@ describe('AssetUploadForm', () => {
         expect(screen.getByText('logo.png')).toBeInTheDocument();
       });
 
-      // Verify interactive elements can receive focus
       const nextButton = screen.getByRole('button', { name: /Next Step/i });
       nextButton.focus();
       expect(document.activeElement).toBe(nextButton);
+    });
+  });
+
+  // -------------------------------------------------
+  // K-03: Market & Business Section
+  // -------------------------------------------------
+  describe('Market & Business Section (K-03)', () => {
+    it('renders brand asset status select', () => {
+      render(<AssetUploadForm />);
+
+      const select = screen.getByLabelText(/brand asset status/i);
+      expect(select).toBeInTheDocument();
+      const options = Array.from(select.querySelectorAll('option'));
+      const values = options.map((o) => o.getAttribute('value'));
+      expect(values).toContain('none');
+      expect(values).toContain('basic');
+      expect(values).toContain('partial');
+      expect(values).toContain('complete');
+    });
+
+    it('renders sales channel checkboxes', () => {
+      render(<AssetUploadForm />);
+
+      expect(screen.getByLabelText(/online store/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/marketplace/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/retail/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/wholesale/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/direct sales/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/social commerce/i)).toBeInTheDocument();
+    });
+
+    it('renders Save Market Info button', () => {
+      render(<AssetUploadForm />);
+
+      expect(
+        screen.getByRole('button', { name: /save market info/i }),
+      ).toBeInTheDocument();
+    });
+
+    it('saves market data via Company PATCH', async () => {
+      render(<AssetUploadForm />);
+
+      fireEvent.change(screen.getByLabelText(/brand asset status/i), {
+        target: { value: 'partial' },
+      });
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /save market info/i }),
+      );
+
+      await waitFor(() => {
+        expect(apiClient.patch).toHaveBeenCalledWith(
+          '/companies/123/',
+          expect.objectContaining({
+            brand_asset_status: 'partial',
+          }),
+        );
+      });
+    });
+
+    it('adds and removes competitor rows', () => {
+      render(<AssetUploadForm />);
+
+      const addButton = screen.getByText(/\+ Add competitor/i);
+      fireEvent.click(addButton);
+
+      const removeButtons = screen.getAllByRole('button', {
+        name: /remove competitor/i,
+      });
+      expect(removeButtons.length).toBe(2);
+
+      fireEvent.click(removeButtons[removeButtons.length - 1]);
+
+      expect(
+        screen.queryAllByRole('button', { name: /remove competitor/i }).length,
+      ).toBeLessThan(2);
+    });
+
+    it('works without sessionId — no provenance on market section (AC-2)', async () => {
+      mockSessionId = null;
+
+      render(<AssetUploadForm />);
+
+      fireEvent.change(screen.getByLabelText(/brand asset status/i), {
+        target: { value: 'complete' },
+      });
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /save market info/i }),
+      );
+
+      await waitFor(() => {
+        expect(apiClient.patch).toHaveBeenCalled();
+      });
+
+      expect(mockGetSessionProvenance).not.toHaveBeenCalled();
+      expect(mockEditProvenance).not.toHaveBeenCalled();
+    });
+
+    it('shows provenance badges for agent-filled market fields (AC-3)', async () => {
+      mockSessionId = 'sess-4';
+      mockGetSessionProvenance.mockResolvedValue({
+        session: 4,
+        groups: [
+          {
+            page: 4,
+            label: 'Assets & Market',
+            fields: [
+              {
+                id: 40,
+                field_name: 'brand_asset_status',
+                extracted_value: 'basic',
+                status: 'PENDING',
+                confidence: 0.75,
+                wizard_page: 4,
+              },
+              {
+                id: 41,
+                field_name: 'competitors',
+                extracted_value: [{ name: 'Acme Corp' }],
+                status: 'PENDING',
+                confidence: 0.8,
+                wizard_page: 4,
+              },
+            ],
+          },
+        ],
+      });
+
+      (apiClient.get as jest.Mock).mockResolvedValue(
+        mockResponse({
+          results: mockFiles,
+          count: 3,
+          has_more: false,
+        }),
+      );
+
+      render(<AssetUploadForm />);
+
+      await waitFor(() => {
+        expect(mockGetSessionProvenance).toHaveBeenCalledWith('sess-4');
+      });
+
+      await waitFor(() => {
+        const badges = screen.getAllByText('AI');
+        expect(badges.length).toBeGreaterThanOrEqual(1);
+      });
+    });
+
+    it('file upload section remains unchanged with market section', async () => {
+      render(<AssetUploadForm />);
+
+      await waitFor(() => {
+        expect(screen.getByText('logo.png')).toBeInTheDocument();
+      });
+
+      expect(screen.getByText(/Upload files/i)).toBeInTheDocument();
+      expect(screen.getByText(/drag and drop/i)).toBeInTheDocument();
+
+      const fileInput = document.querySelector('input[type="file"]');
+      expect(fileInput).not.toBeNull();
+
+      const file = new File(['test content'], 'new-upload.png', {
+        type: 'image/png',
+      });
+      fireEvent.change(fileInput!, { target: { files: [file] } });
+
+      await waitFor(() => {
+        expect(apiClient.upload).toHaveBeenCalledWith(
+          '/assets/upload/',
+          expect.any(FormData),
+        );
+      });
     });
   });
 });

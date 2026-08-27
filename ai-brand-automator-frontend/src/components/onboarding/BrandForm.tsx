@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api';
+import { useWizardProvenance } from '@/hooks/useWizardProvenance';
+import ProvenanceBadge from '@/components/onboarding/ProvenanceBadge';
 
 export function BrandForm() {
   const router = useRouter();
+  const { provenanceMap, editField } = useWizardProvenance(2);
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -17,10 +21,11 @@ export function BrandForm() {
     missionStatement: '',
     values: '',
     positioningStatement: '',
+    businessGoals: '',
   });
   const [isLoading, setIsLoading] = useState(false);
+  const initialValues = useRef<Record<string, string>>({});
 
-  // Load existing company data on mount
   useEffect(() => {
     const loadCompanyData = async () => {
       try {
@@ -30,11 +35,9 @@ export function BrandForm() {
           const companies = data.results || [];
           if (companies.length > 0) {
             const company = companies[0];
-            // Store company ID in localStorage for form submission
             localStorage.setItem('company_id', company.id.toString());
-            
-            // Populate form with existing data (convert snake_case to camelCase)
-            setFormData({
+
+            const loaded = {
               name: company.name || '',
               description: company.description || '',
               industry: company.industry || '',
@@ -45,7 +48,10 @@ export function BrandForm() {
               missionStatement: company.mission_statement || '',
               values: company.values || '',
               positioningStatement: company.positioning_statement || '',
-            });
+              businessGoals: company.business_goals || '',
+            };
+            setFormData(loaded);
+            initialValues.current = { ...loaded };
           }
         }
       } catch (error) {
@@ -68,14 +74,13 @@ export function BrandForm() {
     setIsLoading(true);
     try {
       const companyId = localStorage.getItem('company_id');
-      
+
       if (!companyId) {
         alert('Company ID not found. Please complete step 1 first.');
         router.push('/onboarding/step-1');
         return;
       }
 
-      // Convert camelCase to snake_case for backend
       const apiData = {
         name: formData.name,
         description: formData.description,
@@ -87,21 +92,25 @@ export function BrandForm() {
         mission_statement: formData.missionStatement,
         values: formData.values,
         positioning_statement: formData.positioningStatement,
+        business_goals: formData.businessGoals,
       };
 
       const response = await apiClient.patch(`/companies/${companyId}/`, apiData);
 
       if (response.ok) {
-        const data = await response.json();
-        console.log('Brand data updated:', data);
+        if (
+          provenanceMap.has('business_goals') &&
+          formData.businessGoals !== initialValues.current.businessGoals
+        ) {
+          await editField('business_goals', formData.businessGoals).catch(() => {});
+        }
+
         router.push('/onboarding/step-3');
       } else {
         const error = await response.json();
-        console.error('Validation error:', error);
-        // Show detailed error message
-        const errorMessage = error.detail || 
+        const errorMessage = error.detail ||
           (error.brand_voice && error.brand_voice[0]) ||
-          JSON.stringify(error) || 
+          JSON.stringify(error) ||
           'Failed to save brand data';
         alert(errorMessage);
       }
@@ -195,6 +204,22 @@ export function BrandForm() {
           onChange={handleChange}
           className="input-dark mt-1"
           placeholder="How do you position your brand?"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="businessGoals" className="label-dark">
+          Business Goals
+          <ProvenanceBadge row={provenanceMap.get('business_goals')} />
+        </label>
+        <textarea
+          id="businessGoals"
+          name="businessGoals"
+          rows={3}
+          value={formData.businessGoals}
+          onChange={handleChange}
+          className="input-dark mt-1"
+          placeholder="What does your business want to achieve?"
         />
       </div>
 

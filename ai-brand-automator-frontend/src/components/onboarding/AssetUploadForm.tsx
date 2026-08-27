@@ -5,14 +5,28 @@ import { useRouter } from 'next/navigation';
 import { apiClient, assetsApi } from '@/lib/api';
 import { getPipelineStatusConfig, PipelineStatus } from '@/types/assets';
 import { AllFilesModal } from '@/components/ui/AllFilesModal';
+import { useWizardProvenance } from '@/hooks/useWizardProvenance';
+import ProvenanceBadge from '@/components/onboarding/ProvenanceBadge';
 
-const POLLING_INTERVAL = 5000; // Poll every 5 seconds
+const POLLING_INTERVAL = 5000;
 const LIMIT_OPTIONS = [3, 6, 9] as const;
+
+const SALES_CHANNEL_OPTIONS = [
+  { value: 'online_store', label: 'Online Store' },
+  { value: 'marketplace', label: 'Marketplace' },
+  { value: 'retail', label: 'Retail' },
+  { value: 'wholesale', label: 'Wholesale' },
+  { value: 'direct', label: 'Direct Sales' },
+  { value: 'social', label: 'Social Commerce' },
+] as const;
+
+const CURRENCY_OPTIONS = ['INR', 'USD', 'EUR', 'GBP', 'AUD', 'CAD'] as const;
+const PERIOD_OPTIONS = ['monthly', 'quarterly', 'annually'] as const;
 
 interface UploadedFile {
   id: string;
   file_name: string;
-  file_type: string; // Changed from asset_type to match backend
+  file_type: string;
   file_size: number;
   pipeline_status: PipelineStatus;
 }
@@ -36,8 +50,151 @@ interface DuplicateConfirmation {
   };
 }
 
+interface Competitor {
+  name: string;
+  url: string;
+  notes: string;
+}
+
+interface ProductService {
+  name: string;
+  description: string;
+  price_range: string;
+}
+
+interface SalesChannel {
+  channel: string;
+  notes: string;
+}
+
+interface DigitalPresence {
+  website: string;
+  instagram: string;
+  facebook: string;
+  linkedin: string;
+  twitter: string;
+  youtube: string;
+}
+
+interface BudgetRange {
+  currency: string;
+  min: string;
+  max: string;
+  period: string;
+}
+
+const emptyCompetitor = (): Competitor => ({ name: '', url: '', notes: '' });
+const emptyProduct = (): ProductService => ({ name: '', description: '', price_range: '' });
+const emptyPresence = (): DigitalPresence => ({
+  website: '', instagram: '', facebook: '', linkedin: '', twitter: '', youtube: '',
+});
+const emptyBudget = (): BudgetRange => ({ currency: 'INR', min: '', max: '', period: 'monthly' });
+
+function parseCompetitors(val: unknown): Competitor[] {
+  if (!Array.isArray(val) || val.length === 0) return [emptyCompetitor()];
+  return val.map((c: Record<string, unknown>) => ({
+    name: String(c.name || ''),
+    url: String(c.url || ''),
+    notes: String(c.notes || ''),
+  }));
+}
+
+function parseProducts(val: unknown): ProductService[] {
+  if (!Array.isArray(val) || val.length === 0) return [emptyProduct()];
+  return val.map((p: Record<string, unknown>) => ({
+    name: String(p.name || ''),
+    description: String(p.description || ''),
+    price_range: String(p.price_range || ''),
+  }));
+}
+
+function parseSalesChannels(val: unknown): SalesChannel[] {
+  if (!Array.isArray(val)) return [];
+  return val.map((s: Record<string, unknown>) => ({
+    channel: String(s.channel || ''),
+    notes: String(s.notes || ''),
+  }));
+}
+
+function parsePresence(val: unknown): DigitalPresence {
+  if (!val || typeof val !== 'object') return emptyPresence();
+  const v = val as Record<string, unknown>;
+  return {
+    website: String(v.website || ''),
+    instagram: String(v.instagram || ''),
+    facebook: String(v.facebook || ''),
+    linkedin: String(v.linkedin || ''),
+    twitter: String(v.twitter || ''),
+    youtube: String(v.youtube || ''),
+  };
+}
+
+function parseBudget(val: unknown): BudgetRange {
+  if (!val || typeof val !== 'object') return emptyBudget();
+  const v = val as Record<string, unknown>;
+  return {
+    currency: String(v.currency || 'INR'),
+    min: v.min != null ? String(v.min) : '',
+    max: v.max != null ? String(v.max) : '',
+    period: String(v.period || 'monthly'),
+  };
+}
+
+function serializeCompetitors(items: Competitor[]): Array<Record<string, string>> | null {
+  const valid = items.filter((c) => c.name.trim());
+  if (valid.length === 0) return null;
+  return valid.map((c) => {
+    const obj: Record<string, string> = { name: c.name.trim() };
+    if (c.url.trim()) obj.url = c.url.trim();
+    if (c.notes.trim()) obj.notes = c.notes.trim();
+    return obj;
+  });
+}
+
+function serializeProducts(items: ProductService[]): Array<Record<string, string>> | null {
+  const valid = items.filter((p) => p.name.trim());
+  if (valid.length === 0) return null;
+  return valid.map((p) => {
+    const obj: Record<string, string> = { name: p.name.trim() };
+    if (p.description.trim()) obj.description = p.description.trim();
+    if (p.price_range.trim()) obj.price_range = p.price_range.trim();
+    return obj;
+  });
+}
+
+function serializeSalesChannels(items: SalesChannel[]): Array<Record<string, string>> | null {
+  if (items.length === 0) return null;
+  return items.map((s) => {
+    const obj: Record<string, string> = { channel: s.channel };
+    if (s.notes.trim()) obj.notes = s.notes.trim();
+    return obj;
+  });
+}
+
+function serializePresence(p: DigitalPresence): Record<string, string> | null {
+  const obj: Record<string, string> = {};
+  if (p.website.trim()) obj.website = p.website.trim();
+  if (p.instagram.trim()) obj.instagram = p.instagram.trim();
+  if (p.facebook.trim()) obj.facebook = p.facebook.trim();
+  if (p.linkedin.trim()) obj.linkedin = p.linkedin.trim();
+  if (p.twitter.trim()) obj.twitter = p.twitter.trim();
+  if (p.youtube.trim()) obj.youtube = p.youtube.trim();
+  return Object.keys(obj).length > 0 ? obj : null;
+}
+
+function serializeBudget(b: BudgetRange): Record<string, unknown> | null {
+  const min = b.min.trim() ? Number(b.min) : null;
+  if (min == null) return null;
+  const obj: Record<string, unknown> = { currency: b.currency, min, period: b.period };
+  const max = b.max.trim() ? Number(b.max) : null;
+  if (max != null) obj.max = max;
+  return obj;
+}
+
 export function AssetUploadForm() {
   const router = useRouter();
+  const { provenanceMap, editField } = useWizardProvenance(4);
+
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -50,7 +207,50 @@ export function AssetUploadForm() {
   const [duplicateConfirm, setDuplicateConfirm] = useState<DuplicateConfirmation | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Function to fetch assets with limit
+  const [brandAssetStatus, setBrandAssetStatus] = useState('');
+  const [competitors, setCompetitors] = useState<Competitor[]>([emptyCompetitor()]);
+  const [products, setProducts] = useState<ProductService[]>([emptyProduct()]);
+  const [salesChannels, setSalesChannels] = useState<SalesChannel[]>([]);
+  const [digitalPresence, setDigitalPresence] = useState<DigitalPresence>(emptyPresence());
+  const [budgetRange, setBudgetRange] = useState<BudgetRange>(emptyBudget());
+  const [savingMarket, setSavingMarket] = useState(false);
+  const [marketError, setMarketError] = useState('');
+
+  const initialMarket = useRef<string>('');
+
+  useEffect(() => {
+    const loadCompanyData = async () => {
+      try {
+        const response = await apiClient.get('/companies/');
+        if (response.ok) {
+          const data = await response.json();
+          const companies = data.results || [];
+          if (companies.length > 0) {
+            const company = companies[0];
+            localStorage.setItem('company_id', company.id.toString());
+            setBrandAssetStatus(company.brand_asset_status || '');
+            setCompetitors(parseCompetitors(company.competitors));
+            setProducts(parseProducts(company.products_services));
+            setSalesChannels(parseSalesChannels(company.sales_channels));
+            setDigitalPresence(parsePresence(company.digital_presence));
+            setBudgetRange(parseBudget(company.marketing_budget_range));
+            initialMarket.current = JSON.stringify({
+              brandAssetStatus: company.brand_asset_status || '',
+              competitors: company.competitors,
+              products: company.products_services,
+              salesChannels: company.sales_channels,
+              digitalPresence: company.digital_presence,
+              budgetRange: company.marketing_budget_range,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load company data:', err);
+      }
+    };
+    loadCompanyData();
+  }, []);
+
   const fetchAssets = useCallback(async () => {
     try {
       const response = await apiClient.get(`/assets/?limit=${displayLimit}`);
@@ -60,22 +260,19 @@ export function AssetUploadForm() {
         setTotalCount(data.count || 0);
         setHasMore(data.has_more || false);
       }
-    } catch (error) {
-      console.error('Failed to load files:', error);
+    } catch (err) {
+      console.error('Failed to load files:', err);
     }
   }, [displayLimit]);
 
-  // Check if any files are still processing (not indexed or failed)
   const hasPendingFiles = uploadedFiles.some(
-    (f) => f.pipeline_status !== 'indexed' && f.pipeline_status !== 'failed'
+    (f) => f.pipeline_status !== 'indexed' && f.pipeline_status !== 'failed',
   );
 
-  // Load existing uploaded files on mount and set up polling
   useEffect(() => {
     fetchAssets();
   }, [fetchAssets]);
 
-  // Set up polling when there are pending files
   useEffect(() => {
     if (hasPendingFiles) {
       pollingRef.current = setInterval(() => {
@@ -94,6 +291,65 @@ export function AssetUploadForm() {
     };
   }, [hasPendingFiles, fetchAssets]);
 
+  const handleSaveMarket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingMarket(true);
+    setMarketError('');
+
+    try {
+      const companyId = localStorage.getItem('company_id');
+      if (!companyId) {
+        setMarketError('Company ID not found. Please start from step 1.');
+        setSavingMarket(false);
+        return;
+      }
+
+      const apiData: Record<string, unknown> = {
+        brand_asset_status: brandAssetStatus || null,
+        competitors: serializeCompetitors(competitors),
+        products_services: serializeProducts(products),
+        sales_channels: serializeSalesChannels(salesChannels),
+        digital_presence: serializePresence(digitalPresence),
+        marketing_budget_range: serializeBudget(budgetRange),
+      };
+
+      const response = await apiClient.patch(`/companies/${companyId}/`, apiData);
+
+      if (response.ok) {
+        const currentSnapshot = JSON.stringify({
+          brandAssetStatus,
+          competitors: apiData.competitors,
+          products: apiData.products_services,
+          salesChannels: apiData.sales_channels,
+          digitalPresence: apiData.digital_presence,
+          budgetRange: apiData.marketing_budget_range,
+        });
+        if (currentSnapshot !== initialMarket.current) {
+          const edits: Promise<void>[] = [];
+          const fieldKeys = [
+            'brand_asset_status', 'competitors', 'products_services',
+            'sales_channels', 'digital_presence', 'marketing_budget_range',
+          ] as const;
+          for (const key of fieldKeys) {
+            if (provenanceMap.has(key)) {
+              edits.push(editField(key, apiData[key]));
+            }
+          }
+          await Promise.allSettled(edits);
+        }
+        setMarketError('');
+      } else {
+        const errData = await response.json();
+        setMarketError(errData.detail || 'Failed to save market data');
+      }
+    } catch (err) {
+      console.error('Error saving market data:', err);
+      setMarketError('An unexpected error occurred.');
+    } finally {
+      setSavingMarket(false);
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -109,7 +365,6 @@ export function AssetUploadForm() {
         return;
       }
 
-      // Upload each file
       for (const file of Array.from(files)) {
         const formData = new FormData();
         formData.append('file', file);
@@ -132,8 +387,8 @@ export function AssetUploadForm() {
           setError(`Failed to upload ${file.name}: ${errorData.error || errorData.message || 'Unknown error'}`);
         }
       }
-    } catch (error) {
-      console.error('Error uploading files:', error);
+    } catch (err) {
+      console.error('Error uploading files:', err);
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setUploading(false);
@@ -161,7 +416,7 @@ export function AssetUploadForm() {
 
       const response = await apiClient.upload('/assets/upload/', formData);
       if (response.ok) {
-        await fetchAssets(); // Refresh to show updated file
+        await fetchAssets();
       } else {
         const errorData = await response.json();
         setError(`Failed to replace ${file.name}: ${errorData.error || errorData.message || 'Unknown error'}`);
@@ -196,8 +451,8 @@ export function AssetUploadForm() {
         const errorData = await response.json();
         setError(`Failed to delete ${fileName}: ${errorData.message || 'Unknown error'}`);
       }
-    } catch (error) {
-      console.error('Error deleting file:', error);
+    } catch (err) {
+      console.error('Error deleting file:', err);
       setError(`Failed to delete ${fileName}. Please try again.`);
     } finally {
       setDeletingId(null);
@@ -245,8 +500,313 @@ export function AssetUploadForm() {
     router.push('/onboarding/step-5');
   };
 
+  const toggleSalesChannel = (channel: string) => {
+    setSalesChannels((prev) => {
+      const exists = prev.find((s) => s.channel === channel);
+      if (exists) return prev.filter((s) => s.channel !== channel);
+      return [...prev, { channel, notes: '' }];
+    });
+  };
+
+  const updateSalesChannelNotes = (channel: string, notes: string) => {
+    setSalesChannels((prev) =>
+      prev.map((s) => (s.channel === channel ? { ...s, notes } : s)),
+    );
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* ── Market & Business Section ─────────────────────────────── */}
+      <form onSubmit={handleSaveMarket} className="space-y-6">
+        <div>
+          <h3 className="text-lg font-semibold text-white mb-1">Market & Business</h3>
+          <p className="text-xs text-brand-silver mb-4">
+            Tell us about your market position, products, and budget.
+          </p>
+        </div>
+
+        {marketError && (
+          <div className="bg-red-900/30 border border-red-500/50 text-red-300 px-4 py-3 rounded-lg">
+            {marketError}
+          </div>
+        )}
+
+        <div>
+          <label htmlFor="brandAssetStatus" className="label-dark">
+            Brand Asset Status
+            <ProvenanceBadge row={provenanceMap.get('brand_asset_status')} />
+          </label>
+          <select
+            id="brandAssetStatus"
+            value={brandAssetStatus}
+            onChange={(e) => setBrandAssetStatus(e.target.value)}
+            className="select-dark mt-1"
+          >
+            <option value="">Select status</option>
+            <option value="none">None</option>
+            <option value="basic">Basic (logo only)</option>
+            <option value="partial">Partial (logo + some guidelines)</option>
+            <option value="complete">Complete brand kit</option>
+          </select>
+        </div>
+
+        {/* Competitors repeater */}
+        <div>
+          <label className="label-dark">
+            Competitors
+            <ProvenanceBadge row={provenanceMap.get('competitors')} />
+          </label>
+          <div className="mt-1 space-y-2">
+            {competitors.map((comp, i) => (
+              <div key={i} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-start">
+                <input
+                  type="text"
+                  value={comp.name}
+                  onChange={(e) => {
+                    const updated = [...competitors];
+                    updated[i] = { ...comp, name: e.target.value };
+                    setCompetitors(updated);
+                  }}
+                  className="input-dark"
+                  placeholder="Name"
+                />
+                <input
+                  type="text"
+                  value={comp.url}
+                  onChange={(e) => {
+                    const updated = [...competitors];
+                    updated[i] = { ...comp, url: e.target.value };
+                    setCompetitors(updated);
+                  }}
+                  className="input-dark"
+                  placeholder="Website URL"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={comp.notes}
+                    onChange={(e) => {
+                      const updated = [...competitors];
+                      updated[i] = { ...comp, notes: e.target.value };
+                      setCompetitors(updated);
+                    }}
+                    className="input-dark flex-1"
+                    placeholder="Notes"
+                  />
+                  {competitors.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setCompetitors(competitors.filter((_, j) => j !== i))}
+                      className="text-red-400 hover:text-red-300 px-2"
+                      aria-label={`Remove competitor ${i + 1}`}
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setCompetitors([...competitors, emptyCompetitor()])}
+              className="text-sm text-brand-electric hover:text-brand-electric/80"
+            >
+              + Add competitor
+            </button>
+          </div>
+        </div>
+
+        {/* Products & Services repeater */}
+        <div>
+          <label className="label-dark">
+            Products & Services
+            <ProvenanceBadge row={provenanceMap.get('products_services')} />
+          </label>
+          <div className="mt-1 space-y-2">
+            {products.map((prod, i) => (
+              <div key={i} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-start">
+                <input
+                  type="text"
+                  value={prod.name}
+                  onChange={(e) => {
+                    const updated = [...products];
+                    updated[i] = { ...prod, name: e.target.value };
+                    setProducts(updated);
+                  }}
+                  className="input-dark"
+                  placeholder="Name"
+                />
+                <input
+                  type="text"
+                  value={prod.description}
+                  onChange={(e) => {
+                    const updated = [...products];
+                    updated[i] = { ...prod, description: e.target.value };
+                    setProducts(updated);
+                  }}
+                  className="input-dark"
+                  placeholder="Description"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={prod.price_range}
+                    onChange={(e) => {
+                      const updated = [...products];
+                      updated[i] = { ...prod, price_range: e.target.value };
+                      setProducts(updated);
+                    }}
+                    className="input-dark flex-1"
+                    placeholder="Price range"
+                  />
+                  {products.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setProducts(products.filter((_, j) => j !== i))}
+                      className="text-red-400 hover:text-red-300 px-2"
+                      aria-label={`Remove product ${i + 1}`}
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setProducts([...products, emptyProduct()])}
+              className="text-sm text-brand-electric hover:text-brand-electric/80"
+            >
+              + Add product or service
+            </button>
+          </div>
+        </div>
+
+        {/* Sales Channels checkboxes */}
+        <div>
+          <label className="label-dark">
+            Sales Channels
+            <ProvenanceBadge row={provenanceMap.get('sales_channels')} />
+          </label>
+          <div className="mt-2 space-y-2">
+            {SALES_CHANNEL_OPTIONS.map((opt) => {
+              const active = salesChannels.find((s) => s.channel === opt.value);
+              return (
+                <div key={opt.value}>
+                  <label className="flex items-center gap-2 text-sm text-brand-silver cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!active}
+                      onChange={() => toggleSalesChannel(opt.value)}
+                      className="rounded border-white/20 bg-white/5 text-brand-electric focus:ring-brand-electric"
+                    />
+                    {opt.label}
+                  </label>
+                  {active && (
+                    <input
+                      type="text"
+                      value={active.notes}
+                      onChange={(e) => updateSalesChannelNotes(opt.value, e.target.value)}
+                      className="input-dark mt-1 ml-6 text-sm"
+                      placeholder="Notes (optional)"
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Digital Presence */}
+        <div>
+          <label className="label-dark">
+            Digital Presence
+            <ProvenanceBadge row={provenanceMap.get('digital_presence')} />
+          </label>
+          <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+            {(
+              [
+                ['website', 'Website URL'],
+                ['instagram', 'Instagram handle'],
+                ['facebook', 'Facebook page'],
+                ['linkedin', 'LinkedIn page'],
+                ['twitter', 'Twitter / X handle'],
+                ['youtube', 'YouTube channel'],
+              ] as const
+            ).map(([key, placeholder]) => (
+              <input
+                key={key}
+                type="text"
+                value={digitalPresence[key]}
+                onChange={(e) =>
+                  setDigitalPresence({ ...digitalPresence, [key]: e.target.value })
+                }
+                className="input-dark"
+                placeholder={placeholder}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Marketing Budget Range */}
+        <div>
+          <label className="label-dark">
+            Marketing Budget Range
+            <ProvenanceBadge row={provenanceMap.get('marketing_budget_range')} />
+          </label>
+          <div className="mt-1 grid grid-cols-2 md:grid-cols-4 gap-3">
+            <select
+              value={budgetRange.currency}
+              onChange={(e) => setBudgetRange({ ...budgetRange, currency: e.target.value })}
+              className="select-dark"
+            >
+              {CURRENCY_OPTIONS.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              value={budgetRange.min}
+              onChange={(e) => setBudgetRange({ ...budgetRange, min: e.target.value })}
+              className="input-dark"
+              placeholder="Min"
+              min="0"
+            />
+            <input
+              type="number"
+              value={budgetRange.max}
+              onChange={(e) => setBudgetRange({ ...budgetRange, max: e.target.value })}
+              className="input-dark"
+              placeholder="Max"
+              min="0"
+            />
+            <select
+              value={budgetRange.period}
+              onChange={(e) => setBudgetRange({ ...budgetRange, period: e.target.value })}
+              className="select-dark"
+            >
+              {PERIOD_OPTIONS.map((p) => (
+                <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={savingMarket}
+            className="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {savingMarket ? 'Saving...' : 'Save Market Info'}
+          </button>
+        </div>
+      </form>
+
+      {/* ── Divider ──────────────────────────────────────────────── */}
+      <div className="border-t border-white/10" />
+
+      {/* ── File Upload Section (unchanged) ──────────────────────── */}
       {error && (
         <div className="bg-red-900/30 border border-red-500/50 text-red-300 px-4 py-3 rounded-lg">
           {error}
@@ -317,12 +877,11 @@ export function AssetUploadForm() {
               </h3>
               {hasPendingFiles && (
                 <span className="text-xs text-brand-silver/70 animate-pulse">
-                  🔄 Processing...
+                  Processing...
                 </span>
               )}
             </div>
             <div className="flex items-center gap-3">
-              {/* Limit selector */}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-brand-silver/70">Show:</span>
                 <select
@@ -337,7 +896,6 @@ export function AssetUploadForm() {
                   ))}
                 </select>
               </div>
-              {/* View All button */}
               {totalCount > displayLimit && (
                 <button
                   onClick={() => setShowAllFiles(true)}
@@ -371,7 +929,6 @@ export function AssetUploadForm() {
                   <span className="text-xs bg-brand-electric/20 text-brand-electric px-2 py-1 rounded">
                     {file.file_type}
                   </span>
-                  {/* View button - show for indexed/curated files */}
                   {(file.pipeline_status === 'indexed' || file.pipeline_status === 'curated') && (
                     <button
                       type="button"
@@ -380,10 +937,9 @@ export function AssetUploadForm() {
                       className="text-brand-electric hover:text-brand-electric/80 disabled:opacity-50 transition-colors"
                       title="View file"
                     >
-                      {loadingUrlId === file.id ? '⏳' : '👁️'}
+                      {loadingUrlId === file.id ? 'Loading...' : 'View'}
                     </button>
                   )}
-                  {/* Download button - show for indexed/curated files */}
                   {(file.pipeline_status === 'indexed' || file.pipeline_status === 'curated') && (
                     <button
                       type="button"
@@ -392,7 +948,7 @@ export function AssetUploadForm() {
                       className="text-brand-electric hover:text-brand-electric/80 disabled:opacity-50 transition-colors"
                       title="Download file"
                     >
-                      ⬇️
+                      Download
                     </button>
                   )}
                   <button
@@ -402,11 +958,7 @@ export function AssetUploadForm() {
                     className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     title="Delete file"
                   >
-                    {deletingId === file.id ? (
-                      <span className="inline-block animate-spin">⏳</span>
-                    ) : (
-                      <span>🗑️</span>
-                    )}
+                    {deletingId === file.id ? 'Deleting...' : 'Delete'}
                   </button>
                 </div>
               </li>
@@ -442,19 +994,17 @@ export function AssetUploadForm() {
         </div>
       </div>
 
-      {/* All Files Modal */}
       <AllFilesModal
         isOpen={showAllFiles}
         onClose={() => {
           setShowAllFiles(false);
-          fetchAssets(); // Refresh the list when modal closes
+          fetchAssets();
         }}
         onDelete={async (fileId, fileName) => {
           await handleDelete(fileId, fileName);
         }}
       />
 
-      {/* Duplicate File Confirmation Dialog */}
       {duplicateConfirm && (
         <div
           className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"

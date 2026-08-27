@@ -184,7 +184,7 @@ describe('Integration Tests: User Flows', () => {
 
       render(<CompanyForm />)
 
-      fireEvent.change(screen.getByLabelText(/name/i), {
+      fireEvent.change(screen.getByLabelText(/company name/i), {
         target: { value: 'Integration Test Co' },
       })
       fireEvent.change(screen.getByLabelText(/industry/i), {
@@ -339,7 +339,7 @@ describe('Integration Tests: User Flows', () => {
       render(<CompanyForm />)
 
       // First attempt
-      fireEvent.change(screen.getByLabelText(/name/i), {
+      fireEvent.change(screen.getByLabelText(/company name/i), {
         target: { value: 'Duplicate Name' },
       })
       fireEvent.change(screen.getByLabelText(/industry/i), {
@@ -363,7 +363,7 @@ describe('Integration Tests: User Flows', () => {
       expect(mockPush).not.toHaveBeenCalled()
 
       // Second attempt with different name
-      fireEvent.change(screen.getByLabelText(/name/i), {
+      fireEvent.change(screen.getByLabelText(/company name/i), {
         target: { value: 'Unique Company Name' },
       })
       fireEvent.click(screen.getByRole('button', { name: /next/i }))
