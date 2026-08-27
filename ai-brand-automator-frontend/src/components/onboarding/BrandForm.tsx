@@ -8,7 +8,7 @@ import ProvenanceBadge from '@/components/onboarding/ProvenanceBadge';
 
 export function BrandForm() {
   const router = useRouter();
-  const { provenanceMap, editField } = useWizardProvenance(2);
+  const { provenanceMap, editField, stepPath } = useWizardProvenance(2);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -77,7 +77,7 @@ export function BrandForm() {
 
       if (!companyId) {
         alert('Company ID not found. Please complete step 1 first.');
-        router.push('/onboarding/step-1');
+        router.push(stepPath('/onboarding/step-1'));
         return;
       }
 
@@ -105,7 +105,7 @@ export function BrandForm() {
           await editField('business_goals', formData.businessGoals).catch(() => {});
         }
 
-        router.push('/onboarding/step-3');
+        router.push(stepPath('/onboarding/step-3'));
       } else {
         const error = await response.json();
         const errorMessage = error.detail ||
@@ -226,7 +226,7 @@ export function BrandForm() {
       <div className="flex justify-between">
         <button
           type="button"
-          onClick={() => router.push('/onboarding/step-1')}
+          onClick={() => router.push(stepPath('/onboarding/step-1'))}
           className="btn-secondary"
         >
           Previous

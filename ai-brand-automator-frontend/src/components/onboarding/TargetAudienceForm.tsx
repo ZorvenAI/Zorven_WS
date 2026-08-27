@@ -41,7 +41,7 @@ function serializeCustomerProof(
 
 export function TargetAudienceForm() {
   const router = useRouter();
-  const { provenanceMap, editField } = useWizardProvenance(3);
+  const { provenanceMap, editField, stepPath } = useWizardProvenance(3);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -154,7 +154,7 @@ export function TargetAudienceForm() {
         }
         await Promise.allSettled(provenanceEdits);
 
-        router.push('/onboarding/step-4');
+        router.push(stepPath('/onboarding/step-4'));
       } else {
         const errorData = await response.json();
         setError(errorData.message || 'Failed to save target audience data');
@@ -302,7 +302,7 @@ export function TargetAudienceForm() {
       <div className="flex justify-between pt-6">
         <button
           type="button"
-          onClick={() => router.push('/onboarding/step-2')}
+          onClick={() => router.push(stepPath('/onboarding/step-2'))}
           className="btn-secondary"
         >
           Back

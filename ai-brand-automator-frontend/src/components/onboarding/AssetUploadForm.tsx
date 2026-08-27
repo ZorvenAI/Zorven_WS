@@ -184,16 +184,16 @@ function serializePresence(p: DigitalPresence): Record<string, string> | null {
 
 function serializeBudget(b: BudgetRange): Record<string, unknown> | null {
   const min = b.min.trim() ? Number(b.min) : null;
-  if (min == null) return null;
+  if (min == null || isNaN(min)) return null;
   const obj: Record<string, unknown> = { currency: b.currency, min, period: b.period };
   const max = b.max.trim() ? Number(b.max) : null;
-  if (max != null) obj.max = max;
+  if (max != null && !isNaN(max)) obj.max = max;
   return obj;
 }
 
 export function AssetUploadForm() {
   const router = useRouter();
-  const { provenanceMap, editField } = useWizardProvenance(4);
+  const { provenanceMap, editField, stepPath } = useWizardProvenance(4);
 
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -216,7 +216,7 @@ export function AssetUploadForm() {
   const [savingMarket, setSavingMarket] = useState(false);
   const [marketError, setMarketError] = useState('');
 
-  const initialMarket = useRef<string>('');
+  const initialMarket = useRef<Record<string, string>>({});
 
   useEffect(() => {
     const loadCompanyData = async () => {
@@ -234,14 +234,14 @@ export function AssetUploadForm() {
             setSalesChannels(parseSalesChannels(company.sales_channels));
             setDigitalPresence(parsePresence(company.digital_presence));
             setBudgetRange(parseBudget(company.marketing_budget_range));
-            initialMarket.current = JSON.stringify({
-              brandAssetStatus: company.brand_asset_status || '',
-              competitors: company.competitors,
-              products: company.products_services,
-              salesChannels: company.sales_channels,
-              digitalPresence: company.digital_presence,
-              budgetRange: company.marketing_budget_range,
-            });
+            initialMarket.current = {
+              brand_asset_status: JSON.stringify(company.brand_asset_status || null),
+              competitors: JSON.stringify(serializeCompetitors(parseCompetitors(company.competitors))),
+              products_services: JSON.stringify(serializeProducts(parseProducts(company.products_services))),
+              sales_channels: JSON.stringify(serializeSalesChannels(parseSalesChannels(company.sales_channels))),
+              digital_presence: JSON.stringify(serializePresence(parsePresence(company.digital_presence))),
+              marketing_budget_range: JSON.stringify(serializeBudget(parseBudget(company.marketing_budget_range))),
+            };
           }
         }
       } catch (err) {
@@ -316,27 +316,28 @@ export function AssetUploadForm() {
       const response = await apiClient.patch(`/companies/${companyId}/`, apiData);
 
       if (response.ok) {
-        const currentSnapshot = JSON.stringify({
-          brandAssetStatus,
-          competitors: apiData.competitors,
-          products: apiData.products_services,
-          salesChannels: apiData.sales_channels,
-          digitalPresence: apiData.digital_presence,
-          budgetRange: apiData.marketing_budget_range,
-        });
-        if (currentSnapshot !== initialMarket.current) {
-          const edits: Promise<void>[] = [];
-          const fieldKeys = [
-            'brand_asset_status', 'competitors', 'products_services',
-            'sales_channels', 'digital_presence', 'marketing_budget_range',
-          ] as const;
-          for (const key of fieldKeys) {
-            if (provenanceMap.has(key)) {
-              edits.push(editField(key, apiData[key]));
-            }
+        const currentValues: Record<string, string> = {
+          brand_asset_status: JSON.stringify(apiData.brand_asset_status),
+          competitors: JSON.stringify(apiData.competitors),
+          products_services: JSON.stringify(apiData.products_services),
+          sales_channels: JSON.stringify(apiData.sales_channels),
+          digital_presence: JSON.stringify(apiData.digital_presence),
+          marketing_budget_range: JSON.stringify(apiData.marketing_budget_range),
+        };
+
+        const edits: Promise<void>[] = [];
+        for (const key of Object.keys(currentValues)) {
+          if (
+            provenanceMap.has(key) &&
+            apiData[key] != null &&
+            currentValues[key] !== initialMarket.current[key]
+          ) {
+            edits.push(editField(key, apiData[key]));
           }
-          await Promise.allSettled(edits);
         }
+        if (edits.length > 0) await Promise.allSettled(edits);
+
+        initialMarket.current = currentValues;
         setMarketError('');
       } else {
         const errData = await response.json();
@@ -432,7 +433,7 @@ export function AssetUploadForm() {
   };
 
   const handleSkip = () => {
-    router.push('/onboarding/step-5');
+    router.push(stepPath('/onboarding/step-5'));
   };
 
   const handleDelete = async (fileId: string, fileName: string) => {
@@ -497,7 +498,7 @@ export function AssetUploadForm() {
       setError('Please upload at least one file or click Skip to continue.');
       return;
     }
-    router.push('/onboarding/step-5');
+    router.push(stepPath('/onboarding/step-5'));
   };
 
   const toggleSalesChannel = (channel: string) => {
@@ -970,7 +971,7 @@ export function AssetUploadForm() {
       <div className="flex justify-between pt-6">
         <button
           type="button"
-          onClick={() => router.push('/onboarding/step-3')}
+          onClick={() => router.push(stepPath('/onboarding/step-3'))}
           className="btn-secondary"
         >
           Back

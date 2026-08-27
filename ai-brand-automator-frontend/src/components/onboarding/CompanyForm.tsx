@@ -8,7 +8,7 @@ import ProvenanceBadge from '@/components/onboarding/ProvenanceBadge';
 
 export function CompanyForm() {
   const router = useRouter();
-  const { provenanceMap, editField } = useWizardProvenance(1);
+  const { provenanceMap, editField, stepPath } = useWizardProvenance(1);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -133,7 +133,7 @@ export function CompanyForm() {
         }
         await Promise.allSettled(provenanceEdits);
 
-        router.push('/onboarding/step-2');
+        router.push(stepPath('/onboarding/step-2'));
       } else {
         const error = await response.json();
         alert(error.detail || 'Failed to save company data');

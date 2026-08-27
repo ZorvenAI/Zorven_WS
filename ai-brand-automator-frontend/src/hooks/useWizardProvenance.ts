@@ -12,6 +12,8 @@ interface UseWizardProvenanceResult {
   provenanceMap: Map<string, FieldProvenanceRow>;
   loading: boolean;
   editField: (fieldName: string, newValue: unknown) => Promise<void>;
+  sessionId: string | null;
+  stepPath: (path: string) => string;
 }
 
 export function useWizardProvenance(page: number): UseWizardProvenanceResult {
@@ -64,5 +66,10 @@ export function useWizardProvenance(page: number): UseWizardProvenanceResult {
     [provenanceMap],
   );
 
-  return { provenanceMap, loading, editField };
+  const stepPath = useCallback(
+    (path: string) => (sessionId ? `${path}?sessionId=${sessionId}` : path),
+    [sessionId],
+  );
+
+  return { provenanceMap, loading, editField, sessionId, stepPath };
 }

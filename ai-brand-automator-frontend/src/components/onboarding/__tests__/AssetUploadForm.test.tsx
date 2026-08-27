@@ -69,6 +69,17 @@ function mockResponse(data: unknown, ok = true, status = 200) {
   return { ok, status, json: async () => data };
 }
 
+function mockGetWithAssets(assetsData: unknown) {
+  (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+    if (url.startsWith('/companies')) {
+      return Promise.resolve(
+        mockResponse({ results: [{ id: 123, name: 'Test Co' }] }),
+      );
+    }
+    return Promise.resolve(mockResponse(assetsData));
+  });
+}
+
 describe('AssetUploadForm', () => {
   const originalConfirm = window.confirm;
 
@@ -83,9 +94,16 @@ describe('AssetUploadForm', () => {
 
     window.confirm = jest.fn(() => true);
 
-    (apiClient.get as jest.Mock).mockResolvedValue(
-      mockResponse({ results: mockFiles, count: 3, has_more: false }),
-    );
+    (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+      if (url.startsWith('/companies')) {
+        return Promise.resolve(
+          mockResponse({ results: [{ id: 123, name: 'Test Co' }] }),
+        );
+      }
+      return Promise.resolve(
+        mockResponse({ results: mockFiles, count: 3, has_more: false }),
+      );
+    });
 
     (apiClient.upload as jest.Mock).mockResolvedValue(
       mockResponse({
@@ -131,9 +149,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('shows view all button when files exist', async () => {
-      (apiClient.get as jest.Mock).mockResolvedValue(
-        mockResponse({ results: mockFiles, count: 10, has_more: true }),
-      );
+      mockGetWithAssets({ results: mockFiles, count: 10, has_more: true });
 
       render(<AssetUploadForm />);
 
@@ -162,9 +178,7 @@ describe('AssetUploadForm', () => {
   // -------------------------------------------------
   describe('Compact File Browser', () => {
     it('displays limited number of files in compact view', async () => {
-      (apiClient.get as jest.Mock).mockResolvedValue(
-        mockResponse({ results: mockFiles, count: 25, has_more: true }),
-      );
+      mockGetWithAssets({ results: mockFiles, count: 25, has_more: true });
 
       render(<AssetUploadForm />);
 
@@ -175,9 +189,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('shows total file count summary', async () => {
-      (apiClient.get as jest.Mock).mockResolvedValue(
-        mockResponse({ results: mockFiles, count: 25, has_more: true }),
-      );
+      mockGetWithAssets({ results: mockFiles, count: 25, has_more: true });
 
       render(<AssetUploadForm />);
 
@@ -187,9 +199,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('opens modal when View All clicked', async () => {
-      (apiClient.get as jest.Mock).mockResolvedValue(
-        mockResponse({ results: mockFiles, count: 10, has_more: true }),
-      );
+      mockGetWithAssets({ results: mockFiles, count: 10, has_more: true });
 
       render(<AssetUploadForm />);
 
@@ -443,9 +453,7 @@ describe('AssetUploadForm', () => {
   // -------------------------------------------------
   describe('Empty State', () => {
     it('shows empty state when no files', async () => {
-      (apiClient.get as jest.Mock).mockResolvedValue(
-        mockResponse({ results: [], count: 0, has_more: false }),
-      );
+      mockGetWithAssets({ results: [], count: 0, has_more: false });
 
       render(<AssetUploadForm />);
 
@@ -458,9 +466,7 @@ describe('AssetUploadForm', () => {
     });
 
     it('hides View All button when no files', async () => {
-      (apiClient.get as jest.Mock).mockResolvedValue(
-        mockResponse({ results: [], count: 0, has_more: false }),
-      );
+      mockGetWithAssets({ results: [], count: 0, has_more: false });
 
       render(<AssetUploadForm />);
 
@@ -655,13 +661,7 @@ describe('AssetUploadForm', () => {
         ],
       });
 
-      (apiClient.get as jest.Mock).mockResolvedValue(
-        mockResponse({
-          results: mockFiles,
-          count: 3,
-          has_more: false,
-        }),
-      );
+      mockGetWithAssets({ results: mockFiles, count: 3, has_more: false });
 
       render(<AssetUploadForm />);
 

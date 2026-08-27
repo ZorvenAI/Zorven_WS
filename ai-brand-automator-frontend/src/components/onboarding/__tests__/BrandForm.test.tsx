@@ -273,6 +273,32 @@ describe('BrandForm', () => {
     })
   })
 
+  it('forwards sessionId in navigation links when present', async () => {
+    mockSessionId = 'sess-forward'
+    mockGetSessionProvenance.mockResolvedValue({
+      session: 1,
+      groups: [],
+    })
+    ;(apiClient.patch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 123 }),
+    })
+
+    render(<BrandForm />)
+
+    fireEvent.change(screen.getByLabelText(/brand voice/i), {
+      target: { value: 'professional' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /next step/i }))
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(
+        '/onboarding/step-3?sessionId=sess-forward'
+      )
+    })
+  })
+
   it('calls editProvenance on save when business_goals changes (AC-3)', async () => {
     mockSessionId = 'sess-2'
     mockGetSessionProvenance.mockResolvedValue({
