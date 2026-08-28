@@ -131,6 +131,15 @@ class BackendClient:
             )
             response.raise_for_status()
             body = response.json()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code < 500:
+                self._breaker.record_success()
+            else:
+                self._breaker.record_failure()
+            logger.warning(
+                "backend_write_failed", path=path, error=f"{type(exc).__name__}: {exc}"
+            )
+            return None
         except Exception as exc:
             self._breaker.record_failure()
             logger.warning(
@@ -208,7 +217,9 @@ class BackendClient:
         fields = (body or {}).get("fields")
         return [str(f) for f in fields] if isinstance(fields, list) else []
 
-    async def _get(self, path: str, *, tenant_id: str) -> dict[str, Any] | None:
+    async def _get(
+        self, path: str, *, tenant_id: str, timeout: float = TIMEOUT_S
+    ) -> dict[str, Any] | None:
         if not self.configured:
             return None
         try:
@@ -216,7 +227,7 @@ class BackendClient:
         except CircuitBreakerOpen:
             return None
 
-        client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
+        client = self._client or httpx.AsyncClient(timeout=timeout)
         owns_client = self._client is None
         try:
             response = await client.get(
@@ -225,21 +236,22 @@ class BackendClient:
                     "X-Service-Token": self._token,
                     "X-Tenant-ID": tenant_id,
                 },
-                timeout=TIMEOUT_S,
+                timeout=timeout,
             )
             if response.status_code == 404:
-                # Not a failure of ours, and not a breaker event. Django
-                # answers 404 for a session outside the caller's tenant —
-                # FR-PREP-06 is explicit that a cross-tenant read must not
-                # confirm the row exists — so this is a *fact about the
-                # request*, and collapsing it into None makes it
-                # indistinguishable from Django being down. The caller then
-                # cannot tell "no such session" (4404) from "we are broken"
-                # (1011), and tells the operator the wrong one.
                 self._breaker.record_success()
                 return {"__status__": 404}
             response.raise_for_status()
             body = response.json()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code < 500:
+                self._breaker.record_success()
+            else:
+                self._breaker.record_failure()
+            logger.warning(
+                "backend_read_failed", path=path, error=f"{type(exc).__name__}: {exc}"
+            )
+            return None
         except Exception as exc:
             self._breaker.record_failure()
             logger.warning(
@@ -258,7 +270,7 @@ class BackendClient:
     ) -> dict[str, Any] | None:
         """Fetch the full evidence bundle for a session (J-02)."""
         path = SESSION_EVIDENCE_PATH.format(session_id=session_id)
-        return await self._get(path, tenant_id=tenant_id)
+        return await self._get(path, tenant_id=tenant_id, timeout=GENERATE_TIMEOUT_S)
 
     async def live_precheck(
         self, *, tenant_id: str, session_id: str, ticket: str = ""

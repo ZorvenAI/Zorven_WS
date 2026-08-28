@@ -166,7 +166,14 @@ def dispatch_process(self, *, session_id, tenant_id, manifest, manifest_hash):
 def _revert_to_gathered(session_id):
     """Revert a session from PROCESSING → GATHERED so it is not stuck."""
     from apps.onboarding.models import OnboardingSession, SessionStatus
+    from apps.onboarding.services.session_state import transition
 
-    OnboardingSession.objects.filter(
-        pk=session_id, status=SessionStatus.PROCESSING
-    ).update(status=SessionStatus.GATHERED)
+    try:
+        session = OnboardingSession.objects.get(
+            pk=session_id, status=SessionStatus.PROCESSING
+        )
+        transition(session, SessionStatus.GATHERED)
+    except OnboardingSession.DoesNotExist:
+        logger.warning(
+            "revert_to_gathered: session %s not found or not PROCESSING", session_id
+        )

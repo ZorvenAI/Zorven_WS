@@ -68,7 +68,7 @@ export default function RecorderControl({
   const own = useMeetingRecorder();
   const live = recorder ?? own;
 
-  const { state, error, elapsedSeconds, chunks, start, stop } = live;
+  const { state, error, elapsedSeconds, chunksRef, chunkCount, start, stop } = live;
   const recording = state === 'recording';
   const busy = state === 'requesting' || state === 'stopping';
 
@@ -77,7 +77,8 @@ export default function RecorderControl({
 
   const ownUploader = useChunkUploader({
     recordingId,
-    chunks,
+    chunksRef,
+    chunkCount,
     recording,
     // AC-3: the local bound stops the recording rather than discarding audio.
     onBoundReached: () => void stop(),

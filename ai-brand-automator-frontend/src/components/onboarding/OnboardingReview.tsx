@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api';
+import MeetingEvidence from '@/components/onboarding/MeetingEvidence';
 
 interface CompanyData {
   id: number;
@@ -34,7 +35,7 @@ interface CompanyData {
   messaging_guide?: string;
 }
 
-export function OnboardingReview() {
+export function OnboardingReview({ sessionId = null }: { sessionId?: string | null }) {
   const router = useRouter();
   const [company, setCompany] = useState<CompanyData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -334,12 +335,14 @@ export function OnboardingReview() {
         </div>
       )}
 
+      {sessionId && <MeetingEvidence sessionId={sessionId} />}
+
       {/* Action Buttons */}
       <div className="flex flex-col space-y-4 pt-6">
         <div className="flex justify-between">
           <button
             type="button"
-            onClick={() => router.push('/onboarding/step-4')}
+            onClick={() => router.push(sessionId ? `/onboarding/step-4?sessionId=${sessionId}` : '/onboarding/step-4')}
             className="btn-secondary"
           >
             Back

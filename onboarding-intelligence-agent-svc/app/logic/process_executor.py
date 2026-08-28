@@ -368,6 +368,19 @@ class ProcessExecutor:
             summary = {"error": str(exc)}
             cb_status = JOB_STATUS_FAILED
 
+        except BaseException as exc:
+            # asyncio.CancelledError is a BaseException in Python >=3.9.
+            # Without this handler, cancellation skips the Redis update and
+            # callback below, leaving the session stuck in PROCESSING.
+            logger.warning(
+                "process_job_cancelled",
+                job_id=job_id,
+                session_id=session_id,
+                error=str(exc),
+            )
+            summary = {"error": f"Cancelled: {exc}"}
+            cb_status = JOB_STATUS_FAILED
+
         await self._redis.client.set(
             job_key,
             json.dumps({"job_id": job_id, "status": cb_status}),
@@ -494,45 +507,57 @@ class ProcessExecutor:
         if self._backend is None:
             return generated
 
-        if opts.auto_generate_strategy:
+        backend = self._backend
+
+        async def _try_strategy() -> str | None:
             try:
-                result = await self._backend.generate_brand_strategy(
+                result = await backend.generate_brand_strategy(
                     tenant_id=tenant_id, company_id=company_id
                 )
                 if result is not None:
-                    generated.append("brand_strategy")
-                else:
-                    logger.warning(
-                        "autogen_strategy_failed",
-                        job_id=job_id,
-                        reason="backend_returned_none",
-                    )
+                    return "brand_strategy"
+                logger.warning(
+                    "autogen_strategy_failed",
+                    job_id=job_id,
+                    reason="backend_returned_none",
+                )
             except Exception as exc:
                 logger.warning(
                     "autogen_strategy_failed",
                     job_id=job_id,
                     error=f"{type(exc).__name__}: {exc}",
                 )
+            return None
 
-        if opts.auto_generate_identity:
+        async def _try_identity() -> str | None:
             try:
-                result = await self._backend.generate_brand_identity(
+                result = await backend.generate_brand_identity(
                     tenant_id=tenant_id, company_id=company_id
                 )
                 if result is not None:
-                    generated.append("brand_identity")
-                else:
-                    logger.warning(
-                        "autogen_identity_failed",
-                        job_id=job_id,
-                        reason="backend_returned_none",
-                    )
+                    return "brand_identity"
+                logger.warning(
+                    "autogen_identity_failed",
+                    job_id=job_id,
+                    reason="backend_returned_none",
+                )
             except Exception as exc:
                 logger.warning(
                     "autogen_identity_failed",
                     job_id=job_id,
                     error=f"{type(exc).__name__}: {exc}",
                 )
+            return None
+
+        coros = []
+        if opts.auto_generate_strategy:
+            coros.append(_try_strategy())
+        if opts.auto_generate_identity:
+            coros.append(_try_identity())
+
+        if coros:
+            results = await asyncio.gather(*coros)
+            generated.extend(r for r in results if r is not None)
 
         if generated:
             logger.info("autogen_completed", job_id=job_id, generated=generated)

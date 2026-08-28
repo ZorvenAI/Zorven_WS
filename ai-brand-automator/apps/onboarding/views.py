@@ -95,6 +95,7 @@ from apps.onboarding.serializers import (
     ScheduledMeetingSerializer,
 )
 from apps.onboarding.services.session_state import InvalidTransition, transition
+from apps.onboarding.state import TRANSITIONS
 from apps.onboarding.text import levenshtein, normalise_company_name
 from tenants.permissions import (
     IsTenantAdmin,
@@ -477,7 +478,9 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             .get(pk=pk)
         )
 
-        allowed_states = {"GATHERED", "REVIEW_PENDING", "CONFIRMED"}
+        allowed_states = {
+            s for s, targets in TRANSITIONS.items() if "PROCESSING" in targets
+        }
         if session.status not in allowed_states:
             return Response(
                 {
