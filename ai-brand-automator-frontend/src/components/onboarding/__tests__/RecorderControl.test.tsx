@@ -118,7 +118,8 @@ const recorderStub = (over: Partial<UseMeetingRecorder> = {}): UseMeetingRecorde
   state: 'idle',
   error: null,
   elapsedSeconds: 0,
-  chunks: [],
+  chunksRef: { current: [] },
+  chunkCount: 0,
   mimeType: null,
   start: async () => {},
   stop: async () => {},
@@ -329,8 +330,8 @@ describe('AC-4 · stopping is safe', () => {
     });
     await act(() => result.current.stop());
 
-    expect(result.current.chunks.map((chunk) => chunk.index)).toEqual([0, 1, 2]);
-    expect(result.current.chunks.map((chunk) => chunk.blob.size)).toEqual([4, 8, 16]);
+    expect(result.current.chunksRef.current.map((chunk) => chunk.index)).toEqual([0, 1, 2]);
+    expect(result.current.chunksRef.current.map((chunk) => chunk.blob.size)).toEqual([4, 8, 16]);
   });
 
   it('registers a tab-close warning only while recording', async () => {

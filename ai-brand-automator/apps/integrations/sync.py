@@ -301,7 +301,7 @@ def _apply(connection: CalendarConnection, event: dict, counts: dict) -> None:
         else:
             for attribute, value in defaults.items():
                 setattr(existing, attribute, value)
-            existing.save()
+            existing.save(update_fields=[*defaults.keys(), "updated_at"])
             counts["updated"] += 1
 
 

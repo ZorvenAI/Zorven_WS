@@ -8,6 +8,7 @@ meeting (A-05 AC-2).
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -211,6 +212,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     yield
 
+    pending = app.state.process_executor._running_tasks
+    if pending:
+        logger.info("draining_process_tasks", count=len(pending))
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
     await app.state.commands.stop()
     await app.state.events.stop()
     await app.state.kafka.stop()

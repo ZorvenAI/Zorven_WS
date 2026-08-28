@@ -20,6 +20,7 @@ import {
   type UploadTransport,
 } from '@/lib/resumable-upload';
 import type { RecordedChunk } from '@/hooks/useMeetingRecorder';
+import type React from 'react';
 
 export type UploadStatus = 'idle' | 'uploading' | 'delayed' | 'degraded' | 'stopped';
 
@@ -53,7 +54,8 @@ export interface UseChunkUploader {
 
 export interface UseChunkUploaderOptions {
   recordingId: string | null;
-  chunks: RecordedChunk[];
+  chunksRef: React.RefObject<RecordedChunk[]>;
+  chunkCount: number;
   recording: boolean;
   /** Injected in tests. */
   transport?: UploadTransport;
@@ -68,7 +70,8 @@ interface SessionInfo {
 
 export function useChunkUploader({
   recordingId,
-  chunks,
+  chunksRef,
+  chunkCount,
   recording,
   transport,
   onBoundReached,
@@ -112,12 +115,14 @@ export function useChunkUploader({
    * chunks, and the loser silently misses audio.
    */
   const absorb = useCallback(() => {
-    for (let i = consumed.current; i < chunks.length; i += 1) {
-      buffer.current.push(chunks[i].blob);
+    const arr = chunksRef.current;
+    for (let i = consumed.current; i < arr.length; i += 1) {
+      buffer.current.push(arr[i].blob);
     }
-    consumed.current = chunks.length;
+    consumed.current = arr.length;
     setPending(buffer.current.reduce((total, blob) => total + blob.size, 0));
-  }, [chunks]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chunksRef, chunkCount]);
 
   const flush = useCallback(
     async ({ final }: { final: boolean }) => {

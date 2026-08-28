@@ -74,8 +74,10 @@ export interface UseMeetingRecorder {
   error: string | null;
   /** Seconds of audio recorded, from the audio timeline. */
   elapsedSeconds: number;
-  /** In memory only. F-03 gives this durability; until then a tab close loses it. */
-  chunks: RecordedChunk[];
+  /** Stable ref to the chunk array. Read by index; never replaced. */
+  chunksRef: React.RefObject<RecordedChunk[]>;
+  /** Increments when a new chunk arrives — use as a dependency trigger. */
+  chunkCount: number;
   mimeType: string | null;
   start: () => Promise<void>;
   stop: () => Promise<void>;
@@ -92,7 +94,8 @@ export function useMeetingRecorder(): UseMeetingRecorder {
   const [state, setState] = useState<RecorderState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [elapsedSeconds, setElapsed] = useState(0);
-  const [chunks, setChunks] = useState<RecordedChunk[]>([]);
+  const chunksRef = useRef<RecordedChunk[]>([]);
+  const [chunkCount, setChunkCount] = useState(0);
   const [mimeType, setMimeType] = useState<string | null>(null);
 
   const recorder = useRef<MediaRecorder | null>(null);
@@ -189,9 +192,8 @@ export function useMeetingRecorder(): UseMeetingRecorder {
       if (!event.data || event.data.size === 0) return;
       const index = nextIndex.current;
       nextIndex.current += 1;
-      // Appended, never replaced: F-03 drains this queue and a dropped chunk
-      // is a hole in the recording that nothing downstream can reconstruct.
-      setChunks((prior) => [...prior, { blob: event.data, index }]);
+      chunksRef.current.push({ blob: event.data, index });
+      setChunkCount((n) => n + 1);
     };
 
     media.start(TIMESLICE_MS);
@@ -262,5 +264,5 @@ export function useMeetingRecorder(): UseMeetingRecorder {
 
   useEffect(() => teardown, [teardown]);
 
-  return { state, error, elapsedSeconds, chunks, mimeType, start, stop };
+  return { state, error, elapsedSeconds, chunksRef, chunkCount, mimeType, start, stop };
 }
