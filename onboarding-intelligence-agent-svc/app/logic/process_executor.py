@@ -175,7 +175,7 @@ class ProcessExecutor:
                     PROCESS_PROMPTS, tenant.tenant_id
                 )
                 prompt_versions = {pid: r.version for pid, r in resolved.items()}
-                await self._redis.client.hset(  # type: ignore[misc]
+                await self._redis.client.hset(
                     keys.session(session_id),
                     "prompt_versions",
                     json.dumps(prompt_versions),
