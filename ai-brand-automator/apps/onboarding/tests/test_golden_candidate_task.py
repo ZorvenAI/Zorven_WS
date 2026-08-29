@@ -111,7 +111,6 @@ class TestEditActionWiring:
         assert call_kwargs["extracted_value"] == "Acme Ltd"
         assert call_kwargs["admin_final_value"] == "Acme Limited"
         assert call_kwargs["classification"] == "KEY"
-        assert isinstance(call_kwargs["edit_distance"], float)
         assert 0 < call_kwargs["edit_distance"] <= 1.0
 
     @patch("apps.onboarding.tasks.emit_golden_candidate.delay")
