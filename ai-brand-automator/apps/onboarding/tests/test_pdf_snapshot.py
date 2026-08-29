@@ -28,6 +28,20 @@ from onboarding.models import Company
 from onboarding.serializers import ONBOARDING_FIELDS
 from onboarding.views import build_onboarding_pdf
 
+from apps.onboarding.tests.factories import (
+    make_session,
+    make_recording,
+    make_consent,
+    make_brand_asset,
+    make_provenance,
+)
+from apps.onboarding.models import (
+    FieldClassification,
+    ProvenanceStatus,
+    RecordingStatus,
+    SessionStatus,
+)
+
 pytestmark = [pytest.mark.django_db, pytest.mark.unit]
 
 #: The labels the onboarding PDF emitted before B-03, in order. Committed as
@@ -116,7 +130,7 @@ def make_company() -> Company:
     )
 
 
-def pdf_text(company: Company) -> str:
+def pdf_text(company: Company, session=None) -> str:
     """Readable text out of the PDF bytes.
 
     fpdf2 Flate-compresses its content streams, so the text operators have to
@@ -125,7 +139,7 @@ def pdf_text(company: Company) -> str:
     below pass against an empty haystack. Hence the guard at the end: a text
     extraction that finds nothing is a broken test, not a clean result.
     """
-    raw = build_onboarding_pdf(company)
+    raw = build_onboarding_pdf(company, session=session)
 
     chunks: list[bytes] = []
     for match in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", raw, re.S):
@@ -213,3 +227,116 @@ def test_the_wizard_create_payload_is_unchanged():
     company = serializer.save()
     for field in ONBOARDING_FIELDS:
         assert getattr(company, field) is None, f"{field} was set by the wizard"
+
+
+# ── K-05: Meeting Evidence and Key Findings ────────────────────────
+
+
+def _session_with_evidence(company):
+    """A session with recordings, consent, captures, and KEY provenance."""
+    session = make_session(
+        company=company,
+        status=SessionStatus.CONFIRMED,
+    )
+    make_recording(
+        session=session,
+        status=RecordingStatus.SUMMARIZED,
+        duration_s=155,
+        summary={
+            "text": "Brand owner described founding story and market position.",
+            "key_moments": [
+                {"t": 12, "label": "Founding story begins"},
+                {"t": 85, "label": "Market differentiator"},
+            ],
+        },
+    )
+    make_consent(
+        session=session,
+        subject_name="Asha Kalyani",
+    )
+    make_brand_asset(
+        company=company,
+        file_name="whiteboard.jpg",
+        usage_tag="business_photo",
+        onboarding_session=session,
+        ocr_text="Store layout with pricing board",
+    )
+    make_provenance(
+        session=session,
+        field_name="legal_name",
+        extracted_value="Kalyani Coffee Roasters Pvt Ltd",
+        classification=FieldClassification.KEY,
+        status=ProvenanceStatus.CONFIRMED,
+    )
+    make_provenance(
+        session=session,
+        field_name="industry",
+        extracted_value="Food & Beverage",
+        classification=FieldClassification.SECONDARY,
+    )
+    return session
+
+
+def test_pdf_with_session_includes_evidence_and_findings():
+    """AC-1: both new sections appear with full evidence."""
+    company = make_company()
+    session = _session_with_evidence(company)
+    text = pdf_text(company, session=session)
+
+    assert "Meeting Evidence" in text
+    assert "Recording 1" in text
+    assert "2m 35s" in text
+    assert "Brand owner described founding story" in text
+    assert "Founding story begins" in text
+    assert "Market differentiator" in text
+
+    assert "Consent" in text
+    assert "Verbal, recorded" in text
+
+    assert "whiteboard.jpg" in text
+    assert "Store layout with pricing board" in text
+
+    assert "Key Findings" in text
+    assert "Legal Name" in text
+    assert "Confirmed" in text
+    assert "Kalyani Coffee Roasters Pvt Ltd" in text
+
+
+def test_pdf_without_session_unchanged():
+    """AC-4: no session produces the exact same labels as before."""
+    text = pdf_text(make_company())
+
+    for label in PDF_LABELS_BEFORE_B03:
+        assert label in text, f"the PDF lost the label {label!r}"
+
+    assert "Meeting Evidence" not in text
+    assert "Key Findings" not in text
+
+
+def test_pdf_empty_session_no_empty_headings():
+    """AC-4 edge: a session with no evidence must not render empty headings."""
+    company = make_company()
+    session = make_session(company=company, status=SessionStatus.CONFIRMED)
+    text = pdf_text(company, session=session)
+
+    assert "Meeting Evidence" not in text
+    assert "Key Findings" not in text
+
+
+def test_consent_subject_name_never_in_pdf():
+    """Privacy: subject_name must never appear even when it exists on the model."""
+    company = make_company()
+    session = _session_with_evidence(company)
+    text = pdf_text(company, session=session)
+
+    assert "Asha Kalyani" not in text
+
+
+def test_provenance_secondary_fields_absent():
+    """Only KEY classification appears in Key Findings, not SECONDARY."""
+    company = make_company()
+    session = _session_with_evidence(company)
+    text = pdf_text(company, session=session)
+
+    assert "Legal Name [Confirmed]" in text
+    assert "Industry [Pending]" not in text
