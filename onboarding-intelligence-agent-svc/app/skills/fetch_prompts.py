@@ -55,12 +55,6 @@ class FetchPrompts(BaseSkill):
             "PROCESS": PROCESS_PROMPTS,
         }.get(mode, ALL_PROMPT_IDS)
 
-        if self._loader is None:
-            return SkillResult(
-                skill_id="SKL-OIA-15",
-                output={"prompt_versions": {}, "templates": {}, "degraded": True},
-            )
-
         resolved, degraded = await self._loader.resolve_for_session(
             prompt_set, tenant_id
         )
