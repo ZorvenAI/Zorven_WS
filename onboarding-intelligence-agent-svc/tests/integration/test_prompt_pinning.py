@@ -75,7 +75,7 @@ def test_prep_execute_returns_prompt_versions(client):
 
     assert "prompt_version" in data
     pv = data["prompt_version"]
-    assert isinstance(pv, dict)
+    assert isinstance(pv, dict)  # weak-assert: ok — guards the len() check below
     assert len(pv) >= 1
 
 
@@ -118,7 +118,7 @@ def test_prep_pins_versions_in_session_hash(client):
 
     if raw is not None:
         pinned = json.loads(raw)
-        assert isinstance(pinned, dict)
+        assert isinstance(pinned, dict)  # weak-assert: ok — guards the len() check below
         assert len(pinned) >= 1
 
 
