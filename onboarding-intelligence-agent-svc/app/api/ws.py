@@ -1406,6 +1406,40 @@ async def _hold(
         except Exception:  # noqa: BLE001
             logger.warning("set_questions_failed")
 
+    # L-01: resolve and pin prompt versions at LIVE session start.
+    loader = getattr(websocket.app.state, "prompt_loader", None)
+    if loader is not None and redis_manager is not None:
+        from app.prompts.mapping import LIVE_PROMPTS
+
+        try:
+            resolved, degraded = await loader.resolve_for_session(
+                LIVE_PROMPTS, verdict.tenant_id
+            )
+            prompt_versions = {pid: r.version for pid, r in resolved.items()}
+            keys = redis_manager.keys_for(verdict.tenant_id)
+            import json as _json
+
+            await redis_manager.client.hset(
+                keys.session(session_id),
+                "prompt_versions",
+                _json.dumps(prompt_versions),
+            )
+            if degraded:
+                events_emitter = getattr(websocket.app.state, "events", None)
+                if events_emitter is not None:
+                    from app.events.catalog import EventType
+
+                    await events_emitter.emit(
+                        EventType.AGENT_INVOKED,
+                        tenant_id=verdict.tenant_id,
+                        correlation_id=session_id,
+                        session_id=session_id,
+                        payload={"prompt_source": "hardcoded_fallback"},
+                        outcome="DEGRADED",
+                    )
+        except Exception:  # noqa: BLE001
+            logger.warning("live_prompt_resolution_failed", session_id=session_id)
+
     # G-02: batcher and analysis state
     from app.core.config import get_settings
 

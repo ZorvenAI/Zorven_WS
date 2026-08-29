@@ -117,6 +117,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # F-06: shared registry so ws.py can wire the on_state_change callback.
     app.state.breakers = BreakerRegistry()
 
+    # L-01: prompt resolution chain. Built after the breaker registry so POI
+    # calls are protected by the poi breaker (§18.2, circuit_breakers.yaml).
+    from app.prompts.loader import PromptLoader
+    from app.services.poi_client import POIClient as _POIClient
+
+    poi_client = _POIClient(
+        settings.POI_URL,
+        breaker=app.state.breakers.get("poi"),
+    )
+    app.state.prompt_loader = PromptLoader(
+        redis=app.state.redis,
+        poi_client=poi_client,
+        breaker=app.state.breakers.get("poi"),
+    )
+    app.state.process_executor._prompt_loader = app.state.prompt_loader
+    if not poi_client.configured:
+        logger.info(
+            "poi_not_configured",
+            detail="prompt resolution will use Redis cache or hardcoded fallbacks",
+        )
+
     # F-05: STT adapter and IG-04 registration.
     app.state.stt = GoogleSTTAdapter(
         project=settings.STT_PROJECT,
@@ -157,6 +178,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "backend": app.state.backend,
             "llm": LLMProvider(settings.GEMINI_KEY),
             "redis": app.state.redis,
+            "prompt_loader": app.state.prompt_loader,
         }
     )
     app.state.skill_registry.load()

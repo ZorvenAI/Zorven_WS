@@ -125,6 +125,7 @@ class Settings(BaseSettings):
     TAVILY_API_KEY: str = ""
     SERVICE_TOKEN: str = ""
     POI_TOKEN: str = ""
+    POI_URL: str = ""
 
     # ── Observability ────────────────────────────────────────
     OTEL_EXPORTER_ENDPOINT: str = ""

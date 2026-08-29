@@ -125,6 +125,9 @@ IMPLEMENTED |= {
     "app.api.ws",  # C-04: the IG-10 gate only; F-04 owns the protocol
     "app.logic.live_session",  # F-04 PR 2: seq, replay buffer, resume
     "app.logic.process_executor",  # J-01: PROCESS dispatch + lifecycle
+    "app.prompts.loader",  # L-01: 4-step prompt resolution chain
+    "app.prompts.fallbacks",  # L-01: hardcoded fallback prompts
+    "app.services.poi_client",  # L-01: POI service HTTP client
 }
 
 #: A-06 turned the sixteen skill modules into registry-resolvable classes.
@@ -196,6 +199,7 @@ IMPLEMENTED_BODIES = {
     "app.skills.extract_and_map_fields",  # J-03: SKL-OIA-10
     "app.skills.surface_conflicts_and_escalate",  # J-05: SKL-OIA-14
     "app.skills.autogen_strategy_identity",  # J-06: SKL-OIA-12
+    "app.skills.fetch_prompts",  # L-01: SKL-OIA-15
 }
 
 
