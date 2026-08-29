@@ -179,6 +179,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "llm": LLMProvider(settings.GEMINI_KEY),
             "redis": app.state.redis,
             "prompt_loader": app.state.prompt_loader,
+            "producer": app.state.kafka,
         }
     )
     app.state.skill_registry.load()
@@ -199,6 +200,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # J-05: wire events into ProcessExecutor now that the emitter exists
     app.state.process_executor._events = app.state.events
+
+    # L-02: wire emitter into SKL-OIA-13 now that EventEmitter exists.
+    # Updating _providers would be too late — load() already instantiated the
+    # skill with emitter=None. Wire the instance directly, same as J-05 above.
+    app.state.skill_registry.get("SKL-OIA-13")._emitter = app.state.events
 
     app.state.commands = CommandConsumer(settings, app.state.kafka)
     try:

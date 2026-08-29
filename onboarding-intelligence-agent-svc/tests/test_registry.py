@@ -196,7 +196,7 @@ async def test_origin_defaults_to_external(registry):
 
 
 async def test_internal_callers_pass_the_origin_gate(registry):
-    """The service's own pipelines may invoke them — reaching the deferred body."""
+    """The service's own pipelines may invoke internal-only skills."""
     from app.skills.models import Origin, SkillContext, TenantContext
 
     ctx = SkillContext(
@@ -204,9 +204,8 @@ async def test_internal_callers_pass_the_origin_gate(registry):
         tenant_context=TenantContext(tenant_id="t-1", role="OWNER"),
         origin=Origin.INTERNAL,
     )
-    # Past the gate, into the body A-06 leaves deferred.
-    with pytest.raises(NotImplementedError):
-        await registry.execute("SKL-OIA-13", ctx)
+    result = await registry.execute("SKL-OIA-13", ctx)
+    assert result.skill_id == "SKL-OIA-13"
 
 
 def _first_deferred_skill(registry) -> str:

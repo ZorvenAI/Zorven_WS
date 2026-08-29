@@ -200,6 +200,7 @@ IMPLEMENTED_BODIES = {
     "app.skills.surface_conflicts_and_escalate",  # J-05: SKL-OIA-14
     "app.skills.autogen_strategy_identity",  # J-06: SKL-OIA-12
     "app.skills.fetch_prompts",  # L-01: SKL-OIA-15
+    "app.skills.record_golden_candidates",  # L-02: SKL-OIA-13
 }
 
 
