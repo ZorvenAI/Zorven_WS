@@ -35,7 +35,7 @@ from tenants.permissions import (
 logger = logging.getLogger(__name__)
 
 
-def build_onboarding_pdf(company) -> bytes:
+def build_onboarding_pdf(company, session=None) -> bytes:
     """Render the onboarding summary PDF for *company*.
 
     Extracted from ``CompanyViewSet.generate_onboarding_pdf`` so the
@@ -156,6 +156,91 @@ def build_onboarding_pdf(company) -> bytes:
         _field("Color Palette", company.color_palette_desc)
         _field("Font Recommendations", company.font_recommendations)
         _field("Messaging Guide", company.messaging_guide)
+
+    # ── Meeting Evidence (K-05) ──────────────────────────────────────
+    if session is not None:
+        recordings = list(
+            session.recordings.filter(
+                status__in=["SUMMARIZED", "TRANSCRIBED"]
+            ).order_by("started_at")
+        )
+        consents = list(session.consent_records.filter(revoked_at__isnull=True))
+        captures = list(session.captured_media.all().order_by("uploaded_at"))
+
+        if recordings or consents or captures:
+            _section("Meeting Evidence")
+
+            for idx, rec in enumerate(recordings, 1):
+                dur = rec.duration_s
+                if dur is not None:
+                    mins, secs = divmod(dur, 60)
+                    dur_label = f" ({mins}m {secs:02d}s)"
+                else:
+                    dur_label = ""
+                pdf.set_font("Helvetica", "B", 11)
+                pdf.cell(
+                    0,
+                    7,
+                    _sanitize(f"Recording {idx}{dur_label}"),
+                    new_x="LMARGIN",
+                    new_y="NEXT",
+                )
+                summary = rec.summary or {}
+                summary_text = summary.get("text", "")
+                if summary_text:
+                    pdf.set_font("Helvetica", "", 10)
+                    pdf.multi_cell(0, 5, _wrap_text(summary_text))
+                    pdf.ln(1)
+                for moment in summary.get("key_moments", []):
+                    t = moment.get("t", "")
+                    label = moment.get("label", "")
+                    if label:
+                        pdf.set_font("Helvetica", "", 9)
+                        pdf.cell(
+                            0,
+                            5,
+                            _sanitize(f"  [{t}s] {label}"),
+                            new_x="LMARGIN",
+                            new_y="NEXT",
+                        )
+                pdf.ln(2)
+
+            for consent in consents:
+                method_label = consent.get_method_display()
+                date_str = (
+                    consent.granted_at.strftime("%Y-%m-%d")
+                    if consent.granted_at
+                    else "unknown"
+                )
+                _field("Consent", f"{method_label} on {date_str}")
+
+            for cap in captures:
+                tag_display = cap.get_usage_tag_display() if cap.usage_tag else "Asset"
+                desc = cap.ocr_text or "No description available"
+                _field(
+                    f"{tag_display}: {cap.file_name}",
+                    desc,
+                )
+
+        # ── Key Findings (K-05) ───────────────────────────────────────
+        key_provenance = list(
+            session.provenance.filter(classification="KEY").order_by("field_name")
+        )
+        if key_provenance:
+            _section("Key Findings")
+            for prov in key_provenance:
+                label = prov.field_name.replace("_", " ").title()
+                status_label = prov.get_status_display()
+                value = (
+                    prov.final_value
+                    if prov.final_value is not None
+                    else prov.extracted_value
+                )
+                if not isinstance(value, str):
+                    import json as _json
+
+                    value = _json.dumps(value)
+                _field(f"{label} [{status_label}]", value)
 
     raw_pdf = pdf.output()
     if isinstance(raw_pdf, bytearray):
@@ -326,7 +411,14 @@ class CompanyViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             )
 
         # --- Build the PDF (extracted; see build_onboarding_pdf) ---
-        pdf_bytes = build_onboarding_pdf(company)
+        session = (
+            company.onboarding_sessions.filter(
+                status__in=["REVIEW_PENDING", "CONFIRMED", "COMPLETED"]
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        pdf_bytes = build_onboarding_pdf(company, session=session)
 
         # --- Upload to GCS and create BrandAsset ---
         safe_filename = "onboarding_data.pdf"
