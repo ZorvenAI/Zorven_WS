@@ -64,6 +64,7 @@ class ProcessExecutor:
         self._llm = llm
         self._kafka = kafka
         self._events = events
+        self._prompt_loader: Any = None
         self._running_tasks: set[asyncio.Task[None]] = set()
 
     async def accept(
@@ -163,6 +164,33 @@ class ProcessExecutor:
                 json.dumps({"job_id": job_id, "status": JOB_STATUS_RUNNING}),
                 ex=JOB_TTL,
             )
+
+            # L-01: resolve and pin prompt versions before processing.
+            prompt_versions: dict[str, str] = {}
+            loader = getattr(self, "_prompt_loader", None)
+            if loader is not None:
+                from app.prompts.mapping import PROCESS_PROMPTS
+
+                resolved, degraded = await loader.resolve_for_session(
+                    PROCESS_PROMPTS, tenant.tenant_id
+                )
+                prompt_versions = {pid: r.version for pid, r in resolved.items()}
+                await self._redis.client.hset(
+                    keys.session(session_id),
+                    "prompt_versions",
+                    json.dumps(prompt_versions),
+                )
+                if degraded and self._events is not None:
+                    from app.events.catalog import EventType
+
+                    await self._events.emit(
+                        EventType.AGENT_INVOKED,
+                        tenant_id=tenant.tenant_id,
+                        correlation_id=job_id,
+                        session_id=session_id,
+                        payload={"prompt_source": "hardcoded_fallback"},
+                        outcome="DEGRADED",
+                    )
 
             from app.logic.evidence_assembler import EvidenceAssembler
             from app.logic.memory_compression import compress_if_needed

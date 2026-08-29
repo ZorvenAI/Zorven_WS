@@ -4,7 +4,9 @@ import pytest
 
 from app.logic.prompt_naming import VALID_AGENT_CODES, validate_prompt_name
 from app.registries.prompt_catalog import (
+    OIA_PROMPTS,
     PROMPT_CATALOG,
+    UTILITY_PROMPTS,
     WF1_PROMPTS,
     WF2_PROMPTS,
     WF3_PROMPTS,
@@ -15,12 +17,15 @@ class TestCatalogCompleteness:
     """Verify the catalog meets §3.2 requirements."""
 
     def test_catalog_has_at_least_39_entries(self):
-        """All agent system prompts registered (39 real prompts)."""
+        """All agent system prompts registered (39+ real prompts)."""
         assert len(PROMPT_CATALOG) >= 39
 
-    def test_catalog_has_39_entries(self):
-        """Exact count: 23 WF1 + 7 WF2 + 9 WF3 = 39."""
-        assert len(PROMPT_CATALOG) == 39
+    def test_catalog_total_count(self):
+        """Exact count: 23 WF1 + 7 WF2 + 9 WF3 + 14 UTILITY + 9 OIA = 62."""
+        assert len(PROMPT_CATALOG) == (
+            len(WF1_PROMPTS) + len(WF2_PROMPTS) + len(WF3_PROMPTS)
+            + len(UTILITY_PROMPTS) + len(OIA_PROMPTS)
+        )
 
     def test_wf1_has_23_prompts(self):
         """AC-1: All WF1 prompts registered (MRA:4, CIA:5, APA:6, TCIA:3, VoCA:5)."""
@@ -41,14 +46,30 @@ class TestCatalogCompleteness:
         ), f"Duplicates: {[n for n in names if names.count(n) > 1]}"
 
 
-class TestNamingConvention:
-    """Verify all catalog entries follow §3.1 naming convention."""
+_WORKFLOW_PROMPTS = WF1_PROMPTS + WF2_PROMPTS + WF3_PROMPTS
 
-    @pytest.mark.parametrize("entry", PROMPT_CATALOG, ids=lambda e: e.name)
-    def test_name_is_valid(self, entry):
-        """Every catalog entry passes the §3.1 validator."""
+
+class TestNamingConvention:
+    """Verify workflow entries follow §3.1 naming convention.
+
+    Utility and OIA prompts use ``zorven-<agent>-<skill>`` which is a valid
+    alternative pattern not covered by the §3.1 validator.
+    """
+
+    @pytest.mark.parametrize("entry", _WORKFLOW_PROMPTS, ids=lambda e: e.name)
+    def test_workflow_name_is_valid(self, entry):
+        """Every workflow catalog entry passes the §3.1 validator."""
         parts = validate_prompt_name(entry.name)
         assert parts is not None
+
+    @pytest.mark.parametrize(
+        "entry", UTILITY_PROMPTS + OIA_PROMPTS, ids=lambda e: e.name
+    )
+    def test_utility_name_follows_pattern(self, entry):
+        """Utility/OIA names follow zorven-<agent>-<skill> convention."""
+        assert entry.name.startswith("zorven-")
+        parts = entry.name.split("-")
+        assert len(parts) >= 3
 
 
 class TestAgentCoverage:

@@ -30,7 +30,8 @@ from app.core.config import Settings
 KEY_PREFIX: Final[str] = "oia:v1:"
 
 #: Read-only namespace owned by prompt-optimization-svc, shared in DB 2.
-PROMPT_CACHE_PREFIX: Final[str] = "poi:"
+#: POI writes prompt:{name}:production and prompt:{name}:tenant:{tid} keys.
+PROMPT_CACHE_PREFIX: Final[str] = "prompt:"
 
 # TTLs from Design §14. Nothing is written without one — on a shared instance
 # an untrimmed key creates pressure on every other service's data.
@@ -52,6 +53,7 @@ TTL_CONFIG: Final[int] = 7 * 24 * 60 * 60
 #: conversation is the same span of work as the session it prepares, and the
 #: card is explicit that "an untimed key on a shared Redis is a slow leak".
 TTL_CHAT: Final[int] = 4 * 60 * 60
+TTL_PROMPT_CACHE: Final[int] = 15 * 60  # write-through cache for POI API (L-01)
 
 #: §14: the transcript list is capped so reconnect replay has a known worst
 #: case. ~8 segments/minute means a 60-minute meeting stays under 500.
@@ -167,6 +169,10 @@ class TenantKeys:
     def retry_queue(self, queue_name: str) -> str:
         """Sorted set · OCR retry queue, scored by next-attempt timestamp."""
         return f"{self._scope}retry:{queue_name}"
+
+    def prompt_cache(self, prompt_name: str) -> str:
+        """String · 15 min · OIA's write-through cache of a POI API response."""
+        return f"{self._scope}prompt_cache:{prompt_name}"
 
     def config(self) -> str:
         """Hash · tenant overrides.

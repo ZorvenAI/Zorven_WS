@@ -226,6 +226,40 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
         session_id=payload.session_id,
     )
 
+    # L-01: resolve and pin prompt versions at session start.
+    from app.prompts.mapping import PREP_PROMPTS
+
+    prompt_versions: dict[str, str] = {}
+    loader = getattr(request.app.state, "prompt_loader", None)
+    if loader is not None:
+        resolved, degraded = await loader.resolve_for_session(PREP_PROMPTS, tenant_id)
+        prompt_versions = {pid: r.version for pid, r in resolved.items()}
+        if payload.session_id:
+            import json as _json
+
+            keys = request.app.state.redis.keys_for(tenant_id)
+            await request.app.state.redis.client.hset(
+                keys.session(payload.session_id),
+                "prompt_versions",
+                _json.dumps(prompt_versions),
+            )
+        if degraded:
+            events = getattr(request.app.state, "events", None)
+            if events is not None:
+                from app.events.catalog import EventType
+
+                try:
+                    await events.emit(
+                        EventType.AGENT_INVOKED,
+                        tenant_id=tenant_id,
+                        correlation_id=(payload.tenant_context.correlation_id or ""),
+                        session_id=payload.session_id or "",
+                        payload={"prompt_source": "hardcoded_fallback"},
+                        outcome="DEGRADED",
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+
     brief, from_cache = await request.app.state.prep.research(
         tenant=tenant,
         input_context=payload.input_context,
@@ -280,6 +314,7 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
     return ExecuteResponse(
         status="SUCCEEDED",
         skill_id=QUESTIONNAIRE_SKILL if generated else RESEARCH_SKILL,
+        prompt_version=prompt_versions,
         output={
             "turns": len(history),
             "history": history,

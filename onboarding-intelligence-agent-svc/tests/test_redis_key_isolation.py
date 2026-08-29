@@ -124,7 +124,7 @@ def test_two_tenants_never_share_a_key():
 
 
 def test_prompt_cache_prefix_is_foreign_and_read_only():
-    """The poi: namespace belongs to prompt-optimization-svc."""
+    """The prompt: namespace belongs to prompt-optimization-svc."""
     assert not PROMPT_CACHE_PREFIX.startswith(KEY_PREFIX)
     writers = [
         name for name, fn in BUILDERS if call(fn).startswith(PROMPT_CACHE_PREFIX)
