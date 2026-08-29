@@ -45,7 +45,6 @@ def _admin(tenant: Tenant) -> tuple[User, APIClient]:
 
 
 class TestEmitGoldenCandidateTask:
-
     @patch("apps.onboarding.tasks.requests.post")
     def test_emit_golden_candidate_calls_oia(self, mock_post, settings):
         from apps.onboarding.tasks import emit_golden_candidate
@@ -88,7 +87,6 @@ class TestEmitGoldenCandidateTask:
 
 
 class TestEditActionWiring:
-
     @patch("apps.onboarding.tasks.emit_golden_candidate.delay")
     def test_edit_action_triggers_golden_candidate(self, mock_delay, public_tenant):
         user, client = _admin(public_tenant)
@@ -133,7 +131,6 @@ class TestEditActionWiring:
 
 
 class TestEditDistanceNormalization:
-
     @patch("apps.onboarding.tasks.emit_golden_candidate.delay")
     def test_edit_distance_normalized(self, mock_delay, public_tenant):
         """Raw Levenshtein int → normalized float [0,1]."""
@@ -159,7 +156,6 @@ class TestEditDistanceNormalization:
 
 
 class TestBuildEvidenceRef:
-
     def test_evidence_ref_from_source_span(self, public_tenant):
         row = make_provenance(
             tenant=public_tenant,

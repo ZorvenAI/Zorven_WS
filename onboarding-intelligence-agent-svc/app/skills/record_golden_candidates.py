@@ -143,8 +143,7 @@ class RecordGoldenCandidates(BaseSkill):
         try:
             keys = self._redis.keys_for(tenant_id)
             session_key = keys.session(session_id)
-            redis_client = self._redis.client
-            raw = await redis_client.hget(  # type: ignore[misc]
+            raw = await self._redis.client.hget(
                 session_key, "prompt_versions"
             )
             if raw:
