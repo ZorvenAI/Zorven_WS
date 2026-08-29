@@ -32,7 +32,6 @@ AGENT_SERVICE_DIRS: dict[str, str] = {
     "adpub": "ad-publishing-agent-svc",
     "coa": "campaign-optimization-agent-svc",
     "ila": "intelligence-loop-agent-svc",
-    "oia": "onboarding-intelligence-agent-svc",
 }
 
 # Utility / infrastructure agents that have prompts in the catalog but
@@ -46,6 +45,7 @@ UTILITY_AGENT_CODES: set[str] = {
     "rag_uploader",
     "orchestrator",
     "odoo_worker",
+    "oia",
 }
 
 # All known agent codes (workflow + utility)
