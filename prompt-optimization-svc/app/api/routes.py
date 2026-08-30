@@ -31,6 +31,8 @@ from app.api.schemas import (
     PromptTransitionRequest,
     PromptTransitionResponse,
     RejectionRequest,
+    ScaffoldTenantRequest,
+    ScaffoldTenantResponse,
     SeedResponse,
     SingleAgentOptimizationResponse,
     SyntheticGenerateRequest,
@@ -785,6 +787,27 @@ async def optimize(
             content={"detail": str(exc)},
         )
 
+    tenant_id = config.get("tenant_id") or ""
+    from app.celery_app import celery_app
+
+    if tenant_id and group.workflow == 0:
+        task_name = "app.tasks.optimize_tenant_oia.optimize_tenant_oia_pipeline"
+        result = celery_app.send_task(
+            task_name,
+            kwargs={"tenant_id": tenant_id, "force": True},
+        )
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "QUEUED",
+                "task_id": result.id,
+                "group_name": group_name,
+                "tenant_id": tenant_id,
+                "prompt_count": len(group.prompt_names),
+                "agent_codes": list(group.agent_codes),
+            },
+        )
+
     # Route to the correct Celery task based on workflow
     task_map = {
         0: "app.tasks.optimize_oia_pipeline.optimize_oia_pipeline",
@@ -804,8 +827,6 @@ async def optimize(
             status_code=400,
             content={"detail": f"No task mapped for workflow {group.workflow}"},
         )
-
-    from app.celery_app import celery_app
 
     # All tasks accept force=True to bypass schedule guards for on-demand triggers
     result = celery_app.send_task(task_name, kwargs={"force": True})
@@ -1598,6 +1619,67 @@ async def delete_tenant_override_endpoint(
         await cache.close()
 
 
+@router.post(
+    "/v1/prompts/scaffold-tenant",
+    response_model=ScaffoldTenantResponse,
+    status_code=201,
+)
+async def scaffold_tenant_prompts(
+    request: ScaffoldTenantRequest,
+    decision: Decision = Depends(require_permission(Permission.CREATE_OVERRIDE)),
+):
+    """Clone all OIA production prompts as TENANT_OVERRIDE for a new tenant.
+
+    Idempotent — skips prompts that already have a TENANT_OVERRIDE for
+    the given tenant.
+    """
+    from app.cache.prompt_cache import PromptCacheManager
+    from app.core.config import settings
+    from app.logic.tenant_override import create_tenant_override
+    from app.registries.prompt_catalog import OIA_PROMPTS
+
+    cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
+    await cache.connect()
+    try:
+        scaffolded = 0
+        skipped = 0
+        prompt_names: list[str] = []
+
+        for entry in OIA_PROMPTS:
+            existing = mlflow_registry.get_prompt_by_state(
+                entry.name,
+                PromptState.TENANT_OVERRIDE.value,
+                tenant_id=request.tenant_id,
+            )
+            if existing is not None:
+                skipped += 1
+                continue
+
+            production = mlflow_registry.get_prompt_by_state(
+                entry.name, PromptState.PRODUCTION.value, tenant_id=None
+            )
+            template = production.template if production else entry.template
+
+            await create_tenant_override(
+                prompt_name=entry.name,
+                tenant_id=request.tenant_id,
+                template=template,
+                mlflow_registry=mlflow_registry,
+                prompt_cache=cache,
+            )
+            scaffolded += 1
+            prompt_names.append(entry.name)
+
+        return ScaffoldTenantResponse(
+            tenant_id=request.tenant_id,
+            scaffolded=scaffolded,
+            skipped=skipped,
+            prompt_names=prompt_names,
+        )
+    finally:
+        await cache.close()
+
+
 # ── Canary metrics + dashboard endpoints ──
 
 
@@ -1804,9 +1886,7 @@ async def promote_canary(
 
     promoted = await canary_manager.promote_canary(prompt_name)
     if not promoted:
-        return JSONResponse(
-            status_code=500, content={"detail": "Promotion failed"}
-        )
+        return JSONResponse(status_code=500, content={"detail": "Promotion failed"})
 
     logger.info(
         "Admin force-promoted canary: %s v%d (was production v%d)",
@@ -1846,9 +1926,7 @@ async def rollback_canary(
 
     rolled_back = await canary_manager.rollback_canary(prompt_name)
     if not rolled_back:
-        return JSONResponse(
-            status_code=500, content={"detail": "Rollback failed"}
-        )
+        return JSONResponse(status_code=500, content={"detail": "Rollback failed"})
 
     logger.info(
         "Admin force-rolled-back canary: %s v%d (reverted to production v%d)",

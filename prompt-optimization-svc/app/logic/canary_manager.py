@@ -56,6 +56,7 @@ class CanaryState:
     expires_at: datetime
     agent_code: str
     active: bool = True
+    tenant_id: str = ""
 
 
 class CanaryManager:
@@ -65,7 +66,9 @@ class CanaryManager:
     persistence for canary history.
     """
 
-    def __init__(self, prompt_cache, lifecycle_manager=None, db_session_factory=None) -> None:
+    def __init__(
+        self, prompt_cache, lifecycle_manager=None, db_session_factory=None
+    ) -> None:
         self.prompt_cache = prompt_cache
         self.lifecycle_manager = lifecycle_manager
         self.db_session_factory = db_session_factory
@@ -76,6 +79,7 @@ class CanaryManager:
         canary_version: int,
         production_version: int,
         agent_code: str,
+        tenant_id: str = "",
     ) -> CanaryState:
         """Start a 24-hour canary deployment.
 
@@ -99,6 +103,7 @@ class CanaryManager:
             expires_at=expires_at,
             agent_code=agent_code,
             active=True,
+            tenant_id=tenant_id,
         )
 
         r = await self.prompt_cache.connect()
@@ -111,6 +116,7 @@ class CanaryManager:
             "expires_at": expires_at.isoformat(),
             "agent_code": agent_code,
             "active": "true",
+            "tenant_id": tenant_id,
         }
         await r.hset(key, mapping=state_data)
         # The Redis key must outlive the canary duration so the health check
@@ -148,6 +154,7 @@ class CanaryManager:
             expires_at=datetime.fromisoformat(data["expires_at"]),
             agent_code=data.get("agent_code", ""),
             active=data.get("active", "true") == "true",
+            tenant_id=data.get("tenant_id", ""),
         )
 
     async def record_canary_metric(
@@ -288,9 +295,14 @@ class CanaryManager:
 
         try:
             if self.lifecycle_manager is not None:
-                self.lifecycle_manager.promote_to_production(
-                    prompt_name, state.canary_version
-                )
+                if state.tenant_id:
+                    self.lifecycle_manager.promote_to_tenant_override(
+                        prompt_name, state.canary_version, state.tenant_id
+                    )
+                else:
+                    self.lifecycle_manager.promote_to_production(
+                        prompt_name, state.canary_version
+                    )
             else:
                 logger.warning(
                     "No lifecycle_manager — skipping promotion for %s", prompt_name

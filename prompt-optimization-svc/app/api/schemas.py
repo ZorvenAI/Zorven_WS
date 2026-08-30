@@ -411,6 +411,21 @@ class TenantOverrideResponse(BaseModel):
     state: str = "TENANT_OVERRIDE"
 
 
+class ScaffoldTenantRequest(BaseModel):
+    """Request for POST /v1/prompts/scaffold-tenant."""
+
+    tenant_id: str = Field(..., min_length=1, description="Tenant to scaffold for")
+
+
+class ScaffoldTenantResponse(BaseModel):
+    """Response for POST /v1/prompts/scaffold-tenant."""
+
+    tenant_id: str
+    scaffolded: int = 0
+    skipped: int = 0
+    prompt_names: list[str] = Field(default_factory=list)
+
+
 class TenantOptimizationConfig(BaseModel):
     """Full tenant optimization configuration."""
 
