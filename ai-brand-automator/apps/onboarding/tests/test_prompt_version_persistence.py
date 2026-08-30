@@ -1,6 +1,7 @@
 """L-03 — Prompt version persistence tests.
 
 Covers: process_callback persists prompt_versions from OIA,
+patch_session_prompt_versions for LIVE mode persistence,
 backward compatibility when prompt_versions absent, and
 read-only enforcement via API.
 """
@@ -150,3 +151,117 @@ class TestProcessCallbackPersistsPromptVersions:
 
         session.refresh_from_db()
         assert session.prompt_versions == {}
+
+
+LIVE_URL = "/api/v1/onboarding/internal/sessions/{pk}/prompt-versions/"
+
+
+class TestLivePromptVersionsPersistence:
+    """LIVE mode persists prompt_versions via a dedicated PATCH endpoint."""
+
+    @override_settings(OIA_SERVICE_TOKEN=SERVICE_TOKEN)
+    def test_live_persists_prompt_versions(self, public_tenant):
+        company = make_company(tenant=public_tenant, name="Live Co")
+        session = make_session(
+            company=company,
+            tenant=public_tenant,
+            status=SessionStatus.MEETING_LIVE,
+        )
+        assert session.prompt_versions == {}
+
+        client = APIClient()
+        client.defaults["SERVER_NAME"] = "localhost"
+        url = LIVE_URL.format(pk=session.pk)
+        resp = client.patch(
+            url,
+            data={"prompt_versions": SAMPLE_VERSIONS},
+            format="json",
+            HTTP_X_SERVICE_TOKEN=SERVICE_TOKEN,
+            HTTP_X_TENANT_ID=str(public_tenant.pk),
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["stored"] is True
+
+        session.refresh_from_db()
+        assert session.prompt_versions == SAMPLE_VERSIONS
+
+    @override_settings(OIA_SERVICE_TOKEN=SERVICE_TOKEN)
+    def test_live_rejects_empty_versions(self, public_tenant):
+        company = make_company(tenant=public_tenant, name="EmptyLive Co")
+        session = make_session(
+            company=company,
+            tenant=public_tenant,
+            status=SessionStatus.MEETING_LIVE,
+        )
+
+        client = APIClient()
+        client.defaults["SERVER_NAME"] = "localhost"
+        url = LIVE_URL.format(pk=session.pk)
+        resp = client.patch(
+            url,
+            data={"prompt_versions": {}},
+            format="json",
+            HTTP_X_SERVICE_TOKEN=SERVICE_TOKEN,
+            HTTP_X_TENANT_ID=str(public_tenant.pk),
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    @override_settings(OIA_SERVICE_TOKEN=SERVICE_TOKEN)
+    def test_live_rejects_bad_token(self, public_tenant):
+        company = make_company(tenant=public_tenant, name="BadToken Co")
+        session = make_session(
+            company=company,
+            tenant=public_tenant,
+            status=SessionStatus.MEETING_LIVE,
+        )
+
+        client = APIClient()
+        client.defaults["SERVER_NAME"] = "localhost"
+        url = LIVE_URL.format(pk=session.pk)
+        resp = client.patch(
+            url,
+            data={"prompt_versions": SAMPLE_VERSIONS},
+            format="json",
+            HTTP_X_SERVICE_TOKEN="wrong-token",
+            HTTP_X_TENANT_ID=str(public_tenant.pk),
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    @override_settings(OIA_SERVICE_TOKEN=SERVICE_TOKEN)
+    def test_live_returns_404_for_unknown_session(self, public_tenant):
+        client = APIClient()
+        client.defaults["SERVER_NAME"] = "localhost"
+        url = LIVE_URL.format(pk=99999)
+        resp = client.patch(
+            url,
+            data={"prompt_versions": SAMPLE_VERSIONS},
+            format="json",
+            HTTP_X_SERVICE_TOKEN=SERVICE_TOKEN,
+            HTTP_X_TENANT_ID=str(public_tenant.pk),
+        )
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    @override_settings(OIA_SERVICE_TOKEN=SERVICE_TOKEN)
+    def test_live_works_for_any_session_status(self, public_tenant):
+        """Prompt versions can be persisted regardless of session status."""
+        company = make_company(tenant=public_tenant, name="AnyStatus Co")
+        session = make_session(
+            company=company,
+            tenant=public_tenant,
+            status=SessionStatus.GATHERED,
+        )
+
+        client = APIClient()
+        client.defaults["SERVER_NAME"] = "localhost"
+        url = LIVE_URL.format(pk=session.pk)
+        resp = client.patch(
+            url,
+            data={"prompt_versions": SAMPLE_VERSIONS},
+            format="json",
+            HTTP_X_SERVICE_TOKEN=SERVICE_TOKEN,
+            HTTP_X_TENANT_ID=str(public_tenant.pk),
+        )
+        assert resp.status_code == status.HTTP_200_OK
+
+        session.refresh_from_db()
+        assert session.prompt_versions == SAMPLE_VERSIONS

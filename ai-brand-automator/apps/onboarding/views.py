@@ -2460,6 +2460,59 @@ def process_callback(request, pk):
     )
 
 
+# ── Internal service-to-service endpoint (L-03: LIVE prompt versions) ──
+
+
+@api_view(["PATCH"])
+@permission_classes([AllowAny])
+def patch_session_prompt_versions(request, pk):
+    """``PATCH /api/v1/onboarding/internal/sessions/<pk>/prompt-versions/``
+
+    OIA persists resolved prompt versions at LIVE session end.
+    X-Service-Token auth. Fire-and-forget from OIA's WS teardown.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "") or decouple_config(
+        "OIA_SERVICE_TOKEN", default=""
+    )
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    tenant, error = _service_tenant(request)
+    if error is not None:
+        return error
+
+    prompt_versions = request.data.get("prompt_versions", {})
+    if not isinstance(prompt_versions, dict) or not prompt_versions:
+        return Response(
+            {"error": "prompt_versions must be a non-empty dict"},
+            status=http.HTTP_400_BAD_REQUEST,
+        )
+
+    with db_transaction.atomic():
+        session = (
+            OnboardingSession.objects.filter(pk=pk, tenant=tenant)
+            .select_for_update(of=("self",))
+            .first()
+        )
+        if session is None:
+            return Response(
+                {"error": "Session not found"},
+                status=http.HTTP_404_NOT_FOUND,
+            )
+
+        session.prompt_versions = prompt_versions
+        session.save(update_fields=["prompt_versions", "updated_at"])
+
+    return Response(
+        {"session_id": session.pk, "stored": True},
+        status=http.HTTP_200_OK,
+    )
+
+
 # ── Internal service-to-service endpoint (J-02) ─────────────────────
 
 
