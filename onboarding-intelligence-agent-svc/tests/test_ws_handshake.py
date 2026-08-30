@@ -130,7 +130,7 @@ def client(app_with_live_redis, django_stub, live_company):
         yield test_client
 
 
-def expect_close(socket, within: float = 3.0) -> WebSocketDisconnect:
+def expect_close(socket, within: float = 10.0) -> WebSocketDisconnect:
     """Wait for the server to close, and fail rather than hang if it does not.
 
     Starlette's test client has no receive timeout, so the obvious
@@ -138,6 +138,13 @@ def expect_close(socket, within: float = 3.0) -> WebSocketDisconnect:
     when the close it expects never comes. That is how a mutation to the lock
     or the expiry check turns into a six-hour CI job instead of a red test —
     observed while checking exactly those two guards.
+
+    The default timeout is 10s rather than 3s: on a loaded CI runner the poll
+    loop in _hold needs multiple cycles (each doing Redis + HTTP) before it
+    sees the consent change, and a tight window turns a slow runner into a
+    deadlock — Starlette's TestClient __exit__ does an indefinite
+    Condition.wait() to join the ASGI thread, so if this helper times out
+    before the server closes, the 300s pytest-timeout fires instead.
     """
     import threading
 
