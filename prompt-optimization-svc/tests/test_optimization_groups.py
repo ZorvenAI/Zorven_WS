@@ -15,7 +15,7 @@ from app.registries.optimization_groups import (
     get_group,
 )
 
-ALL_15_AGENTS = {
+ALL_AGENTS = {
     "mra",
     "cia",
     "apa",
@@ -31,14 +31,15 @@ ALL_15_AGENTS = {
     "adpub",
     "coa",
     "ila",
+    "oia",
 }
 
 
 class TestOptimizationGroups:
     """Tests for optimization group definitions."""
 
-    def test_four_groups_defined(self):
-        assert len(OPTIMIZATION_GROUPS) == 4
+    def test_five_groups_defined(self):
+        assert len(OPTIMIZATION_GROUPS) == 5
 
     def test_group_names_match_keys(self):
         for key, group in OPTIMIZATION_GROUPS.items():
@@ -73,11 +74,12 @@ class TestOptimizationGroups:
         covered = set()
         for group in OPTIMIZATION_GROUPS.values():
             covered.update(group.agent_codes)
-        assert covered == ALL_15_AGENTS
+        assert covered == ALL_AGENTS
 
     def test_workflow_numbers_valid(self):
         for name, group in OPTIMIZATION_GROUPS.items():
             assert group.workflow in {
+                0,
                 1,
                 2,
                 3,
@@ -89,10 +91,11 @@ class TestOptimizationGroups:
             group.name = "modified"
 
     def test_prompt_names_follow_naming_convention(self):
-        pattern = re.compile(r"^zorven-wf\d+-\w+-\w+$")
+        wf_pattern = re.compile(r"^zorven-wf\d+-[\w-]+$")
+        oia_pattern = re.compile(r"^zorven-oia-[\w-]+$")
         for name, group in OPTIMIZATION_GROUPS.items():
             for pn in group.prompt_names:
-                assert pattern.match(pn), (
+                assert wf_pattern.match(pn) or oia_pattern.match(pn), (
                     f"Prompt name '{pn}' in group '{name}' "
-                    f"doesn't match zorven-wfN-agent-skill pattern"
+                    f"doesn't match naming convention"
                 )

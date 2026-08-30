@@ -2425,6 +2425,11 @@ def process_callback(request, pk):
                         status=http.HTTP_400_BAD_REQUEST,
                     )
                 session.process_summary = summary
+
+            prompt_versions = request.data.get("prompt_versions", {})
+            if isinstance(prompt_versions, dict) and prompt_versions:
+                session.prompt_versions = prompt_versions
+
             target = "REVIEW_PENDING"
         else:
             target = "GATHERED"
@@ -2441,6 +2446,7 @@ def process_callback(request, pk):
             "status",
             "process_job_id",
             "process_summary",
+            "prompt_versions",
             "updated_at",
         ]
         session.save(update_fields=update_fields)

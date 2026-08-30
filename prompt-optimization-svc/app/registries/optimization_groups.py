@@ -84,6 +84,26 @@ OPTIMIZATION_GROUPS: dict[str, OptimizationGroup] = {
         workflow=2,
         description="WF2 brand strategy agents optimized together",
     ),
+    "oia-onboarding-pipeline": OptimizationGroup(
+        name="oia-onboarding-pipeline",
+        prompt_names=(
+            "zorven-oia-research-brief",
+            "zorven-oia-questionnaire",
+            "zorven-oia-analyze-stream",
+            "zorven-oia-sufficiency",
+            "zorven-oia-followups",
+            "zorven-oia-media-analysis",
+            "zorven-oia-media-analysis-multi",
+            "zorven-oia-summarize-recording",
+            "zorven-oia-extract-fields",
+        ),
+        agent_codes=("oia",),
+        workflow=0,
+        description=(
+            "OIA onboarding prompts — research, questionnaire, "
+            "live analysis, and PROCESS extraction"
+        ),
+    ),
 }
 
 
