@@ -62,7 +62,7 @@ def questionnaire_coverage(*, inputs, outputs, expectations=None):
                     workflows_covered.add(str(wf))
         if workflows_covered:
             score_parts += min(len(workflows_covered) / 3, 1.0)
-            details.append("workflow_coverage: " f"{len(workflows_covered)} workflows")
+            details.append(f"workflow_coverage: " f"{len(workflows_covered)} workflows")
         else:
             details.append("workflow_coverage: no workflow_id on questions")
 

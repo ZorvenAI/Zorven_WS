@@ -52,7 +52,7 @@ def extraction_accuracy(*, inputs, outputs, expectations=None):
         non_empty = sum(1 for v in fields.values() if v is not None and v != "")
         ratio = non_empty / len(fields)
         score_parts += ratio
-        details.append(f"extracted_fields: " f"{non_empty}/{len(fields)} non-empty")
+        details.append(f"extracted_fields: {non_empty}/{len(fields)} non-empty")
     else:
         details.append("extracted_fields: missing or empty")
 
