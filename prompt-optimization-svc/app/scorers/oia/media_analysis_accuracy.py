@@ -1,8 +1,8 @@
 """Media analysis accuracy scorer for OIA (§17.1).
 
-Checks OCR text extraction accuracy and usage_tag classification
-against admin corrections. Used for both single-frame and multi-frame
-media analysis prompts.
+Checks caption quality, doc_type classification, and
+sensitivity_class assignment against admin corrections.
+Used for both single-frame and multi-frame media analysis prompts.
 """
 
 import json
@@ -12,6 +12,23 @@ from mlflow.entities.assessment import Feedback
 from mlflow.genai.scorers import scorer
 
 logger = logging.getLogger(__name__)
+
+_VALID_DOC_TYPES = {
+    "invoice",
+    "receipt",
+    "contract",
+    "id_card",
+    "passport",
+    "business_card",
+    "presentation",
+    "report",
+    "letter",
+    "form",
+    "photo",
+    "screenshot",
+    "other",
+}
+_VALID_SENSITIVITY = {"GENERAL", "IDENTITY", "FINANCIAL"}
 
 
 def _parse_output(outputs) -> dict | None:
@@ -28,10 +45,10 @@ def _parse_output(outputs) -> dict | None:
 
 @scorer(name="media_analysis_accuracy")
 def media_analysis_accuracy(*, inputs, outputs, expectations=None):
-    """Score media analysis OCR and classification accuracy.
+    """Score media analysis classification accuracy.
 
-    Checks for: extracted_text (non-empty), usage_tags (list),
-    and agreement with expectations when available.
+    Prompt output keys: caption (str), doc_type (str),
+    sensitivity_class (str).
 
     Returns:
         Feedback with value 0.0-1.0.
@@ -48,51 +65,45 @@ def media_analysis_accuracy(*, inputs, outputs, expectations=None):
     total_parts = 3
     details = []
 
-    ocr_text = data.get("extracted_text", data.get("ocr_text", ""))
-    if isinstance(ocr_text, str) and len(ocr_text.strip()) > 0:
+    caption = data.get("caption", "")
+    if isinstance(caption, str) and caption.strip():
         score_parts += 1
-        details.append(f"extracted_text: {len(ocr_text)} chars")
+        details.append(f"caption: {len(caption)} chars")
     else:
-        details.append("extracted_text: missing or empty")
+        details.append("caption: missing or empty")
 
-    usage_tags = data.get("usage_tags", data.get("tags", []))
-    if isinstance(usage_tags, list) and len(usage_tags) > 0:
+    doc_type = data.get("doc_type", "")
+    if isinstance(doc_type, str) and doc_type in _VALID_DOC_TYPES:
         score_parts += 1
-        details.append(f"usage_tags: {len(usage_tags)} tags")
+        details.append(f"doc_type: {doc_type}")
+    elif isinstance(doc_type, str) and doc_type:
+        score_parts += 0.5
+        details.append(f"doc_type: '{doc_type}' not in enum")
     else:
-        details.append("usage_tags: missing or empty")
+        details.append("doc_type: missing")
+
+    sensitivity = data.get("sensitivity_class", "")
+    if isinstance(sensitivity, str) and sensitivity in _VALID_SENSITIVITY:
+        score_parts += 1
+        details.append(f"sensitivity_class: {sensitivity}")
+    elif isinstance(sensitivity, str) and sensitivity:
+        score_parts += 0.5
+        details.append(f"sensitivity_class: '{sensitivity}' not in enum")
+    else:
+        details.append("sensitivity_class: missing")
 
     exp_data = _parse_output(expectations) if expectations else None
     if exp_data:
-        expected_tags = exp_data.get("expected_tags", [])
-        if isinstance(expected_tags, list) and expected_tags:
-            predicted = set(
-                str(t).lower()
-                for t in (usage_tags if isinstance(usage_tags, list) else [])
-            )
-            expected = set(str(t).lower() for t in expected_tags)
-            if expected:
-                overlap = len(predicted & expected)
-                precision = overlap / len(predicted) if predicted else 0
-                recall = overlap / len(expected)
-                f1 = (
-                    2 * precision * recall / (precision + recall)
-                    if (precision + recall) > 0
-                    else 0
-                )
-                score_parts += f1
-                details.append(f"tag_f1: {f1:.2f}")
-            else:
-                score_parts += 1
-                details.append("expected_tags: empty reference")
-        else:
-            score_parts += 0.5
-            details.append("no expected_tags for comparison")
-    else:
-        score_parts += 0.5
-        details.append("no expectations provided")
+        exp_doc = exp_data.get("doc_type")
+        exp_sens = exp_data.get("sensitivity_class")
+        if exp_doc and doc_type != exp_doc:
+            score_parts -= 0.5
+            details.append(f"doc_type mismatch: expected {exp_doc}")
+        if exp_sens and sensitivity != exp_sens:
+            score_parts -= 0.5
+            details.append(f"sensitivity mismatch: expected {exp_sens}")
 
-    score = score_parts / total_parts
+    score = max(0.0, score_parts / total_parts)
 
     return Feedback(
         name="media_analysis_accuracy",

@@ -29,8 +29,8 @@ def _parse_output(outputs) -> dict | None:
 def summary_faithfulness(*, inputs, outputs, expectations=None):
     """Score recording summary faithfulness.
 
-    Checks for: key_moments (with timestamps), summary_text (non-empty),
-    and speaker attribution.
+    Prompt output keys: text (str), key_moments (list of
+    {t: float, label: str}).
 
     Returns:
         Feedback with value 0.0-1.0.
@@ -47,20 +47,17 @@ def summary_faithfulness(*, inputs, outputs, expectations=None):
     total_parts = 3
     details = []
 
-    summary_text = data.get("summary", data.get("summary_text", ""))
-    if isinstance(summary_text, str) and len(summary_text.strip()) > 0:
+    summary_text = data.get("text", "")
+    if isinstance(summary_text, str) and summary_text.strip():
         score_parts += 1
         details.append(f"summary: {len(summary_text)} chars")
     else:
-        details.append("summary: missing or empty")
+        details.append("text: missing or empty")
 
-    key_moments = data.get("key_moments", data.get("moments", []))
+    key_moments = data.get("key_moments", [])
     if isinstance(key_moments, list) and len(key_moments) > 0:
         timestamped = sum(
-            1
-            for m in key_moments
-            if isinstance(m, dict)
-            and (m.get("timestamp") is not None or m.get("t_start") is not None)
+            1 for m in key_moments if isinstance(m, dict) and m.get("t") is not None
         )
         ratio = timestamped / len(key_moments) if key_moments else 0
         score_parts += ratio
@@ -68,15 +65,20 @@ def summary_faithfulness(*, inputs, outputs, expectations=None):
     else:
         details.append("key_moments: missing or empty")
 
-    speakers = data.get("speakers", data.get("speaker_segments", []))
-    if isinstance(speakers, list) and len(speakers) > 0:
-        score_parts += 1
-        details.append(f"speakers: {len(speakers)} identified")
-    elif isinstance(summary_text, str) and "speaker" in summary_text.lower():
-        score_parts += 0.5
-        details.append("speakers: referenced in summary text")
+    if isinstance(key_moments, list) and len(key_moments) > 0:
+        labeled = sum(
+            1
+            for m in key_moments
+            if isinstance(m, dict)
+            and isinstance(m.get("label"), str)
+            and len(m["label"].strip()) > 0
+        )
+        ratio = labeled / len(key_moments)
+        score_parts += ratio
+        details.append(f"labels: {labeled}/{len(key_moments)} present")
     else:
-        details.append("speakers: not attributed")
+        score_parts += 0
+        details.append("labels: no key_moments to check")
 
     score = score_parts / total_parts
 

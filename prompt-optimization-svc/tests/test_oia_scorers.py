@@ -1,6 +1,7 @@
 """Unit tests for OIA onboarding intelligence scorers (L-03).
 
 Covers all 8 scorers: perfect, partial, invalid, and edge inputs.
+Output shapes match the actual OIA prompt templates in prompt_catalog.py.
 """
 
 import json
@@ -16,24 +17,43 @@ from app.scorers.oia.summary_faithfulness import summary_faithfulness
 from app.scorers.oia import OIA_SCORERS
 
 # ── Helper builders ──
+# Each mirrors the actual prompt output format from prompt_catalog.py.
 
 
 def _research_output(**overrides) -> str:
     data = {
-        "sourced_facts": overrides.get(
-            "sourced_facts",
+        "facts": overrides.get(
+            "facts",
             [
-                {"claim": "Revenue is $1M", "source_url": "https://example.com"},
-                {"claim": "10 employees", "source_url": "https://example.com/about"},
+                {
+                    "statement": "Revenue is $1M",
+                    "source_url": "https://example.com",
+                },
+                {
+                    "statement": "10 employees",
+                    "source_url": "https://example.com/about",
+                },
+                {
+                    "statement": "Founded in 2015",
+                    "source_url": "https://example.com/history",
+                },
             ],
+        ),
+        "competitors_seen": overrides.get("competitors_seen", ["CompetitorA"]),
+        "digital_presence": overrides.get(
+            "digital_presence",
+            {
+                "website": "https://acme.com",
+                "social_profiles": [],
+                "notes": "",
+            },
         ),
         "open_unknowns": overrides.get(
             "open_unknowns",
-            ["founding year unclear", "market share unknown"],
-        ),
-        "source_urls": overrides.get(
-            "source_urls",
-            ["https://example.com", "https://example.com/about"],
+            [
+                "founding year unclear",
+                "market share unknown",
+            ],
         ),
     }
     data.update({k: v for k, v in overrides.items() if k not in data})
@@ -41,45 +61,70 @@ def _research_output(**overrides) -> str:
 
 
 def _questionnaire_output(**overrides) -> str:
-    data = {
-        "questions": overrides.get(
-            "questions",
-            [
-                {
-                    "text": "What is your brand voice?",
-                    "rationale": "Needed for brand strategy",
-                    "workflow_id": "wf2",
-                },
-                {
-                    "text": "Who is your target audience?",
-                    "rationale": "Audience profiling",
-                    "workflow_id": "wf1",
-                },
-                {
-                    "text": "What is your budget?",
-                    "rationale": "Campaign planning",
-                    "workflow_id": "wf3",
-                },
-            ],
-        ),
-    }
-    data.update({k: v for k, v in overrides.items() if k not in data})
-    return json.dumps(data)
+    """Questionnaire prompt returns a bare JSON array."""
+    questions = overrides.get(
+        "questions",
+        [
+            {
+                "text": "What is your brand voice?",
+                "workflow_target": "WF2",
+                "target_field": "brand_voice",
+            },
+            {
+                "text": "Who is your target audience?",
+                "workflow_target": "WF1",
+                "target_field": "target_audience",
+            },
+            {
+                "text": "What is your budget?",
+                "workflow_target": "WF3",
+                "target_field": "",
+            },
+        ],
+    )
+    return json.dumps(questions)
 
 
 def _stream_output(**overrides) -> str:
     data = {
-        "matched_questions": overrides.get(
-            "matched_questions",
+        "attachments": overrides.get(
+            "attachments",
             [
-                {"question_id": "q1", "answer": "We target millennials"},
-                {"question_id": "q2", "answer": "Budget is $50k"},
+                {
+                    "question_id": "q1",
+                    "relevance": 0.85,
+                    "evidence": [
+                        {
+                            "recording_id": "r_01",
+                            "t_start": 120.5,
+                            "t_end": 123.8,
+                        }
+                    ],
+                },
+                {
+                    "question_id": "q2",
+                    "relevance": 0.72,
+                    "evidence": [
+                        {
+                            "recording_id": "r_01",
+                            "t_start": 200.0,
+                            "t_end": 210.0,
+                        }
+                    ],
+                },
             ],
         ),
-        "ad_hoc_questions": overrides.get(
-            "ad_hoc_questions",
-            [{"text": "What about social media?"}],
+        "adhoc_questions": overrides.get(
+            "adhoc_questions",
+            [
+                {
+                    "text": "What about social media?",
+                    "t_start": 125.0,
+                    "inferred_target_field": "social_channels",
+                }
+            ],
         ),
+        "notable_facts": overrides.get("notable_facts", []),
     }
     data.update({k: v for k, v in overrides.items() if k not in data})
     return json.dumps(data)
@@ -87,11 +132,9 @@ def _stream_output(**overrides) -> str:
 
 def _sufficiency_output(**overrides) -> str:
     data = {
-        "sufficient": overrides.get("sufficient", True),
-        "confidence": overrides.get("confidence", 0.85),
-        "reasoning": overrides.get("reasoning", "All key fields populated"),
-        "field_coverage": overrides.get(
-            "field_coverage", {"legal_name": True, "industry": True}
+        "score": overrides.get("score", 0.85),
+        "missing_aspects": overrides.get(
+            "missing_aspects", ["founding year not mentioned"]
         ),
     }
     data.update({k: v for k, v in overrides.items() if k not in data})
@@ -100,8 +143,9 @@ def _sufficiency_output(**overrides) -> str:
 
 def _media_output(**overrides) -> str:
     data = {
-        "extracted_text": overrides.get("extracted_text", "ACME Corp Logo Design"),
-        "usage_tags": overrides.get("usage_tags", ["logo", "branding"]),
+        "caption": overrides.get("caption", "A business invoice from ACME Corp"),
+        "doc_type": overrides.get("doc_type", "invoice"),
+        "sensitivity_class": overrides.get("sensitivity_class", "FINANCIAL"),
     }
     data.update({k: v for k, v in overrides.items() if k not in data})
     return json.dumps(data)
@@ -109,20 +153,16 @@ def _media_output(**overrides) -> str:
 
 def _summary_output(**overrides) -> str:
     data = {
-        "summary": overrides.get(
-            "summary",
-            "Meeting covered brand strategy and target audience definition.",
+        "text": overrides.get(
+            "text",
+            "Meeting covered brand strategy and target " "audience definition.",
         ),
         "key_moments": overrides.get(
             "key_moments",
             [
-                {"text": "Brand voice discussion", "timestamp": 120.5},
-                {"text": "Audience definition", "t_start": 300.0},
+                {"t": 120.5, "label": "Brand voice discussion"},
+                {"t": 300.0, "label": "Audience definition"},
             ],
-        ),
-        "speakers": overrides.get(
-            "speakers",
-            [{"name": "Alice", "role": "founder"}, {"name": "Bob", "role": "agent"}],
         ),
     }
     data.update({k: v for k, v in overrides.items() if k not in data})
@@ -131,13 +171,46 @@ def _summary_output(**overrides) -> str:
 
 def _extraction_output(**overrides) -> str:
     data = {
-        "extracted_fields": overrides.get(
-            "extracted_fields",
-            {
-                "legal_name": "Acme Corp",
-                "industry": "Technology",
-                "founding_year": "2020",
-            },
+        "fields": overrides.get(
+            "fields",
+            [
+                {
+                    "field_name": "legal_name",
+                    "value": "Acme Corp",
+                    "confidence": 0.95,
+                    "evidence": [
+                        {
+                            "recording_id": "r1",
+                            "t_start": 12.5,
+                            "t_end": 18.3,
+                        }
+                    ],
+                },
+                {
+                    "field_name": "industry",
+                    "value": "Technology",
+                    "confidence": 0.88,
+                    "evidence": [
+                        {
+                            "recording_id": "r1",
+                            "t_start": 30.0,
+                            "t_end": 35.0,
+                        }
+                    ],
+                },
+                {
+                    "field_name": "founding_year",
+                    "value": "2020",
+                    "confidence": 0.70,
+                    "evidence": [
+                        {
+                            "recording_id": "r1",
+                            "t_start": 45.0,
+                            "t_end": 50.0,
+                        }
+                    ],
+                },
+            ],
         ),
     }
     data.update({k: v for k, v in overrides.items() if k not in data})
@@ -150,17 +223,19 @@ def _extraction_output(**overrides) -> str:
 class TestResearchFactuality:
     def test_valid_complete_output(self):
         result = research_factuality(
-            inputs="test", outputs=_research_output(), expectations=None
+            inputs="test",
+            outputs=_research_output(),
+            expectations=None,
         )
         assert result.value == 1.0
 
-    def test_missing_sourced_facts(self):
-        out = _research_output(sourced_facts=[])
+    def test_missing_facts(self):
+        out = _research_output(facts=[])
         result = research_factuality(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
     def test_facts_without_source_url(self):
-        out = _research_output(sourced_facts=[{"claim": "Revenue is $1M"}])
+        out = _research_output(facts=[{"statement": "Revenue is $1M"}])
         result = research_factuality(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
@@ -169,8 +244,19 @@ class TestResearchFactuality:
         result = research_factuality(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
-    def test_missing_source_urls(self):
-        out = _research_output(source_urls=[])
+    def test_single_source_partial_diversity(self):
+        out = _research_output(
+            facts=[
+                {
+                    "statement": "A",
+                    "source_url": "https://one.com",
+                },
+                {
+                    "statement": "B",
+                    "source_url": "https://one.com",
+                },
+            ]
+        )
         result = research_factuality(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
@@ -189,13 +275,17 @@ class TestResearchFactuality:
 
     def test_feedback_name(self):
         result = research_factuality(
-            inputs="test", outputs=_research_output(), expectations=None
+            inputs="test",
+            outputs=_research_output(),
+            expectations=None,
         )
         assert result.name == "research_factuality"
 
     def test_all_fields_missing(self):
         result = research_factuality(
-            inputs="test", outputs=json.dumps({}), expectations=None
+            inputs="test",
+            outputs=json.dumps({}),
+            expectations=None,
         )
         assert result.value == 0.0
 
@@ -206,28 +296,55 @@ class TestResearchFactuality:
 class TestQuestionnaireCoverage:
     def test_valid_complete_output(self):
         result = questionnaire_coverage(
-            inputs="test", outputs=_questionnaire_output(), expectations=None
+            inputs="test",
+            outputs=_questionnaire_output(),
+            expectations=None,
         )
         assert result.value == 1.0
 
-    def test_missing_questions(self):
-        out = _questionnaire_output(questions=[])
+    def test_empty_array(self):
+        out = json.dumps([])
         result = questionnaire_coverage(inputs="test", outputs=out, expectations=None)
         assert result.value == 0.0
 
-    def test_questions_without_workflow_id(self):
-        out = _questionnaire_output(
-            questions=[{"text": "What is your name?", "rationale": "Identification"}]
+    def test_questions_without_workflow_target(self):
+        out = json.dumps(
+            [
+                {
+                    "text": "What is your name?",
+                    "target_field": "legal_name",
+                }
+            ]
         )
         result = questionnaire_coverage(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
-    def test_questions_without_rationale(self):
-        out = _questionnaire_output(
-            questions=[{"text": "What is your name?", "workflow_id": "wf1"}]
+    def test_questions_without_target_field(self):
+        out = json.dumps(
+            [
+                {
+                    "text": "What is your name?",
+                    "workflow_target": "WF1",
+                }
+            ]
         )
         result = questionnaire_coverage(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
+
+    def test_dict_wrapper_still_works(self):
+        out = json.dumps(
+            {
+                "questions": [
+                    {
+                        "text": "Q?",
+                        "workflow_target": "WF1",
+                        "target_field": "x",
+                    }
+                ]
+            }
+        )
+        result = questionnaire_coverage(inputs="test", outputs=out, expectations=None)
+        assert result.value > 0.0
 
     def test_none_output(self):
         result = questionnaire_coverage(inputs="test", outputs=None, expectations=None)
@@ -235,7 +352,9 @@ class TestQuestionnaireCoverage:
 
     def test_feedback_name(self):
         result = questionnaire_coverage(
-            inputs="test", outputs=_questionnaire_output(), expectations=None
+            inputs="test",
+            outputs=_questionnaire_output(),
+            expectations=None,
         )
         assert result.name == "questionnaire_coverage"
 
@@ -246,22 +365,24 @@ class TestQuestionnaireCoverage:
 class TestStreamAttachment:
     def test_valid_complete_output(self):
         result = stream_attachment(
-            inputs="test", outputs=_stream_output(), expectations=None
+            inputs="test",
+            outputs=_stream_output(),
+            expectations=None,
         )
         assert result.value == 1.0
 
-    def test_missing_matched_questions(self):
-        out = _stream_output(matched_questions=[])
+    def test_empty_attachments(self):
+        out = _stream_output(attachments=[])
         result = stream_attachment(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
-    def test_matches_without_answer(self):
-        out = _stream_output(matched_questions=[{"question_id": "q1"}])
+    def test_attachment_without_relevance(self):
+        out = _stream_output(attachments=[{"question_id": "q1"}])
         result = stream_attachment(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
-    def test_no_ad_hoc(self):
-        out = _stream_output(ad_hoc_questions=[])
+    def test_no_adhoc_questions(self):
+        out = _stream_output(adhoc_questions=[])
         result = stream_attachment(inputs="test", outputs=out, expectations=None)
         assert result.value == 1.0
 
@@ -271,7 +392,9 @@ class TestStreamAttachment:
 
     def test_feedback_name(self):
         result = stream_attachment(
-            inputs="test", outputs=_stream_output(), expectations=None
+            inputs="test",
+            outputs=_stream_output(),
+            expectations=None,
         )
         assert result.name == "stream_attachment"
 
@@ -281,24 +404,30 @@ class TestStreamAttachment:
 
 class TestSufficiencyAgreement:
     def test_agrees_with_admin(self):
-        out = _sufficiency_output(sufficient=True)
+        out = _sufficiency_output(score=0.85)
         exp = json.dumps({"admin_sufficient": True})
         result = sufficiency_agreement(inputs="test", outputs=out, expectations=exp)
         assert result.value == 1.0
 
     def test_disagrees_with_admin(self):
-        out = _sufficiency_output(sufficient=True)
+        out = _sufficiency_output(score=0.85)
         exp = json.dumps({"admin_sufficient": False})
         result = sufficiency_agreement(inputs="test", outputs=out, expectations=exp)
         assert result.value == 0.0
 
-    def test_no_expectations_with_reasoning(self):
+    def test_low_score_agrees_insufficient(self):
+        out = _sufficiency_output(score=0.2)
+        exp = json.dumps({"admin_sufficient": False})
+        result = sufficiency_agreement(inputs="test", outputs=out, expectations=exp)
+        assert result.value == 1.0
+
+    def test_no_expectations_with_missing_aspects(self):
         out = _sufficiency_output()
         result = sufficiency_agreement(inputs="test", outputs=out, expectations=None)
         assert result.value > 0.5
 
-    def test_no_sufficient_field(self):
-        out = json.dumps({"confidence": 0.9})
+    def test_no_score_field(self):
+        out = json.dumps({"missing_aspects": []})
         result = sufficiency_agreement(inputs="test", outputs=out, expectations=None)
         assert result.value == 0.0
 
@@ -308,7 +437,9 @@ class TestSufficiencyAgreement:
 
     def test_feedback_name(self):
         result = sufficiency_agreement(
-            inputs="test", outputs=_sufficiency_output(), expectations=None
+            inputs="test",
+            outputs=_sufficiency_output(),
+            expectations=None,
         )
         assert result.name == "sufficiency_agreement"
 
@@ -319,7 +450,9 @@ class TestSufficiencyAgreement:
 class TestFollowupUsefulness:
     def test_stub_returns_zero(self):
         result = followup_usefulness(
-            inputs="test", outputs=json.dumps({"followups": []}), expectations=None
+            inputs="test",
+            outputs=json.dumps({"followups": []}),
+            expectations=None,
         )
         assert result.value == 0.0
 
@@ -330,7 +463,9 @@ class TestFollowupUsefulness:
 
     def test_stub_returns_zero_with_any_input(self):
         result = followup_usefulness(
-            inputs="anything", outputs="anything", expectations="anything"
+            inputs="anything",
+            outputs="anything",
+            expectations="anything",
         )
         assert result.value == 0.0
 
@@ -345,29 +480,60 @@ class TestFollowupUsefulness:
 class TestMediaAnalysisAccuracy:
     def test_valid_complete_output(self):
         result = media_analysis_accuracy(
-            inputs="test", outputs=_media_output(), expectations=None
+            inputs="test",
+            outputs=_media_output(),
+            expectations=None,
         )
-        assert result.value > 0.5
+        assert result.value == 1.0
 
-    def test_missing_extracted_text(self):
-        out = _media_output(extracted_text="")
+    def test_missing_caption(self):
+        out = _media_output(caption="")
         result = media_analysis_accuracy(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
-    def test_missing_usage_tags(self):
-        out = _media_output(usage_tags=[])
+    def test_missing_doc_type(self):
+        out = _media_output(doc_type="")
         result = media_analysis_accuracy(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
+
+    def test_invalid_doc_type(self):
+        out = _media_output(doc_type="unknown_type")
+        result = media_analysis_accuracy(inputs="test", outputs=out, expectations=None)
+        assert result.value < 1.0
+
+    def test_valid_sensitivity_classes(self):
+        for cls in ["GENERAL", "IDENTITY", "FINANCIAL"]:
+            out = _media_output(sensitivity_class=cls)
+            result = media_analysis_accuracy(
+                inputs="test", outputs=out, expectations=None
+            )
+            assert result.value == 1.0
 
     def test_with_matching_expectations(self):
-        out = _media_output(usage_tags=["logo", "branding"])
-        exp = json.dumps({"expected_tags": ["logo", "branding"]})
+        out = _media_output(
+            doc_type="invoice",
+            sensitivity_class="FINANCIAL",
+        )
+        exp = json.dumps(
+            {
+                "doc_type": "invoice",
+                "sensitivity_class": "FINANCIAL",
+            }
+        )
         result = media_analysis_accuracy(inputs="test", outputs=out, expectations=exp)
         assert result.value == 1.0
 
     def test_with_mismatched_expectations(self):
-        out = _media_output(usage_tags=["logo"])
-        exp = json.dumps({"expected_tags": ["website", "product"]})
+        out = _media_output(
+            doc_type="invoice",
+            sensitivity_class="GENERAL",
+        )
+        exp = json.dumps(
+            {
+                "doc_type": "receipt",
+                "sensitivity_class": "FINANCIAL",
+            }
+        )
         result = media_analysis_accuracy(inputs="test", outputs=out, expectations=exp)
         assert result.value < 1.0
 
@@ -377,7 +543,9 @@ class TestMediaAnalysisAccuracy:
 
     def test_feedback_name(self):
         result = media_analysis_accuracy(
-            inputs="test", outputs=_media_output(), expectations=None
+            inputs="test",
+            outputs=_media_output(),
+            expectations=None,
         )
         assert result.name == "media_analysis_accuracy"
 
@@ -388,12 +556,14 @@ class TestMediaAnalysisAccuracy:
 class TestSummaryFaithfulness:
     def test_valid_complete_output(self):
         result = summary_faithfulness(
-            inputs="test", outputs=_summary_output(), expectations=None
+            inputs="test",
+            outputs=_summary_output(),
+            expectations=None,
         )
         assert result.value == 1.0
 
-    def test_missing_summary_text(self):
-        out = _summary_output(summary="")
+    def test_missing_text(self):
+        out = _summary_output(text="")
         result = summary_faithfulness(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
@@ -403,12 +573,12 @@ class TestSummaryFaithfulness:
         assert result.value < 1.0
 
     def test_moments_without_timestamps(self):
-        out = _summary_output(key_moments=[{"text": "Discussion point"}])
+        out = _summary_output(key_moments=[{"label": "Discussion point"}])
         result = summary_faithfulness(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
-    def test_missing_speakers(self):
-        out = _summary_output(speakers=[])
+    def test_moments_without_labels(self):
+        out = _summary_output(key_moments=[{"t": 120.5}])
         result = summary_faithfulness(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
@@ -418,7 +588,9 @@ class TestSummaryFaithfulness:
 
     def test_feedback_name(self):
         result = summary_faithfulness(
-            inputs="test", outputs=_summary_output(), expectations=None
+            inputs="test",
+            outputs=_summary_output(),
+            expectations=None,
         )
         assert result.name == "summary_faithfulness"
 
@@ -429,34 +601,76 @@ class TestSummaryFaithfulness:
 class TestExtractionAccuracy:
     def test_valid_complete_output(self):
         result = extraction_accuracy(
-            inputs="test", outputs=_extraction_output(), expectations=None
+            inputs="test",
+            outputs=_extraction_output(),
+            expectations=None,
         )
         assert result.value > 0.5
 
     def test_empty_fields(self):
-        out = _extraction_output(extracted_fields={})
+        out = _extraction_output(fields=[])
         result = extraction_accuracy(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
     def test_fields_with_none_values(self):
         out = _extraction_output(
-            extracted_fields={"legal_name": None, "industry": None}
+            fields=[
+                {
+                    "field_name": "legal_name",
+                    "value": None,
+                    "confidence": 0.5,
+                    "evidence": [],
+                },
+                {
+                    "field_name": "industry",
+                    "value": None,
+                    "confidence": 0.5,
+                    "evidence": [],
+                },
+            ]
         )
         result = extraction_accuracy(inputs="test", outputs=out, expectations=None)
         assert result.value < 1.0
 
     def test_with_matching_expectations(self):
         out = _extraction_output(
-            extracted_fields={"legal_name": "Acme Corp", "industry": "Tech"}
+            fields=[
+                {
+                    "field_name": "legal_name",
+                    "value": "Acme Corp",
+                    "confidence": 0.95,
+                    "evidence": [],
+                },
+                {
+                    "field_name": "industry",
+                    "value": "Tech",
+                    "confidence": 0.9,
+                    "evidence": [],
+                },
+            ]
         )
         exp = json.dumps(
-            {"admin_fields": {"legal_name": "Acme Corp", "industry": "Tech"}}
+            {
+                "admin_fields": {
+                    "legal_name": "Acme Corp",
+                    "industry": "Tech",
+                }
+            }
         )
         result = extraction_accuracy(inputs="test", outputs=out, expectations=exp)
         assert result.value == 1.0
 
     def test_with_mismatched_expectations(self):
-        out = _extraction_output(extracted_fields={"legal_name": "Acme Ltd"})
+        out = _extraction_output(
+            fields=[
+                {
+                    "field_name": "legal_name",
+                    "value": "Acme Ltd",
+                    "confidence": 0.8,
+                    "evidence": [],
+                }
+            ]
+        )
         exp = json.dumps({"admin_fields": {"legal_name": "Acme Corporation"}})
         result = extraction_accuracy(inputs="test", outputs=out, expectations=exp)
         assert result.value < 1.0
@@ -467,7 +681,9 @@ class TestExtractionAccuracy:
 
     def test_feedback_name(self):
         result = extraction_accuracy(
-            inputs="test", outputs=_extraction_output(), expectations=None
+            inputs="test",
+            outputs=_extraction_output(),
+            expectations=None,
         )
         assert result.name == "extraction_accuracy"
 
@@ -492,7 +708,11 @@ class TestOiaScorerConformance:
 
     def test_all_handle_invalid_json(self):
         for s in OIA_SCORERS:
-            result = s(inputs="test", outputs="{{bad", expectations=None)
+            result = s(
+                inputs="test",
+                outputs="{{bad",
+                expectations=None,
+            )
             assert result.value == 0.0, f"{s.name} did not return 0.0 for bad JSON"
 
     def test_all_values_in_range(self):

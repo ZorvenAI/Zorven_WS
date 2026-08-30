@@ -25,12 +25,23 @@ def _parse_output(outputs) -> dict | None:
         return None
 
 
+def _fields_to_dict(fields_list) -> dict:
+    """Convert [{field_name, value, ...}] list to {name: value}."""
+    result = {}
+    if not isinstance(fields_list, list):
+        return result
+    for item in fields_list:
+        if isinstance(item, dict) and "field_name" in item:
+            result[item["field_name"]] = item.get("value")
+    return result
+
+
 @scorer(name="extraction_accuracy")
 def extraction_accuracy(*, inputs, outputs, expectations=None):
     """Score field extraction accuracy.
 
-    Checks for: extracted_fields (dict with field values), JSON schema
-    compliance, and field-level match against expectations when available.
+    Prompt output keys: fields (list of {field_name, value,
+    confidence, evidence}).
 
     Returns:
         Feedback with value 0.0-1.0.
@@ -47,23 +58,30 @@ def extraction_accuracy(*, inputs, outputs, expectations=None):
     total_parts = 2
     details = []
 
-    fields = data.get("extracted_fields", data.get("fields", {}))
-    if isinstance(fields, dict) and len(fields) > 0:
+    raw_fields = data.get("fields", [])
+    fields = _fields_to_dict(raw_fields)
+
+    if fields:
         non_empty = sum(1 for v in fields.values() if v is not None and v != "")
         ratio = non_empty / len(fields)
         score_parts += ratio
-        details.append(f"extracted_fields: {non_empty}/{len(fields)} non-empty")
+        details.append(f"fields: {non_empty}/{len(fields)} non-empty")
     else:
-        details.append("extracted_fields: missing or empty")
+        details.append("fields: missing or empty")
 
     exp_data = _parse_output(expectations) if expectations else None
     if exp_data:
-        expected_fields = exp_data.get("admin_fields", exp_data.get("fields", {}))
-        if isinstance(expected_fields, dict) and expected_fields:
+        exp_fields_raw = exp_data.get("admin_fields", exp_data.get("fields", []))
+        expected = (
+            _fields_to_dict(exp_fields_raw)
+            if isinstance(exp_fields_raw, list)
+            else exp_fields_raw if isinstance(exp_fields_raw, dict) else {}
+        )
+        if isinstance(expected, dict) and expected:
             matches = 0
-            total = len(expected_fields)
-            for key, expected_val in expected_fields.items():
-                actual_val = fields.get(key) if isinstance(fields, dict) else None
+            total = len(expected)
+            for key, expected_val in expected.items():
+                actual_val = fields.get(key)
                 if actual_val is not None and expected_val is not None:
                     if (
                         str(actual_val).strip().lower()

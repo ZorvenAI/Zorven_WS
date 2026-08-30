@@ -31,8 +31,8 @@ def _parse_output(outputs) -> dict | None:
 def research_factuality(*, inputs, outputs, expectations=None):
     """Score research brief factuality.
 
-    Checks for: sourced_facts (list with source_url), open_unknowns
-    (acknowledged gaps), and source_urls (citation list).
+    Prompt output keys: facts (list of {statement, source_url}),
+    open_unknowns (list of str), competitors_seen, digital_presence.
 
     Returns:
         Feedback with value 0.0-1.0.
@@ -49,32 +49,34 @@ def research_factuality(*, inputs, outputs, expectations=None):
     total_parts = 3
     details = []
 
-    sourced_facts = data.get("sourced_facts", data.get("facts", []))
-    if isinstance(sourced_facts, list) and len(sourced_facts) > 0:
-        cited = sum(
-            1 for f in sourced_facts if isinstance(f, dict) and f.get("source_url")
-        )
+    facts = data.get("facts", [])
+    if isinstance(facts, list) and len(facts) > 0:
+        cited = sum(1 for f in facts if isinstance(f, dict) and f.get("source_url"))
         if cited > 0:
-            score_parts += cited / len(sourced_facts)
-            details.append(f"sourced_facts: " f"{cited}/{len(sourced_facts)} cited")
+            score_parts += cited / len(facts)
+            details.append(f"facts: {cited}/{len(facts)} cited")
         else:
-            details.append("sourced_facts: none have source_url")
+            details.append("facts: none have source_url")
     else:
-        details.append("sourced_facts: missing or empty")
+        details.append("facts: missing or empty")
 
-    unknowns = data.get("open_unknowns", data.get("unknowns", []))
+    unknowns = data.get("open_unknowns", [])
     if isinstance(unknowns, list) and len(unknowns) > 0:
         score_parts += 1
         details.append(f"open_unknowns: {len(unknowns)} acknowledged")
     else:
         details.append("open_unknowns: missing or empty")
 
-    sources = data.get("source_urls", data.get("sources", []))
-    if isinstance(sources, list) and len(sources) > 0:
-        score_parts += 1
-        details.append(f"source_urls: {len(sources)} provided")
+    unique_urls = set()
+    if isinstance(facts, list):
+        for f in facts:
+            if isinstance(f, dict) and f.get("source_url"):
+                unique_urls.add(f["source_url"])
+    if unique_urls:
+        score_parts += min(len(unique_urls) / 3, 1.0)
+        details.append(f"source_diversity: {len(unique_urls)} unique URLs")
     else:
-        details.append("source_urls: missing or empty")
+        details.append("source_diversity: no URLs found")
 
     score = score_parts / total_parts
 
