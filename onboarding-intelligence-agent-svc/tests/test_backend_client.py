@@ -396,3 +396,19 @@ async def test_persist_prompt_versions_swallows_failure(django_stub):
     )
 
     assert stored is False
+
+
+async def test_patch_4xx_does_not_open_breaker(django_stub):
+    """A 4xx from PATCH is a client error, not an outage."""
+    django_stub["status"] = 400
+    django_stub["body"] = {"error": "bad request"}
+    brk = breaker(failure_threshold=1)
+    client = BackendClient(django_stub["url"], "tok", breaker=brk)
+
+    await client.persist_prompt_versions(
+        tenant_id="t-1",
+        session_id="s-1",
+        prompt_versions={"zorven-oia-research-brief": "1"},
+    )
+
+    assert brk.state is State.CLOSED, "a 4xx should not open the breaker"

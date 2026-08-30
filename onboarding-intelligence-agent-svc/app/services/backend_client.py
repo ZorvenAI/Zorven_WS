@@ -328,6 +328,17 @@ class BackendClient:
             )
             response.raise_for_status()
             body = response.json()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code < 500:
+                self._breaker.record_success()
+            else:
+                self._breaker.record_failure()
+            logger.warning(
+                "backend_write_failed",
+                path=path,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            return None
         except Exception as exc:
             self._breaker.record_failure()
             logger.warning(
