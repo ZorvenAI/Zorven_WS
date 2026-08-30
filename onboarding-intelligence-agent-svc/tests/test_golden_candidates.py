@@ -7,7 +7,6 @@ resolution, EVT-110 payload safety, and fire-and-forget error handling.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import uuid
 
@@ -133,7 +132,6 @@ class _FakeKeys:
 
 
 class TestFieldExtractionCandidate:
-
     @pytest.fixture
     def producer(self):
         return FakeProducer()
@@ -148,8 +146,8 @@ class TestFieldExtractionCandidate:
             _meta(), producer=producer, emitter=emitter, redis=None
         )
 
-    def test_field_extraction_candidate_emitted(self, skill, producer, emitter):
-        result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+    async def test_field_extraction_candidate_emitted(self, skill, producer, emitter):
+        result = await skill.run(_context())
 
         assert result.output["candidates_emitted"] == 1
         assert result.output["dlq_count"] == 0
@@ -166,8 +164,8 @@ class TestFieldExtractionCandidate:
         assert candidate["edit_distance"] == 0.25
         assert candidate["accepted_without_edit"] is False
 
-    def test_evt110_emitted(self, skill, emitter):
-        asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+    async def test_evt110_emitted(self, skill, emitter):
+        await skill.run(_context())
 
         assert len(emitter.events) == 1
         evt = emitter.events[0]
@@ -178,14 +176,14 @@ class TestFieldExtractionCandidate:
 # ── AC-2: zero edit distance emits nothing ──────────────────────────
 
 
-def test_no_candidate_on_zero_edit_distance():
+async def test_no_candidate_on_zero_edit_distance():
     producer = FakeProducer()
     emitter = FakeEmitter()
     skill = RecordGoldenCandidates(
         _meta(), producer=producer, emitter=emitter, redis=None
     )
     ctx = _context(edit_distance=0)
-    result = asyncio.get_event_loop().run_until_complete(skill.run(ctx))
+    result = await skill.run(ctx)
 
     assert result.output["candidates_emitted"] == 0
     assert result.output["dlq_count"] == 0
@@ -193,25 +191,25 @@ def test_no_candidate_on_zero_edit_distance():
     assert len(emitter.events) == 0
 
 
-def test_negative_edit_distance_emits_nothing():
+async def test_negative_edit_distance_emits_nothing():
     producer = FakeProducer()
     skill = RecordGoldenCandidates(_meta(), producer=producer)
     ctx = _context(edit_distance=-0.1)
-    result = asyncio.get_event_loop().run_until_complete(skill.run(ctx))
+    result = await skill.run(ctx)
     assert result.output["candidates_emitted"] == 0
 
 
 # ── AC-3: sufficiency override ──────────────────────────────────────
 
 
-def test_sufficiency_override_emits_candidate():
+async def test_sufficiency_override_emits_candidate():
     producer = FakeProducer()
     emitter = FakeEmitter()
     skill = RecordGoldenCandidates(
         _meta(), producer=producer, emitter=emitter, redis=None
     )
     ctx = _context(candidate_type="sufficiency_override", edit_distance=0)
-    result = asyncio.get_event_loop().run_until_complete(skill.run(ctx))
+    result = await skill.run(ctx)
 
     assert result.output["candidates_emitted"] == 1
 
@@ -225,7 +223,7 @@ def test_sufficiency_override_emits_candidate():
 # ── AC-4: redaction precedes capture ────────────────────────────────
 
 
-def test_redaction_precedes_capture():
+async def test_redaction_precedes_capture():
     """PII in extracted/final values must be redacted in the candidate."""
     producer = FakeProducer()
     skill = RecordGoldenCandidates(_meta(), producer=producer)
@@ -234,7 +232,7 @@ def test_redaction_precedes_capture():
         admin_final_value="Call me at 555-123-4567",
         edit_distance=0.3,
     )
-    result = asyncio.get_event_loop().run_until_complete(skill.run(ctx))
+    result = await skill.run(ctx)
     assert result.output["candidates_emitted"] == 1
 
     envelope = json.loads(producer.sent[0]["value"])
@@ -246,12 +244,12 @@ def test_redaction_precedes_capture():
 # ── AC-4: evidence ref is a ref string, not text ────────────────────
 
 
-def test_evidence_ref_not_text():
+async def test_evidence_ref_not_text():
     """Candidate carries a ref string, never raw text content."""
     producer = FakeProducer()
     skill = RecordGoldenCandidates(_meta(), producer=producer)
     ctx = _context(evidence_ref="recording:rec-42:10.0-20.5")
-    asyncio.get_event_loop().run_until_complete(skill.run(ctx))
+    await skill.run(ctx)
 
     envelope = json.loads(producer.sent[0]["value"])
     assert envelope["payload"]["input_evidence_ref"] == "recording:rec-42:10.0-20.5"
@@ -260,7 +258,7 @@ def test_evidence_ref_not_text():
 # ── Prompt version resolution ───────────────────────────────────────
 
 
-def test_prompt_version_resolved_from_redis():
+async def test_prompt_version_resolved_from_redis():
     redis = FakeRedis(
         {
             f"oia:v1:{TENANT}:session:{SESSION}:prompt_versions": json.dumps(
@@ -270,7 +268,7 @@ def test_prompt_version_resolved_from_redis():
     )
     producer = FakeProducer()
     skill = RecordGoldenCandidates(_meta(), producer=producer, redis=redis)
-    result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+    result = await skill.run(_context())
 
     assert result.prompt_version == "v3.1"
 
@@ -278,33 +276,33 @@ def test_prompt_version_resolved_from_redis():
     assert envelope["payload"]["prompt_version"] == "v3.1"
 
 
-def test_prompt_version_fallback_on_missing():
+async def test_prompt_version_fallback_on_missing():
     redis = FakeRedis({})
     producer = FakeProducer()
     skill = RecordGoldenCandidates(_meta(), producer=producer, redis=redis)
-    result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+    result = await skill.run(_context())
 
     assert result.prompt_version == "unknown"
 
 
-def test_prompt_version_fallback_without_redis():
+async def test_prompt_version_fallback_without_redis():
     producer = FakeProducer()
     skill = RecordGoldenCandidates(_meta(), producer=producer, redis=None)
-    result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+    result = await skill.run(_context())
     assert result.prompt_version == "unknown"
 
 
 # ── EVT-110 payload safety ──────────────────────────────────────────
 
 
-def test_evt110_payload_has_no_values():
+async def test_evt110_payload_has_no_values():
     """EVT-110 must carry ONLY prompt_id, prompt_version, edit_distance."""
     emitter = FakeEmitter()
     producer = FakeProducer()
     skill = RecordGoldenCandidates(
         _meta(), producer=producer, emitter=emitter, redis=None
     )
-    asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+    await skill.run(_context())
 
     payload = emitter.events[0]["payload"]
     assert set(payload.keys()) == {"prompt_id", "prompt_version", "edit_distance"}
@@ -321,21 +319,21 @@ class BrokenProducer:
         raise ConnectionError("Kafka is down")
 
 
-def test_skill_never_raises_on_publish_failure():
+async def test_skill_never_raises_on_publish_failure():
     skill = RecordGoldenCandidates(
         _meta(), producer=BrokenProducer(), emitter=None, redis=None
     )
-    result = asyncio.get_event_loop().run_until_complete(skill.run(_context()))
+    result = await skill.run(_context())
     assert result.output["candidates_emitted"] == 1
     assert result.output["dlq_count"] == 1
 
 
-def test_skill_never_raises_on_internal_error():
+async def test_skill_never_raises_on_internal_error():
     """Even a catastrophic bug returns a result with dlq_count."""
     skill = RecordGoldenCandidates(_meta(), producer=None, emitter=None, redis=None)
     ctx = _context()
     ctx.input_context["edit_distance"] = "not-a-number"
-    result = asyncio.get_event_loop().run_until_complete(skill.run(ctx))
+    result = await skill.run(ctx)
     assert result.output["dlq_count"] == 1
 
 
