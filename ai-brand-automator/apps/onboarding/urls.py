@@ -25,6 +25,7 @@ from apps.onboarding.views import (
     internal_generate_brand_strategy,
     live_precheck,
     patch_company_fields,
+    patch_session_prompt_versions,
     process_callback,
     session_evidence,
     update_recording_summary,
@@ -81,6 +82,12 @@ urlpatterns = [
         "internal/sessions/<pk>/process/callback/",
         process_callback,
         name="onboarding-process-callback",
+    ),
+    # L-03: OIA persists prompt versions at LIVE session end.
+    path(
+        "internal/sessions/<pk>/prompt-versions/",
+        patch_session_prompt_versions,
+        name="onboarding-session-prompt-versions",
     ),
     # J-02: OIA fetches the evidence bundle for a session.
     path(

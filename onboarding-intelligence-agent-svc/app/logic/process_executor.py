@@ -422,6 +422,7 @@ class ProcessExecutor:
                 job_id=job_id,
                 status=cb_status,
                 summary=summary,
+                prompt_versions=prompt_versions,
             )
 
     async def _handle_conflicts(
@@ -640,6 +641,7 @@ class ProcessExecutor:
         job_id: str,
         status: str,
         summary: dict[str, Any],
+        prompt_versions: dict[str, str] | None = None,
     ) -> None:
         """POST the terminal result back to Django via BackendClient."""
         if self._backend is None:
@@ -650,9 +652,16 @@ class ProcessExecutor:
 
         parsed = urlparse(callback_url)
         path = parsed.path
+        payload: dict[str, Any] = {
+            "job_id": job_id,
+            "status": status,
+            "summary": summary,
+        }
+        if prompt_versions:
+            payload["prompt_versions"] = prompt_versions
         result = await self._backend._post(
             path,
-            {"job_id": job_id, "status": status, "summary": summary},
+            payload,
             tenant_id=tenant_id,
         )
         if result is None:

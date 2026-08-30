@@ -43,6 +43,17 @@ from app.scorers.cga import (
     cta_effectiveness,
     variant_diversity,
 )
+from app.scorers.oia import (
+    OIA_SCORERS,
+    extraction_accuracy,
+    followup_usefulness,
+    media_analysis_accuracy,
+    questionnaire_coverage,
+    research_factuality,
+    stream_attachment,
+    sufficiency_agreement,
+    summary_faithfulness,
+)
 from app.scorers.common import (
     brand_voice,
     json_compliance,
@@ -57,6 +68,7 @@ __all__ = [
     "CGA_SCORERS",
     "CAA_SCORERS",
     "COA_SCORERS",
+    "OIA_SCORERS",
     "WF1_SCORERS",
     "WF2_SCORERS",
     "ILA_SCORERS",
@@ -89,4 +101,12 @@ __all__ = [
     "narrative_engagement",
     "learning_depth",
     "meta_policy",
+    "research_factuality",
+    "questionnaire_coverage",
+    "stream_attachment",
+    "sufficiency_agreement",
+    "followup_usefulness",
+    "media_analysis_accuracy",
+    "summary_faithfulness",
+    "extraction_accuracy",
 ]

@@ -787,6 +787,7 @@ async def optimize(
 
     # Route to the correct Celery task based on workflow
     task_map = {
+        0: "app.tasks.optimize_oia_pipeline.optimize_oia_pipeline",
         1: "app.tasks.optimize_wf1_pipeline.optimize_wf1_pipeline",
         2: "app.tasks.optimize_wf2_pipeline.optimize_wf2_pipeline",
     }

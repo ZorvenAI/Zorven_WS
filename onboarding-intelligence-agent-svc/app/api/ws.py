@@ -1578,6 +1578,26 @@ async def _hold(
                 except (asyncio.CancelledError, Exception):  # noqa: BLE001
                     pass
 
+        # L-03: persist prompt versions to Django at LIVE session end.
+        if backend is not None and redis_manager is not None:
+            try:
+                keys = redis_manager.keys_for(verdict.tenant_id)
+                raw_pv = await redis_manager.client.hget(
+                    keys.session(session_id), "prompt_versions"
+                )
+                if raw_pv:
+                    import json as _json
+
+                    pv = _json.loads(raw_pv)
+                    if isinstance(pv, dict) and pv:
+                        await backend.persist_prompt_versions(
+                            tenant_id=verdict.tenant_id,
+                            session_id=session_id,
+                            prompt_versions=pv,
+                        )
+            except Exception:  # noqa: BLE001
+                logger.warning("live_prompt_versions_persist_failed")
+
         audio_q = stt_state.get("audio_q")
         if audio_q is not None:
             audio_q.put_nowait(None)

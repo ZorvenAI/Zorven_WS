@@ -31,9 +31,9 @@ class TestOptimizationGroupRegistry:
         assert any("cga" in n for n in group.prompt_names)
         assert any("adpub" in n for n in group.prompt_names)
 
-    def test_all_3_workflows_have_groups(self):
+    def test_all_workflows_have_groups(self):
         workflows = {g.workflow for g in OPTIMIZATION_GROUPS.values()}
-        assert {1, 2, 3} == workflows
+        assert {0, 1, 2, 3} == workflows
 
     def test_all_groups_have_prompts(self):
         for name, group in OPTIMIZATION_GROUPS.items():

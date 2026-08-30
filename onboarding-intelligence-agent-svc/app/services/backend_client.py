@@ -48,6 +48,9 @@ UPSERT_PATH = "/api/v1/onboarding/research-briefs/upsert/"
 QUESTIONNAIRE_PATH = "/api/v1/onboarding/questionnaires/generate/"
 VOCABULARY_PATH = "/api/v1/onboarding/field-vocabulary/"
 PRECHECK_PATH = "/api/v1/onboarding/sessions/{session_id}/live-precheck/"
+PROMPT_VERSIONS_PATH = (
+    "/api/v1/onboarding/internal/sessions/{session_id}/prompt-versions/"
+)
 GENERATE_STRATEGY_PATH = (
     "/api/v1/onboarding/internal/companies/{company_id}/generate-strategy/"
 )
@@ -325,6 +328,17 @@ class BackendClient:
             )
             response.raise_for_status()
             body = response.json()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code < 500:
+                self._breaker.record_success()
+            else:
+                self._breaker.record_failure()
+            logger.warning(
+                "backend_write_failed",
+                path=path,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            return None
         except Exception as exc:
             self._breaker.record_failure()
             logger.warning(
@@ -419,6 +433,24 @@ class BackendClient:
             return []
         records = body.get("records", [])
         return records if isinstance(records, list) else []
+
+    async def persist_prompt_versions(
+        self,
+        *,
+        tenant_id: str,
+        session_id: str,
+        prompt_versions: dict[str, Any],
+    ) -> bool:
+        """Persist resolved prompt versions to Django (L-03)."""
+        if not prompt_versions:
+            return False
+        path = PROMPT_VERSIONS_PATH.format(session_id=session_id)
+        body = await self._patch(
+            path,
+            {"prompt_versions": prompt_versions},
+            tenant_id=tenant_id,
+        )
+        return bool(body and body.get("stored"))
 
     async def generate_brand_strategy(
         self, *, tenant_id: str, company_id: int

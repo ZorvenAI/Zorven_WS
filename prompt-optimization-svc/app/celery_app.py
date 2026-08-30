@@ -20,6 +20,7 @@ celery_app = Celery(
         "app.tasks.optimize_wf3_pipeline",
         "app.tasks.prompt_health_check",
         "app.tasks.canary_health_check",
+        "app.tasks.optimize_oia_pipeline",
     ],
 )
 
@@ -60,13 +61,19 @@ celery_app.conf.beat_schedule = {
     },
     # Weekly (Sunday): task self-skips based on tenant schedule config (AC-2)
     "optimize-wf3-creative-pipeline": {
-        "task": "app.tasks.optimize_wf3_pipeline.optimize_wf3_creative_pipeline",
+        "task": ("app.tasks.optimize_wf3_pipeline" ".optimize_wf3_creative_pipeline"),
         "schedule": crontab(hour=6, minute=0, day_of_week="sunday"),
     },
     # Weekly (Sunday): follows same schedule as creative pipeline
     "optimize-wf3-optimization-loop": {
-        "task": "app.tasks.optimize_wf3_pipeline.optimize_wf3_optimization_loop",
+        "task": ("app.tasks.optimize_wf3_pipeline" ".optimize_wf3_optimization_loop"),
         "schedule": crontab(hour=6, minute=30, day_of_week="sunday"),
+    },
+    # Monthly: 4th Sunday 06:00 UTC (02:00 ET)
+    # Same OR semantics workaround — task self-guards for 4th Sunday.
+    "optimize-oia-pipeline-monthly": {
+        "task": "app.tasks.optimize_oia_pipeline.optimize_oia_pipeline",
+        "schedule": crontab(hour=6, minute=0, day_of_week="sunday"),
     },
     # Daily: 10:00 UTC (06:00 ET)
     "prompt-health-check-daily": {

@@ -40,11 +40,12 @@ def django_stub():
     state = {"status": 201, "body": {"stored": True, "created": True}, "requests": []}
 
     class Handler(BaseHTTPRequestHandler):
-        def do_POST(self):
+        def _handle(self):
             length = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(length)
             state["requests"].append(
                 {
+                    "method": self.command,
                     "path": self.path,
                     "token": self.headers.get("X-Service-Token"),
                     "tenant": self.headers.get("X-Tenant-ID"),
@@ -57,6 +58,9 @@ def django_stub():
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+
+        do_POST = _handle
+        do_PATCH = _handle
 
         def log_message(self, *args):
             pass
@@ -348,3 +352,63 @@ def test_the_app_shares_one_backend_client_across_prep_and_the_gate():
         "the IG-10 gate would hold independent breakers"
     )
     assert "backend=app.state.backend" in source
+
+
+# ── L-03: prompt version persistence ───────────────────────────────
+
+
+async def test_persist_prompt_versions_sends_patch(django_stub):
+    django_stub["status"] = 200
+    django_stub["body"] = {"session_id": 42, "stored": True}
+    client = BackendClient(django_stub["url"], "tok", breaker=breaker())
+
+    versions = {"zorven-oia-research-brief": "3", "zorven-oia-sufficiency": "1"}
+    stored = await client.persist_prompt_versions(
+        tenant_id="t-1", session_id="sess-99", prompt_versions=versions
+    )
+
+    assert stored is True
+    sent = django_stub["requests"][0]
+    assert sent["method"] == "PATCH"
+    assert "/sessions/sess-99/prompt-versions/" in sent["path"]
+    assert sent["body"]["prompt_versions"] == versions
+    assert sent["tenant"] == "t-1"
+
+
+async def test_persist_prompt_versions_empty_returns_false():
+    client = BackendClient("http://127.0.0.1:1", "tok", breaker=breaker())
+
+    stored = await client.persist_prompt_versions(
+        tenant_id="t-1", session_id="sess-1", prompt_versions={}
+    )
+
+    assert stored is False
+
+
+async def test_persist_prompt_versions_swallows_failure(django_stub):
+    django_stub["status"] = 500
+    client = BackendClient(django_stub["url"], "tok", breaker=breaker())
+
+    stored = await client.persist_prompt_versions(
+        tenant_id="t-1",
+        session_id="sess-1",
+        prompt_versions={"zorven-oia-research-brief": "1"},
+    )
+
+    assert stored is False
+
+
+async def test_patch_4xx_does_not_open_breaker(django_stub):
+    """A 4xx from PATCH is a client error, not an outage."""
+    django_stub["status"] = 400
+    django_stub["body"] = {"error": "bad request"}
+    brk = breaker(failure_threshold=1)
+    client = BackendClient(django_stub["url"], "tok", breaker=brk)
+
+    await client.persist_prompt_versions(
+        tenant_id="t-1",
+        session_id="s-1",
+        prompt_versions={"zorven-oia-research-brief": "1"},
+    )
+
+    assert brk.state is State.CLOSED, "a 4xx should not open the breaker"
