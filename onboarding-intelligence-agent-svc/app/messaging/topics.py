@@ -6,10 +6,6 @@ Terraform in this monorepo (zero ``.tf`` files; compose relies on
 ``KAFKA_AUTO_CREATE_TOPICS_ENABLE``), so this module plus
 :mod:`app.messaging.provision` is what that module would have been, expressed
 in the form the repository actually uses.
-
-``onboarding.golden-dataset.candidates`` is deliberately **absent**. A-03's
-technical note: it belongs to L-02, and creating it early produces an empty
-topic nobody consumes.
 """
 
 from __future__ import annotations
@@ -66,17 +62,19 @@ MEMORY_EVICTION = TopicSpec(
     retention_ms=3 * DAY_MS,
     purpose="L2/L3 eviction and summarization telemetry (§6)",
 )
+GOLDEN_CANDIDATES = TopicSpec(
+    name="onboarding.golden-dataset.candidates",
+    retention_ms=30 * DAY_MS,
+    purpose="Admin-edit flywheel consumed by prompt-optimization-svc (§17.3)",
+)
 
-#: The fleet-mandatory set, minus the per-tenant events topic which is created
-#: on demand. AC-1 calls the sixth "the heartbeat topic"; §13.1 names it
-#: memory.eviction.events, and §13.1 is the catalogue, so that is what is
-#: provisioned.
 FLEET_TOPICS: Final[tuple[TopicSpec, ...]] = (
     COMMANDS,
     RESULTS,
     ESCALATIONS,
     DLQ,
     MEMORY_EVICTION,
+    GOLDEN_CANDIDATES,
 )
 
 
@@ -102,3 +100,13 @@ def message_key(tenant_id: str, session_id: str | None) -> str:
     and keying on the session keeps a meeting's events in order within it.
     """
     return f"{tenant_id}:{session_id or '-'}"
+
+
+def candidate_key(tenant_id: str, prompt_id: str) -> str:
+    """§13.1 keys the golden-dataset topic on ``tenant:prompt_id``.
+
+    Lets POI's consumer partition per prompt per tenant without a repartition
+    step. Getting the key wrong here is expensive to change later because it
+    changes partition assignment.
+    """
+    return f"{tenant_id}:{prompt_id}"

@@ -368,3 +368,40 @@ def test_evt101_accepts_the_hashed_shape():
 
     assert event.payload["subject_name_hash"] == "9f" * 32
     assert "subject_name" not in event.payload
+
+
+# ── L-02 · EVT-110 ─────────────────────────────────────────────────
+
+
+def test_evt110_payload_passes_assert_no_pii():
+    """AC-4: the permitted fields pass the PII guard."""
+    payload = {
+        "prompt_id": "oia.extract_fields",
+        "prompt_version": "v3.1",
+        "edit_distance": 0.34,
+    }
+    assert_no_pii(EventType.GOLDEN_CANDIDATE_RECORDED, payload)
+
+    event = AgentEvent(
+        **envelope(event_type=EventType.GOLDEN_CANDIDATE_RECORDED, payload=payload)
+    )
+    assert event.payload["prompt_id"] == "oia.extract_fields"
+    assert event.payload["edit_distance"] == 0.34
+    assert "extracted_value" not in event.payload
+    assert "admin_final_value" not in event.payload
+
+
+@pytest.mark.parametrize(
+    "forbidden_key",
+    ["extracted_value", "admin_final_value", "value"],
+)
+def test_evt110_with_values_fails_assert_no_pii(forbidden_key):
+    """AC-4: forbidden fields raise PIILeakError on EVT-110."""
+    payload = {
+        "prompt_id": "oia.extract_fields",
+        "prompt_version": "v1",
+        "edit_distance": 0.5,
+        forbidden_key: "some secret data",
+    }
+    with pytest.raises(PIILeakError, match=forbidden_key):
+        assert_no_pii(EventType.GOLDEN_CANDIDATE_RECORDED, payload)

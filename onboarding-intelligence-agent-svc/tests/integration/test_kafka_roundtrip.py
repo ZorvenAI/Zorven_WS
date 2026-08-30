@@ -32,7 +32,14 @@ from app.events.emitter import EventEmitter
 from app.messaging.consumer import CommandConsumer
 from app.messaging.producer import KafkaProducer
 from app.messaging.provision import provision, retention_of, verify
-from app.messaging.topics import COMMANDS, DLQ, FLEET_TOPICS, events_topic
+from app.messaging.topics import (
+    COMMANDS,
+    DLQ,
+    FLEET_TOPICS,
+    GOLDEN_CANDIDATES,
+    candidate_key,
+    events_topic,
+)
 
 pytestmark = [pytest.mark.integration]
 
@@ -527,3 +534,89 @@ async def test_auto_commit_is_disabled_on_the_real_consumer(settings, producer, 
         assert consumer._consumer._enable_auto_commit is False
     finally:
         await stop(consumer)
+
+
+# ── L-02 · golden-dataset topic ────────────────────────────────────
+
+
+async def test_golden_candidate_topic_provisioned(broker):
+    """AC-1: the golden-dataset topic is created by provision()."""
+    report = await provision(broker)
+    assert GOLDEN_CANDIDATES.name in report.all_present
+
+
+async def test_golden_candidate_topic_retention(broker):
+    """AC-1: 30-day retention per §13.1."""
+    await provision(broker)
+    actual = await retention_of(broker, GOLDEN_CANDIDATES.name)
+    assert actual == str(GOLDEN_CANDIDATES.retention_ms)
+
+
+async def test_golden_candidate_key_shape(producer, broker):
+    """AC-1: key is {tenant_id}:{prompt_id}."""
+    await provision(broker)
+    tenant = str(uuid.uuid4())
+    prompt_id = "oia.extract_fields"
+    key = candidate_key(tenant, prompt_id)
+    assert key == f"{tenant}:{prompt_id}"
+
+    payload = {"probe": "golden-candidate", "id": str(uuid.uuid4())}
+    offsets = await end_offsets(GOLDEN_CANDIDATES.name)
+    sent = await producer.send(
+        GOLDEN_CANDIDATES.name, key=key, value=json.dumps(payload).encode()
+    )
+    assert sent
+
+    received = await read_since(
+        GOLDEN_CANDIDATES.name, offsets, lambda b: b.get("id") == payload["id"]
+    )
+    assert received is not None
+    assert received["probe"] == "golden-candidate"
+
+
+async def test_golden_candidate_roundtrip(producer, broker):
+    """Full path: publish envelope → consume → verify shape."""
+    from app.messaging.schemas import GoldenCandidate, MessageEnvelope
+
+    await provision(broker)
+    tenant = uuid.uuid4()
+    session = uuid.uuid4()
+
+    candidate = GoldenCandidate(
+        prompt_id="oia.extract_fields",
+        prompt_version="v3.1",
+        field_name="company_name",
+        input_evidence_ref="recording:r1:10.0-15.0",
+        extracted_value="[REDACTED]",
+        admin_final_value="Acme Corp",
+        edit_distance=0.34,
+        classification="KEY",
+        accepted_without_edit=False,
+    )
+    envelope = MessageEnvelope(
+        correlation_id=uuid.uuid4().hex,
+        tenant_id=tenant,
+        session_id=session,
+        payload=candidate.model_dump(mode="json"),
+    )
+
+    offsets = await end_offsets(GOLDEN_CANDIDATES.name)
+    key = candidate_key(str(tenant), "oia.extract_fields")
+    sent = await producer.send(
+        GOLDEN_CANDIDATES.name,
+        key=key,
+        value=json.dumps(envelope.model_dump(mode="json")).encode(),
+    )
+    assert sent
+
+    received = await read_since(
+        GOLDEN_CANDIDATES.name,
+        offsets,
+        lambda b: b.get("correlation_id") == envelope.correlation_id,
+    )
+    assert received is not None
+    assert received["tenant_id"] == str(tenant)
+    assert received["session_id"] == str(session)
+    assert received["payload"]["prompt_id"] == "oia.extract_fields"
+    assert received["payload"]["prompt_version"] == "v3.1"
+    assert received["payload"]["edit_distance"] == 0.34

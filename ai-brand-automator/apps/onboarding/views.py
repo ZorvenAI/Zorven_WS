@@ -1140,14 +1140,14 @@ class FieldProvenanceViewSet(
         payload.is_valid(raise_exception=True)
         final_value = payload.validated_data["final_value"]
 
-        distance = levenshtein(_as_text(row.extracted_value), _as_text(final_value))
+        extracted_text = _as_text(row.extracted_value)
+        final_text = _as_text(final_value)
+        distance = levenshtein(extracted_text, final_text)
 
         row.final_value = final_value
         row.status = ProvenanceStatus.EDITED
         row.reviewed_by = request.user if request.user.is_authenticated else None
         row.reviewed_at = timezone.now()
-        # extracted_value is absent from update_fields on purpose: L-02 needs
-        # the agent's original proposal to compare against.
         row.save(
             update_fields=[
                 "final_value",
@@ -1166,6 +1166,22 @@ class FieldProvenanceViewSet(
             edit_distance=distance,
             classification=row.classification,
         )
+
+        normalised = distance / max(len(extracted_text), len(final_text), 1)
+
+        from apps.onboarding.tasks import emit_golden_candidate
+
+        emit_golden_candidate.delay(
+            tenant_id=str(row.tenant_id),
+            session_id=str(row.session_id),
+            field_name=row.field_name,
+            extracted_value=extracted_text,
+            admin_final_value=final_text,
+            edit_distance=normalised,
+            classification=row.classification,
+            evidence_ref=_build_evidence_ref(row),
+        )
+
         return Response(self.get_serializer(row).data)
 
 
@@ -1179,6 +1195,20 @@ def _as_text(value) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value, sort_keys=True, default=str)
+
+
+def _build_evidence_ref(row) -> str:
+    """Build a concise evidence reference from a FieldProvenance row (L-02)."""
+    span = row.source_span
+    if isinstance(span, dict) and "recording_id" in span:
+        t_start = span.get("t_start", 0)
+        t_end = span.get("t_end", 0)
+        return f"recording:{span['recording_id']}:{t_start}-{t_end}"
+    if row.source_recording_id:
+        return f"recording:{row.source_recording_id}"
+    if row.source_media_id:
+        return f"media:{row.source_media_id}"
+    return "unknown"
 
 
 class ResearchBriefViewSet(
