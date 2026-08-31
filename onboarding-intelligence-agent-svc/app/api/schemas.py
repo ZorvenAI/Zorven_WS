@@ -383,3 +383,26 @@ class PageExtractionResponse(BaseModel):
     """The shape the LLM is instructed to return per wizard page."""
 
     fields: list[FieldCandidate]
+
+
+class CacheBustRequest(BaseModel):
+    """Admin cache-bust request (L-05, §20 incident recovery)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    prompt_id: str | None = Field(
+        default=None,
+        description="Internal prompt ID (e.g. oia.research_brief), or null for all.",
+    )
+    tenant_id: str | None = Field(
+        default=None,
+        description="Specific tenant, or null for all tenants.",
+    )
+
+
+class CacheBustResponse(BaseModel):
+    """Result of a cache-bust operation."""
+
+    cleared: int
+    prompt_ids: list[str]
+    tenant_id: str | None

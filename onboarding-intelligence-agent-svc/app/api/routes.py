@@ -20,6 +20,8 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api.deps import verify_service_token
 from app.api.schemas import (
+    CacheBustRequest,
+    CacheBustResponse,
     ExecuteRequest,
     ExecuteResponse,
     GuardrailReport,
@@ -440,4 +442,43 @@ async def process(
         options=payload.options,
         callback_url=payload.callback_url,
         idempotency_key=idempotency_key,
+    )
+
+
+@router.post(
+    "/v1/admin/cache-bust",
+    response_model=CacheBustResponse,
+    dependencies=[Depends(verify_service_token)],
+)
+async def cache_bust(
+    request: Request,
+    payload: CacheBustRequest,
+) -> CacheBustResponse:
+    """Bust prompt cache for incident recovery (L-05, §20).
+
+    Clears POI's Redis cache (``prompt:zorven-oia-*``) and OIA's
+    write-through cache (``oia:v1:{tenant}:prompt_cache:*``) so the
+    resolution chain falls through to the POI API and picks up the
+    reverted version. In-flight sessions are unaffected — their prompt
+    versions are pinned in the session hash.
+    """
+    loader = getattr(request.app.state, "prompt_loader", None)
+    if loader is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Prompt loader not initialized",
+        )
+
+    prompt_ids = [payload.prompt_id] if payload.prompt_id else None
+    cleared = await loader.bust_cache(
+        prompt_ids=prompt_ids,
+        tenant_id=payload.tenant_id,
+    )
+
+    from app.prompts.mapping import ALL_PROMPT_IDS
+
+    return CacheBustResponse(
+        cleared=cleared,
+        prompt_ids=[payload.prompt_id] if payload.prompt_id else list(ALL_PROMPT_IDS),
+        tenant_id=payload.tenant_id,
     )
