@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.logic.guardrails import Action, Verdict
+from app.logic.guardrails import Action
 from app.logic.pg08 import pg08_sensitive_media
 
 
