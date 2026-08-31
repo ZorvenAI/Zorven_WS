@@ -1109,3 +1109,57 @@ async def test_coverage_incremental_matches_full(manager):
     wf1_diffs = [d for d in diffs_after if d.workflow == "WF1"]
     assert len(wf1_diffs) == 1, "ad-hoc question should cause WF1 divergence"
     assert wf1_diffs[0].full_pct > wf1_diffs[0].incremental_pct
+
+
+# ── L-05 · Session pinning survives cache bust ─────────────────────────
+
+
+async def test_inflight_session_unaffected_by_revert(live_redis):
+    """AC-1: a cache bust does not affect in-flight sessions.
+
+    Prompt versions are pinned in the session hash at session start (§17.2).
+    A cache bust clears the prompt *cache* but the session hash is a
+    separate key — the pinned versions must survive.
+    """
+    import json
+
+    from app.cache.redis_manager import TenantKeys
+    from app.prompts.loader import PromptLoader
+    from app.services.poi_client import POIClient
+
+    tenant_id = "t-pintest"
+    session_id = "s-inflight-42"
+    keys = TenantKeys(tenant_id)
+
+    pinned_versions = {
+        "oia.research_brief": "v3-production",
+        "oia.generate_questionnaire": "v2-tenant",
+    }
+    await live_redis.client.hset(
+        keys.session(session_id),
+        "prompt_versions",
+        json.dumps(pinned_versions),
+    )
+
+    # Seed a prompt cache key that the bust will clear
+    await live_redis.client.set(
+        "prompt:zorven-oia-research-brief:production", "old-template"
+    )
+
+    loader = PromptLoader(redis=live_redis, poi_client=POIClient(""))
+    await loader.bust_cache()
+
+    # Cache key is gone
+    assert (
+        await live_redis.client.get("prompt:zorven-oia-research-brief:production")
+        is None
+    )
+
+    # Session hash is untouched — pinned versions survive
+    raw = await live_redis.client.hget(keys.session(session_id), "prompt_versions")
+    assert raw is not None
+    surviving = json.loads(raw)
+    assert surviving == pinned_versions
+
+    # Cleanup
+    await live_redis.client.delete(keys.session(session_id))

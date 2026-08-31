@@ -147,3 +147,102 @@ def test_every_ttl_constant_is_positive_and_bounded():
 def test_transcript_list_is_capped():
     """§14: the cap bounds reconnect replay cost to a known worst case."""
     assert redis_manager.TRANSCRIPT_MAX_ENTRIES == 4000
+
+
+# ── L-05 · Cache bust scoping ──────────────────────────────────────────
+
+
+@pytest.mark.integration
+async def test_cache_bust_scoped_to_prefix(live_redis):
+    """AC-2: bust clears OIA prompt keys without touching other services'."""
+    from app.prompts.loader import PromptLoader
+    from app.services.poi_client import POIClient
+
+    client = live_redis.client
+
+    # Seed: OIA's POI cache keys (should be cleared)
+    await client.set("prompt:zorven-oia-research-brief:production", "old-v1")
+    await client.set("prompt:zorven-oia-questionnaire:tenant:t-1", "old-v2")
+
+    # Seed: OIA's write-through cache (should be cleared)
+    await client.set(
+        "oia:v1:t-1:prompt_cache:zorven-oia-research-brief",
+        '{"template":"t","version":"v1"}',
+    )
+
+    # Seed: foreign keys (must survive)
+    await client.set("prompt:zorven-wf1-discovery:production", "foreign-v1")
+    await client.set("bpa:v1:t-1:something", "foreign-v2")
+    await client.set("oia:v1:t-1:session:s-99", "session-data")
+
+    loader = PromptLoader(
+        redis=live_redis,
+        poi_client=POIClient(""),
+    )
+    cleared = await loader.bust_cache()
+
+    # OIA prompt keys cleared
+    assert await client.get("prompt:zorven-oia-research-brief:production") is None
+    assert await client.get("prompt:zorven-oia-questionnaire:tenant:t-1") is None
+    assert await client.get("oia:v1:t-1:prompt_cache:zorven-oia-research-brief") is None
+
+    # Foreign keys survive
+    assert await client.get("prompt:zorven-wf1-discovery:production") == "foreign-v1"
+    assert await client.get("bpa:v1:t-1:something") == "foreign-v2"
+    assert await client.get("oia:v1:t-1:session:s-99") == "session-data"
+
+    assert cleared >= 3
+
+    # Cleanup
+    await client.delete(
+        "prompt:zorven-wf1-discovery:production",
+        "bpa:v1:t-1:something",
+        "oia:v1:t-1:session:s-99",
+    )
+
+
+@pytest.mark.integration
+async def test_cache_bust_with_tenant_scope(live_redis):
+    """AC-2: tenant-scoped bust clears only that tenant's write-through cache."""
+    from app.prompts.loader import PromptLoader
+    from app.services.poi_client import POIClient
+
+    client = live_redis.client
+
+    # Seed: two tenants' write-through caches
+    await client.set(
+        "oia:v1:t-bust-a:prompt_cache:zorven-oia-research-brief",
+        '{"template":"a","version":"v1"}',
+    )
+    await client.set(
+        "oia:v1:t-bust-b:prompt_cache:zorven-oia-research-brief",
+        '{"template":"b","version":"v1"}',
+    )
+
+    loader = PromptLoader(
+        redis=live_redis,
+        poi_client=POIClient(""),
+    )
+    cleared = await loader.bust_cache(
+        prompt_ids=["oia.research_brief"],
+        tenant_id="t-bust-a",
+    )
+
+    # tenant-a's cache cleared
+    assert (
+        await client.get("oia:v1:t-bust-a:prompt_cache:zorven-oia-research-brief")
+        is None
+    )
+
+    # tenant-b's cache survives
+    assert (
+        await client.get("oia:v1:t-bust-b:prompt_cache:zorven-oia-research-brief")
+        is not None
+    )
+
+    assert cleared >= 1
+
+    # Cleanup
+    await client.delete(
+        "oia:v1:t-bust-b:prompt_cache:zorven-oia-research-brief",
+    )

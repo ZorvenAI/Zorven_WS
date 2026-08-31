@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.cache.redis_manager import (
+    KEY_PREFIX,
     PROMPT_CACHE_PREFIX,
     TTL_PROMPT_CACHE,
     RedisManager,
@@ -27,7 +28,7 @@ from app.cache.redis_manager import (
 from app.circuit_breaker.breaker import CircuitBreaker
 from app.core.logging import get_logger
 from app.prompts.fallbacks import get_fallback_prompts, get_fallback_versions
-from app.prompts.mapping import poi_name
+from app.prompts.mapping import ALL_PROMPT_IDS, poi_name
 from app.services.poi_client import POIClient
 
 logger = get_logger(__name__)
@@ -180,6 +181,55 @@ class PromptLoader:
         key = keys.prompt_cache(prompt_name)
         payload = json.dumps({"template": template, "version": version})
         await self._redis.client.set(key, payload, ex=TTL_PROMPT_CACHE)
+
+    async def bust_cache(
+        self,
+        prompt_ids: Iterable[str] | None = None,
+        tenant_id: str | None = None,
+    ) -> int:
+        """Clear cached prompt data for OIA prompts (§20 incident recovery).
+
+        Clears two namespaces:
+        1. POI's Redis cache: ``prompt:zorven-oia-*`` keys (production + tenant
+           variants). These are normally read-only; DELETing them during
+           incident recovery forces the resolution chain to fall through to
+           POI's API and pick up the reverted version.
+        2. OIA's write-through cache: ``oia:v1:{tenant}:prompt_cache:*`` keys.
+
+        Returns the total number of keys deleted.
+        """
+        ids = list(prompt_ids) if prompt_ids is not None else list(ALL_PROMPT_IDS)
+        poi_names = [poi_name(pid) for pid in ids]
+        deleted = 0
+        client = self._redis.client
+
+        for pn in poi_names:
+            poi_keys = await self._redis.scan_prefix(f"{PROMPT_CACHE_PREFIX}{pn}:")
+            if poi_keys:
+                deleted += await client.delete(*poi_keys)
+
+        if tenant_id is not None:
+            keys_obj = self._redis.keys_for(tenant_id)
+            oia_keys = [keys_obj.prompt_cache(pn) for pn in poi_names]
+            existing = [k for k, v in zip(oia_keys, await client.mget(oia_keys)) if v]
+            if existing:
+                deleted += await client.delete(*existing)
+        else:
+            for pn in poi_names:
+                pattern = f"{KEY_PREFIX}*:prompt_cache:{pn}"
+                matched: list[str] = []
+                async for key in client.scan_iter(match=pattern, count=100):
+                    matched.append(key)
+                if matched:
+                    deleted += await client.delete(*matched)
+
+        logger.info(
+            "prompt_cache_bust",
+            prompt_ids=ids,
+            tenant_id=tenant_id,
+            keys_cleared=deleted,
+        )
+        return deleted
 
     @staticmethod
     def _extract_version(cached_value: str) -> str:

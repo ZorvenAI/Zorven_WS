@@ -122,6 +122,27 @@ def test_prep_pins_versions_in_session_hash(client):
         assert len(pinned) >= 1
 
 
+def test_admin_cache_bust_endpoint(client):
+    """POST /v1/admin/cache-bust returns 200 and reports cleared count."""
+    resp = client.post(
+        "/v1/admin/cache-bust",
+        json={},
+        headers={"X-Service-Token": SERVICE_TOKEN},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert "cleared" in data
+    assert isinstance(data["cleared"], int)
+    assert len(data["prompt_ids"]) == 9
+    assert data["tenant_id"] is None
+
+
+def test_admin_cache_bust_requires_service_token(client):
+    """Cache bust rejects requests without a valid service token."""
+    resp = client.post("/v1/admin/cache-bust", json={})
+    assert resp.status_code in (401, 403)
+
+
 def test_process_accepts_and_stores_job(client):
     """POST /v1/process returns 202 — prompt resolution happens internally."""
     tenant_id = _unique("t")
