@@ -5,7 +5,8 @@ States:
     STAGING → REJECTED (optimization didn't improve)
     CANARY → ROLLED_BACK (regression detected)
     PRODUCTION → ROLLED_BACK (manual rollback)
-    DRAFT → TENANT_OVERRIDE → ARCHIVED (tenant-specific path)
+    DRAFT → TENANT_OVERRIDE → ARCHIVED (tenant-specific clone, no gates)
+    CANARY → TENANT_OVERRIDE → ARCHIVED (tenant-specific via full gates)
 """
 
 import logging
@@ -32,7 +33,11 @@ class PromptState(str, Enum):
 VALID_TRANSITIONS: dict[PromptState, set[PromptState]] = {
     PromptState.DRAFT: {PromptState.STAGING, PromptState.TENANT_OVERRIDE},
     PromptState.STAGING: {PromptState.CANARY, PromptState.REJECTED},
-    PromptState.CANARY: {PromptState.PRODUCTION, PromptState.ROLLED_BACK},
+    PromptState.CANARY: {
+        PromptState.PRODUCTION,
+        PromptState.ROLLED_BACK,
+        PromptState.TENANT_OVERRIDE,
+    },
     PromptState.PRODUCTION: {PromptState.ARCHIVED, PromptState.ROLLED_BACK},
     PromptState.ARCHIVED: {PromptState.PRODUCTION},
     PromptState.REJECTED: set(),
@@ -180,6 +185,37 @@ class PromptLifecycleManager:
             version,
             PromptState.CANARY,
             PromptState.PRODUCTION,
+            tenant_id=tenant_id,
+        )
+
+    def promote_to_tenant_override(
+        self,
+        name: str,
+        version: int,
+        tenant_id: str,
+    ) -> bool:
+        """Promote a CANARY version to TENANT_OVERRIDE for a specific tenant.
+
+        Mirrors promote_to_production but targets the tenant-scoped path.
+        Archives the previous TENANT_OVERRIDE for this tenant if one exists.
+        """
+        current_override = self.registry.get_prompt_by_state(
+            name, PromptState.TENANT_OVERRIDE.value, tenant_id=tenant_id
+        )
+        if current_override is not None:
+            self.transition(
+                name,
+                current_override.version,
+                PromptState.TENANT_OVERRIDE,
+                PromptState.ARCHIVED,
+                tenant_id=tenant_id,
+            )
+
+        return self.transition(
+            name,
+            version,
+            PromptState.CANARY,
+            PromptState.TENANT_OVERRIDE,
             tenant_id=tenant_id,
         )
 

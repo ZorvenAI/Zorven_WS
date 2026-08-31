@@ -157,6 +157,7 @@ class ProcessExecutor:
         """Execute the PROCESS job and call back to Django."""
         keys = self._redis.keys_for(tenant.tenant_id)
         job_key = keys.idempotency(f"process:job:{job_id}")
+        prompt_versions: dict[str, str] = {}
 
         try:
             await self._redis.client.set(
@@ -166,7 +167,6 @@ class ProcessExecutor:
             )
 
             # L-01: resolve and pin prompt versions before processing.
-            prompt_versions: dict[str, str] = {}
             loader = getattr(self, "_prompt_loader", None)
             if loader is not None:
                 from app.prompts.mapping import PROCESS_PROMPTS
@@ -397,9 +397,8 @@ class ProcessExecutor:
             cb_status = JOB_STATUS_FAILED
 
         except BaseException as exc:
-            # asyncio.CancelledError is a BaseException in Python >=3.9.
-            # Without this handler, cancellation skips the Redis update and
-            # callback below, leaving the session stuck in PROCESSING.
+            if not isinstance(exc, asyncio.CancelledError):
+                raise
             logger.warning(
                 "process_job_cancelled",
                 job_id=job_id,
