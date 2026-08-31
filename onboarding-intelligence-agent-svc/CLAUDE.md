@@ -172,7 +172,7 @@ services and is isolated only by its key prefix.
   called without one." Never format a key inline.
 - Every key carries a TTL — `maxmemory-policy allkeys-lru` is instance-wide,
   so an untrimmed key evicts another service's data.
-- The prompt cache (`poi:` prefix, same DB) is **read-only** except for
+- The prompt cache (`prompt:` prefix, same DB) is **read-only** except for
   cache-bust DELETEs during incident recovery (L-05, §20). The
   `POST /v1/admin/cache-bust` endpoint is the only writer.
 - `tests/test_redis_key_isolation.py` enforces all of this by reflection over
