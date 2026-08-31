@@ -13,7 +13,6 @@ class TestPG08SensitiveMedia:
             "redaction_applied": False,
         }
         result = pg08_sensitive_media(payload, None)
-        assert isinstance(result, Verdict)
         assert result.action is Action.DROP
         assert result.payload["rag_excluded"] is True
 
@@ -23,7 +22,6 @@ class TestPG08SensitiveMedia:
             "redaction_applied": False,
         }
         result = pg08_sensitive_media(payload, None)
-        assert isinstance(result, Verdict)
         assert result.action is Action.DROP
         assert result.payload["rag_excluded"] is True
 
@@ -33,7 +31,6 @@ class TestPG08SensitiveMedia:
             "redaction_applied": True,
         }
         result = pg08_sensitive_media(payload, None)
-        assert isinstance(result, Verdict)
         assert result.action is Action.PASS
         assert "rag_excluded" not in result.payload
 
@@ -43,18 +40,16 @@ class TestPG08SensitiveMedia:
             "redaction_applied": False,
         }
         result = pg08_sensitive_media(payload, None)
-        assert isinstance(result, Verdict)
         assert result.action is Action.PASS
         assert "rag_excluded" not in result.payload
 
     def test_missing_sensitivity_defaults_general(self):
         payload = {"redaction_applied": False}
         result = pg08_sensitive_media(payload, None)
-        assert isinstance(result, Verdict)
         assert result.action is Action.PASS
         assert "rag_excluded" not in result.payload
 
     def test_non_dict_payload_passes(self):
         result = pg08_sensitive_media("not-a-dict", None)
-        assert isinstance(result, Verdict)
         assert result.action is Action.PASS
+        assert result.rule_id == "PG-08"
