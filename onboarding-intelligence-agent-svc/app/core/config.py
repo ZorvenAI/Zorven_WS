@@ -92,8 +92,30 @@ class Settings(BaseSettings):
     EXTRACTION_TEMPERATURE: float = 0.1
     EXTRACTION_RETRY_LIMIT: int = 1
 
-    # ── Output guardrails (J-04, Design §5.3 OG-03) ──────
+    # ── Guardrail thresholds (M-01, Design §5) ────────────
+    IG_BUDGET_MS: int = 200
+    OG_BUDGET_MS: int = 300
+    INJECTION_PATTERNS: str = (
+        "ignore previous,system prompt,you are now,act as,"
+        "disregard,ignore all instructions"
+    )
+    SCAM_PATTERNS: str = (
+        "send money,wire transfer,bank account,"
+        "credit card number,routing number,social security"
+    )
+    SCOPE_TERMS: str = (
+        "onboarding,brand_discovery,questionnaire,meeting,"
+        "transcript,brand_owner,business_research,company_profile"
+    )
+    SCOPE_THRESHOLD: float = 0.55
+    INPUT_MAX_TOKENS: int = 4096
+    RATE_LIMIT_PREP_PER_MIN: int = 10
+    AUTO_CREATE_COMPANY: bool = True
+    PG07_PREP_TOKEN_BUDGET: int = 40_000
+    PG07_LIVE_TOKEN_BUDGET_HR: int = 60_000
+    PG07_PROCESS_TOKEN_BUDGET: int = 120_000
     OG03_KEY_CONFIDENCE_THRESHOLD: float = 0.6
+    OG04_JUDGE_SAMPLE_RATE: float = 0.1
 
     # ── Batcher (G-02, Design §4.3) ────────────────────────
     BATCH_WINDOW_S: float = 3.0

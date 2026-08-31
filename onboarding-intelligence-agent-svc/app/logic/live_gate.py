@@ -19,8 +19,10 @@ lets it be tested without a socket.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any, Callable
 
 from app.core.logging import get_logger
+from app.logic.guardrails import Action, Verdict as ChainVerdict
 from app.services.backend_client import BackendClient
 
 logger = get_logger(__name__)
@@ -89,3 +91,22 @@ async def evaluate(
         questionnaire_status=body.get("questionnaire_status"),
     )
     return LiveVerdict(allowed=False, reason=reason)
+
+
+def as_rule(verdict: LiveVerdict) -> Callable[[Any, Any], ChainVerdict]:
+    """Adapt a pre-computed LiveVerdict to the chain's synchronous Rule signature.
+
+    Mirrors consent_gate.as_rule — the live verdict is evaluated before the
+    chain runs and closed over here so the chain can emit EVT-004.
+    """
+
+    def _evaluate(payload: Any, context: Any) -> ChainVerdict:  # noqa: ARG001
+        if verdict.allowed:
+            return ChainVerdict(rule_id=RULE_ID, action=Action.PASS)
+        return ChainVerdict(
+            rule_id=RULE_ID,
+            action=Action.BLOCK,
+            detail=verdict.reason,
+        )
+
+    return _evaluate

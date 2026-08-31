@@ -506,3 +506,141 @@ def test_og05_cross_tenant_is_security_event():
 
     assert verdict.action is Action.BLOCK
     assert foreign in verdict.detail
+
+
+# ── M-01: AC-1 audit — every rule has a named implementation ─────────
+
+
+def _noop_body_name() -> str:
+    """The function name used by the noop stub in guardrails.py."""
+    from app.logic.guardrails import noop
+
+    return (
+        noop("_test_")._evaluate.__qualname__
+        if hasattr(noop("_"), "_evaluate")
+        else noop("_").__qualname__
+    )
+
+
+def test_every_rule_has_a_named_implementation():
+    """AC-1: no rule in either chain is still the A-06 no-op stub.
+
+    Imports `_register_all_rules` from `main` and verifies each
+    registered rule's function is not the generic ``noop.<locals>._evaluate``.
+    """
+    from app.logic.guardrails import GuardrailChain, noop
+
+    noop_qualname = noop("_test_").__qualname__
+
+    from app.main import _register_all_rules
+    from app.core.config import Settings
+
+    s = Settings(
+        BACKEND_BASE_URL="http://localhost:8001",
+        GCS_BUCKET="test-bucket",
+    )
+    chain = GuardrailChain()
+    _register_all_rules(chain, s)
+
+    for layer in (Layer.INPUT, Layer.PROCESS, Layer.OUTPUT):
+        for registered in chain._rules[layer]:
+            assert (
+                registered.evaluate.__qualname__ != noop_qualname
+            ), f"{registered.rule_id} is still a no-op stub"
+
+
+# ── M-01: AC-2 budget enforcement ───────────────────────────────
+
+
+def test_budget_breach_fails_closed():
+    """A layer that exceeds its budget raises GuardrailViolation."""
+    import time as _time
+
+    chain = GuardrailChain(ig_budget_ms=1, og_budget_ms=300)
+
+    def slow_rule(payload, ctx):
+        _time.sleep(0.01)
+        return Verdict(rule_id="IG-SLOW", action=Action.PASS, payload=payload)
+
+    chain.register(Layer.INPUT, "IG-01", slow_rule)
+
+    ctx = context()
+    with pytest.raises(GuardrailViolation) as exc_info:
+        chain.evaluate(Layer.INPUT, {"text": "test"}, ctx)
+
+    assert "BUDGET" in exc_info.value.verdict.rule_id
+
+
+def test_budget_breach_skips_remaining_rules():
+    """Rules after the breach do not execute."""
+    import time as _time
+
+    calls: list[str] = []
+
+    def slow_rule(payload, ctx):
+        calls.append("slow")
+        _time.sleep(0.01)
+        return Verdict(rule_id="IG-01", action=Action.PASS, payload=payload)
+
+    def second_rule(payload, ctx):
+        calls.append("second")
+        return Verdict(rule_id="IG-02", action=Action.PASS, payload=payload)
+
+    chain = GuardrailChain(ig_budget_ms=1)
+    chain.register(Layer.INPUT, "IG-01", slow_rule)
+    chain.register(Layer.INPUT, "IG-02", second_rule)
+
+    ctx = context()
+    with pytest.raises(GuardrailViolation):
+        chain.evaluate(Layer.INPUT, {"text": "test"}, ctx)
+
+    assert "slow" in calls
+    assert "second" not in calls
+
+
+# ── M-01: AC-4 triggered event collection ────────────────────────
+
+
+def test_triggered_verdicts_collected():
+    """Non-PASS verdicts are collected in chain._triggered."""
+
+    def escalating_rule(payload, ctx):
+        return Verdict(
+            rule_id="IG-03",
+            action=Action.ESCALATE,
+            detail="out of scope",
+            payload=payload,
+        )
+
+    chain = GuardrailChain(ig_budget_ms=10000)
+    chain.register(Layer.INPUT, "IG-03", escalating_rule)
+
+    ctx = context()
+    chain.evaluate(Layer.INPUT, {"text": "test"}, ctx)
+
+    assert len(chain._triggered) == 1
+    assert chain._triggered[0]["rule_id"] == "IG-03"
+    assert chain._triggered[0]["action"] == "ESCALATE"
+
+
+def test_drain_triggered_clears_list():
+    """drain_triggered returns items and clears the internal list."""
+
+    def escalating_rule(payload, ctx):
+        return Verdict(
+            rule_id="IG-03",
+            action=Action.ESCALATE,
+            detail="out of scope",
+            payload=payload,
+        )
+
+    chain = GuardrailChain(ig_budget_ms=10000)
+    chain.register(Layer.INPUT, "IG-03", escalating_rule)
+
+    ctx = context()
+    chain.evaluate(Layer.INPUT, {"text": "test"}, ctx)
+
+    items = chain.drain_triggered()
+    assert len(items) == 1
+    assert chain._triggered == []
+    assert chain.drain_triggered() == []

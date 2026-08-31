@@ -108,7 +108,12 @@ OUTPUT_RULES = [f"OG-{n:02d}" for n in range(1, 7)]
 class GuardrailChain:
     """Runs the three layers in order. The registry owns one of these."""
 
-    def __init__(self, emitter: Any = None) -> None:
+    def __init__(
+        self,
+        emitter: Any = None,
+        ig_budget_ms: int = 200,
+        og_budget_ms: int = 300,
+    ) -> None:
         self._rules: dict[Layer, list[RegisteredRule]] = {
             Layer.INPUT: [],
             Layer.PROCESS: [],
@@ -116,6 +121,9 @@ class GuardrailChain:
         }
         self._emitter = emitter
         self.calls: list[tuple[Layer, str]] = []
+        self._ig_budget_ms = ig_budget_ms
+        self._og_budget_ms = og_budget_ms
+        self._triggered: list[dict[str, Any]] = []
         self._register_defaults()
 
     def _register_defaults(self) -> None:
@@ -150,12 +158,20 @@ class GuardrailChain:
 
         A BLOCK raises rather than returning, because a blocked payload must
         not reach the next stage under any circumstances.
+
+        Budget enforcement (§18.3): IG ≤ ig_budget_ms, OG ≤ og_budget_ms.
+        On breach the remaining rules are skipped and GuardrailViolation is
+        raised — failing closed, same as a BLOCK.
         """
+        budget_ms = self._budget_for(layer)
         current = payload
+        cumulative_ms = 0.0
+
         for rule in self._rules[layer]:
             started = time.perf_counter()
             verdict = rule.evaluate(current, context)
             elapsed_ms = (time.perf_counter() - started) * 1000
+            cumulative_ms += elapsed_ms
             self.calls.append((layer, rule.rule_id))
 
             logger.debug(
@@ -168,17 +184,37 @@ class GuardrailChain:
             )
 
             if verdict.action is not Action.PASS:
-                self._emit_triggered(verdict, layer, context, elapsed_ms)
+                self._collect_triggered(verdict, layer, context, elapsed_ms)
             if verdict.blocked:
                 raise GuardrailViolation(verdict)
             if verdict.payload is not None:
                 current = verdict.payload
+
+            if budget_ms is not None and cumulative_ms > budget_ms:
+                breach = Verdict(
+                    rule_id=f"{layer.value}-BUDGET",
+                    action=Action.BLOCK,
+                    detail=(
+                        f"{layer.value} layer exceeded {budget_ms}ms budget "
+                        f"({cumulative_ms:.1f}ms after {rule.rule_id})"
+                    ),
+                )
+                self._collect_triggered(breach, layer, context, cumulative_ms)
+                raise GuardrailViolation(breach)
+
         return current
 
-    def _emit_triggered(
+    def _budget_for(self, layer: Layer) -> float | None:
+        if layer is Layer.INPUT:
+            return float(self._ig_budget_ms)
+        if layer is Layer.OUTPUT:
+            return float(self._og_budget_ms)
+        return None
+
+    def _collect_triggered(
         self, verdict: Verdict, layer: Layer, context: SkillContext, elapsed_ms: float
     ) -> None:
-        """EVT-004 per §5 — every trigger is an event, not just a log line."""
+        """Log and collect for EVT-004 emission by the async caller."""
         logger.info(
             "guardrail_triggered",
             rule_id=verdict.rule_id,
@@ -188,6 +224,22 @@ class GuardrailChain:
             elapsed_ms=round(elapsed_ms, 3),
             tenant_id=context.tenant_context.tenant_id,
         )
+        self._triggered.append(
+            {
+                "rule_id": verdict.rule_id,
+                "action": verdict.action.value,
+                "detail": verdict.detail,
+                "layer": layer.value,
+                "tenant_id": context.tenant_context.tenant_id,
+                "elapsed_ms": round(elapsed_ms, 3),
+            }
+        )
+
+    def drain_triggered(self) -> list[dict[str, Any]]:
+        """Return and clear collected triggered verdicts for EVT-004 emission."""
+        items = list(self._triggered)
+        self._triggered.clear()
+        return items
 
     async def wrap_stream(
         self,
