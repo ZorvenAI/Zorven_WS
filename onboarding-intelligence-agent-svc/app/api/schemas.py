@@ -162,9 +162,9 @@ class ServerFrame(BaseModel):
 
 
 class TranscriptPartial(ServerFrame):
-    type: Literal[
+    type: Literal[ServerFrameType.TRANSCRIPT_PARTIAL] = (
         ServerFrameType.TRANSCRIPT_PARTIAL
-    ] = ServerFrameType.TRANSCRIPT_PARTIAL
+    )
     text: str
     speaker: int
 
@@ -291,9 +291,9 @@ class MarkQuestionFrame(BaseModel):
 class MarkFollowupAskedFrame(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal[
+    type: Literal[ClientFrameType.MARK_FOLLOWUP_ASKED] = (
         ClientFrameType.MARK_FOLLOWUP_ASKED
-    ] = ClientFrameType.MARK_FOLLOWUP_ASKED
+    )
     question_id: str
     suggestion_index: int = Field(ge=0, le=2)
 
