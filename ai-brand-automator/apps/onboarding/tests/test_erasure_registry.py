@@ -54,6 +54,7 @@ class TestRegistryCompleteness:
     def test_validate_completeness_passes_when_all_registered(self):
         _register_all_stores()
         StoreRegistry.validate_completeness()
+        assert len(StoreRegistry.store_names()) == len(ALL_STORE_CLASSES)
 
     def test_validate_completeness_raises_when_incomplete(self):
         with pytest.raises(RegistryIncomplete):

@@ -142,4 +142,4 @@ class TestErasureLogList:
     def test_admin_can_list_logs(self, admin_client_with_tenant):
         resp = admin_client_with_tenant.get("/api/v1/onboarding/erasure/logs/")
         assert resp.status_code == status.HTTP_200_OK
-        assert isinstance(resp.data, list)
+        assert resp.data == []

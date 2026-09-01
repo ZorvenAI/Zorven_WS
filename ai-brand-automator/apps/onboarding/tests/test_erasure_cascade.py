@@ -156,5 +156,5 @@ class TestErasureCascadeWithData:
 
         data = report.to_dict()
         serialized = json.dumps(data)
-        assert isinstance(serialized, str)
+        assert len(serialized) > 0
         assert data["tenant_id"] == str(tenant.pk)
