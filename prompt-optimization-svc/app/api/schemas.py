@@ -522,3 +522,24 @@ class CanaryHistoryResponse(BaseModel):
     total: int = 0
     page: int = 1
     page_size: int = 10
+
+
+class ErasureRequest(BaseModel):
+    """M-02 · GDPR erasure request from Django."""
+
+    tenant_id: str
+    session_ids: list[str]
+
+
+class ErasureCaveat(BaseModel):
+    """A caveat about a deactivated golden dataset row."""
+
+    dataset_id: int
+    reason: str
+
+
+class ErasureResponse(BaseModel):
+    """M-02 · GDPR erasure result."""
+
+    deactivated: int
+    caveats: list[ErasureCaveat] = Field(default_factory=list)

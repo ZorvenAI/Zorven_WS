@@ -10,6 +10,7 @@ the original app is mounted at the root rather than under its own name.
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from apps.onboarding.erasure.views import ErasureLogListView, ErasureRequestView
 from apps.onboarding.views import (
     FieldProvenanceViewSet,
     MeetingRecordingViewSet,
@@ -124,6 +125,16 @@ urlpatterns = [
         "internal/companies/<int:pk>/generate-identity/",
         internal_generate_brand_identity,
         name="onboarding-internal-generate-identity",
+    ),
+    path(
+        "erasure/",
+        ErasureRequestView.as_view(),
+        name="onboarding-erasure-request",
+    ),
+    path(
+        "erasure/logs/",
+        ErasureLogListView.as_view(),
+        name="onboarding-erasure-logs",
     ),
     path("", include(router.urls)),
 ]

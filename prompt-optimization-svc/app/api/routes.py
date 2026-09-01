@@ -44,8 +44,12 @@ from app.api.schemas import (
     DatasetSizeConfigRequest,
 )  # noqa: E402 — top-level for FastAPI
 from app.api.schemas import (
+    ErasureCaveat,
+    ErasureRequest,
+    ErasureResponse,
     TenantConfigUpdateRequest,
 )  # noqa: E402 — top-level for FastAPI
+from app.auth.deps import verify_service_token
 from app.auth.rbac import Decision, Permission, Role, require_permission, resolve_role
 from app.logic.lifecycle import (
     InvalidTransitionError,
@@ -2046,3 +2050,83 @@ async def update_tenant_config(
         )
     finally:
         await cache.close()
+
+
+# ── M-02: GDPR erasure ────────────────────────────────────────
+
+
+@router.delete(
+    "/v1/admin/erasure",
+    response_model=ErasureResponse,
+    dependencies=[Depends(verify_service_token)],
+)
+async def erasure(payload: ErasureRequest) -> ErasureResponse:
+    """Soft-delete golden dataset rows linked to the given sessions."""
+    if not payload.session_ids:
+        return ErasureResponse(deactivated=0)
+
+    from sqlalchemy import or_, select, update
+
+    from app.models.database import async_session_factory
+    from app.models.golden_dataset import GoldenDataset
+    from app.models.optimization_run import OptimizationRun
+
+    async with async_session_factory() as session:
+        conditions = []
+        for sid in payload.session_ids:
+            conditions.append(
+                GoldenDataset.input_context["session_id"].as_string() == sid
+            )
+            conditions.append(
+                GoldenDataset.metadata_extra["session_id"].as_string() == sid
+            )
+
+        stmt = select(GoldenDataset).where(
+            GoldenDataset.tenant_id == payload.tenant_id,
+            GoldenDataset.active.is_(True),
+            or_(*conditions),
+        )
+        result = await session.execute(stmt)
+        rows = result.scalars().all()
+
+        if not rows:
+            return ErasureResponse(deactivated=0)
+
+        caveats: list[ErasureCaveat] = []
+        row_ids = [r.id for r in rows]
+
+        run_stmt = select(OptimizationRun).where(
+            OptimizationRun.status == "COMPLETED",
+        )
+        run_result = await session.execute(run_stmt)
+        completed_runs = run_result.scalars().all()
+
+        used_prompts = set()
+        for run in completed_runs:
+            if hasattr(run, "prompt_name") and run.prompt_name:
+                used_prompts.add(run.prompt_name)
+
+        for row in rows:
+            if row.prompt_name in used_prompts:
+                caveats.append(
+                    ErasureCaveat(
+                        dataset_id=row.id,
+                        reason=(
+                            f"Row contributed to optimization of "
+                            f"'{row.prompt_name}' — prompt already deployed."
+                        ),
+                    )
+                )
+
+        update_stmt = (
+            update(GoldenDataset)
+            .where(GoldenDataset.id.in_(row_ids))
+            .values(active=False)
+        )
+        await session.execute(update_stmt)
+        await session.commit()
+
+        return ErasureResponse(
+            deactivated=len(row_ids),
+            caveats=caveats,
+        )

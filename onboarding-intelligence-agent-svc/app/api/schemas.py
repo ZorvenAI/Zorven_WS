@@ -162,9 +162,9 @@ class ServerFrame(BaseModel):
 
 
 class TranscriptPartial(ServerFrame):
-    type: Literal[ServerFrameType.TRANSCRIPT_PARTIAL] = (
+    type: Literal[
         ServerFrameType.TRANSCRIPT_PARTIAL
-    )
+    ] = ServerFrameType.TRANSCRIPT_PARTIAL
     text: str
     speaker: int
 
@@ -291,9 +291,9 @@ class MarkQuestionFrame(BaseModel):
 class MarkFollowupAskedFrame(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal[ClientFrameType.MARK_FOLLOWUP_ASKED] = (
+    type: Literal[
         ClientFrameType.MARK_FOLLOWUP_ASKED
-    )
+    ] = ClientFrameType.MARK_FOLLOWUP_ASKED
     question_id: str
     suggestion_index: int = Field(ge=0, le=2)
 
@@ -406,3 +406,19 @@ class CacheBustResponse(BaseModel):
     cleared: int
     prompt_ids: list[str]
     tenant_id: str | None
+
+
+class ErasureRequest(BaseModel):
+    """M-02 · GDPR erasure request from Django."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str
+    session_ids: list[str]
+
+
+class ErasureResponse(BaseModel):
+    """M-02 · GDPR erasure result."""
+
+    deleted_keys: list[str]
+    total: int

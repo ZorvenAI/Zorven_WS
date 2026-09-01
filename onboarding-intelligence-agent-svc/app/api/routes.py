@@ -22,6 +22,8 @@ from app.api.deps import verify_service_token
 from app.api.schemas import (
     CacheBustRequest,
     CacheBustResponse,
+    ErasureRequest,
+    ErasureResponse,
     ExecuteRequest,
     ExecuteResponse,
     GuardrailReport,
@@ -481,4 +483,69 @@ async def cache_bust(
         cleared=cleared,
         prompt_ids=[payload.prompt_id] if payload.prompt_id else list(ALL_PROMPT_IDS),
         tenant_id=payload.tenant_id,
+    )
+
+
+# ── M-02: GDPR erasure ────────────────────────────────────────
+
+
+@router.delete(
+    "/v1/admin/erasure",
+    response_model=ErasureResponse,
+    dependencies=[Depends(verify_service_token)],
+    status_code=status.HTTP_200_OK,
+)
+async def erasure(request: Request, payload: ErasureRequest) -> ErasureResponse:
+    """Delete all session-scoped Redis keys for the given sessions.
+
+    Called by Django's GDPR erasure cascade. Iterates every key builder
+    on TenantKeys for each session_id, then falls back to a SCAN for
+    any keys the explicit list missed.
+    """
+    from app.cache.redis_manager import KEY_PREFIX, TenantKeys
+
+    redis = request.app.state.redis.client
+    keys = TenantKeys(payload.tenant_id)
+
+    deleted_keys: list[str] = []
+
+    for sid in payload.session_ids:
+        session_keys = [
+            keys.session(sid),
+            keys.session_summary(sid),
+            keys.transcript(sid),
+            keys.questions(sid),
+            keys.coverage(sid),
+            keys.live_frames(sid),
+            keys.unmapped(sid),
+            keys.live_seq(sid),
+            keys.outbox(sid),
+        ]
+        for key in session_keys:
+            try:
+                removed = await redis.delete(key)
+                if removed:
+                    deleted_keys.append(key)
+            except Exception:
+                logger.warning("erasure_key_delete_failed", key=key)
+
+    scan_prefix = f"{KEY_PREFIX}{payload.tenant_id}:"
+    for sid in payload.session_ids:
+        pattern = f"{scan_prefix}*{sid}*"
+        cursor: int | str = 0
+        while True:
+            cursor, found = await redis.scan(cursor=cursor, match=pattern, count=100)
+            for key in found:
+                if key not in deleted_keys:
+                    try:
+                        await redis.delete(key)
+                        deleted_keys.append(key)
+                    except Exception:
+                        logger.warning("erasure_scan_delete_failed", key=key)
+            if cursor == 0:
+                break
+
+    return ErasureResponse(
+        deleted_keys=deleted_keys,
+        total=len(deleted_keys),
     )
