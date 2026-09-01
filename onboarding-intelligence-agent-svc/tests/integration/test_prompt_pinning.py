@@ -132,7 +132,7 @@ def test_admin_cache_bust_endpoint(client):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert "cleared" in data
-    assert isinstance(data["cleared"], int)
+    assert data["cleared"] >= 0
     assert len(data["prompt_ids"]) == 9
     assert data["tenant_id"] is None
 
@@ -140,7 +140,7 @@ def test_admin_cache_bust_endpoint(client):
 def test_admin_cache_bust_requires_service_token(client):
     """Cache bust rejects requests without a valid service token."""
     resp = client.post("/v1/admin/cache-bust", json={})
-    assert resp.status_code in (401, 403)
+    assert resp.status_code == 401
 
 
 def test_process_accepts_and_stores_job(client):

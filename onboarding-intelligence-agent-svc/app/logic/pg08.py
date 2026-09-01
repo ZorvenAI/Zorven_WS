@@ -1,6 +1,6 @@
 """PG-08 — Sensitive media restriction.
 
-Design §5.2 · implemented by story H-03.
+Design §5.2 · implemented by story H-03, fixed by M-01.
 
 IDENTITY or FINANCIAL captures whose text could not be fully redacted
 are excluded from RAG ingestion. The guardrail sets ``rag_excluded=True``
@@ -12,16 +12,22 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from app.logic.guardrails import Action, Verdict
+from app.skills.models import SkillContext
+
 logger = logging.getLogger(__name__)
 
 
-def pg08_sensitive_media(payload: dict[str, Any], context: Any) -> dict[str, Any]:
+def pg08_sensitive_media(payload: Any, context: SkillContext) -> Verdict:
     """PG-08 rule body, registered on ``Layer.PROCESS``.
 
     Checks ``sensitivity_class`` in the payload. For IDENTITY/FINANCIAL,
     if redaction was not applied (``redaction_applied`` is False), sets
     ``rag_excluded=True``.
     """
+    if not isinstance(payload, dict):
+        return Verdict(rule_id="PG-08", action=Action.PASS, payload=payload)
+
     sensitivity = payload.get("sensitivity_class", "GENERAL")
     redaction_applied = payload.get("redaction_applied", False)
 
@@ -34,4 +40,10 @@ def pg08_sensitive_media(payload: dict[str, Any], context: Any) -> dict[str, Any
                 "reason": "unredactable sensitive content",
             },
         )
-    return payload
+        return Verdict(
+            rule_id="PG-08",
+            action=Action.DROP,
+            detail=f"unredactable {sensitivity} content excluded from RAG",
+            payload=payload,
+        )
+    return Verdict(rule_id="PG-08", action=Action.PASS, payload=payload)

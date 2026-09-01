@@ -1,4 +1,4 @@
-"""J-04 — Output guardrail chain rules (OG-02, OG-05).
+"""J-04 / M-01 — Output guardrail chain rules (OG-02 through OG-05).
 
 Tests the chain-compatible rule functions that run on the OUTPUT layer.
 """
@@ -8,7 +8,12 @@ from __future__ import annotations
 import pytest
 
 from app.logic.guardrails import Action
-from app.logic.output_guardrails import og02_egress_redact, og05_tenant_isolation
+from app.logic.output_guardrails import (
+    og02_egress_redact,
+    og03_confidence_gate,
+    og04_sampled_judge,
+    og05_tenant_isolation,
+)
 from app.skills.models import SkillContext, TenantContext
 
 pytestmark = pytest.mark.unit
@@ -114,3 +119,69 @@ def test_og05_scans_lists():
     verdict = og05_tenant_isolation(payload, _ctx(own))
 
     assert verdict.action is Action.BLOCK
+
+
+# ── OG-03 ────────────────────────────────────────────────
+
+
+def _ctx_with_config(**config: object) -> SkillContext:
+    return SkillContext(
+        input_prompt="test",
+        tenant_context=TenantContext(
+            tenant_id="aaaaaaaa-1111-2222-3333-444444444444", role="ADMIN"
+        ),
+        config=dict(config),
+    )
+
+
+def test_og03_forces_key_below_threshold():
+    """Low confidence → forced to KEY."""
+    ctx = _ctx_with_config(_og03_threshold=0.6)
+    payload = {"confidence": 0.3, "classification": "SUPPLEMENTARY"}
+    verdict = og03_confidence_gate(payload, ctx)
+    assert verdict.action is Action.REDACT
+    assert verdict.payload["classification"] == "KEY"
+
+
+def test_og03_passes_above_threshold():
+    """High confidence → PASS."""
+    ctx = _ctx_with_config(_og03_threshold=0.6)
+    payload = {"confidence": 0.9, "classification": "SUPPLEMENTARY"}
+    verdict = og03_confidence_gate(payload, ctx)
+    assert verdict.action is Action.PASS
+
+
+def test_og03_passes_without_confidence():
+    """No confidence field → PASS."""
+    ctx = _ctx_with_config(_og03_threshold=0.6)
+    payload = {"classification": "KEY"}
+    verdict = og03_confidence_gate(payload, ctx)
+    assert verdict.action is Action.PASS
+
+
+def test_og03_passes_non_dict():
+    """Non-dict payload → PASS."""
+    ctx = _ctx_with_config(_og03_threshold=0.6)
+    verdict = og03_confidence_gate("just text", ctx)
+    assert verdict.action is Action.PASS
+
+
+# ── OG-04 ────────────────────────────────────────────────
+
+
+def test_og04_stashes_payload_when_sampled():
+    """When sampled, the payload is stashed for async judge."""
+    ctx = _ctx_with_config(_og04_sample_selected=True)
+    payload = {"text": "some output"}
+    verdict = og04_sampled_judge(payload, ctx)
+    assert verdict.action is Action.PASS
+    assert ctx.config["_og04_payload"] == payload
+
+
+def test_og04_does_not_stash_when_not_sampled():
+    """When not sampled, nothing is stashed."""
+    ctx = _ctx_with_config(_og04_sample_selected=False)
+    payload = {"text": "some output"}
+    verdict = og04_sampled_judge(payload, ctx)
+    assert verdict.action is Action.PASS
+    assert "_og04_payload" not in ctx.config

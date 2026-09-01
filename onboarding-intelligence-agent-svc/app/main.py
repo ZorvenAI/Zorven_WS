@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 from fastapi import FastAPI
 
@@ -38,6 +38,84 @@ settings = get_settings()
 configure_logging(settings.LOG_LEVEL)
 configure_telemetry(settings.OTEL_EXPORTER_ENDPOINT)
 logger = get_logger(__name__)
+
+
+def _register_all_rules(chain: Any, s: Any) -> None:
+    """M-01: register all 24 guardrail rules on one chain."""
+    from app.logic.guardrails import Layer
+    from app.skills.redact_pii import _ensure_engines, ig04_redact
+    from app.logic.consent_gate import ConsentState, as_rule as consent_as_rule
+    from app.logic.live_gate import LiveVerdict, as_rule as live_as_rule
+    from app.logic.green_signal_integrity import og06_green_signal_integrity
+    from app.logic.grounding import ground_output
+    from app.logic.output_guardrails import (
+        og02_egress_redact,
+        og03_confidence_gate,
+        og04_sampled_judge,
+        og05_tenant_isolation,
+    )
+    from app.logic.input_guardrails import (
+        ig01_prompt_injection,
+        ig02_scam_filter,
+        ig03_scope_filter,
+        ig05_tenant_context,
+        ig06_input_size,
+        ig07_rate_limit,
+        ig09_brand_identity,
+    )
+    from app.logic.process_guardrails import (
+        pg01_plan_required,
+        pg02_skill_allowlist,
+        pg03_rbac,
+        pg04_write_scope,
+        pg05_prompt_pinning,
+        pg06_field_protection,
+        pg07_budget_guard,
+    )
+    from app.logic.pg08 import pg08_sensitive_media
+
+    _ensure_engines()
+
+    # IG layer
+    chain.register(Layer.INPUT, "IG-01", ig01_prompt_injection)
+    chain.register(Layer.INPUT, "IG-02", ig02_scam_filter)
+    chain.register(Layer.INPUT, "IG-03", ig03_scope_filter)
+    chain.register(Layer.INPUT, "IG-04", ig04_redact)
+    chain.register(Layer.INPUT, "IG-05", ig05_tenant_context)
+    chain.register(Layer.INPUT, "IG-06", ig06_input_size)
+    chain.register(Layer.INPUT, "IG-07", ig07_rate_limit)
+    chain.register(
+        Layer.INPUT,
+        "IG-08",
+        consent_as_rule(ConsentState(present=True, active=True)),
+    )
+    chain.register(Layer.INPUT, "IG-09", ig09_brand_identity)
+    chain.register(
+        Layer.INPUT,
+        "IG-10",
+        live_as_rule(LiveVerdict(allowed=True)),
+    )
+
+    # PG layer
+    chain.register(Layer.PROCESS, "PG-01", pg01_plan_required)
+    chain.register(Layer.PROCESS, "PG-02", pg02_skill_allowlist)
+    chain.register(Layer.PROCESS, "PG-03", pg03_rbac)
+    chain.register(Layer.PROCESS, "PG-04", pg04_write_scope)
+    chain.register(Layer.PROCESS, "PG-05", pg05_prompt_pinning)
+    chain.register(Layer.PROCESS, "PG-06", pg06_field_protection)
+    chain.register(Layer.PROCESS, "PG-07", pg07_budget_guard)
+    chain.register(Layer.PROCESS, "PG-08", pg08_sensitive_media)
+
+    # OG layer
+    chain.register(Layer.OUTPUT, "OG-01", ground_output)
+    chain.register(Layer.OUTPUT, "OG-02", og02_egress_redact)
+    chain.register(Layer.OUTPUT, "OG-03", og03_confidence_gate)
+    chain.register(Layer.OUTPUT, "OG-04", og04_sampled_judge)
+    chain.register(Layer.OUTPUT, "OG-05", og05_tenant_isolation)
+    chain.register(Layer.OUTPUT, "OG-06", og06_green_signal_integrity)
+
+    chain._ig_budget_ms = s.IG_BUDGET_MS
+    chain._og_budget_ms = s.OG_BUDGET_MS
 
 
 @asynccontextmanager
@@ -153,19 +231,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             detail="live transcription unavailable — set OIA_STT_PROJECT",
         )
 
-    from app.logic.guardrails import Layer
-    from app.skills.redact_pii import _ensure_engines, ig04_redact
-    from app.logic.green_signal_integrity import og06_green_signal_integrity
-    from app.logic.output_guardrails import og02_egress_redact, og05_tenant_isolation
-
-    _ensure_engines()
-    app.state.prep.registry.chain.register(Layer.INPUT, "IG-04", ig04_redact)
-    app.state.prep.registry.chain.register(Layer.OUTPUT, "OG-02", og02_egress_redact)
-    app.state.prep.registry.chain.register(Layer.OUTPUT, "OG-05", og05_tenant_isolation)
-    app.state.prep.registry.chain.register(
-        Layer.OUTPUT, "OG-06", og06_green_signal_integrity
-    )
-
     # H-03: LIVE skill registry with OCR/Vision providers.
     ocr_provider = OCRProvider(breaker=app.state.breakers.get("vision"))
     vision_provider = VisionProvider(
@@ -183,17 +248,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         }
     )
     app.state.skill_registry.load()
-    app.state.skill_registry.chain.register(Layer.INPUT, "IG-04", ig04_redact)
-    app.state.skill_registry.chain.register(Layer.OUTPUT, "OG-02", og02_egress_redact)
-    app.state.skill_registry.chain.register(
-        Layer.OUTPUT, "OG-05", og05_tenant_isolation
-    )
 
-    from app.logic.pg08 import pg08_sensitive_media
-
-    app.state.skill_registry.chain.register(
-        Layer.PROCESS, "PG-08", pg08_sensitive_media
-    )
+    # M-01: register all 24 guardrail rules on both chains.
+    _register_all_rules(app.state.prep.registry.chain, settings)
+    _register_all_rules(app.state.skill_registry.chain, settings)
 
     app.state.events = EventEmitter(app.state.kafka)
     await app.state.events.start()

@@ -54,6 +54,8 @@ class SkillRegistry:
         chain: GuardrailChain | None = None,
         rbac: RBACEngine | None = None,
         providers: Mapping[str, Any] | None = None,
+        events: Any = None,
+        redis: Any = None,
     ) -> None:
         self._by_id: dict[str, Skill] = {}
         self._by_name: dict[str, Skill] = {}
@@ -61,6 +63,8 @@ class SkillRegistry:
         self._internal_only: set[str] = set()
         self.chain = chain or GuardrailChain()
         self.rbac = rbac or RBACEngine()
+        self._events = events
+        self._redis = redis
         #: Shared dependencies offered to skills that declare them (C-02).
         #: Keyed by keyword-argument name — "tavily", "llm", "vision" — and
         #: passed only to skills whose __init__ accepts that name, so a skill
@@ -214,8 +218,6 @@ class SkillRegistry:
         skill = self.get(key)
         meta = skill.meta
 
-        # The evaluated payload is assigned back: IG-04 redacts and IG-06
-        # truncates, and a transform the skill never sees is not a guardrail.
         context.input_context = self.chain.evaluate(
             Layer.INPUT, context.input_context, context
         )
@@ -231,7 +233,9 @@ class SkillRegistry:
         result = await skill.run(context)
         result.duration_ms = int((time.perf_counter() - started) * 1000)
 
-        return self.chain.evaluate_result(result, context)
+        evaluated = self.chain.evaluate_result(result, context)
+        await self._emit_triggered(context)
+        return evaluated
 
     async def execute_stream(
         self, key: str, context: SkillContext
@@ -253,6 +257,36 @@ class SkillRegistry:
             )
         async for chunk in self.chain.wrap_stream(skill.stream(context), context):
             yield chunk
+        await self._emit_triggered(context)
+
+    async def _emit_triggered(self, context: SkillContext) -> None:
+        """Drain and emit EVT-004 for any non-PASS verdicts collected by the chain."""
+        triggered = self.chain.drain_triggered()
+        if not triggered or self._events is None:
+            return
+
+        from app.events.catalog import EventType
+
+        for item in triggered:
+            try:
+                await self._events.emit(
+                    EventType.AGENT_GUARDRAIL_TRIGGERED,
+                    tenant_id=context.tenant_context.tenant_id,
+                    correlation_id=context.correlation_id or "guardrail",
+                    outcome="BLOCKED" if item["action"] == "BLOCK" else "FAILURE",
+                    payload={
+                        "rule_id": item["rule_id"],
+                        "action": item["action"],
+                        "detail": item.get("detail", ""),
+                        "layer": item.get("layer", ""),
+                        "elapsed_ms": item.get("elapsed_ms", 0),
+                    },
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "evt004_emission_failed",
+                    rule_id=item["rule_id"],
+                )
 
     def _authorize(self, meta: SkillMeta, context: SkillContext) -> Verdict:
         """PG-03. Raises ERR-04 on a denial; ESCALATE and VIEW_RESULT pass through.
