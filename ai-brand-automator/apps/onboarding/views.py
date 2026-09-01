@@ -434,14 +434,23 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
             )
         )
 
+        from apps.onboarding.erasure.models import ErasureLog
+
+        erasure_log = ErasureLog.objects.create(
+            tenant=session.tenant,
+            subject_name=record.subject_name,
+            reason="consent_revocation",
+        )
         _tenant_id = str(session.tenant_id)
         _subject = record.subject_name
+        _log_id = erasure_log.pk
         db_transaction.on_commit(
             lambda: execute_erasure_cascade.delay(
                 tenant_id=_tenant_id,
                 subject_name=_subject,
                 requested_by_user_id="system",
                 reason="consent_revocation",
+                erasure_log_id=_log_id,
             )
         )
         return Response(ConsentRecordSerializer(record).data, status=http.HTTP_200_OK)

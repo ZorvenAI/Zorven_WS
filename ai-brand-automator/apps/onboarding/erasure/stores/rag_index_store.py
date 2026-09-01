@@ -35,7 +35,7 @@ class RAGIndexStore(ErasureStore):
         return ErasureManifest(
             store_name=self.store_name,
             item_count=len(company_ids),
-            details={"company_ids": company_ids},
+            details={"company_ids": company_ids, "tenant_id": tenant_id},
         )
 
     def erase(self, manifest):
@@ -49,7 +49,9 @@ class RAGIndexStore(ErasureStore):
             try:
                 from rag_index.tasks import sync_model_to_rag
 
-                sync_model_to_rag.delay("onboarding", "Company", company_id)
+                sync_model_to_rag.apply_async(
+                    args=["Company", company_id, manifest.details.get("tenant_id")]
+                )
                 synced += 1
             except Exception as exc:
                 errors.append(f"company {company_id}: {exc}")

@@ -54,10 +54,13 @@ class ErasureRequestView(APIView):
         subject_name = serializer.validated_data["subject_name"]
         reason = serializer.validated_data["reason"]
 
+        from django.db.models import Q
+
         from apps.onboarding.models import ConsentRecord
 
         exists = ConsentRecord.objects.filter(
-            tenant=tenant, subject_name=subject_name
+            Q(tenant=tenant) | Q(tenant__isnull=True),
+            subject_name=subject_name,
         ).exists()
         if not exists:
             return Response(

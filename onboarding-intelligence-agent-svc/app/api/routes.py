@@ -507,7 +507,7 @@ async def erasure(request: Request, payload: ErasureRequest) -> ErasureResponse:
     redis = request.app.state.redis.client
     keys = TenantKeys(payload.tenant_id)
 
-    deleted_keys: list[str] = []
+    deleted_keys: set[str] = set()
 
     for sid in payload.session_ids:
         session_keys = [
@@ -525,13 +525,13 @@ async def erasure(request: Request, payload: ErasureRequest) -> ErasureResponse:
             try:
                 removed = await redis.delete(key)
                 if removed:
-                    deleted_keys.append(key)
+                    deleted_keys.add(key)
             except Exception:
                 logger.warning("erasure_key_delete_failed", key=key)
 
     scan_prefix = f"{KEY_PREFIX}{payload.tenant_id}:"
     for sid in payload.session_ids:
-        pattern = f"{scan_prefix}*{sid}*"
+        pattern = f"{scan_prefix}*:{sid}:*"
         cursor: int | str = 0
         while True:
             cursor, found = await redis.scan(cursor=cursor, match=pattern, count=100)
@@ -539,13 +539,14 @@ async def erasure(request: Request, payload: ErasureRequest) -> ErasureResponse:
                 if key not in deleted_keys:
                     try:
                         await redis.delete(key)
-                        deleted_keys.append(key)
+                        deleted_keys.add(key)
                     except Exception:
                         logger.warning("erasure_scan_delete_failed", key=key)
             if cursor == 0:
                 break
 
+    result_keys = sorted(deleted_keys)
     return ErasureResponse(
-        deleted_keys=deleted_keys,
-        total=len(deleted_keys),
+        deleted_keys=result_keys,
+        total=len(result_keys),
     )

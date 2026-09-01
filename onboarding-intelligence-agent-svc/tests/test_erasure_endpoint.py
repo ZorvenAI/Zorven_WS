@@ -54,7 +54,7 @@ class TestErasureDeletesKeys:
     def test_erasure_scan_catches_unlisted_keys(self, client, service_token):
         tenant_id = "erasure-scan-tenant"
         session_id = "sess-scan-001"
-        extra_key = f"oia:v1:{tenant_id}:custom:{session_id}:extra"
+        extra_key = f"oia:v1:{tenant_id}:custom_type:{session_id}:extra"
 
         import redis as sync_redis
 

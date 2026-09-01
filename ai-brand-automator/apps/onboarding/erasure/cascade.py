@@ -38,6 +38,8 @@ class ErasureCascade:
         requested_by: str = "system",
         reason: str = "",
     ) -> CompletionReport:
+        from django.db.models import Q
+
         from apps.onboarding.models import ConsentRecord
 
         StoreRegistry.validate_completeness()
@@ -45,7 +47,7 @@ class ErasureCascade:
         self._validate_store_order()
 
         records = ConsentRecord.objects.filter(
-            tenant_id=tenant_id,
+            Q(tenant_id=tenant_id) | Q(tenant__isnull=True),
             subject_name=subject_name,
         ).select_related("session")
 

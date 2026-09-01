@@ -2095,16 +2095,15 @@ async def erasure(payload: ErasureRequest) -> ErasureResponse:
         caveats: list[ErasureCaveat] = []
         row_ids = [r.id for r in rows]
 
-        run_stmt = select(OptimizationRun).where(
-            OptimizationRun.status == "COMPLETED",
-        )
-        run_result = await session.execute(run_stmt)
-        completed_runs = run_result.scalars().all()
-
-        used_prompts = set()
-        for run in completed_runs:
-            if hasattr(run, "prompt_name") and run.prompt_name:
-                used_prompts.add(run.prompt_name)
+        affected_prompts = {r.prompt_name for r in rows if r.prompt_name}
+        used_prompts: set[str] = set()
+        if affected_prompts:
+            run_stmt = select(OptimizationRun.prompt_name).where(
+                OptimizationRun.state == "COMPLETED",
+                OptimizationRun.prompt_name.in_(affected_prompts),
+            ).distinct()
+            run_result = await session.execute(run_stmt)
+            used_prompts = {r[0] for r in run_result.all()}
 
         for row in rows:
             if row.prompt_name in used_prompts:
