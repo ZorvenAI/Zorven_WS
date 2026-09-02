@@ -1026,6 +1026,12 @@ CELERY_BEAT_SCHEDULE["reconcile-analytics-rollups"] = {
     "schedule": crontab(hour=2, minute=0),
 }
 
+# M-03: daily retention enforcement — erase expired onboarding evidence
+CELERY_BEAT_SCHEDULE["enforce-onboarding-retention"] = {
+    "task": "apps.onboarding.erasure.tasks.enforce_retention_windows",
+    "schedule": crontab(hour=3, minute=0),
+}
+
 # ILA: expire stale WF2 approval requests hourly
 CELERY_BEAT_SCHEDULE["expire-ila-wf2-requests"] = {
     "task": "intelligence_loop.tasks.expire_pending_wf2_requests",
