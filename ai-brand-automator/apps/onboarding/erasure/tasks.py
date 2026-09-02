@@ -10,8 +10,7 @@ import logging
 from datetime import timedelta
 
 from celery import shared_task
-from decouple import config
-from django.db.models import Max, Q
+from django.db.models import Max
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -84,22 +83,26 @@ def enforce_retention_windows(self):
     """
     from tenants.models import Tenant
 
-    from apps.onboarding.erasure.models import ErasureLog
+    from apps.onboarding.erasure.models import (
+        RETENTION_DAYS_DEFAULT,
+        ErasureLog,
+    )
     from apps.onboarding.models import ConsentRecord
 
-    default_days = int(config("OIA_RETENTION_DAYS_DEFAULT", default=365))
     total_dispatched = 0
 
     for tenant in Tenant.objects.select_related("retention_config").all():
         retention_config = getattr(tenant, "retention_config", None)
         retention_days = (
-            retention_config.retention_days if retention_config else default_days
+            retention_config.retention_days
+            if retention_config
+            else RETENTION_DAYS_DEFAULT
         )
         cutoff = timezone.now() - timedelta(days=retention_days)
 
         expired_subjects = (
             ConsentRecord.objects.filter(
-                Q(tenant=tenant) | Q(tenant__isnull=True),
+                tenant=tenant,
                 revoked_at__isnull=True,
             )
             .values("subject_name")
@@ -108,6 +111,15 @@ def enforce_retention_windows(self):
         )
 
         for entry in expired_subjects:
+            already_pending = ErasureLog.objects.filter(
+                tenant=tenant,
+                subject_name=entry["subject_name"],
+                reason="retention_enforcement",
+                completed_at__isnull=True,
+            ).exists()
+            if already_pending:
+                continue
+
             log_entry = ErasureLog.objects.create(
                 tenant=tenant,
                 subject_name=entry["subject_name"],

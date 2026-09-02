@@ -303,13 +303,14 @@ class TestRetentionEnforcement:
             tenant=tenant, reason="retention_enforcement"
         ).count()
 
-        enforce_retention_windows()
+        result2 = enforce_retention_windows()
         count2 = ErasureLog.objects.filter(
             tenant=tenant, reason="retention_enforcement"
         ).count()
 
         assert result1["dispatched"] >= 1
-        assert count2 >= count1
+        assert result2["dispatched"] == 0
+        assert count2 == count1
 
     def test_beat_job_uses_default_without_config(self, tenant, company):
         from apps.onboarding.erasure.tasks import enforce_retention_windows

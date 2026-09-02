@@ -18,7 +18,13 @@ from rest_framework.views import APIView
 
 from tenants.permissions import IsTenantAdmin
 
-from apps.onboarding.erasure.models import ErasureLog, RetentionConfig
+from apps.onboarding.erasure.models import (
+    RETENTION_DAYS_DEFAULT,
+    RETENTION_DAYS_MAX,
+    RETENTION_DAYS_MIN,
+    ErasureLog,
+    RetentionConfig,
+)
 from apps.onboarding.erasure.tasks import execute_erasure_cascade
 
 
@@ -115,11 +121,11 @@ class ErasureLogListView(APIView):
 # M-03 · Retention configuration
 # ---------------------------------------------------------------------------
 
-DEFAULT_RETENTION_DAYS = 365
-
 
 class RetentionConfigUpdateSerializer(serializers.Serializer):
-    retention_days = serializers.IntegerField(min_value=1, max_value=3650)
+    retention_days = serializers.IntegerField(
+        min_value=RETENTION_DAYS_MIN, max_value=RETENTION_DAYS_MAX
+    )
 
 
 def _next_enforcement_run():
@@ -184,7 +190,7 @@ class RetentionConfigView(APIView):
         return Response(
             {
                 "retention_days": (
-                    config.retention_days if config else DEFAULT_RETENTION_DAYS
+                    config.retention_days if config else RETENTION_DAYS_DEFAULT
                 ),
                 "is_default": config is None,
                 "next_enforcement_run": _next_enforcement_run().isoformat(),
@@ -204,7 +210,7 @@ class RetentionConfigView(APIView):
         new_days = serializer.validated_data["retention_days"]
 
         config = RetentionConfig.objects.filter(tenant=tenant).first()
-        old_days = config.retention_days if config else DEFAULT_RETENTION_DAYS
+        old_days = config.retention_days if config else RETENTION_DAYS_DEFAULT
 
         impact = None
         if new_days < old_days:
