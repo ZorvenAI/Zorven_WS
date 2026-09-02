@@ -72,7 +72,8 @@ async def test_ready_probes_all_dependencies(app_with_live_redis):
 async def test_kafka_absence_does_not_fail_ready(app_with_live_redis):
     """No GCP script provisions a broker; absence is a valid state."""
     response = await get(app_with_live_redis, "/ready")
-    assert response.status_code in (200, 503)  # 503 only if STT isn't configured
+    # weak-assert: ok — 200 if STT unconfigured, 503 if configured
+    assert response.status_code in (200, 503)
 
     diagnostics = (await get(app_with_live_redis, "/health/diagnostics")).json()
     kafka = diagnostics["dependencies"]["kafka"]
