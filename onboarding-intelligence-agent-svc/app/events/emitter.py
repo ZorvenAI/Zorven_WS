@@ -182,6 +182,9 @@ class EventEmitter:
         except asyncio.QueueFull:
             # Losing an event is bad; losing the meeting is worse.
             self.dropped += 1
+            from app.metrics import EVENTS_DROPPED
+
+            EVENTS_DROPPED.inc()
             logger.warning(
                 "event_queue_full",
                 dropped_total=self.dropped,

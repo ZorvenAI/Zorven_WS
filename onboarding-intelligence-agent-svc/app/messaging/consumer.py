@@ -168,6 +168,10 @@ class CommandConsumer:
             idempotency_key=idempotency_key,
         )
         self.dead_lettered += 1
+
+        from app.metrics import DLQ_DEPTH
+
+        DLQ_DEPTH.set(self.dead_lettered)
         logger.error(
             "command_dead_lettered",
             error_code=error_code,

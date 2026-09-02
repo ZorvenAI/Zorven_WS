@@ -25,6 +25,7 @@ from apps.onboarding.views import (
     create_provenance_bulk,
     create_questionnaire,
     field_vocabulary,
+    finalize_stuck_session,
     get_session_provenance,
     internal_generate_brand_identity,
     internal_generate_brand_strategy,
@@ -129,6 +130,12 @@ urlpatterns = [
         "internal/companies/<int:pk>/generate-identity/",
         internal_generate_brand_identity,
         name="onboarding-internal-generate-identity",
+    ),
+    # M-04: OIA watchdog finalizes stuck MEETING_LIVE sessions.
+    path(
+        "internal/sessions/<int:pk>/finalize-stuck/",
+        finalize_stuck_session,
+        name="onboarding-session-finalize-stuck",
     ),
     path(
         "erasure/",

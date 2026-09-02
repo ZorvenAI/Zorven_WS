@@ -117,7 +117,11 @@ class RecordGoldenCandidates(BaseSkill):
 
         dlq_count = 0
         published = await self._publish(tenant_id, prompt_id, envelope)
-        if not published:
+        if published:
+            from app.metrics import GOLDEN_CANDIDATES
+
+            GOLDEN_CANDIDATES.inc()
+        else:
             dlq_count = 1
 
         await self._emit_evt110(

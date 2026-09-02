@@ -28,6 +28,8 @@ from app.providers.llm import LLMProvider
 from app.providers.ocr import OCRProvider
 from app.providers.vision import VisionProvider
 from app.circuit_breaker.breaker import BreakerRegistry
+from app.logic.watchdog import watchdog_loop
+from app.metrics import record_circuit_state
 from app.providers.stt import GoogleSTTAdapter
 from app.providers.tavily import TavilyProvider
 from app.services.backend_client import BackendClient
@@ -195,6 +197,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # F-06: shared registry so ws.py can wire the on_state_change callback.
     app.state.breakers = BreakerRegistry()
 
+    # M-04: expose breaker state as Prometheus gauge per dependency.
+    _STATE_ORDINAL = {"CLOSED": 0, "OPEN": 1, "HALF_OPEN": 2}
+    for dep_name in app.state.breakers.names():
+        breaker = app.state.breakers.get(dep_name)
+        record_circuit_state(dep_name, 0)
+        breaker.add_on_state_change(
+            lambda dep, _old, new: record_circuit_state(
+                dep, _STATE_ORDINAL.get(str(new), 0)
+            )
+        )
+
     # L-01: prompt resolution chain. Built after the breaker registry so POI
     # calls are protected by the poi breaker (§18.2, circuit_breakers.yaml).
     from app.prompts.loader import PromptLoader
@@ -264,6 +277,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # skill with emitter=None. Wire the instance directly, same as J-05 above.
     app.state.skill_registry.get("SKL-OIA-13")._emitter = app.state.events
 
+    # M-04: stuck-session watchdog background task.
+    app.state.watchdog_task = asyncio.create_task(
+        watchdog_loop(
+            app.state.redis.client,
+            app.state.backend,
+            app.state.events,
+            interval_s=settings.WATCHDOG_INTERVAL_S,
+            timeout_s=settings.WATCHDOG_TIMEOUT_S,
+        )
+    )
+
     app.state.commands = CommandConsumer(settings, app.state.kafka)
     try:
         await app.state.commands.start()
@@ -304,6 +328,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         for task in pending:
             task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
+    if hasattr(app.state, "watchdog_task"):
+        app.state.watchdog_task.cancel()
+        try:
+            await app.state.watchdog_task
+        except asyncio.CancelledError:
+            pass
     await app.state.commands.stop()
     await app.state.events.stop()
     await app.state.kafka.stop()

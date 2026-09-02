@@ -1,0 +1,68 @@
+groups:
+  - name: oia-alerts
+    rules:
+      - alert: OIA_STT_HighLatency
+        expr: histogram_quantile(0.95, rate(oia_stt_partial_latency_ms_bucket[5m])) > 2000
+        for: 5m
+        labels:
+          severity: warning
+          service: onboarding-intelligence-agent
+        annotations:
+          summary: "OIA STT partial latency p95 exceeds 2s"
+          description: "STT partial transcript latency p95 is {{ $value }}ms (threshold: 2000ms). Check GCP Speech-to-Text quotas and network latency."
+          runbook: "docs/runbook.md#stt-latency"
+
+      - alert: OIA_SufficiencyHighLatency
+        expr: histogram_quantile(0.95, rate(oia_sufficiency_latency_ms_bucket[5m])) > 5000
+        for: 5m
+        labels:
+          severity: warning
+          service: onboarding-intelligence-agent
+        annotations:
+          summary: "OIA sufficiency scoring p95 exceeds 5s"
+          description: "Sufficiency scoring latency p95 is {{ $value }}ms (threshold: 5000ms). Check Gemini API latency and LLM breaker state."
+          runbook: "docs/runbook.md#sufficiency-latency"
+
+      - alert: OIA_DLQ_NotEmpty
+        expr: oia_dlq_depth > 0
+        for: 10m
+        labels:
+          severity: warning
+          service: onboarding-intelligence-agent
+        annotations:
+          summary: "OIA DLQ has {{ $value }} dead-lettered messages"
+          description: "Messages have been dead-lettered for over 10 minutes. Inspect and replay per the runbook."
+          runbook: "docs/runbook.md#dlq-handling"
+
+      - alert: OIA_CircuitBreakerOpen
+        expr: oia_circuit_breaker_state == 1
+        for: 2m
+        labels:
+          severity: critical
+          service: onboarding-intelligence-agent
+        annotations:
+          summary: "OIA circuit breaker OPEN for {{ $labels.dependency }}"
+          description: "The {{ $labels.dependency }} circuit breaker has been OPEN for over 2 minutes. The service is degraded for this dependency."
+          runbook: "docs/runbook.md#circuit-breaker"
+
+      - alert: OIA_DroppedUngroundedSpike
+        expr: rate(oia_dropped_ungrounded_total[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: onboarding-intelligence-agent
+        annotations:
+          summary: "OIA dropping ungrounded facts at elevated rate"
+          description: "Ungrounded fact drop rate is {{ $value }}/s. This may indicate a model regression or evidence quality issue."
+          runbook: "docs/runbook.md#ungrounded-facts"
+
+      - alert: OIA_EventsDropped
+        expr: rate(oia_events_dropped_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: onboarding-intelligence-agent
+        annotations:
+          summary: "OIA event queue is overflowing"
+          description: "Events are being dropped due to queue overflow. Check Kafka connectivity and event emission rate."
+          runbook: "docs/runbook.md#event-queue-overflow"

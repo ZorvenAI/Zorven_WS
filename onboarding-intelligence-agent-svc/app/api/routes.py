@@ -103,29 +103,14 @@ async def _dependency_status(request: Request) -> dict[str, dict[str, Any]]:
 
 
 @router.get("/health")
-async def health(request: Request, response: Response) -> dict[str, Any]:
-    """Liveness probe that actually checks its dependencies.
+async def health() -> dict[str, Any]:
+    """Liveness probe (Design §20, M-04 AC-1). Static OK — no dependency checks.
 
-    Returns 200 only when every **required** dependency answers. Redis is
-    always required; Kafka is required only where a broker is configured.
-    Both underlying checks are bounded by 2 s socket timeouts, so this
-    answers within the AC-3 budget rather than hanging.
+    Readiness is the place where dependency state is reported. A liveness
+    probe that contacts external systems causes Cloud Run to restart the
+    container when a dependency is temporarily down, which worsens the
+    outage rather than recovering from it.
     """
-    deps = await _dependency_status(request)
-    failed = [
-        name
-        for name, state in deps.items()
-        if state["required"] and not state["healthy"]
-    ]
-
-    if failed:
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {
-            "status": "unhealthy",
-            "service": SERVICE_NAME,
-            "failed": failed,
-        }
-
     return {"status": "ok", "service": SERVICE_NAME}
 
 
@@ -166,23 +151,77 @@ async def diagnostics(request: Request) -> dict[str, Any]:
 
 @router.get("/ready")
 async def ready(request: Request, response: Response) -> dict[str, Any]:
-    """Readiness probe (Design §20).
+    """Readiness probe (Design §20, M-04 AC-1, NFR-OPS-01).
 
-    §20 describes /health as liveness only and /ready as the probe that
-    checks dependencies, while A-05's AC-3 required /health to check them.
-    Both readings are honoured: /health keeps the behaviour A-05 shipped and
-    is tested, and /ready is the §20-named endpoint with the same semantics,
-    so a rolling deploy can point at either name.
+    Probes Redis, Kafka (when configured), and the STT credential path.
+    A rolling deploy cannot route traffic to an instance that will fail
+    on first use.
     """
+    import os
+
     deps = await _dependency_status(request)
+    settings = request.app.state.settings
+
+    stt = getattr(request.app.state, "stt", None)
+    stt_configured = stt is not None and getattr(stt, "configured", False)
+    stt_creds_ok = True
+    if settings.STT_CREDENTIALS:
+        stt_creds_ok = os.access(settings.STT_CREDENTIALS, os.R_OK)
+
+    breakers = getattr(request.app.state, "breakers", None)
+    stt_breaker = breakers.get("stt") if breakers is not None else None
+    stt_breaker_state = (
+        stt_breaker.state.value if stt_breaker is not None else "unknown"
+    )
+
+    deps["stt"] = {
+        "required": True,
+        "healthy": stt_configured and stt_creds_ok,
+        "configured": stt_configured,
+        "credentials_readable": stt_creds_ok,
+        "breaker_state": stt_breaker_state,
+        "detail": (
+            "configured and credentials readable"
+            if stt_configured and stt_creds_ok
+            else (
+                "credentials file not readable"
+                if stt_configured
+                else "not configured — set OIA_STT_PROJECT"
+            )
+        ),
+    }
+
     failed = [
         name
         for name, state in deps.items()
         if state["required"] and not state["healthy"]
     ]
+
+    degraded = [
+        name
+        for name, state in deps.items()
+        if not state["required"]
+        and state.get("breaker_state") == "OPEN"
+        or (name == "stt" and stt_breaker_state == "OPEN" and name not in failed)
+    ]
+
     if failed:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {"status": "not_ready", "service": SERVICE_NAME, "failed": failed}
+        return {
+            "status": "not_ready",
+            "service": SERVICE_NAME,
+            "failed": failed,
+            "dependencies": deps,
+        }
+
+    if degraded:
+        return {
+            "status": "degraded",
+            "service": SERVICE_NAME,
+            "degraded": degraded,
+            "dependencies": deps,
+        }
+
     return {"status": "ready", "service": SERVICE_NAME}
 
 
