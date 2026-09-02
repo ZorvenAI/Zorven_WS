@@ -1188,3 +1188,6 @@ class CalendarSyncConflict(models.Model):
 
     def __str__(self) -> str:
         return f"{self.winner} won for meeting {self.meeting_id}"
+
+
+from apps.onboarding.erasure.models import ErasureLog  # noqa: E402, F401

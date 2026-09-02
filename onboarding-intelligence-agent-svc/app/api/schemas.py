@@ -406,3 +406,19 @@ class CacheBustResponse(BaseModel):
     cleared: int
     prompt_ids: list[str]
     tenant_id: str | None
+
+
+class ErasureRequest(BaseModel):
+    """M-02 · GDPR erasure request from Django."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str
+    session_ids: list[str]
+
+
+class ErasureResponse(BaseModel):
+    """M-02 · GDPR erasure result."""
+
+    deleted_keys: list[str]
+    total: int

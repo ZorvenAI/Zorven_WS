@@ -44,6 +44,7 @@ from tenants.models import Tenant
 
 from apps.onboarding import errors
 from apps.onboarding.commands import publish_consent_revoked
+from apps.onboarding.erasure.tasks import execute_erasure_cascade
 from apps.onboarding.field_map import all_mapped_fields, label_for, page_for
 from apps.onboarding.live_tickets import USABLE_SECONDS, mint, resolve
 from apps.onboarding.uploads import (
@@ -430,6 +431,26 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 session_id=session.pk,
                 tenant_id=session.tenant_id,
                 consent_id=record.pk,
+            )
+        )
+
+        from apps.onboarding.erasure.models import ErasureLog
+
+        erasure_log = ErasureLog.objects.create(
+            tenant=session.tenant,
+            subject_name=record.subject_name,
+            reason="consent_revocation",
+        )
+        _tenant_id = str(session.tenant_id)
+        _subject = record.subject_name
+        _log_id = erasure_log.pk
+        db_transaction.on_commit(
+            lambda: execute_erasure_cascade.delay(
+                tenant_id=_tenant_id,
+                subject_name=_subject,
+                requested_by_user_id="system",
+                reason="consent_revocation",
+                erasure_log_id=_log_id,
             )
         )
         return Response(ConsentRecordSerializer(record).data, status=http.HTTP_200_OK)
