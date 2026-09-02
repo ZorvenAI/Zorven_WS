@@ -1,14 +1,19 @@
-"""M-02 · ErasureLog model — GDPR erasure audit trail.
+"""GDPR erasure models — audit trail and retention configuration.
 
-Every cascade execution records its completion report here so that the
-tenant admin and any future compliance audit can show what was erased,
-when, and whether it succeeded.
+ErasureLog (M-02): records each cascade execution.
+RetentionConfig (M-03): per-tenant retention window, enforced by a daily
+Celery Beat job that feeds M-02's cascade.
 """
 
 from __future__ import annotations
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+
+RETENTION_DAYS_MIN = 1
+RETENTION_DAYS_MAX = 3650
+RETENTION_DAYS_DEFAULT = 365
 
 
 class ErasureLog(models.Model):
@@ -39,3 +44,37 @@ class ErasureLog(models.Model):
 
     def __str__(self):
         return f"Erasure({self.subject_name}, tenant={self.tenant_id})"
+
+
+class RetentionConfig(models.Model):
+    tenant = models.OneToOneField(
+        "tenants.Tenant",
+        on_delete=models.CASCADE,
+        related_name="retention_config",
+    )
+    retention_days = models.PositiveIntegerField(
+        default=RETENTION_DAYS_DEFAULT,
+        validators=[
+            MinValueValidator(RETENTION_DAYS_MIN),
+            MaxValueValidator(RETENTION_DAYS_MAX),
+        ],
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(
+                    retention_days__gte=RETENTION_DAYS_MIN,
+                    retention_days__lte=RETENTION_DAYS_MAX,
+                ),
+                name="retention_days_range",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"RetentionConfig(tenant={self.tenant_id}, " f"days={self.retention_days})"
+        )

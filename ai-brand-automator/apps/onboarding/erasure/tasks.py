@@ -1,10 +1,16 @@
-"""M-02 · Celery task for async GDPR erasure execution."""
+"""Celery tasks for GDPR erasure and retention enforcement.
+
+execute_erasure_cascade (M-02): runs the registry-driven cascade for one subject.
+enforce_retention_windows (M-03): daily sweep that erases expired subjects.
+"""
 
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from celery import shared_task
+from django.db.models import Max
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -65,3 +71,71 @@ def execute_erasure_cascade(
         log_entry.save(update_fields=["completion_report", "completed_at"])
 
     return report.to_dict()
+
+
+@shared_task(bind=True, max_retries=0)
+def enforce_retention_windows(self):
+    """Daily retention enforcement (M-03, §20, FR-GDPR-02).
+
+    For each tenant, find subjects whose most recent session is older
+    than the tenant's retention window and dispatch an erasure cascade
+    for each.
+    """
+    from tenants.models import Tenant
+
+    from apps.onboarding.erasure.models import (
+        RETENTION_DAYS_DEFAULT,
+        ErasureLog,
+    )
+    from apps.onboarding.models import ConsentRecord
+
+    total_dispatched = 0
+
+    for tenant in Tenant.objects.select_related("retention_config").all():
+        retention_config = getattr(tenant, "retention_config", None)
+        retention_days = (
+            retention_config.retention_days
+            if retention_config
+            else RETENTION_DAYS_DEFAULT
+        )
+        cutoff = timezone.now() - timedelta(days=retention_days)
+
+        expired_subjects = (
+            ConsentRecord.objects.filter(
+                tenant=tenant,
+                revoked_at__isnull=True,
+            )
+            .values("subject_name")
+            .annotate(latest=Max("session__created_at"))
+            .filter(latest__lt=cutoff)
+        )
+
+        for entry in expired_subjects:
+            already_pending = ErasureLog.objects.filter(
+                tenant=tenant,
+                subject_name=entry["subject_name"],
+                reason="retention_enforcement",
+                completed_at__isnull=True,
+            ).exists()
+            if already_pending:
+                continue
+
+            log_entry = ErasureLog.objects.create(
+                tenant=tenant,
+                subject_name=entry["subject_name"],
+                reason="retention_enforcement",
+            )
+            execute_erasure_cascade.delay(
+                tenant_id=str(tenant.pk),
+                subject_name=entry["subject_name"],
+                requested_by_user_id="system",
+                reason="retention_enforcement",
+                erasure_log_id=log_entry.pk,
+            )
+            total_dispatched += 1
+
+    logger.info(
+        "retention_enforcement_complete",
+        extra={"dispatched": total_dispatched},
+    )
+    return {"dispatched": total_dispatched}
