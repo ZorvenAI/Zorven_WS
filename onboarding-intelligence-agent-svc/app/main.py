@@ -158,17 +158,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception as exc:  # noqa: BLE001 — reported via /health
             logger.warning("kafka_topic_provisioning_failed", error=str(exc))
 
+    # F-06 / M-04: shared breaker registry — constructed FIRST so every
+    # client and provider receives the same breaker instances, and M-04
+    # callbacks observe the real state across all callers.
+    app.state.breakers = BreakerRegistry()
+
     # C-02. Built once: loading the registry parses YAML and imports sixteen
     # modules, which is startup work rather than per-request work. The
     # providers are constructed here so a missing key is visible at boot in
     # the logs rather than on the first operator's turn.
-    # One BackendClient, shared. Each one builds its own BreakerRegistry, so
-    # two would give the PREP path and the IG-10 gate independent breakers for
-    # the same dependency: Django could be failing for one and "healthy" for
-    # the other, and the gate would keep paying a full timeout per socket
-    # while PREP had already given up. The comment here used to claim they
-    # shared one while the code created two.
-    app.state.backend = BackendClient(settings.BACKEND_BASE_URL, settings.SERVICE_TOKEN)
+    app.state.backend = BackendClient(
+        settings.BACKEND_BASE_URL,
+        settings.SERVICE_TOKEN,
+        breaker=app.state.breakers.get("backend"),
+    )
 
     # J-01: PROCESS mode executor. Shares the BackendClient and Redis.
     from app.logic.process_executor import ProcessExecutor
@@ -177,15 +180,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.redis,
         backend=app.state.backend,
         settings=settings,
-        llm=LLMProvider(settings.GEMINI_KEY),
+        llm=LLMProvider(settings.GEMINI_KEY, breaker=app.state.breakers.get("llm")),
         kafka=app.state.kafka,
         events=None,  # wired below after EventEmitter is created
     )
 
     app.state.prep = PrepExecutor(
         app.state.redis,
-        tavily=TavilyProvider(settings.TAVILY_API_KEY),
-        llm=LLMProvider(settings.GEMINI_KEY),
+        tavily=TavilyProvider(
+            settings.TAVILY_API_KEY, breaker=app.state.breakers.get("tavily")
+        ),
+        llm=LLMProvider(settings.GEMINI_KEY, breaker=app.state.breakers.get("llm")),
         backend=app.state.backend,
     )
     if not settings.TAVILY_API_KEY:
@@ -193,9 +198,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "tavily_not_configured",
             detail="research will degrade to operator-provided information only",
         )
-
-    # F-06: shared registry so ws.py can wire the on_state_change callback.
-    app.state.breakers = BreakerRegistry()
 
     # M-04: expose breaker state as Prometheus gauge per dependency.
     _STATE_ORDINAL = {"CLOSED": 0, "OPEN": 1, "HALF_OPEN": 2}
@@ -254,7 +256,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "ocr": ocr_provider,
             "vision": vision_provider,
             "backend": app.state.backend,
-            "llm": LLMProvider(settings.GEMINI_KEY),
+            "llm": LLMProvider(
+                settings.GEMINI_KEY, breaker=app.state.breakers.get("llm")
+            ),
             "redis": app.state.redis,
             "prompt_loader": app.state.prompt_loader,
             "producer": app.state.kafka,
@@ -285,6 +289,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             app.state.events,
             interval_s=settings.WATCHDOG_INTERVAL_S,
             timeout_s=settings.WATCHDOG_TIMEOUT_S,
+            breakers=app.state.breakers,
         )
     )
 

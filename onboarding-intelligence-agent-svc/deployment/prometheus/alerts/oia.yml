@@ -23,15 +23,15 @@ groups:
           description: "Sufficiency scoring latency p95 is {{ $value }}ms (threshold: 5000ms). Check Gemini API latency and LLM breaker state."
           runbook: "docs/runbook.md#sufficiency-latency"
 
-      - alert: OIA_DLQ_NotEmpty
-        expr: oia_dlq_depth > 0
+      - alert: OIA_DLQ_Active
+        expr: rate(oia_dlq_messages_total[5m]) > 0
         for: 10m
         labels:
           severity: warning
           service: onboarding-intelligence-agent
         annotations:
-          summary: "OIA DLQ has {{ $value }} dead-lettered messages"
-          description: "Messages have been dead-lettered for over 10 minutes. Inspect and replay per the runbook."
+          summary: "OIA is actively dead-lettering messages"
+          description: "Messages have been dead-lettered continuously for 10 minutes. Inspect and replay per the runbook."
           runbook: "docs/runbook.md#dlq-handling"
 
       - alert: OIA_CircuitBreakerOpen

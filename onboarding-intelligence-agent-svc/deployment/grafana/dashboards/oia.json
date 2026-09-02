@@ -164,14 +164,14 @@
       }
     },
     {
-      "title": "DLQ Depth",
-      "description": "Dead-lettered messages since startup (Panel 6, §20). Alert when depth > 0 for 10m.",
+      "title": "DLQ Rate",
+      "description": "Dead-letter rate (Panel 6, §20). Alert when rate > 0 for 10m.",
       "type": "stat",
       "gridPos": { "h": 8, "w": 6, "x": 12, "y": 16 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
         {
-          "expr": "oia_dlq_depth",
+          "expr": "rate(oia_dlq_messages_total[5m])",
           "legendFormat": "{{instance}}",
           "refId": "A",
           "instant": true

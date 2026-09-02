@@ -222,7 +222,7 @@ async def ready(request: Request, response: Response) -> dict[str, Any]:
             "dependencies": deps,
         }
 
-    return {"status": "ready", "service": SERVICE_NAME}
+    return {"status": "ready", "service": SERVICE_NAME, "dependencies": deps}
 
 
 @router.get("/metrics")

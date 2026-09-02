@@ -169,9 +169,9 @@ class CommandConsumer:
         )
         self.dead_lettered += 1
 
-        from app.metrics import DLQ_DEPTH
+        from app.metrics import DLQ_MESSAGES
 
-        DLQ_DEPTH.set(self.dead_lettered)
+        DLQ_MESSAGES.inc()
         logger.error(
             "command_dead_lettered",
             error_code=error_code,

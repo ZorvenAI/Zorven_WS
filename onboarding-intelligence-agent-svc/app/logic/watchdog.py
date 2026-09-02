@@ -75,8 +75,18 @@ async def _scan_and_close(
             if age < timeout_s:
                 continue
 
-            await _close_stuck(redis, backend, events, key, tenant_id, session_id, age)
-            closed += 1
+            claim_key = f"{KEY_PREFIX}{tenant_id}:watchdog:{session_id}"
+            claimed = await redis.set(claim_key, "1", nx=True, ex=120)
+            if not claimed:
+                continue
+
+            ok = await _close_stuck(
+                redis, backend, events, key, tenant_id, session_id, age
+            )
+            if ok:
+                closed += 1
+            else:
+                await redis.delete(claim_key)
 
         if cursor == 0:
             break
@@ -91,7 +101,8 @@ async def _close_stuck(
     tenant_id: str,
     session_id: str,
     age_s: float,
-) -> None:
+) -> bool:
+    """Returns True when finalization succeeded."""
     logger.warning(
         "watchdog_stuck_session",
         session_id=session_id,
@@ -99,7 +110,16 @@ async def _close_stuck(
         heartbeat_age_s=round(age_s, 1),
     )
 
-    await backend.finalize_stuck_session(tenant_id=tenant_id, session_id=session_id)
+    result = await backend.finalize_stuck_session(
+        tenant_id=tenant_id, session_id=session_id
+    )
+    if result is None:
+        logger.warning(
+            "watchdog_finalize_failed",
+            session_id=session_id,
+            tenant_id=tenant_id,
+        )
+        return False
 
     await redis.hdel(key, "last_heartbeat")
 
@@ -118,6 +138,24 @@ async def _close_stuck(
     except Exception:
         logger.warning("watchdog_event_emit_failed", session_id=session_id)
 
+    return True
+
+
+_STATE_ORDINAL = {"CLOSED": 0, "OPEN": 1, "HALF_OPEN": 2}
+
+
+def _sync_breaker_gauges(breakers: Any) -> None:
+    """Poll actual breaker state and update Prometheus gauges.
+
+    The on_state_change callback misses the lazy OPEN->HALF_OPEN
+    transition, so we reconcile on every watchdog sweep.
+    """
+    from app.metrics import record_circuit_state
+
+    for dep_name in breakers.names():
+        breaker = breakers.get(dep_name)
+        record_circuit_state(dep_name, _STATE_ORDINAL.get(str(breaker.state), 0))
+
 
 async def watchdog_loop(
     redis: Any,
@@ -125,6 +163,7 @@ async def watchdog_loop(
     events: "EventEmitter",
     interval_s: float = 60,
     timeout_s: float = 300,
+    breakers: Any = None,
 ) -> None:
     """Run forever, scanning for stuck sessions every ``interval_s``."""
     logger.info(
@@ -137,6 +176,8 @@ async def watchdog_loop(
             closed = await _scan_and_close(redis, backend, events, timeout_s)
             if closed:
                 logger.info("watchdog_sweep_done", closed=closed)
+            if breakers is not None:
+                _sync_breaker_gauges(breakers)
         except asyncio.CancelledError:
             raise
         except Exception:

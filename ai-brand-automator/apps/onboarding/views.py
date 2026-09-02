@@ -3040,29 +3040,35 @@ def finalize_stuck_session(request, pk):
             status=http.HTTP_403_FORBIDDEN,
         )
 
-    try:
-        session = OnboardingSession.objects.get(pk=pk)
-    except OnboardingSession.DoesNotExist:
-        return Response(
-            {"error": "Session not found"},
-            status=http.HTTP_404_NOT_FOUND,
-        )
+    tenant_id = request.META.get("HTTP_X_TENANT_ID", "")
+    qs = OnboardingSession.objects.all()
+    if tenant_id:
+        qs = qs.filter(company__tenant_id=tenant_id)
 
-    if session.status != SessionStatus.MEETING_LIVE:
-        return Response(
-            {
-                "error": (
-                    f"Session is {session.status}, not MEETING_LIVE. "
-                    "Only MEETING_LIVE sessions can be finalized as stuck."
-                ),
-                "current_status": session.status,
-            },
-            status=http.HTTP_409_CONFLICT,
-        )
+    with db_transaction.atomic():
+        try:
+            session = qs.select_for_update(of=("self",)).get(pk=pk)
+        except OnboardingSession.DoesNotExist:
+            return Response(
+                {"error": "Session not found"},
+                status=http.HTTP_404_NOT_FOUND,
+            )
 
-    from apps.onboarding.services.session_state import transition
+        if session.status != SessionStatus.MEETING_LIVE:
+            return Response(
+                {
+                    "error": (
+                        f"Session is {session.status}, not MEETING_LIVE. "
+                        "Only MEETING_LIVE sessions can be finalized as stuck."
+                    ),
+                    "current_status": session.status,
+                },
+                status=http.HTTP_409_CONFLICT,
+            )
 
-    transition(session, SessionStatus.GATHERED)
+        from apps.onboarding.services.session_state import transition
+
+        transition(session, SessionStatus.GATHERED)
 
     reason = request.data.get("reason", "watchdog_stuck_session")
     logger.info(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.metrics import (
     CIRCUIT_BREAKER_STATE,
-    DLQ_DEPTH,
+    DLQ_MESSAGES,
     DROPPED_UNGROUNDED,
     EVENTS_DROPPED,
     GOLDEN_CANDIDATES,
@@ -27,7 +27,7 @@ def test_all_metrics_have_oia_prefix():
         SUFFICIENCY_LATENCY,
         GUARDRAIL_TRIGGERS,
         CIRCUIT_BREAKER_STATE,
-        DLQ_DEPTH,
+        DLQ_MESSAGES,
         GOLDEN_CANDIDATES,
         DROPPED_UNGROUNDED,
         EVENTS_DROPPED,
@@ -61,10 +61,10 @@ def test_circuit_state_sets_gauge():
     assert val == 0.0
 
 
-def test_dlq_depth_sets_absolute():
-    DLQ_DEPTH.set(5)
-    assert DLQ_DEPTH._value.get() == 5.0
-    DLQ_DEPTH.set(0)
+def test_dlq_messages_increments():
+    before = DLQ_MESSAGES._value.get()
+    DLQ_MESSAGES.inc()
+    assert DLQ_MESSAGES._value.get() == before + 1
 
 
 def test_stt_partial_latency_records():

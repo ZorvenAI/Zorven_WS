@@ -77,6 +77,7 @@ async def test_stuck_session_watchdog_finalises(
     assert hb is None
 
     await redis_client.delete(key)
+    await redis_client.delete("oia:v1:tenant-1:watchdog:sess-stuck")
 
 
 async def test_watchdog_ignores_fresh_sessions(redis_client, mock_backend, mock_events):
@@ -106,6 +107,26 @@ async def test_watchdog_ignores_sessions_without_heartbeat(
     mock_backend.finalize_stuck_session.assert_not_called()
 
     await redis_client.delete(key)
+
+
+async def test_watchdog_retains_heartbeat_on_finalize_failure(
+    redis_client, mock_backend, mock_events
+):
+    """When Django returns None (failure), the heartbeat stays so next sweep retries."""
+    mock_backend.finalize_stuck_session = AsyncMock(return_value=None)
+    stale_hb = time.time() - TIMEOUT_S - 60
+    key = await _write_session_with_heartbeat(
+        redis_client, "tenant-5", "sess-fail", stale_hb
+    )
+
+    closed = await _scan_and_close(redis_client, mock_backend, mock_events, TIMEOUT_S)
+
+    assert closed == 0
+    hb = await redis_client.hget(key, "last_heartbeat")
+    assert hb is not None
+
+    await redis_client.delete(key)
+    await redis_client.delete("oia:v1:tenant-5:watchdog:sess-fail")
 
 
 async def test_watchdog_skips_summary_keys(redis_client, mock_backend, mock_events):

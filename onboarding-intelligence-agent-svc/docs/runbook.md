@@ -8,9 +8,9 @@ Service: `onboarding-intelligence-agent-svc` (port 8120)
 
 **Alert**: `OIA_DLQ_NotEmpty`
 
-1. Check DLQ depth:
+1. Check DLQ message rate:
    ```bash
-   curl -s http://localhost:8120/health/diagnostics | jq .dlq_depth
+   curl -s http://localhost:8120/metrics | grep oia_dlq_messages_total
    ```
 
 2. List DLQ messages (requires Kafka access):
@@ -198,3 +198,73 @@ The event emitter uses a bounded queue (1000 items). When full, events are dropp
    ```
 
 3. Events are also logged and recorded as span events, so the audit trail survives in logs even when Kafka drops.
+
+---
+
+## STT Latency
+
+**Alert**: `OIA_STT_HighLatency`
+
+The `oia_stt_partial_latency_ms` histogram measures the time to emit a partial transcript to the WebSocket client. A p95 above 2s degrades the live meeting experience.
+
+1. Check current latency:
+   ```bash
+   curl -s http://localhost:8120/metrics | grep oia_stt_partial_latency_ms
+   ```
+
+2. Common causes:
+   - GCP Speech-to-Text API throttling — check quotas in Cloud Console
+   - Network latency between Cloud Run and GCP STT endpoint
+   - Redis contention when writing partial results to session state
+
+3. Check the STT breaker state:
+   ```bash
+   curl -s http://localhost:8120/ready | jq .dependencies.stt
+   ```
+
+4. If STT is in OPEN state, the service automatically degrades to record-only mode. Breakers auto-recover via half-open trials.
+
+---
+
+## Sufficiency Latency
+
+**Alert**: `OIA_SufficiencyHighLatency`
+
+The `oia_sufficiency_latency_ms` histogram measures sufficiency scoring time. A p95 above 5s slows live meeting feedback loops.
+
+1. Check current latency:
+   ```bash
+   curl -s http://localhost:8120/metrics | grep oia_sufficiency_latency_ms
+   ```
+
+2. Common causes:
+   - Gemini API latency spike — check LLM breaker state
+   - Large transcript context exceeding token limits
+
+3. Check LLM breaker:
+   ```bash
+   curl -s http://localhost:8120/ready | jq .dependencies
+   curl -s http://localhost:8120/metrics | grep oia_circuit_breaker_state
+   ```
+
+4. If latency is sustained, consider reducing `OIA_SCOPE_THRESHOLD` to decrease evaluation frequency.
+
+---
+
+## Ungrounded Facts
+
+**Alert**: `OIA_DroppedUngroundedSpike`
+
+The `oia_dropped_ungrounded_total` counter tracks facts dropped during PROCESS extraction because they lacked source evidence.
+
+1. Check current rate:
+   ```bash
+   curl -s http://localhost:8120/metrics | grep oia_dropped_ungrounded_total
+   ```
+
+2. A sustained rate above 0.5/s for 5 minutes indicates:
+   - Model regression — the LLM is generating claims without grounding them in evidence
+   - Evidence quality issue — uploaded documents have low OCR confidence
+   - Prompt drift — check prompt versions via POI
+
+3. Review recent PROCESS job results to identify affected sessions and inspect the evidence bundles.

@@ -19,7 +19,7 @@ WS_SESSIONS_ACTIVE = Gauge(
 
 STT_PARTIAL_LATENCY = Histogram(
     "oia_stt_partial_latency_ms",
-    "STT partial transcript latency in milliseconds",
+    "Time to emit an STT partial transcript to the WebSocket client (ms)",
     buckets=[50, 100, 250, 500, 1000, 1500, 2000, 3000, 5000],
 )
 
@@ -49,9 +49,9 @@ CIRCUIT_BREAKER_STATE = Gauge(
 
 # ── Panel 6: DLQ depth ──
 
-DLQ_DEPTH = Gauge(
-    "oia_dlq_depth",
-    "Number of messages dead-lettered since startup",
+DLQ_MESSAGES = Counter(
+    "oia_dlq_messages_total",
+    "Messages dead-lettered since startup",
 )
 
 # ── Panel 7: Golden candidate volume ──
@@ -79,7 +79,7 @@ EVENTS_DROPPED = Counter(
 
 ALERT_STT_PARTIAL_P95_MS = 2000.0
 ALERT_SUFFICIENCY_P95_MS = 5000.0
-ALERT_DLQ_DEPTH = 10
+ALERT_DLQ_RATE = 0.1
 
 
 # ── Convenience record functions ──
