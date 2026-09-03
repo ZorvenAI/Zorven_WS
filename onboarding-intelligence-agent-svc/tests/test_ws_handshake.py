@@ -97,7 +97,9 @@ def django_stub():
     try:
         yield state
     finally:
-        server.shutdown()
+        t = threading.Thread(target=server.shutdown, daemon=True)
+        t.start()
+        t.join(timeout=5)
         server.server_close()
 
 
