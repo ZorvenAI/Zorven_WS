@@ -29,6 +29,7 @@ from app.skills.generate_questionnaire import (
 )
 from app.skills.models import SkillContext, SkillMeta, TenantContext
 from app.skills.questionnaire_models import WORKFLOWS, GeneratedQuestionnaire
+from tests.fakes import StubModels
 
 RUBRIC = json.loads(
     (Path(__file__).parent / "fixtures" / "depth_rubric.json").read_text()
@@ -54,29 +55,6 @@ def depth_profile(questions: list[str]) -> dict[str, float]:
     deep = sum(1 for q in questions if _matches(q, RUBRIC["deep_markers"]))
     shallow = sum(1 for q in questions if _matches(q, RUBRIC["shallow_markers"]))
     return {"deep": deep / len(questions), "shallow": shallow / len(questions)}
-
-
-class StubModels:
-    """Stands in for ``genai.Client(...).aio.models`` (see C-02's note)."""
-
-    def __init__(self, payload) -> None:
-        self._payload = payload
-        self.prompts: list[str] = []
-
-    async def generate_content(self, *, model, contents, config=None):
-        self.prompts.append(contents)
-        text = (
-            self._payload
-            if isinstance(self._payload, str)
-            else json.dumps(self._payload)
-        )
-
-        class Response:
-            pass
-
-        response = Response()
-        response.text = text
-        return response
 
 
 def llm(payload) -> LLMProvider:

@@ -16,6 +16,7 @@ the absence of any LLM import or dependency.
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 
 import pytest
@@ -113,6 +114,20 @@ async def test_finals_have_timestamps():
         assert final.t_start >= 0.0
         assert final.t_end > final.t_start
         assert final.stability == 1.0
+
+
+async def test_fake_replays_realistic_timing():
+    """AC-2: shared fakes have realistic timing, not zero-millisecond returns."""
+    events = [
+        {"text": "a", "is_final": False, "t_start": 0, "t_end": 0.5, "delay_ms": 100},
+        {"text": "b", "is_final": True, "t_start": 0, "t_end": 1.0, "delay_ms": 100},
+        {"text": "c", "is_final": True, "t_start": 1.0, "t_end": 2.0, "delay_ms": 100},
+    ]
+    adapter = FakeSTTAdapter(events=events)
+    t0 = time.perf_counter()
+    _ = [r async for r in adapter.stream(_silent_audio())]
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    assert elapsed_ms >= 240, f"expected >= 240ms, got {elapsed_ms:.0f}ms"
 
 
 async def test_finals_non_decreasing_t_start_from_fixture():

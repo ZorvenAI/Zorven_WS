@@ -21,3 +21,13 @@ ignore_missing_imports = true
 # that is intentional scaffolding, not a type error.
 disable_error_code = ["empty-body"]
 
+[tool.coverage.run]
+source = ["app"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+

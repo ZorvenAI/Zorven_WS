@@ -19,7 +19,7 @@ import pytest
 
 from app.logic.process_executor import ProcessExecutor
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.e2e, pytest.mark.asyncio]
 
 E2E_ENABLED = os.environ.get("OIA_TEST_E2E", "")
 
@@ -93,6 +93,7 @@ async def test_strategy_and_identity_generated():
     assert backend.calls == ["brand_strategy", "brand_identity"]
 
 
+@pytest.mark.unit
 async def test_strategy_and_identity_generated_unit():
     """Same test, always runs (no OIA_TEST_E2E gate)."""
     backend = StubBackend()
