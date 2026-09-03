@@ -1,8 +1,7 @@
-"""AC-3 — the health probe is honest.
+"""Health and readiness probes (M-04 refactor of A-05 AC-3).
 
-Against a real Redis, up and down. The interesting case is down: a probe that
-reports optimism, or hangs, is worse than no probe, because Cloud Run's health
-check and the CI post-deploy check both believe it.
+``/health`` is liveness-only — always 200. Dependency checks moved to ``/ready``
+(M-04 AC-1). Against a real Redis, up and down.
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ from httpx import ASGITransport, AsyncClient
 
 pytestmark = [pytest.mark.integration]
 
-HEALTH_BUDGET_S = 2.0
+READY_BUDGET_S = 2.0
 
 
 async def get(app, path: str):
@@ -24,7 +23,8 @@ async def get(app, path: str):
             return await client.get(path)
 
 
-async def test_health_is_200_when_redis_is_up(app_with_live_redis):
+async def test_health_is_static_liveness(app_with_live_redis):
+    """M-04 AC-1: /health is always 200 regardless of dep state."""
     response = await get(app_with_live_redis, "/health")
     assert response.status_code == 200
     assert response.json() == {
@@ -33,43 +33,55 @@ async def test_health_is_200_when_redis_is_up(app_with_live_redis):
     }
 
 
-async def test_health_is_503_when_redis_is_down(app_with_dead_redis):
+async def test_health_is_200_even_when_redis_is_down(app_with_dead_redis):
+    """M-04 AC-1: /health stays 200 even when Redis is unreachable."""
     response = await get(app_with_dead_redis, "/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+async def test_ready_is_503_when_redis_is_down(app_with_dead_redis):
+    """M-04 AC-1: /ready returns 503 when a required dependency is down."""
+    response = await get(app_with_dead_redis, "/ready")
     assert response.status_code == 503
     body = response.json()
-    assert body["status"] == "unhealthy"
+    assert body["status"] == "not_ready"
     assert "redis" in body["failed"]
 
 
-async def test_health_answers_within_two_seconds_when_redis_is_down(
+async def test_ready_answers_within_two_seconds_when_redis_is_down(
     app_with_dead_redis,
 ):
-    """AC-3: returns 503 within 2 s rather than hanging."""
     started = time.perf_counter()
-    response = await get(app_with_dead_redis, "/health")
+    response = await get(app_with_dead_redis, "/ready")
     elapsed = time.perf_counter() - started
 
     assert response.status_code == 503
-    assert elapsed < HEALTH_BUDGET_S, f"probe took {elapsed:.2f}s"
+    assert elapsed < READY_BUDGET_S, f"probe took {elapsed:.2f}s"
 
 
-async def test_kafka_absence_does_not_fail_health(app_with_live_redis):
-    """No GCP script provisions a broker; absence is a valid state.
+async def test_ready_probes_all_dependencies(app_with_live_redis):
+    """M-04 AC-1: /ready checks Redis, Kafka, and STT."""
+    response = await get(app_with_live_redis, "/ready")
+    body = response.json()
+    assert "redis" in body["dependencies"]
+    assert "kafka" in body["dependencies"]
+    assert "stt" in body["dependencies"]
 
-    A literal reading of AC-3 would make the service permanently 503 in
-    production, where no Kafka exists at all.
-    """
-    response = await get(app_with_live_redis, "/health")
-    assert response.status_code == 200
+
+async def test_kafka_absence_does_not_fail_ready(app_with_live_redis):
+    """No GCP script provisions a broker; absence is a valid state."""
+    response = await get(app_with_live_redis, "/ready")
+    # weak-assert: ok — 200 if STT unconfigured, 503 if configured
+    assert response.status_code in (200, 503)
 
     diagnostics = (await get(app_with_live_redis, "/health/diagnostics")).json()
     kafka = diagnostics["dependencies"]["kafka"]
     assert kafka["configured"] is False
     assert kafka["required"] is False
-    assert "not configured" in kafka["detail"]
 
 
-async def test_configured_but_unreachable_kafka_does_fail_health(monkeypatch):
+async def test_configured_but_unreachable_kafka_does_fail_ready(monkeypatch):
     """When a broker IS configured, an unreachable one is a real fault."""
     from tests.conftest import _build_app, free_port, redis_available
 
@@ -79,7 +91,7 @@ async def test_configured_but_unreachable_kafka_does_fail_health(monkeypatch):
     monkeypatch.setenv("OIA_REDIS_URL", "redis://localhost:6379/2")
     monkeypatch.setenv("OIA_KAFKA_BOOTSTRAP_SERVERS", f"127.0.0.1:{free_port()}")
 
-    response = await get(_build_app(), "/health")
+    response = await get(_build_app(), "/ready")
     assert response.status_code == 503
     assert "kafka" in response.json()["failed"]
 

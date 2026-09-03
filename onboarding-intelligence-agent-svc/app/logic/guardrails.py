@@ -215,6 +215,8 @@ class GuardrailChain:
         self, verdict: Verdict, layer: Layer, context: SkillContext, elapsed_ms: float
     ) -> None:
         """Log and collect for EVT-004 emission by the async caller."""
+        from app.metrics import record_guardrail_trigger
+
         logger.info(
             "guardrail_triggered",
             rule_id=verdict.rule_id,
@@ -224,6 +226,7 @@ class GuardrailChain:
             elapsed_ms=round(elapsed_ms, 3),
             tenant_id=context.tenant_context.tenant_id,
         )
+        record_guardrail_trigger(verdict.rule_id)
         self._triggered.append(
             {
                 "rule_id": verdict.rule_id,

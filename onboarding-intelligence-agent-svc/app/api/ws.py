@@ -228,7 +228,13 @@ async def _stt_loop(
                     analysis_state=analysis_state,
                 )
             else:
+                import time as _time
+
+                _partial_t0 = _time.perf_counter()
                 await _emit_partial(websocket, session, result)
+                from app.metrics import record_stt_partial_latency
+
+                record_stt_partial_latency((_time.perf_counter() - _partial_t0) * 1000)
     except STTUnavailable as exc:
         logger.warning("stt_unavailable", reason=exc.reason, mode=exc.degraded_mode)
         await session.set_mode(LiveSessionManager.MODE_RECORD_ONLY)
@@ -663,6 +669,9 @@ async def _run_analysis(
 
     # G-03: score sufficiency for each question that received new evidence.
     if updated_questions:
+        import time as _time
+
+        _suf_t0 = _time.perf_counter()
         await _evaluate_sufficiency(
             websocket,
             session,
@@ -671,6 +680,9 @@ async def _run_analysis(
             updated_questions,
             context.tenant_context,
         )
+        from app.metrics import record_sufficiency_latency
+
+        record_sufficiency_latency((_time.perf_counter() - _suf_t0) * 1000)
 
     # G-06: recompute coverage after any evidence change.
     if updated_questions:
@@ -1389,6 +1401,10 @@ async def _hold(
         else None
     )
 
+    from app.metrics import WS_SESSIONS_ACTIVE
+
+    WS_SESSIONS_ACTIVE.inc()
+
     allowlist = [t for t in [verdict.company_name] if t]
     if session is not None and allowlist:
         try:
@@ -1509,6 +1525,12 @@ async def _hold(
 
     try:
         while True:
+            if session is not None:
+                try:
+                    await session.write_heartbeat()
+                except Exception:  # noqa: BLE001
+                    pass
+
             if expired(verdict.valid_until):
                 await websocket.close(
                     code=CLOSE_UNAUTHORIZED,
@@ -1555,6 +1577,8 @@ async def _hold(
 
             await _handle_control(websocket, session, message, stt_state=stt_state)
     finally:
+        WS_SESSIONS_ACTIVE.dec()
+
         if _breaker_ref is not None and _breaker_cb is not None:
             _breaker_ref.remove_on_state_change(_breaker_cb)
 

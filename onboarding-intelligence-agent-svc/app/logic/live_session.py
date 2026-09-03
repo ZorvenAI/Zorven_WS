@@ -774,3 +774,26 @@ return 1
             elif field == "updated_at":
                 result[field] = float(val)
         return result
+
+    # ── M-04: heartbeat for stuck-session watchdog ──
+
+    async def write_heartbeat(self) -> None:
+        """Record a heartbeat timestamp for the stuck-session watchdog."""
+        keys = self._keys()
+        key = keys.session(self.session_id)
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.hset(key, "last_heartbeat", str(time.time()))
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
+
+    async def get_heartbeat(self) -> float | None:
+        """Read the last heartbeat timestamp. None if never written."""
+        keys = self._keys()
+        key = keys.session(self.session_id)
+        raw = await self.redis.client.hget(key, "last_heartbeat")
+        if raw is None:
+            return None
+        try:
+            return float(raw if isinstance(raw, str) else raw.decode())
+        except (ValueError, TypeError):
+            return None

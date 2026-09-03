@@ -57,6 +57,9 @@ GENERATE_STRATEGY_PATH = (
 GENERATE_IDENTITY_PATH = (
     "/api/v1/onboarding/internal/companies/{company_id}/generate-identity/"
 )
+FINALIZE_STUCK_PATH = (
+    "/api/v1/onboarding/internal/sessions/{session_id}/finalize-stuck/"
+)
 
 #: Short. This is a fire-and-forget write on the tail of a turn the operator
 #: is waiting on, and §2.1 gives PREP a 60 s budget that research and synthesis
@@ -459,6 +462,17 @@ class BackendClient:
         path = GENERATE_STRATEGY_PATH.format(company_id=company_id)
         return await self._post(
             path, {}, tenant_id=tenant_id, timeout=GENERATE_TIMEOUT_S
+        )
+
+    async def finalize_stuck_session(
+        self, *, tenant_id: str, session_id: str
+    ) -> dict[str, Any] | None:
+        """Ask Django to transition a stuck MEETING_LIVE session to GATHERED (M-04)."""
+        path = FINALIZE_STUCK_PATH.format(session_id=session_id)
+        return await self._post(
+            path,
+            {"reason": "watchdog_stuck_session"},
+            tenant_id=tenant_id,
         )
 
     async def generate_brand_identity(

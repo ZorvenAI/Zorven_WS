@@ -157,8 +157,8 @@ def test_missing_required_variable_exits_non_zero(image):
     assert "GCS_BUCKET" in combined, combined[-1500:]
 
 
-def test_health_reports_unhealthy_when_redis_is_unreachable(image):
-    """The probe checks rather than reports optimism — in the real image."""
+def test_ready_reports_not_ready_when_redis_is_unreachable(image):
+    """/ready fails when Redis is down; /health stays 200 (liveness only)."""
     port = free_port()
     name = f"{CONTAINER}-noredis"
     subprocess.run(["docker", "rm", "-f", name], capture_output=True)
@@ -175,7 +175,6 @@ def test_health_reports_unhealthy_when_redis_is_unreachable(image):
             "OIA_BACKEND_BASE_URL=http://backend:8001",
             "-e",
             "OIA_GCS_BUCKET=zorven-raw-assets",
-            # Nothing is listening here.
             "-e",
             "OIA_REDIS_URL=redis://127.0.0.1:6399/2",
             image,
@@ -185,10 +184,12 @@ def test_health_reports_unhealthy_when_redis_is_unreachable(image):
     )
     try:
         base = f"http://127.0.0.1:{port}"
-        _wait_for_status(base, 503)
-        response = httpx.get(f"{base}/health", timeout=10)
-        assert response.status_code == 503
-        assert "redis" in response.json()["failed"]
+        _wait_for_status(base, 200)
+        health = httpx.get(f"{base}/health", timeout=10)
+        assert health.status_code == 200
+        ready = httpx.get(f"{base}/ready", timeout=10)
+        assert ready.status_code == 503
+        assert "redis" in ready.json()["failed"]
     finally:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True)
 

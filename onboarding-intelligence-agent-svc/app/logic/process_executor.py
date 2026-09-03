@@ -365,6 +365,10 @@ class ProcessExecutor:
                 "steps_used": extraction.steps_used,
                 "generated": generated,
             }
+            if extraction.dropped_ungrounded_total:
+                from app.metrics import DROPPED_UNGROUNDED
+
+                DROPPED_UNGROUNDED.inc(extraction.dropped_ungrounded_total)
             cb_status = JOB_STATUS_SUCCEEDED
 
         except GuardrailViolation as exc:

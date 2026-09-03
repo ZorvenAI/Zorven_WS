@@ -149,6 +149,10 @@ class Settings(BaseSettings):
     POI_TOKEN: str = ""
     POI_URL: str = ""
 
+    # ── Watchdog (M-04, Design §20) ─────────────────────────
+    WATCHDOG_INTERVAL_S: int = 60
+    WATCHDOG_TIMEOUT_S: int = 300
+
     # ── Observability ────────────────────────────────────────
     OTEL_EXPORTER_ENDPOINT: str = ""
 

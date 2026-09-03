@@ -32,7 +32,11 @@ from datetime import timezone as dt_timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from django.conf import settings
 from django.http import Http404
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    permission_classes,
+)
 from rest_framework.permissions import AllowAny
 
 from brand_automator.validators import sanitize_filename
@@ -3012,5 +3016,71 @@ def internal_generate_brand_identity(request, pk):
 
     return Response(
         {"success": True, "data": result},
+        status=http.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def finalize_stuck_session(request, pk):
+    """``POST /api/v1/onboarding/internal/sessions/<pk>/finalize-stuck/``
+
+    M-04 watchdog: transition a stuck MEETING_LIVE session to GATHERED.
+    X-Service-Token auth. Django owns the actual state transition because
+    GCS spool finalization and batch STT live here, not in OIA.
+    """
+    token = request.META.get("HTTP_X_SERVICE_TOKEN", "")
+    expected = getattr(settings, "OIA_SERVICE_TOKEN", "") or decouple_config(
+        "OIA_SERVICE_TOKEN", default=""
+    )
+    if not expected or not hmac.compare_digest(token, expected):
+        return Response(
+            {"error": "Invalid or missing X-Service-Token"},
+            status=http.HTTP_403_FORBIDDEN,
+        )
+
+    tenant_id = request.META.get("HTTP_X_TENANT_ID", "")
+    qs = OnboardingSession.objects.all()
+    if tenant_id:
+        qs = qs.filter(company__tenant_id=tenant_id)
+
+    with db_transaction.atomic():
+        try:
+            session = qs.select_for_update(of=("self",)).get(pk=pk)
+        except OnboardingSession.DoesNotExist:
+            return Response(
+                {"error": "Session not found"},
+                status=http.HTTP_404_NOT_FOUND,
+            )
+
+        if session.status != SessionStatus.MEETING_LIVE:
+            return Response(
+                {
+                    "error": (
+                        f"Session is {session.status}, not MEETING_LIVE. "
+                        "Only MEETING_LIVE sessions can be finalized as stuck."
+                    ),
+                    "current_status": session.status,
+                },
+                status=http.HTTP_409_CONFLICT,
+            )
+
+        from apps.onboarding.services.session_state import transition
+
+        transition(session, SessionStatus.GATHERED)
+
+    reason = request.data.get("reason", "watchdog_stuck_session")
+    logger.info(
+        "Session %s finalized as stuck (reason=%s, was MEETING_LIVE)",
+        pk,
+        reason,
+    )
+
+    return Response(
+        {
+            "status": session.status,
+            "session_id": session.pk,
+        },
         status=http.HTTP_200_OK,
     )
