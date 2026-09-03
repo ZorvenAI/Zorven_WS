@@ -19,7 +19,7 @@ import pytest
 
 from app.logic.process_executor import ProcessExecutor
 
-pytestmark = [pytest.mark.e2e, pytest.mark.asyncio]
+pytestmark = pytest.mark.asyncio
 
 E2E_ENABLED = os.environ.get("OIA_TEST_E2E", "")
 
@@ -69,6 +69,7 @@ class FakeRedis:
         return None
 
 
+@pytest.mark.e2e
 @pytest.mark.skipif(not E2E_ENABLED, reason="OIA_TEST_E2E not set")
 async def test_strategy_and_identity_generated():
     """Happy path: PROCESS auto-generates both strategy and identity.

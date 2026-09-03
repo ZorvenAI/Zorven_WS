@@ -60,6 +60,7 @@ def _collect_frames(ws, *, timeout: float = 15.0) -> list[dict]:
 
     ws.send_json({"type": "stop"})
     time.sleep(0.5)
+    ws.close()
 
     done.wait(timeout=timeout)
     return frames

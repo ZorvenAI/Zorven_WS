@@ -46,7 +46,7 @@ class StubModels:
         *,
         text: str | None = None,
         raises: Exception | None = None,
-        delay_ms: int = 0,
+        delay_ms: int = 5,
     ) -> None:
         raw = text if text is not None else text_or_payload
         if isinstance(raw, (dict, list)):
