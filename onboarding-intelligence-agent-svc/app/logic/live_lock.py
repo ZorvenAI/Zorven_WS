@@ -83,28 +83,38 @@ def _as_text(value: object) -> str:
 
 
 async def acquire(
-    redis_manager: Any, *, tenant_id: str, company_id: str, token: str
+    redis_manager: Any,
+    *,
+    tenant_id: str,
+    company_id: str,
+    token: str,
+    max_slots: int = 1,
 ) -> LiveLock | None:
-    """Claim the live slot, or return None if somebody else holds it.
+    """Claim a live slot, or return None if all slots are taken.
 
-    `SET key token NX EX ttl` — one round trip, and atomic. A get-then-set
+    ``SET key token NX EX ttl`` — one round trip, and atomic. A get-then-set
     would let two handshakes arriving together both find the key empty and
     both proceed, which is precisely the race AC-2 is about and precisely the
     one that never shows up in a single-threaded test.
+
+    When ``max_slots > 1`` (tenant-configurable per M-05 AC-2), the function
+    tries each slot sequentially. Slot 0 is backward-compatible with the
+    original single-slot key.
     """
     if redis_manager is None or not company_id:
-        # No Redis, or a session whose company we could not resolve. Refusing
-        # is the only safe answer: admitting a second writer to a live meeting
-        # corrupts the transcript for both.
         return None
 
     keys = redis_manager.keys_for(tenant_id)
-    key = keys.live_lock(company_id)
     client = redis_manager.client
 
-    acquired = await client.set(key, token, nx=True, ex=LOCK_TTL_S)
-    if not acquired:
-        logger.info("live_lock_contended", extra={"tenant_id": tenant_id})
-        return None
+    for slot in range(max(1, max_slots)):
+        key = keys.live_lock_slot(company_id, slot)
+        acquired = await client.set(key, token, nx=True, ex=LOCK_TTL_S)
+        if acquired:
+            return LiveLock(key=key, token=token, _client=client)
 
-    return LiveLock(key=key, token=token, _client=client)
+    logger.info(
+        "live_lock_contended",
+        extra={"tenant_id": tenant_id, "slots": max_slots},
+    )
+    return None
