@@ -146,6 +146,7 @@ class PrepExecutor:
         input_prompt: str,
         correlation_id: str = "",
         use_cache: bool = True,
+        config: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], bool]:
         """Run SKL-OIA-01, returning ``(brief, came_from_cache)``.
 
@@ -166,6 +167,7 @@ class PrepExecutor:
             input_prompt=input_prompt,
             tenant_context=tenant,
             input_context=dict(input_context),
+            config=dict(config) if config else {},
             correlation_id=correlation_id,
             origin=Origin.EXTERNAL,
         )
@@ -224,6 +226,7 @@ class PrepExecutor:
         input_prompt: str,
         chat_session_id: str = "",
         correlation_id: str = "",
+        config: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         """Run SKL-OIA-02 and store the result as a DRAFT.
 
@@ -246,6 +249,7 @@ class PrepExecutor:
                 "count": count,
                 "depth": depth,
             },
+            config=dict(config) if config else {},
             correlation_id=correlation_id,
             origin=Origin.EXTERNAL,
         )

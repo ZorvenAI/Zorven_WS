@@ -142,11 +142,29 @@ async def live_websocket(websocket: WebSocket, session_id: str) -> None:
 
     lock = None
     if not verdict.refused:
+        max_slots = 1
+        if redis_manager is not None:
+            from app.core.config import get_settings as _get_settings
+
+            _cfg = _get_settings()
+            t_keys = redis_manager.keys_for(verdict.tenant_id)
+            raw = await redis_manager.client.hget(
+                t_keys.config(), "max_concurrent_sessions"
+            )
+            if raw is not None:
+                try:
+                    max_slots = max(1, int(raw))
+                except (ValueError, TypeError):
+                    pass
+            else:
+                max_slots = _cfg.MAX_CONCURRENT_LIVE_PER_COMPANY
+
         lock = await acquire(
             redis_manager,
             tenant_id=verdict.tenant_id,
             company_id=verdict.company_id,
             token=uuid.uuid4().hex,
+            max_slots=max_slots,
         )
         if lock is None:
             verdict = Handshake(
@@ -1122,6 +1140,7 @@ async def _handle_control(
     message: Any,
     *,
     stt_state: dict[str, Any],
+    rate_ctx: dict[str, Any] | None = None,
 ) -> None:
     """Act on one client control frame (§10.2.3).
 
@@ -1139,6 +1158,39 @@ async def _handle_control(
     raw = message.get("text")
     if not raw:
         return
+
+    if rate_ctx is not None:
+        from app.logic.rate_limiter import check_rate
+
+        rl_key = rate_ctx["rl_key"]
+        rl_limit = rate_ctx["rl_limit"]
+        count, exceeded = await check_rate(rate_ctx["redis_client"], rl_key, rl_limit)
+        if exceeded:
+            from app.events.catalog import EventType
+            from app.logic.live_handshake import CLOSE_RATE_LIMITED
+
+            evts = rate_ctx.get("events")
+            if evts is not None:
+                try:
+                    await evts.emit(
+                        EventType.AGENT_RATE_LIMITED,
+                        tenant_id=rate_ctx["tenant_id"],
+                        correlation_id="",
+                        session_id=rate_ctx.get("session_id", ""),
+                        payload={
+                            "user_id": rate_ctx["user_id"],
+                            "count": count,
+                            "limit": rl_limit,
+                        },
+                        outcome="BLOCKED",
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+            await websocket.close(
+                code=CLOSE_RATE_LIMITED,
+                reason=f"control frame rate exceeded: {count}/{rl_limit}/min",
+            )
+            return
 
     try:
         frame = json.loads(raw)
@@ -1489,6 +1541,19 @@ async def _hold(
         "batcher": batcher,
         "analysis_state": analysis_state,
     }
+
+    rate_ctx: dict[str, Any] | None = None
+    if redis_manager is not None and verdict.user_id:
+        rl_keys = redis_manager.keys_for(verdict.tenant_id)
+        rate_ctx = {
+            "redis_client": redis_manager.client,
+            "rl_key": rl_keys.ratelimit(verdict.user_id),
+            "rl_limit": cfg.RATE_LIMIT_PREP_PER_MIN,
+            "tenant_id": verdict.tenant_id,
+            "user_id": verdict.user_id,
+            "session_id": session_id,
+            "events": events,
+        }
     _breaker_cb = None
     _breaker_ref = None
     if breaker_registry and events:
@@ -1575,7 +1640,13 @@ async def _hold(
                 stt_state["audio_q"].put_nowait(message["bytes"])
                 continue
 
-            await _handle_control(websocket, session, message, stt_state=stt_state)
+            await _handle_control(
+                websocket,
+                session,
+                message,
+                stt_state=stt_state,
+                rate_ctx=rate_ctx,
+            )
     finally:
         WS_SESSIONS_ACTIVE.dec()
 

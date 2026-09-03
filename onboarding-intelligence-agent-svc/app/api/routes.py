@@ -33,6 +33,7 @@ from app.api.schemas import (
     UsageReport,
 )
 from app.cache.conversation import ConversationStore
+from app.logic.rate_limiter import check_rate
 from app.logic.prep_executor import QUESTIONNAIRE_SKILL, RESEARCH_SKILL
 from app.skills.models import Origin, SkillContext, TenantContext
 from app.skills.questionnaire_models import GeneratedQuestionnaire
@@ -250,8 +251,43 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
     """
     started = time.monotonic()
     tenant_id = payload.tenant_context.tenant_id
+    user_id = payload.tenant_context.user_id or "anonymous"
+    settings = request.app.state.settings
 
-    store = ConversationStore(request.app.state.redis)
+    redis = request.app.state.redis
+    rl_key = redis.keys_for(tenant_id).ratelimit(user_id)
+    rl_count, rl_exceeded = await check_rate(
+        redis.client, rl_key, settings.RATE_LIMIT_PREP_PER_MIN
+    )
+    if rl_exceeded:
+        events = getattr(request.app.state, "events", None)
+        if events is not None:
+            from app.events.catalog import EventType
+
+            try:
+                await events.emit(
+                    EventType.AGENT_RATE_LIMITED,
+                    tenant_id=tenant_id,
+                    correlation_id=(payload.tenant_context.correlation_id or ""),
+                    session_id=payload.session_id or "",
+                    payload={
+                        "user_id": user_id,
+                        "count": rl_count,
+                        "limit": settings.RATE_LIMIT_PREP_PER_MIN,
+                    },
+                    outcome="BLOCKED",
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                f"Rate limit exceeded: {rl_count}/"
+                f"{settings.RATE_LIMIT_PREP_PER_MIN} per minute"
+            ),
+        )
+
+    store = ConversationStore(redis)
     await store.append(
         tenant_id=tenant_id,
         chat_session_id=payload.chat_session_id,
@@ -303,11 +339,16 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
                 except Exception:  # noqa: BLE001
                     pass
 
+    rl_config = {
+        "_ig07_count": rl_count,
+        "_rate_limit": settings.RATE_LIMIT_PREP_PER_MIN,
+    }
     brief, from_cache = await request.app.state.prep.research(
         tenant=tenant,
         input_context=payload.input_context,
         input_prompt=payload.input_prompt,
         correlation_id=payload.tenant_context.correlation_id or "",
+        config=rl_config,
     )
 
     summary = BusinessResearchBrief.model_validate(brief).summary_line()
@@ -332,6 +373,7 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
             input_prompt=payload.input_prompt,
             chat_session_id=payload.chat_session_id,
             correlation_id=payload.tenant_context.correlation_id or "",
+            config=rl_config,
         )
         questionnaire = GeneratedQuestionnaire.model_validate(generated)
         # The questionnaire's summary replaces the brief's: it is the answer to

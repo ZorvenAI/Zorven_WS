@@ -78,7 +78,10 @@ def test_constructing_without_a_tenant_fails(bad):
 
 
 def test_circuit_key_is_deliberately_not_tenant_scoped():
-    """A dependency being down is a global fact, not a per-tenant one."""
+    """A dependency being down is a global fact, not a per-tenant one.
+
+    M-05 AC-4: this test proves the circuit key is global (not per-tenant).
+    """
     key = circuit_key("google-stt")
     assert key == f"{KEY_PREFIX}circuit:google-stt"
     assert key.startswith(KEY_PREFIX)

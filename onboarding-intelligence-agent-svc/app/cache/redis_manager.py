@@ -152,6 +152,17 @@ class TenantKeys:
         """
         return f"{self._scope}lock:live:{company_id}"
 
+    def live_lock_slot(self, company_id: str, slot: int) -> str:
+        """String · 2 h · one of N concurrent live slots (M-05 AC-2).
+
+        When ``max_concurrent_sessions > 1``, each slot is a separate key.
+        Slot 0 is equivalent to ``live_lock(company_id)`` for backward
+        compatibility with existing locks.
+        """
+        if slot == 0:
+            return self.live_lock(company_id)
+        return f"{self._scope}lock:live:{company_id}:{slot}"
+
     # ── Write safety ─────────────────────────────────────────
     def idempotency(self, digest: str) -> str:
         """String · 24 h · write dedup, value is the original response."""
