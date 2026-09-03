@@ -268,7 +268,10 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
                 await events.emit(
                     EventType.AGENT_RATE_LIMITED,
                     tenant_id=tenant_id,
-                    correlation_id=(payload.tenant_context.correlation_id or ""),
+                    correlation_id=(
+                        payload.tenant_context.correlation_id
+                        or payload.tenant_context.trace_id
+                    ),
                     session_id=payload.session_id or "",
                     payload={
                         "user_id": user_id,
@@ -331,7 +334,10 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
                     await events.emit(
                         EventType.AGENT_INVOKED,
                         tenant_id=tenant_id,
-                        correlation_id=(payload.tenant_context.correlation_id or ""),
+                        correlation_id=(
+                            payload.tenant_context.correlation_id
+                            or payload.tenant_context.trace_id
+                        ),
                         session_id=payload.session_id or "",
                         payload={"prompt_source": "hardcoded_fallback"},
                         outcome="DEGRADED",

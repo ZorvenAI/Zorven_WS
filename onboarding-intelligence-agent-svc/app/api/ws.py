@@ -142,11 +142,11 @@ async def live_websocket(websocket: WebSocket, session_id: str) -> None:
 
     lock = None
     if not verdict.refused:
-        max_slots = 1
-        if redis_manager is not None:
-            from app.core.config import get_settings as _get_settings
+        from app.core.config import get_settings as _get_settings
 
-            _cfg = _get_settings()
+        _cfg = _get_settings()
+        max_slots = _cfg.MAX_CONCURRENT_LIVE_PER_COMPANY
+        if redis_manager is not None:
             t_keys = redis_manager.keys_for(verdict.tenant_id)
             raw = await redis_manager.client.hget(
                 t_keys.config(), "max_concurrent_sessions"
@@ -156,8 +156,6 @@ async def live_websocket(websocket: WebSocket, session_id: str) -> None:
                     max_slots = max(1, int(raw))
                 except (ValueError, TypeError):
                     pass
-            else:
-                max_slots = _cfg.MAX_CONCURRENT_LIVE_PER_COMPANY
 
         lock = await acquire(
             redis_manager,
@@ -1175,7 +1173,7 @@ async def _handle_control(
                     await evts.emit(
                         EventType.AGENT_RATE_LIMITED,
                         tenant_id=rate_ctx["tenant_id"],
-                        correlation_id="",
+                        correlation_id=rate_ctx.get("session_id", ""),
                         session_id=rate_ctx.get("session_id", ""),
                         payload={
                             "user_id": rate_ctx["user_id"],

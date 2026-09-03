@@ -15,17 +15,23 @@ logger = get_logger(__name__)
 
 WINDOW_S = 60
 
+_LUA_INCR_WITH_EXPIRE = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return count
+"""
+
 
 async def check_rate(redis_client: Any, key: str, limit: int) -> tuple[int, bool]:
     """Increment the counter and return (count, exceeded).
 
-    ``INCR`` is atomic across Cloud Run instances because it is a single Redis
-    command. The ``EXPIRE`` on the first increment creates the 60-second
-    window; subsequent increments do not reset the TTL.
+    Uses a Lua script so the ``INCR`` and ``EXPIRE`` execute atomically in
+    a single round trip. Without this, a crash between the two commands
+    would leave a counter with no TTL — permanently rate-limiting the user.
     """
-    count: int = await redis_client.incr(key)
-    if count == 1:
-        await redis_client.expire(key, WINDOW_S)
+    count: int = await redis_client.eval(_LUA_INCR_WITH_EXPIRE, 1, key, WINDOW_S)
     exceeded = count > limit
     if exceeded:
         logger.warning(
