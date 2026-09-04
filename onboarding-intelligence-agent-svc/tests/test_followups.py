@@ -14,6 +14,7 @@ from app.circuit_breaker.breaker import BreakerConfig, CircuitBreaker
 from app.providers.llm import LLMProvider, LLMUnavailable
 from app.skills.generate_followups import GenerateFollowups
 from app.skills.models import SkillContext, SkillMeta, TenantContext
+from tests.fakes import StubModels
 
 
 def meta() -> SkillMeta:
@@ -55,25 +56,6 @@ def brk() -> CircuitBreaker:
             user_message="unavailable",
         )
     )
-
-
-class StubModels:
-    """Stand-in for ``genai.Client(...).aio.models``."""
-
-    def __init__(self, text: str = "", raises: Exception | None = None) -> None:
-        self._text = text
-        self._raises = raises
-        self.prompts: list[str] = []
-
-    async def generate_content(self, *, model, contents, config=None):
-        self.prompts.append(contents)
-        if self._raises:
-            raise self._raises
-
-        class Response:
-            text = self._text
-
-        return Response()
 
 
 def llm_for(model: StubModels) -> LLMProvider:

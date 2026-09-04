@@ -456,15 +456,24 @@ jobs:
           done
           echo "::warning::Kafka never became ready; broker tests will skip"
 
-      # Integration tests run against the real Redis and Kafka above. The e2e
-      # tests build and run the image and are excluded here — they need Docker
-      # and take minutes; they run locally and in the image build job.
-      - name: Test
+      - name: Test (unit + coverage)
+        working-directory: onboarding-intelligence-agent-svc
+        env:
+          OIA_TEST_REDIS_URL: redis://localhost:6379/2
+        run: pytest tests/ -v -m "not integration and not e2e" --cov=app --cov-report=term-missing --cov-fail-under=55
+
+      - name: Test (integration + coverage)
         working-directory: onboarding-intelligence-agent-svc
         env:
           OIA_TEST_KAFKA: localhost:39092
           OIA_TEST_REDIS_URL: redis://localhost:6379/2
-        run: pytest tests/ -v -m "not e2e"
+        run: pytest tests/ -v -m "integration" --cov=app --cov-report=term-missing --cov-fail-under=55
+
+      - name: Test (fast e2e)
+        working-directory: onboarding-intelligence-agent-svc
+        env:
+          OIA_TEST_REDIS_URL: redis://localhost:6379/2
+        run: pytest tests/e2e/ -v -m "e2e" --ignore=tests/e2e/test_prep_to_questionnaire.py
 
   # Frontend Tests
   frontend-tests:

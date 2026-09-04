@@ -25,6 +25,7 @@ from app.providers.tavily import TavilyProvider
 from app.skills.models import SkillContext, SkillMeta, TenantContext
 from app.skills.research_brief import BusinessResearchBrief
 from app.skills.research_business import ResearchBusiness, normalise_company_name
+from tests.fakes import StubModels
 
 REAL_URL = "https://kalyani.example/about"
 
@@ -67,34 +68,6 @@ def brk(name: str, **overrides) -> CircuitBreaker:
     )
     base.update(overrides)
     return CircuitBreaker(BreakerConfig(**base))
-
-
-class StubModels:
-    """Stands in for ``genai.Client(...).aio.models``.
-
-    Not a mock framework and not a patch — a real object satisfying the
-    one-method surface the provider narrowed to, so the provider's breaker,
-    exception handling and empty-completion check all still execute for real.
-
-    The keyword-only signature mirrors google-genai's, so a drift in how the
-    provider calls it shows up here as a TypeError rather than being absorbed
-    by a permissive ``**kwargs``.
-    """
-
-    def __init__(self, text: str = "", raises: Exception | None = None) -> None:
-        self._text = text
-        self._raises = raises
-        self.prompts: list[str] = []
-
-    async def generate_content(self, *, model, contents, config=None):
-        self.prompts.append(contents)
-        if self._raises:
-            raise self._raises
-
-        class Response:
-            text = self._text
-
-        return Response()
 
 
 @pytest.fixture
