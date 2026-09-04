@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.metrics import (
+    ANALYSIS_DROPS,
     CIRCUIT_BREAKER_STATE,
     DLQ_MESSAGES,
     DROPPED_UNGROUNDED,
@@ -13,6 +14,7 @@ from app.metrics import (
     SUFFICIENCY_DROPS,
     SUFFICIENCY_LATENCY,
     WS_SESSIONS_ACTIVE,
+    record_analysis_drop,
     record_circuit_state,
     record_guardrail_trigger,
     record_stt_partial_latency,
@@ -34,6 +36,7 @@ def test_all_metrics_have_oia_prefix():
         DROPPED_UNGROUNDED,
         EVENTS_DROPPED,
         SUFFICIENCY_DROPS,
+        ANALYSIS_DROPS,
     ]
     for m in metrics:
         desc = m.describe()[0]
@@ -102,3 +105,9 @@ def test_sufficiency_drops_increments():
     before = SUFFICIENCY_DROPS._value.get()
     record_sufficiency_drop()
     assert SUFFICIENCY_DROPS._value.get() == before + 1
+
+
+def test_analysis_drops_increments():
+    before = ANALYSIS_DROPS._value.get()
+    record_analysis_drop()
+    assert ANALYSIS_DROPS._value.get() == before + 1

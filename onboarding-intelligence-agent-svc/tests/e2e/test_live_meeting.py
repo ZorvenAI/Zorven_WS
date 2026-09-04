@@ -23,14 +23,33 @@ from tests.conftest import REDIS_URL
 pytestmark = pytest.mark.e2e
 
 
-def _collect_frames(ws, *, timeout: float = 15.0) -> list[dict]:
+class _FrameResult:
+    """Frames collected from a WS session plus close/error outcome."""
+
+    __slots__ = ("frames", "error", "timed_out")
+
+    def __init__(
+        self,
+        frames: list[dict],
+        error: Exception | None,
+        timed_out: bool,
+    ):
+        self.frames = frames
+        self.error = error
+        self.timed_out = timed_out
+
+
+def _collect_frames(ws, *, timeout: float = 15.0) -> _FrameResult:
     """Read frames until the socket closes or timeout fires.
 
     Runs in a daemon thread so ``receive_text`` does not block the test
-    forever if the server hangs.
+    forever if the server hangs. Returns a ``_FrameResult`` with the
+    frames AND the close/error outcome so callers can assert the
+    WebSocket shut down cleanly.
     """
     frames: list[dict] = []
     done = threading.Event()
+    reader_error: list[Exception] = []
 
     def _reader():
         try:
@@ -40,8 +59,8 @@ def _collect_frames(ws, *, timeout: float = 15.0) -> list[dict]:
                     frames.append(json.loads(raw))
                 except (TypeError, ValueError):
                     pass
-        except Exception:
-            pass
+        except Exception as exc:
+            reader_error.append(exc)
         finally:
             done.set()
 
@@ -67,8 +86,12 @@ def _collect_frames(ws, *, timeout: float = 15.0) -> list[dict]:
     time.sleep(0.5)
     ws.close()
 
-    done.wait(timeout=timeout)
-    return frames
+    timed_out = not done.wait(timeout=timeout)
+    return _FrameResult(
+        frames=frames,
+        error=reader_error[0] if reader_error else None,
+        timed_out=timed_out,
+    )
 
 
 class TestLiveMeeting:
@@ -80,10 +103,12 @@ class TestLiveMeeting:
         with e2e_client.websocket_connect(
             f"/v1/live/{session_id}?tenant_id={tenant}&ticket=tkt-1"
         ) as ws:
-            frames = _collect_frames(ws)
+            result = _collect_frames(ws)
 
-        partials = [f for f in frames if f.get("type") == "transcript.partial"]
-        finals = [f for f in frames if f.get("type") == "transcript.final"]
+        assert not result.timed_out, "WS reader timed out"
+
+        partials = [f for f in result.frames if f.get("type") == "transcript.partial"]
+        finals = [f for f in result.frames if f.get("type") == "transcript.final"]
 
         assert len(partials) > 0, "expected at least one partial transcript"
         assert len(finals) > 0, "expected at least one final transcript"
@@ -99,7 +124,9 @@ class TestLiveMeeting:
         with e2e_client.websocket_connect(
             f"/v1/live/{session_id}?tenant_id={tenant}&ticket=tkt-1"
         ) as ws:
-            _collect_frames(ws)
+            result = _collect_frames(ws)
+
+        assert not result.timed_out, "WS reader timed out"
 
         r = sync_redis.Redis.from_url(REDIS_URL)
         keys = TenantKeys(tenant)
@@ -130,10 +157,12 @@ class TestLongSession:
         with e2e_client_45min.websocket_connect(
             f"/v1/live/{session_id}?tenant_id={tenant}&ticket=tkt-1"
         ) as ws:
-            frames = _collect_frames(ws, timeout=120.0)
+            result = _collect_frames(ws, timeout=120.0)
 
-        partials = [f for f in frames if f.get("type") == "transcript.partial"]
-        finals = [f for f in frames if f.get("type") == "transcript.final"]
+        assert not result.timed_out, "WS reader timed out during 45-min replay"
+
+        partials = [f for f in result.frames if f.get("type") == "transcript.partial"]
+        finals = [f for f in result.frames if f.get("type") == "transcript.final"]
 
         assert len(partials) > 0, "expected partial transcripts"
         assert len(finals) > 0, "expected final transcripts"

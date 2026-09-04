@@ -5,11 +5,19 @@ NFR-PERF-01…03 through the real gateway. They are gated behind
 ``OIA_LOAD_TARGET`` and skip in CI unless that variable points at a
 live service.
 
-Usage::
+**Deployed target requirement**: The target service must be configured
+with ``OIA_STT_PROVIDER=fake`` so that the FakeSTTAdapter replays
+fixture transcripts from silent audio chunks. Real GoogleSTTAdapter
+produces nothing from silence — these tests exercise latency budgets,
+not speech recognition.
+
+Credentials are configurable via environment variables::
 
     OIA_LOAD_TARGET=wss://oia.zorven.dev \
     OIA_LOAD_ENVIRONMENT=kong_dev \
     OIA_LOAD_CONCURRENCY=5 \
+    OIA_LOAD_TICKET=<valid-ticket> \
+    OIA_LOAD_SERVICE_TOKEN=<valid-token> \
     pytest -m load -v
 """
 
@@ -18,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import uuid
 from typing import Any
 
 import httpx
@@ -38,6 +47,7 @@ async def _run_ws_session(
     *,
     session_id: str,
     tenant_id: str,
+    ticket: str,
 ) -> dict[str, Any]:
     """Open a WebSocket session, replay events, collect frames.
 
@@ -46,10 +56,7 @@ async def _run_ws_session(
     import websockets
 
     base = target_url.rstrip("/")
-    url = (
-        f"{base}/v1/live/{session_id}"
-        f"?tenant_id={tenant_id}&ticket=load-test"
-    )
+    url = f"{base}/v1/live/{session_id}" f"?tenant_id={tenant_id}&ticket={ticket}"
     frames: list[dict[str, Any]] = []
     t0 = time.monotonic()
 
@@ -107,7 +114,12 @@ async def _run_ws_session(
 
 
 async def _send_audio(ws: Any, events: list[dict[str, Any]]) -> None:
-    """Send audio chunks with realistic pacing, then stop."""
+    """Send audio chunks with realistic pacing, then stop.
+
+    Sends silent LINEAR16 chunks — the deployed target must use
+    FakeSTTAdapter (``OIA_STT_PROVIDER=fake``) to produce transcripts
+    from these.
+    """
     for ev in events:
         delay = ev.get("delay_ms", 50) / 1000.0
         await asyncio.sleep(delay)
@@ -127,11 +139,14 @@ class TestNFRPerformance:
         fixture_events: list[dict[str, Any]],
         metrics_client: httpx.Client,
         environment_label: str,
+        load_ticket: str,
     ):
         """NFR-PERF-01: STT partial latency ≤ 2000ms p95.
 
-        Runs a single session through the deployed path and checks
-        the server-side Prometheus histogram for p95.
+        Measures server-side processing latency (emit_partial time) via
+        the Prometheus histogram. This excludes STT recognition and
+        gateway transit time — it measures the service's own overhead
+        once a partial is ready to emit.
         """
         before = metrics_client.get("/metrics").text
 
@@ -141,6 +156,7 @@ class TestNFRPerformance:
                 fixture_events,
                 session_id="load-partial-01",
                 tenant_id="t-load-01",
+                ticket=load_ticket,
             )
         )
 
@@ -156,6 +172,11 @@ class TestNFRPerformance:
             after, "oia_stt_partial_latency_ms"
         )
 
+        assert buckets_after, "no histogram buckets found in /metrics"
+        assert len(buckets_before) == len(
+            buckets_after
+        ), "histogram bucket count changed mid-test"
+
         delta_buckets = [
             (le, after_count - before_count)
             for (le, after_count), (_, before_count) in zip(
@@ -164,11 +185,11 @@ class TestNFRPerformance:
         ]
 
         p95 = estimate_p95_from_buckets(delta_buckets)
+        assert p95 is not None, "no latency observations in histogram"
         print(
             f"\n[{environment_label}] STT partial latency p95: "
             f"{p95:.0f}ms (budget: 2000ms)"
         )
-        assert p95 is not None, "no latency observations"
         assert p95 <= 2000.0, f"STT partial p95 {p95:.0f}ms exceeds 2000ms budget"
 
     def test_sufficiency_p95_under_concurrency(
@@ -178,11 +199,13 @@ class TestNFRPerformance:
         metrics_client: httpx.Client,
         concurrency: int,
         environment_label: str,
+        load_ticket: str,
     ):
         """NFR-PERF-02: Sufficiency feedback ≤ 5000ms p95 under concurrency.
 
         Opens N concurrent WebSocket sessions, replays events in parallel,
         then checks the server-side sufficiency latency histogram.
+        All sessions must succeed to validate the concurrency level.
         """
         before = metrics_client.get("/metrics").text
 
@@ -193,6 +216,7 @@ class TestNFRPerformance:
                     fixture_events,
                     session_id=f"load-suf-{i:02d}",
                     tenant_id=f"t-load-suf-{i:02d}",
+                    ticket=load_ticket,
                 )
                 for i in range(concurrency)
             ]
@@ -201,13 +225,16 @@ class TestNFRPerformance:
         results = asyncio.get_event_loop().run_until_complete(_run_all())
 
         errors = [r for r in results if r["error"]]
-        successful = [r for r in results if not r["error"]]
-        print(
-            f"\n[{environment_label}] Concurrency: {concurrency}, "
-            f"successful: {len(successful)}, errors: {len(errors)}"
+        assert (
+            len(errors) == 0
+        ), f"{len(errors)}/{concurrency} sessions failed: " + "; ".join(
+            r["error"] for r in errors
         )
 
-        assert len(successful) > 0, "all sessions failed"
+        print(
+            f"\n[{environment_label}] Concurrency: {concurrency}, "
+            f"all {concurrency} sessions succeeded"
+        )
 
         after = metrics_client.get("/metrics").text
 
@@ -218,70 +245,60 @@ class TestNFRPerformance:
             after, "oia_sufficiency_latency_ms"
         )
 
-        if (
-            buckets_before
-            and buckets_after
-            and len(buckets_before) == len(buckets_after)
-        ):
-            delta_buckets = [
-                (le, after_count - before_count)
-                for (le, after_count), (_, before_count) in zip(
-                    buckets_after, buckets_before
-                )
-            ]
-            p95 = estimate_p95_from_buckets(delta_buckets)
-            if p95 is not None:
-                print(
-                    f"[{environment_label}] Sufficiency latency p95: "
-                    f"{p95:.0f}ms (budget: 5000ms)"
-                )
-                assert p95 <= 5000.0, (
-                    f"Sufficiency p95 {p95:.0f}ms exceeds 5000ms budget "
-                    f"at concurrency={concurrency}"
-                )
-            else:
-                print(
-                    f"[{environment_label}] No sufficiency observations "
-                    f"(fixture may not trigger sufficiency scoring)"
-                )
+        assert buckets_after, "no sufficiency histogram buckets in /metrics"
+        assert len(buckets_before) == len(
+            buckets_after
+        ), "histogram bucket count changed mid-test"
+
+        delta_buckets = [
+            (le, after_count - before_count)
+            for (le, after_count), (_, before_count) in zip(
+                buckets_after, buckets_before
+            )
+        ]
+        p95 = estimate_p95_from_buckets(delta_buckets)
+        assert p95 is not None, (
+            "no sufficiency observations in histogram — "
+            "the fixture may not trigger sufficiency scoring"
+        )
+        print(
+            f"[{environment_label}] Sufficiency latency p95: "
+            f"{p95:.0f}ms (budget: 5000ms)"
+        )
+        assert p95 <= 5000.0, (
+            f"Sufficiency p95 {p95:.0f}ms exceeds 5000ms budget "
+            f"at concurrency={concurrency}"
+        )
 
     def test_process_60min_within_5min(
         self,
         http_base: str,
         environment_label: str,
+        load_service_token: str,
     ):
         """NFR-PERF-03: PROCESS of a 60-minute meeting ≤ 5 minutes.
 
-        POSTs a PROCESS request with a payload representing a 60-minute
-        meeting and polls until completion, measuring wall-clock time.
+        POSTs a PROCESS request matching the ProcessRequest schema
+        (tenant_context + evidence_manifest), asserts 202, and polls
+        until completion, measuring wall-clock time.
         """
         client = httpx.Client(base_url=http_base, timeout=30.0)
 
-        transcript_segments = []
-        for i in range(600):
-            transcript_segments.append(
-                {
-                    "text": (
-                        f"Segment {i}: discussion about "
-                        "brand strategy and positioning."
-                    ),
-                    "t_start": float(i * 6),
-                    "t_end": float(i * 6 + 5),
-                    "speaker": i % 2,
-                    "is_final": True,
-                }
-            )
-
         payload = {
-            "tenant_id": "t-load-process",
-            "company_id": 1,
+            "tenant_context": {
+                "tenant_id": "t-load-process",
+                "user_id": "load-test-user",
+                "role": "ADMIN",
+                "trace_id": f"load-{uuid.uuid4().hex[:16]}",
+            },
             "session_id": "sess-load-process-60min",
-            "transcript_segments": transcript_segments,
-            "questions": [
-                {"id": "q1", "text": "What is your company name?"},
-                {"id": "q2", "text": "When was it founded?"},
-                {"id": "q3", "text": "Who are your competitors?"},
-            ],
+            "evidence_manifest": {
+                "recordings": ["rec-load-60min"],
+                "media": [],
+                "has_questionnaire": True,
+                "has_transcript": True,
+            },
+            "callback_url": "",
         }
 
         t0 = time.monotonic()
@@ -289,19 +306,31 @@ class TestNFRPerformance:
         resp = client.post(
             "/v1/process",
             json=payload,
-            headers={"X-Service-Token": "load-test"},
+            headers={
+                "X-Service-Token": load_service_token,
+                "Idempotency-Key": f"load-nfr03-{uuid.uuid4().hex[:8]}",
+            },
         )
 
-        if resp.status_code == 202:
-            job_id = resp.json().get("job_id")
-            if job_id:
-                for _ in range(60):
-                    time.sleep(5)
-                    status_resp = client.get(f"/v1/process/{job_id}/status")
-                    if status_resp.status_code == 200:
-                        status = status_resp.json().get("status")
-                        if status in ("SUCCEEDED", "FAILED"):
-                            break
+        assert resp.status_code == 202, (
+            f"expected 202 ACCEPTED, got {resp.status_code}: " f"{resp.text[:200]}"
+        )
+
+        job_id = resp.json().get("job_id")
+        assert job_id, "202 response missing job_id"
+
+        for _ in range(60):
+            time.sleep(5)
+            status_resp = client.get(
+                f"/v1/process/{job_id}/status",
+                headers={
+                    "X-Service-Token": load_service_token,
+                },
+            )
+            if status_resp.status_code == 200:
+                job_status = status_resp.json().get("status")
+                if job_status in ("SUCCEEDED", "FAILED"):
+                    break
 
         elapsed = time.monotonic() - t0
         print(
@@ -317,6 +346,7 @@ class TestNFRPerformance:
         metrics_client: httpx.Client,
         concurrency: int,
         environment_label: str,
+        load_ticket: str,
     ):
         """AC-3: Under overload, sufficiency signals are dropped, not queued.
 
@@ -336,6 +366,7 @@ class TestNFRPerformance:
                     fixture_events,
                     session_id=f"load-drop-{i:02d}",
                     tenant_id=f"t-load-drop-{i:02d}",
+                    ticket=load_ticket,
                 )
                 for i in range(overload_n)
             ]
@@ -363,5 +394,6 @@ class TestNFRPerformance:
         if len(successful) > 0:
             assert drop_delta > 0, (
                 "expected sufficiency drops under overload, but counter "
-                f"did not increment (before={drops_before}, after={drops_after})"
+                f"did not increment (before={drops_before}, "
+                f"after={drops_after})"
             )

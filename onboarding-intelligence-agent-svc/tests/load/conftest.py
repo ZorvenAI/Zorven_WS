@@ -22,6 +22,8 @@ import pytest
 LOAD_TARGET = os.environ.get("OIA_LOAD_TARGET", "")
 LOAD_CONCURRENCY = int(os.environ.get("OIA_LOAD_CONCURRENCY", "5"))
 LOAD_ENVIRONMENT = os.environ.get("OIA_LOAD_ENVIRONMENT", "local")
+LOAD_TICKET = os.environ.get("OIA_LOAD_TICKET", "load-test")
+LOAD_SERVICE_TOKEN = os.environ.get("OIA_LOAD_SERVICE_TOKEN", "load-test")
 
 FIXTURE_2MIN = Path(__file__).parent.parent / "fixtures" / "two_speaker_2min.jsonl"
 
@@ -59,6 +61,16 @@ def concurrency() -> int:
 @pytest.fixture
 def environment_label() -> str:
     return LOAD_ENVIRONMENT
+
+
+@pytest.fixture
+def load_ticket() -> str:
+    return LOAD_TICKET
+
+
+@pytest.fixture
+def load_service_token() -> str:
+    return LOAD_SERVICE_TOKEN
 
 
 @pytest.fixture

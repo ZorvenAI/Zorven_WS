@@ -589,9 +589,9 @@ async def _run_analysis(
             timeout=5.0,
         )
     except asyncio.TimeoutError:
-        from app.metrics import record_sufficiency_drop
+        from app.metrics import record_analysis_drop
 
-        record_sufficiency_drop()
+        record_analysis_drop()
         logger.warning(
             "analysis_timeout",
             session=session.session_id,
